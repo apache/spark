@@ -30,8 +30,8 @@ import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.eclipse.jetty.server.{NetworkConnector, Server}
-import org.eclipse.jetty.server.handler.HandlerList
-import org.eclipse.jetty.servlet.{DefaultServlet, FilterHolder, ServletContextHandler, ServletHolder}
+import org.eclipse.jetty.server.handler.{ContextHandler, ContextHandlerCollection, ResourceHandler}
+import org.eclipse.jetty.servlet.{FilterHolder, ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -44,7 +44,8 @@ private[spark] object JettyUtils extends Logging {
 
   type Responder[T] = HttpServletRequest => T
 
-  class ServletParams[T <% AnyRef](val responder: Responder[T],
+  class ServletParams[T <% AnyRef](
+    val responder: Responder[T],
     val contentType: String,
     val extractFn: T => String = (in: Any) => in.toString) {}
 
@@ -58,7 +59,8 @@ private[spark] object JettyUtils extends Logging {
   implicit def textResponderToServlet(responder: Responder[String]): ServletParams[String] =
     new ServletParams(responder, "text/plain")
 
-  def createServlet[T <% AnyRef](servletParams: ServletParams[T],
+  def createServlet[T <% AnyRef](
+      servletParams: ServletParams[T],
       securityMgr: SecurityManager): HttpServlet = {
     new HttpServlet {
       override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
@@ -89,32 +91,27 @@ private[spark] object JettyUtils extends Logging {
   /** Creates a handler that always redirects the user to a given path */
   def createRedirectHandler(newPath: String, path: String): ServletContextHandler = {
     val servlet = new HttpServlet {
-      override def doGet(request: HttpServletRequest,
-                 response: HttpServletResponse) {
+      override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
         // make sure we don't end up with // in the middle
         val newUri = new URL(new URL(request.getRequestURL.toString), newPath).toURI
         response.sendRedirect(newUri.toString)
       }
     }
-    val contextHandler = new ServletContextHandler()
-    val holder = new ServletHolder(servlet)
-    contextHandler.setContextPath(path)
-    contextHandler.addServlet(holder, "/")
-    contextHandler
+    createServletHandler(path, servlet)
   }
 
   /** Creates a handler for serving files from a static directory */
-  def createStaticHandler(resourceBase: String, path: String): ServletContextHandler = {
-    val contextHandler = new ServletContextHandler()
-    val staticHandler = new DefaultServlet
-    val holder = new ServletHolder(staticHandler)
+  def createStaticHandler(resourceBase: String, path: String): ContextHandler = {
+    val resourceHandler = new ResourceHandler
     Option(getClass.getClassLoader.getResource(resourceBase)) match {
       case Some(res) =>
-        holder.setInitParameter("resourceBase", res.toString)
+        resourceHandler.setResourceBase(res.toString)
       case None =>
         throw new Exception("Could not find resource path for Web UI: " + resourceBase)
     }
-    contextHandler.addServlet(holder, path)
+    val contextHandler = new ContextHandler
+    contextHandler.setContextPath(path)
+    contextHandler.setHandler(resourceHandler)
     contextHandler
   }
 
@@ -133,7 +130,7 @@ private[spark] object JettyUtils extends Logging {
             if (!param.isEmpty) {
               val parts = param.split("=")
               if (parts.length == 2) holder.setInitParameter(parts(0), parts(1))
-           }
+            }
         }
         val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.ERROR,
           DispatcherType.FORWARD, DispatcherType.INCLUDE, DispatcherType.REQUEST)
@@ -152,12 +149,15 @@ private[spark] object JettyUtils extends Logging {
   def startJettyServer(
       hostName: String,
       port: Int,
-      handlers: Seq[ServletContextHandler],
+      handlers: Seq[ContextHandler],
       conf: SparkConf): (Server, Int) = {
 
-    addFilters(handlers, conf)
-    val handlerList = new HandlerList
-    handlerList.setHandlers(handlers.toArray)
+    // Add security filters
+    val servletContextHandlers = handlers.collect { case h: ServletContextHandler => h }
+    addFilters(servletContextHandlers, conf)
+
+    val handlerCollection = new ContextHandlerCollection
+    handlerCollection.setHandlers(handlers.toArray)
 
     @tailrec
     def connect(currentPort: Int): (Server, Int) = {
@@ -166,8 +166,7 @@ private[spark] object JettyUtils extends Logging {
       // constructor. But fortunately the pool allocated by Jetty is always a QueuedThreadPool.
       val pool = server.getThreadPool.asInstanceOf[QueuedThreadPool]
       pool.setDaemon(true)
-
-      server.setHandler(handlerList)
+      server.setHandler(handlerCollection)
 
       Try {
         server.start()

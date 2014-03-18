@@ -19,12 +19,13 @@ package org.apache.spark.deploy.worker.ui
 
 import java.io.File
 import javax.servlet.http.HttpServletRequest
+
 import org.eclipse.jetty.server.Server
-import org.eclipse.jetty.servlet.ServletContextHandler
+import org.eclipse.jetty.server.handler.ContextHandler
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.worker.Worker
-import org.apache.spark.ui.{JettyUtils, UIUtils}
+import org.apache.spark.ui.{JettyUtils, SparkUI, UIUtils}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -46,8 +47,8 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
   val metricsHandlers = worker.metricsSystem.getServletHandlers
 
-  val handlers = metricsHandlers ++ Seq[ServletContextHandler](
-    createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static/*"),
+  val handlers = metricsHandlers ++ Seq[ContextHandler](
+    createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static"),
     createServletHandler("/log", createServlet((request: HttpServletRequest) => log(request),
       worker.securityMgr)),
     createServletHandler("/logPage", createServlet((request: HttpServletRequest) => logPage
@@ -202,6 +203,6 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 }
 
 private[spark] object WorkerWebUI {
-  val STATIC_RESOURCE_BASE = "org/apache/spark/ui"
+  val STATIC_RESOURCE_BASE = SparkUI.STATIC_RESOURCE_DIR
   val DEFAULT_PORT="8081"
 }

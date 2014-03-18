@@ -18,12 +18,13 @@
 package org.apache.spark.deploy.master.ui
 
 import javax.servlet.http.HttpServletRequest
+
 import org.eclipse.jetty.server.Server
-import org.eclipse.jetty.servlet.ServletContextHandler
+import org.eclipse.jetty.server.handler.ContextHandler
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.ui.JettyUtils
+import org.apache.spark.ui.{JettyUtils, SparkUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -60,8 +61,8 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
   val metricsHandlers = master.masterMetricsSystem.getServletHandlers ++
     master.applicationMetricsSystem.getServletHandlers
 
-  val handlers = metricsHandlers ++ Seq[ServletContextHandler](
-    createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static/*"),
+  val handlers = metricsHandlers ++ Seq[ContextHandler](
+    createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"),
     createServletHandler("/app/json",
       createServlet((request: HttpServletRequest) => applicationPage.renderJson(request),
         master.securityMgr)),
@@ -79,5 +80,5 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
 }
 
 private[spark] object MasterWebUI {
-  val STATIC_RESOURCE_DIR = "org/apache/spark/ui"
+  val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
 }
