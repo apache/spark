@@ -149,7 +149,13 @@ object GradientDescent extends Logging {
 
     // Initialize weights as a column vector
     var weights = new DoubleMatrix(initialWeights.length, 1, initialWeights:_*)
-    var regVal = 0.0
+
+    /**
+     * For the first iteration, the regVal will be initialized as sum of sqrt of
+     * weights if it's L2 update; for L1 update; the same logic is followed.
+     */
+    var regVal = updater.compute(
+      weights, new DoubleMatrix(initialWeights.length, 1), 0, 1, regParam)._2
 
     for (i <- 1 to numIterations) {
       // Sample a subset (fraction miniBatchFraction) of the total data

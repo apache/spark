@@ -30,23 +30,21 @@ import scala.reflect.ClassTag
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 import org.apache.hadoop.conf.{Configurable, Configuration}
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf, OutputFormat}
-import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
-import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob}
-import org.apache.hadoop.mapreduce.{RecordWriter => NewRecordWriter}
+import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, Job => NewAPIHadoopJob, RecordWriter => NewRecordWriter, JobContext, SparkHadoopMapReduceUtil}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
 
 // SparkHadoopWriter and SparkHadoopMapReduceUtil are actually source files defined in Spark.
 import org.apache.hadoop.mapred.SparkHadoopWriter
-import org.apache.hadoop.mapreduce.SparkHadoopMapReduceUtil
 
 import org.apache.spark._
 import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.SparkContext._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.SerializableHyperLogLog
 
 /**
@@ -76,7 +74,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       mergeCombiners: (C, C) => C,
       partitioner: Partitioner,
       mapSideCombine: Boolean = true,
-      serializerClass: String = null): RDD[(K, C)] = {
+      serializer: Serializer = null): RDD[(K, C)] = {
     require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
     if (getKeyClass().isArray) {
       if (mapSideCombine) {
@@ -96,13 +94,13 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
         aggregator.combineValuesByKey(iter, context)
       }, preservesPartitioning = true)
       val partitioned = new ShuffledRDD[K, C, (K, C)](combined, partitioner)
-        .setSerializer(serializerClass)
+        .setSerializer(serializer)
       partitioned.mapPartitionsWithContext((context, iter) => {
         new InterruptibleIterator(context, aggregator.combineCombinersByKey(iter, context))
       }, preservesPartitioning = true)
     } else {
       // Don't apply map-side combiner.
-      val values = new ShuffledRDD[K, V, (K, V)](self, partitioner).setSerializer(serializerClass)
+      val values = new ShuffledRDD[K, V, (K, V)](self, partitioner).setSerializer(serializer)
       values.mapPartitionsWithContext((context, iter) => {
         new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
       }, preservesPartitioning = true)
@@ -196,6 +194,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   }
 
   /** Alias for reduceByKeyLocally */
+  @deprecated("Use reduceByKeyLocally", "1.0.0")
   def reduceByKeyToDriver(func: (V, V) => V): Map[K, V] = reduceByKeyLocally(func)
 
   /** Count the number of elements for each key, and return the result to the master as a Map. */
@@ -425,7 +424,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * Return the key-value pairs in this RDD to the master as a Map.
    */
   def collectAsMap(): Map[K, V] = {
-    val data = self.toArray()
+    val data = self.collect()
     val map = new mutable.HashMap[K, V]
     map.sizeHint(data.length)
     data.foreach { case (k, v) => map.put(k, v) }
@@ -604,8 +603,12 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     val job = new NewAPIHadoopJob(conf)
     job.setOutputKeyClass(keyClass)
     job.setOutputValueClass(valueClass)
+
     val wrappedConf = new SerializableWritable(job.getConfiguration)
-    NewFileOutputFormat.setOutputPath(job, new Path(path))
+    val outpath = new Path(path)
+    NewFileOutputFormat.setOutputPath(job, outpath)
+    val jobFormat = outputFormatClass.newInstance
+    jobFormat.checkOutputSpecs(job)
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id
@@ -633,7 +636,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       committer.commitTask(hadoopContext)
       return 1
     }
-    val jobFormat = outputFormatClass.newInstance
+
     /* apparently we need a TaskAttemptID to construct an OutputCommitter;
      * however we're only going to use this local OutputCommitter for
      * setupJob/commitJob, so we just use a dummy "map" task.
@@ -642,7 +645,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
     val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
     jobCommitter.setupJob(jobTaskContext)
-    val count = self.context.runJob(self, writeShard _).sum
+    self.context.runJob(self, writeShard _)
     jobCommitter.commitJob(jobTaskContext)
   }
 
@@ -696,10 +699,10 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * MapReduce job.
    */
   def saveAsHadoopDataset(conf: JobConf) {
-    val outputFormatClass = conf.getOutputFormat
+    val outputFormatInstance = conf.getOutputFormat
     val keyClass = conf.getOutputKeyClass
     val valueClass = conf.getOutputValueClass
-    if (outputFormatClass == null) {
+    if (outputFormatInstance == null) {
       throw new SparkException("Output format class not set")
     }
     if (keyClass == null) {
@@ -711,6 +714,12 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
 
     logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
       valueClass.getSimpleName + ")")
+
+    if (outputFormatInstance.isInstanceOf[FileOutputFormat[_, _]]) {
+      // FileOutputFormat ignores the filesystem parameter
+      val ignoredFs = FileSystem.get(conf)
+      conf.getOutputFormat.checkOutputSpecs(ignoredFs, conf)
+    }
 
     val writer = new SparkHadoopWriter(conf)
     writer.preSetup()

@@ -58,11 +58,21 @@ do is as follows.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1" >
+First, we import the names of the Spark Streaming classes, and some implicit
+conversions from StreamingContext into our environment, to add useful methods to
+other classes we need (like DStream).
 
-First, we create a
-[StreamingContext](api/streaming/index.html#org.apache.spark.streaming.StreamingContext) object,
-which is the main entry point for all streaming
-functionality. Besides Spark's configuration, we specify that any DStream will be processed
+[StreamingContext](api/streaming/index.html#org.apache.spark.streaming.StreamingContext) is the
+main entry point for all streaming functionality.
+
+{% highlight scala %}
+import org.apache.spark.streaming._
+import org.apache.spark.streaming.StreamingContext._
+{% endhighlight %}
+
+Then we create a
+[StreamingContext](api/streaming/index.html#org.apache.spark.streaming.StreamingContext) object.
+Besides Spark's configuration, we specify that any DStream will be processed
 in 1 second batches.
 
 {% highlight scala %}
@@ -98,7 +108,7 @@ val pairs = words.map(word => (word, 1))
 val wordCounts = pairs.reduceByKey(_ + _)
 
 // Print a few of the counts to the console
-wordCount.print()
+wordCounts.print()
 {% endhighlight %}
 
 The `words` DStream is further mapped (one-to-one transformation) to a DStream of `(word,
@@ -178,7 +188,7 @@ JavaPairDStream<String, Integer> wordCounts = pairs.reduceByKey(
       return i1 + i2;
     }
   });
-wordCount.print();     // Print a few of the counts to the console
+wordCounts.print();     // Print a few of the counts to the console
 {% endhighlight %}
 
 The `words` DStream is further mapped (one-to-one transformation) to a DStream of `(word,
@@ -261,6 +271,24 @@ Time: 1357008430000 ms
 {% endhighlight %}
     </td>
 </table>
+
+If you plan to run the Scala code for Spark Streaming-based use cases in the Spark
+shell, you should start the shell with the SparkConfiguration pre-configured to
+discard old batches periodically:
+
+{% highlight bash %}
+$ SPARK_JAVA_OPTS=-Dspark.cleaner.ttl=10000 bin/spark-shell
+{% endhighlight %}
+
+... and create your StreamingContext by wrapping the existing interactive shell
+SparkContext object, `sc`:
+
+{% highlight scala %}
+val ssc = new StreamingContext(sc, Seconds(1))
+{% endhighlight %}
+
+When working with the shell, you may also need to send a `^D` to your netcat session
+to force the pipeline to print the word counts to the console at the sink.
 
 ***************************************************************************************************  
 
@@ -511,7 +539,7 @@ common ones are as follows.
   <td> <b>updateStateByKey</b>(<i>func</i>) </td>
   <td> Return a new "state" DStream where the state for each key is updated by applying the
   given function on the previous state of the key and the new values for the key. This can be
-  used to maintain arbitrary state data for each ket.</td>
+  used to maintain arbitrary state data for each key.</td>
 </tr>
 <tr><td></td><td></td></tr>
 </table>

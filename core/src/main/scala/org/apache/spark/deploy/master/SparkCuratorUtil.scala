@@ -17,11 +17,13 @@
 
 package org.apache.spark.deploy.master
 
-import org.apache.spark.{SparkConf, Logging}
+import scala.collection.JavaConversions._
+
 import org.apache.curator.framework.{CuratorFramework, CuratorFrameworkFactory}
 import org.apache.curator.retry.ExponentialBackoffRetry
 import org.apache.zookeeper.KeeperException
 
+import org.apache.spark.{Logging, SparkConf}
 
 object SparkCuratorUtil extends Logging {
 
@@ -48,6 +50,15 @@ object SparkCuratorUtil extends Logging {
           // do nothing, ignore node existing exception.
         case e: Exception => throw e
       }
+    }
+  }
+
+  def deleteRecursive(zk: CuratorFramework, path: String) {
+    if (zk.checkExists().forPath(path) != null) {
+      for (child <- zk.getChildren.forPath(path)) {
+        zk.delete().forPath(path + "/" + child)
+      }
+      zk.delete().forPath(path)
     }
   }
 }

@@ -30,7 +30,7 @@ import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import akka.serialization.SerializationExtension
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState.DriverState
@@ -39,7 +39,8 @@ import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{AkkaUtils, Utils}
 
-private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
+private[spark] class Master(host: String, port: Int, webUiPort: Int,
+    val securityMgr: SecurityManager) extends Actor with Logging {
   import context.dispatcher   // to use Akka's scheduler.schedule()
 
   val conf = new SparkConf
@@ -70,8 +71,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   Utils.checkHost(host, "Expected hostname")
 
-  val masterMetricsSystem = MetricsSystem.createMetricsSystem("master", conf)
-  val applicationMetricsSystem = MetricsSystem.createMetricsSystem("applications", conf)
+  val masterMetricsSystem = MetricsSystem.createMetricsSystem("master", conf, securityMgr)
+  val applicationMetricsSystem = MetricsSystem.createMetricsSystem("applications", conf,
+    securityMgr)
   val masterSource = new MasterSource(this)
 
   val webUi = new MasterWebUI(this, webUiPort)
@@ -529,8 +531,15 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
     val workerAddress = worker.actor.path.address
     if (addressToWorker.contains(workerAddress)) {
-      logInfo("Attempted to re-register worker at same address: " + workerAddress)
-      return false
+      val oldWorker = addressToWorker(workerAddress)
+      if (oldWorker.state == WorkerState.UNKNOWN) {
+        // A worker registering from UNKNOWN implies that the worker was restarted during recovery.
+        // The old worker must thus be dead, so we will remove it and accept the new worker.
+        removeWorker(oldWorker)
+      } else {
+        logInfo("Attempted to re-register worker at same address: " + workerAddress)
+        return false
+      }
     }
 
     workers += worker
@@ -711,8 +720,11 @@ private[spark] object Master {
   def startSystemAndActor(host: String, port: Int, webUiPort: Int, conf: SparkConf)
       : (ActorSystem, Int, Int) =
   {
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf)
-    val actor = actorSystem.actorOf(Props(classOf[Master], host, boundPort, webUiPort), actorName)
+    val securityMgr = new SecurityManager(conf)
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf,
+      securityManager = securityMgr)
+    val actor = actorSystem.actorOf(Props(classOf[Master], host, boundPort, webUiPort,
+      securityMgr), actorName)
     val timeout = AkkaUtils.askTimeout(conf)
     val respFuture = actor.ask(RequestWebUIPort)(timeout)
     val resp = Await.result(respFuture, timeout).asInstanceOf[WebUIPortResponse]

@@ -35,13 +35,28 @@ private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
-private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster)
+private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster, conf: SparkConf)
   extends Actor with Logging {
+  val maxAkkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
+
   def receive = {
     case GetMapOutputStatuses(shuffleId: Int) =>
       val hostPort = sender.path.address.hostPort
       logInfo("Asked to send map output locations for shuffle " + shuffleId + " to " + hostPort)
-      sender ! tracker.getSerializedMapOutputStatuses(shuffleId)
+      val mapOutputStatuses = tracker.getSerializedMapOutputStatuses(shuffleId)
+      val serializedSize = mapOutputStatuses.size
+      if (serializedSize > maxAkkaFrameSize) {
+        val msg = s"Map output statuses were $serializedSize bytes which " +
+          s"exceeds spark.akka.frameSize ($maxAkkaFrameSize bytes)."
+
+        /* For SPARK-1244 we'll opt for just logging an error and then throwing an exception.
+         * Note that on exception the actor will just restart. A bigger refactoring (SPARK-1239)
+         * will ultimately remove this entire code path. */
+        val exception = new SparkException(msg)
+        logError(msg, exception)
+        throw exception
+      }
+      sender ! mapOutputStatuses
 
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerActor stopped!")

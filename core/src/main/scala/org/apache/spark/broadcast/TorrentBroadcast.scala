@@ -241,7 +241,9 @@ private[spark] case class TorrentInfo(
  */
 class TorrentBroadcastFactory extends BroadcastFactory {
 
-  def initialize(isDriver: Boolean, conf: SparkConf) { TorrentBroadcast.initialize(isDriver, conf) }
+  def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager) { 
+    TorrentBroadcast.initialize(isDriver, conf) 
+  }
 
   def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long) =
     new TorrentBroadcast[T](value_, isLocal, id)

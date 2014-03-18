@@ -23,9 +23,9 @@ import scala.util.control.{ControlThrowable, NonFatal}
 import com.typesafe.config.Config
 
 /**
- * An [[akka.actor.ActorSystem]] which refuses to shut down in the event of a fatal exception.
+ * An akka.actor.ActorSystem which refuses to shut down in the event of a fatal exception
  * This is necessary as Spark Executors are allowed to recover from fatal exceptions
- * (see [[org.apache.spark.executor.Executor]]).
+ * (see org.apache.spark.executor.Executor)
  */
 object IndestructibleActorSystem {
   def apply(name: String, config: Config): ActorSystem =

@@ -21,9 +21,12 @@ import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkContext, SparkException}
+
+import scala.collection.JavaConversions._
 
 /**
  * Contains util methods to interact with Hadoop from Spark.
@@ -33,20 +36,20 @@ class SparkHadoopUtil {
   UserGroupInformation.setConfiguration(conf)
 
   def runAsUser(user: String)(func: () => Unit) {
-    // if we are already running as the user intended there is no reason to do the doAs. It
-    // will actually break secure HDFS access as it doesn't fill in the credentials. Also if
-    // the user is UNKNOWN then we shouldn't be creating a remote unknown user
-    // (this is actually the path spark on yarn takes) since SPARK_USER is initialized only
-    // in SparkContext.
-    val currentUser = Option(System.getProperty("user.name")).
-      getOrElse(SparkContext.SPARK_UNKNOWN_USER)
-    if (user != SparkContext.SPARK_UNKNOWN_USER && currentUser != user) {
+    if (user != SparkContext.SPARK_UNKNOWN_USER) {
       val ugi = UserGroupInformation.createRemoteUser(user)
+      transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
       ugi.doAs(new PrivilegedExceptionAction[Unit] {
         def run: Unit = func()
       })
     } else {
       func()
+    }
+  }
+
+  def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
+    for (token <- source.getTokens()) {
+      dest.addToken(token)
     }
   }
 
@@ -63,6 +66,15 @@ class SparkHadoopUtil {
   def addCredentials(conf: JobConf) {}
 
   def isYarnMode(): Boolean = { false }
+
+  def getCurrentUserCredentials(): Credentials = { null }
+
+  def addCurrentUserCredentials(creds: Credentials) {}
+
+  def addSecretKeyToUserCredentials(key: String, secret: String) {}
+
+  def getSecretKeyFromUserCredentials(key: String): Array[Byte] = { null }
+
 }
 
 object SparkHadoopUtil {

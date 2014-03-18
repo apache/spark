@@ -83,7 +83,7 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, Ja
    * Return a new RDD containing only the elements that satisfy a predicate.
    */
   def filter(f: JFunction[JDouble, java.lang.Boolean]): JavaDoubleRDD =
-    fromRDD(srdd.filter(x => f(x).booleanValue()))
+    fromRDD(srdd.filter(x => f.call(x).booleanValue()))
 
   /**
    * Return a new RDD that is reduced into `numPartitions` partitions.
@@ -139,6 +139,14 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, Ja
    * times (use `.distinct()` to eliminate them).
    */
   def union(other: JavaDoubleRDD): JavaDoubleRDD = fromRDD(srdd.union(other.srdd))
+
+  /**
+   * Return the intersection of this RDD and another one. The output will not contain any duplicate
+   * elements, even if the input RDDs did.
+   *
+   * Note that this method performs a shuffle internally.
+   */
+  def intersection(other: JavaDoubleRDD): JavaDoubleRDD = fromRDD(srdd.intersection(other.srdd))
 
   // Double RDD functions
 

@@ -70,7 +70,7 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
    * Return a new RDD containing only the elements that satisfy a predicate.
    */
   def filter(f: JFunction[T, java.lang.Boolean]): JavaRDD[T] =
-    wrapRDD(rdd.filter((x => f(x).booleanValue())))
+    wrapRDD(rdd.filter((x => f.call(x).booleanValue())))
 
   /**
    * Return a new RDD that is reduced into `numPartitions` partitions.
@@ -105,6 +105,15 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
    * times (use `.distinct()` to eliminate them).
    */
   def union(other: JavaRDD[T]): JavaRDD[T] = wrapRDD(rdd.union(other.rdd))
+
+
+  /**
+   * Return the intersection of this RDD and another one. The output will not contain any duplicate
+   * elements, even if the input RDDs did.
+   *
+   * Note that this method performs a shuffle internally.
+   */
+  def intersection(other: JavaRDD[T]): JavaRDD[T] = wrapRDD(rdd.intersection(other.rdd))
 
   /**
    * Return an RDD with the elements from `this` that are not in `other`.

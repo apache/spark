@@ -32,7 +32,7 @@ import java.util.regex.Pattern;
  */
 public final class JavaKMeans {
 
-  static class ParsePoint extends Function<String, double[]> {
+  static class ParsePoint implements Function<String, double[]> {
     private static final Pattern SPACE = Pattern.compile(" ");
 
     @Override
