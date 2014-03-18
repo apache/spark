@@ -431,11 +431,13 @@ class StreamingContext private[streaming] (
    * Stop the execution of the streams.
    * @param stopSparkContext Stop the associated SparkContext or not
    */
-  def stop(stopSparkContext: Boolean = true) = synchronized {
-    scheduler.stop()
-    logInfo("StreamingContext stopped successfully")
-    waiter.notifyStop()
-    if (stopSparkContext) sc.stop()
+  def stop(stopSparkContext: Boolean = true) {
+    synchronized {
+      scheduler.stop()
+      logInfo("StreamingContext stopped successfully")
+      waiter.notifyStop()
+      if (stopSparkContext) sc.stop()
+    }
   }
 }
 
@@ -489,7 +491,7 @@ object StreamingContext extends Logging {
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
    * their JARs to StreamingContext.
    */
-  def jarOfClass(cls: Class[_]) = SparkContext.jarOfClass(cls)
+  def jarOfClass(cls: Class[_]): Seq[String] = SparkContext.jarOfClass(cls)
 
   private[streaming] def createNewSparkContext(conf: SparkConf): SparkContext = {
     // Set the default cleaner delay to an hour if not already set.
