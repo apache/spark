@@ -37,10 +37,10 @@
            a Hadoop 0.23.X issue -->
       <id>yarn-alpha</id>
       <dependencies>
-         <dependency>
-           <groupId>org.apache.avro</groupId>
-           <artifactId>avro</artifactId>
-         </dependency>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro</artifactId>
+        </dependency>
       </dependencies>
     </profile>
   </profiles>

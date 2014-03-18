@@ -100,7 +100,7 @@ private[spark] class Stage(
     id
   }
 
-  val name = callSite.getOrElse(rdd.origin)
+  val name = callSite.getOrElse(rdd.getCreationSite)
 
   override def toString = "Stage " + id
 

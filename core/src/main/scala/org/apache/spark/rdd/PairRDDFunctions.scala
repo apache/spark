@@ -44,6 +44,7 @@ import org.apache.spark._
 import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.SparkContext._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.SerializableHyperLogLog
 
 /**
@@ -73,7 +74,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       mergeCombiners: (C, C) => C,
       partitioner: Partitioner,
       mapSideCombine: Boolean = true,
-      serializerClass: String = null): RDD[(K, C)] = {
+      serializer: Serializer = null): RDD[(K, C)] = {
     require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
     if (getKeyClass().isArray) {
       if (mapSideCombine) {
@@ -93,13 +94,13 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
         aggregator.combineValuesByKey(iter, context)
       }, preservesPartitioning = true)
       val partitioned = new ShuffledRDD[K, C, (K, C)](combined, partitioner)
-        .setSerializer(serializerClass)
+        .setSerializer(serializer)
       partitioned.mapPartitionsWithContext((context, iter) => {
         new InterruptibleIterator(context, aggregator.combineCombinersByKey(iter, context))
       }, preservesPartitioning = true)
     } else {
       // Don't apply map-side combiner.
-      val values = new ShuffledRDD[K, V, (K, V)](self, partitioner).setSerializer(serializerClass)
+      val values = new ShuffledRDD[K, V, (K, V)](self, partitioner).setSerializer(serializer)
       values.mapPartitionsWithContext((context, iter) => {
         new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
       }, preservesPartitioning = true)
@@ -423,7 +424,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * Return the key-value pairs in this RDD to the master as a Map.
    */
   def collectAsMap(): Map[K, V] = {
-    val data = self.toArray()
+    val data = self.collect()
     val map = new mutable.HashMap[K, V]
     map.sizeHint(data.length)
     data.foreach { case (k, v) => map.put(k, v) }

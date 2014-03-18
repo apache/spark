@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Dependency, Partition, Partitioner, ShuffleDependency, SparkEnv, TaskContext}
+import org.apache.spark.serializer.Serializer
 
 private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
   override val index = idx
@@ -38,15 +39,15 @@ class ShuffledRDD[K, V, P <: Product2[K, V] : ClassTag](
     part: Partitioner)
   extends RDD[P](prev.context, Nil) {
 
-  private var serializerClass: String = null
+  private var serializer: Serializer = null
 
-  def setSerializer(cls: String): ShuffledRDD[K, V, P] = {
-    serializerClass = cls
+  def setSerializer(serializer: Serializer): ShuffledRDD[K, V, P] = {
+    this.serializer = serializer
     this
   }
 
   override def getDependencies: Seq[Dependency[_]] = {
-    List(new ShuffleDependency(prev, part, serializerClass))
+    List(new ShuffleDependency(prev, part, serializer))
   }
 
   override val partitioner = Some(part)
@@ -57,8 +58,8 @@ class ShuffledRDD[K, V, P <: Product2[K, V] : ClassTag](
 
   override def compute(split: Partition, context: TaskContext): Iterator[P] = {
     val shuffledId = dependencies.head.asInstanceOf[ShuffleDependency[K, V]].shuffleId
-    SparkEnv.get.shuffleFetcher.fetch[P](shuffledId, split.index, context,
-      SparkEnv.get.serializerManager.get(serializerClass, SparkEnv.get.conf))
+    val ser = Serializer.getSerializer(serializer)
+    SparkEnv.get.shuffleFetcher.fetch[P](shuffledId, split.index, context, ser)
   }
 
   override def clearDependencies() {

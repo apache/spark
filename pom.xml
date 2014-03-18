@@ -127,7 +127,18 @@
     <repository>
       <id>maven-repo</id> <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
-      <url>http://repo.maven.apache.org/maven2</url>
+      <url>https://repo.maven.apache.org/maven2</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>apache-repo</id>
+      <name>Apache Repository</name>
+      <url>https://repository.apache.org/content/repositories/releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -138,7 +149,18 @@
     <repository>
       <id>jboss-repo</id>
       <name>JBoss Repository</name>
-      <url>http://repository.jboss.org/nexus/content/repositories/releases</url>
+      <url>https://repository.jboss.org/nexus/content/repositories/releases</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>mqtt-repo</id>
+      <name>MQTT Repository</name>
+      <url>https://repo.eclipse.org/content/repositories/paho-releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -150,11 +172,32 @@
       <id>cloudera-repo</id>
       <name>Cloudera Repository</name>
       <url>https://repository.cloudera.com/artifactory/cloudera-repos</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
     </repository>
   </repositories>
 
   <dependencyManagement>
     <dependencies>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-util</artifactId>
+        <version>7.6.8.v20121106</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-security</artifactId>
+        <version>7.6.8.v20121106</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-plus</artifactId>
+        <version>7.6.8.v20121106</version>
+      </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-server</artifactId>
@@ -207,11 +250,6 @@
         <version>1.0.5</version>
       </dependency>
       <dependency>
-        <groupId>org.ow2.asm</groupId>
-        <artifactId>asm</artifactId>
-        <version>4.0</version>
-      </dependency>
-      <dependency>
         <groupId>com.clearspring.analytics</groupId>
         <artifactId>stream</artifactId>
         <version>2.4.0</version>
@@ -230,11 +268,31 @@
         <groupId>com.twitter</groupId>
         <artifactId>chill_${scala.binary.version}</artifactId>
         <version>0.3.1</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm-commons</artifactId>
+         </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill-java</artifactId>
         <version>0.3.1</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm-commons</artifactId>
+         </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
@@ -294,6 +352,11 @@
         <groupId>org.apache.mesos</groupId>
         <artifactId>mesos</artifactId>
         <version>${mesos.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>commons-net</groupId>
+        <artifactId>commons-net</artifactId>
+        <version>2.2</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -416,6 +479,10 @@
             <artifactId>asm</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.jboss.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
@@ -455,6 +522,10 @@
             <artifactId>asm</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.jboss.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
@@ -467,6 +538,10 @@
         <exclusions>
           <exclusion>
             <groupId>asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
             <artifactId>asm</artifactId>
           </exclusion>
           <exclusion>
@@ -483,6 +558,10 @@
         <exclusions>
           <exclusion>
             <groupId>asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
             <artifactId>asm</artifactId>
           </exclusion>
           <exclusion>
@@ -705,12 +784,19 @@
         <hadoop.version>0.23.7</hadoop.version>
         <!--<hadoop.version>2.0.5-alpha</hadoop.version> -->
       </properties>
-
       <modules>
         <module>yarn</module>
       </modules>
-
     </profile>
+
+    <!-- Ganglia integration is not included by default due to LGPL-licensed code -->
+    <profile>
+      <id>spark-ganglia-lgpl</id>
+      <modules>
+        <module>extras/spark-ganglia-lgpl</module>
+      </modules>
+    </profile>
+
     <profile>
       <id>java8-tests</id>
       <build>
@@ -749,5 +835,51 @@
       </modules>
 
     </profile>
+    
+   <!-- Build without Hadoop dependencies that are included in some runtime environments. -->
+    <profile>
+      <id>hadoop-provided</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-client</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-api</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-common</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-client</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro-ipc</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper</artifactId>
+          <scope>provided</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    
   </profiles>
 </project>

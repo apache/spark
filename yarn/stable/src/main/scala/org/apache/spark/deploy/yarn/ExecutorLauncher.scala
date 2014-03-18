@@ -28,14 +28,14 @@ import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 import akka.actor._
 import akka.remote._
 import akka.actor.Terminated
-import org.apache.spark.{SparkConf, SparkContext, Logging}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.util.{Utils, AkkaUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 
-class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, sparkConf: SparkConf)
+class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sparkConf: SparkConf)
   extends Logging {
 
   def this(args: ApplicationMasterArguments, sparkConf: SparkConf) =
@@ -52,8 +52,9 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
 
   private var amClient: AMRMClient[ContainerRequest] = _
 
+  val securityManager = new SecurityManager(sparkConf)
   val actorSystem: ActorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
-    conf = sparkConf)._1
+    conf = sparkConf, securityManager = securityManager)._1
   var actor: ActorRef = _
 
   // This actor just working as a monitor to watch on Driver Actor.
@@ -92,7 +93,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
     waitForSparkMaster()
 
     // Allocate all containers
-    allocateWorkers()
+    allocateExecutors()
 
     // Launch a progress reporter thread, else app will get killed after expiration (def: 10mins) timeout
     // ensure that progress is sent before YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS elapse.
@@ -105,6 +106,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
     val interval = math.min(timeoutInterval / 2, schedulerInterval)
 
     reporterThread = launchReporterThread(interval)
+    
 
     // Wait for the reporter thread to Finish.
     reporterThread.join()
@@ -173,7 +175,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
   }
 
 
-  private def allocateWorkers() {
+  private def allocateExecutors() {
 
     // Fixme: should get preferredNodeLocationData from SparkContext, just fake a empty one for now.
     val preferredNodeLocationData: scala.collection.Map[String, scala.collection.Set[SplitInfo]] =
@@ -187,18 +189,18 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
       preferredNodeLocationData,
       sparkConf)
 
-    logInfo("Allocating " + args.numWorkers + " workers.")
+    logInfo("Allocating " + args.numExecutors + " executors.")
     // Wait until all containers have finished
     // TODO: This is a bit ugly. Can we make it nicer?
     // TODO: Handle container failure
 
-    yarnAllocator.addResourceRequests(args.numWorkers)
-    while ((yarnAllocator.getNumWorkersRunning < args.numWorkers) && (!driverClosed)) {
+    yarnAllocator.addResourceRequests(args.numExecutors)
+    while ((yarnAllocator.getNumExecutorsRunning < args.numExecutors) && (!driverClosed)) {
       yarnAllocator.allocateResources()
       Thread.sleep(100)
     }
 
-    logInfo("All workers have launched.")
+    logInfo("All executors have launched.")
 
   }
 
@@ -209,12 +211,12 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
     val t = new Thread {
       override def run() {
         while (!driverClosed) {
-          val missingWorkerCount = args.numWorkers - yarnAllocator.getNumWorkersRunning -
+          val missingExecutorCount = args.numExecutors - yarnAllocator.getNumExecutorsRunning -
             yarnAllocator.getNumPendingAllocate
-          if (missingWorkerCount > 0) {
+          if (missingExecutorCount > 0) {
             logInfo("Allocating %d containers to make up for (potentially) lost containers".
-              format(missingWorkerCount))
-            yarnAllocator.addResourceRequests(missingWorkerCount)
+              format(missingExecutorCount))
+            yarnAllocator.addResourceRequests(missingExecutorCount)
           }
           sendProgress()
           Thread.sleep(sleepTime)
@@ -242,9 +244,9 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
 }
 
 
-object WorkerLauncher {
+object ExecutorLauncher {
   def main(argStrings: Array[String]) {
     val args = new ApplicationMasterArguments(argStrings)
-    new WorkerLauncher(args).run()
+    new ExecutorLauncher(args).run()
   }
 }

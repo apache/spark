@@ -89,10 +89,15 @@ case class Rating(val user: Int, val product: Int, val rating: Double)
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
-class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var lambda: Double,
-                   var implicitPrefs: Boolean, var alpha: Double)
-  extends Serializable with Logging
-{
+class ALS private (
+    var numBlocks: Int,
+    var rank: Int,
+    var iterations: Int,
+    var lambda: Double,
+    var implicitPrefs: Boolean,
+    var alpha: Double,
+    var seed: Long = System.nanoTime()
+  ) extends Serializable with Logging {
   def this() = this(-1, 10, 10, 0.01, false, 1.0)
 
   /**
@@ -132,6 +137,12 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
     this
   }
 
+  /** Sets a random seed to have deterministic results. */
+  def setSeed(seed: Long): ALS = {
+    this.seed = seed
+    this
+  }
+
   /**
    * Run ALS with the configured parameters on an input RDD of (user, product, rating) triples.
    * Returns a MatrixFactorizationModel with feature vectors for each user and product.
@@ -155,7 +166,7 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
 
     // Initialize user and product factors randomly, but use a deterministic seed for each
     // partition so that fault recovery works
-    val seedGen = new Random()
+    val seedGen = new Random(seed)
     val seed1 = seedGen.nextInt()
     val seed2 = seedGen.nextInt()
     // Hash an integer to propagate random bits at all positions, similar to java.util.HashTable
@@ -210,18 +221,43 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
    */
   def computeYtY(factors: RDD[(Int, Array[Array[Double]])]) = {
     if (implicitPrefs) {
-      Option(
-        factors.flatMapValues { case factorArray =>
-          factorArray.view.map { vector =>
-            val x = new DoubleMatrix(vector)
-            x.mmul(x.transpose())
-          }
-        }.reduceByKeyLocally((a, b) => a.addi(b))
-         .values
-         .reduce((a, b) => a.addi(b))
-      )
+      val n = rank * (rank + 1) / 2
+      val LYtY = factors.values.aggregate(new DoubleMatrix(n))( seqOp = (L, Y) => {
+        Y.foreach(y => dspr(1.0, new DoubleMatrix(y), L))
+        L
+      }, combOp = (L1, L2) => {
+        L1.addi(L2)
+      })
+      val YtY = new DoubleMatrix(rank, rank)
+      fillFullMatrix(LYtY, YtY)
+      Option(YtY)
     } else {
       None
+    }
+  }
+
+  /**
+   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's DSPR.
+   *
+   * @param L the lower triangular part of the matrix packed in an array (row major)
+   */
+  private def dspr(alpha: Double, x: DoubleMatrix, L: DoubleMatrix) = {
+    val n = x.length
+    var i = 0
+    var j = 0
+    var idx = 0
+    var axi = 0.0
+    val xd = x.data
+    val Ld = L.data
+    while (i < n) {
+      axi = alpha * xd(i)
+      j = 0
+      while (j <= i) {
+        Ld(idx) += axi * xd(j)
+        j += 1
+        idx += 1
+      }
+      i += 1
     }
   }
 
@@ -376,7 +412,8 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
     for (productBlock <- 0 until numBlocks) {
       for (p <- 0 until blockFactors(productBlock).length) {
         val x = new DoubleMatrix(blockFactors(productBlock)(p))
-        fillXtX(x, tempXtX)
+        tempXtX.fill(0.0)
+        dspr(1.0, x, tempXtX)
         val (us, rs) = inLinkBlock.ratingsForBlock(productBlock)(p)
         for (i <- 0 until us.length) {
           implicitPrefs match {
@@ -387,7 +424,7 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
               // Extension to the original paper to handle rs(i) < 0. confidence is a function
               // of |rs(i)| instead so that it is never negative:
               val confidence = 1 + alpha * abs(rs(i))
-              userXtX(us(i)).addi(tempXtX.mul(confidence - 1))
+              SimpleBlas.axpy(confidence - 1.0, tempXtX, userXtX(us(i)))
               // For rs(i) < 0, the corresponding entry in P is 0 now, not 1 -- negative rs(i)
               // means we try to reconstruct 0. We add terms only where P = 1, so, term below
               // is now only added for rs(i) > 0:
@@ -400,35 +437,16 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
     }
 
     // Solve the least-squares problem for each user and return the new feature vectors
-    userXtX.zipWithIndex.map{ case (triangularXtX, index) =>
+    Array.range(0, numUsers).map { index =>
       // Compute the full XtX matrix from the lower-triangular part we got above
-      fillFullMatrix(triangularXtX, fullXtX)
+      fillFullMatrix(userXtX(index), fullXtX)
       // Add regularization
       (0 until rank).foreach(i => fullXtX.data(i*rank + i) += lambda)
       // Solve the resulting matrix, which is symmetric and positive-definite
       implicitPrefs match {
         case false => Solve.solvePositive(fullXtX, userXy(index)).data
-        case true => Solve.solvePositive(fullXtX.add(YtY.value.get), userXy(index)).data
+        case true => Solve.solvePositive(fullXtX.addi(YtY.value.get), userXy(index)).data
       }
-    }
-  }
-
-  /**
-   * Set xtxDest to the lower-triangular part of x transpose * x. For efficiency in summing
-   * these matrices, we store xtxDest as only rank * (rank+1) / 2 values, namely the values
-   * at (0,0), (1,0), (1,1), (2,0), (2,1), (2,2), etc in that order.
-   */
-  private def fillXtX(x: DoubleMatrix, xtxDest: DoubleMatrix) {
-    var i = 0
-    var pos = 0
-    while (i < x.length) {
-      var j = 0
-      while (j <= i) {
-        xtxDest.data(pos) = x.data(i) * x.data(j)
-        pos += 1
-        j += 1
-      }
-      i += 1
     }
   }
 
@@ -455,9 +473,35 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
 
 
 /**
- * Top-level methods for calling Alternating Least Squares (ALS) matrix factorizaton.
+ * Top-level methods for calling Alternating Least Squares (ALS) matrix factorization.
  */
 object ALS {
+
+  /**
+   * Train a matrix factorization model given an RDD of ratings given by users to some products,
+   * in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the
+   * product of two lower-rank matrices of a given rank (number of features). To solve for these
+   * features, we run a given number of iterations of ALS. This is done using a level of
+   * parallelism given by `blocks`.
+   *
+   * @param ratings    RDD of (userID, productID, rating) pairs
+   * @param rank       number of features to use
+   * @param iterations number of iterations of ALS (recommended: 10-20)
+   * @param lambda     regularization factor (recommended: 0.01)
+   * @param blocks     level of parallelism to split computation into
+   * @param seed       random seed
+   */
+  def train(
+      ratings: RDD[Rating],
+      rank: Int,
+      iterations: Int,
+      lambda: Double,
+      blocks: Int,
+      seed: Long
+    ): MatrixFactorizationModel = {
+    new ALS(blocks, rank, iterations, lambda, false, 1.0, seed).run(ratings)
+  }
+
   /**
    * Train a matrix factorization model given an RDD of ratings given by users to some products,
    * in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the
@@ -476,9 +520,8 @@ object ALS {
       rank: Int,
       iterations: Int,
       lambda: Double,
-      blocks: Int)
-    : MatrixFactorizationModel =
-  {
+      blocks: Int
+    ): MatrixFactorizationModel = {
     new ALS(blocks, rank, iterations, lambda, false, 1.0).run(ratings)
   }
 
@@ -495,8 +538,7 @@ object ALS {
    * @param lambda     regularization factor (recommended: 0.01)
    */
   def train(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double)
-    : MatrixFactorizationModel =
-  {
+    : MatrixFactorizationModel = {
     train(ratings, rank, iterations, lambda, -1)
   }
 
@@ -512,9 +554,35 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    */
   def train(ratings: RDD[Rating], rank: Int, iterations: Int)
-    : MatrixFactorizationModel =
-  {
+    : MatrixFactorizationModel = {
     train(ratings, rank, iterations, 0.01, -1)
+  }
+
+  /**
+   * Train a matrix factorization model given an RDD of 'implicit preferences' given by users
+   * to some products, in the form of (userID, productID, preference) pairs. We approximate the
+   * ratings matrix as the product of two lower-rank matrices of a given rank (number of features).
+   * To solve for these features, we run a given number of iterations of ALS. This is done using
+   * a level of parallelism given by `blocks`.
+   *
+   * @param ratings    RDD of (userID, productID, rating) pairs
+   * @param rank       number of features to use
+   * @param iterations number of iterations of ALS (recommended: 10-20)
+   * @param lambda     regularization factor (recommended: 0.01)
+   * @param blocks     level of parallelism to split computation into
+   * @param alpha      confidence parameter (only applies when immplicitPrefs = true)
+   * @param seed       random seed
+   */
+  def trainImplicit(
+      ratings: RDD[Rating],
+      rank: Int,
+      iterations: Int,
+      lambda: Double,
+      blocks: Int,
+      alpha: Double,
+      seed: Long
+    ): MatrixFactorizationModel = {
+    new ALS(blocks, rank, iterations, lambda, true, alpha, seed).run(ratings)
   }
 
   /**
@@ -537,9 +605,8 @@ object ALS {
       iterations: Int,
       lambda: Double,
       blocks: Int,
-      alpha: Double)
-  : MatrixFactorizationModel =
-  {
+      alpha: Double
+    ): MatrixFactorizationModel = {
     new ALS(blocks, rank, iterations, lambda, true, alpha).run(ratings)
   }
 
@@ -555,8 +622,8 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    */
-  def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double,
-      alpha: Double): MatrixFactorizationModel = {
+  def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double, alpha: Double)
+    : MatrixFactorizationModel = {
     trainImplicit(ratings, rank, iterations, lambda, -1, alpha)
   }
 
@@ -573,8 +640,7 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    */
   def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int)
-  : MatrixFactorizationModel =
-  {
+    : MatrixFactorizationModel = {
     trainImplicit(ratings, rank, iterations, 0.01, -1, 1.0)
   }
 

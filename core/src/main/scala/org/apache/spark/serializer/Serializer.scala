@@ -23,18 +23,28 @@ import java.nio.ByteBuffer
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 
 import org.apache.spark.util.{ByteBufferInputStream, NextIterator}
+import org.apache.spark.SparkEnv
 
 /**
  * A serializer. Because some serialization libraries are not thread safe, this class is used to
  * create [[org.apache.spark.serializer.SerializerInstance]] objects that do the actual
  * serialization and are guaranteed to only be called from one thread at a time.
  *
- * Implementations of this trait should have a zero-arg constructor or a constructor that accepts a
- * [[org.apache.spark.SparkConf]] as parameter. If both constructors are defined, the latter takes
- * precedence.
+ * Implementations of this trait should implement:
+ * 1. a zero-arg constructor or a constructor that accepts a [[org.apache.spark.SparkConf]]
+ * as parameter. If both constructors are defined, the latter takes precedence.
+ *
+ * 2. Java serialization interface.
  */
 trait Serializer {
   def newInstance(): SerializerInstance
+}
+
+
+object Serializer {
+  def getSerializer(serializer: Serializer): Serializer = {
+    if (serializer == null) SparkEnv.get.serializer else serializer
+  }
 }
 
 
