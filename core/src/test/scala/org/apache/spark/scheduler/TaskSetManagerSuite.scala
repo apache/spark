@@ -301,7 +301,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
   test("executors should be blacklisted after task failure, in spite of locality preferences") {
     val rescheduleDelay = 300L
     val conf = new SparkConf().
-      set("spark.task.executorBlacklistTimeout", rescheduleDelay.toString).
+      set("spark.scheduler.executorTaskBlacklistTime", rescheduleDelay.toString).
       // dont wait to jump locality levels in this test
       set("spark.locality.wait", "0")
 
