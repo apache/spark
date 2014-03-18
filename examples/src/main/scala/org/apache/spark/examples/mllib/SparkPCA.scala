@@ -42,16 +42,18 @@ object SparkPCA {
     val sc = new SparkContext(args(0), "SVD",
       System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
 
-    // Load and parse the data file
-    val data = sc.textFile(args(1)).map { line =>
-      val parts = line.split(',')
-      MatrixEntry(parts(0).toInt - 1, parts(1).toInt - 1, parts(2).toDouble)
-    }
     val m = args(2).toInt
     val n = args(3).toInt
 
+    val data = Array.ofDim[Double](m, n)
+    // Load and parse the data file
+    sc.textFile(args(1)).map { line =>
+      val parts = line.split(',')
+      data(parts(0).toInt - 1)(parts(1).toInt - 1) = parts(2).toDouble
+    }
+
     // recover top principal component
-    val coeffs = new PCA().computePCA(LAUtils.spToDense(SparseMatrix(data, m, n)), 1)
+    val coeffs = new PCA().setK(1).compute(sc.makeRDD(data))
 
     println("top principal component = " + coeffs.mkString(", "))
   }
