@@ -51,8 +51,8 @@ trait BinaryClassificationModel extends ClassificationModel {
    * @return Double Area under curve of ROC
    */ 
   def areaUnderROC(predictionAndLabel: RDD[(Double, Double)]) : Double = {
-    val nObs = predictionAndLabel.count
-    val nPos = predictionAndLabel.filter(x => x._2 == 1.0).count
+    val nObs = predictionAndLabel.count.toDouble
+    val nPos = predictionAndLabel.filter(x => x._2 == 1.0).count.toDouble
     // sort according to the predicted score and add indices
     val sortedPredictionsWithIndex = predictionAndLabel.sortByKey(true).zipWithIndex
     // sum of the positive ranks
@@ -62,7 +62,7 @@ trait BinaryClassificationModel extends ClassificationModel {
     if ((nPos > 0) && (nObs > nPos)) {
           (sumPosRanks - nPos * (nPos + 1) / 2) / (nPos * (nObs - nPos))
         } else {
-          0
+          0.0
         }
   }
 }
