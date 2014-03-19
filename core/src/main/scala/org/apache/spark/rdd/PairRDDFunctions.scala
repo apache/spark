@@ -44,6 +44,7 @@ import com.clearspring.analytics.stream.cardinality.HyperLogLog
 import org.apache.hadoop.mapred.SparkHadoopWriter
 import org.apache.hadoop.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.SparkContext._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.Partitioner.defaultPartitioner
@@ -710,6 +711,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     if (valueClass == null) {
       throw new SparkException("Output value class not set")
     }
+    SparkHadoopUtil.get.addCredentials(conf)
 
     logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
       valueClass.getSimpleName+ ")")
