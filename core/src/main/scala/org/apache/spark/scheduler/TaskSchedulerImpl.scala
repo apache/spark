@@ -235,7 +235,8 @@ private[spark] class TaskSchedulerImpl(
             taskIdToExecutorId(tid) = execId
             activeExecutorIds += execId
             executorsByHost(host) += execId
-            availableCpus(i) -= 1
+            availableCpus(i) -= taskSet.CPUS_PER_TASK
+            assert (availableCpus(i) >= 0)
             launchedTask = true
           }
         }
