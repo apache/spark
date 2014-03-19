@@ -697,7 +697,7 @@ private[spark] object Utils extends Logging {
     var finished = false
     var firstUserClass = "<unknown>"
 
-    for (el <- trace) {
+    for (el <- trace if el.getClassName != "scala.Option") {
       if (!finished) {
         if (SPARK_CLASS_REGEX.findFirstIn(el.getClassName).isDefined) {
           lastSparkMethod = if (el.getMethodName == "<init>") {
