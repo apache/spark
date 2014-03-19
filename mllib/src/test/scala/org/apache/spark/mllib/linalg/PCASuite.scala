@@ -66,9 +66,9 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
   test("full rank matrix pca") {
     val m = 5
     val n = 3
-    val dataarr = Array.tabulate(m,n){ (a, b) =>
-      MatrixEntry(a, b, Math.sin(a+b+a*b)) }.flatten
-    val data = sc.makeRDD(dataarr, 3) 
+    val dataArr = Array.tabulate(m,n){ (a, b) =>
+      MatrixEntry(a, b, Math.sin(a + b + a * b)) }.flatten
+    val data = sc.makeRDD(dataArr, 3) 
     val a = LAUtils.sparseToTallSkinnyDense(SparseMatrix(data, m, n))
 
     val realPCAArray = Array((0,0,-0.2579), (0,1,-0.6602), (0,2,0.7054),
@@ -85,9 +85,9 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
     val m = 5
     val n = 3
     // the entry that gets dropped is zero to test sparse support
-    val dataarr = Array.tabulate(m,n){ (a, b) =>
-      MatrixEntry(a, b, Math.sin(a+b+a*b)) }.flatten.drop(1)
-    val data = sc.makeRDD(dataarr, 3)
+    val dataArr = Array.tabulate(m,n){ (a, b) =>
+      MatrixEntry(a, b, Math.sin(a + b + a * b)) }.flatten.drop(1)
+    val data = sc.makeRDD(dataArr, 3)
     val a = LAUtils.sparseToTallSkinnyDense(SparseMatrix(data, m, n))
 
     val realPCAArray = Array((0,0,-0.2579), (0,1,-0.6602), (0,2,0.7054),
@@ -103,10 +103,10 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
   test("truncated matrix pca") {
     val m = 5
     val n = 3
-    val dataarr = Array.tabulate(m,n){ (a, b) =>
-      MatrixEntry(a, b, Math.sin(a+b+a*b)) }.flatten
+    val dataArr = Array.tabulate(m,n){ (a, b) =>
+      MatrixEntry(a, b, Math.sin(a + b + a * b)) }.flatten
     
-    val data = sc.makeRDD(dataarr, 3)
+    val data = sc.makeRDD(dataArr, 3)
     val a = LAUtils.sparseToTallSkinnyDense(SparseMatrix(data, m, n))
 
     val realPCAArray = Array((0,0,-0.2579), (0,1,-0.6602),
