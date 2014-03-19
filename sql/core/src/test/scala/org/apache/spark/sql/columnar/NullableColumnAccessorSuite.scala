@@ -25,16 +25,9 @@ import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 class NullableColumnAccessorSuite extends FunSuite {
   import ColumnarTestData._
 
-  testNullableColumnAccessor(BOOLEAN)
-  testNullableColumnAccessor(INT)
-  testNullableColumnAccessor(SHORT)
-  testNullableColumnAccessor(LONG)
-  testNullableColumnAccessor(BYTE)
-  testNullableColumnAccessor(DOUBLE)
-  testNullableColumnAccessor(FLOAT)
-  testNullableColumnAccessor(STRING)
-  testNullableColumnAccessor(BINARY)
-  testNullableColumnAccessor(GENERIC)
+  Seq(INT, LONG, SHORT, BOOLEAN, BYTE, STRING, DOUBLE, FLOAT, BINARY, GENERIC).foreach {
+    testNullableColumnAccessor(_)
+  }
 
   def testNullableColumnAccessor[T <: DataType, JvmType](columnType: ColumnType[T, JvmType]) {
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")

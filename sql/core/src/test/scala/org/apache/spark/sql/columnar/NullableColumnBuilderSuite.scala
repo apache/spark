@@ -26,16 +26,9 @@ import org.apache.spark.sql.execution.KryoSerializer
 class NullableColumnBuilderSuite extends FunSuite {
   import ColumnarTestData._
 
-  testNullableColumnBuilder(INT)
-  testNullableColumnBuilder(LONG)
-  testNullableColumnBuilder(SHORT)
-  testNullableColumnBuilder(BOOLEAN)
-  testNullableColumnBuilder(BYTE)
-  testNullableColumnBuilder(STRING)
-  testNullableColumnBuilder(DOUBLE)
-  testNullableColumnBuilder(FLOAT)
-  testNullableColumnBuilder(BINARY)
-  testNullableColumnBuilder(GENERIC)
+  Seq(INT, LONG, SHORT, BOOLEAN, BYTE, STRING, DOUBLE, FLOAT, BINARY, GENERIC).foreach {
+    testNullableColumnBuilder(_)
+  }
 
   def testNullableColumnBuilder[T <: DataType, JvmType](columnType: ColumnType[T, JvmType]) {
     val columnBuilder = ColumnBuilder(columnType.typeId)
