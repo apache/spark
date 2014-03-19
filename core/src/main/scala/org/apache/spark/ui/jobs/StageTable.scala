@@ -106,13 +106,8 @@ private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgr
     val description = listener.stageIdToDescription.get(s.stageId)
       .map(d => <div><em>{d}</em></div><div>{nameLink}</div>).getOrElse(nameLink)
     val finishTime = s.completionTime.getOrElse(System.currentTimeMillis())
-    val duration = s.submissionTime.map {
-      case t =>
-        if (finishTime > t) {
-          finishTime - t
-        } else {
-          System.currentTimeMillis() - t
-        }
+    val duration = s.submissionTime.map { t =>
+        if (finishTime > t) finishTime - t else System.currentTimeMillis - t
     }
 
     <tr>
