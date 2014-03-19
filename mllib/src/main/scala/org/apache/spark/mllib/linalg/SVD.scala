@@ -280,7 +280,7 @@ class SVD {
       throw new IllegalArgumentException("Must request up to n singular values")
     }
 
-    // Compute A^T A, assuming rows are sparse enough to fit in memory
+   // Compute A^T A, assuming rows are sparse enough to fit in memory
     val rows = data.map(entry =>
             (entry.i, (entry.j, entry.mval))).groupByKey()
     val emits = rows.flatMap{ case (rowind, cols)  =>

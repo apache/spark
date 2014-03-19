@@ -65,13 +65,11 @@ class PCA {
    * singular value decomposition (SVD) algorithm. 
    *
    * @param matrix dense matrix to perform PCA on
-   * @param k Recover k principal components
    * @return An nxk matrix with principal components in columns. Columns are inner arrays
    */
   private def computePCA(matrix: TallSkinnyDenseMatrix): Array[Array[Double]] = {
     val m = matrix.m
     val n = matrix.n
-    val sc = matrix.rows.sparkContext
 
     if (m <= 0 || n <= 0) {
       throw new IllegalArgumentException("Expecting a well-formed matrix: m=$m n=$n")
@@ -90,12 +88,10 @@ class PCA {
    * singular value decomposition (SVD) algorithm. 
    *
    * @param matrix dense matrix to perform pca on
-   * @param k Recover k principal components
    * @return An nxk matrix of principal components
    */
   private def computePCA(matrix: RDD[Array[Double]]): Array[Array[Double]] = {
     val n = matrix.first.size
-    val sc = matrix.sparkContext
 
     // compute column sums and normalize matrix
     val colSumsTemp = matrix.map((_, 1)).fold((Array.ofDim[Double](n), 0)) { (a, b) => 
