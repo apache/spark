@@ -52,15 +52,15 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
     ret
   }
 
-  def assertMatrixEquals(a: DoubleMatrix, b: DoubleMatrix) {
+  def assertMatrixApproximatelyEquals(a: DoubleMatrix, b: DoubleMatrix) {
     assert(a.rows == b.rows && a.columns == b.columns,
       "dimension mismatch: $a.rows vs $b.rows and $a.columns vs $b.columns")
-    val diff = DoubleMatrix.zeros(a.rows, a.columns)
-    Array.tabulate(a.rows, a.columns) { (i, j) =>
-      diff.put(i, j,
-        Math.min(Math.abs(a.get(i, j) - b.get(i, j)), Math.abs(a.get(i, j) + b.get(i, j))))
+    for (i <- 0 until a.columns) {
+      val aCol = a.getColumn(i)
+      val bCol = b.getColumn(i)
+      val diff = Math.min(aCol.sub(bCol).norm1, aCol.add(bCol).norm1)
+      assert(diff < EPSILON, "matrix mismatch: " + diff)
     }
-    assert(diff.norm1 < EPSILON, "matrix mismatch: " + diff.norm1)
   }
 
   test("full rank matrix pca") {
@@ -78,7 +78,7 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
 
     val coeffs = new DoubleMatrix(new PCA().setK(n).compute(a))
 
-    assertMatrixEquals(getDenseMatrix(SparseMatrix(realPCA,n,n)), coeffs)  
+    assertMatrixApproximatelyEquals(getDenseMatrix(SparseMatrix(realPCA,n,n)), coeffs)  
   }
 
   test("sparse matrix full rank matrix pca") {
@@ -97,7 +97,7 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
 
     val coeffs = new DoubleMatrix(new PCA().setK(n).compute(a))
 
-    assertMatrixEquals(getDenseMatrix(SparseMatrix(realPCA,n,n)), coeffs)
+    assertMatrixApproximatelyEquals(getDenseMatrix(SparseMatrix(realPCA,n,n)), coeffs)
   }
 
   test("truncated matrix pca") {
@@ -117,7 +117,7 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
     val k = 2
     val coeffs = new DoubleMatrix(new PCA().setK(k).compute(a))
 
-    assertMatrixEquals(getDenseMatrix(SparseMatrix(realPCA,n,k)), coeffs)
+    assertMatrixApproximatelyEquals(getDenseMatrix(SparseMatrix(realPCA,n,k)), coeffs)
   }
 }
 
