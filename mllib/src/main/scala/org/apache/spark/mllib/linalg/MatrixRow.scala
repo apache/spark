@@ -21,6 +21,6 @@ package org.apache.spark.mllib.linalg
  * Class that represents a row of a dense matrix
  *
  * @param i row index (0 indexing used)
- * @param row entries of the row
+ * @param data entries of the row
  */
 case class MatrixRow(val i: Int, val data: Array[Double])

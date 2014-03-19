@@ -40,11 +40,11 @@ class PCA {
     this
   }
 
-   /**
-    * Compute PCA using the current set parameters
-    */
+  /**
+   * Compute PCA using the current set parameters
+   */
   def compute(matrix: TallSkinnyDenseMatrix): Array[Array[Double]] = {
-    computePCA(matrix, k)
+    computePCA(matrix)
   }
 
   /**
@@ -52,57 +52,53 @@ class PCA {
    * See computePCA() for more details
    */
   def compute(matrix: RDD[Array[Double]]): Array[Array[Double]] = {
-    computePCA(matrix, k)
+    computePCA(matrix)
   }
 
- /**
-  * Principal Component Analysis.
-  * Computes the top k principal component coefficients for the m-by-n data matrix X.
-  * Rows of X correspond to observations and columns correspond to variables. 
-  * The coefficient matrix is n-by-k. Each column of coeff contains coefficients
-  * for one principal component, and the columns are in descending 
-  * order of component variance.
-  * This function centers the data and uses the 
-  * singular value decomposition (SVD) algorithm. 
-  *
-  * @param matrix dense matrix to perform pca on
-  * @param k Recover k principal components
-  * @return An nxk matrix with principal components in columns
-  */
-  private def computePCA(matrix: TallSkinnyDenseMatrix, k: Int): Array[Array[Double]] = {
+  /**
+   * Computes the top k principal component coefficients for the m-by-n data matrix X.
+   * Rows of X correspond to observations and columns correspond to variables. 
+   * The coefficient matrix is n-by-k. Each column of coeff contains coefficients
+   * for one principal component, and the columns are in descending 
+   * order of component variance.
+   * This function centers the data and uses the 
+   * singular value decomposition (SVD) algorithm. 
+   *
+   * @param matrix dense matrix to perform PCA on
+   * @param k Recover k principal components
+   * @return An nxk matrix with principal components in columns. Columns are inner arrays
+   */
+  private def computePCA(matrix: TallSkinnyDenseMatrix): Array[Array[Double]] = {
     val m = matrix.m
     val n = matrix.n
     val sc = matrix.rows.sparkContext
 
     if (m <= 0 || n <= 0) {
-      throw new IllegalArgumentException(
-                "Expecting a well-formed matrix: m=" + m + " n=" + n)
+      throw new IllegalArgumentException("Expecting a well-formed matrix: m=$m n=$n")
     }
 
-    computePCA(matrix.rows.map(_.data), k)
+    computePCA(matrix.rows.map(_.data))
   }
 
   /**
-  * Principal Component Analysis.
-  * Computes the top k principal component coefficients for the m-by-n data matrix X.
-  * Rows of X correspond to observations and columns correspond to variables. 
-  * The coefficient matrix is n-by-k. Each column of coeff contains coefficients
-  * for one principal component, and the columns are in descending 
-  * order of component variance.
-  * This function centers the data and uses the 
-  * singular value decomposition (SVD) algorithm. 
-  *
-  * @param matrix dense matrix to perform pca on
-  * @param k Recover k principal components
-  * @return An nxk matrix of principal components
-  */
-  private def computePCA(matrix: RDD[Array[Double]], k: Int): Array[Array[Double]] = {
+   * Computes the top k principal component coefficients for the m-by-n data matrix X.
+   * Rows of X correspond to observations and columns correspond to variables. 
+   * The coefficient matrix is n-by-k. Each column of coeff contains coefficients
+   * for one principal component, and the columns are in descending 
+   * order of component variance.
+   * This function centers the data and uses the 
+   * singular value decomposition (SVD) algorithm. 
+   *
+   * @param matrix dense matrix to perform pca on
+   * @param k Recover k principal components
+   * @return An nxk matrix of principal components
+   */
+  private def computePCA(matrix: RDD[Array[Double]]): Array[Array[Double]] = {
     val n = matrix.first.size
     val sc = matrix.sparkContext
 
     // compute column sums and normalize matrix
-    val colSumsTemp = matrix.map(x => (x, 1))
-          .fold((Array.ofDim[Double](n), 0)) { (a, b) => 
+    val colSumsTemp = matrix.map((_, 1)).fold((Array.ofDim[Double](n), 0)) { (a, b) => 
       val am = new DoubleMatrix(a._1)
       val bm = new DoubleMatrix(b._1)
       am.addi(bm)
@@ -112,14 +108,14 @@ class PCA {
     val m = colSumsTemp._2 
     val colSums = colSumsTemp._1.map(x => x / m)
 
-    val data = matrix.map{ x => 
-        val row = Array.ofDim[Double](n)
-        var i = 0
-        while(i < n) {
-          row(i) = x(i) - colSums(i)
-          i += 1 
-        }
-        row
+    val data = matrix.map { x => 
+      val row = Array.ofDim[Double](n)
+      var i = 0
+      while (i < n) {
+        row(i) = x(i) - colSums(i)
+        i += 1 
+      }
+      row
     }           
    
     val (u, s, v) = new SVD().setK(k).compute(data)

@@ -29,8 +29,8 @@ import org.apache.spark.mllib.util._
  */
 object SparkPCA {
   def main(args: Array[String]) {
-   if (args.length != 4) {
-      System.err.println("Usage: SparkPCA <master> <file> m n")
+    if (args.length != 4) {
+      System.err.println("Usage: SparkPCA <master> m n")
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "SVD",

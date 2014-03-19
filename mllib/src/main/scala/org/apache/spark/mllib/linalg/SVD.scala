@@ -41,9 +41,9 @@ class SVD {
   }
 
   /**
-   * How small of a singular value is considered zero?
+   * Singular values smaller than this value are considered zero
    */
-  def setRCOND(rcond: Double): SVD = {
+  def setReciprocalConditionNumber(rcond: Double): SVD = {
     this.RCOND = rcond
     this
   }
@@ -72,6 +72,11 @@ class SVD {
 
   /**
    * Compute SVD using the current set parameters
+   * Returns (U, S, V)  such that A = USV^T 
+   * U is a row-by-row dense matrix
+   * S is a simple double array of singular values
+   * V is a 2d array matrix
+   * See denseSVD for more documentation 
    */
   def compute(matrix: RDD[Array[Double]]) :
     (RDD[Array[Double]], Array[Double], Array[Array[Double]])  = {
@@ -133,7 +138,7 @@ object SVD {
             (entry.i, (entry.j, entry.mval))).groupByKey()
     val emits = rows.flatMap{ case (rowind, cols)  =>
       cols.flatMap{ case (colind1, mval1) =>
-                    cols.map{ case (colind2, mval2) =>
+                    cols.map { case (colind2, mval2) =>
                             ((colind1, colind2), mval1*mval2) } }
     }.reduceByKey(_ + _)
 
@@ -237,8 +242,10 @@ object SVD {
     
     if(computeU) {
       // prep u for returning
-      val retU = TallSkinnyDenseMatrix(u.zip(rowIndices).map{
-                  case (row, i) => MatrixRow(i, row) }, m, k)
+      val retU = TallSkinnyDenseMatrix(
+        u.zip(rowIndices).map {case (row, i) => MatrixRow(i, row) },
+        m,
+        k)
     
       TallSkinnyMatrixSVD(retU, sigma, v)
     } else {
@@ -285,32 +292,31 @@ object SVD {
     }
 
     // Compute A^T A
-    val fullata = matrix.mapPartitions{
-        iter => 
-          val miniata = Array.ofDim[Double](n, n)
-          while(iter.hasNext) {
-            val row = iter.next 
-            var i = 0
-            while(i < n) {
-              var j = 0
-              while(j < n) {
-                miniata(i)(j) += row(i) * row(j)
-                j += 1
-              }
-              i += 1
-            }
-         }
-         List(miniata).iterator
-    }.fold(Array.ofDim[Double](n, n)) { (a, b) =>
+    val fullata = matrix.mapPartitions { iter => 
+      val miniata = Array.ofDim[Double](n, n)
+      while(iter.hasNext) {
+          val row = iter.next 
           var i = 0
           while(i < n) {
-            var j = 0 
+            var j = 0
             while(j < n) {
-              a(i)(j) += b(i)(j)
+              miniata(i)(j) += row(i) * row(j)
               j += 1
             }
             i += 1
           }
+      }
+      List(miniata).iterator
+    }.fold(Array.ofDim[Double](n, n)) { (a, b) =>
+      var i = 0
+      while(i < n) {
+        var j = 0 
+        while(j < n) {
+          a(i)(j) += b(i)(j)
+          j += 1
+        }
+        i += 1
+      }
       a
     }
 
@@ -324,7 +330,6 @@ object SVD {
 
     val sk = Math.min(k, sigmas.size)
     val sigma = sigmas.take(sk)
-    val sc = matrix.sparkContext
 
     // prepare V for returning
     val retV = Array.tabulate(n, sk)((i, j) => V.get(i, j))
@@ -334,7 +339,7 @@ object SVD {
     val vsinv = new DoubleMatrix(Array.tabulate(n, sk)((i, j) => V.get(i, j) / sigma(j)))
      
     if (computeU) {
-      val retU = matrix.map{ x =>
+      val retU = matrix.map { x =>
         val v = new DoubleMatrix(Array(x))
         v.mmul(vsinv).data
       }

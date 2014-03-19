@@ -33,18 +33,17 @@ object LAUtils {
    * @param sp Sparse matrix to be converted
    * @return dense version of the input
    */
-  def spToDense(sp: SparseMatrix): TallSkinnyDenseMatrix = {
+  def sparseToDense(sp: SparseMatrix): TallSkinnyDenseMatrix = {
     val m = sp.m
     val n = sp.n
-    val rows = sp.data.map(x => (x.i, (x.j, x.mval))).groupByKey.map{
-      case (i, cols) =>
-        val rowarray = Array.ofDim[Double](n)
-        var j = 0
-        while (j < cols.size) {
-          rowarray(cols(j)._1) = cols(j)._2
-          j += 1 
-        }
-        MatrixRow(i, rowarray)
+    val rows = sp.data.map(x => (x.i, (x.j, x.mval))).groupByKey.map { case (i, cols) =>
+      val rowarray = Array.ofDim[Double](n)
+      var j = 0
+      while (j < cols.size) {
+        rowarray(cols(j)._1) = cols(j)._2
+        j += 1 
+      }
+      MatrixRow(i, rowarray)
     }
     TallSkinnyDenseMatrix(rows, m, n)
   }
@@ -55,7 +54,7 @@ object LAUtils {
    * @param a matrix to be converted
    * @return sparse version of the input
    */
-  def denseToSp(a: TallSkinnyDenseMatrix): SparseMatrix = {
+  def denseToSparse(a: TallSkinnyDenseMatrix): SparseMatrix = {
     val m = a.m
     val n = a.n
     val data = a.rows.flatMap{
