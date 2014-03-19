@@ -22,8 +22,9 @@ import java.io.{File, FileWriter}
 import scala.collection.mutable
 
 import com.google.common.io.Files
-import org.apache.spark.SparkConf
 import org.scalatest.{BeforeAndAfterEach, FunSuite}
+
+import org.apache.spark.SparkConf
 
 class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach {
   private val testConf = new SparkConf(false)

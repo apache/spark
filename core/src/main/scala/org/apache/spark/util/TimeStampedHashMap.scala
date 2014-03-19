@@ -18,10 +18,11 @@
 package org.apache.spark.util
 
 import java.util.concurrent.ConcurrentHashMap
+
 import scala.collection.JavaConversions
-import scala.collection.mutable.Map
 import scala.collection.immutable
-import org.apache.spark.scheduler.MapStatus
+import scala.collection.mutable.Map
+
 import org.apache.spark.Logging
 
 /**

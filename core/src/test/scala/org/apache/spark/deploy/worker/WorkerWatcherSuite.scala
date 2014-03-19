@@ -17,11 +17,10 @@
 
 package org.apache.spark.deploy.worker
 
-
-import akka.testkit.TestActorRef
-import org.scalatest.FunSuite
-import akka.remote.DisassociatedEvent
 import akka.actor.{ActorSystem, AddressFromURIString, Props}
+import akka.testkit.TestActorRef
+import akka.remote.DisassociatedEvent
+import org.scalatest.FunSuite
 
 class WorkerWatcherSuite extends FunSuite {
   test("WorkerWatcher shuts down on valid disassociation") {

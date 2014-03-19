@@ -138,3 +138,11 @@ ul.nav li.dropdown ul.dropdown-menu li.dropdown-submenu ul.dropdown-menu {
 .nav-tabs > li > a, .nav-tabs > li > a:hover {
   color: #333;
 }
+
+/**
+ * MathJax (embedded latex formulas)
+ */
+.MathJax .mo { color: inherit }
+.MathJax .mi { color: inherit }
+.MathJax .mf { color: inherit }
+.MathJax .mh { color: inherit }

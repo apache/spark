@@ -18,6 +18,7 @@
 package org.apache.spark.util.random
 
 import java.util.{Random => JavaRandom}
+
 import org.apache.spark.util.Utils.timeIt
 
 /**

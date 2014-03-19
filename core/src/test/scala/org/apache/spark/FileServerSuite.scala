@@ -20,9 +20,10 @@ package org.apache.spark
 import java.io._
 import java.util.jar.{JarEntry, JarOutputStream}
 
-import SparkContext._
 import com.google.common.io.Files
 import org.scalatest.FunSuite
+
+import org.apache.spark.SparkContext._
 
 class FileServerSuite extends FunSuite with LocalSparkContext {
 

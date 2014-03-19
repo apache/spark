@@ -17,13 +17,13 @@
 
 package org.apache.spark.scheduler
 
-import org.scalatest.FunSuite
-import org.scalatest.BeforeAndAfter
+import java.util.Properties
 
-import org.apache.spark._
 import scala.collection.mutable.ArrayBuffer
 
-import java.util.Properties
+import org.scalatest.FunSuite
+
+import org.apache.spark._
 
 class FakeTaskSetManager(
     initPriority: Int,

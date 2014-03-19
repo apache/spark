@@ -51,7 +51,8 @@ class SparkContext(object):
 
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
-        environment=None, batchSize=1024, serializer=PickleSerializer(), conf=None):
+        environment=None, batchSize=1024, serializer=PickleSerializer(), conf=None,
+        gateway=None):
         """
         Create a new SparkContext. At least the master and app name should be set,
         either through the named parameters here or through C{conf}.
@@ -70,6 +71,8 @@ class SparkContext(object):
                unlimited batch size.
         @param serializer: The serializer for RDDs.
         @param conf: A L{SparkConf} object setting Spark properties.
+        @param gateway: Use an existing gateway and JVM, otherwise a new JVM
+               will be instatiated.
 
 
         >>> from pyspark.context import SparkContext
@@ -80,7 +83,7 @@ class SparkContext(object):
             ...
         ValueError:...
         """
-        SparkContext._ensure_initialized(self)
+        SparkContext._ensure_initialized(self, gateway=gateway)
 
         self.environment = environment or {}
         self._conf = conf or SparkConf(_jvm=self._jvm)
@@ -120,7 +123,7 @@ class SparkContext(object):
                 self.environment[varName] = v
 
         # Create the Java SparkContext through Py4J
-        self._jsc = self._jvm.JavaSparkContext(self._conf._jconf)
+        self._jsc = self._initialize_context(self._conf._jconf)
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
@@ -152,11 +155,15 @@ class SparkContext(object):
         self._temp_dir = \
             self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
 
+    # Initialize SparkContext in function to allow subclass specific initialization
+    def _initialize_context(self, jconf):
+        return self._jvm.JavaSparkContext(jconf)
+
     @classmethod
-    def _ensure_initialized(cls, instance=None):
+    def _ensure_initialized(cls, instance=None, gateway=None):
         with SparkContext._lock:
             if not SparkContext._gateway:
-                SparkContext._gateway = launch_gateway()
+                SparkContext._gateway = gateway or launch_gateway()
                 SparkContext._jvm = SparkContext._gateway.jvm
                 SparkContext._writeToFile = SparkContext._jvm.PythonRDD.writeToFile
 

@@ -17,11 +17,13 @@
 
 package org.apache.spark.util
 
-import java.io.{Externalizable, ObjectOutput, ObjectInput}
-import com.clearspring.analytics.stream.cardinality.{ICardinality, HyperLogLog}
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
+
+import com.clearspring.analytics.stream.cardinality.{HyperLogLog, ICardinality}
 
 /**
- * A wrapper around [[com.clearspring.analytics.stream.cardinality.HyperLogLog]] that is serializable.
+ * A wrapper around [[com.clearspring.analytics.stream.cardinality.HyperLogLog]] that is
+ * serializable.
  */
 private[spark]
 class SerializableHyperLogLog(var value: ICardinality) extends Externalizable {

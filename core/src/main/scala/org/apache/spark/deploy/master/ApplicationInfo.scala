@@ -17,10 +17,13 @@
 
 package org.apache.spark.deploy.master
 
-import org.apache.spark.deploy.ApplicationDescription
 import java.util.Date
-import akka.actor.ActorRef
+
 import scala.collection.mutable
+
+import akka.actor.ActorRef
+
+import org.apache.spark.deploy.ApplicationDescription
 
 private[spark] class ApplicationInfo(
     val startTime: Long,

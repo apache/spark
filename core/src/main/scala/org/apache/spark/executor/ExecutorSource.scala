@@ -17,11 +17,10 @@
 
 package org.apache.spark.executor
 
-import com.codahale.metrics.{Gauge, MetricRegistry}
-
-import org.apache.hadoop.fs.FileSystem
-
 import scala.collection.JavaConversions._
+
+import com.codahale.metrics.{Gauge, MetricRegistry}
+import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.metrics.source.Source
 
@@ -55,7 +54,8 @@ class ExecutorSource(val executor: Executor, executorId: String) extends Source 
     override def getValue: Int = executor.threadPool.getPoolSize()
   })
 
-  // Gauge got executor thread pool's largest number of threads that have ever simultaneously been in th pool
+  // Gauge got executor thread pool's largest number of threads that have ever simultaneously
+  // been in th pool
   metricRegistry.register(MetricRegistry.name("threadpool", "maxPool_size"), new Gauge[Int] {
     override def getValue: Int = executor.threadPool.getMaximumPoolSize()
   })

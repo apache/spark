@@ -31,7 +31,6 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
-import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{AkkaUtils, Utils}
@@ -325,6 +324,7 @@ private[spark] class Worker(
 
   override def postStop() {
     executors.values.foreach(_.kill())
+    drivers.values.foreach(_.kill())
     webUi.stop()
     metricsSystem.stop()
   }

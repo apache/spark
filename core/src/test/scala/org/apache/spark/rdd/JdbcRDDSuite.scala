@@ -17,10 +17,11 @@
 
 package org.apache.spark
 
-import org.scalatest.{ BeforeAndAfter, FunSuite }
-import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.JdbcRDD
 import java.sql._
+
+import org.scalatest.{BeforeAndAfter, FunSuite}
+
+import org.apache.spark.rdd.JdbcRDD
 
 class JdbcRDDSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
 

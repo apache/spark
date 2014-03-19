@@ -50,10 +50,10 @@ object LogQuery {
     val dataSet =
       if (args.length == 2) sc.textFile(args(1))
       else sc.parallelize(exampleApacheLogs)
-
+    // scalastyle:off
     val apacheLogRegex =
       """^([\d.]+) (\S+) (\S+) \[([\w\d:/]+\s[+\-]\d{4})\] "(.+?)" (\d{3}) ([\d\-]+) "([^"]+)" "([^"]+)".*""".r
-
+    // scalastyle:on
     /** Tracks the total query count and number of aggregate bytes for a particular group. */
     class Stats(val count: Int, val numBytes: Int) extends Serializable {
       def merge(other: Stats) = new Stats(count + other.count, numBytes + other.numBytes)

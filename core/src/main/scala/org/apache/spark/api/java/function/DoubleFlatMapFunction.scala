@@ -15,21 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark.api.java.function
 
-import scala.reflect.ClassTag;
-import scala.reflect.ClassTag$;
-
-import java.io.Serializable;
+import java.lang.{Double => JDouble, Iterable => JIterable}
 
 /**
- * A two-argument function that takes arguments of type T1 and T2 and returns an R.
+ * A function that returns zero or more records of type Double from each input record.
  */
-public abstract class Function2<T1, T2, R> extends WrappedFunction2<T1, T2, R>
-  implements Serializable {
-
-  public ClassTag<R> returnType() {
-    return (ClassTag<R>) ClassTag$.MODULE$.apply(Object.class);
-  }
+// DoubleFlatMapFunction does not extend FlatMapFunction because flatMap is
+// overloaded for both FlatMapFunction and DoubleFlatMapFunction.
+abstract class DoubleFlatMapFunction[T] extends WrappedFunction1[T, JIterable[JDouble]]
+   with Serializable {
+   // Intentionally left blank
 }
-

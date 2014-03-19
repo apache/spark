@@ -24,7 +24,8 @@ import java.util.Random
 object SkewedGroupByTest {
   def main(args: Array[String]) {
     if (args.length == 0) {
-      System.err.println("Usage: GroupByTest <master> [numMappers] [numKVPairs] [KeySize] [numReducers]")
+      System.err.println(
+        "Usage: GroupByTest <master> [numMappers] [numKVPairs] [KeySize] [numReducers]")
       System.exit(1)
     }  
 

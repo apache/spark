@@ -17,10 +17,10 @@
 
 package org.apache.spark.metrics.sink
 
-import com.codahale.metrics.{ConsoleReporter, MetricRegistry}
-
 import java.util.Properties
 import java.util.concurrent.TimeUnit
+
+import com.codahale.metrics.{ConsoleReporter, MetricRegistry}
 
 import org.apache.spark.metrics.MetricsSystem
 

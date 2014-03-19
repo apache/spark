@@ -17,16 +17,7 @@
 
 package org.apache.spark
 
-import scala.collection.immutable.NumericRange
-
 import org.scalatest.FunSuite
-import org.scalatest.prop.Checkers
-import org.scalacheck.Arbitrary._
-import org.scalacheck.Gen
-import org.scalacheck.Prop._
-
-import SparkContext._
-
 
 object ZippedPartitionsSuite {
   def procZippedData(i: Iterator[Int], s: Iterator[String], d: Iterator[Double]) : Iterator[Int] = {

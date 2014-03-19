@@ -64,7 +64,7 @@ case class Rating(val user: Int, val product: Int, val rating: Double)
  * Alternating Least Squares matrix factorization.
  *
  * ALS attempts to estimate the ratings matrix `R` as the product of two lower-rank matrices,
- * `X` and `Y`, i.e. `Xt * Y = R`. Typically these approximations are called 'factor' matrices.
+ * `X` and `Y`, i.e. `X * Yt = R`. Typically these approximations are called 'factor' matrices.
  * The general approach is iterative. During each iteration, one of the factor matrices is held
  * constant, while the other is solved for using least squares. The newly-solved factor matrix is
  * then held constant while solving for the other factor matrix.
@@ -81,11 +81,12 @@ case class Rating(val user: Int, val product: Int, val rating: Double)
  *
  * For implicit preference data, the algorithm used is based on
  * "Collaborative Filtering for Implicit Feedback Datasets", available at
- * [[http://research.yahoo.com/pub/2433]], adapted for the blocked approach used here.
+ * [[http://dx.doi.org/10.1109/ICDM.2008.22]], adapted for the blocked approach used here.
  *
  * Essentially instead of finding the low-rank approximations to the rating matrix `R`,
- * this finds the approximations for a preference matrix `P` where the elements of `P` are 1 if r > 0
- * and 0 if r = 0. The ratings then act as 'confidence' values related to strength of indicated user
+ * this finds the approximations for a preference matrix `P` where the elements of `P` are 1 if
+ * r > 0 and 0 if r = 0. The ratings then act as 'confidence' values related to strength of
+ * indicated user
  * preferences rather than explicit ratings given to items.
  */
 class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var lambda: Double,
@@ -152,8 +153,8 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
     val (userInLinks, userOutLinks) = makeLinkRDDs(numBlocks, ratingsByUserBlock)
     val (productInLinks, productOutLinks) = makeLinkRDDs(numBlocks, ratingsByProductBlock)
 
-    // Initialize user and product factors randomly, but use a deterministic seed for each partition
-    // so that fault recovery works
+    // Initialize user and product factors randomly, but use a deterministic seed for each
+    // partition so that fault recovery works
     val seedGen = new Random()
     val seed1 = seedGen.nextInt()
     val seed2 = seedGen.nextInt()
@@ -210,8 +211,8 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
   def computeYtY(factors: RDD[(Int, Array[Array[Double]])]) = {
     if (implicitPrefs) {
       Option(
-        factors.flatMapValues{ case factorArray =>
-          factorArray.map{ vector =>
+        factors.flatMapValues { case factorArray =>
+          factorArray.view.map { vector =>
             val x = new DoubleMatrix(vector)
             x.mmul(x.transpose())
           }
@@ -268,7 +269,8 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
       val groupedRatings = blockRatings(productBlock).groupBy(_.product).toArray
       // Sort them by product ID
       val ordering = new Ordering[(Int, ArrayBuffer[Rating])] {
-        def compare(a: (Int, ArrayBuffer[Rating]), b: (Int, ArrayBuffer[Rating])): Int = a._1 - b._1
+        def compare(a: (Int, ArrayBuffer[Rating]), b: (Int, ArrayBuffer[Rating])): Int =
+            a._1 - b._1
       }
       Sorting.quickSort(groupedRatings)(ordering)
       // Translate the user IDs to indices based on userIdToPos
@@ -369,7 +371,8 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
     val tempXtX = DoubleMatrix.zeros(triangleSize)
     val fullXtX = DoubleMatrix.zeros(rank, rank)
 
-    // Compute the XtX and Xy values for each user by adding products it rated in each product block
+    // Compute the XtX and Xy values for each user by adding products it rated in each product
+    // block
     for (productBlock <- 0 until numBlocks) {
       for (p <- 0 until blockFactors(productBlock).length) {
         val x = new DoubleMatrix(blockFactors(productBlock)(p))
@@ -381,8 +384,16 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
               userXtX(us(i)).addi(tempXtX)
               SimpleBlas.axpy(rs(i), x, userXy(us(i)))
             case true =>
-              userXtX(us(i)).addi(tempXtX.mul(alpha * rs(i)))
-              SimpleBlas.axpy(1 + alpha * rs(i), x, userXy(us(i)))
+              // Extension to the original paper to handle rs(i) < 0. confidence is a function
+              // of |rs(i)| instead so that it is never negative:
+              val confidence = 1 + alpha * abs(rs(i))
+              userXtX(us(i)).addi(tempXtX.mul(confidence - 1))
+              // For rs(i) < 0, the corresponding entry in P is 0 now, not 1 -- negative rs(i)
+              // means we try to reconstruct 0. We add terms only where P = 1, so, term below
+              // is now only added for rs(i) > 0:
+              if (rs(i) > 0) {
+                SimpleBlas.axpy(confidence, x, userXy(us(i)))
+              }
           }
         }
       }
@@ -544,9 +555,8 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    */
-  def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double, alpha: Double)
-  : MatrixFactorizationModel =
-  {
+  def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double,
+      alpha: Double): MatrixFactorizationModel = {
     trainImplicit(ratings, rank, iterations, lambda, -1, alpha)
   }
 

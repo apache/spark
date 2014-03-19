@@ -17,7 +17,6 @@
 
 package org.apache.spark.util.collection
 
-
 /**
  * A simple, fixed-size bit set implementation. This implementation is fast because it avoids
  * safety/bound checking.
@@ -123,7 +122,7 @@ class BitSet(numBits: Int) extends Serializable {
     override def hasNext: Boolean = ind >= 0
     override def next() = {
       val tmp = ind
-      ind  = nextSetBit(ind+1)
+      ind  = nextSetBit(ind + 1)
       tmp
     }
   }

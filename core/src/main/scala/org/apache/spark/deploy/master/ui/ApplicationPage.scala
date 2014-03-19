@@ -17,11 +17,12 @@
 
 package org.apache.spark.deploy.master.ui
 
+import javax.servlet.http.HttpServletRequest
+
 import scala.concurrent.Await
 import scala.xml.Node
 
 import akka.pattern.ask
-import javax.servlet.http.HttpServletRequest
 import net.liftweb.json.JsonAST.JValue
 
 import org.apache.spark.deploy.JsonProtocol

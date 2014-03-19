@@ -17,13 +17,15 @@
 
 package org.apache.spark.util
 
+import scala.util.Random
+
+import java.io.{ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream}
+import java.nio.{ByteBuffer, ByteOrder}
+
 import com.google.common.base.Charsets
 import com.google.common.io.Files
-import java.io.{ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream, File}
-import java.nio.{ByteBuffer, ByteOrder}
-import org.scalatest.FunSuite
 import org.apache.commons.io.FileUtils
-import scala.util.Random
+import org.scalatest.FunSuite
 
 class UtilsSuite extends FunSuite {
 
@@ -145,6 +147,13 @@ class UtilsSuite extends FunSuite {
     bbuf.putLong(testval)
     assert(bbuf.array.length === 8)
     assert(Utils.deserializeLongValue(bbuf.array) === testval)
+  }
+
+  test("get iterator size") {
+    val empty = Seq[Int]()
+    assert(Utils.getIteratorSize(empty.toIterator) === 0L)
+    val iterator = Iterator.range(0, 5)
+    assert(Utils.getIteratorSize(iterator) === 5L)
   }
 }
 

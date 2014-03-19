@@ -43,16 +43,18 @@ class PageRankUtils extends Serializable {
     val terminate = superstep >= 10
 
     val outbox: Array[PRMessage] =
-      if (!terminate)
-        self.outEdges.map(targetId =>
-          new PRMessage(targetId, newValue / self.outEdges.size))
-      else
+      if (!terminate) {
+        self.outEdges.map(targetId => new PRMessage(targetId, newValue / self.outEdges.size))
+      } else {
         Array[PRMessage]()
+      }
 
     (new PRVertex(newValue, self.outEdges, !terminate), outbox)
   }
 
-  def computeNoCombiner(numVertices: Long, epsilon: Double)(self: PRVertex, messages: Option[Array[PRMessage]], superstep: Int): (PRVertex, Array[PRMessage]) =
+  def computeNoCombiner(numVertices: Long, epsilon: Double)
+    (self: PRVertex, messages: Option[Array[PRMessage]], superstep: Int)
+  : (PRVertex, Array[PRMessage]) =
     computeWithCombiner(numVertices, epsilon)(self, messages match {
       case Some(msgs) => Some(msgs.map(_.value).sum)
       case None => None
@@ -81,7 +83,8 @@ class PRVertex() extends Vertex with Serializable {
   }
 
   override def toString(): String = {
-    "PRVertex(value=%f, outEdges.length=%d, active=%s)".format(value, outEdges.length, active.toString)
+    "PRVertex(value=%f, outEdges.length=%d, active=%s)"
+      .format(value, outEdges.length, active.toString)
   }
 }
 

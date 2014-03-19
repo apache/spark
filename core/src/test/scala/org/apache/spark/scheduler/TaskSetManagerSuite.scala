@@ -24,8 +24,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
-import java.nio.ByteBuffer
-import org.apache.spark.util.{Utils, FakeClock}
+import org.apache.spark.util.FakeClock
 
 class FakeDAGScheduler(taskScheduler: FakeClusterScheduler) extends DAGScheduler(taskScheduler) {
   override def taskStarted(task: Task[_], taskInfo: TaskInfo) {
