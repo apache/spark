@@ -49,7 +49,7 @@ object SparkSVD {
     val n = args(3).toInt
 
     // recover largest singular vector
-    val decomposed = SVD.sparseSVD(SparseMatrix(data, m, n), 1)
+    val decomposed = new SVD().setK(1).compute(SparseMatrix(data, m, n))
     val u = decomposed.U.data
     val s = decomposed.S.data
     val v = decomposed.V.data

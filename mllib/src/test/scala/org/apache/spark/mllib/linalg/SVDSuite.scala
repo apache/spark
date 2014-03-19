@@ -75,7 +75,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
 
     val a = SparseMatrix(data, m, n)
 
-    val decomposed = SVD.sparseSVD(a, n)
+    val decomposed = new SVD().setK(n).compute(a)
     val u = decomposed.U
     val v = decomposed.V
     val s = decomposed.S
@@ -137,7 +137,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
 
     val a = SparseMatrix(data, m, n)
 
-    val decomposed = SVD.sparseSVD(a, k)
+    val decomposed = new SVD().setK(k).compute(a)
     val u = decomposed.U
     val s = decomposed.S
     val v = decomposed.V
@@ -170,7 +170,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     
     val k = 1 // only one svalue above this
 
-    val decomposed = SVD.sparseSVD(a, k)
+    val decomposed = new SVD().setK(k).compute(a)
     val u = decomposed.U
     val s = decomposed.S
     val v = decomposed.V

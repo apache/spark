@@ -23,7 +23,6 @@ import org.apache.spark.rdd.RDD
 
 import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
 
-
 /**
  * Class used to obtain singular value decompositions
  */
@@ -59,15 +58,8 @@ class SVD {
   /**
    * Compute SVD using the current set parameters
    */
-  def compute(matrix: SparseMatrix) : MatrixSVD = {
-    SVD.sparseSVD(matrix, k)
-  }
-
-  /**
-   * Compute SVD using the current set parameters
-   */
   def compute(matrix: TallSkinnyDenseMatrix) : TallSkinnyMatrixSVD = {
-    SVD.denseSVD(matrix, k, computeU, smallestSigma)
+    denseSVD(matrix)
   }
 
   /**
@@ -80,16 +72,20 @@ class SVD {
    */
   def compute(matrix: RDD[Array[Double]]) :
     (RDD[Array[Double]], Array[Double], Array[Array[Double]])  = {
-      SVD.denseSVD(matrix, k, computeU, smallestSigma)
+      denseSVD(matrix)
   }
-}
 
+  /**
+  * Compute SVD with default parameter for computeU = true.
+  * See full paramter definition of sparseSVD for more description.
+  *
+  * @param matrix sparse matrix to factorize
+  * @return Three sparse matrices: U, S, V such that A = USV^T
+  */
+  def compute(matrix: SparseMatrix): MatrixSVD = {
+    sparseSVD(matrix)
+  }
 
-/**
- * Top-level methods for calling Singular Value Decomposition
- * NOTE: All matrices are 0-indexed
- */
-object SVD {
 /**
  * Singular Value Decomposition for Tall and Skinny matrices.
  * Given an m x n matrix A, this will compute matrices U, S, V such that
@@ -111,16 +107,169 @@ object SVD {
  * U is m x k and satisfies U'U = eye(k)
  * V is n x k and satisfies V'V = eye(k)
  *
- * All input and output is expected in sparse matrix format, 0-indexed
- * as tuples of the form ((i,j),value) all in RDDs using the
- * SparseMatrix class
- *
- * @param matrix sparse matrix to factorize
+ * @param matrix dense matrix to factorize
  * @param k Recover k singular values and vectors
  * @param computeU gives the option of skipping the U computation
- * @return Three sparse matrices: U, S, V such that A = USV^T
+ * @param smallestSigma smallest singular value considered nonzero
+ * @return Three dense matrices: U, S, V such that A = USV^T
  */
-  def sparseSVD(matrix: SparseMatrix, k: Int, computeU: Boolean): MatrixSVD = {
+ private def denseSVD(matrix: TallSkinnyDenseMatrix): TallSkinnyMatrixSVD = {
+   val rows = matrix.rows
+   val m = matrix.m
+   val n = matrix.n
+   val sc = matrix.rows.sparkContext
+
+   if (m < n || m <= 0 || n <= 0) {
+     throw new IllegalArgumentException("Expecting a tall and skinny matrix m=$m n=$n")
+   }
+
+   if (k < 1 || k > n) {
+     throw new IllegalArgumentException("Request up to n singular values n=$n k=$k")
+   }
+
+   val rowIndices = matrix.rows.map(_.i)
+
+   // compute SVD
+   val (u, sigma, v) = denseSVD(matrix.rows.map(_.data))
+    
+   if(computeU) {
+     // prep u for returning
+     val retU = TallSkinnyDenseMatrix(
+       u.zip(rowIndices).map {case (row, i) => MatrixRow(i, row) },
+       m,
+       k)
+    
+     TallSkinnyMatrixSVD(retU, sigma, v)
+   } else {
+     TallSkinnyMatrixSVD(null, sigma, v)
+   }
+ }
+
+/**
+ * Singular Value Decomposition for Tall and Skinny matrices.
+ * Given an m x n matrix A, this will compute matrices U, S, V such that
+ * A = U * S * V'
+ * 
+ * There is no restriction on m, but we require n^2 doubles to fit in memory.
+ * Further, n should be less than m.
+ * 
+ * The decomposition is computed by first computing A'A = V S^2 V',
+ * computing svd locally on that (since n x n is small),
+ * from which we recover S and V. 
+ * Then we compute U via easy matrix multiplication
+ * as U =  A * V * S^-1
+ * 
+ * Only the k largest singular values and associated vectors are found.
+ * If there are k such values, then the dimensions of the return will be:
+ *
+ * S is k x k and diagonal, holding the singular values on diagonal
+ * U is m x k and satisfies U'U = eye(k)
+ * V is n x k and satisfies V'V = eye(k)
+ *
+ * The return values are as lean as possible: an RDD of rows for U,
+ * a simple array for sigma, and a dense 2d matrix array for V
+ *
+ * @param matrix dense matrix to factorize
+ * @param k Recover k singular values and vectors
+ * @return Three matrices: U, S, V such that A = USV^T
+ */
+ private def denseSVD(matrix: RDD[Array[Double]]) : 
+               (RDD[Array[Double]], Array[Double], Array[Array[Double]])  = {
+    val n = matrix.first.size
+
+    if (k < 1 || k > n) {
+      throw new IllegalArgumentException(
+        "Request up to n singular values k=$k n=$n")
+    }
+
+    // Compute A^T A
+    val fullata = matrix.mapPartitions { iter => 
+      val miniata = Array.ofDim[Double](n, n)
+      while(iter.hasNext) {
+          val row = iter.next 
+          var i = 0
+          while(i < n) {
+            var j = 0
+            while(j < n) {
+              miniata(i)(j) += row(i) * row(j)
+              j += 1
+            }
+            i += 1
+          }
+      }
+      List(miniata).iterator
+    }.fold(Array.ofDim[Double](n, n)) { (a, b) =>
+      var i = 0
+      while(i < n) {
+        var j = 0 
+        while(j < n) {
+          a(i)(j) += b(i)(j)
+          j += 1
+        }
+        i += 1
+      }
+      a
+    }
+
+    // Construct jblas A^T A locally
+    val ata = new DoubleMatrix(fullata)
+
+    // Since A^T A is small, we can compute its SVD directly
+    val svd = Singular.sparseSVD(ata)
+    val V = svd(0)
+    val sigmas = MatrixFunctions.sqrt(svd(1)).toArray.filter(x => x > smallestSigma)
+
+    val sk = Math.min(k, sigmas.size)
+    val sigma = sigmas.take(sk)
+
+    // prepare V for returning
+    val retV = Array.tabulate(n, sk)((i, j) => V.get(i, j))
+
+    if (computeU) {
+      // Compute U as U = A V S^-1
+      // Compute VS^-1
+      val vsinv = new DoubleMatrix(Array.tabulate(n, sk)((i, j) => V.get(i, j) / sigma(j)))
+      val retU = matrix.map { x =>
+        val v = new DoubleMatrix(Array(x))
+        v.mmul(vsinv).data
+      }
+      (retU, sigma, retV)
+    } else {
+      (null, sigma, retV)
+    }
+  }
+
+ /**
+  * Singular Value Decomposition for Tall and Skinny sparse matrices.
+  * Given an m x n matrix A, this will compute matrices U, S, V such that
+  * A = U * S * V'
+  * 
+  * There is no restriction on m, but we require n^2 doubles to fit in memory.
+  * Further, n should be less than m.
+  * 
+  * The decomposition is computed by first computing A'A = V S^2 V',
+  * computing svd locally on that (since n x n is small),
+  * from which we recover S and V. 
+  * Then we compute U via easy matrix multiplication
+  * as U =  A * V * S^-1
+  * 
+  * Only the k largest singular values and associated vectors are found.
+  * If there are k such values, then the dimensions of the return will be:
+  *
+  * S is k x k and diagonal, holding the singular values on diagonal
+  * U is m x k and satisfies U'U = eye(k)
+  * V is n x k and satisfies V'V = eye(k)
+  *
+  * All input and output is expected in sparse matrix format, 0-indexed
+  * as tuples of the form ((i,j),value) all in RDDs using the
+  * SparseMatrix class
+  *
+  * @param matrix sparse matrix to factorize
+  * @param k Recover k singular values and vectors
+  * @param computeU gives the option of skipping the U computation
+  * @return Three sparse matrices: U, S, V such that A = USV^T
+  */
+  private def sparseSVD(matrix: SparseMatrix): MatrixSVD = {
     val data = matrix.data
     val m = matrix.m
     val n = matrix.n
@@ -192,174 +341,13 @@ object SVD {
       MatrixSVD(null, retS, retV)
     }
   }
+}
 
 /**
- * Singular Value Decomposition for Tall and Skinny matrices.
- * Given an m x n matrix A, this will compute matrices U, S, V such that
- * A = U * S * V'
- * 
- * There is no restriction on m, but we require n^2 doubles to fit in memory.
- * Further, n should be less than m.
- * 
- * The decomposition is computed by first computing A'A = V S^2 V',
- * computing svd locally on that (since n x n is small),
- * from which we recover S and V. 
- * Then we compute U via easy matrix multiplication
- * as U =  A * V * S^-1
- * 
- * Only the k largest singular values and associated vectors are found.
- * If there are k such values, then the dimensions of the return will be:
- *
- * S is k x k and diagonal, holding the singular values on diagonal
- * U is m x k and satisfies U'U = eye(k)
- * V is n x k and satisfies V'V = eye(k)
- *
- * @param matrix dense matrix to factorize
- * @param k Recover k singular values and vectors
- * @param computeU gives the option of skipping the U computation
- * @param rcond smallest singular value considered nonzero
- * @return Three dense matrices: U, S, V such that A = USV^T
+ * Top-level methods for calling sparse Singular Value Decomposition
+ * NOTE: All matrices are 0-indexed
  */
- private def denseSVD(matrix: TallSkinnyDenseMatrix, k: Int,
-              computeU: Boolean, rcond: Double): TallSkinnyMatrixSVD = {
-    val rows = matrix.rows
-    val m = matrix.m
-    val n = matrix.n
-    val sc = matrix.rows.sparkContext
-
-    if (m < n || m <= 0 || n <= 0) {
-      throw new IllegalArgumentException("Expecting a tall and skinny matrix m=$m n=$n")
-    }
-
-    if (k < 1 || k > n) {
-      throw new IllegalArgumentException("Request up to n singular values n=$n k=$k")
-    }
-
-    val rowIndices = matrix.rows.map(_.i)
-
-    // compute SVD
-    val (u, sigma, v) = denseSVD(matrix.rows.map(_.data), k, computeU, rcond)
-    
-    if(computeU) {
-      // prep u for returning
-      val retU = TallSkinnyDenseMatrix(
-        u.zip(rowIndices).map {case (row, i) => MatrixRow(i, row) },
-        m,
-        k)
-    
-      TallSkinnyMatrixSVD(retU, sigma, v)
-    } else {
-      TallSkinnyMatrixSVD(null, sigma, v)
-    }
- }
-
-/**
- * Singular Value Decomposition for Tall and Skinny matrices.
- * Given an m x n matrix A, this will compute matrices U, S, V such that
- * A = U * S * V'
- * 
- * There is no restriction on m, but we require n^2 doubles to fit in memory.
- * Further, n should be less than m.
- * 
- * The decomposition is computed by first computing A'A = V S^2 V',
- * computing svd locally on that (since n x n is small),
- * from which we recover S and V. 
- * Then we compute U via easy matrix multiplication
- * as U =  A * V * S^-1
- * 
- * Only the k largest singular values and associated vectors are found.
- * If there are k such values, then the dimensions of the return will be:
- *
- * S is k x k and diagonal, holding the singular values on diagonal
- * U is m x k and satisfies U'U = eye(k)
- * V is n x k and satisfies V'V = eye(k)
- *
- * The return values are as lean as possible: an RDD of rows for U,
- * a simple array for sigma, and a dense 2d matrix array for V
- *
- * @param matrix dense matrix to factorize
- * @param k Recover k singular values and vectors
- * @return Three matrices: U, S, V such that A = USV^T
- */
- private def denseSVD(matrix: RDD[Array[Double]], k: Int,
-                      computeU: Boolean, rcond: Double) : 
-               (RDD[Array[Double]], Array[Double], Array[Array[Double]])  = {
-    val n = matrix.first.size
-
-    if (k < 1 || k > n) {
-      throw new IllegalArgumentException(
-        "Request up to n singular values k=$k n=$n")
-    }
-
-    // Compute A^T A
-    val fullata = matrix.mapPartitions { iter => 
-      val miniata = Array.ofDim[Double](n, n)
-      while(iter.hasNext) {
-          val row = iter.next 
-          var i = 0
-          while(i < n) {
-            var j = 0
-            while(j < n) {
-              miniata(i)(j) += row(i) * row(j)
-              j += 1
-            }
-            i += 1
-          }
-      }
-      List(miniata).iterator
-    }.fold(Array.ofDim[Double](n, n)) { (a, b) =>
-      var i = 0
-      while(i < n) {
-        var j = 0 
-        while(j < n) {
-          a(i)(j) += b(i)(j)
-          j += 1
-        }
-        i += 1
-      }
-      a
-    }
-
-    // Construct jblas A^T A locally
-    val ata = new DoubleMatrix(fullata)
-
-    // Since A^T A is small, we can compute its SVD directly
-    val svd = Singular.sparseSVD(ata)
-    val V = svd(0)
-    val sigmas = MatrixFunctions.sqrt(svd(1)).toArray.filter(x => x > rcond)
-
-    val sk = Math.min(k, sigmas.size)
-    val sigma = sigmas.take(sk)
-
-    // prepare V for returning
-    val retV = Array.tabulate(n, sk)((i, j) => V.get(i, j))
-
-    if (computeU) {
-      // Compute U as U = A V S^-1
-      // Compute VS^-1
-      val vsinv = new DoubleMatrix(Array.tabulate(n, sk)((i, j) => V.get(i, j) / sigma(j)))
-      val retU = matrix.map { x =>
-        val v = new DoubleMatrix(Array(x))
-        v.mmul(vsinv).data
-      }
-      (retU, sigma, retV)
-    } else {
-      (null, sigma, retV)
-    }
-  }
-
-   /**
-   * Compute SVD with default parameter for computeU = true.
-   * See full paramter definition of sparseSVD for more description.
-   *
-   * @param matrix sparse matrix to factorize
-   * @param k Recover k singular values and vectors
-   * @return Three sparse matrices: U, S, V such that A = USV^T
-   */
-   def sparseSVD(matrix: SparseMatrix, k: Int): MatrixSVD = {
-     sparseSVD(matrix, k, true)
-   }
-
+object SVD {
   def main(args: Array[String]) {
     if (args.length < 8) {
       println("Usage: SVD <master> <matrix_file> <m> <n> " +
@@ -379,7 +367,7 @@ object SVD {
       MatrixEntry(parts(0).toInt, parts(1).toInt, parts(2).toDouble)
     }
 
-    val decomposed = SVD.sparseSVD(SparseMatrix(data, m, n), k)
+    val decomposed = new SVD().setK(k).compute(SparseMatrix(data, m, n))
     val u = decomposed.U.data
     val s = decomposed.S.data
     val v = decomposed.V.data
