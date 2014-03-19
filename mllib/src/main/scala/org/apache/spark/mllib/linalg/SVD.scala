@@ -323,27 +323,20 @@ object SVD {
     val sigmas = MatrixFunctions.sqrt(svd(1)).toArray.filter(x => x > rcond)
 
     val sk = Math.min(k, sigmas.size)
-
     val sigma = sigmas.take(sk)
-
     val sc = matrix.sparkContext
 
     // prepare V for returning
-    val retV = Array.tabulate(n, k)((i, j) => V.get(i, j))
+    val retV = Array.tabulate(n, sk)((i, j) => V.get(i, j))
 
     // Compute U as U = A V S^-1
     // Compute VS^-1
-    val vsinv = Array.tabulate(n, k)((i, j) => V.get(i, j) / sigma(j))
+    val vsinv = new DoubleMatrix(Array.tabulate(n, sk)((i, j) => V.get(i, j) / sigma(j)))
      
     if (computeU) {
-      val retU = matrix.map{x =>
-        val row = Array.ofDim[Double](k)
-        for(j <- 0 until k) {
-          for(i <- 0 until n) {
-            row(j) += vsinv(i)(j) * x(i)  
-          }
-        }
-        row
+      val retU = matrix.map{ x =>
+        val v = new DoubleMatrix(Array(x))
+        v.mmul(vsinv).data
       }
       (retU, sigma, retV)
     } else {
