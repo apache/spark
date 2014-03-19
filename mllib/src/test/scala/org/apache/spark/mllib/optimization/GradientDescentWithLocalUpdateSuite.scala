@@ -23,7 +23,7 @@ import org.scalatest.matchers.ShouldMatchers
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.LocalSparkContext
 
-class GradientDescentWithLocalUpdateSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
+class GradientDescentWithLocalUpdateSuite extends FunSuite with LocalSparkContext {
 
   import GradientDescentSuite._
 

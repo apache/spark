@@ -17,13 +17,15 @@
 
 package org.apache.spark.mllib.optimization
 
-import org.apache.spark.Logging
-import org.apache.spark.rdd.RDD
+import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
 
 import org.jblas.DoubleMatrix
 
-import scala.collection.mutable.ArrayBuffer
-import scala.util.Random
+import org.apache.spark.Logging
+import org.apache.spark.rdd.RDD
+
+
 
 /**
  * Class used to solve an optimization problem using Gradient Descent.
@@ -31,8 +33,7 @@ import scala.util.Random
  * @param updater Updater to be used to update weights after every iteration.
  */
 class GradientDescentWithLocalUpdate(gradient: Gradient, updater: Updater)
-  extends GradientDescent(gradient, updater) with Logging
-{
+  extends GradientDescent(gradient, updater) with Logging {
   private var numLocalIterations: Int = 1
 
   /**
@@ -64,7 +65,9 @@ class GradientDescentWithLocalUpdate(gradient: Gradient, updater: Updater)
 // Top-level method to run gradient descent.
 object GradientDescentWithLocalUpdate extends Logging {
    /**
-   * Run BSP+ gradient descent in parallel using mini batches.
+   * Run gradient descent with local update in parallel using mini batches. Unlike the
+   * [[GradientDescent]], here gradient descent takes place not only among jobs, but also inner
+   * jobs, i.e. on an executor.
    *
    * @param data - Input data for SGD. RDD of form (label, [feature values]).
    * @param gradient - Gradient object that will be used to compute the gradient.
@@ -89,7 +92,7 @@ object GradientDescentWithLocalUpdate extends Logging {
       numInnerIterations: Int,
       regParam: Double,
       miniBatchFraction: Double,
-      initialWeights: Array[Double]) : (Array[Double], Array[Double]) = {
+      initialWeights: Array[Double]): (Array[Double], Array[Double]) = {
 
     val stochasticLossHistory = new ArrayBuffer[Double](numOuterIterations)
 
@@ -112,9 +115,9 @@ object GradientDescentWithLocalUpdate extends Logging {
           val sampled = iterCurrent.filter(x => rand.nextDouble() <= miniBatchFraction)
           val (gradientSum, lossSum) = sampled.map { case (y, features) =>
             val featuresCol = new DoubleMatrix(features.length, 1, features: _*)
-            val (grad, loss) = gradient.compute(featuresCol, y, weights)
-            (grad, loss)
-          }.reduce((a, b) => (a._1.addi(b._1), a._2 + b._2))
+            gradient.compute(featuresCol, y, weights)
+          }.reduceOption((a, b) => (a._1.addi(b._1), a._2 + b._2))
+            .getOrElse((DoubleMatrix.zeros(0), 0.0))
 
           localLossHistory += lossSum / miniBatchSize + regVal
 
@@ -139,7 +142,7 @@ object GradientDescentWithLocalUpdate extends Logging {
       weights = weightsSum.divi(c.size)
     }
 
-    logInfo("GradientDescentWithLocalUpdate finished. Last 10 stochastic losses %s".format(
+    logInfo("GradientDescentWithLocalUpdate finished. Last a few stochastic losses %s".format(
       stochasticLossHistory.takeRight(10).mkString(", ")))
 
     (weights.toArray, stochasticLossHistory.toArray)
