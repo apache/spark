@@ -339,10 +339,15 @@ private[spark] object Worker {
     actorSystem.awaitTermination()
   }
 
-  def startSystemAndActor(host: String, port: Int, webUiPort: Int, cores: Int, memory: Int,
-      masterUrls: Array[String], workDir: String, workerNumber: Option[Int] = None)
-      : (ActorSystem, Int) =
-  {
+  def startSystemAndActor(
+      host: String,
+      port: Int,
+      webUiPort: Int,
+      cores: Int,
+      memory: Int,
+      masterUrls: Array[String],
+      workDir: String, workerNumber: Option[Int] = None): (ActorSystem, Int) = {
+
     // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
     val conf = new SparkConf
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")

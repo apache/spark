@@ -57,7 +57,8 @@ case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(S
 case class SparkListenerBlockManagerAdded(blockManagerId: BlockManagerId, maxMem: Long)
   extends SparkListenerEvent
 
-case class SparkListenerBlockManagerLost(blockManagerId: BlockManagerId) extends SparkListenerEvent
+case class SparkListenerBlockManagerRemoved(blockManagerId: BlockManagerId)
+  extends SparkListenerEvent
 
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
@@ -116,9 +117,9 @@ trait SparkListener {
   def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded) { }
 
   /**
-   * Called when an existing block manager has been lost
+   * Called when an existing block manager has been removed
    */
-  def onBlockManagerLost(blockManagerLost: SparkListenerBlockManagerLost) { }
+  def onBlockManagerRemoved(blockManagerRemoved: SparkListenerBlockManagerRemoved) { }
 
   /**
    * Called when an RDD is manually unpersisted by the application
@@ -130,6 +131,9 @@ trait SparkListener {
  * Simple SparkListener that logs a few summary statistics when each stage completes
  */
 class StatsReportListener extends SparkListener with Logging {
+
+  import org.apache.spark.scheduler.StatsReportListener._
+
   private val taskInfoMetrics = mutable.Buffer[(TaskInfo, TaskMetrics)]()
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
@@ -141,7 +145,6 @@ class StatsReportListener extends SparkListener with Logging {
   }
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
-    import org.apache.spark.scheduler.StatsReportListener._
     implicit val sc = stageCompleted
     this.logInfo("Finished stage: " + stageCompleted.stageInfo)
     showMillisDistribution("task runtime:", (info, _) => Some(info.duration), taskInfoMetrics)

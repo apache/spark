@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.master.ui
 
 import javax.servlet.http.HttpServletRequest
+
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.Logging
@@ -33,12 +34,12 @@ private[spark]
 class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
   val masterActorRef = master.self
   val timeout = AkkaUtils.askTimeout(master.conf)
-  var serverInfo: Option[ServerInfo] = None
 
   private val host = Utils.localHostName()
   private val port = requestedPort
   private val applicationPage = new ApplicationPage(this)
   private val indexPage = new IndexPage(this)
+  private var serverInfo: Option[ServerInfo] = None
 
   private val handlers: Seq[ServletContextHandler] = {
     master.masterMetricsSystem.getServletHandlers ++
@@ -71,7 +72,7 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
 
   /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */
   def attachUI(ui: SparkUI) {
-    assert(serverInfo.isDefined, "Master UI must be initialized before attaching SparkUIs")
+    assert(serverInfo.isDefined, "Master UI must be bound to a server before attaching SparkUIs")
     val rootHandler = serverInfo.get.rootHandler
     for (handler <- ui.handlers) {
       rootHandler.addHandler(handler)
@@ -83,7 +84,7 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
 
   /** Detach a reconstructed UI from this Master UI. Only valid after bind(). */
   def detachUI(ui: SparkUI) {
-    assert(serverInfo.isDefined, "Master UI must be initialized before detaching SparkUIs")
+    assert(serverInfo.isDefined, "Master UI must be bound to a server before detaching SparkUIs")
     val rootHandler = serverInfo.get.rootHandler
     for (handler <- ui.handlers) {
       if (handler.isStarted) {
@@ -94,7 +95,7 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
   }
 
   def stop() {
-    assert(serverInfo.isDefined, "Attempted to stop a Master UI that was not initialized!")
+    assert(serverInfo.isDefined, "Attempted to stop a Master UI that was not bound to a server!")
     serverInfo.get.server.stop()
   }
 }

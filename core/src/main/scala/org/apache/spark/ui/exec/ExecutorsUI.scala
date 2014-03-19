@@ -151,11 +151,11 @@ private[ui] class ExecutorsUI(parent: SparkUI) {
       totalTasks,
       totalDuration,
       totalShuffleRead,
-      totalShuffleWrite
-    ) ++ Seq(maxMem)
+      totalShuffleWrite,
+      maxMem
+    ).map(_.toString)
 
-    val execValuesString = execValues.map(_.toString)
-    execFields.zip(execValuesString).toMap
+    execFields.zip(execValues).toMap
   }
 }
 

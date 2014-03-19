@@ -37,10 +37,8 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  * all slaves' block managers.
  */
 private[spark]
-class BlockManagerMasterActor(
-    val isLocal: Boolean,
-    conf: SparkConf,
-    listenerBus: LiveListenerBus) extends Actor with Logging {
+class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus: LiveListenerBus)
+  extends Actor with Logging {
 
   // Mapping from block manager id to the block manager's information.
   private val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]
@@ -163,8 +161,7 @@ class BlockManagerMasterActor(
         blockLocations.remove(locations)
       }
     }
-    val blockManagerLost = SparkListenerBlockManagerLost(blockManagerId)
-    listenerBus.post(blockManagerLost)
+    listenerBus.post(SparkListenerBlockManagerRemoved(blockManagerId))
   }
 
   private def expireDeadHosts() {
@@ -241,8 +238,7 @@ class BlockManagerMasterActor(
       blockManagerInfo(id) =
         new BlockManagerInfo(id, System.currentTimeMillis(), maxMemSize, slaveActor)
     }
-    val blockManagerAdded = SparkListenerBlockManagerAdded(id, maxMemSize)
-    listenerBus.post(blockManagerAdded)
+    listenerBus.post(SparkListenerBlockManagerAdded(id, maxMemSize))
   }
 
   private def updateBlockInfo(

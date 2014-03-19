@@ -29,7 +29,7 @@ import org.apache.spark.ui.jobs.JobProgressUI
 import org.apache.spark.ui.storage.BlockManagerUI
 import org.apache.spark.util.Utils
 
-/** Top level user interface for Spark. */
+/** Top level user interface for Spark */
 private[spark] class SparkUI(
     val sc: SparkContext,
     conf: SparkConf,
@@ -106,7 +106,7 @@ private[spark] class SparkUI(
   }
 
   def stop() {
-    assert(serverInfo.isDefined, "Attempted to stop a SparkUI that was not initialized!")
+    assert(serverInfo.isDefined, "Attempted to stop a SparkUI that was not bound to a server!")
     serverInfo.get.server.stop()
     logInfo("Stopped Spark Web UI at %s".format(appUIAddress))
   }

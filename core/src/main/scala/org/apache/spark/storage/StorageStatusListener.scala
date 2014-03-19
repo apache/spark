@@ -51,14 +51,12 @@ private[spark] class StorageStatusListener extends SparkListener {
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
     val info = taskEnd.taskInfo
-    if (info != null) {
+    val metrics = taskEnd.taskMetrics
+    if (info != null && metrics != null) {
       val execId = formatExecutorId(info.executorId)
-      val metrics = taskEnd.taskMetrics
-      if (metrics != null) {
-        val updatedBlocks = metrics.updatedBlocks.getOrElse(Seq())
-        if (updatedBlocks.length > 0) {
-          updateStorageStatus(execId, updatedBlocks)
-        }
+      val updatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
+      if (updatedBlocks.length > 0) {
+        updateStorageStatus(execId, updatedBlocks)
       }
     }
   }
@@ -77,9 +75,9 @@ private[spark] class StorageStatusListener extends SparkListener {
     }
   }
 
-  override def onBlockManagerLost(blockManagerLost: SparkListenerBlockManagerLost) {
+  override def onBlockManagerRemoved(blockManagerRemoved: SparkListenerBlockManagerRemoved) {
     synchronized {
-      val executorId = blockManagerLost.blockManagerId.executorId
+      val executorId = blockManagerRemoved.blockManagerId.executorId
       executorIdToStorageStatus.remove(executorId)
     }
   }

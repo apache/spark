@@ -85,7 +85,7 @@ private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
       case Some(t) => dateFmt.format(new Date(t))
       case None => "Unknown"
     }
-    val finishTime = s.completionTime.getOrElse(System.currentTimeMillis())
+    val finishTime = s.completionTime.getOrElse(System.currentTimeMillis)
     val duration =  s.submissionTime.map(t => finishTime - t)
     val formattedDuration = duration.map(d => parent.formatDuration(d)).getOrElse("Unknown")
     val startedTasks =

@@ -33,11 +33,13 @@ import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
-/** Utilities for launching a web server using Jetty's HTTP Server class */
+/**
+ * Utilities for launching a web server using Jetty's HTTP Server class
+ */
 private[spark] object JettyUtils extends Logging {
+
   // Base type for a function that returns something based on an HTTP request. Allows for
   // implicit conversion from many types of functions to jetty Handlers.
-
   type Responder[T] = HttpServletRequest => T
 
   class ServletParams[T <% AnyRef](val responder: Responder[T],
@@ -102,7 +104,6 @@ private[spark] object JettyUtils extends Logging {
       srcPath: String,
       destPath: String,
       basePath: String = ""): ServletContextHandler = {
-    val prefixedSrcPath = attachPrefix(basePath, srcPath)
     val prefixedDestPath = attachPrefix(basePath, destPath)
     val servlet = new HttpServlet {
       override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
@@ -111,11 +112,7 @@ private[spark] object JettyUtils extends Logging {
         response.sendRedirect(newUrl)
       }
     }
-    val contextHandler = new ServletContextHandler
-    val holder = new ServletHolder(servlet)
-    contextHandler.setContextPath(prefixedSrcPath)
-    contextHandler.addServlet(holder, "/")
-    contextHandler
+    createServletHandler(srcPath, servlet, basePath)
   }
 
   /** Create a handler for serving files from a static directory */
@@ -133,6 +130,7 @@ private[spark] object JettyUtils extends Logging {
     contextHandler
   }
 
+  /** Add security filters, if any, do the given list of ServletContextHandlers */
   private def addFilters(handlers: Seq[ServletContextHandler], conf: SparkConf) {
     val filters: Array[String] = conf.get("spark.ui.filters", "").split(',').map(_.trim())
     filters.foreach {

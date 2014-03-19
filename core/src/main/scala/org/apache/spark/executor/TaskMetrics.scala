@@ -72,7 +72,7 @@ class TaskMetrics extends Serializable {
   var shuffleWriteMetrics: Option[ShuffleWriteMetrics] = None
 
   /**
-   * Statuses of any blocks that have been updated as a result of this task.
+   * Storage statuses of any blocks that have been updated as a result of this task.
    */
   var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
 }

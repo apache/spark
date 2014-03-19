@@ -155,6 +155,27 @@ class SparkContext(
   private[spark] val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, conf)
 
+  // Initialize the Spark UI, registering all associated listeners
+  private[spark] val ui = new SparkUI(this)
+  ui.bind()
+  ui.start()
+
+  // Optionally log Spark events
+  private[spark] val eventLogger: Option[EventLoggingListener] = {
+    if (conf.getBoolean("spark.eventLog.enabled", false)) {
+      val logger = new EventLoggingListener(appName, conf)
+      listenerBus.addListener(logger)
+      Some(logger)
+    } else None
+  }
+
+  // Information needed to replay logged events, if any
+  private[spark] val eventLoggingInfo: Option[EventLoggingInfo] =
+    eventLogger.map { logger => Some(logger.info) }.getOrElse(None)
+
+  // At this point, all relevant SparkListeners have been registered, so begin releasing events
+  listenerBus.start()
+
   val startTime = System.currentTimeMillis()
 
   // Add each JAR given through the constructor
@@ -198,27 +219,6 @@ class SparkContext(
     SparkContext.SPARK_UNKNOWN_USER
   }
   executorEnvs("SPARK_USER") = sparkUser
-
-  // Start the UI before posting events to listener bus, because the UI listens for Spark events
-  private[spark] val ui = new SparkUI(this)
-  ui.bind()
-  ui.start()
-
-  // Optionally log SparkListenerEvents
-  private[spark] val eventLogger: Option[EventLoggingListener] = {
-    if (conf.getBoolean("spark.eventLog.enabled", false)) {
-      val logger = new EventLoggingListener(appName, conf)
-      listenerBus.addListener(logger)
-      Some(logger)
-    } else None
-  }
-
-  // Information needed to replay logged events, if any
-  private[spark] val eventLoggingInfo: Option[EventLoggingInfo] =
-    eventLogger.map { logger => Some(logger.info) }.getOrElse(None)
-
-  // At this point, all relevant SparkListeners have been registered, so begin releasing events
-  listenerBus.start()
 
   // Create and start the scheduler
   private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
@@ -835,6 +835,7 @@ class SparkContext(
     if (dagSchedulerCopy != null) {
       metadataCleaner.cancel()
       dagSchedulerCopy.stop()
+      listenerBus.stop()
       taskScheduler = null
       // TODO: Cache.stop()?
       env.stop()
@@ -1065,7 +1066,7 @@ class SparkContext(
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
 
-  /** Post the environment update event once the task scheduler is ready. */
+  /** Post the environment update event once the task scheduler is ready */
   private def postEnvironmentUpdate() {
     if (taskScheduler != null) {
       val schedulingMode = getSchedulingMode.toString

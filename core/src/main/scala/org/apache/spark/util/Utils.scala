@@ -900,6 +900,7 @@ private[spark] object Utils extends Logging {
     obj.getClass.getSimpleName.replace("$", "")
   }
 
+  /** Return an option that translates JNothing to None */
   def jsonOption(json: JValue): Option[JValue] = {
     json match {
       case JNothing => None
@@ -907,6 +908,7 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /** Return an empty JSON object */
   def emptyJson = JObject(List[JField]())
 
   /**

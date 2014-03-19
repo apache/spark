@@ -66,11 +66,16 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
   }
 
   // Events that do not trigger a flush
-  override def onStageSubmitted(event: SparkListenerStageSubmitted) = logEvent(event)
-  override def onTaskStart(event: SparkListenerTaskStart) = logEvent(event)
-  override def onTaskGettingResult(event: SparkListenerTaskGettingResult) = logEvent(event)
-  override def onTaskEnd(event: SparkListenerTaskEnd) = logEvent(event)
-  override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate) = logEvent(event)
+  override def onStageSubmitted(event: SparkListenerStageSubmitted) =
+    logEvent(event)
+  override def onTaskStart(event: SparkListenerTaskStart) =
+    logEvent(event)
+  override def onTaskGettingResult(event: SparkListenerTaskGettingResult) =
+    logEvent(event)
+  override def onTaskEnd(event: SparkListenerTaskEnd) =
+    logEvent(event)
+  override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate) =
+    logEvent(event)
 
   // Events that trigger a flush
   override def onStageCompleted(event: SparkListenerStageCompleted) =
@@ -81,7 +86,7 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
     logEvent(event, flushLogger = true)
   override def onBlockManagerAdded(event: SparkListenerBlockManagerAdded) =
     logEvent(event, flushLogger = true)
-  override def onBlockManagerLost(event: SparkListenerBlockManagerLost) =
+  override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved) =
     logEvent(event, flushLogger = true)
   override def onUnpersistRDD(event: SparkListenerUnpersistRDD) =
     logEvent(event, flushLogger = true)

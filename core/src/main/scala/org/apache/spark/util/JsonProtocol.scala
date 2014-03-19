@@ -21,7 +21,6 @@ import java.util.{Properties, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
-import scala.collection.mutable
 
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
@@ -59,12 +58,13 @@ private[spark] object JsonProtocol {
         environmentUpdateToJson(environmentUpdate)
       case blockManagerAdded: SparkListenerBlockManagerAdded =>
         blockManagerAddedToJson(blockManagerAdded)
-      case blockManagerLost: SparkListenerBlockManagerLost =>
-        blockManagerLostToJson(blockManagerLost)
+      case blockManagerRemoved: SparkListenerBlockManagerRemoved =>
+        blockManagerRemovedToJson(blockManagerRemoved)
       case unpersistRDD: SparkListenerUnpersistRDD =>
         unpersistRDDToJson(unpersistRDD)
-      case SparkListenerShutdown =>
-        shutdownToJson()
+
+      // Not used, but keeps compiler happy
+      case SparkListenerShutdown => JNothing
     }
   }
 
@@ -146,9 +146,9 @@ private[spark] object JsonProtocol {
     ("Maximum Memory" -> blockManagerAdded.maxMem)
   }
 
-  def blockManagerLostToJson(blockManagerLost: SparkListenerBlockManagerLost): JValue = {
-    val blockManagerId = blockManagerIdToJson(blockManagerLost.blockManagerId)
-    ("Event" -> Utils.getFormattedClassName(blockManagerLost)) ~
+  def blockManagerRemovedToJson(blockManagerRemoved: SparkListenerBlockManagerRemoved): JValue = {
+    val blockManagerId = blockManagerIdToJson(blockManagerRemoved.blockManagerId)
+    ("Event" -> Utils.getFormattedClassName(blockManagerRemoved)) ~
     ("Block Manager ID" -> blockManagerId)
   }
 
@@ -157,9 +157,6 @@ private[spark] object JsonProtocol {
     ("RDD ID" -> unpersistRDD.rddId)
   }
 
-  def shutdownToJson(): JValue = {
-    "Event" -> Utils.getFormattedClassName(SparkListenerShutdown)
-  }
 
   /** ------------------------------------------------------------------- *
    * JSON serialization methods for classes SparkListenerEvents depend on |
@@ -323,6 +320,7 @@ private[spark] object JsonProtocol {
     ("Disk Size" -> blockStatus.diskSize)
   }
 
+
   /** ------------------------------ *
    * Util JSON serialization methods |
    * ------------------------------- */
@@ -357,6 +355,7 @@ private[spark] object JsonProtocol {
     ("Stack Trace" -> stackTraceToJson(exception.getStackTrace))
   }
 
+
   /** --------------------------------------------------- *
    * JSON deserialization methods for SparkListenerEvents |
    * ---------------------------------------------------- */
@@ -371,9 +370,8 @@ private[spark] object JsonProtocol {
     val jobEnd = Utils.getFormattedClassName(SparkListenerJobEnd)
     val environmentUpdate = Utils.getFormattedClassName(SparkListenerEnvironmentUpdate)
     val blockManagerAdded = Utils.getFormattedClassName(SparkListenerBlockManagerAdded)
-    val blockManagerLost = Utils.getFormattedClassName(SparkListenerBlockManagerLost)
+    val blockManagerRemoved = Utils.getFormattedClassName(SparkListenerBlockManagerRemoved)
     val unpersistRDD = Utils.getFormattedClassName(SparkListenerUnpersistRDD)
-    val shutdown = Utils.getFormattedClassName(SparkListenerShutdown)
 
     (json \ "Event").extract[String] match {
       case `stageSubmitted` => stageSubmittedFromJson(json)
@@ -385,9 +383,8 @@ private[spark] object JsonProtocol {
       case `jobEnd` => jobEndFromJson(json)
       case `environmentUpdate` => environmentUpdateFromJson(json)
       case `blockManagerAdded` => blockManagerAddedFromJson(json)
-      case `blockManagerLost` => blockManagerLostFromJson(json)
+      case `blockManagerRemoved` => blockManagerRemovedFromJson(json)
       case `unpersistRDD` => unpersistRDDFromJson(json)
-      case `shutdown` => SparkListenerShutdown
     }
   }
 
@@ -450,14 +447,15 @@ private[spark] object JsonProtocol {
     SparkListenerBlockManagerAdded(blockManagerId, maxMem)
   }
 
-  def blockManagerLostFromJson(json: JValue): SparkListenerBlockManagerLost = {
+  def blockManagerRemovedFromJson(json: JValue): SparkListenerBlockManagerRemoved = {
     val blockManagerId = blockManagerIdFromJson(json \ "Block Manager ID")
-    SparkListenerBlockManagerLost(blockManagerId)
+    SparkListenerBlockManagerRemoved(blockManagerId)
   }
 
   def unpersistRDDFromJson(json: JValue): SparkListenerUnpersistRDD = {
     SparkListenerUnpersistRDD((json \ "RDD ID").extract[Int])
   }
+
 
   /** --------------------------------------------------------------------- *
    * JSON deserialization methods for classes SparkListenerEvents depend on |
@@ -668,6 +666,7 @@ private[spark] object JsonProtocol {
     val diskSize = (json \ "Disk Size").extract[Long]
     BlockStatus(storageLevel, memorySize, diskSize)
   }
+
 
   /** -------------------------------- *
    * Util JSON deserialization methods |

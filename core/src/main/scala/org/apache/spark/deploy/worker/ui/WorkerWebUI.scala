@@ -19,6 +19,7 @@ package org.apache.spark.deploy.worker.ui
 
 import java.io.File
 import javax.servlet.http.HttpServletRequest
+
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.Logging
@@ -32,29 +33,30 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  */
 private[spark]
 class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[Int] = None)
-    extends Logging {
+  extends Logging {
+
   val timeout = AkkaUtils.askTimeout(worker.conf)
-  val host = Utils.localHostName()
-  val port = requestedPort.getOrElse(
+
+  private val host = Utils.localHostName()
+  private val port = requestedPort.getOrElse(
     worker.conf.get("worker.ui.port",  WorkerWebUI.DEFAULT_PORT).toInt)
+  private val indexPage = new IndexPage(this)
+  private var serverInfo: Option[ServerInfo] = None
 
-  var serverInfo: Option[ServerInfo] = None
-
-  val indexPage = new IndexPage(this)
-
-  val metricsHandlers = worker.metricsSystem.getServletHandlers
-
-  val handlers = metricsHandlers ++ Seq[ServletContextHandler](
-    createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static/*"),
-    createServletHandler("/log",
-      (request: HttpServletRequest) => log(request), worker.securityMgr),
-    createServletHandler("/logPage",
-      (request: HttpServletRequest) => logPage(request), worker.securityMgr),
-    createServletHandler("/json",
-      (request: HttpServletRequest) => indexPage.renderJson(request), worker.securityMgr),
-    createServletHandler("/",
-      (request: HttpServletRequest) => indexPage.render(request), worker.securityMgr)
-  )
+  private val handlers: Seq[ServletContextHandler] = {
+    worker.metricsSystem.getServletHandlers ++
+    Seq[ServletContextHandler](
+      createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static/*"),
+      createServletHandler("/log",
+        (request: HttpServletRequest) => log(request), worker.securityMgr),
+      createServletHandler("/logPage",
+        (request: HttpServletRequest) => logPage(request), worker.securityMgr),
+      createServletHandler("/json",
+        (request: HttpServletRequest) => indexPage.renderJson(request), worker.securityMgr),
+      createServletHandler("/",
+        (request: HttpServletRequest) => indexPage.render(request), worker.securityMgr)
+    )
+  }
 
   def bind() {
     try {
@@ -69,7 +71,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
   def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
 
-  def log(request: HttpServletRequest): String = {
+  private def log(request: HttpServletRequest): String = {
     val defaultBytes = 100 * 1024
 
     val appId = Option(request.getParameter("appId"))
@@ -96,7 +98,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
     pre + Utils.offsetBytes(path, startByte, endByte)
   }
 
-  def logPage(request: HttpServletRequest): Seq[scala.xml.Node] = {
+  private def logPage(request: HttpServletRequest): Seq[scala.xml.Node] = {
     val defaultBytes = 100 * 1024
     val appId = Option(request.getParameter("appId"))
     val executorId = Option(request.getParameter("executorId"))
@@ -117,17 +119,14 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
     val (startByte, endByte) = getByteRange(path, offset, byteLength)
     val file = new File(path)
     val logLength = file.length
-
     val logText = <node>{Utils.offsetBytes(path, startByte, endByte)}</node>
-
     val linkToMaster = <p><a href={worker.activeMasterWebUiUrl}>Back to Master</a></p>
-
     val range = <span>Bytes {startByte.toString} - {endByte.toString} of {logLength}</span>
 
     val backButton =
       if (startByte > 0) {
         <a href={"?%s&logType=%s&offset=%s&byteLength=%s"
-          .format(params, logType, math.max(startByte-byteLength, 0), byteLength)}>
+          .format(params, logType, math.max(startByte - byteLength, 0), byteLength)}>
           <button type="button" class="btn btn-default">
             Previous {Utils.bytesToString(math.min(byteLength, startByte))}
           </button>
@@ -144,7 +143,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
         <a href={"?%s&logType=%s&offset=%s&byteLength=%s".
           format(params, logType, endByte, byteLength)}>
           <button type="button" class="btn btn-default">
-            Next {Utils.bytesToString(math.min(byteLength, logLength-endByte))}
+            Next {Utils.bytesToString(math.min(byteLength, logLength - endByte))}
           </button>
         </a>
       }
@@ -173,29 +172,23 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
   }
 
   /** Determine the byte range for a log or log page. */
-  def getByteRange(path: String, offset: Option[Long], byteLength: Int)
-  : (Long, Long) = {
+  private def getByteRange(path: String, offset: Option[Long], byteLength: Int): (Long, Long) = {
     val defaultBytes = 100 * 1024
     val maxBytes = 1024 * 1024
-
     val file = new File(path)
     val logLength = file.length()
-    val getOffset = offset.getOrElse(logLength-defaultBytes)
-
+    val getOffset = offset.getOrElse(logLength - defaultBytes)
     val startByte =
       if (getOffset < 0) 0L
       else if (getOffset > logLength) logLength
       else getOffset
-
     val logPageLength = math.min(byteLength, maxBytes)
-
     val endByte = math.min(startByte + logPageLength, logLength)
-
     (startByte, endByte)
   }
 
   def stop() {
-    assert(serverInfo.isDefined, "Attempted to stop a Worker UI that was not initialized!")
+    assert(serverInfo.isDefined, "Attempted to stop a Worker UI that was not bound to a server!")
     serverInfo.get.server.stop()
   }
 }

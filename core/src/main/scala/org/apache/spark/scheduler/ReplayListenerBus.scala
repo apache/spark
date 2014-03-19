@@ -67,28 +67,35 @@ private[spark] class ReplayListenerBus(conf: SparkConf) extends SparkListenerBus
     }
 
     logPaths.foreach { path =>
-      // In case there is an exception, keep track of the highest level stream to close it later
-      var streamToClose: Option[InputStream] = None
-      var currentLine = "<not started>"
+      // Keep track of input streams at all levels to close them later
+      // This is necessary because an exception can occur in between stream initializations
+      var fileStream: Option[InputStream] = None
+      var bufferedStream: Option[InputStream] = None
+      var compressStream: Option[InputStream] = None
+      var currentLine = ""
       try {
-        val fstream = fileSystem.open(path)
-        val bstream = new FastBufferedInputStream(fstream)
-        val cstream = if (compressed) compressionCodec.compressedInputStream(bstream) else bstream
-        streamToClose = Some(cstream)
+        currentLine = "<not started>"
+        fileStream = Some(fileSystem.open(path))
+        bufferedStream = Some(new FastBufferedInputStream(fileStream.get))
+        compressStream =
+          if (compressed) {
+            Some(compressionCodec.compressedInputStream(bufferedStream.get))
+          } else bufferedStream
 
         // Parse each line as an event and post it to all attached listeners
-        val lines = Source.fromInputStream(cstream).getLines()
+        val lines = Source.fromInputStream(compressStream.get).getLines()
         lines.foreach { line =>
           currentLine = line
-          val event = JsonProtocol.sparkEventFromJson(parse(line))
-          postToAll(event)
+          postToAll(JsonProtocol.sparkEventFromJson(parse(line)))
         }
       } catch {
         case e: Exception =>
           logError("Exception in parsing Spark event log %s".format(path), e)
           logError("Malformed line: %s\n".format(currentLine))
       } finally {
-        streamToClose.foreach(_.close())
+        fileStream.foreach(_.close())
+        bufferedStream.foreach(_.close())
+        compressStream.foreach(_.close())
       }
     }
     fileSystem.close()

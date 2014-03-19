@@ -73,11 +73,11 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       returnValues: Boolean): PutResult = {
     if (level.deserialized) {
       val sizeEstimate = SizeEstimator.estimate(values.asInstanceOf[AnyRef])
-      val putAttempt = tryToPut(blockId, values, sizeEstimate, true)
+      val putAttempt = tryToPut(blockId, values, sizeEstimate, deserialized = true)
       PutResult(sizeEstimate, Left(values.iterator), putAttempt.droppedBlocks)
     } else {
       val bytes = blockManager.dataSerialize(blockId, values.iterator)
-      val putAttempt = tryToPut(blockId, bytes, bytes.limit, false)
+      val putAttempt = tryToPut(blockId, bytes, bytes.limit, deserialized = false)
       PutResult(bytes.limit(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
     }
   }
@@ -158,7 +158,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * blocks to free memory for one block, another thread may use up the freed space for
    * another block.
    *
-   * Return whether put was successful, along with the blocks dropped in the process
+   * Return whether put was successful, along with the blocks dropped in the process.
    */
   private def tryToPut(
       blockId: BlockId,

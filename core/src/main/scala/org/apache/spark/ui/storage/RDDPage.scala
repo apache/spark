@@ -33,20 +33,23 @@ private[ui] class RDDPage(parent: BlockManagerUI) {
   private lazy val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    val rddId = request.getParameter("id").toInt
     val storageStatusList = listener.storageStatusList
-    val id = request.getParameter("id").toInt
-    val rddInfo = listener.rddInfoList.filter(_.id == id).head
+    val rddInfo = listener.rddInfoList.find(_.id == rddId).getOrElse {
+      // Rather than crashing, render an "RDD Not Found" page
+      return UIUtils.headerSparkPage(Seq[Node](), basePath, appName, "RDD Not Found", Storage)
+    }
 
     // Worker table
-    val workers = storageStatusList.map((id, _))
+    val workers = storageStatusList.map((rddId, _))
     val workerTable = UIUtils.listingTable(workerHeader, workerRow, workers)
 
     // Block table
-    val filteredStorageStatusList = StorageUtils.filterStorageStatusByRDD(storageStatusList, id)
+    val filteredStorageStatusList = StorageUtils.filterStorageStatusByRDD(storageStatusList, rddId)
     val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).sortWith(_._1.name < _._1.name)
     val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
     val blocks = blockStatuses.map { case (blockId, status) =>
-      (blockId, status, blockLocations.get(blockId).getOrElse(Seq("Unknown")))
+      (blockId, status, blockLocations.get(blockId).getOrElse(Seq[String]("Unknown")))
     }
     val blockTable = UIUtils.listingTable(blockHeader, blockRow, blocks)
 

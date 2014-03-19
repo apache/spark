@@ -49,7 +49,7 @@ class JsonProtocolSuite extends FunSuite {
     ))
     val blockManagerAdded = SparkListenerBlockManagerAdded(
       BlockManagerId("Stars", "In your multitude...", 300, 400), 500)
-    val blockManagerLost = SparkListenerBlockManagerLost(
+    val blockManagerRemoved = SparkListenerBlockManagerRemoved(
       BlockManagerId("Scarce", "to be counted...", 100, 200))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
 
@@ -62,9 +62,8 @@ class JsonProtocolSuite extends FunSuite {
     testEvent(jobEnd, jobEndJsonString)
     testEvent(environmentUpdate, environmentUpdateJsonString)
     testEvent(blockManagerAdded, blockManagerAddedJsonString)
-    testEvent(blockManagerLost, blockManagerLostJsonString)
+    testEvent(blockManagerRemoved, blockManagerRemovedJsonString)
     testEvent(unpersistRdd, unpersistRDDJsonString)
-    testEvent(SparkListenerShutdown, shutdownJsonString)
   }
 
   test("Dependent Classes") {
@@ -208,7 +207,7 @@ class JsonProtocolSuite extends FunSuite {
       case (e1: SparkListenerBlockManagerAdded, e2: SparkListenerBlockManagerAdded) =>
         assert(e1.maxMem == e2.maxMem)
         assertEquals(e1.blockManagerId, e2.blockManagerId)
-      case (e1: SparkListenerBlockManagerLost, e2: SparkListenerBlockManagerLost) =>
+      case (e1: SparkListenerBlockManagerRemoved, e2: SparkListenerBlockManagerRemoved) =>
         assertEquals(e1.blockManagerId, e2.blockManagerId)
       case (e1: SparkListenerUnpersistRDD, e2: SparkListenerUnpersistRDD) =>
         assert(e1.rddId == e2.rddId)
@@ -546,9 +545,9 @@ class JsonProtocolSuite extends FunSuite {
       "Host":"In your multitude...","Port":300,"Netty Port":400},"Maximum Memory":500}
     """
 
-  private val blockManagerLostJsonString =
+  private val blockManagerRemovedJsonString =
     """
-      {"Event":"SparkListenerBlockManagerLost","Block Manager ID":{"Executor ID":"Scarce",
+      {"Event":"SparkListenerBlockManagerRemoved","Block Manager ID":{"Executor ID":"Scarce",
       "Host":"to be counted...","Port":100,"Netty Port":200}}
     """
 
@@ -557,8 +556,4 @@ class JsonProtocolSuite extends FunSuite {
       {"Event":"SparkListenerUnpersistRDD","RDD ID":12345}
     """
 
-  private val shutdownJsonString =
-    """
-      {"Event":"SparkListenerShutdown"}
-    """
  }

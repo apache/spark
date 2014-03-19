@@ -75,10 +75,10 @@ private[ui] class EnvironmentUI(parent: SparkUI) {
  * A SparkListener that prepares information to be displayed on the EnvironmentUI
  */
 private[ui] class EnvironmentListener extends SparkListener {
-  var jvmInformation: Seq[(String, String)] = Seq()
-  var sparkProperties: Seq[(String, String)] = Seq()
-  var systemProperties: Seq[(String, String)] = Seq()
-  var classpathEntries: Seq[(String, String)] = Seq()
+  var jvmInformation = Seq[(String, String)]()
+  var sparkProperties = Seq[(String, String)]()
+  var systemProperties = Seq[(String, String)]()
+  var classpathEntries = Seq[(String, String)]()
 
   override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) {
     synchronized {

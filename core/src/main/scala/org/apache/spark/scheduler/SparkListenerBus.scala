@@ -34,9 +34,10 @@ private[spark] trait SparkListenerBus {
   }
 
   /**
-   * Post an event to all attached listeners. Return true if the shutdown event is posted.
+   * Post an event to all attached listeners. This does nothing if the event is
+   * SparkListenerShutdown.
    */
-  def postToAll(event: SparkListenerEvent): Boolean = {
+  protected def postToAll(event: SparkListenerEvent) {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
         sparkListeners.foreach(_.onStageSubmitted(stageSubmitted))
@@ -56,14 +57,11 @@ private[spark] trait SparkListenerBus {
         sparkListeners.foreach(_.onEnvironmentUpdate(environmentUpdate))
       case blockManagerAdded: SparkListenerBlockManagerAdded =>
         sparkListeners.foreach(_.onBlockManagerAdded(blockManagerAdded))
-      case blockManagerLost: SparkListenerBlockManagerLost =>
-        sparkListeners.foreach(_.onBlockManagerLost(blockManagerLost))
+      case blockManagerRemoved: SparkListenerBlockManagerRemoved =>
+        sparkListeners.foreach(_.onBlockManagerRemoved(blockManagerRemoved))
       case unpersistRDD: SparkListenerUnpersistRDD =>
         sparkListeners.foreach(_.onUnpersistRDD(unpersistRDD))
       case SparkListenerShutdown =>
-        return true
-      case _ =>
     }
-    false
   }
 }

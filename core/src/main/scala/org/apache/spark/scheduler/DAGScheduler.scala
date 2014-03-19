@@ -1093,7 +1093,7 @@ class DAGScheduler(
       "stageToInfos" -> stageToInfos,
       "jobIdToStageIds" -> jobIdToStageIds,
       "stageIdToJobIds" -> stageIdToJobIds).
-      foreach { case(s, t) =>
+      foreach { case (s, t) =>
         val sizeBefore = t.size
         t.clearOldValues(cleanupTime)
         logInfo("%s %d --> %d".format(s, sizeBefore, t.size))
@@ -1106,7 +1106,6 @@ class DAGScheduler(
     }
     metadataCleaner.cancel()
     taskScheduler.stop()
-    listenerBus.stop()
   }
 }
 

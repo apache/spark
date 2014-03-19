@@ -54,11 +54,11 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
       override def run() {
         while (true) {
           val event = eventQueue.take
-          val shutdown = postToAll(event)
-          if (shutdown) {
+          if (event == SparkListenerShutdown) {
             // Get out of the while loop and shutdown the daemon thread
             return
           }
+          postToAll(event)
         }
       }
     }.start()

@@ -39,7 +39,7 @@ import org.apache.spark.io.CompressionCodec
 class FileLogger(
     logDir: String,
     conf: SparkConf = new SparkConf,
-    outputBufferSize: Int = 8 * 1024,
+    outputBufferSize: Int = 8 * 1024, // 8 KB
     compress: Boolean = false,
     overwrite: Boolean = true)
   extends Logging {
@@ -59,7 +59,9 @@ class FileLogger(
     Some(createWriter())
   }
 
-  /** Create a logging directory with the given path. */
+  /**
+   * Create a logging directory with the given path.
+   */
   private def createLogDir() {
     val path = new Path(logDir)
     if (fileSystem.exists(path)) {
@@ -86,18 +88,14 @@ class FileLogger(
     /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
      * Therefore, for local files, use FileOutputStream instead. */
     val dstream = uri.getScheme match {
-      case "hdfs" | "s3" =>
-        val path = new Path(logPath)
-        hadoopDataStream = Some(fileSystem.create(path, overwrite))
-        hadoopDataStream.get
-
       case "file" | null =>
         // Second parameter is whether to append
         new FileOutputStream(logPath, !overwrite)
 
-      case unsupportedScheme =>
-        throw new UnsupportedOperationException("File system scheme %s is not supported!"
-          .format(unsupportedScheme))
+      case _ =>
+        val path = new Path(logPath)
+        hadoopDataStream = Some(fileSystem.create(path, overwrite))
+        hadoopDataStream.get
     }
 
     val bstream = new FastBufferedOutputStream(dstream, outputBufferSize)
@@ -106,21 +104,20 @@ class FileLogger(
   }
 
   /**
-   * Log the message to the given writer
+   * Log the message to the given writer.
    * @param msg The message to be logged
    * @param withTime Whether to prepend message with a timestamp
    */
   def log(msg: String, withTime: Boolean = false) {
-    var writeInfo = msg
-    if (withTime) {
+    val writeInfo = if (!withTime) msg else {
       val date = new Date(System.currentTimeMillis())
-      writeInfo = DATE_FORMAT.format(date) + ": " + msg
+      DATE_FORMAT.format(date) + ": " + msg
     }
     writer.foreach(_.print(writeInfo))
   }
 
   /**
-   * Log the message to the given writer as a new line
+   * Log the message to the given writer as a new line.
    * @param msg The message to be logged
    * @param withTime Whether to prepend message with a timestamp
    */
@@ -138,13 +135,17 @@ class FileLogger(
     hadoopDataStream.foreach(_.sync())
   }
 
-  /** Close the writer. Any subsequent calls to log or flush will have no effect. */
+  /**
+   * Close the writer. Any subsequent calls to log or flush will have no effect.
+   */
   def close() {
     writer.foreach(_.close())
     writer = None
   }
 
-  /** Start a writer for a new file if one does not already exit */
+  /**
+   * Start a writer for a new file if one does not already exit.
+   */
   def start() {
     writer.getOrElse {
       fileIndex += 1

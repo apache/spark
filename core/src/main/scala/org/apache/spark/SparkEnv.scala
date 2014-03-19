@@ -180,10 +180,9 @@ object SparkEnv extends Logging {
       }
     }
 
-    val blockManagerMaster = new BlockManagerMaster(
-      registerOrLookup("BlockManagerMaster",
-        new BlockManagerMasterActor(isLocal, conf, listenerBus)),
-      conf)
+    val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
+      "BlockManagerMaster",
+      new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf)
 
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
       serializer, conf, securityManager)
@@ -271,23 +270,26 @@ object SparkEnv extends Logging {
       ("Scala Home", Properties.scalaHome)
     ).sorted
 
-    // Spark properties, including scheduling mode whether or not it is configured
-    var additionalFields = Seq[(String, String)]()
-    conf.getOption("spark.scheduler.mode").getOrElse {
-      additionalFields ++= Seq(("spark.scheduler.mode", schedulingMode))
-    }
-    val sparkProperties = conf.getAll.sorted ++ additionalFields
+    // Spark properties
+    // This includes the scheduling mode whether or not it is configured (used by SparkUI)
+    val schedulerMode =
+      if (!conf.contains("spark.scheduler.mode")) {
+        Seq(("spark.scheduler.mode", schedulingMode))
+      } else {
+        Seq[(String, String)]()
+      }
+    val sparkProperties = (conf.getAll ++ schedulerMode).sorted
 
     // System properties that are not java classpaths
     val systemProperties = System.getProperties.iterator.toSeq
-    val classPathProperty = systemProperties.find { case (k, v) =>
-      k == "java.class.path"
-    }.getOrElse(("", ""))
     val otherProperties = systemProperties.filter { case (k, v) =>
       k != "java.class.path" && !k.startsWith("spark.")
     }.sorted
 
     // Class paths including all added jars and files
+    val classPathProperty = systemProperties.find { case (k, v) =>
+      k == "java.class.path"
+    }.getOrElse(("", ""))
     val classPathEntries = classPathProperty._2
       .split(conf.get("path.separator", ":"))
       .filterNot(e => e.isEmpty)

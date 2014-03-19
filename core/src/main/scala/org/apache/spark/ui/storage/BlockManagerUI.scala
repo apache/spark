@@ -66,13 +66,14 @@ private[ui] class BlockManagerListener(storageStatusListener: StorageStatusListe
 
   /** Update each RDD's info to reflect any updates to the RDD's storage status */
   private def updateRDDInfo() {
-    val updatedRDDInfoList = StorageUtils.rddInfoFromStorageStatus(storageStatusList, _rddInfoMap)
-    updatedRDDInfoList.foreach { info => _rddInfoMap(info.id) = info }
+    val rddInfos = _rddInfoMap.values.toSeq
+    val updatedRddInfos = StorageUtils.rddInfoFromStorageStatus(storageStatusList, rddInfos)
+    updatedRddInfos.foreach { info => _rddInfoMap(info.id) = info }
   }
 
   /**
-   * Assumes the storage status list is fully up-to-date. This implies that the corresponding
-   * StorageStatusSparkListener must
+   * Assumes the storage status list is fully up-to-date. This implies the corresponding
+   * StorageStatusSparkListener must process the SparkListenerTaskEnd event before this listener.
    */
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
     val metrics = taskEnd.taskMetrics
@@ -88,11 +89,10 @@ private[ui] class BlockManagerListener(storageStatusListener: StorageStatusListe
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
     // Remove all partitions that are no longer cached
-    _rddInfoMap.retain { case (id, info) => info.numCachedPartitions > 0 }
+    _rddInfoMap.retain { case (_, info) => info.numCachedPartitions > 0 }
   }
 
   override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) = synchronized {
-    super.onUnpersistRDD(unpersistRDD)
     updateRDDInfo()
   }
 }

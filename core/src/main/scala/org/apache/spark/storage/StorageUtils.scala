@@ -70,31 +70,41 @@ class RDDInfo(val id: Int, val name: String, val numPartitions: Int, val storage
 private[spark]
 object StorageUtils {
 
-  /** Returns RDD-level information from a list of StorageStatus objects and SparkContext */
-  def rddInfoFromStorageStatus(
-      storageStatusList: Seq[StorageStatus],
-      sc: SparkContext): Array[RDDInfo] = {
-    val blockStatusMap = blockStatusMapFromStorageStatus(storageStatusList)
-    val rddInfoList = rddInfoFromSparkContext(blockStatusMap.keys.toSeq, sc)
-    val rddInfoMap = rddInfoList.map { info => (info.id, info) }.toMap
-    rddInfoFromBlockStatusMap(blockStatusMap, rddInfoMap)
-  }
-
   /**
-   * Returns RDD-level information from a list of StorageStatus objects and an existing
-   * RDD ID to RDDInfo mapping
+   * Returns basic information of all RDDs persisted in the given SparkContext. This does not
+   * include storage information.
    */
-  def rddInfoFromStorageStatus(
-      storageStatusList: Seq[StorageStatus],
-      rddInfoMap: Map[Int, RDDInfo]): Array[RDDInfo] = {
-    val blockStatusMap = blockStatusMapFromStorageStatus(storageStatusList)
-    rddInfoFromBlockStatusMap(blockStatusMap, rddInfoMap)
+  def rddInfoFromSparkContext(sc: SparkContext): Array[RDDInfo] = {
+    sc.persistentRdds.values.map { rdd =>
+      val rddName = Option(rdd.name).getOrElse(rdd.id.toString)
+      val rddNumPartitions = rdd.partitions.size
+      val rddStorageLevel = rdd.getStorageLevel
+      val rddInfo = new RDDInfo(rdd.id, rddName, rddNumPartitions, rddStorageLevel)
+      rddInfo
+    }.toArray
   }
 
-  private def rddInfoFromBlockStatusMap(
-      blockStatusMap: Map[Int, Array[BlockStatus]],
-      rddInfoMap: Map[Int, RDDInfo]): Array[RDDInfo] = {
-    val rddInfos = blockStatusMap.map { case (rddId, blocks) =>
+  /** Returns storage information of all RDDs persisted in the given SparkContext. */
+  def rddInfoFromStorageStatus(
+      storageStatuses: Seq[StorageStatus],
+      sc: SparkContext): Array[RDDInfo] = {
+    rddInfoFromStorageStatus(storageStatuses, rddInfoFromSparkContext(sc))
+  }
+
+  /** Returns storage information of all RDDs in the given list. */
+  def rddInfoFromStorageStatus(
+      storageStatuses: Seq[StorageStatus],
+      rddInfos: Seq[RDDInfo]): Array[RDDInfo] = {
+
+    // Mapping from RDD ID -> an array of associated BlockStatuses
+    val blockStatusMap = storageStatuses.flatMap(_.rddBlocks).toMap
+      .groupBy { case (k, _) => k.rddId }
+      .mapValues(_.values.toArray)
+
+    // Mapping from RDD ID -> the associated RDDInfo (with potentially outdated storage information)
+    val rddInfoMap = rddInfos.map { info => (info.id, info) }.toMap
+
+    val rddStorageInfos = blockStatusMap.flatMap { case (rddId, blocks) =>
       // Add up memory and disk sizes
       val persistedBlocks = blocks.filter { status => status.memSize + status.diskSize > 0 }
       val memSize = persistedBlocks.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
@@ -105,42 +115,28 @@ object StorageUtils {
         rddInfo.diskSize = diskSize
         rddInfo
       }
-    }.flatten.toArray
-
-    scala.util.Sorting.quickSort(rddInfos)
-    rddInfos
-  }
-
-  private def blockStatusMapFromStorageStatus(storageStatusList: Seq[StorageStatus])
-      : Map[Int, Array[BlockStatus]] = {
-    val rddBlockMap = storageStatusList.flatMap(_.rddBlocks).toMap[RDDBlockId, BlockStatus]
-    rddBlockMap.groupBy { case (k, v) => k.rddId }.mapValues(_.values.toArray)
-  }
-
-  private def rddInfoFromSparkContext(rddIds: Seq[Int], sc: SparkContext): Array[RDDInfo] = {
-    rddIds.flatMap { rddId =>
-      sc.persistentRdds.get(rddId).map { r =>
-        val rddName = Option(r.name).getOrElse(rddId.toString)
-        val rddNumPartitions = r.partitions.size
-        val rddStorageLevel = r.getStorageLevel
-        val rddInfo = new RDDInfo(rddId, rddName, rddNumPartitions, rddStorageLevel)
-        rddInfo
-      }
     }.toArray
+
+    scala.util.Sorting.quickSort(rddStorageInfos)
+    rddStorageInfos
   }
 
-  /** Returns a map of blocks to their locations, compiled from a list of StorageStatus objects */
-  def blockLocationsFromStorageStatus(storageStatusList: Seq[StorageStatus]) = {
-    val blockLocationPairs =
-      storageStatusList.flatMap(s => s.blocks.map(b => (b._1, s.blockManagerId.hostPort)))
-    blockLocationPairs.groupBy(_._1).map{case (k, v) => (k, v.unzip._2)}.toMap
+  /** Returns a mapping from BlockId to the locations of the associated block. */
+  def blockLocationsFromStorageStatus(
+      storageStatuses: Seq[StorageStatus]): Map[BlockId, Seq[String]] = {
+    val blockLocationPairs = storageStatuses.flatMap { storageStatus =>
+      storageStatus.blocks.map { case (bid, _) => (bid, storageStatus.blockManagerId.hostPort) }
+    }
+    blockLocationPairs.toMap
+      .groupBy { case (blockId, _) => blockId }
+      .mapValues(_.values.toSeq)
   }
 
-  /** Filters storage status by a given RDD id. */
+  /** Filters the given list of StorageStatus by the given RDD ID. */
   def filterStorageStatusByRDD(
-      storageStatusList: Seq[StorageStatus],
-      rddId: Int) : Array[StorageStatus] = {
-    storageStatusList.map { status =>
+      storageStatuses: Seq[StorageStatus],
+      rddId: Int): Array[StorageStatus] = {
+    storageStatuses.map { status =>
       val filteredBlocks = status.rddBlocks.filterKeys(_.rddId == rddId).toSeq
       val filteredBlockMap = mutable.Map[BlockId, BlockStatus](filteredBlocks: _*)
       new StorageStatus(status.blockManagerId, status.maxMem, filteredBlockMap)
