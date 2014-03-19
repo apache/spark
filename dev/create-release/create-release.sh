@@ -25,11 +25,11 @@
 #  - Send output to stderr and have useful logging in stdout
 #  - Have this use sbt rather than Maven release plug in
 
-GIT_USERNAME=pwendell
+GIT_USERNAME=XXX
 GIT_PASSWORD=XXX
 GPG_PASSPHRASE=XXX
 GIT_BRANCH=branch-0.9
-RELEASE_VERSION=0.9.0-incubating
+RELEASE_VERSION=0.9.1
 RC_NAME=rc2
 USER_NAME=pwendell
 

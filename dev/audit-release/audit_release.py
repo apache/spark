@@ -31,10 +31,10 @@ import time
 import urllib2
 
 ## Fill in release details here:
-RELEASE_URL = "http://people.apache.org/~pwendell/spark-1.0.0-rc1/"
+RELEASE_URL = "http://people.apache.org/~tdas/spark-0.9.1-rc1/"
 RELEASE_KEY = "9E4FE3AF"
 RELEASE_REPOSITORY = "https://repository.apache.org/content/repositories/orgapachespark-1006/"
-RELEASE_VERSION = "1.0.0"
+RELEASE_VERSION = "0.9.1"
 SCALA_VERSION = "2.10.3"
 SCALA_BINARY_VERSION = "2.10"
 ##
