@@ -21,7 +21,7 @@ package columnar
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.types.DataType
-import org.apache.spark.sql.execution.KryoSerializer
+import org.apache.spark.sql.execution.SparkSqlSerializer
 
 class NullableColumnBuilderSuite extends FunSuite {
   import ColumnarTestData._
@@ -81,7 +81,7 @@ class NullableColumnBuilderSuite extends FunSuite {
       // For non-null values
       (0 until 4).foreach { _ =>
         val actual = if (columnType == GENERIC) {
-          KryoSerializer.deserialize[Any](GENERIC.extract(buffer))
+          SparkSqlSerializer.deserialize[Any](GENERIC.extract(buffer))
         } else {
           columnType.extract(buffer)
         }

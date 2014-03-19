@@ -22,7 +22,7 @@ import java.nio.{ByteOrder, ByteBuffer}
 
 import org.apache.spark.sql.catalyst.types.{BinaryType, NativeType, DataType}
 import org.apache.spark.sql.catalyst.expressions.MutableRow
-import org.apache.spark.sql.execution.KryoSerializer
+import org.apache.spark.sql.execution.SparkSqlSerializer
 
 /**
  * An `Iterator` like trait used to extract values from columnar byte buffer. When a value is
@@ -133,7 +133,7 @@ class GenericColumnAccessor(buffer: ByteBuffer)
 
   override protected def doExtractTo(row: MutableRow, ordinal: Int) {
     val serialized = columnType.extract(buffer)
-    row(ordinal) = KryoSerializer.deserialize[Any](serialized)
+    row(ordinal) = SparkSqlSerializer.deserialize[Any](serialized)
   }
 }
 

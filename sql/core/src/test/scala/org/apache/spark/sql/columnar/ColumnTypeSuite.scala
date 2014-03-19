@@ -8,7 +8,7 @@ import scala.util.Random
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.execution.KryoSerializer
+import org.apache.spark.sql.execution.SparkSqlSerializer
 
 class ColumnTypeSuite extends FunSuite {
   val columnTypes = Seq(INT, SHORT, LONG, BYTE, DOUBLE, FLOAT, STRING, BINARY, GENERIC)
@@ -22,7 +22,7 @@ class ColumnTypeSuite extends FunSuite {
   }
 
   test("actualSize") {
-    val expectedSizes = Seq(4, 2, 8, 1, 8, 4, 4 + 5, 4 + 4, 4 + 11)
+    val expectedSizes = Seq(4, 2, 8, 1, 8, 4, 4 + 5, 4 + 4, 4 + 8)
     val actualSizes = Seq(
       INT.actualSize(Int.MaxValue),
       SHORT.actualSize(Short.MaxValue),
@@ -32,7 +32,7 @@ class ColumnTypeSuite extends FunSuite {
       FLOAT.actualSize(Float.MaxValue),
       STRING.actualSize("hello"),
       BINARY.actualSize(new Array[Byte](4)),
-      GENERIC.actualSize(KryoSerializer.serialize(Map(1 -> "a"))))
+      GENERIC.actualSize(SparkSqlSerializer.serialize(Map(1 -> "a"))))
 
     expectedSizes.zip(actualSizes).foreach { case (expected, actual) =>
       assert(expected === actual)
@@ -153,9 +153,9 @@ class ColumnTypeSuite extends FunSuite {
   test("GENERIC") {
     val buffer = ByteBuffer.allocate(512)
     val obj = Map(1 -> "spark", 2 -> "sql")
-    val serializedObj = KryoSerializer.serialize(obj)
+    val serializedObj = SparkSqlSerializer.serialize(obj)
 
-    GENERIC.append(KryoSerializer.serialize(obj), buffer)
+    GENERIC.append(SparkSqlSerializer.serialize(obj), buffer)
     buffer.rewind()
 
     val length = buffer.getInt()
@@ -163,13 +163,13 @@ class ColumnTypeSuite extends FunSuite {
 
     val bytes = new Array[Byte](length)
     buffer.get(bytes, 0, length)
-    assert(obj === KryoSerializer.deserialize(bytes))
+    assert(obj === SparkSqlSerializer.deserialize(bytes))
 
     buffer.rewind()
     buffer.putInt(serializedObj.length).put(serializedObj)
 
     buffer.rewind()
-    assert(obj === KryoSerializer.deserialize(GENERIC.extract(buffer)))
+    assert(obj === SparkSqlSerializer.deserialize(GENERIC.extract(buffer)))
   }
 
   def testNumericColumnType[T <: DataType, JvmType](

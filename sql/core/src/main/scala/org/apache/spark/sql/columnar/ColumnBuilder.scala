@@ -21,7 +21,7 @@ package columnar
 import java.nio.{ByteOrder, ByteBuffer}
 
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.execution.KryoSerializer
+import org.apache.spark.sql.execution.SparkSqlSerializer
 
 trait ColumnBuilder {
   /**
@@ -140,7 +140,7 @@ class GenericColumnBuilder
   def columnType = GENERIC
 
   override def doAppendFrom(row: Row, ordinal: Int) {
-    val serialized = KryoSerializer.serialize(row(ordinal))
+    val serialized = SparkSqlSerializer.serialize(row(ordinal))
     buffer = ColumnBuilder.ensureFreeSpace(buffer, columnType.actualSize(serialized))
     columnType.append(serialized, buffer)
   }
