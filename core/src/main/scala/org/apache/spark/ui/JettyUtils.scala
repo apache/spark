@@ -126,7 +126,8 @@ private[spark] object JettyUtils extends Logging {
       case None =>
         throw new Exception("Could not find resource path for Web UI: " + resourceBase)
     }
-    contextHandler.addServlet(holder, path)
+    contextHandler.setContextPath(path)
+    contextHandler.addServlet(holder, "/")
     contextHandler
   }
 

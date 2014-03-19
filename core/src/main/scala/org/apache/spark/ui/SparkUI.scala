@@ -68,7 +68,7 @@ private[spark] class SparkUI(
     exec.getHandlers ++
     metricsServletHandlers ++
     Seq[ServletContextHandler] (
-      createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static/*"),
+      createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"),
       createRedirectHandler("/", "/stages", basePath)
     )
   }
@@ -117,5 +117,5 @@ private[spark] class SparkUI(
 
 private[spark] object SparkUI {
   val DEFAULT_PORT = "4040"
-  val STATIC_RESOURCE_DIR = "org/apache/spark/ui"
+  val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
 }

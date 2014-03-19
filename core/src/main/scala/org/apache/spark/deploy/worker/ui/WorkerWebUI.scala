@@ -46,7 +46,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
   private val handlers: Seq[ServletContextHandler] = {
     worker.metricsSystem.getServletHandlers ++
     Seq[ServletContextHandler](
-      createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static/*"),
+      createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static"),
       createServletHandler("/log",
         (request: HttpServletRequest) => log(request), worker.securityMgr),
       createServletHandler("/logPage",
