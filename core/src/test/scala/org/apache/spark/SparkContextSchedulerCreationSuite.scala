@@ -27,10 +27,10 @@ import org.apache.spark.scheduler.local.LocalBackend
 class SparkContextSchedulerCreationSuite
   extends FunSuite with PrivateMethodTester with LocalSparkContext with Logging {
 
-  def createTaskScheduler(master: String): TaskSchedulerImpl = {
+  def createTaskScheduler(master: String, conf: SparkConf = new SparkConf()): TaskSchedulerImpl = {
     // Create local SparkContext to setup a SparkEnv. We don't actually want to start() the
     // real schedulers, so we don't want to create a full SparkContext with the desired scheduler.
-    sc = new SparkContext("local", "test")
+    sc = new SparkContext("local", "test", conf)
     val createTaskSchedulerMethod = PrivateMethod[TaskScheduler]('createTaskScheduler)
     val sched = SparkContext invokePrivate createTaskSchedulerMethod(sc, master)
     sched.asInstanceOf[TaskSchedulerImpl]
@@ -44,9 +44,22 @@ class SparkContextSchedulerCreationSuite
   }
 
   test("local") {
-    val sched = createTaskScheduler("local")
+    var conf = new SparkConf()
+    conf.set("spark.cores.max", "1")
+    val sched = createTaskScheduler("local", conf)
     sched.backend match {
       case s: LocalBackend => assert(s.totalCores === 1)
+      case _ => fail()
+    }
+  }
+
+  test("local-cores-exceed") {
+    val cores = Runtime.getRuntime.availableProcessors() + 1
+    var conf = new SparkConf()
+    conf.set("spark.cores.max", cores.toString)
+    val sched = createTaskScheduler("local", conf)
+    sched.backend match {
+      case s: LocalBackend => assert(s.totalCores === Runtime.getRuntime.availableProcessors())
       case _ => fail()
     }
   }
