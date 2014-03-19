@@ -58,6 +58,7 @@ object LAUtils {
     val n = a.n
     val data = a.rows.flatMap{
       mrow => Array.tabulate(n)(j => MatrixEntry(mrow.i, j, mrow.data(j)))
+                   .filter(x => x.mval != 0)
     }
     SparseMatrix(data, m, n)
   }
