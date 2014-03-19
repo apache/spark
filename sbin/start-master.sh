@@ -22,6 +22,21 @@
 sbin=`dirname "$0"`
 sbin=`cd "$sbin"; pwd`
 
+START_TACHYON=false
+
+while (( "$#" )); do
+case $1 in
+    --with-tachyon)
+      if [ ! -e "$sbin"/../tachyon/bin/tachyon ]; then
+        echo "Error: --with-tachyon specified, but tachyon not found."
+        exit -1
+      fi
+      START_TACHYON=true
+      ;;
+  esac
+shift
+done
+
 . "$sbin/spark-config.sh"
 
 if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
@@ -50,3 +65,9 @@ if [ "$SPARK_PUBLIC_DNS" = "" ]; then
 fi
 
 "$sbin"/spark-daemon.sh start org.apache.spark.deploy.master.Master 1 --ip $SPARK_MASTER_IP --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT
+
+if [ "$START_TACHYON" == "true" ]; then
+  "$sbin"/../tachyon/bin/tachyon bootstrap-conf $SPARK_MASTER_IP
+  "$sbin"/../tachyon/bin/tachyon format -s
+  "$sbin"/../tachyon/bin/tachyon-start.sh master
+fi
