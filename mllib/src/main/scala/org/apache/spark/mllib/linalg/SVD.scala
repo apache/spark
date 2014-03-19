@@ -112,7 +112,7 @@ class SVD {
  * V is n x k and satisfies V'V = eye(k)
  *
  * @param matrix dense matrix to factorize
- * @return Three dense matrices: U, S, V such that A = USV^T
+ * @return See [[TallSkinnyMatrixSVD]] for the output matrices and arrays
  */
  private def denseSVD(matrix: TallSkinnyDenseMatrix): TallSkinnyMatrixSVD = {
    val rows = matrix.rows
