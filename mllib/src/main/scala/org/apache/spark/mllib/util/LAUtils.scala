@@ -39,10 +39,10 @@ object LAUtils {
     val rows = sp.data.map(x => (x.i, (x.j, x.mval))).groupByKey.map{
       case (i, cols) =>
         val rowarray = Array.ofDim[Double](n)
-        val i = 0
-        while (i < cols.size) {
-          rowarray(cols(i)._1) = cols(i)._2
-          i += 1 
+        var j = 0
+        while (j < cols.size) {
+          rowarray(cols(j)._1) = cols(j)._2
+          j += 1 
         }
         MatrixRow(i, rowarray)
     }

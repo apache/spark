@@ -69,14 +69,15 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
   test("full rank matrix pca") {
     val m = 5
     val n = 3
-    val data = sc.makeRDD(Array.tabulate(m,n){ (a, b) =>
-      MatrixEntry(a, b, Math.sin(a+b+a*b)) }.flatten )
+    val dataarr = Array.tabulate(m,n){ (a, b) =>
+      MatrixEntry(a, b, Math.sin(a+b+a*b)) }.flatten
+    val data = sc.makeRDD(dataarr, 3) 
     val a = LAUtils.spToDense(SparseMatrix(data, m, n))
 
     val realPCAArray = Array((0,0,-0.2579), (0,1,-0.6602), (0,2,0.7054),
                         (1,0,-0.1448), (1,1,0.7483),  (1,2,0.6474),
                         (2,0,0.9553),  (2,1,-0.0649),  (2,2,0.2886))
-    val realPCA = sc.makeRDD(realPCAArray.map(x => MatrixEntry(x._1, x._2, x._3)))
+    val realPCA = sc.makeRDD(realPCAArray.map(x => MatrixEntry(x._1, x._2, x._3)), 3)
 
     val coeffs = new DoubleMatrix(new PCA().setK(n).compute(a))
 
@@ -86,8 +87,9 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
   test("sparse matrix full rank matrix pca") {
     val m = 5
     val n = 3
-    val data = sc.makeRDD(Array.tabulate(m,n){ (a, b) =>
-      MatrixEntry(a, b, Math.sin(a+b+a*b)) }.flatten.drop(1) )
+    val dataarr = Array.tabulate(m,n){ (a, b) =>
+      MatrixEntry(a, b, Math.sin(a+b+a*b)) }.flatten.drop(1)
+    val data = sc.makeRDD(dataarr, 3)
     val a = LAUtils.spToDense(SparseMatrix(data, m, n))
 
     val realPCAArray = Array((0,0,-0.2579), (0,1,-0.6602), (0,2,0.7054),
@@ -103,8 +105,10 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
   test("truncated matrix pca") {
     val m = 5
     val n = 3
-    val data = sc.makeRDD(Array.tabulate(m,n){ (a, b) =>
-      MatrixEntry(a, b, Math.sin(a+b+a*b)) }.flatten )
+    val dataarr = Array.tabulate(m,n){ (a, b) =>
+      MatrixEntry(a, b, Math.sin(a+b+a*b)) }.flatten
+    
+    val data = sc.makeRDD(dataarr, 3)
     val a = LAUtils.spToDense(SparseMatrix(data, m, n))
 
     val realPCAArray = Array((0,0,-0.2579), (0,1,-0.6602),

@@ -99,18 +99,18 @@ class PCA {
   private def computePCA(matrix: RDD[Array[Double]], k: Int): Array[Array[Double]] = {
     val n = matrix.first.size
     val sc = matrix.sparkContext
-    val m = sc.accumulator(-1)
 
     // compute column sums and normalize matrix
-    val colSumsTemp = matrix.fold(Array.ofDim[Double](n)) { (a, b) => 
-      val am = new DoubleMatrix(a)
-      val bm = new DoubleMatrix(b)
+    val colSumsTemp = matrix.map(x => (x, 1))
+          .fold((Array.ofDim[Double](n), 0)) { (a, b) => 
+      val am = new DoubleMatrix(a._1)
+      val bm = new DoubleMatrix(b._1)
       am.addi(bm)
-      m += 1
-      a
+      (a._1, a._2 + b._2)
     }
 
-    val colSums = colSumsTemp.map(x => x / m.value)
+    val m = colSumsTemp._2 
+    val colSums = colSumsTemp._1.map(x => x / m)
 
     val data = matrix.map{ x => 
         val row = Array.ofDim[Double](n)

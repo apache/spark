@@ -69,8 +69,9 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
   test("full rank matrix svd") {
     val m = 10
     val n = 3
-    val data = sc.makeRDD(Array.tabulate(m,n){ (a, b) =>
-      MatrixEntry(a, b, (a + 2).toDouble * (b + 1) / (1 + a + b)) }.flatten )
+    val datarr = Array.tabulate(m,n){ (a, b) =>
+      MatrixEntry(a, b, (a + 2).toDouble * (b + 1) / (1 + a + b)) }.flatten
+    val data = sc.makeRDD(datarr, 3)
 
     val a = SparseMatrix(data, m, n)
 
@@ -99,8 +100,9 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
  test("dense full rank matrix svd") {
     val m = 10
     val n = 3
-    val data = sc.makeRDD(Array.tabulate(m,n){ (a, b) =>
-      MatrixEntry(a, b, (a + 2).toDouble * (b + 1) / (1 + a + b)) }.flatten )
+    val datarr = Array.tabulate(m,n){ (a, b) =>
+      MatrixEntry(a, b, (a + 2).toDouble * (b + 1) / (1 + a + b)) }.flatten
+    val data = sc.makeRDD(datarr, 3)
 
     val a = LAUtils.spToDense(SparseMatrix(data, m, n))
 
