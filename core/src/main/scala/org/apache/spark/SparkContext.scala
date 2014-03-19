@@ -568,7 +568,7 @@ class SparkContext(
       minSplits: Int = defaultMinSplits
       ): RDD[T] = {
     sequenceFile(path, classOf[NullWritable], classOf[BytesWritable], minSplits)
-      .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes))
+      .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes, Thread.currentThread.getContextClassLoader))
   }
 
 
