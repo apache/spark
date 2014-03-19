@@ -80,8 +80,8 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val v = decomposed.V
     val s = decomposed.S
 
-    val densea = getDenseMatrix(a)
-    val svd = Singular.sparseSVD(densea)
+    val denseA = getDenseMatrix(a)
+    val svd = Singular.sparseSVD(denseA)
 
     val retu = getDenseMatrix(u)
     val rets = getDenseMatrix(s)
@@ -94,7 +94,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     assertMatrixEquals(retv, svd(2))
 
     // check multiplication guarantee
-    assertMatrixEquals(retu.mmul(rets).mmul(retv.transpose), densea)  
+    assertMatrixEquals(retu.mmul(rets).mmul(retv.transpose), denseA)  
   }
 
  test("dense full rank matrix svd") {
@@ -111,8 +111,8 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val v = decomposed.V
     val s = decomposed.S
 
-    val densea = getDenseMatrix(LAUtils.denseToSp(a))
-    val svd = Singular.sparseSVD(densea)
+    val denseA = getDenseMatrix(LAUtils.denseToSp(a))
+    val svd = Singular.sparseSVD(denseA)
 
     val retu = getDenseMatrix(u)
     val rets = DoubleMatrix.diag(new DoubleMatrix(s))
@@ -125,7 +125,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     assertMatrixEquals(retv, svd(2))
 
     // check multiplication guarantee
-    assertMatrixEquals(retu.mmul(rets).mmul(retv.transpose), densea)
+    assertMatrixEquals(retu.mmul(rets).mmul(retv.transpose), denseA)
   }
 
  test("rank one matrix svd") {
@@ -145,8 +145,8 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
 
     assert(retrank == 1, "rank returned not one")
 
-    val densea = getDenseMatrix(a)
-    val svd = Singular.sparseSVD(densea)
+    val denseA = getDenseMatrix(a)
+    val svd = Singular.sparseSVD(denseA)
 
     val retu = getDenseMatrix(u)
     val rets = getDenseMatrix(s)
@@ -158,7 +158,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     assertMatrixEquals(retv, svd(2).getColumn(0))
 
      // check multiplication guarantee
-    assertMatrixEquals(retu.mmul(rets).mmul(retv.transpose), densea)  
+    assertMatrixEquals(retu.mmul(rets).mmul(retv.transpose), denseA)  
   }
 
  test("truncated with k") {
@@ -176,8 +176,8 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val v = decomposed.V
     val retrank = s.data.collect().length
 
-    val densea = getDenseMatrix(a)
-    val svd = Singular.sparseSVD(densea)
+    val denseA = getDenseMatrix(a)
+    val svd = Singular.sparseSVD(denseA)
 
     val retu = getDenseMatrix(u)
     val rets = getDenseMatrix(s)

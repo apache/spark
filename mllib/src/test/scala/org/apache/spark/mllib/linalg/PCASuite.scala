@@ -22,8 +22,6 @@ import scala.util.Random
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
-import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
-
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
@@ -87,6 +85,7 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
   test("sparse matrix full rank matrix pca") {
     val m = 5
     val n = 3
+    // the entry that gets dropped is zero to test sparse support
     val dataarr = Array.tabulate(m,n){ (a, b) =>
       MatrixEntry(a, b, Math.sin(a+b+a*b)) }.flatten.drop(1)
     val data = sc.makeRDD(dataarr, 3)
