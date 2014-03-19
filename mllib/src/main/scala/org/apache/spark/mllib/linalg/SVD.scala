@@ -228,11 +228,11 @@ object SVD {
     val sc = matrix.rows.sparkContext
 
     if (m < n || m <= 0 || n <= 0) {
-      throw new IllegalArgumentException("Expecting a tall and skinny matrix m=" + m + " n=" + n)
+      throw new IllegalArgumentException("Expecting a tall and skinny matrix m=$m n=$n")
     }
 
     if (k < 1 || k > n) {
-      throw new IllegalArgumentException("Request up to n singular values n=" + n + " k=" + k)
+      throw new IllegalArgumentException("Request up to n singular values n=$n k=$k")
     }
 
     val rowIndices = matrix.rows.map(_.i)
@@ -288,7 +288,7 @@ object SVD {
 
     if (k < 1 || k > n) {
       throw new IllegalArgumentException(
-        "Request up to n singular valuesi k=" + k + " n= " + n)
+        "Request up to n singular values k=$k n=$n")
     }
 
     // Compute A^T A
