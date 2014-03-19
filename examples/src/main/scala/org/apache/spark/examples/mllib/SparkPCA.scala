@@ -33,14 +33,14 @@ object SparkPCA {
       System.err.println("Usage: SparkPCA <master> m n")
       System.exit(1)
     }
-    val sc = new SparkContext(args(0), "SVD",
-      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
+    val sc = new SparkContext(args(0), "PCA",
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
 
     val m = args(2).toInt
     val n = args(3).toInt
 
     // Make example matrix
-    val data = Array.tabulate(m, n){ (a, b) =>
+    val data = Array.tabulate(m, n) { (a, b) =>
       (a + 2).toDouble * (b + 1) / (1 + a + b) }
 
     // recover top principal component

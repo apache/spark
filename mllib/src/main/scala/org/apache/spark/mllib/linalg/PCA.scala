@@ -30,7 +30,7 @@ import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
  * Class used to obtain principal components
  */
 class PCA {
-  private var k: Int = 1
+  private var k = 1
 
   /**
    * Set the number of top-k principle components to return

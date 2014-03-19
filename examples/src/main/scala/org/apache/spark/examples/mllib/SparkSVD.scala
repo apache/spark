@@ -38,7 +38,7 @@ object SparkSVD {
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "SVD",
-      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
 
     // Load and parse the data file
     val data = sc.textFile(args(1)).map { line =>

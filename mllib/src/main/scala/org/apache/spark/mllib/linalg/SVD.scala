@@ -27,9 +27,9 @@ import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
  * Class used to obtain singular value decompositions
  */
 class SVD {
-  private var k: Int = 1
-  private var computeU: Boolean = true
-  private var rCond: Double = 1e-9
+  private var k = 1
+  private var computeU = true
+  private var rCond = 1e-9
 
   /**
    * Set the number of top-k singular vectors to return
