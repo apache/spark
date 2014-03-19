@@ -130,6 +130,8 @@ class SparkContext(
 
   val isLocal = (master == "local" || master.startsWith("local["))
 
+  if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
+
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.create(
     conf,
@@ -160,19 +162,20 @@ class SparkContext(
     jars.foreach(addJar)
   }
 
+  def warnSparkMem(value: String): String = {
+    logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
+      "deprecated, please use spark.executor.memory instead.")
+    value
+  }
+
   private[spark] val executorMemory = conf.getOption("spark.executor.memory")
-    .orElse(Option(System.getenv("SPARK_MEM")))
+    .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
+    .orElse(Option(System.getenv("SPARK_MEM")).map(warnSparkMem))
     .map(Utils.memoryStringToMb)
     .getOrElse(512)
 
-  if (!conf.contains("spark.executor.memory") && sys.env.contains("SPARK_MEM")) {
-    logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
-      "deprecated, instead use spark.executor.memory")
-  }
-
   // Environment variables to pass to our executors
   private[spark] val executorEnvs = HashMap[String, String]()
-  // Note: SPARK_MEM is included for Mesos, but overwritten for standalone mode in ExecutorRunner
   for (key <- Seq("SPARK_CLASSPATH", "SPARK_LIBRARY_PATH", "SPARK_JAVA_OPTS");
       value <- Option(System.getenv(key))) {
     executorEnvs(key) = value
@@ -183,8 +186,9 @@ class SparkContext(
     value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
     executorEnvs(envKey) = value
   }
-  // Since memory can be set with a system property too, use that
-  executorEnvs("SPARK_MEM") = executorMemory + "m"
+  // The Mesos scheduler backend relies on this environment variable to set executor memory.
+  // TODO: Set this only in the Mesos scheduler.
+  executorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
   executorEnvs ++= conf.getExecutorEnv
 
   // Set SPARK_USER for user who is running SparkContext.
@@ -240,6 +244,7 @@ class SparkContext(
     localProperties.set(props)
   }
 
+  @deprecated("Properties no longer need to be explicitly initialized.", "1.0.0")
   def initLocalProperties() {
     localProperties.set(new Properties())
   }
@@ -308,7 +313,7 @@ class SparkContext(
   private val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler, this)
   private val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager, this)
 
-  def initDriverMetrics() {
+  private def initDriverMetrics() {
     SparkEnv.get.metricsSystem.registerSource(dagSchedulerSource)
     SparkEnv.get.metricsSystem.registerSource(blockManagerSource)
   }
@@ -350,7 +355,7 @@ class SparkContext(
    * using the older MapReduce API (`org.apache.hadoop.mapred`).
    *
    * @param conf JobConf for setting up the dataset
-   * @param inputFormatClass Class of the [[InputFormat]]
+   * @param inputFormatClass Class of the InputFormat
    * @param keyClass Class of the keys
    * @param valueClass Class of the values
    * @param minSplits Minimum number of Hadoop Splits to generate.
@@ -633,7 +638,7 @@ class SparkContext(
     addedFiles(key) = System.currentTimeMillis
 
     // Fetch the file locally in case a job is executed using DAGScheduler.runLocally().
-    Utils.fetchFile(path, new File(SparkFiles.getRootDirectory), conf)
+    Utils.fetchFile(path, new File(SparkFiles.getRootDirectory), conf, env.securityManager)
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
   }
@@ -735,8 +740,10 @@ class SparkContext(
         key = uri.getScheme match {
           // A JAR file which exists only on the driver node
           case null | "file" =>
-            if (SparkHadoopUtil.get.isYarnMode() && master == "yarn-standalone") {
-              // In order for this to work in yarn standalone mode the user must specify the 
+            // yarn-standalone is deprecated, but still supported
+            if (SparkHadoopUtil.get.isYarnMode() &&
+                (master == "yarn-standalone" || master == "yarn-cluster")) {
+              // In order for this to work in yarn-cluster mode the user must specify the
               // --addjars option to the client to upload the file into the distributed cache 
               // of the AM to make it show up in the current working directory.
               val fileName = new Path(uri.getPath).getName()
@@ -825,13 +832,12 @@ class SparkContext(
     setLocalProperty("externalCallSite", null)
   }
 
+  /**
+   * Capture the current user callsite and return a formatted version for printing. If the user
+   * has overridden the call site, this will return the user's version.
+   */
   private[spark] def getCallSite(): String = {
-    val callSite = getLocalProperty("externalCallSite")
-    if (callSite == null) {
-      Utils.formatSparkCallSite
-    } else {
-      callSite
-    }
+    Option(getLocalProperty("externalCallSite")).getOrElse(Utils.formatCallSiteInfo())
   }
 
   /**
@@ -846,6 +852,9 @@ class SparkContext(
       partitions: Seq[Int],
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit) {
+    partitions.foreach{ p =>
+      require(p >= 0 && p < rdd.partitions.size, s"Invalid partition requested: $p")
+    }
     val callSite = getCallSite
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite)
@@ -949,6 +958,9 @@ class SparkContext(
       resultHandler: (Int, U) => Unit,
       resultFunc: => R): SimpleFutureAction[R] =
   {
+    partitions.foreach{ p =>
+      require(p >= 0 && p < rdd.partitions.size, s"Invalid partition requested: $p")
+    }
     val cleanF = clean(processPartition)
     val callSite = getCallSite
     val waiter = dagScheduler.submitJob(
@@ -1024,7 +1036,7 @@ class SparkContext(
  * The SparkContext object contains a number of implicit conversions and parameters for use with
  * various Spark features.
  */
-object SparkContext {
+object SparkContext extends Logging {
 
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
 
@@ -1242,7 +1254,11 @@ object SparkContext {
         }
         scheduler
 
-      case "yarn-standalone" =>
+      case "yarn-standalone" | "yarn-cluster" =>
+        if (master == "yarn-standalone") {
+          logWarning(
+            "\"yarn-standalone\" is deprecated as of Spark 1.0. Use \"yarn-cluster\" instead.")
+        }
         val scheduler = try {
           val clazz = Class.forName("org.apache.spark.scheduler.cluster.YarnClusterScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])

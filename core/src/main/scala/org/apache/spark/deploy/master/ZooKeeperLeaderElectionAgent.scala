@@ -18,105 +18,67 @@
 package org.apache.spark.deploy.master
 
 import akka.actor.ActorRef
-import org.apache.zookeeper._
-import org.apache.zookeeper.Watcher.Event.EventType
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.master.MasterMessages._
+import org.apache.curator.framework.CuratorFramework
+import org.apache.curator.framework.recipes.leader.{LeaderLatchListener, LeaderLatch}
 
 private[spark] class ZooKeeperLeaderElectionAgent(val masterActor: ActorRef,
     masterUrl: String, conf: SparkConf)
-  extends LeaderElectionAgent with SparkZooKeeperWatcher with Logging  {
+  extends LeaderElectionAgent with LeaderLatchListener with Logging  {
 
   val WORKING_DIR = conf.get("spark.deploy.zookeeper.dir", "/spark") + "/leader_election"
 
-  private val watcher = new ZooKeeperWatcher()
-  private val zk = new SparkZooKeeperSession(this, conf)
+  private var zk: CuratorFramework = _
+  private var leaderLatch: LeaderLatch = _
   private var status = LeadershipStatus.NOT_LEADER
-  private var myLeaderFile: String = _
-  private var leaderUrl: String = _
 
   override def preStart() {
-    logInfo("Starting ZooKeeper LeaderElection agent")
-    zk.connect()
-  }
 
-  override def zkSessionCreated() {
-    synchronized {
-      zk.mkdirRecursive(WORKING_DIR)
-      myLeaderFile =
-        zk.create(WORKING_DIR + "/master_", masterUrl.getBytes, CreateMode.EPHEMERAL_SEQUENTIAL)
-      self ! CheckLeader
-    }
+    logInfo("Starting ZooKeeper LeaderElection agent")
+    zk = SparkCuratorUtil.newClient(conf)
+    leaderLatch = new LeaderLatch(zk, WORKING_DIR)
+    leaderLatch.addListener(this)
+
+    leaderLatch.start()
   }
 
   override def preRestart(reason: scala.Throwable, message: scala.Option[scala.Any]) {
-    logError("LeaderElectionAgent failed, waiting " + zk.ZK_TIMEOUT_MILLIS + "...", reason)
-    Thread.sleep(zk.ZK_TIMEOUT_MILLIS)
+    logError("LeaderElectionAgent failed...", reason)
     super.preRestart(reason, message)
   }
 
-  override def zkDown() {
-    logError("ZooKeeper down! LeaderElectionAgent shutting down Master.")
-    System.exit(1)
-  }
-
   override def postStop() {
+    leaderLatch.close()
     zk.close()
   }
 
   override def receive = {
-    case CheckLeader => checkLeader()
+    case _ =>
   }
 
-  private class ZooKeeperWatcher extends Watcher {
-    def process(event: WatchedEvent) {
-      if (event.getType == EventType.NodeDeleted) {
-        logInfo("Leader file disappeared, a master is down!")
-        self ! CheckLeader
-      }
-    }
-  }
-
-  /** Uses ZK leader election. Navigates several ZK potholes along the way. */
-  def checkLeader() {
-    val masters = zk.getChildren(WORKING_DIR).toList
-    val leader = masters.sorted.head
-    val leaderFile = WORKING_DIR + "/" + leader
-
-    // Setup a watch for the current leader.
-    zk.exists(leaderFile, watcher)
-
-    try {
-      leaderUrl = new String(zk.getData(leaderFile))
-    } catch {
-      // A NoNodeException may be thrown if old leader died since the start of this method call.
-      // This is fine -- just check again, since we're guaranteed to see the new values.
-      case e: KeeperException.NoNodeException =>
-        logInfo("Leader disappeared while reading it -- finding next leader")
-        checkLeader()
-        return
-    }
-
-    // Synchronization used to ensure no interleaving between the creation of a new session and the
-    // checking of a leader, which could cause us to delete our real leader file erroneously.
+  override def isLeader() {
     synchronized {
-      val isLeader = myLeaderFile == leaderFile
-      if (!isLeader && leaderUrl == masterUrl) {
-        // We found a different master file pointing to this process.
-        // This can happen in the following two cases:
-        // (1) The master process was restarted on the same node.
-        // (2) The ZK server died between creating the file and returning the name of the file.
-        //     For this case, we will end up creating a second file, and MUST explicitly delete the
-        //     first one, since our ZK session is still open.
-        // Note that this deletion will cause a NodeDeleted event to be fired so we check again for
-        // leader changes.
-        assert(leaderFile < myLeaderFile)
-        logWarning("Cleaning up old ZK master election file that points to this master.")
-        zk.delete(leaderFile)
-      } else {
-        updateLeadershipStatus(isLeader)
+      // could have lost leadership by now.
+      if (!leaderLatch.hasLeadership) {
+        return
       }
+
+      logInfo("We have gained leadership")
+      updateLeadershipStatus(true)
+    }
+  }
+
+  override def notLeader() {
+    synchronized {
+      // could have gained leadership by now.
+      if (leaderLatch.hasLeadership) {
+        return
+      }
+
+      logInfo("We have lost leadership")
+      updateLeadershipStatus(false)
     }
   }
 

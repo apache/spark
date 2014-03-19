@@ -33,9 +33,9 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
   var userJar: String = null
   var userClass: String = null
   var userArgs: Seq[String] = Seq[String]()
-  var workerMemory = 1024 // MB
-  var workerCores = 1
-  var numWorkers = 2
+  var executorMemory = 1024 // MB
+  var executorCores = 1
+  var numExecutors = 2
   var amQueue = sparkConf.get("QUEUE", "default")
   var amMemory: Int = 512 // MB
   var amClass: String = "org.apache.spark.deploy.yarn.ApplicationMaster"
@@ -67,24 +67,39 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
           userArgsBuffer += value
           args = tail
 
-        case ("--master-class") :: value :: tail =>
+        case ("--master-class" | "--am-class") :: value :: tail =>
+          if (args(0) == "--master-class") {
+            println("--master-class is deprecated. Use --am-class instead.")
+          }
           amClass = value
           args = tail
 
-        case ("--master-memory") :: MemoryParam(value) :: tail =>
+        case ("--master-memory" | "--driver-memory") :: MemoryParam(value) :: tail =>
+          if (args(0) == "--master-memory") {
+            println("--master-memory is deprecated. Use --driver-memory instead.")
+          }
           amMemory = value
           args = tail
 
-        case ("--num-workers") :: IntParam(value) :: tail =>
-          numWorkers = value
+        case ("--num-workers" | "--num-executors") :: IntParam(value) :: tail =>
+          if (args(0) == "--num-workers") {
+            println("--num-workers is deprecated. Use --num-executors instead.")
+          }
+          numExecutors = value
           args = tail
 
-        case ("--worker-memory") :: MemoryParam(value) :: tail =>
-          workerMemory = value
+        case ("--worker-memory" | "--executor-memory") :: MemoryParam(value) :: tail =>
+          if (args(0) == "--worker-memory") {
+            println("--worker-memory is deprecated. Use --executor-memory instead.")
+          }
+          executorMemory = value
           args = tail
 
-        case ("--worker-cores") :: IntParam(value) :: tail =>
-          workerCores = value
+        case ("--worker-cores" | "--executor-cores") :: IntParam(value) :: tail =>
+          if (args(0) == "--worker-cores") {
+            println("--worker-cores is deprecated. Use --executor-cores instead.")
+          }
+          executorCores = value
           args = tail
 
         case ("--queue") :: value :: tail =>
@@ -108,7 +123,7 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
           args = tail
 
         case Nil =>
-          if (userJar == null || userClass == null) {
+          if (userClass == null) {
             printUsageAndExit(1)
           }
 
@@ -129,15 +144,14 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
     System.err.println(
       "Usage: org.apache.spark.deploy.yarn.Client [options] \n" +
       "Options:\n" +
-      "  --jar JAR_PATH             Path to your application's JAR file (required)\n" +
+      "  --jar JAR_PATH             Path to your application's JAR file (required in yarn-cluster mode)\n" +
       "  --class CLASS_NAME         Name of your application's main class (required)\n" +
       "  --args ARGS                Arguments to be passed to your application's main class.\n" +
       "                             Mutliple invocations are possible, each will be passed in order.\n" +
-      "  --num-workers NUM          Number of workers to start (Default: 2)\n" +
-      "  --worker-cores NUM         Number of cores for the workers (Default: 1). This is unsused right now.\n" +
-      "  --master-class CLASS_NAME  Class Name for Master (Default: spark.deploy.yarn.ApplicationMaster)\n" +
-      "  --master-memory MEM        Memory for Master (e.g. 1000M, 2G) (Default: 512 Mb)\n" +
-      "  --worker-memory MEM        Memory per Worker (e.g. 1000M, 2G) (Default: 1G)\n" +
+      "  --num-executors NUM        Number of executors to start (Default: 2)\n" +
+      "  --executor-cores NUM       Number of cores for the executors (Default: 1).\n" +
+      "  --driver-memory MEM        Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)\n" +
+      "  --executor-memory MEM      Memory per executor (e.g. 1000M, 2G) (Default: 1G)\n" +
       "  --name NAME                The name of your application (Default: Spark)\n" +
       "  --queue QUEUE              The hadoop queue to use for allocation requests (Default: 'default')\n" +
       "  --addJars jars             Comma separated list of local jars that want SparkContext.addJar to work with.\n" +

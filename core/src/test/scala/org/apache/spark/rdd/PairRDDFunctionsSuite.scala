@@ -347,6 +347,48 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
      */
     pairs.saveAsNewAPIHadoopFile[ConfigTestFormat]("ignored")
   }
+
+  test("lookup") {
+    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+
+    assert(pairs.partitioner === None)
+    assert(pairs.lookup(1) === Seq(2))
+    assert(pairs.lookup(5) === Seq(6,7))
+    assert(pairs.lookup(-1) === Seq())
+
+  }
+
+  test("lookup with partitioner") {
+    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+
+    val p = new Partitioner {
+      def numPartitions: Int = 2
+
+      def getPartition(key: Any): Int = Math.abs(key.hashCode() % 2)
+    }
+    val shuffled = pairs.partitionBy(p)
+
+    assert(shuffled.partitioner === Some(p))
+    assert(shuffled.lookup(1) === Seq(2))
+    assert(shuffled.lookup(5) === Seq(6,7))
+    assert(shuffled.lookup(-1) === Seq())
+  }
+
+  test("lookup with bad partitioner") {
+    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+
+    val p = new Partitioner {
+      def numPartitions: Int = 2
+
+      def getPartition(key: Any): Int = key.hashCode() % 2
+    }
+    val shuffled = pairs.partitionBy(p)
+
+    assert(shuffled.partitioner === Some(p))
+    assert(shuffled.lookup(1) === Seq(2))
+    intercept[IllegalArgumentException] {shuffled.lookup(-1)}
+  }
+
 }
 
 /*

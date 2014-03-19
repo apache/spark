@@ -25,6 +25,8 @@ If you don't run this, you may see errors like the following:
 
 You can fix this by setting the `MAVEN_OPTS` variable as discussed before.
 
+*Note: For Java 1.8 and above this step is not required.*
+
 ## Specifying the Hadoop version ##
 
 Because HDFS is not protocol-compatible across versions, if you want to read from HDFS, you'll need to build Spark against the specific HDFS version in your environment. You can do this through the "hadoop.version" property. If unset, Spark will build against Hadoop 1.0.4 by default.
@@ -54,7 +56,7 @@ Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.o
 
 The ScalaTest plugin also supports running only a specific test suite as follows:
 
-    $ mvn -Dhadoop.version=... -Dsuites=spark.repl.ReplSuite test
+    $ mvn -Dhadoop.version=... -Dsuites=org.apache.spark.repl.ReplSuite test
 
 
 ## Continuous Compilation ##
@@ -76,3 +78,19 @@ The maven build includes support for building a Debian package containing the as
     $ mvn -Pdeb -DskipTests clean package
 
 The debian package can then be found under assembly/target. We added the short commit hash to the file name so that we can distinguish individual packages built for SNAPSHOT versions.
+
+## Running java 8 test suites.
+
+Running only java 8 tests and nothing else.
+
+    $ mvn install -DskipTests -Pjava8-tests
+    
+Java 8 tests are run when -Pjava8-tests profile is enabled, they will run in spite of -DskipTests. 
+For these tests to run your system must have a JDK 8 installation. 
+If you have JDK 8 installed but it is not the system default, you can set JAVA_HOME to point to JDK 8 before running the tests.
+
+## Packaging without Hadoop dependencies for deployment on YARN ##
+
+The assembly jar produced by "mvn package" will, by default, include all of Spark's dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this causes multiple versions of these to appear on executor classpaths: the version packaged in the Spark assembly and the version on each node, included with yarn.application.classpath.  The "hadoop-provided" profile builds the assembly without including Hadoop-ecosystem projects, like ZooKeeper and Hadoop itself. 
+
+

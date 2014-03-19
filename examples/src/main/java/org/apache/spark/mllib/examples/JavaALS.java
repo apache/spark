@@ -35,7 +35,7 @@ import scala.Tuple2;
  */
 public final class JavaALS {
 
-  static class ParseRating extends Function<String, Rating> {
+  static class ParseRating implements Function<String, Rating> {
     private static final Pattern COMMA = Pattern.compile(",");
 
     @Override
@@ -48,7 +48,7 @@ public final class JavaALS {
     }
   }
 
-  static class FeaturesToString extends Function<Tuple2<Object, double[]>, String> {
+  static class FeaturesToString implements Function<Tuple2<Object, double[]>, String> {
     @Override
     public String call(Tuple2<Object, double[]> element) {
       return element._1() + "," + Arrays.toString(element._2());

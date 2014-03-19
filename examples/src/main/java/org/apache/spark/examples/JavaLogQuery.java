@@ -108,7 +108,7 @@ public final class JavaLogQuery {
 
     JavaRDD<String> dataSet = (args.length == 2) ? jsc.textFile(args[1]) : jsc.parallelize(exampleApacheLogs);
 
-    JavaPairRDD<Tuple3<String, String, String>, Stats> extracted = dataSet.map(new PairFunction<String, Tuple3<String, String, String>, Stats>() {
+    JavaPairRDD<Tuple3<String, String, String>, Stats> extracted = dataSet.mapToPair(new PairFunction<String, Tuple3<String, String, String>, Stats>() {
       @Override
       public Tuple2<Tuple3<String, String, String>, Stats> call(String s) {
         return new Tuple2<Tuple3<String, String, String>, Stats>(extractKey(s), extractStats(s));
@@ -124,7 +124,7 @@ public final class JavaLogQuery {
 
     List<Tuple2<Tuple3<String, String, String>, Stats>> output = counts.collect();
     for (Tuple2<?,?> t : output) {
-      System.out.println(t._1 + "\t" + t._2);
+      System.out.println(t._1() + "\t" + t._2());
     }
     System.exit(0);
   }

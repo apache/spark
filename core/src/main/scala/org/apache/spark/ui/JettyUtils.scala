@@ -18,18 +18,23 @@
 package org.apache.spark.ui
 
 import java.net.InetSocketAddress
-import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
+import java.net.URL
+import javax.servlet.http.{HttpServlet, HttpServletResponse, HttpServletRequest}
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 import scala.xml.Node
 
-import net.liftweb.json.{JValue, pretty, render}
-import org.eclipse.jetty.server.{Handler, Request, Server}
-import org.eclipse.jetty.server.handler.{AbstractHandler, ContextHandler, HandlerList, ResourceHandler}
+import org.json4s.JValue
+import org.json4s.jackson.JsonMethods.{pretty, render}
+
+import org.eclipse.jetty.server.{DispatcherType, Server}
+import org.eclipse.jetty.server.handler.HandlerList
+import org.eclipse.jetty.servlet.{DefaultServlet, FilterHolder, ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
+
 
 /** Utilities for launching a web server using Jetty's HTTP Server class */
 private[spark] object JettyUtils extends Logging {
@@ -38,57 +43,107 @@ private[spark] object JettyUtils extends Logging {
 
   type Responder[T] = HttpServletRequest => T
 
-  // Conversions from various types of Responder's to jetty Handlers
-  implicit def jsonResponderToHandler(responder: Responder[JValue]): Handler =
-    createHandler(responder, "text/json", (in: JValue) => pretty(render(in)))
+  class ServletParams[T <% AnyRef](val responder: Responder[T],
+    val contentType: String,
+    val extractFn: T => String = (in: Any) => in.toString) {}
 
-  implicit def htmlResponderToHandler(responder: Responder[Seq[Node]]): Handler =
-    createHandler(responder, "text/html", (in: Seq[Node]) => "<!DOCTYPE html>" + in.toString)
+  // Conversions from various types of Responder's to appropriate servlet parameters
+  implicit def jsonResponderToServlet(responder: Responder[JValue]): ServletParams[JValue] =
+    new ServletParams(responder, "text/json", (in: JValue) => pretty(render(in)))
 
-  implicit def textResponderToHandler(responder: Responder[String]): Handler =
-    createHandler(responder, "text/plain")
+  implicit def htmlResponderToServlet(responder: Responder[Seq[Node]]): ServletParams[Seq[Node]] =
+    new ServletParams(responder, "text/html", (in: Seq[Node]) => "<!DOCTYPE html>" + in.toString)
 
-  def createHandler[T <% AnyRef](responder: Responder[T], contentType: String,
-                                 extractFn: T => String = (in: Any) => in.toString): Handler = {
-    new AbstractHandler {
-      def handle(target: String,
-                 baseRequest: Request,
-                 request: HttpServletRequest,
+  implicit def textResponderToServlet(responder: Responder[String]): ServletParams[String] =
+    new ServletParams(responder, "text/plain")
+
+  def createServlet[T <% AnyRef](servletParams: ServletParams[T],
+      securityMgr: SecurityManager): HttpServlet = {
+    new HttpServlet {
+      override def doGet(request: HttpServletRequest,
                  response: HttpServletResponse) {
-        response.setContentType("%s;charset=utf-8".format(contentType))
-        response.setStatus(HttpServletResponse.SC_OK)
-        baseRequest.setHandled(true)
-        val result = responder(request)
-        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-        response.getWriter().println(extractFn(result))
+        if (securityMgr.checkUIViewPermissions(request.getRemoteUser())) {
+          response.setContentType("%s;charset=utf-8".format(servletParams.contentType))
+          response.setStatus(HttpServletResponse.SC_OK)
+          val result = servletParams.responder(request)
+          response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+          response.getWriter().println(servletParams.extractFn(result))
+        } else {
+          response.setStatus(HttpServletResponse.SC_UNAUTHORIZED)
+          response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+          response.sendError(HttpServletResponse.SC_UNAUTHORIZED,
+            "User is not authorized to access this page.");
+        }
       }
     }
+  }
+
+  def createServletHandler(path: String, servlet: HttpServlet): ServletContextHandler = {
+    val contextHandler = new ServletContextHandler()
+    val holder = new ServletHolder(servlet)
+    contextHandler.setContextPath(path)
+    contextHandler.addServlet(holder, "/")
+    contextHandler
   }
 
   /** Creates a handler that always redirects the user to a given path */
-  def createRedirectHandler(newPath: String): Handler = {
-    new AbstractHandler {
-      def handle(target: String,
-                 baseRequest: Request,
-                 request: HttpServletRequest,
+  def createRedirectHandler(newPath: String, path: String): ServletContextHandler = {
+    val servlet = new HttpServlet {
+      override def doGet(request: HttpServletRequest,
                  response: HttpServletResponse) {
-        response.setStatus(302)
-        response.setHeader("Location", baseRequest.getRootURL + newPath)
-        baseRequest.setHandled(true)
+        // make sure we don't end up with // in the middle
+        val newUri = new URL(new URL(request.getRequestURL.toString), newPath).toURI
+        response.sendRedirect(newUri.toString)
       }
     }
+    val contextHandler = new ServletContextHandler()
+    val holder = new ServletHolder(servlet)
+    contextHandler.setContextPath(path)
+    contextHandler.addServlet(holder, "/")
+    contextHandler
   }
 
   /** Creates a handler for serving files from a static directory */
-  def createStaticHandler(resourceBase: String): ResourceHandler = {
-    val staticHandler = new ResourceHandler
+  def createStaticHandler(resourceBase: String, path: String): ServletContextHandler = {
+    val contextHandler = new ServletContextHandler()
+    val staticHandler = new DefaultServlet
+    val holder = new ServletHolder(staticHandler)
     Option(getClass.getClassLoader.getResource(resourceBase)) match {
       case Some(res) =>
-        staticHandler.setResourceBase(res.toString)
+        holder.setInitParameter("resourceBase", res.toString)
+        holder.setInitParameter("welcomeServlets", "false")
+        holder.setInitParameter("pathInfoOnly", "false")
       case None =>
         throw new Exception("Could not find resource path for Web UI: " + resourceBase)
     }
-    staticHandler
+    contextHandler.setContextPath(path)
+    contextHandler.addServlet(holder, "/")
+    contextHandler
+  }
+
+  private def addFilters(handlers: Seq[ServletContextHandler], conf: SparkConf) {
+    val filters: Array[String] = conf.get("spark.ui.filters", "").split(',').map(_.trim())
+    filters.foreach {
+      case filter : String => 
+        if (!filter.isEmpty) {
+          logInfo("Adding filter: " + filter)
+          val holder : FilterHolder = new FilterHolder()
+          holder.setClassName(filter)
+          // get any parameters for each filter
+          val paramName = "spark." + filter + ".params"
+          val params = conf.get(paramName, "").split(',').map(_.trim()).toSet
+          params.foreach {
+            case param : String =>
+              if (!param.isEmpty) {
+                val parts = param.split("=")
+                if (parts.length == 2) holder.setInitParameter(parts(0), parts(1))
+             }
+          }
+          val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.ERROR, 
+            DispatcherType.FORWARD, DispatcherType.INCLUDE, DispatcherType.REQUEST)
+          handlers.foreach { case(handler) => handler.addFilter(holder, "/*", enumDispatcher) }
+        }
+    }
   }
 
   /**
@@ -98,17 +153,12 @@ private[spark] object JettyUtils extends Logging {
    * If the desired port number is contented, continues incrementing ports until a free port is
    * found. Returns the chosen port and the jetty Server object.
    */
-  def startJettyServer(hostName: String, port: Int, handlers: Seq[(String, Handler)]): (Server, Int)
-  = {
+  def startJettyServer(hostName: String, port: Int, handlers: Seq[ServletContextHandler],
+      conf: SparkConf): (Server, Int) = {
 
-    val handlersToRegister = handlers.map { case(path, handler) =>
-      val contextHandler = new ContextHandler(path)
-      contextHandler.setHandler(handler)
-      contextHandler.asInstanceOf[org.eclipse.jetty.server.Handler]
-    }
-
+    addFilters(handlers, conf)
     val handlerList = new HandlerList
-    handlerList.setHandlers(handlersToRegister.toArray)
+    handlerList.setHandlers(handlers.toArray)
 
     @tailrec
     def connect(currentPort: Int): (Server, Int) = {
@@ -118,7 +168,9 @@ private[spark] object JettyUtils extends Logging {
       server.setThreadPool(pool)
       server.setHandler(handlerList)
 
-      Try { server.start() } match {
+      Try {
+        server.start()
+      } match {
         case s: Success[_] =>
           (server, server.getConnectors.head.getLocalPort)
         case f: Failure[_] =>

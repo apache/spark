@@ -44,9 +44,13 @@ import org.apache.spark.util.Utils
  */
 
 private[storage]
-trait BlockFetcherIterator extends Iterator[(BlockId, Option[Iterator[Any]])]
-  with Logging with BlockFetchTracker {
+trait BlockFetcherIterator extends Iterator[(BlockId, Option[Iterator[Any]])] with Logging {
   def initialize()
+  def totalBlocks: Int
+  def numLocalBlocks: Int
+  def numRemoteBlocks: Int
+  def fetchWaitTime: Long
+  def remoteBytesRead: Long
 }
 
 
@@ -74,7 +78,6 @@ object BlockFetcherIterator {
     import blockManager._
 
     private var _remoteBytesRead = 0L
-    private var _remoteFetchTime = 0L
     private var _fetchWaitTime = 0L
 
     if (blocksByAddress == null) {
@@ -120,7 +123,6 @@ object BlockFetcherIterator {
       future.onSuccess {
         case Some(message) => {
           val fetchDone = System.currentTimeMillis()
-          _remoteFetchTime += fetchDone - fetchStart
           val bufferMessage = message.asInstanceOf[BufferMessage]
           val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
           for (blockMessage <- blockMessageArray) {
@@ -233,7 +235,15 @@ object BlockFetcherIterator {
       logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime) + " ms")
     }
 
-    //an iterator that will read fetched blocks off the queue as they arrive.
+    override def totalBlocks: Int = numLocal + numRemote
+    override def numLocalBlocks: Int = numLocal
+    override def numRemoteBlocks: Int = numRemote
+    override def fetchWaitTime: Long = _fetchWaitTime
+    override def remoteBytesRead: Long = _remoteBytesRead
+ 
+
+    // Implementing the Iterator methods with an iterator that reads fetched blocks off the queue
+    // as they arrive.
     @volatile protected var resultsGotten = 0
 
     override def hasNext: Boolean = resultsGotten < _numBlocksToFetch
@@ -251,14 +261,6 @@ object BlockFetcherIterator {
       }
       (result.blockId, if (result.failed) None else Some(result.deserialize()))
     }
-
-    // Implementing BlockFetchTracker trait.
-    override def totalBlocks: Int = numLocal + numRemote
-    override def numLocalBlocks: Int = numLocal
-    override def numRemoteBlocks: Int = numRemote
-    override def remoteFetchTime: Long = _remoteFetchTime
-    override def fetchWaitTime: Long = _fetchWaitTime
-    override def remoteBytesRead: Long = _remoteBytesRead
   }
   // End of BasicBlockFetcherIterator
 

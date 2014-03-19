@@ -23,7 +23,8 @@ import scala.concurrent.Await
 import scala.xml.Node
 
 import akka.pattern.ask
-import net.liftweb.json.JsonAST.JValue
+import javax.servlet.http.HttpServletRequest
+import org.json4s.JValue
 
 import org.apache.spark.deploy.{DeployWebUI, JsonProtocol}
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
@@ -85,6 +86,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
               <li><strong>Drivers:</strong>
                 {state.activeDrivers.size} Running,
                 {state.completedDrivers.size} Completed </li>
+              <li><strong>Status:</strong> {state.status}</li>
             </ul>
           </div>
         </div>

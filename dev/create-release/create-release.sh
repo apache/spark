@@ -39,8 +39,8 @@ GIT_TAG=v$RELEASE_VERSION
 
 # Artifact publishing
 
-git clone https://git-wip-us.apache.org/repos/asf/incubator-spark.git -b $GIT_BRANCH
-cd incubator-spark
+git clone https://git-wip-us.apache.org/repos/asf/spark.git -b $GIT_BRANCH
+cd spark
 export MAVEN_OPTS="-Xmx3g -XX:MaxPermSize=1g -XX:ReservedCodeCacheSize=1g"
 
 mvn -Pyarn release:clean
@@ -49,21 +49,21 @@ mvn -DskipTests \
   -Darguments="-DskipTests=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
   -Dusername=$GIT_USERNAME -Dpassword=$GIT_PASSWORD \
   -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-  -Pyarn \
+  -Pyarn -Pspark-ganglia-lgpl \
   -Dtag=$GIT_TAG -DautoVersionSubmodules=true \
   --batch-mode release:prepare
 
 mvn -DskipTests \
   -Darguments="-DskipTests=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
   -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-  -Pyarn \
+  -Pyarn -Pspark-ganglia-lgpl\
   release:perform
 
-rm -rf incubator-spark
+rm -rf spark
 
 # Source and binary tarballs
-git clone https://git-wip-us.apache.org/repos/asf/incubator-spark.git
-cd incubator-spark
+git clone https://git-wip-us.apache.org/repos/asf/spark.git
+cd spark
 git checkout --force $GIT_TAG
 release_hash=`git rev-parse HEAD`
 
@@ -71,7 +71,7 @@ rm .gitignore
 rm -rf .git
 cd ..
 
-cp -r incubator-spark spark-$RELEASE_VERSION
+cp -r spark spark-$RELEASE_VERSION
 tar cvzf spark-$RELEASE_VERSION.tgz spark-$RELEASE_VERSION
 echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --armour --output spark-$RELEASE_VERSION.tgz.asc \
   --detach-sig spark-$RELEASE_VERSION.tgz
@@ -85,7 +85,7 @@ make_binary_release() {
   NAME=$1
   MAVEN_FLAGS=$2
 
-  cp -r incubator-spark spark-$RELEASE_VERSION-bin-$NAME
+  cp -r spark spark-$RELEASE_VERSION-bin-$NAME
   cd spark-$RELEASE_VERSION-bin-$NAME
   export MAVEN_OPTS="-Xmx3g -XX:MaxPermSize=1g -XX:ReservedCodeCacheSize=1g"
   mvn $MAVEN_FLAGS -DskipTests clean package
@@ -118,9 +118,9 @@ scp spark* \
   $USER_NAME@people.apache.org:/home/$USER_NAME/public_html/$rc_folder/
 
 # Docs
-cd incubator-spark
+cd spark
 cd docs
-jekyll build
+PRODUCTION=1 jekyll build
 echo "Copying release documentation"
 rc_docs_folder=${rc_folder}-docs
 rsync -r _site/* $USER_NAME@people.apache.org /home/$USER_NAME/public_html/$rc_docs_folder
