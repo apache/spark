@@ -73,7 +73,7 @@ class SVD {
    * U is a row-by-row dense matrix
    * S is a simple double array of singular values
    * V is a 2d array matrix
-   * See denseSVD for more documentation 
+   * See [[denseSVD]] for more documentation 
    */
   def compute(matrix: RDD[Array[Double]]) :
     (RDD[Array[Double]], Array[Double], Array[Array[Double]])  = {
@@ -81,7 +81,6 @@ class SVD {
   }
 
   /**
-  * Compute SVD with default parameter for computeU = true.
   * See full paramter definition of sparseSVD for more description.
   *
   * @param matrix sparse matrix to factorize
@@ -113,9 +112,6 @@ class SVD {
  * V is n x k and satisfies V'V = eye(k)
  *
  * @param matrix dense matrix to factorize
- * @param k Recover k singular values and vectors
- * @param computeU gives the option of skipping the U computation
- * @param rCond smallest singular value considered nonzero
  * @return Three dense matrices: U, S, V such that A = USV^T
  */
  private def denseSVD(matrix: TallSkinnyDenseMatrix): TallSkinnyMatrixSVD = {
