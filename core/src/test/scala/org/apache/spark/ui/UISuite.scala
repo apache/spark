@@ -22,6 +22,7 @@ import java.net.ServerSocket
 import scala.util.{Failure, Success, Try}
 
 import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.servlet.ServletContextHandler
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkConf
@@ -36,22 +37,27 @@ class UISuite extends FunSuite {
       case Failure(e) => 
       // Either case server port is busy hence setup for test complete
     }
-    val (jettyServer1, boundPort1) = JettyUtils.startJettyServer("0.0.0.0", startPort, Seq(),
-      new SparkConf)
-    val (jettyServer2, boundPort2) = JettyUtils.startJettyServer("0.0.0.0", startPort, Seq(),
-      new SparkConf)
+    val serverInfo1 = JettyUtils.startJettyServer(
+      "0.0.0.0", startPort, Seq[ServletContextHandler](), new SparkConf)
+    val serverInfo2 = JettyUtils.startJettyServer(
+      "0.0.0.0", startPort, Seq[ServletContextHandler](), new SparkConf)
     // Allow some wiggle room in case ports on the machine are under contention
+    val boundPort1 = serverInfo1.boundPort
+    val boundPort2 = serverInfo2.boundPort
     assert(boundPort1 > startPort && boundPort1 < startPort + 10)
     assert(boundPort2 > boundPort1 && boundPort2 < boundPort1 + 10)
   }
 
   test("jetty binds to port 0 correctly") {
-    val (jettyServer, boundPort) = JettyUtils.startJettyServer("0.0.0.0", 0, Seq(), new SparkConf)
-    assert(jettyServer.getState === "STARTED")
+    val serverInfo = JettyUtils.startJettyServer(
+      "0.0.0.0", 0, Seq[ServletContextHandler](), new SparkConf)
+    val server = serverInfo.server
+    val boundPort = serverInfo.boundPort
+    assert(server.getState === "STARTED")
     assert(boundPort != 0)
-    Try {new ServerSocket(boundPort)} match {
+    Try { new ServerSocket(boundPort) } match {
       case Success(s) => fail("Port %s doesn't seem used by jetty server".format(boundPort))
-      case Failure  (e) =>
+      case Failure(e) =>
     }
   }
 }

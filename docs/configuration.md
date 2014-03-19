@@ -490,7 +490,30 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.logConf</td>
   <td>false</td>
   <td>
-    Log the supplied SparkConf as INFO at start of spark context.
+    Whether to log the supplied SparkConf as INFO at start of spark context.
+  </td>
+</tr>
+<tr>
+  <td>spark.eventLog.enabled</td>
+  <td>false</td>
+  <td>
+    Whether to log spark events, useful for reconstructing the Web UI after the application has finished.
+  </td>
+</tr>
+<tr>
+  <td>spark.eventLog.compress</td>
+  <td>false</td>
+  <td>
+    Whether to compress logged events, if <code>spark.eventLog.enabled</code> is true.
+  </td>
+</tr>
+<tr>
+  <td>spark.eventLog.dir</td>
+  <td>file:///tmp/spark-events</td>
+  <td>
+    Base directory in which spark events are logged, if <code>spark.eventLog.enabled</code> is true.
+    Within this base directory, Spark creates a sub-directory for each application, and logs the events
+    specific to the application in this directory.
   </td>
 </tr>
 <tr>

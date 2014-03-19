@@ -132,6 +132,9 @@ class SparkContext(
 
   if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
 
+  // An asynchronous listener bus for Spark events
+  private[spark] val listenerBus = new LiveListenerBus
+
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.create(
     conf,
@@ -139,7 +142,8 @@ class SparkContext(
     conf.get("spark.driver.host"),
     conf.get("spark.driver.port").toInt,
     isDriver = true,
-    isLocal = isLocal)
+    isLocal = isLocal,
+    listenerBus = listenerBus)
   SparkEnv.set(env)
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
@@ -151,9 +155,26 @@ class SparkContext(
   private[spark] val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, conf)
 
-  // Initialize the Spark UI
+  // Initialize the Spark UI, registering all associated listeners
   private[spark] val ui = new SparkUI(this)
   ui.bind()
+  ui.start()
+
+  // Optionally log Spark events
+  private[spark] val eventLogger: Option[EventLoggingListener] = {
+    if (conf.getBoolean("spark.eventLog.enabled", false)) {
+      val logger = new EventLoggingListener(appName, conf)
+      listenerBus.addListener(logger)
+      Some(logger)
+    } else None
+  }
+
+  // Information needed to replay logged events, if any
+  private[spark] val eventLoggingInfo: Option[EventLoggingInfo] =
+    eventLogger.map { logger => Some(logger.info) }.getOrElse(None)
+
+  // At this point, all relevant SparkListeners have been registered, so begin releasing events
+  listenerBus.start()
 
   val startTime = System.currentTimeMillis()
 
@@ -200,13 +221,13 @@ class SparkContext(
   executorEnvs("SPARK_USER") = sparkUser
 
   // Create and start the scheduler
-  private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master, appName)
+  private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
   taskScheduler.start()
 
-  @volatile private[spark] var dagScheduler = new DAGScheduler(taskScheduler)
+  @volatile private[spark] var dagScheduler = new DAGScheduler(this)
   dagScheduler.start()
 
-  ui.start()
+  postEnvironmentUpdate()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = {
@@ -571,7 +592,6 @@ class SparkContext(
       .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes))
   }
 
-
   protected[spark] def checkpointFile[T: ClassTag](
       path: String
     ): RDD[T] = {
@@ -641,10 +661,11 @@ class SparkContext(
     Utils.fetchFile(path, new File(SparkFiles.getRootDirectory), conf, env.securityManager)
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
+    postEnvironmentUpdate()
   }
 
   def addSparkListener(listener: SparkListener) {
-    dagScheduler.addSparkListener(listener)
+    listenerBus.addListener(listener)
   }
 
   /**
@@ -671,7 +692,7 @@ class SparkContext(
    */
   def getPersistentRDDs: Map[Int, RDD[_]] = persistentRdds.toMap
 
-  def getStageInfo: Map[Stage,StageInfo] = {
+  def getStageInfo: Map[Stage, StageInfo] = {
     dagScheduler.stageToInfos
   }
 
@@ -698,7 +719,7 @@ class SparkContext(
   }
 
   /**
-   *  Return current scheduling mode
+   * Return current scheduling mode
    */
   def getSchedulingMode: SchedulingMode.SchedulingMode = {
     taskScheduler.schedulingMode
@@ -708,6 +729,7 @@ class SparkContext(
    * Clear the job's list of files added by `addFile` so that they do not get downloaded to
    * any new nodes.
    */
+  @deprecated("adding files no longer creates local copies that need to be deleted", "1.0.0")
   def clearFiles() {
     addedFiles.clear()
   }
@@ -720,6 +742,23 @@ class SparkContext(
    */
   private [spark] def getPreferredLocs(rdd: RDD[_], partition: Int): Seq[TaskLocation] = {
     dagScheduler.getPreferredLocs(rdd, partition)
+  }
+
+  /**
+   * Register an RDD to be persisted in memory and/or disk storage
+   */
+  private[spark] def persistRDD(rdd: RDD[_]) {
+    persistentRdds(rdd.id) = rdd
+  }
+
+  /**
+   * Unpersist an RDD from memory and/or disk storage
+   */
+  private[spark] def unpersistRDD(rdd: RDD[_], blocking: Boolean = true) {
+    val rddId = rdd.id
+    env.blockManager.master.removeRdd(rddId, blocking)
+    persistentRdds.remove(rddId)
+    listenerBus.post(SparkListenerUnpersistRDD(rddId))
   }
 
   /**
@@ -744,7 +783,7 @@ class SparkContext(
             if (SparkHadoopUtil.get.isYarnMode() &&
                 (master == "yarn-standalone" || master == "yarn-cluster")) {
               // In order for this to work in yarn-cluster mode the user must specify the
-              // --addjars option to the client to upload the file into the distributed cache 
+              // --addjars option to the client to upload the file into the distributed cache
               // of the AM to make it show up in the current working directory.
               val fileName = new Path(uri.getPath).getName()
               try {
@@ -752,7 +791,7 @@ class SparkContext(
               } catch {
                 case e: Exception => {
                   // For now just log an error but allow to go through so spark examples work.
-                  // The spark examples don't really need the jar distributed since its also 
+                  // The spark examples don't really need the jar distributed since its also
                   // the app jar.
                   logError("Error adding jar (" + e + "), was the --addJars option used?")
                   null
@@ -773,12 +812,14 @@ class SparkContext(
         logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
       }
     }
+    postEnvironmentUpdate()
   }
 
   /**
    * Clear the job's list of JARs added by `addJar` so that they do not get downloaded to
    * any new nodes.
    */
+  @deprecated("adding jars no longer creates local copies that need to be deleted", "1.0.0")
   def clearJars() {
     addedJars.clear()
   }
@@ -786,6 +827,7 @@ class SparkContext(
   /** Shut down the SparkContext. */
   def stop() {
     ui.stop()
+    eventLogger.foreach(_.stop())
     // Do this only if not stopped already - best case effort.
     // prevent NPE if stopped more than once.
     val dagSchedulerCopy = dagScheduler
@@ -793,12 +835,10 @@ class SparkContext(
     if (dagSchedulerCopy != null) {
       metadataCleaner.cancel()
       dagSchedulerCopy.stop()
+      listenerBus.stop()
       taskScheduler = null
       // TODO: Cache.stop()?
       env.stop()
-      // Clean up locally linked files
-      clearFiles()
-      clearJars()
       SparkEnv.set(null)
       ShuffleMapTask.clearCache()
       ResultTask.clearCache()
@@ -1026,6 +1066,19 @@ class SparkContext(
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
 
+  /** Post the environment update event once the task scheduler is ready */
+  private def postEnvironmentUpdate() {
+    if (taskScheduler != null) {
+      val schedulingMode = getSchedulingMode.toString
+      val addedJarPaths = addedJars.keys.toSeq
+      val addedFilePaths = addedFiles.keys.toSeq
+      val environmentDetails =
+        SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths, addedFilePaths)
+      val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
+      listenerBus.post(environmentUpdate)
+    }
+  }
+
   /** Called by MetadataCleaner to clean up the persistentRdds map periodically */
   private[spark] def cleanup(cleanupTime: Long) {
     persistentRdds.clearOldValues(cleanupTime)
@@ -1189,9 +1242,7 @@ object SparkContext extends Logging {
   }
 
   /** Creates a task scheduler based on a given master URL. Extracted for testing. */
-  private def createTaskScheduler(sc: SparkContext, master: String, appName: String)
-      : TaskScheduler =
-  {
+  private def createTaskScheduler(sc: SparkContext, master: String): TaskScheduler = {
     // Regular expression used for local[N] master format
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
@@ -1230,7 +1281,7 @@ object SparkContext extends Logging {
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new TaskSchedulerImpl(sc)
         val masterUrls = sparkUrl.split(",").map("spark://" + _)
-        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls, appName)
+        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
         scheduler
 
@@ -1247,7 +1298,7 @@ object SparkContext extends Logging {
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt)
         val masterUrls = localCluster.start()
-        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls, appName)
+        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
         backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
           localCluster.stop()
@@ -1307,9 +1358,9 @@ object SparkContext extends Logging {
         val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", false)
         val url = mesosUrl.stripPrefix("mesos://") // strip scheme from raw Mesos URLs
         val backend = if (coarseGrained) {
-          new CoarseMesosSchedulerBackend(scheduler, sc, url, appName)
+          new CoarseMesosSchedulerBackend(scheduler, sc, url)
         } else {
-          new MesosSchedulerBackend(scheduler, sc, url, appName)
+          new MesosSchedulerBackend(scheduler, sc, url)
         }
         scheduler.initialize(backend)
         scheduler
