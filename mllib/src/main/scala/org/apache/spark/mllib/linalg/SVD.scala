@@ -30,8 +30,8 @@ class SVD {
   private var k = 1
   private var computeU = true
   
-  // Singular values smaller than this value
-  // relative to the largest singular value are considered zero
+  // All singular values smaller than rcond * sigma(0)
+  // are treated as zero, where sigma(0) is the largest singular value.
   private var rCond = 1e-9
 
   /**
@@ -43,8 +43,9 @@ class SVD {
   }
 
   /**
-   * Singular values smaller than this value
-   * relative to the largest singular value are considered zero
+   * Sets the reciprocal condition number (rcond). All singular values
+   * smaller than rcond * sigma(0) are treated as zero, 
+   * where sigma(0) is the largest singular value.
    */
   def setReciprocalConditionNumber(smallS: Double): SVD = {
     this.rCond = smallS
