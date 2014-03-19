@@ -431,13 +431,11 @@ class StreamingContext private[streaming] (
    * Stop the execution of the streams.
    * @param stopSparkContext Stop the associated SparkContext or not
    */
-  def stop(stopSparkContext: Boolean = true) {
-    synchronized {
-      scheduler.stop()
-      logInfo("StreamingContext stopped successfully")
-      waiter.notifyStop()
-      if (stopSparkContext) sc.stop()
-    }
+  def stop(stopSparkContext: Boolean = true): Unit = synchronized {
+    scheduler.stop()
+    logInfo("StreamingContext stopped successfully")
+    waiter.notifyStop()
+    if (stopSparkContext) sc.stop()
   }
 }
 

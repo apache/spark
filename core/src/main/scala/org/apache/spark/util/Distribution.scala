@@ -42,8 +42,8 @@ class Distribution(val data: Array[Double], val startIdx: Int, val endIdx: Int) 
    * given from 0 to 1
    * @param probabilities
    */
-  def getQuantiles(probabilities: Traversable[Double] = defaultProbabilities):
-  IndexedSeq[Double] = {
+  def getQuantiles(probabilities: Traversable[Double] = defaultProbabilities)
+      : IndexedSeq[Double] = {
     probabilities.toIndexedSeq.map{p:Double => data(closestIndex(p))}
   }
 
@@ -51,7 +51,7 @@ class Distribution(val data: Array[Double], val startIdx: Int, val endIdx: Int) 
     math.min((p * length).toInt + startIdx, endIdx - 1)
   }
 
-  def showQuantiles(out: PrintStream = System.out) {
+  def showQuantiles(out: PrintStream = System.out): Unit = {
     out.println("min\t25%\t50%\t75%\tmax")
     getQuantiles(defaultProbabilities).foreach{q => out.print(q + "\t")}
     out.println

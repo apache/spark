@@ -1110,8 +1110,8 @@ object SparkContext extends Logging {
   }
 
   // Helper objects for converting common types to Writable
-  private def simpleWritableConverter[T, W <: Writable: ClassTag](convert: W => T):
-  WritableConverter[T] = {
+  private def simpleWritableConverter[T, W <: Writable: ClassTag](convert: W => T)
+      : WritableConverter[T] = {
     val wClass = classTag[W].runtimeClass.asInstanceOf[Class[W]]
     new WritableConverter[T](_ => wClass, x => convert(x.asInstanceOf[W]))
   }
@@ -1135,7 +1135,8 @@ object SparkContext extends Logging {
     simpleWritableConverter[Array[Byte], BytesWritable](_.getBytes)
   }
 
-  implicit def stringWritableConverter() = simpleWritableConverter[String, Text](_.toString)
+  implicit def stringWritableConverter(): WritableConverter[String] =
+    simpleWritableConverter[String, Text](_.toString)
 
   implicit def writableWritableConverter[T <: Writable]() =
     new WritableConverter[T](_.runtimeClass.asInstanceOf[Class[T]], _.asInstanceOf[T])

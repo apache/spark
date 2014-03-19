@@ -477,7 +477,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   /**
    * Start the execution of the streams.
    */
-  def start() {
+  def start(): Unit = {
     ssc.start()
   }
 
@@ -485,7 +485,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * Wait for the execution to stop. Any exceptions that occurs during the execution
    * will be thrown in this thread.
    */
-  def awaitTermination() {
+  def awaitTermination(): Unit = {
     ssc.awaitTermination()
   }
 
@@ -494,14 +494,14 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * will be thrown in this thread.
    * @param timeout time to wait in milliseconds
    */
-  def awaitTermination(timeout: Long) {
+  def awaitTermination(timeout: Long): Unit = {
     ssc.awaitTermination(timeout)
   }
 
   /**
    * Stop the execution of the streams. Will stop the associated JavaSparkContext as well.
    */
-  def stop() {
+  def stop(): Unit = {
     ssc.stop()
   }
 
@@ -509,7 +509,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * Stop the execution of the streams.
    * @param stopSparkContext Stop the associated SparkContext or not
    */
-  def stop(stopSparkContext: Boolean) {
+  def stop(stopSparkContext: Boolean): Unit = {
     ssc.stop(stopSparkContext)
   }
 }
