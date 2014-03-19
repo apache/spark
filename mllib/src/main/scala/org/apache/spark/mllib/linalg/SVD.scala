@@ -146,35 +146,35 @@ class SVD {
    }
  }
 
-/**
- * Singular Value Decomposition for Tall and Skinny matrices.
- * Given an m x n matrix A, this will compute matrices U, S, V such that
- * A = U * S * V'
- * 
- * There is no restriction on m, but we require n^2 doubles to fit in memory.
- * Further, n should be less than m.
- * 
- * The decomposition is computed by first computing A'A = V S^2 V',
- * computing svd locally on that (since n x n is small),
- * from which we recover S and V. 
- * Then we compute U via easy matrix multiplication
- * as U =  A * V * S^-1
- * 
- * Only the k largest singular values and associated vectors are found.
- * If there are k such values, then the dimensions of the return will be:
- *
- * S is k x k and diagonal, holding the singular values on diagonal
- * U is m x k and satisfies U'U = eye(k)
- * V is n x k and satisfies V'V = eye(k)
- *
- * The return values are as lean as possible: an RDD of rows for U,
- * a simple array for sigma, and a dense 2d matrix array for V
- *
- * @param matrix dense matrix to factorize
- * @param k Recover k singular values and vectors
- * @return Three matrices: U, S, V such that A = USV^T
- */
- private def denseSVD(matrix: RDD[Array[Double]]) : 
+ /**
+  * Singular Value Decomposition for Tall and Skinny matrices.
+  * Given an m x n matrix A, this will compute matrices U, S, V such that
+  * A = U * S * V'
+  * 
+  * There is no restriction on m, but we require n^2 doubles to fit in memory.
+  * Further, n should be less than m.
+  * 
+  * The decomposition is computed by first computing A'A = V S^2 V',
+  * computing svd locally on that (since n x n is small),
+  * from which we recover S and V. 
+  * Then we compute U via easy matrix multiplication
+  * as U =  A * V * S^-1
+  * 
+  * Only the k largest singular values and associated vectors are found.
+  * If there are k such values, then the dimensions of the return will be:
+  *
+  * S is k x k and diagonal, holding the singular values on diagonal
+  * U is m x k and satisfies U'U = eye(k)
+  * V is n x k and satisfies V'V = eye(k)
+  *
+  * The return values are as lean as possible: an RDD of rows for U,
+  * a simple array for sigma, and a dense 2d matrix array for V
+  *
+  * @param matrix dense matrix to factorize
+  * @param k Recover k singular values and vectors
+  * @return Three matrices: U, S, V such that A = USV^T
+  */
+  private def denseSVD(matrix: RDD[Array[Double]]) : 
                (RDD[Array[Double]], Array[Double], Array[Array[Double]])  = {
     val n = matrix.first.size
 
@@ -185,25 +185,25 @@ class SVD {
 
     // Compute A^T A
     val fullata = matrix.mapPartitions { iter => 
-      val miniata = Array.ofDim[Double](n, n)
-      while(iter.hasNext) {
+      val localATA = Array.ofDim[Double](n, n)
+      while (iter.hasNext) {
           val row = iter.next 
           var i = 0
-          while(i < n) {
+          while (i < n) {
             var j = 0
             while(j < n) {
-              miniata(i)(j) += row(i) * row(j)
+              localATA(i)(j) += row(i) * row(j)
               j += 1
             }
             i += 1
           }
       }
-      List(miniata).iterator
+      Iterator(localATA)
     }.fold(Array.ofDim[Double](n, n)) { (a, b) =>
       var i = 0
-      while(i < n) {
+      while (i < n) {
         var j = 0 
-        while(j < n) {
+        while (j < n) {
           a(i)(j) += b(i)(j)
           j += 1
         }
@@ -245,7 +245,7 @@ class SVD {
   * Given an m x n matrix A, this will compute matrices U, S, V such that
   * A = U * S * V'
   * 
-  * There is no restriction on m, but we require n^2 doubles to fit in memory.
+  * There is no restriction on m, but we require O(n^2) doubles to fit in memory.
   * Further, n should be less than m.
   * 
   * The decomposition is computed by first computing A'A = V S^2 V',
@@ -301,6 +301,7 @@ class SVD {
     // Since A^T A is small, we can compute its SVD directly
     val svd = Singular.sparseSVD(ata)
     val V = svd(0)
+    // This will be updated to rcond
     val sigmas = MatrixFunctions.sqrt(svd(1)).toArray.filter(x => x > 1e-9)
 
     if (sigmas.size < k) {

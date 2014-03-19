@@ -69,7 +69,7 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
     val dataarr = Array.tabulate(m,n){ (a, b) =>
       MatrixEntry(a, b, Math.sin(a+b+a*b)) }.flatten
     val data = sc.makeRDD(dataarr, 3) 
-    val a = LAUtils.sparseToDense(SparseMatrix(data, m, n))
+    val a = LAUtils.sparseToTallSkinnyDense(SparseMatrix(data, m, n))
 
     val realPCAArray = Array((0,0,-0.2579), (0,1,-0.6602), (0,2,0.7054),
                         (1,0,-0.1448), (1,1,0.7483),  (1,2,0.6474),
@@ -88,7 +88,7 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
     val dataarr = Array.tabulate(m,n){ (a, b) =>
       MatrixEntry(a, b, Math.sin(a+b+a*b)) }.flatten.drop(1)
     val data = sc.makeRDD(dataarr, 3)
-    val a = LAUtils.sparseToDense(SparseMatrix(data, m, n))
+    val a = LAUtils.sparseToTallSkinnyDense(SparseMatrix(data, m, n))
 
     val realPCAArray = Array((0,0,-0.2579), (0,1,-0.6602), (0,2,0.7054),
                         (1,0,-0.1448), (1,1,0.7483),  (1,2,0.6474),
@@ -107,7 +107,7 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
       MatrixEntry(a, b, Math.sin(a+b+a*b)) }.flatten
     
     val data = sc.makeRDD(dataarr, 3)
-    val a = LAUtils.sparseToDense(SparseMatrix(data, m, n))
+    val a = LAUtils.sparseToTallSkinnyDense(SparseMatrix(data, m, n))
 
     val realPCAArray = Array((0,0,-0.2579), (0,1,-0.6602),
                         (1,0,-0.1448), (1,1,0.7483),

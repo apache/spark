@@ -104,7 +104,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
       MatrixEntry(a, b, (a + 2).toDouble * (b + 1) / (1 + a + b)) }.flatten
     val data = sc.makeRDD(datarr, 3)
 
-    val a = LAUtils.sparseToDense(SparseMatrix(data, m, n))
+    val a = LAUtils.sparseToTallSkinnyDense(SparseMatrix(data, m, n))
 
     val decomposed = new SVD().setK(n).setComputeU(true).compute(a)
     val u = LAUtils.denseToSparse(decomposed.U)

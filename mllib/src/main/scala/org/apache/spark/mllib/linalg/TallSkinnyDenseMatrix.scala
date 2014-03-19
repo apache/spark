@@ -23,7 +23,7 @@ import org.apache.spark.rdd.RDD
 /**
  * Class that represents a dense matrix
  *
- * @param data RDD of rows
+ * @param rows RDD of rows
  * @param m number of rows
  * @param n number of columns
  */
