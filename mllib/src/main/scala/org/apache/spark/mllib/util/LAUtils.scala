@@ -17,8 +17,6 @@
 
 package org.apache.spark.mllib.util
 
-import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 
 import org.apache.spark.mllib.linalg._
@@ -36,14 +34,15 @@ object LAUtils {
   def sparseToTallSkinnyDense(sp: SparseMatrix): TallSkinnyDenseMatrix = {
     val m = sp.m
     val n = sp.n
-    val rows = sp.data.map(x => (x.i, (x.j, x.mval))).groupByKey.map { case (i, cols) =>
-      val rowarray = Array.ofDim[Double](n)
-      var j = 0
-      while (j < cols.size) {
-        rowarray(cols(j)._1) = cols(j)._2
-        j += 1 
-      }
-      MatrixRow(i, rowarray)
+    val rows = sp.data.map(x => (x.i, (x.j, x.mval))).groupByKey().map {
+      case (i, cols) =>
+        val rowArray = Array.ofDim[Double](n)
+        var j = 0
+        while (j < cols.size) {
+          rowArray(cols(j)._1) = cols(j)._2
+          j += 1
+        }
+        MatrixRow(i, rowArray)
     }
     TallSkinnyDenseMatrix(rows, m, n)
   }
@@ -57,9 +56,9 @@ object LAUtils {
   def denseToSparse(a: TallSkinnyDenseMatrix): SparseMatrix = {
     val m = a.m
     val n = a.n
-    val data = a.rows.flatMap{
+    val data = a.rows.flatMap {
       mrow => Array.tabulate(n)(j => MatrixEntry(mrow.i, j, mrow.data(j)))
-                   .filter(x => x.mval != 0)
+        .filter(x => x.mval != 0)
     }
     SparseMatrix(data, m, n)
   }

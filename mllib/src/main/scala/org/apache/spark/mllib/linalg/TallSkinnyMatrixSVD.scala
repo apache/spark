@@ -23,8 +23,8 @@ package org.apache.spark.mllib.linalg
  * @param U such that A = USV^T is a TallSkinnyDenseMatrix
  * @param S such that A = USV^T is a simple double array
  * @param V such that A = USV^T, V is a 2d array matrix that holds
- * singular vectors in columns. Columns are inner arrays
-.* i.e. V(i)(j) is standard math notation V_{ij}
+ *          singular vectors in columns. Columns are inner arrays
+ *          i.e. V(i)(j) is standard math notation V_{ij}
  */
 case class TallSkinnyMatrixSVD(val U: TallSkinnyDenseMatrix,
                                val S: Array[Double],

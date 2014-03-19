@@ -17,13 +17,10 @@
 
 package org.apache.spark.mllib.linalg
 
-import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 
-import org.apache.spark.mllib.util._
 
-import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
+import org.jblas.DoubleMatrix
 
 
 /**
@@ -94,26 +91,28 @@ class PCA {
     val n = matrix.first.size
 
     // compute column sums and normalize matrix
-    val colSumsTemp = matrix.map((_, 1)).fold((Array.ofDim[Double](n), 0)) { (a, b) => 
-      val am = new DoubleMatrix(a._1)
-      val bm = new DoubleMatrix(b._1)
-      am.addi(bm)
-      (a._1, a._2 + b._2)
+    val colSumsTemp = matrix.map((_, 1)).fold((Array.ofDim[Double](n), 0)) {
+      (a, b) =>
+        val am = new DoubleMatrix(a._1)
+        val bm = new DoubleMatrix(b._1)
+        am.addi(bm)
+        (a._1, a._2 + b._2)
     }
 
-    val m = colSumsTemp._2 
+    val m = colSumsTemp._2
     val colSums = colSumsTemp._1.map(x => x / m)
 
-    val data = matrix.map { x => 
-      val row = Array.ofDim[Double](n)
-      var i = 0
-      while (i < n) {
-        row(i) = x(i) - colSums(i)
-        i += 1 
-      }
-      row
-    }           
-   
+    val data = matrix.map {
+      x =>
+        val row = Array.ofDim[Double](n)
+        var i = 0
+        while (i < n) {
+          row(i) = x(i) - colSums(i)
+          i += 1
+        }
+        row
+    }
+
     val (u, s, v) = new SVD().setK(k).compute(data)
     v
   }
