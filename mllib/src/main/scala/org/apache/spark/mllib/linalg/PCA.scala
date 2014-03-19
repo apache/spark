@@ -66,7 +66,7 @@ class PCA {
   *
   * @param matrix dense matrix to perform pca on
   * @param k Recover k principal components
-  * @return An nxk matrix of principal components
+  * @return An nxk matrix with principal components in columns
   */
   def computePCA(matrix: TallSkinnyDenseMatrix, k: Int): Array[Array[Double]] = {
     val m = matrix.m

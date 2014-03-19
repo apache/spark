@@ -26,12 +26,6 @@ import org.apache.spark.mllib.util._
 
 /**
  * Compute PCA of an example matrix.
- * Input file should be comma separated, 1 indexed of the form
- * i,j,value
- * Where i is the column, j the row, and value is the matrix entry
- * 
- * For example input file, see:
- * mllib/data/als/test.data  (example is 4 x 4)
  */
 object SparkPCA {
   def main(args: Array[String]) {
@@ -45,12 +39,9 @@ object SparkPCA {
     val m = args(2).toInt
     val n = args(3).toInt
 
-    val data = Array.ofDim[Double](m, n)
-    // Load and parse the data file
-    sc.textFile(args(1)).map { line =>
-      val parts = line.split(',')
-      data(parts(0).toInt - 1)(parts(1).toInt - 1) = parts(2).toDouble
-    }
+    // Make example matrix
+    val data = Array.tabulate(m, n){ (a, b) =>
+      (a + 2).toDouble * (b + 1) / (1 + a + b) }
 
     // recover top principal component
     val coeffs = new PCA().setK(1).compute(sc.makeRDD(data))

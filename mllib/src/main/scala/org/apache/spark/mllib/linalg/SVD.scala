@@ -48,15 +48,15 @@ class SVD {
   }
 
   /**
-  * Compute SVD using the current set parameters
-  */
+   * Compute SVD using the current set parameters
+   */
   def compute(matrix: SparseMatrix) : MatrixSVD = {
     SVD.sparseSVD(matrix, k)
   }
 
   /**
-  * Compute SVD using the current set parameters
-  */
+   * Compute SVD using the current set parameters
+   */
   def compute(matrix: TallSkinnyDenseMatrix) : TallSkinnyMatrixSVD = {
     SVD.denseSVD(matrix, k, computeU)
   }
@@ -65,7 +65,7 @@ class SVD {
 
 /**
  * Top-level methods for calling Singular Value Decomposition
- * NOTE: All matrices are in 0-indexed sparse format RDD[((int, int), value)]
+ * NOTE: All matrices are 0-indexed
  */
 object SVD {
 /**

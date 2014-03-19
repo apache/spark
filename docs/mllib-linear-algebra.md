@@ -67,8 +67,7 @@ Computes the top k principal component coefficients for the m-by-n data matrix X
 Rows of X correspond to observations and columns correspond to variables.
 The coefficient matrix is n-by-k. Each column of the return matrix contains coefficients
 for one principal component, and the columns are in descending
-order of component variance.
-This function centers the data and uses the
+order of component variance. This function centers the data and uses the
 singular value decomposition (SVD) algorithm.
 
 All input and output is expected in DenseMatrix matrix format. See the examples directory
