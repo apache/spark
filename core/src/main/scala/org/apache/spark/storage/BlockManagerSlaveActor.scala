@@ -27,7 +27,10 @@ import org.apache.spark.storage.BlockManagerMessages._
  * this is used to remove blocks from the slave's BlockManager.
  */
 private[storage]
-class BlockManagerSlaveActor(blockManager: BlockManager, mapOutputTracker: MapOutputTracker) extends Actor {
+class BlockManagerSlaveActor(
+    blockManager: BlockManager,
+    mapOutputTracker: MapOutputTracker
+  ) extends Actor {
   override def receive = {
 
     case RemoveBlock(blockId) =>
