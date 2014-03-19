@@ -171,7 +171,7 @@ object SparkBuild extends Build {
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
     // Remove certain packages from Scaladoc
-    scalacOptions in (Compile,doc) := Seq("-skip-packages", Seq(
+    scalacOptions in (Compile,doc) := Seq("-groups", "-skip-packages", Seq(
       "akka",
       "org.apache.spark.network",
       "org.apache.spark.deploy",

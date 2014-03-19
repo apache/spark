@@ -115,6 +115,7 @@ package object dsl {
     def > (other: Expression) = GreaterThan(expr, other)
     def >= (other: Expression) = GreaterThanOrEqual(expr, other)
     def === (other: Expression) = Equals(expr, other)
+    def != (other: Expression) = Not(Equals(expr, other))
 
     def asc = SortOrder(expr, Ascending)
     def desc = SortOrder(expr, Descending)

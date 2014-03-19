@@ -62,7 +62,7 @@ of the original data.  Using the data from the above example:
 import sqlContext._
 
 // Define the schema using a case class.
-case class Person(name: String, age: String)
+case class Person(name: String, age: Int)
 val people: RDD[Person] // An RDD of case class objects.
 
 // Write out an RDD as a parquet file.
@@ -86,7 +86,7 @@ import sqlContext._
 val people: RDD[Person] // An RDD of case class objects.
 
 // The following is the same as 'SELECT name FROM people WHERE age >= 10 && age <= 19'
-val teenagers = people.where('age >= 10).where('age <= 19).select('name).toRdd
+val teenagers = people.where('age >= 10).where('age <= 19).select('name)
 {% endhighlight %}
 
 The DSL uses Scala symbols to represent columns in the underlying table, which are identifiers

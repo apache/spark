@@ -22,40 +22,27 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.dsl
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.Optimizer
+import org.apache.spark.sql.catalyst.planning.QueryPlanner
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, NativeCommand, WriteToFile}
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.execution._
 
-import catalyst.analysis._
-import catalyst.dsl
-import catalyst.expressions._
-import catalyst.optimizer.Optimizer
-import catalyst.planning.QueryPlanner
-import catalyst.plans.logical.{LogicalPlan, NativeCommand, WriteToFile}
-import catalyst.rules.RuleExecutor
-
-import execution._
-
-/**
- * The result of executing a query using SparkSQL.  This class acts as an RDD of the through
- * implicit conversions.  It also allows access to the executed plan for DML queries, similar to an
- * EXPLAIN command in standard SQL.
- */
-case class ExecutedQuery(
-    sql: String,
-    logicalPlan: LogicalPlan,
-    executedPlan: Option[SparkPlan],
-    rdd: RDD[Row]) {
-
-  def schema = logicalPlan.output
-
-  override def toString() =
-    s"$sql\n${executedPlan.map(p => s"=== Query Plan ===\n$p").getOrElse("")}"
-}
-
+/** A SQLContext that can be used for local testing. */
 object TestSQLContext
   extends SQLContext(new SparkContext("local", "TestSQLContext", new SparkConf()))
 
 /**
- * The entry point for running relational queries using Spark.  Uses the provided spark context
- * to execute relational operators.
+ * <span class="badge" style="float: right; background-color: darkblue;">ALPHA COMPONENT</span>
+ *
+ * The entry point for running relational queries using Spark.  Allows the creation of [[SchemaRDD]]
+ * objects and the execution of SQL queries.
+ *
+ * @groupname userf Spark SQL Functions
+ * @groupname Ungrouped Support functions for language integrated queries.
  */
 class SQLContext(val sparkContext: SparkContext) extends Logging with dsl.ExpressionConversions {
   self =>
@@ -73,60 +60,54 @@ class SQLContext(val sparkContext: SparkContext) extends Logging with dsl.Expres
 
   implicit def logicalPlanToSparkQuery(plan: LogicalPlan) = executePlan(plan)
 
-  implicit def logicalDsl(q: ExecutedQuery) = new DslLogicalPlan(q.logicalPlan)
-
-  /** Allows the results of sql queries to be used as RDDs */
-  implicit def toRdd(q: ExecutedQuery) = q.rdd
-
-  // Expression implicits.  Copied from dsl package object.
-
   implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) extends dsl.LogicalPlanFunctions {
     def registerAsTable(tableName: String): Unit = {
-      catalog.registerTable(None, tableName, logicalPlan)
-    }
+       catalog.registerTable(None, tableName, logicalPlan)
+     }
   }
 
   /**
-   * An implicit conversion on RDDs of case classes that infers the schema using Scala reflection.
-   * This class adds methods to the RDD that require this extra schema information, such as
-   * registering the RDD as a table, or writing the RDD out using Parquet.
+   * Creates a SchemaRDD from an RDD of case classes.
+   *
+   * @group userf
    */
-  implicit class TableRdd[A <: Product: TypeTag](rdd: RDD[A]) extends dsl.LogicalPlanFunctions {
-    def logicalPlan = SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd))
+  implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) =
+    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd)))
 
-    def saveAsParquetFile(path: String) = {
-      WriteToFile(path, logicalPlan).toRdd
-    }
+  /**
+   * Loads a parequet file, returning the result as a [[SchemaRDD]].
+   *
+   * @group userf
+   */
+  def parquetFile(path: String): SchemaRDD =
+    new SchemaRDD(this, parquet.ParquetRelation("ParquetFile", path))
 
-    def registerAsTable(tableName: String): Unit = {
-      catalog.registerTable(None, tableName, logicalPlan)
-    }
-  }
-
-  /** Loads a parequet file. */
-  def parquetFile(path: String): LogicalPlan = parquet.ParquetRelation("ParquetFile", path)
-
-  /** Writes the given RDD to a file using Parquet. */
-  def saveRDDAsParquetFile[A <: Product : TypeTag](rdd: RDD[A], path: String): Unit = {
+  /**
+   * Writes the given [[SchemaRDD]] to a file using Parquet.
+   *
+   * @group userf
+   */
+  def saveRDDAsParquetFile(rdd: SchemaRDD, path: String): Unit = {
     rdd.saveAsParquetFile(path)
   }
 
-  /** Registers the given RDD as a table in the catalog. */
-  def registerRDDAsTable[A <: Product : TypeTag](rdd: RDD[A], tableName: String): Unit = {
-    rdd.registerAsTable(tableName)
+  /**
+   * Registers the given RDD as a table in the catalog.
+   *
+   * @group userf
+   */
+  def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
+    catalog.registerTable(None, tableName, rdd.logicalPlan)
   }
 
   /**
    * Executes a SQL query using Spark, returning the result as an RDD as well as the plan used
    * for execution.
+   *
+   * @group userf
    */
-  def sql(sqlText: String): ExecutedQuery = {
-    val queryWorkflow = executeSql(sqlText)
-    val executedPlan = queryWorkflow.analyzed match {
-      case _: NativeCommand => None
-      case other => Some(queryWorkflow.executedPlan)
-    }
-    ExecutedQuery(sqlText, queryWorkflow.analyzed, executedPlan, queryWorkflow.toRdd)
+  def sql(sqlText: String): SchemaRDD = {
+    new SchemaRDD(this, parseSql(sqlText))
   }
 
   protected[sql] class SparkPlanner extends SparkStrategies {
@@ -155,8 +136,7 @@ class SQLContext(val sparkContext: SparkContext) extends Logging with dsl.Expres
 
   /**
    * The primary workflow for executing relational queries using Spark.  Designed to allow easy
-   * access to the intermediate phases of query execution for developers.  Most users should
-   * use [[ExecutedQuery]] to interact with query results.
+   * access to the intermediate phases of query execution for developers.
    */
   protected abstract class QueryExecution {
     def logical: LogicalPlan
@@ -167,8 +147,8 @@ class SQLContext(val sparkContext: SparkContext) extends Logging with dsl.Expres
     lazy val sparkPlan = planner(optimizedPlan).next()
     lazy val executedPlan: SparkPlan = PrepareForExecution(sparkPlan)
 
-    // TODO: We are loosing schema here.
-    lazy val toRdd: RDD[Row] = executedPlan.execute().map(_.copy())
+    /** Internal version of the RDD. Avoids copies and has no schema */
+    lazy val toRdd: RDD[Row] = executedPlan.execute()
 
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }

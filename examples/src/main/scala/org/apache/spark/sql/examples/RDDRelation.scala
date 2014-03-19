@@ -53,7 +53,7 @@ object RDDRelation {
     rddFromSql.map(row => s"Key: ${row(0)}, Value: ${row(1)}").collect.foreach(println)
 
     // Queries can also be written using a LINQ-like Scala DSL.
-    rdd.where('key === 1).orderBy('value.asc).select('key).toRdd.collect().foreach(println)
+    rdd.where('key === 1).orderBy('value.asc).select('key).collect().foreach(println)
 
     // Write out an RDD as a parquet file.
     rdd.saveAsParquetFile("pair.parquet")
@@ -62,7 +62,7 @@ object RDDRelation {
     val parquetFile = sqlContext.parquetFile("pair.parquet")
 
     // Queries can be run using the DSL on parequet files just like the original RDD.
-    parquetFile.where('key === 1).select('value).toRdd.collect().foreach(println)
+    parquetFile.where('key === 1).select('value as 'a).collect().foreach(println)
 
     // These files can also be registered as tables.
     parquetFile.registerAsTable("parquetFile")
