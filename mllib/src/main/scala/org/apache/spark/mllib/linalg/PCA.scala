@@ -102,8 +102,7 @@ class PCA {
     val m = sc.accumulator(-1)
 
     // compute column sums and normalize matrix
-    val colSumsTemp = matrix.fold(Array.ofDim[Double](n)){
-      (a, b) => 
+    val colSumsTemp = matrix.fold(Array.ofDim[Double](n)) { (a, b) => 
       val am = new DoubleMatrix(a)
       val bm = new DoubleMatrix(b)
       am.addi(bm)
@@ -111,51 +110,20 @@ class PCA {
       a
     }
 
-    val normalizedColSums = colSumsTemp.map(x => x / m.value)
-    val colSums = sc.broadcast(normalizedColSums).value
+    val colSums = colSumsTemp.map(x => x / m.value)
 
-    val data = matrix.map{
-      x => 
+    val data = matrix.map{ x => 
         val row = Array.ofDim[Double](n)
-        for(i <- 0 until n) {
-          row(i) = x(i) - colSums(i) 
+        var i = 0
+        while(i < n) {
+          row(i) = x(i) - colSums(i)
+          i += 1 
         }
         row
     }           
    
     val (u, s, v) = SVD.denseSVD(data, k)
     v
-  }
-}
-
-/**
- * Top-level methods for calling Principal Component Analysis
- * NOTE: All matrices are TallSkinnyDenseMatrix format
- */
-object PCA {
-  def main(args: Array[String]) {
-    if (args.length < 6) {
-      println("Usage: PCA <master> <matrix_file> <m> <n> " +
-              "<k> <output_coefficient_file>")
-      System.exit(1)
-    }
-
-    val (master, inputFile, m, n, k, output_u) = 
-      (args(0), args(1), args(2).toInt, args(3).toInt,
-      args(4).toInt, args(5))
-    
-    val sc = new SparkContext(master, "PCA")
-    
-    val rawData = sc.textFile(inputFile)
-    val data = rawData.map { line =>
-      val parts = line.split(',')
-      MatrixEntry(parts(0).toInt, parts(1).toInt, parts(2).toDouble)
-    }
-
-    val u = new PCA().computePCA(LAUtils.spToDense(SparseMatrix(data, m, n)), k)
-    
-    println("Computed " + k + " principal vectors")
-    System.exit(0)
   }
 }
 
