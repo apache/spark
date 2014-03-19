@@ -30,12 +30,21 @@ import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
 class SVD {
   private var k: Int = 1
   private var computeU: Boolean = true
+  private var RCOND: Double = 1e-9
 
   /**
    * Set the number of top-k singular vectors to return
    */
   def setK(k: Int): SVD = {
     this.k = k
+    this
+  }
+
+  /**
+   * How small of a singular value is considered zero?
+   */
+  def setRCOND(rcond: Double): SVD = {
+    this.RCOND = rcond
     this
   }
 
@@ -58,7 +67,7 @@ class SVD {
    * Compute SVD using the current set parameters
    */
   def compute(matrix: TallSkinnyDenseMatrix) : TallSkinnyMatrixSVD = {
-    SVD.denseSVD(matrix, k, computeU)
+    SVD.denseSVD(matrix, k, computeU, RCOND)
   }
 
   /**
@@ -66,7 +75,7 @@ class SVD {
    */
   def compute(matrix: RDD[Array[Double]]) :
     (RDD[Array[Double]], Array[Double], Array[Array[Double]])  = {
-      SVD.denseSVD(matrix, k, computeU)
+      SVD.denseSVD(matrix, k, computeU, RCOND)
   }
 }
 
@@ -203,10 +212,11 @@ object SVD {
  * @param matrix dense matrix to factorize
  * @param k Recover k singular values and vectors
  * @param computeU gives the option of skipping the U computation
+ * @param rcond smallest singular value considered nonzero
  * @return Three dense matrices: U, S, V such that A = USV^T
  */
  private def denseSVD(matrix: TallSkinnyDenseMatrix, k: Int,
-              computeU: Boolean): TallSkinnyMatrixSVD = {
+              computeU: Boolean, rcond: Double): TallSkinnyMatrixSVD = {
     val rows = matrix.rows
     val m = matrix.m
     val n = matrix.n
@@ -223,7 +233,7 @@ object SVD {
     val rowIndices = matrix.rows.map(_.i)
 
     // compute SVD
-    val (u, sigma, v) = denseSVD(matrix.rows.map(_.data), k, computeU)
+    val (u, sigma, v) = denseSVD(matrix.rows.map(_.data), k, computeU, rcond)
     
     if(computeU) {
       // prep u for returning
@@ -264,8 +274,9 @@ object SVD {
  * @param k Recover k singular values and vectors
  * @return Three matrices: U, S, V such that A = USV^T
  */
- private def denseSVD(matrix: RDD[Array[Double]], k: Int, computeU: Boolean) 
-    : (RDD[Array[Double]], Array[Double], Array[Array[Double]])  = {
+ private def denseSVD(matrix: RDD[Array[Double]], k: Int,
+                      computeU: Boolean, rcond: Double) : 
+               (RDD[Array[Double]], Array[Double], Array[Array[Double]])  = {
     val n = matrix.first.size
 
     if (k < 1 || k > n) {
@@ -290,8 +301,7 @@ object SVD {
             }
          }
          List(miniata).iterator
-    }.fold(Array.ofDim[Double](n, n)){
-      (a, b) =>
+    }.fold(Array.ofDim[Double](n, n)) { (a, b) =>
           var i = 0
           while(i < n) {
             var j = 0 
@@ -310,13 +320,11 @@ object SVD {
     // Since A^T A is small, we can compute its SVD directly
     val svd = Singular.sparseSVD(ata)
     val V = svd(0)
-    val sigmas = MatrixFunctions.sqrt(svd(1)).toArray.filter(x => x > 1e-9)
+    val sigmas = MatrixFunctions.sqrt(svd(1)).toArray.filter(x => x > rcond)
 
-    if (sigmas.size < k) {
-      throw new Exception("Not enough singular values to return k=" + k + " s=" + sigmas.size)
-    }
+    val sk = Math.min(k, sigmas.size)
 
-    val sigma = sigmas.take(k)
+    val sigma = sigmas.take(sk)
 
     val sc = matrix.sparkContext
 
