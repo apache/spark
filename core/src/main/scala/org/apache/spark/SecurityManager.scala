@@ -18,12 +18,12 @@
 package org.apache.spark
 
 import java.net.{Authenticator, PasswordAuthentication}
-import org.apache.hadoop.io.Text
-import org.apache.hadoop.security.Credentials
-import org.apache.hadoop.security.UserGroupInformation
-import org.apache.spark.deploy.SparkHadoopUtil
 
 import scala.collection.mutable.ArrayBuffer
+
+import org.apache.hadoop.io.Text
+
+import org.apache.spark.deploy.SparkHadoopUtil
 
 /** 
  * Spark class responsible for security. 
