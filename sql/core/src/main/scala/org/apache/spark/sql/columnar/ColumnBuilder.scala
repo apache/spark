@@ -183,22 +183,4 @@ object ColumnBuilder {
     builder.initialize(initialSize, columnName)
     builder
   }
-
-  def apply(dataType: DataType, initialSize: Int, columnName: String): ColumnBuilder = {
-    val builder = (dataType match {
-      case IntegerType => new IntColumnBuilder
-      case LongType    => new LongColumnBuilder
-      case FloatType   => new FloatColumnBuilder
-      case DoubleType  => new DoubleColumnBuilder
-      case BooleanType => new BooleanColumnBuilder
-      case ByteType    => new ByteColumnBuilder
-      case ShortType   => new ShortColumnBuilder
-      case StringType  => new StringColumnBuilder
-      case BinaryType  => new BinaryColumnBuilder
-      case _ => new GenericColumnBuilder
-    }).asInstanceOf[ColumnBuilder]
-
-    builder.initialize(initialSize, columnName)
-    builder
-  }
 }

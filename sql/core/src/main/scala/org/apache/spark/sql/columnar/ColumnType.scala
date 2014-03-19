@@ -173,7 +173,24 @@ sealed abstract class ByteArrayColumnType[T <: DataType](typeId: Int, defaultSiz
 
 object BINARY extends ByteArrayColumnType[BinaryType.type](8, 16)
 
-// Used process generic objects (all types other than those listed above). Objects should be
+// Used to process generic objects (all types other than those listed above). Objects should be
 // serialized first before appending to the column `ByteBuffer`, and is also extracted as serialized
 // byte array.
 object GENERIC extends ByteArrayColumnType[DataType](9, 16)
+
+object ColumnType {
+  implicit def dataTypeToColumnType(dataType: DataType): ColumnType[_, _] = {
+    dataType match {
+      case IntegerType => INT
+      case LongType    => LONG
+      case FloatType   => FLOAT
+      case DoubleType  => DOUBLE
+      case BooleanType => BOOLEAN
+      case ByteType    => BYTE
+      case ShortType   => SHORT
+      case StringType  => STRING
+      case BinaryType  => BINARY
+      case _           => GENERIC
+    }
+  }
+}
