@@ -52,7 +52,7 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
     val m = matrix.m
     val n = matrix.n
     val ret = DoubleMatrix.zeros(m, n)
-    matrix.data.toArray.map(x => ret.put(x.i, x.j, x.mval))
+    matrix.data.collect.map(x => ret.put(x.i, x.j, x.mval))
     ret
   }
 
@@ -78,7 +78,7 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
                         (2,0,0.9553),  (2,1,-0.0649),  (2,2,0.2886))
     val realPCA = sc.makeRDD(realPCAArray.map(x => MatrixEntry(x._1, x._2, x._3)))
 
-    val coeffs = new DoubleMatrix(new PCA().computePCA(a, n))
+    val coeffs = new DoubleMatrix(new PCA().setK(n).compute(a))
 
     assertMatrixEquals(getDenseMatrix(SparseMatrix(realPCA,n,n)), coeffs)  
   }
@@ -95,7 +95,7 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
                         (2,0,0.9553),  (2,1,-0.0649),  (2,2,0.2886))
     val realPCA = sc.makeRDD(realPCAArray.map(x => MatrixEntry(x._1, x._2, x._3)))
 
-    val coeffs = new DoubleMatrix(new PCA().computePCA(a, n))
+    val coeffs = new DoubleMatrix(new PCA().setK(n).compute(a))
 
     assertMatrixEquals(getDenseMatrix(SparseMatrix(realPCA,n,n)), coeffs)
   }
@@ -113,7 +113,7 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
     val realPCA = sc.makeRDD(realPCAArray.map(x => MatrixEntry(x._1, x._2, x._3)))
 
     val k = 2
-    val coeffs = new DoubleMatrix(new PCA().computePCA(a, k))
+    val coeffs = new DoubleMatrix(new PCA().setK(k).compute(a))
 
     assertMatrixEquals(getDenseMatrix(SparseMatrix(realPCA,n,k)), coeffs)
   }

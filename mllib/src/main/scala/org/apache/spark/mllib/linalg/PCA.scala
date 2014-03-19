@@ -41,15 +41,16 @@ class PCA {
   }
 
    /**
-   * Compute PCA using the current set parameters
-   */
+    * Compute PCA using the current set parameters
+    */
   def compute(matrix: TallSkinnyDenseMatrix): Array[Array[Double]] = {
     computePCA(matrix, k)
   }
 
   /**
-  * Compute PCA using the current set parameters
-  */
+   * Compute PCA using the parameters currently set
+   * See computePCA() for more details
+   */
   def compute(matrix: RDD[Array[Double]]): Array[Array[Double]] = {
     computePCA(matrix, k)
   }
@@ -68,18 +69,18 @@ class PCA {
   * @param k Recover k principal components
   * @return An nxk matrix with principal components in columns
   */
-  def computePCA(matrix: TallSkinnyDenseMatrix, k: Int): Array[Array[Double]] = {
+  private def computePCA(matrix: TallSkinnyDenseMatrix, k: Int): Array[Array[Double]] = {
     val m = matrix.m
     val n = matrix.n
     val sc = matrix.rows.sparkContext
 
     if (m <= 0 || n <= 0) {
-      throw new IllegalArgumentException("Expecting a well-formed matrix")
+      throw new IllegalArgumentException(
+                "Expecting a well-formed matrix: m=" + m + " n=" + n)
     }
 
     computePCA(matrix.rows.map(_.data), k)
   }
-
 
   /**
   * Principal Component Analysis.
@@ -95,20 +96,24 @@ class PCA {
   * @param k Recover k principal components
   * @return An nxk matrix of principal components
   */
-  def computePCA(matrix: RDD[Array[Double]], k: Int): Array[Array[Double]] = {
+  private def computePCA(matrix: RDD[Array[Double]], k: Int): Array[Array[Double]] = {
     val n = matrix.first.size
     val sc = matrix.sparkContext
-    val m = matrix.count
+    val m = sc.accumulator(-1)
 
     // compute column sums and normalize matrix
-    val colSums = sc.broadcast(matrix.fold(Array.ofDim[Double](n)){
+    val colSumsTemp = matrix.fold(Array.ofDim[Double](n)){
       (a, b) => 
       val am = new DoubleMatrix(a)
       val bm = new DoubleMatrix(b)
       am.addi(bm)
+      m += 1
       a
-    }.map(x => x / m)).value
-   
+    }
+
+    val normalizedColSums = colSumsTemp.map(x => x / m.value)
+    val colSums = sc.broadcast(normalizedColSums).value
+
     val data = matrix.map{
       x => 
         val row = Array.ofDim[Double](n)
@@ -122,7 +127,6 @@ class PCA {
     v
   }
 }
-
 
 /**
  * Top-level methods for calling Principal Component Analysis
@@ -154,5 +158,4 @@ object PCA {
     System.exit(0)
   }
 }
-
 
