@@ -86,7 +86,9 @@ private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
       case None => "Unknown"
     }
     val finishTime = s.completionTime.getOrElse(System.currentTimeMillis)
-    val duration =  s.submissionTime.map(t => finishTime - t)
+    val duration = s.submissionTime.map { t =>
+      if (finishTime > t) finishTime - t else System.currentTimeMillis - t
+    }
     val formattedDuration = duration.map(d => parent.formatDuration(d)).getOrElse("Unknown")
     val startedTasks =
       listener.stageIdToTasksActive.getOrElse(s.stageId, HashMap[Long, TaskInfo]()).size
@@ -106,6 +108,7 @@ private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
       case 0 => ""
       case b => Utils.bytesToString(b)
     }
+
     <tr>
       <td>{s.stageId}</td>
       {if (isFairScheduler) {
