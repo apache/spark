@@ -171,7 +171,6 @@ class SVD {
   * a simple array for sigma, and a dense 2d matrix array for V
   *
   * @param matrix dense matrix to factorize
-  * @param k Recover k singular values and vectors
   * @return Three matrices: U, S, V such that A = USV^T
   */
   private def denseSVD(matrix: RDD[Array[Double]]) : 
@@ -266,8 +265,6 @@ class SVD {
   * SparseMatrix class
   *
   * @param matrix sparse matrix to factorize
-  * @param k Recover k singular values and vectors
-  * @param computeU gives the option of skipping the U computation
   * @return Three sparse matrices: U, S, V such that A = USV^T
   */
   private def sparseSVD(matrix: SparseMatrix): MatrixSVD = {
