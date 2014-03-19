@@ -29,7 +29,7 @@ import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
 class SVD {
   private var k: Int = 1
   private var computeU: Boolean = true
-  private var smallestSigma: Double = 1e-9
+  private var rCond: Double = 1e-9
 
   /**
    * Set the number of top-k singular vectors to return
@@ -40,10 +40,11 @@ class SVD {
   }
 
   /**
-   * Singular values smaller than this value are considered zero
+   * Singular values smaller than this value
+   * relative to the largest singular value are considered zero
    */
   def setReciprocalConditionNumber(smallS: Double): SVD = {
-    this.smallestSigma = smallS
+    this.rCond = smallS
     this
   }
 
@@ -110,7 +111,7 @@ class SVD {
  * @param matrix dense matrix to factorize
  * @param k Recover k singular values and vectors
  * @param computeU gives the option of skipping the U computation
- * @param smallestSigma smallest singular value considered nonzero
+ * @param rCond smallest singular value considered nonzero
  * @return Three dense matrices: U, S, V such that A = USV^T
  */
  private def denseSVD(matrix: TallSkinnyDenseMatrix): TallSkinnyMatrixSVD = {
@@ -217,7 +218,7 @@ class SVD {
     // Since A^T A is small, we can compute its SVD directly
     val svd = Singular.sparseSVD(ata)
     val V = svd(0)
-    val sigmas = MatrixFunctions.sqrt(svd(1)).toArray.filter(x => x > smallestSigma)
+    val sigmas = MatrixFunctions.sqrt(svd(1)).toArray.filter(x => x / svd(1).get(0) > rCond)
 
     val sk = Math.min(k, sigmas.size)
     val sigma = sigmas.take(sk)
