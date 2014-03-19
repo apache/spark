@@ -18,11 +18,11 @@
 package org.apache.spark.mllib.linalg
 
 /**
- * Class that represents the SV decomposition of a matrix
+ * Class that represents the Singular Value decomposition of a matrix
  *
- * @param U such that A = USV^T
- * @param S such that A = USV^T
- * @param V such that A = USV^T
+ * @param U such that A = USV^T is a TallSkinnyDenseMatrix
+ * @param S such that A = USV^T is a simple double array
+ * @param V such that A = USV^T, V is a 2d array matrix
  */
 case class TallSkinnyMatrixSVD(val U: TallSkinnyDenseMatrix,
                                val S: Array[Double],
