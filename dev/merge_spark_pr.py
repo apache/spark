@@ -38,6 +38,8 @@ PR_REMOTE_NAME = os.environ.get("PR_REMOTE_NAME", "apache-github")
 # Remote name which points to Apache git
 PUSH_REMOTE_NAME = os.environ.get("PUSH_REMOTE_NAME", "apache")
 
+print "%s" % PUSH_REMOTE_NAME
+
 GIT_API_BASE = "https://api.github.com/repos/apache/spark"
 # Prefix added to temporary branches
 BRANCH_PREFIX = "PR_TOOL"
