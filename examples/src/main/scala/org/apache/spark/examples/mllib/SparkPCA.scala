@@ -29,7 +29,7 @@ import org.apache.spark.mllib.util._
  */
 object SparkPCA {
   def main(args: Array[String]) {
-    if (args.length != 4) {
+    if (args.length != 3) {
       System.err.println("Usage: SparkPCA <master> m n")
       System.exit(1)
     }
