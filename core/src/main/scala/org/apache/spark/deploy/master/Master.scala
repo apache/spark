@@ -622,7 +622,7 @@ private[spark] class Master(
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
         completedApps.take(toRemove).foreach( a => {
-          appIdToUI.get(a.id).foreach { ui =>
+          appIdToUI.remove(a.id).foreach { ui =>
             ui.stop()
             webUi.detachUI(ui)
           }
