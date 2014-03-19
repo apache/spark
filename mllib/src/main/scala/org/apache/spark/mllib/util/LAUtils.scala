@@ -28,7 +28,7 @@ import org.apache.spark.mllib.linalg._
  */
 object LAUtils {
   /**
-   * Convert a SparseMatrix into a DenseMatrix
+   * Convert a SparseMatrix into a TallSkinnyDenseMatrix
    *
    * @param sp Sparse matrix to be converted
    * @return dense version of the input
@@ -49,7 +49,7 @@ object LAUtils {
   }
 
   /**
-   * Convert a DenseMatrix to a SparseMatrix
+   * Convert a TallSkinnyDenseMatrix to a SparseMatrix
    *
    * @param a matrix to be converted
    * @return sparse version of the input
