@@ -29,6 +29,9 @@ import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
 class SVD {
   private var k = 1
   private var computeU = true
+  
+  // Singular values smaller than this value
+  // relative to the largest singular value are considered zero
   private var rCond = 1e-9
 
   /**
