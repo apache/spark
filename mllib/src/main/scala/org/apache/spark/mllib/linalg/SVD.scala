@@ -60,6 +60,14 @@ class SVD {
   def compute(matrix: TallSkinnyDenseMatrix) : TallSkinnyMatrixSVD = {
     SVD.denseSVD(matrix, k, computeU)
   }
+
+  /**
+   * Compute SVD using the current set parameters
+   */
+  def compute(matrix: RDD[Array[Double]]) :
+    (RDD[Array[Double]], Array[Double], Array[Array[Double]])  = {
+      SVD.denseSVD(matrix, k, computeU)
+  }
 }
 
 
@@ -132,7 +140,7 @@ object SVD {
     val sigmas = MatrixFunctions.sqrt(svd(1)).toArray.filter(x => x > 1e-9)
 
     if (sigmas.size < k) {
-      throw new Exception("Not enough singular values to return")
+      throw new Exception("Not enough singular values to return k=" + k + " s=" + sigmas.size)
     } 
 
     val sigma = sigmas.take(k)
@@ -197,7 +205,7 @@ object SVD {
  * @param computeU gives the option of skipping the U computation
  * @return Three dense matrices: U, S, V such that A = USV^T
  */
- def denseSVD(matrix: TallSkinnyDenseMatrix, k: Int,
+ private def denseSVD(matrix: TallSkinnyDenseMatrix, k: Int,
               computeU: Boolean): TallSkinnyMatrixSVD = {
     val rows = matrix.rows
     val m = matrix.m
@@ -205,23 +213,23 @@ object SVD {
     val sc = matrix.rows.sparkContext
 
     if (m < n || m <= 0 || n <= 0) {
-      throw new IllegalArgumentException("Expecting a tall and skinny matrix")
+      throw new IllegalArgumentException("Expecting a tall and skinny matrix m=" + m + " n=" + n)
     }
 
     if (k < 1 || k > n) {
-      throw new IllegalArgumentException("Must request up to n singular values")
+      throw new IllegalArgumentException("Request up to n singular values n=" + n + " k=" + k)
     }
 
     val rowIndices = matrix.rows.map(_.i)
 
     // compute SVD
-    val (u, sigma, v) = denseSVD(matrix.rows.map(_.data), k)
-    
-    // prep u for returning
-    val retU = TallSkinnyDenseMatrix(u.zip(rowIndices).map{
-                case (row, i) => MatrixRow(i, row) }, m, k)
+    val (u, sigma, v) = denseSVD(matrix.rows.map(_.data), k, computeU)
     
     if(computeU) {
+      // prep u for returning
+      val retU = TallSkinnyDenseMatrix(u.zip(rowIndices).map{
+                  case (row, i) => MatrixRow(i, row) }, m, k)
+    
       TallSkinnyMatrixSVD(retU, sigma, v)
     } else {
       TallSkinnyMatrixSVD(null, sigma, v)
@@ -249,30 +257,49 @@ object SVD {
  * U is m x k and satisfies U'U = eye(k)
  * V is n x k and satisfies V'V = eye(k)
  *
+ * The return values are as lean as possible: an RDD of rows for U,
+ * a simple array for sigma, and a dense 2d matrix array for V
+ *
  * @param matrix dense matrix to factorize
  * @param k Recover k singular values and vectors
  * @return Three matrices: U, S, V such that A = USV^T
  */
- def denseSVD(matrix: RDD[Array[Double]], k: Int) : 
-     (RDD[Array[Double]], Array[Double], Array[Array[Double]])  = {
+ private def denseSVD(matrix: RDD[Array[Double]], k: Int, computeU: Boolean) 
+    : (RDD[Array[Double]], Array[Double], Array[Array[Double]])  = {
     val n = matrix.first.size
 
     if (k < 1 || k > n) {
-      throw new IllegalArgumentException("Must request up to n singular values")
+      throw new IllegalArgumentException(
+        "Request up to n singular valuesi k=" + k + " n= " + n)
     }
 
     // Compute A^T A
-    val fullata = matrix.map{
-        row => 
+    val fullata = matrix.mapPartitions{
+        iter => 
           val miniata = Array.ofDim[Double](n, n)
-          for(i <- 0 until n) for(j <- 0 until n) {
-             miniata(i)(j) += row(i) * row(j)
-          }
-        miniata 
+          while(iter.hasNext) {
+            val row = iter.next 
+            var i = 0
+            while(i < n) {
+              var j = 0
+              while(j < n) {
+                miniata(i)(j) += row(i) * row(j)
+                j += 1
+              }
+              i += 1
+            }
+         }
+         List(miniata).iterator
     }.fold(Array.ofDim[Double](n, n)){
       (a, b) =>
-          for(i <- 0 until n) for(j <- 0 until n) {
-             a(i)(j) += b(i)(j)
+          var i = 0
+          while(i < n) {
+            var j = 0 
+            while(j < n) {
+              a(i)(j) += b(i)(j)
+              j += 1
+            }
+            i += 1
           }
       a
     }
@@ -286,7 +313,7 @@ object SVD {
     val sigmas = MatrixFunctions.sqrt(svd(1)).toArray.filter(x => x > 1e-9)
 
     if (sigmas.size < k) {
-      throw new Exception("Not enough singular values to return")
+      throw new Exception("Not enough singular values to return k=" + k + " s=" + sigmas.size)
     }
 
     val sigma = sigmas.take(k)
@@ -298,19 +325,22 @@ object SVD {
 
     // Compute U as U = A V S^-1
     // Compute VS^-1
-    val vsinv = sc.broadcast(Array.tabulate(n, k)((i, j) => V.get(i, j) / sigma(j))).value
+    val vsinv = Array.tabulate(n, k)((i, j) => V.get(i, j) / sigma(j))
      
-    val retU = matrix.map{x =>
-      val row = Array.ofDim[Double](k)
-      for(j <- 0 until k) {
-        for(i <- 0 until n) {
-          row(j) += vsinv(i)(j) * x(i)  
+    if (computeU) {
+      val retU = matrix.map{x =>
+        val row = Array.ofDim[Double](k)
+        for(j <- 0 until k) {
+          for(i <- 0 until n) {
+            row(j) += vsinv(i)(j) * x(i)  
+          }
         }
+        row
       }
-      row
+      (retU, sigma, retV)
+    } else {
+      (null, sigma, retV)
     }
-    
-    (retU, sigma, retV)
   }
 
    /**

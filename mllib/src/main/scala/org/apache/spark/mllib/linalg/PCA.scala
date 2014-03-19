@@ -122,7 +122,7 @@ class PCA {
         row
     }           
    
-    val (u, s, v) = SVD.denseSVD(data, k)
+    val (u, s, v) = new SVD().setK(k).compute(data)
     v
   }
 }

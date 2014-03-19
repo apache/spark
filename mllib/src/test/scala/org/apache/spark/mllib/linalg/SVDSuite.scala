@@ -104,7 +104,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
 
     val a = LAUtils.spToDense(SparseMatrix(data, m, n))
 
-    val decomposed = SVD.denseSVD(a, n, true)
+    val decomposed = new SVD().setK(n).setComputeU(true).compute(a)
     val u = LAUtils.denseToSp(decomposed.U)
     val v = decomposed.V
     val s = decomposed.S
