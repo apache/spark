@@ -30,7 +30,7 @@ import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
 class SVD {
   private var k: Int = 1
   private var computeU: Boolean = true
-  private var RCOND: Double = 1e-9
+  private var smallestSigma: Double = 1e-9
 
   /**
    * Set the number of top-k singular vectors to return
@@ -43,8 +43,8 @@ class SVD {
   /**
    * Singular values smaller than this value are considered zero
    */
-  def setReciprocalConditionNumber(rcond: Double): SVD = {
-    this.RCOND = rcond
+  def setReciprocalConditionNumber(smallS: Double): SVD = {
+    this.smallestSigma = smallS
     this
   }
 
@@ -67,7 +67,7 @@ class SVD {
    * Compute SVD using the current set parameters
    */
   def compute(matrix: TallSkinnyDenseMatrix) : TallSkinnyMatrixSVD = {
-    SVD.denseSVD(matrix, k, computeU, RCOND)
+    SVD.denseSVD(matrix, k, computeU, smallestSigma)
   }
 
   /**
@@ -80,7 +80,7 @@ class SVD {
    */
   def compute(matrix: RDD[Array[Double]]) :
     (RDD[Array[Double]], Array[Double], Array[Array[Double]])  = {
-      SVD.denseSVD(matrix, k, computeU, RCOND)
+      SVD.denseSVD(matrix, k, computeU, smallestSigma)
   }
 }
 
@@ -334,11 +334,10 @@ object SVD {
     // prepare V for returning
     val retV = Array.tabulate(n, sk)((i, j) => V.get(i, j))
 
-    // Compute U as U = A V S^-1
-    // Compute VS^-1
-    val vsinv = new DoubleMatrix(Array.tabulate(n, sk)((i, j) => V.get(i, j) / sigma(j)))
-     
     if (computeU) {
+      // Compute U as U = A V S^-1
+      // Compute VS^-1
+      val vsinv = new DoubleMatrix(Array.tabulate(n, sk)((i, j) => V.get(i, j) / sigma(j)))
       val retU = matrix.map { x =>
         val v = new DoubleMatrix(Array(x))
         v.mmul(vsinv).data
