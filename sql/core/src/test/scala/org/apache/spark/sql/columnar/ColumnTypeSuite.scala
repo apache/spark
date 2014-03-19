@@ -22,7 +22,7 @@ class ColumnTypeSuite extends FunSuite {
   }
 
   test("actualSize") {
-    val expectedSizes = Seq(4, 2, 8, 1, 8, 4, 4 + 5, 4 + 4, 4 + 8)
+    val expectedSizes = Seq(4, 2, 8, 1, 8, 4, 4 + 5, 4 + 4, 4 + 11)
     val actualSizes = Seq(
       INT.actualSize(Int.MaxValue),
       SHORT.actualSize(Short.MaxValue),

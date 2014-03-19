@@ -12,9 +12,9 @@ import org.apache.spark.util.MutablePair
 
 class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
   override def newKryo(): Kryo = {
-    val kryo = super.newKryo()
+    val kryo = new Kryo()
     kryo.setRegistrationRequired(false)
-    kryo.register(classOf[MutablePair[_,_]])
+    kryo.register(classOf[MutablePair[_, _]])
     kryo.register(classOf[Array[Any]])
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericRow])
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericMutableRow])
@@ -27,9 +27,11 @@ class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
 }
 
 object SparkSqlSerializer {
-  @transient lazy val ser: SparkSqlSerializer = {
+  // TODO (lian) Using KryoSerializer here is workaround, needs further investigation
+  // Using SparkSqlSerializer here makes BasicQuerySuite to fail because of Kryo serialization related error.
+  @transient lazy val ser: KryoSerializer = {
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
-    new SparkSqlSerializer(sparkConf)
+    new KryoSerializer(sparkConf)
   }
 
   def serialize[T](o: T): Array[Byte] = {
