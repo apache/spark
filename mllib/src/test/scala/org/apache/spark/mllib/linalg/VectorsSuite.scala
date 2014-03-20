@@ -17,9 +17,11 @@
 
 package org.apache.spark.mllib.linalg
 
+import scala.collection.JavaConverters._
+
 import org.scalatest.FunSuite
 
-class VectorSuite extends FunSuite {
+class VectorsSuite extends FunSuite {
 
   val arr = Array(0.1, 0.2, 0.3, 0.4)
   val n = 20
@@ -41,6 +43,13 @@ class VectorSuite extends FunSuite {
 
   test("sparse vector construction with unordered elements") {
     val vec = Vectors.sparse(n, indices.zip(values).reverse).asInstanceOf[SparseVector]
+    assert(vec.size === n)
+    assert(vec.indices === indices)
+    assert(vec.values === values)
+  }
+
+  test("sparse vector construction with unordered elements stored as Java Iterable") {
+    val vec = Vectors.sparse(n, indices.toSeq.zip(values).reverse.asJava).asInstanceOf[SparseVector]
     assert(vec.size === n)
     assert(vec.indices === indices)
     assert(vec.values === values)

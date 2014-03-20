@@ -17,6 +17,10 @@
 
 package org.apache.spark.mllib.linalg
 
+import java.lang.{Iterable => JavaIterable}
+
+import scala.collection.JavaConverters._
+
 import breeze.linalg.{Vector => BreezeVector, DenseVector => BreezeDenseVector,
   SparseVector => BreezeSparseVector}
 
@@ -68,11 +72,11 @@ object Vectors {
    * @param size vector size.
    * @param elements vector elements in (index, value) pairs.
    */
-  def sparse(size: Int, elements: Iterable[(Int, Double)]): Vector = {
+  def sparse(size: Int, elements: Seq[(Int, Double)]): Vector = {
 
     require(size > 0)
 
-    val (indices, values) = elements.toArray.sortBy(_._1).unzip
+    val (indices, values) = elements.sortBy(_._1).unzip
     var prev = -1
     indices.foreach { i =>
       require(prev < i, "Found duplicate indices: " + i)
@@ -84,13 +88,22 @@ object Vectors {
   }
 
   /**
+   * Creates a sparse vector using unordered (index, value) pairs.
+   *
+   * @param size vector size.
+   * @param elements vector elements in (index, value) pairs.
+   */
+  def sparse(size: Int, elements: JavaIterable[(Int, Double)]): Vector =
+    sparse(size, elements.asScala.toSeq)
+
+  /**
    * Creates a vector instance from a breeze vector.
    */
   private[mllib] def fromBreeze(breezeVector: BreezeVector[Double]): Vector = {
     breezeVector match {
       case v: BreezeDenseVector[Double] => {
-        require(v.offset == 0)
-        require(v.stride == 1)
+        require(v.offset == 0, s"Do not support non-zero offset ${v.offset}.")
+        require(v.stride == 1, s"Do not support stride other than 1, but got ${v.stride}.")
         new DenseVector(v.data)
       }
       case v: BreezeSparseVector[Double] => {
