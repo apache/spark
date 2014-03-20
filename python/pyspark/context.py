@@ -258,6 +258,13 @@ class SparkContext(object):
         Read a text file from HDFS, a local file system (available on all
         nodes), or any Hadoop-supported file system URI, and return it as an
         RDD of Strings.
+        
+        >>> path = os.path.join(tempdir, "sample-text.txt")
+        >>> with open(path, "w") as testFile:
+        ...    testFile.write("Hello world!")
+        >>> textFile = sc.textFile(path)
+        >>> textFile.collect()
+        [u'Hello world!']
         """
         minSplits = minSplits or min(self.defaultParallelism, 2)
         return RDD(self._jsc.textFile(name, minSplits), self,
