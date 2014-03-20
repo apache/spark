@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.optimization
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
 
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.LocalSparkContext
@@ -38,8 +37,8 @@ class GradientDescentWithLocalUpdateSuite extends FunSuite with LocalSparkContex
     val gradient = new LogisticGradient()
     val updater = new SimpleUpdater()
     val stepSize = 1.0
-    val numIterations = 10
-    val numLocalIterations = 10
+    val numIterations = 50
+    val numLocalIterations = 2
     val regParam = 0
     val miniBatchFrac = 1.0
 
@@ -61,11 +60,13 @@ class GradientDescentWithLocalUpdateSuite extends FunSuite with LocalSparkContex
       numLocalIterations,
       regParam,
       miniBatchFrac,
+      20,
       initialWeightsWithIntercept)
 
-    assert(loss.last - loss.head < 0, "loss isn't decreasing.")
+    val lossToCompare = loss.drop(10)
+    assert(lossToCompare.last - lossToCompare.head < 0, "loss isn't decreasing.")
 
-    val lossDiff = loss.init.zip(loss.tail).map { case (lhs, rhs) => lhs - rhs }
-    assert(lossDiff.count(_ > 0).toDouble / lossDiff.size > 0.8)
+    val lossDiff = lossToCompare.init.zip(lossToCompare.tail).map { case (lhs, rhs) => lhs - rhs }
+    assert(lossDiff.count(_ > 0).toDouble / lossDiff.size > 0.8, "losses seem divergence.")
   }
 }

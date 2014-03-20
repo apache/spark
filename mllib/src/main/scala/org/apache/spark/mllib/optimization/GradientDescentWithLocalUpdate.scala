@@ -56,6 +56,7 @@ class GradientDescentWithLocalUpdate(gradient: Gradient, updater: Updater)
         numLocalIterations,
         regParam,
         miniBatchFraction,
+        20,
         initialWeights)
     weights
   }
@@ -73,8 +74,8 @@ object GradientDescentWithLocalUpdate extends Logging {
    * @param gradient - Gradient object that will be used to compute the gradient.
    * @param updater - Updater object that will be used to update the model.
    * @param stepSize - stepSize to be used during update.
-   * @param numOuterIterations - number of outer iterations that SGD should be run.
-   * @param numInnerIterations - number of inner iterations that SGD should be run.
+   * @param numIterations - number of outer iterations that SGD should be run.
+   * @param numLocalIterations - number of inner iterations that SGD should be run.
    * @param regParam - regularization parameter
    * @param miniBatchFraction - fraction of the input data set that should be used for
    *                            one iteration of SGD. Default value 1.0.
@@ -88,58 +89,70 @@ object GradientDescentWithLocalUpdate extends Logging {
       gradient: Gradient,
       updater: Updater,
       stepSize: Double,
-      numOuterIterations: Int,
-      numInnerIterations: Int,
+      numIterations: Int,
+      numLocalIterations: Int,
       regParam: Double,
       miniBatchFraction: Double,
+      tinyBatchSize: Int = 20,
       initialWeights: Array[Double]): (Array[Double], Array[Double]) = {
 
-    val stochasticLossHistory = new ArrayBuffer[Double](numOuterIterations)
-
-    val numExamples: Long = data.count()
-    val numPartition = data.partitions.length
-    val miniBatchSize = numExamples * miniBatchFraction / numPartition
+    val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
 
     // Initialize weights as a column vector
     var weights = new DoubleMatrix(initialWeights.length, 1, initialWeights: _*)
-    var regVal = 0.0
+    val regVal = updater
+      .compute(weights, new DoubleMatrix(initialWeights.length, 1), 0, 1, regParam)._2
 
-    for (i <- 1 to numOuterIterations) {
+
+    for (i <- 1 to numIterations) {
       val weightsAndLosses = data.mapPartitions { iter =>
-        var iterReserved = iter
-        val localLossHistory = new ArrayBuffer[Double](numInnerIterations)
+        val rand = new Random(42 + i * numIterations)
+        val sampled = iter.filter(x => rand.nextDouble() <= miniBatchFraction)
 
-        for (j <- 1 to numInnerIterations) {
-          val (iterCurrent, iterNext) = iterReserved.duplicate
-          val rand = new Random(42 + i * numOuterIterations + j)
-          val sampled = iterCurrent.filter(x => rand.nextDouble() <= miniBatchFraction)
-          val (gradientSum, lossSum) = sampled.map { case (y, features) =>
-            val featuresCol = new DoubleMatrix(features.length, 1, features: _*)
-            gradient.compute(featuresCol, y, weights)
-          }.reduceOption((a, b) => (a._1.addi(b._1), a._2 + b._2))
-            .getOrElse((DoubleMatrix.zeros(0), 0.0))
+        val ((weightsAvg, lossAvg, regValAvg), _) = sampled.grouped(tinyBatchSize).map {
+          case tinyDataSets =>
+            val dataMatrices = tinyDataSets.map {
+              case (y, features)  => (y, new DoubleMatrix(features.length, 1, features: _*))
+            }
 
-          localLossHistory += lossSum / miniBatchSize + regVal
+            Iterator.iterate((weights, 0.0, regVal)) {
+              case (lastWeights, lastLoss, lastRegVal) =>
 
-          val update = updater.compute(weights, gradientSum.div(miniBatchSize),
-            stepSize, (i - 1) + numOuterIterations + j, regParam)
+                val (localGrad, localLoss) = dataMatrices.map { case (y, featuresCol) =>
+                  gradient.compute(featuresCol, y, lastWeights)
+                }.reduce((a, b) => (a._1.addi(b._1), a._2+b._2))
 
-          weights = update._1
-          regVal = update._2
+                val grad = localGrad.divi(dataMatrices.size)
+                val loss = localLoss / dataMatrices.size
 
-          iterReserved = iterNext
+                val (newWeights, newRegVal) = updater.compute(
+                  lastWeights, grad.div(1.0), stepSize, i*numIterations, regParam)
+
+                (newWeights, loss+lastLoss, newRegVal+lastRegVal)
+
+            }.drop(numLocalIterations).next()
+
+        }.foldLeft(((DoubleMatrix.zeros(initialWeights.length), 0.0, 0.0), 0.0)) {
+          case (((lMatrix, lLoss, lRegVal), count), (rMatrix, rLoss, rRegVal)) =>
+            ((lMatrix.muli(count).addi(rMatrix).divi(count+1),
+              (lLoss*count+rLoss)/(count+1),
+              (lRegVal*count+rRegVal)/(count+1)
+              ),
+              count+1
+             )
         }
 
-        List((weights, localLossHistory.toArray)).iterator
+        val localLossHistory = (lossAvg + regValAvg) / numLocalIterations
+
+        List((weightsAvg, localLossHistory)).iterator
       }
 
       val c = weightsAndLosses.collect()
       val (ws, ls) = c.unzip
 
-      stochasticLossHistory.append(ls.head.reduce(_ + _) / ls.head.size)
+      stochasticLossHistory.append(ls.reduce(_ + _) / ls.size)
 
-      val weightsSum = ws.reduce(_ addi _)
-      weights = weightsSum.divi(c.size)
+      weights = ws.reduce(_ addi _).divi(c.size)
     }
 
     logInfo("GradientDescentWithLocalUpdate finished. Last a few stochastic losses %s".format(
