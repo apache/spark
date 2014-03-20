@@ -17,30 +17,36 @@
 
 package org.apache.spark.deploy.history
 
+import java.text.SimpleDateFormat
+import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.deploy.DeployWebUI
-import org.apache.spark.deploy.master.ApplicationInfo
-import org.apache.spark.ui.UIUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.ui.{SparkUI, UIUtils}
 
 private[spark] class IndexPage(parent: HistoryServer) {
+  val dateFmt = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    // Check if logs have been updated
+    parent.checkForLogs()
+
+    // Populate app table, with most recently modified first
+    val appRows = parent.logPathToLastUpdated.toSeq
+      .sortBy { case (path, lastUpdated) => -lastUpdated }
+      .map { case (path, lastUpdated) =>
+        // (appName, lastUpdated, UI)
+        (parent.getAppName(path), lastUpdated, parent.logPathToUI(path))
+      }
+    val appTable = UIUtils.listingTable(appHeader, appRow, appRows)
+
     val content =
       <div class="row-fluid">
         <div class="span12">
           <ul class="unstyled">
-            <li>
-              <strong>Welcome to the Fastest and Furious-est HistoryServer in the World!</strong>
-            </li>
-            {
-              parent.logPathToUI.map { case (path, ui) =>
-                <li>{path} at {ui.basePath}</li>
-              }
-            }
+            <li><strong>Event Log Location: </strong> {parent.baseLogDir}</li>
+            <h4>Applications</h4> {appTable}
           </ul>
         </div>
       </div>
@@ -48,24 +54,14 @@ private[spark] class IndexPage(parent: HistoryServer) {
     UIUtils.basicSparkPage(content, "History Server")
   }
 
-  def appRow(app: ApplicationInfo): Seq[Node] = {
-    <tr>
-      <td>
-        <a href={"app?appId=" + app.id}>{app.id}</a>
-      </td>
-      <td>
-        <a href={app.desc.appUiUrl}>{app.desc.name}</a>
-      </td>
-      <td>
-        {app.coresGranted}
-      </td>
-      <td sorttable_customkey={app.desc.memoryPerSlave.toString}>
-        {Utils.megabytesToString(app.desc.memoryPerSlave)}
-      </td>
-      <td>{DeployWebUI.formatDate(app.submitDate)}</td>
-      <td>{app.desc.user}</td>
-      <td>{app.state.toString}</td>
-      <td>{DeployWebUI.formatDuration(app.duration)}</td>
-    </tr>
+  private val appHeader = Seq[String]("App Name", "Last Updated")
+
+  private def appRow(info: (String, Long, SparkUI)): Seq[Node] = {
+    info match { case (appName, lastUpdated, ui) =>
+      <tr>
+        <td><a href={parent.getAddress + ui.basePath}>{appName}</a></td>
+        <td>{dateFmt.format(new Date(lastUpdated))}</td>
+      </tr>
+    }
   }
 }

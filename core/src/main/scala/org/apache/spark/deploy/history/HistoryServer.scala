@@ -44,10 +44,10 @@ import org.apache.spark.scheduler.ReplayListenerBus
  * @param baseLogDir The base directory in which event logs are found
  * @param requestedPort The requested port to which this server is to be bound
  */
-class HistoryServer(baseLogDir: String, requestedPort: Int, conf: SparkConf)
+class HistoryServer(val baseLogDir: String, requestedPort: Int, conf: SparkConf)
   extends SparkUIContainer("History Server") with Logging {
 
-  private val host = Utils.localHostName()
+  private val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
   private val port = requestedPort
   private val indexPage = new IndexPage(this)
   private val fileSystem = Utils.getHadoopFileSystem(new URI(baseLogDir))
@@ -101,35 +101,36 @@ class HistoryServer(baseLogDir: String, requestedPort: Int, conf: SparkConf)
 
     // Remove any outdated SparkUIs
     val logPaths = logDirs.map(_.getPath.toString)
-    logPathToUI.keys.foreach { path =>
+    logPathToUI.foreach { case (path, ui) =>
       if (!logPaths.contains(path)) {
+        detachUI(ui)
         logPathToUI.remove(path)
         logPathToLastUpdated.remove(path)
       }
     }
-
-    logWarning("By the end of check for logs, the map looks like")
-    logPathToUI.foreach { case (k, v) => logWarning("* %s".format(k)) }
   }
 
   /** Attempt to render a new SparkUI from event logs residing in the given log directory. */
   def maybeRenderUI(logPath: String, lastUpdated: Long) {
-    logWarning("Maybe rendering UI %s".format(logPath))
-
-    val appName = logPath.split("/").last
+    val appName = getAppName(logPath)
     val replayBus = new ReplayListenerBus(conf)
     val ui = new SparkUI(conf, replayBus, appName, "/history/%s".format(appName))
 
     // Do not call ui.bind() to avoid creating a new server for each application
     ui.start()
     val success = replayBus.replay(logPath)
-    logWarning("Just replayed the events. Successful? %s".format(success))
     if (success) {
       attachUI(ui)
       logPathToUI(logPath) = ui
       logPathToLastUpdated(logPath) = lastUpdated
     }
   }
+
+  /** Parse app name from the given log path. */
+  def getAppName(logPath: String): String = logPath.split("/").last
+
+  /** Return the address of this server. */
+  def getAddress = "http://" + host + ":" + boundPort
 
 }
 
