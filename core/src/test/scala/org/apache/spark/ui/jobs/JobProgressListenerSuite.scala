@@ -22,11 +22,12 @@ import org.scalatest.FunSuite
 import org.apache.spark.{LocalSparkContext, SparkContext, Success}
 import org.apache.spark.executor.{ShuffleReadMetrics, TaskMetrics}
 import org.apache.spark.scheduler._
+import org.apache.spark.util.Utils
 
 class JobProgressListenerSuite extends FunSuite with LocalSparkContext {
   test("test executor id to summary") {
     val sc = new SparkContext("local", "test")
-    val listener = new JobProgressListener(sc)
+    val listener = new JobProgressListener(sc.conf)
     val taskMetrics = new TaskMetrics()
     val shuffleReadMetrics = new ShuffleReadMetrics()
 
@@ -38,16 +39,17 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext {
     taskMetrics.shuffleReadMetrics = Some(shuffleReadMetrics)
     var taskInfo = new TaskInfo(1234L, 0, 0L, "exe-1", "host1", TaskLocality.NODE_LOCAL)
     taskInfo.finishTime = 1
-    listener.onTaskEnd(new SparkListenerTaskEnd(
-      new ShuffleMapTask(0, null, null, 0, null), Success, taskInfo, taskMetrics))
+    var task = new ShuffleMapTask(0, null, null, 0, null)
+    val taskType = Utils.getFormattedClassName(task)
+    listener.onTaskEnd(SparkListenerTaskEnd(task.stageId, taskType, Success, taskInfo, taskMetrics))
     assert(listener.stageIdToExecutorSummaries.getOrElse(0, fail()).getOrElse("exe-1", fail())
       .shuffleRead == 1000)
 
     // finish a task with unknown executor-id, nothing should happen
     taskInfo = new TaskInfo(1234L, 0, 1000L, "exe-unknown", "host1", TaskLocality.NODE_LOCAL)
     taskInfo.finishTime = 1
-    listener.onTaskEnd(new SparkListenerTaskEnd(
-      new ShuffleMapTask(0, null, null, 0, null), Success, taskInfo, taskMetrics))
+    task = new ShuffleMapTask(0, null, null, 0, null)
+    listener.onTaskEnd(SparkListenerTaskEnd(task.stageId, taskType, Success, taskInfo, taskMetrics))
     assert(listener.stageIdToExecutorSummaries.size == 1)
 
     // finish this task, should get updated duration
@@ -55,8 +57,8 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext {
     taskMetrics.shuffleReadMetrics = Some(shuffleReadMetrics)
     taskInfo = new TaskInfo(1235L, 0, 0L, "exe-1", "host1", TaskLocality.NODE_LOCAL)
     taskInfo.finishTime = 1
-    listener.onTaskEnd(new SparkListenerTaskEnd(
-      new ShuffleMapTask(0, null, null, 0, null), Success, taskInfo, taskMetrics))
+    task = new ShuffleMapTask(0, null, null, 0, null)
+    listener.onTaskEnd(SparkListenerTaskEnd(task.stageId, taskType, Success, taskInfo, taskMetrics))
     assert(listener.stageIdToExecutorSummaries.getOrElse(0, fail()).getOrElse("exe-1", fail())
       .shuffleRead == 2000)
 
@@ -65,8 +67,8 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext {
     taskMetrics.shuffleReadMetrics = Some(shuffleReadMetrics)
     taskInfo = new TaskInfo(1236L, 0, 0L, "exe-2", "host1", TaskLocality.NODE_LOCAL)
     taskInfo.finishTime = 1
-    listener.onTaskEnd(new SparkListenerTaskEnd(
-      new ShuffleMapTask(0, null, null, 0, null), Success, taskInfo, taskMetrics))
+    task = new ShuffleMapTask(0, null, null, 0, null)
+    listener.onTaskEnd(SparkListenerTaskEnd(task.stageId, taskType, Success, taskInfo, taskMetrics))
     assert(listener.stageIdToExecutorSummaries.getOrElse(0, fail()).getOrElse("exe-2", fail())
       .shuffleRead == 1000)
   }

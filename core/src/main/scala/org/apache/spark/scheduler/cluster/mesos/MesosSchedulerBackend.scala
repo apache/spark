@@ -41,8 +41,7 @@ import org.apache.spark.util.Utils
 private[spark] class MesosSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
-    master: String,
-    appName: String)
+    master: String)
   extends SchedulerBackend
   with MScheduler
   with Logging {
@@ -71,7 +70,7 @@ private[spark] class MesosSchedulerBackend(
         setDaemon(true)
         override def run() {
           val scheduler = MesosSchedulerBackend.this
-          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(appName).build()
+          val fwInfo = FrameworkInfo.newBuilder().setUser("").setName(sc.appName).build()
           driver = new MesosSchedulerDriver(scheduler, fwInfo, master)
           try {
             val ret = driver.run()

@@ -23,7 +23,6 @@ import scala.concurrent.Await
 import scala.xml.Node
 
 import akka.pattern.ask
-import javax.servlet.http.HttpServletRequest
 import org.json4s.JValue
 
 import org.apache.spark.deploy.{DeployWebUI, JsonProtocol}
@@ -162,7 +161,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
         <a href={"app?appId=" + app.id}>{app.id}</a>
       </td>
       <td>
-        <a href={app.appUiUrl}>{app.desc.name}</a>
+        <a href={app.desc.appUiUrl}>{app.desc.name}</a>
       </td>
       <td>
         {app.coresGranted}

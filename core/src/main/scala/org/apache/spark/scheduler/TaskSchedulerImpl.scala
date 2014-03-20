@@ -204,7 +204,7 @@ private[spark] class TaskSchedulerImpl(
       executorIdToHost(o.executorId) = o.host
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
-        executorGained(o.executorId, o.host)
+        executorAdded(o.executorId, o.host)
       }
     }
 
@@ -235,7 +235,8 @@ private[spark] class TaskSchedulerImpl(
             taskIdToExecutorId(tid) = execId
             activeExecutorIds += execId
             executorsByHost(host) += execId
-            availableCpus(i) -= 1
+            availableCpus(i) -= taskSet.CPUS_PER_TASK
+            assert (availableCpus(i) >= 0)
             launchedTask = true
           }
         }
@@ -399,8 +400,8 @@ private[spark] class TaskSchedulerImpl(
     rootPool.executorLost(executorId, host)
   }
 
-  def executorGained(execId: String, host: String) {
-    dagScheduler.executorGained(execId, host)
+  def executorAdded(execId: String, host: String) {
+    dagScheduler.executorAdded(execId, host)
   }
 
   def getExecutorsAliveOnHost(host: String): Option[Set[String]] = synchronized {
