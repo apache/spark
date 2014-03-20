@@ -25,10 +25,7 @@ SCALA_VERSION=2.10
 # Figure out where Spark is installed
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
-# Load environment variables from conf/spark-env.sh, if it exists
-if [ -e "$FWDIR/conf/spark-env.sh" ] ; then
-  . $FWDIR/conf/spark-env.sh
-fi
+. $FWDIR/bin/load-spark-env
 
 # Build up classpath
 CLASSPATH="$SPARK_CLASSPATH:$FWDIR/conf"
