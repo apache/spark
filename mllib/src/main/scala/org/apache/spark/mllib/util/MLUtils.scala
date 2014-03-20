@@ -17,8 +17,6 @@
 
 package org.apache.spark.mllib.util
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.hadoop.io.Text
 import org.jblas.DoubleMatrix
 
@@ -136,27 +134,10 @@ object MLUtils {
    *         i.e. the first is the file name of a file, the second one is its content.
    */
   def smallTextFiles(sc: SparkContext, path: String): RDD[(String, String)] = {
-    val fileBlocks = sc.newAPIHadoopFile(
+    sc.newAPIHadoopFile(
       path,
       classOf[BatchFilesInputFormat],
       classOf[String],
-      classOf[Text])
-
-    fileBlocks.mapPartitions { iterator =>
-      var lastFileName = ""
-      val mergedContents = ArrayBuffer.empty[(String, Text)]
-
-      for ((filename, content) <- iterator) {
-        if (filename != lastFileName) {
-          mergedContents.append((filename, new Text()))
-          lastFileName = filename
-        }
-        mergedContents.last._2.append(content.getBytes, 0, content.getLength)
-      }
-
-      mergedContents.map { case (fileName, content) =>
-        (fileName, content.toString)
-      }.iterator
-    }
+      classOf[Text]).mapValues(_.toString)
   }
 }

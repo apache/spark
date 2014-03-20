@@ -19,9 +19,11 @@ package org.apache.spark.mllib.input;
 
 import java.io.IOException;
 
+import com.google.common.io.Closeables;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.lib.input.CombineFileSplit;
@@ -34,16 +36,15 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 
 public class BatchFilesRecordReader extends RecordReader<String, Text> {
     private long startOffset;
-    private long end;
-    private long pos;
+    private int length;
     private Path path;
-
-    private int MAX_BYTES_ALLOCATION;
 
     private String key = null;
     private Text value = null;
 
-    private FSDataInputStream fileIn;
+    private boolean processed = false;
+
+    private FileSystem fs;
 
     public BatchFilesRecordReader(
             CombineFileSplit split,
@@ -52,32 +53,22 @@ public class BatchFilesRecordReader extends RecordReader<String, Text> {
             throws IOException {
         path = split.getPath(index);
         startOffset = split.getOffset(index);
-        pos = startOffset;
-        end = startOffset + split.getLength(index);
-
-        FileSystem fs = path.getFileSystem(context.getConfiguration());
-        fileIn = fs.open(path);
-        fileIn.seek(startOffset);
-
-        MAX_BYTES_ALLOCATION = context.getConfiguration()
-            .getInt("MAX_BYTES_ALLOCATION", 64*1024*1024);
+        length = (int) split.getLength(index);
+        fs = path.getFileSystem(context.getConfiguration());
     }
 
     @Override
     public void initialize(InputSplit arg0, TaskAttemptContext arg1)
-            throws IOException, InterruptedException {}
+            throws IOException, InterruptedException {
+    }
 
     @Override
     public void close() throws IOException {
-        if (fileIn != null) {
-            fileIn.close();
-        }
     }
 
     @Override
     public float getProgress() throws IOException {
-        if (pos == end) return 1.0f;
-        return Math.min(1.0f, (pos - startOffset) / (float) (end - startOffset));
+        return processed ? 1.0f : 0.0f;
     }
 
     @Override
@@ -92,29 +83,27 @@ public class BatchFilesRecordReader extends RecordReader<String, Text> {
 
     @Override
     public boolean nextKeyValue() throws IOException {
-        if (key == null) {
-            key = path.getName();
+        if (!processed) {
+            if (key == null) {
+                key = path.getName();
+            }
+            if (value == null) {
+                value = new Text();
+            }
+
+            FSDataInputStream fileIn = null;
+            try {
+                fileIn = fs.open(path);
+                fileIn.seek(startOffset);
+                byte[] innerBuffer = new byte[length];
+                IOUtils.readFully(fileIn, innerBuffer, 0, length);
+                value.set(innerBuffer, 0, length);
+            } finally {
+                Closeables.close(fileIn, false);
+            }
+            processed = true;
+            return true;
         }
-        if (value == null) {
-            value = new Text();
-        }
-
-        if (pos >= end) {
-            return false;
-        }
-
-        int maxBufferLength = end - pos < Integer.MAX_VALUE ? (int) (end - pos) : Integer.MAX_VALUE;
-        if (maxBufferLength > MAX_BYTES_ALLOCATION) {
-            maxBufferLength = MAX_BYTES_ALLOCATION;
-        }
-
-        byte[] innerBuffer = new byte[maxBufferLength];
-
-        int len = fileIn.read(pos, innerBuffer, 0, maxBufferLength);
-        pos += len;
-
-        value.set(innerBuffer, 0, len);
-
-        return true;
+        return false;
     }
 }
