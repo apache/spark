@@ -149,7 +149,6 @@ private[spark] class Master(
 
   override def postStop() {
     webUi.stop()
-    appIdToUI.values.foreach(_.stop())
     masterMetricsSystem.stop()
     applicationMetricsSystem.stop()
     persistenceEngine.close()
@@ -622,10 +621,7 @@ private[spark] class Master(
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
         completedApps.take(toRemove).foreach( a => {
-          appIdToUI.remove(a.id).foreach { ui =>
-            ui.stop()
-            webUi.detachUI(ui)
-          }
+          appIdToUI.remove(a.id).foreach { ui => webUi.detachUI(ui) }
           applicationMetricsSystem.removeSource(a.appSource)
         })
         completedApps.trimStart(toRemove)
@@ -681,10 +677,7 @@ private[spark] class Master(
     // Do not call ui.bind() to avoid creating a new server for each application
     ui.start()
     val success = replayerBus.replay(eventLogDir)
-    if (!success) {
-      ui.stop()
-      None
-    } else Some(ui)
+    if (success) Some(ui) else None
   }
 
   /** Generate a new app ID given a app's submission date */
