@@ -43,8 +43,7 @@ import scala.collection.JavaConversions._
  * Starts up an instance of hive where metadata is stored locally. An in-process metadata data is
  * created with data stored in ./metadata.  Warehouse data is stored in in ./warehouse.
  */
-class LocalHiveContext(sc: SparkContext)
-  extends HiveContext(sc) {
+class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   lazy val metastorePath = new File("metastore").getCanonicalPath
   lazy val warehousePath: String = new File("warehouse").getCanonicalPath
@@ -72,6 +71,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     new this.QueryExecution { val logical = plan }
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
+  @transient
   protected val outputBuffer =  new java.io.OutputStream {
     var pos: Int = 0
     var buffer = new Array[Int](10240)
@@ -106,9 +106,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   sessionState.out = new PrintStream(outputBuffer, true, "UTF-8")
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
+  @transient
   override lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
 
   /* An analyzer that uses the Hive metastore. */
+  @transient
   override lazy val analyzer = new Analyzer(catalog, HiveFunctionRegistry, caseSensitive = false)
 
   def tables: Seq[BaseRelation] = {
@@ -180,7 +182,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     }
   }
 
-  object HivePlanner extends SparkPlanner with HiveStrategies {
+  @transient
+  val hivePlanner = new SparkPlanner with HiveStrategies {
     val hiveContext = self
 
     override val strategies: Seq[Strategy] = Seq(
@@ -198,8 +201,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     )
   }
 
-  override val planner = HivePlanner
+  @transient
+  override val planner = hivePlanner
 
+  @transient
   protected lazy val emptyResult =
     sparkContext.parallelize(Seq(new GenericRow(Array[Any]()): Row), 1)
 

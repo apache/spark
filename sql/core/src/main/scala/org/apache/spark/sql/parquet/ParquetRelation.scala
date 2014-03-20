@@ -43,58 +43,19 @@ import parquet.hadoop.util.ContextUtil
 import scala.collection.JavaConversions._
 
 /**
- * Relation formed by underlying Parquet file that contains data stored in columnar form.
- * Note that there are currently two ways to import a ParquetRelation:
+ * Relation that consists of data stored in a Parquet columnar format.
+ *
+ * Users should interact with parquet files though a SchemaRDD, created by a [[SQLContext]] instead
+ * of using this class directly.
  *
  * {{{
- * // a) create the Relation "manually" and register via the OverrideCatalog, e.g.:
- * scala> ParquetTestData.writeFile
- *
- * scala> TestHive.catalog.overrideTable(None, "psrc", ParquetTestData.testData)
- * res1: Option[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan] = None
- *
- * scala> val query = sql("SELECT * FROM psrc")
- * query: org.apache.spark.sql.ExecutedQuery =
- * SELECT * FROM psrc
- * === Query Plan ===
- * ParquetTableScan [myboolean#6,myint#7,mystring#8,mylong#9L,myfloat#10,mydouble#11],
- * (ParquetRelation testData, file:/tmp/testParquetFile), None
- *
- * scala> query.collect
- * res2: Array[org.apache.spark.sql.Row] = Array([true,5,abc,8589934592,2.5,4.5], ...
- *
- * // b) "manually" resolve the relation by modifying the logical plan
- * scala> import org.apache.spark.sql.execution.ParquetRelation
- * import org.apache.spark.sql.execution.ParquetRelation
- *
- * scala> ParquetTestData.writeFile
- *
- * scala> val filename = ParquetTestData.testFile.toString
- * filename: String = /tmp/testParquetFile
- *
- * scala> val query_string = "SELECT * FROM psrc"
- * query_string: String = SELECT * FROM psrc
- *
- * scala> val query = TestHive.parseSql(query_string).transform {
- *    | case relation @ UnresolvedRelation(databaseName, name, alias) =>
- *    | if (name == "psrc") ParquetRelation(name, filename)
- *    | else relation
- *    | }
- * query: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan =
- * Project [*]
- * ParquetRelation psrc, /tmp/testParquetFile
- *
- * scala> executePlan(query).toRdd.collect()
- * res8: Array[org.apache.spark.sql.Row] = Array([true,5,abc,8589934592,2.5,4.5], ...
+ *   val parquetRDD = sqlContext.parquetFile("path/to/parequet.file")
  * }}}
  *
  * @param tableName The name of the relation that can be used in queries.
  * @param path The path to the Parquet file.
  */
 case class ParquetRelation(val tableName: String, val path: String) extends BaseRelation {
-
-  // TODO: Figure out resolution of unresolved ParquetRelation (a simple MetaStore?)
-  // to make this more user friendly
 
   /** Schema derived from ParquetFile **/
   def parquetSchema: MessageType =

@@ -31,7 +31,7 @@ import org.apache.spark.util.collection.AppendOnlyMap
  * Extra functions on RDDs that perform only local operations.  These can be used when data has
  * already been partitioned correctly.
  */
-protected[spark] class PartitionLocalRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
+private[spark] class PartitionLocalRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   extends Logging
   with Serializable {
 
@@ -91,7 +91,7 @@ protected[spark] class PartitionLocalRDDFunctions[K: ClassTag, V: ClassTag](self
   }
 }
 
-object PartitionLocalRDDFunctions {
+private[spark] object PartitionLocalRDDFunctions {
   implicit def rddToPartitionLocalRDDFunctions[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)]) =
     new PartitionLocalRDDFunctions(rdd)
 }

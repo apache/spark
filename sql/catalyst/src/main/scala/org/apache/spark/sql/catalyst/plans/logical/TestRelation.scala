@@ -28,7 +28,9 @@ object LocalRelation {
     new LocalRelation(output)
 }
 
-case class LocalRelation(output: Seq[Attribute], data: Seq[Product] = Nil) extends LeafNode {
+case class LocalRelation(output: Seq[Attribute], data: Seq[Product] = Nil)
+  extends LeafNode with analysis.MultiInstanceRelation {
+
   // TODO: Validate schema compliance.
   def loadData(newData: Seq[Product]) = new LocalRelation(output, data ++ newData)
 
@@ -37,28 +39,9 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[Product] = Nil) exten
    * attributes are required when a relation is going to be included multiple times in the same
    * query.
    */
-  def newInstance: LocalRelation = {
-    LocalRelation(output.map(_.newInstance), data)
+  override final def newInstance: this.type = {
+    LocalRelation(output.map(_.newInstance), data).asInstanceOf[this.type]
   }
 
   override protected def stringArgs = Iterator(output)
-}
-
-/**
- * If any local relation appears more than once in the query plan then the plan is updated so that
- * each instance has unique expression ids for the attributes produced.
- */
-object NewLocalRelationInstances extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    val localRelations = plan collect { case l: LocalRelation => l}
-    val multiAppearance = localRelations
-      .groupBy(identity[LocalRelation])
-      .filter { case (_, ls) => ls.size > 1 }
-      .map(_._1)
-      .toSet
-
-    plan transform {
-      case l: LocalRelation if multiAppearance contains l => l.newInstance
-    }
-  }
 }

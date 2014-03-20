@@ -20,16 +20,17 @@ package execution
 
 import org.scalatest.FunSuite
 
-import catalyst.expressions._
-import catalyst.plans.logical
-import TestSQLContext._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.test.TestSQLContext.planner._
 
 class PlannerSuite extends FunSuite {
-  import TestData._
-  import TestSQLContext.planner._
+
 
   test("unions are collapsed") {
-    val query = testData.unionAll(testData).unionAll(testData)
+    val query = testData.unionAll(testData).unionAll(testData).logicalPlan
     val planned = BasicOperators(query).head
     val logicalUnions = query collect { case u: logical.Union => u}
     val physicalUnions = planned collect { case u: execution.Union => u}
@@ -39,7 +40,7 @@ class PlannerSuite extends FunSuite {
   }
 
   test("count is partially aggregated") {
-    val query = testData.groupBy('value)(Count('key)).analyze
+    val query = testData.groupBy('value)(Count('key)).analyze.logicalPlan
     val planned = PartialAggregation(query).head
     val aggregations = planned.collect { case a: Aggregate => a }
 
@@ -47,13 +48,14 @@ class PlannerSuite extends FunSuite {
   }
 
   test("count distinct is not partially aggregated") {
-    val query = testData.groupBy('value)(CountDistinct('key :: Nil)).analyze
-    val planned = PartialAggregation(query)
+    val query = testData.groupBy('value)(CountDistinct('key :: Nil)).analyze.logicalPlan
+    val planned = PartialAggregation(query.logicalPlan)
     assert(planned.isEmpty)
   }
 
   test("mixed aggregates are not partially aggregated") {
-    val query = testData.groupBy('value)(Count('value), CountDistinct('key :: Nil)).analyze
+    val query =
+      testData.groupBy('value)(Count('value), CountDistinct('key :: Nil)).analyze.logicalPlan
     val planned = PartialAggregation(query)
     assert(planned.isEmpty)
   }

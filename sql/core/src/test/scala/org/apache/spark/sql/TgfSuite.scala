@@ -20,11 +20,13 @@ package execution
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
-import catalyst.analysis._
-import catalyst.expressions._
-import catalyst.plans._
-import catalyst.plans.logical.LogicalPlan
-import catalyst.types._
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.test._
+
 
 import TestSQLContext._
 
@@ -53,7 +55,7 @@ case class ExampleTGF(input: Seq[Attribute] = Seq('name, 'age)) extends Generato
   }
 }
 
-class TgfSuite extends DslQueryTest {
+class TgfSuite extends QueryTest {
   val inputData =
     logical.LocalRelation('name.string, 'age.int).loadData(
       ("michael", 29) :: Nil

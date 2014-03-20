@@ -289,7 +289,7 @@ class SqlParser extends StandardTokenParsers {
     COUNT ~> "(" ~ expression <~ ")" ^^ { case dist ~ exp => Count(exp) } |
     COUNT ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => CountDistinct(exp :: Nil) } |
     FIRST ~> "(" ~> expression <~ ")" ^^ { case exp => First(exp) } |
-    AVG ~> "(" ~> expression <~ ")" ^^ { case exp => Sum(exp) } |
+    AVG ~> "(" ~> expression <~ ")" ^^ { case exp => Average(exp) } |
     IF ~> "(" ~> expression ~ "," ~ expression ~ "," ~ expression <~ ")" ^^ {
       case c ~ "," ~ t ~ "," ~ f => If(c,t,f)
     } |
@@ -302,7 +302,7 @@ class SqlParser extends StandardTokenParsers {
 
   protected lazy val literal: Parser[Literal] =
     numericLit ^^ {
-      case i if i.toLong <= Int.MaxValue => Literal(i.toLong)
+      case i if i.toLong > Int.MaxValue => Literal(i.toLong)
       case i => Literal(i.toInt)
     } |
     NULL ^^^ Literal(null, NullType) |

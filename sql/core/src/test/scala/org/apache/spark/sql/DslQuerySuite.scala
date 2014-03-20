@@ -19,96 +19,24 @@ package org.apache.spark.sql
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
-import catalyst.analysis._
-import catalyst.expressions._
-import catalyst.plans._
-import catalyst.plans.logical.LogicalPlan
-import catalyst.types._
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.test._
 
 /* Implicits */
 import TestSQLContext._
 
-object TestData {
-  val testData =
-    logical.LocalRelation('key.int, 'value.string)
-      .loadData((1 to 100).map(i => (i, i.toString)))
-
-  val testData2 =
-    logical.LocalRelation('a.int, 'b.int).loadData(
-      (1, 1) ::
-        (1, 2) ::
-        (2, 1) ::
-        (2, 2) ::
-        (3, 1) ::
-        (3, 2) :: Nil
-    )
-
-  val testData3 =
-    logical.LocalRelation('a.int, 'b.int).loadData(
-      (1, null) ::
-        (2, 2) :: Nil
-    )
-
-  val upperCaseData =
-    logical.LocalRelation('N.int, 'L.string).loadData(
-        (1, "A") ::
-        (2, "B") ::
-        (3, "C") ::
-        (4, "D") ::
-        (5, "E") ::
-        (6, "F") :: Nil
-    )
-
-  val lowerCaseData =
-    logical.LocalRelation('n.int, 'l.string).loadData(
-        (1, "a") ::
-        (2, "b") ::
-        (3, "c") ::
-        (4, "d") :: Nil
-    )
-}
-
-class DslQueryTest extends FunSuite {
-  /**
-   * Runs the plan and makes sure the answer matches the expected result.
-   * @param plan the query to be executed
-   * @param expectedAnswer the expected result, can either be an Any, Seq[Product], or Seq[ Seq[Any] ].
-   */
-  protected def checkAnswer(plan: LogicalPlan, expectedAnswer: Any): Unit = {
-    val convertedAnswer = expectedAnswer match {
-      case s: Seq[_] if s.isEmpty => s
-      case s: Seq[_] if s.head.isInstanceOf[Product] &&
-        !s.head.isInstanceOf[Seq[_]] => s.map(_.asInstanceOf[Product].productIterator.toIndexedSeq)
-      case s: Seq[_] => s
-      case singleItem => Seq(Seq(singleItem))
-    }
-
-    val isSorted = plan.collect { case s: logical.Sort => s}.nonEmpty
-    def prepareAnswer(answer: Seq[Any]) = if (!isSorted) answer.sortBy(_.toString) else answer
-    val sparkAnswer = try plan.toRdd.collect().toSeq catch {
-      case e: Exception =>
-        fail(
-          s"""
-            |Exception thrown while executing query:
-            |$plan
-            |== Physical Plan ==
-            |${plan.executedPlan}
-            |== Exception ==
-            |$e
-          """.stripMargin)
-    }
-    assert(prepareAnswer(convertedAnswer) === prepareAnswer(sparkAnswer))
-  }
-}
-
-class BasicQuerySuite extends DslQueryTest {
-  import TestSQLContext._
+class DslQuerySuite extends QueryTest {
   import TestData._
 
   test("table scan") {
     checkAnswer(
       testData,
-      testData.data)
+      testData.collect().toSeq)
   }
 
   test("agg") {
@@ -121,17 +49,13 @@ class BasicQuerySuite extends DslQueryTest {
   test("select *") {
     checkAnswer(
       testData.select(Star(None)),
-      testData.data)
+      testData.collect().toSeq)
   }
 
   test("simple select") {
     checkAnswer(
       testData.where('key === 1).select('value),
       Seq(Seq("1")))
-  }
-
-  test("random sample") {
-    testData.sample(0.5).toRdd.collect()
   }
 
   test("sorting") {
@@ -161,7 +85,7 @@ class BasicQuerySuite extends DslQueryTest {
   test("count") {
     checkAnswer(
       testData2.groupBy()(Count(1)),
-      testData2.data.size
+      testData2.count()
     )
   }
 
@@ -226,16 +150,17 @@ class BasicQuerySuite extends DslQueryTest {
 
     checkAnswer(
       bigDataX.join(bigDataY).where("x.key".attr === "y.key".attr),
-      testData.data.flatMap(row => Seq.fill(16)((row.productIterator ++ row.productIterator).toSeq)))
+      testData.flatMap(
+        row => Seq.fill(16)((row ++ row).toSeq)).collect().toSeq)
   }
 
   test("cartisian product join") {
     checkAnswer(
       testData3.join(testData3),
-        (1, null, 1, null) ::
-        (1, null, 2, 2) ::
-        (2, 2, 1, null) ::
-        (2, 2, 2, 2) :: Nil)
+      (1, null, 1, null) ::
+      (1, null, 2, 2) ::
+      (2, 2, 1, null) ::
+      (2, 2, 2, 2) :: Nil)
   }
 
   test("left outer join") {

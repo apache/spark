@@ -20,10 +20,11 @@ package execution
 
 import org.apache.spark.rdd.RDD
 
-import catalyst.plans.QueryPlan
-import catalyst.plans.logical
-import catalyst.plans.physical._
-import catalyst.trees
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.trees
 
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
   self: Product =>
@@ -51,11 +52,27 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
 
 /**
  * Allows already planned SparkQueries to be linked into logical query plans.
+ *
+ * Note that in general it is not valid to use this class to link multiple copies of the same
+ * physical operator into the same query plan as this violates the uniqueness of expression ids.
+ * Special handling exists for ExistingRdd as these are already leaf operators and thus we can just
+ * replace the output attributes with new copies of themselves without breaking any attribute
+ * linking.
  */
-case class SparkLogicalPlan(alreadyPlanned: SparkPlan) extends logical.LogicalPlan {
+case class SparkLogicalPlan(alreadyPlanned: SparkPlan)
+  extends logical.LogicalPlan with MultiInstanceRelation {
+
   def output = alreadyPlanned.output
   def references = Set.empty
   def children = Nil
+
+  override final def newInstance: this.type = {
+    SparkLogicalPlan(
+      alreadyPlanned match {
+        case ExistingRdd(output, rdd) => ExistingRdd(output.map(_.newInstance), rdd)
+        case _ => sys.error("Multiple instance of the same relation detected.")
+      }).asInstanceOf[this.type]
+  }
 }
 
 trait LeafNode extends SparkPlan with trees.LeafNode[SparkPlan] {

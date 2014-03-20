@@ -20,9 +20,9 @@ package org.apache.spark.sql.parquet
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.TestSQLContext
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.util.getTempFilePath
+import org.apache.spark.sql.test.TestSQLContext
 
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.fs.{Path, FileSystem}

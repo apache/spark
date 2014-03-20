@@ -31,10 +31,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, NativeCommand, 
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 
-/** A SQLContext that can be used for local testing. */
-object TestSQLContext
-  extends SQLContext(new SparkContext("local", "TestSQLContext", new SparkConf()))
-
 /**
  * <span class="badge" style="float: right; background-color: darkblue;">ALPHA COMPONENT</span>
  *
@@ -44,13 +40,21 @@ object TestSQLContext
  * @groupname userf Spark SQL Functions
  * @groupname Ungrouped Support functions for language integrated queries.
  */
-class SQLContext(val sparkContext: SparkContext) extends Logging with dsl.ExpressionConversions {
+class SQLContext(@transient val sparkContext: SparkContext)
+  extends Logging
+  with dsl.ExpressionConversions
+  with Serializable {
+
   self =>
 
+  @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog
+  @transient
   protected[sql] lazy val analyzer: Analyzer =
     new Analyzer(catalog, EmptyFunctionRegistry, caseSensitive = true)
+  @transient
   protected[sql] val optimizer = Optimizer
+  @transient
   protected[sql] val parser = new catalyst.SqlParser
 
   protected[sql] def parseSql(sql: String): LogicalPlan = parser(sql)
@@ -58,13 +62,14 @@ class SQLContext(val sparkContext: SparkContext) extends Logging with dsl.Expres
   protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
 
-  implicit def logicalPlanToSparkQuery(plan: LogicalPlan) = executePlan(plan)
-
-  implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) extends dsl.LogicalPlanFunctions {
-    def registerAsTable(tableName: String): Unit = {
-       catalog.registerTable(None, tableName, logicalPlan)
-     }
-  }
+  /**
+   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+   *
+   * Allows catalyst LogicalPlans to be executed as a SchemaRDD.  Note that the LogicalPlan
+   * interface is considered internal, and thus not guranteed to be stable.  As a result, using
+   * them directly is not reccomended.
+   */
+  implicit def logicalPlanToSparkQuery(plan: LogicalPlan): SchemaRDD = new SchemaRDD(this, plan)
 
   /**
    * Creates a SchemaRDD from an RDD of case classes.
@@ -82,17 +87,10 @@ class SQLContext(val sparkContext: SparkContext) extends Logging with dsl.Expres
   def parquetFile(path: String): SchemaRDD =
     new SchemaRDD(this, parquet.ParquetRelation("ParquetFile", path))
 
-  /**
-   * Writes the given [[SchemaRDD]] to a file using Parquet.
-   *
-   * @group userf
-   */
-  def saveRDDAsParquetFile(rdd: SchemaRDD, path: String): Unit = {
-    rdd.saveAsParquetFile(path)
-  }
 
   /**
-   * Registers the given RDD as a table in the catalog.
+   * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
+   * during the lifetime of this instance of SQLContext.
    *
    * @group userf
    */
@@ -101,13 +99,17 @@ class SQLContext(val sparkContext: SparkContext) extends Logging with dsl.Expres
   }
 
   /**
-   * Executes a SQL query using Spark, returning the result as an RDD as well as the plan used
-   * for execution.
+   * Executes a SQL query using Spark, returning the result as a SchemaRDD.
    *
    * @group userf
    */
   def sql(sqlText: String): SchemaRDD = {
-    new SchemaRDD(this, parseSql(sqlText))
+    val result = new SchemaRDD(this, parseSql(sqlText))
+    // We force query optimization to happen right away instead of letting it happen lazily like
+    // when using the query DSL.  This is so DDL commands behave as expected.  This is only
+    // generates the RDD lineage for DML queries, but do not perform any execution.
+    result.queryExecution.toRdd
+    result
   }
 
   protected[sql] class SparkPlanner extends SparkStrategies {
@@ -122,13 +124,15 @@ class SQLContext(val sparkContext: SparkContext) extends Logging with dsl.Expres
       BroadcastNestedLoopJoin :: Nil
   }
 
+  @transient
   protected[sql] val planner = new SparkPlanner
 
   /**
    * Prepares a planned SparkPlan for execution by binding references to specific ordinals, and
    * inserting shuffle operations as needed.
    */
-  protected[sql] object PrepareForExecution extends RuleExecutor[SparkPlan] {
+  @transient
+  protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
     val batches =
       Batch("Add exchange", Once, AddExchange) ::
       Batch("Prepare Expressions", Once, new BindReferences[SparkPlan]) :: Nil
@@ -145,7 +149,7 @@ class SQLContext(val sparkContext: SparkContext) extends Logging with dsl.Expres
     lazy val optimizedPlan = optimizer(analyzed)
     // TODO: Don't just pick the first one...
     lazy val sparkPlan = planner(optimizedPlan).next()
-    lazy val executedPlan: SparkPlan = PrepareForExecution(sparkPlan)
+    lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
 
     /** Internal version of the RDD. Avoids copies and has no schema */
     lazy val toRdd: RDD[Row] = executedPlan.execute()

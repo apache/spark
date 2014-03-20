@@ -35,6 +35,9 @@ import org.apache.spark.sql.catalyst.types.BooleanType
  * whose elements are scala case classes into a SchemaRDD.  This conversion can also be done
  * explicitly using the `createSchemaRDD` function on a [[SQLContext]].
  *
+ * A `SchemaRDD` can also be created by loading data in from external sources, for example,
+ * by using the `parquetFile` method on [[SQLContext]].
+ *
  * == SQL Queries ==
  * A SchemaRDD can be registered as a table in the [[SQLContext]] that was used to create it.  Once
  * an RDD has been registered as a table, it can be used in the FROM clause of SQL statements.
@@ -76,8 +79,7 @@ import org.apache.spark.sql.catalyst.types.BooleanType
  *  rdd.where('key === 1).orderBy('value.asc).select('key).collect()
  * }}}
  *
- *  @todo There is currently no support for creating SchemaRDDs from either Java or Python other
- *        than those based on data stored in Hive.
+ *  @todo There is currently no support for creating SchemaRDDs from either Java or Python RDDs.
  *
  *  @groupname Query Language Integrated Queries
  *  @groupdesc Query Functions that create new queries from SchemaRDDs.  The
@@ -101,7 +103,12 @@ class SchemaRDD(
    * expensive.
    */
   @transient
-  protected lazy val queryExecution = sqlContext.executePlan(logicalPlan)
+  protected[spark] lazy val queryExecution = sqlContext.executePlan(logicalPlan)
+
+  override def toString =
+    s"""${super.toString}
+       |== Query Plan ==
+       |${queryExecution.executedPlan}""".stripMargin.trim
 
   // =========================================================================================
   // RDD functions: Copy the interal row representation so we present immutable data to users.
@@ -125,7 +132,7 @@ class SchemaRDD(
    * in SQL.
    *
    * {{{
-   *   rdd.select('a, 'b + 'c, 'd as 'aliasedName)
+   *   schemaRDD.select('a, 'b + 'c, 'd as 'aliasedName)
    * }}}
    *
    * @param exprs a set of logical expression that will be evaluated for each input row.
@@ -139,9 +146,9 @@ class SchemaRDD(
    * Filters the ouput, only returning those rows where `condition` evaluates to true.
    *
    * {{{
-   *   rdd.where('a === 'b)
-   *   rdd.where('a === 1)
-   *   rdd.where('a + 'b > 10)
+   *   schemaRDD.where('a === 'b)
+   *   schemaRDD.where('a === 1)
+   *   schemaRDD.where('a + 'b > 10)
    * }}}
    *
    * @group Query
@@ -169,9 +176,9 @@ class SchemaRDD(
   /**
    * Sorts the results by the given expressions.
    * {{{
-   *   rdd.orderBy('a)
-   *   rdd.orderBy('a, 'b)
-   *   rdd.orderBy('a.asc, 'b.desc)
+   *   schemaRDD.orderBy('a)
+   *   schemaRDD.orderBy('a, 'b)
+   *   schemaRDD.orderBy('a.asc, 'b.desc)
    * }}}
    *
    * @group Query
@@ -183,7 +190,7 @@ class SchemaRDD(
    * Performs a grouping followed by an aggregation.
    *
    * {{{
-   *   rdd.groupBy('year)(Sum('sales) as 'totalSales)
+   *   schemaRDD.groupBy('year)(Sum('sales) as 'totalSales)
    * }}}
    *
    * @group Query
@@ -201,8 +208,8 @@ class SchemaRDD(
    * with the same name, for example, when peforming self-joins.
    *
    * {{{
-   *   val x = rdd.where('a === 1).subquery('x)
-   *   val y = rdd.where('a === 2).subquery('y)
+   *   val x = schemaRDD.where('a === 1).subquery('x)
+   *   val y = schemaRDD.where('a === 2).subquery('y)
    *   x.join(y).where("x.a".attr === "y.a".attr),
    * }}}
    *
@@ -223,7 +230,7 @@ class SchemaRDD(
    * Filters tuples using a function over the value of the specified column.
    *
    * {{{
-   *   rdd.sfilter('a)((a: Int) => ...)
+   *   schemaRDD.sfilter('a)((a: Int) => ...)
    * }}}
    *
    * @group Query
@@ -242,7 +249,7 @@ class SchemaRDD(
    * being passed to the function.
    *
    * {{{
-   *   rdd.where(r => r.firstName == "Bob" && r.lastName == "Smith")
+   *   schemaRDD.where(r => r.firstName == "Bob" && r.lastName == "Smith")
    * }}}
    *
    * @group Query
@@ -331,6 +338,5 @@ class SchemaRDD(
    */
   def toSchemaRDD = this
 
-  def analyze =
-    new SchemaRDD(sqlContext, sqlContext.analyzer(logicalPlan))
+  def analyze = sqlContext.analyzer(logicalPlan)
 }

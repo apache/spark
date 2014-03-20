@@ -42,13 +42,14 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   val fixedPoint = FixedPoint(100)
 
   val batches: Seq[Batch] = Seq(
-    Batch("LocalRelations", Once,
-      NewLocalRelationInstances),
+    Batch("MultiInstanceRelations", Once,
+      NewRelationInstances),
     Batch("CaseInsensitiveAttributeReferences", Once,
       (if (caseSensitive) Nil else LowercaseAttributeReferences :: Nil) : _*),
     Batch("Resolution", fixedPoint,
       ResolveReferences ::
       ResolveRelations ::
+      NewRelationInstances ::
       ImplicitGenerate ::
       StarExpansion ::
       ResolveFunctions ::

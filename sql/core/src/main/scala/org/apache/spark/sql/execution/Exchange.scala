@@ -33,7 +33,7 @@ import catalyst.errors._
 import catalyst.expressions._
 import catalyst.plans.physical._
 
-class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
+private class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
   override def newKryo(): Kryo = {
     val kryo = new Kryo
     kryo.setRegistrationRequired(true)
@@ -49,7 +49,7 @@ class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
   }
 }
 
-class BigDecimalSerializer extends Serializer[BigDecimal] {
+private class BigDecimalSerializer extends Serializer[BigDecimal] {
   def write(kryo: Kryo, output: Output, bd: math.BigDecimal) {
     // TODO: There are probably more efficient representations than strings...
     output.writeString(bd.toString)
