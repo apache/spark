@@ -17,8 +17,6 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseVector => BreezeDenseVector}
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vector
@@ -33,19 +31,18 @@ class KMeansModel(val clusterCenters: Array[Array[Double]]) extends Serializable
 
   /** Return the cluster index that a given point belongs to. */
   def predict(point: Array[Double]): Int = {
-    KMeans.findClosest(clusterCenters, point)._1
+    KMeans.findClosest(clusterCentersWithNorm, new BreezeVectorWithNorm(point))._1
   }
 
   /** Returns the cluster index that a given point belongs to. */
   def predict(point: Vector): Int = {
-    val breezeClusterCenters = clusterCenters.view.map(new BreezeDenseVector[Double](_))
-    KMeans.findClosest(breezeClusterCenters, point.toBreeze)._1
+    KMeans.findClosest(clusterCentersWithNorm, new BreezeVectorWithNorm(point))._1
   }
 
   /** Maps given points to their cluster indices. */
   def predict(points: RDD[Vector]): RDD[Int] = {
-    val breezeClusterCenters = clusterCenters.map(new BreezeDenseVector[Double](_))
-    points.map(p => KMeans.findClosest(breezeClusterCenters, p.toBreeze)._1)
+    val centersWithNorm = clusterCentersWithNorm
+    points.map(p => KMeans.findClosest(centersWithNorm, new BreezeVectorWithNorm(p))._1)
   }
 
   /**
@@ -53,7 +50,8 @@ class KMeansModel(val clusterCenters: Array[Array[Double]]) extends Serializable
    * model on the given data.
    */
   def computeCost(data: RDD[Array[Double]]): Double = {
-    data.map(p => KMeans.pointCost(clusterCenters, p)).sum()
+    val centersWithNorm = clusterCentersWithNorm
+    data.map(p => KMeans.pointCost(centersWithNorm, new BreezeVectorWithNorm(p))).sum()
   }
 
   /**
@@ -61,7 +59,10 @@ class KMeansModel(val clusterCenters: Array[Array[Double]]) extends Serializable
    * model on the given data.
    */
   def computeCost(data: RDD[Vector])(implicit d: DummyImplicit): Double = {
-    val breezeClusterCenters = clusterCenters.map(new BreezeDenseVector[Double](_))
-    data.map(p => KMeans.pointCost(breezeClusterCenters, p.toBreeze)).sum()
+    val centersWithNorm = clusterCentersWithNorm
+    data.map(p => KMeans.pointCost(centersWithNorm, new BreezeVectorWithNorm(p))).sum()
   }
+
+  private def clusterCentersWithNorm: Iterable[BreezeVectorWithNorm] =
+    clusterCenters.map(new BreezeVectorWithNorm(_))
 }

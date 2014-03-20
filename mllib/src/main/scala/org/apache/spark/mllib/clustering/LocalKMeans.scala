@@ -29,36 +29,20 @@ import org.apache.spark.Logging
  */
 private[mllib] object LocalKMeans extends Logging {
 
-  def kMeansPlusPlus(
-      seed: Int,
-      points: Array[Array[Double]],
-      weights: Array[Double],
-      k: Int,
-      maxIterations: Int
-  ): Array[Array[Double]] = {
-    val breezePoints = points.map { v =>
-      val bv = new BDV[Double](v)
-      val norm: Double = breezeNorm(bv, 2.0)
-      new BreezeVectorWithSquaredNorm(bv, norm * norm)
-    }
-    val breezeCenters = kMeansPlusPlus(seed, breezePoints, weights, k, maxIterations)
-    breezeCenters.map(_.vector.toArray)
-  }
-
   /**
    * Run K-means++ on the weighted point set `points`. This first does the K-means++
    * initialization procedure and then rounds of Lloyd's algorithm.
    */
   def kMeansPlusPlus(
       seed: Int,
-      points: Array[BreezeVectorWithSquaredNorm],
+      points: Array[BreezeVectorWithNorm],
       weights: Array[Double],
       k: Int,
       maxIterations: Int
-  )(implicit d: DummyImplicit): Array[BreezeVectorWithSquaredNorm] = {
+  ): Array[BreezeVectorWithNorm] = {
     val rand = new Random(seed)
     val dimensions = points(0).vector.length
-    val centers = new Array[BreezeVectorWithSquaredNorm](k)
+    val centers = new Array[BreezeVectorWithNorm](k)
 
     // Initialize centers by sampling using the k-means++ procedure.
     centers(0) = pickWeighted(rand, points, weights).toDense
@@ -108,7 +92,7 @@ private[mllib] object LocalKMeans extends Logging {
           centers(j) = points(rand.nextInt(points.length)).toDense
         } else {
           sums(j) /= counts(j)
-          centers(j) = new BreezeVectorWithSquaredNorm(sums(j))
+          centers(j) = new BreezeVectorWithNorm(sums(j))
         }
         j += 1
       }

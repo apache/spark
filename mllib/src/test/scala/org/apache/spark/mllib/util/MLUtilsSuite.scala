@@ -30,18 +30,18 @@ class MLUtilsSuite extends FunSuite {
     val a = (30 to 0 by -1).map(math.pow(2.0, _)).toArray
     val n = a.length
     val v1 = new BDV[Double](a)
-    val norm1: Double = breezeNorm(v1)
-    val squaredNorm1 = norm1 * norm1
+    val norm1 = breezeNorm(v1, 2.0)
     val precision = 1e-6
     for (m <- 0 until n) {
       val indices = (0 to m).toArray
       val values = indices.map(i => a(i))
       val v2 = new BSV[Double](indices, values, n)
-      val norm2: Double = breezeNorm(v2)
-      val squaredNorm2 = norm2 * norm2
-      val squaredDist: Double = breezeSquaredDistance(v1, v2)
-      val fastSquaredDist = fastSquaredDistance(v1, squaredNorm1, v2, squaredNorm2, precision)
-      assert((fastSquaredDist - squaredDist) <= precision * squaredDist, s"failed with m = $m")
+      val norm2 = breezeNorm(v2, 2.0)
+      val squaredDist = breezeSquaredDistance(v1, v2)
+      val fastSquaredDist1 = fastSquaredDistance(v1, norm1, v2, norm2, precision)
+      assert((fastSquaredDist1 - squaredDist) <= precision * squaredDist, s"failed with m = $m")
+      val fastSquaredDist2 = fastSquaredDistance(v1, norm1, v2.toDenseVector, norm2, precision)
+      assert((fastSquaredDist2 - squaredDist) <= precision * squaredDist, s"failed with m = $m")
     }
   }
 }

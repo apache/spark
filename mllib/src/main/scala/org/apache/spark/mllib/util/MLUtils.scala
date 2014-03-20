@@ -111,22 +111,6 @@ object MLUtils {
   }
 
   /**
-   * Return the squared Euclidean distance between two vectors.
-   */
-  def squaredDistance(v1: Array[Double], v2: Array[Double]): Double = {
-    if (v1.length != v2.length) {
-      throw new IllegalArgumentException("Vector sizes don't match")
-    }
-    var i = 0
-    var sum = 0.0
-    while (i < v1.length) {
-      sum += (v1(i) - v2(i)) * (v1(i) - v2(i))
-      i += 1
-    }
-    sum
-  }
-
-  /**
    * Returns the squared Euclidean distance between two vectors. The following formula will be used
    * if it does not introduce too much numerical error:
    * <pre>
@@ -136,23 +120,23 @@ object MLUtils {
    * especially when one of the vectors is a sparse vector.
    *
    * @param v1 the first vector
-   * @param squaredNorm1 the squared norm of the first vector, non-negative
+   * @param norm1 the norm of the first vector, non-negative
    * @param v2 the second vector
-   * @param squaredNorm2 the squared norm of the second vector, non-negative
+   * @param norm2 the norm of the second vector, non-negative
    * @param precision desired relative precision for the squared distance
    * @return squared distance between v1 and v2 within the specified precision
    */
   private[mllib] def fastSquaredDistance(
       v1: BV[Double],
-      squaredNorm1: Double,
+      norm1: Double,
       v2: BV[Double],
-      squaredNorm2: Double,
+      norm2: Double,
       precision: Double = 1e-6): Double = {
     val n = v1.size
     require(v2.size == n)
-    require(squaredNorm1 >= 0.0 && squaredNorm2 >= 0.0)
-    val sumSquaredNorm = squaredNorm1 + squaredNorm2
-    val normDiff = math.sqrt(squaredNorm1) - math.sqrt(squaredNorm2)
+    require(norm1 >= 0.0 && norm2 >= 0.0)
+    val sumSquaredNorm = norm1 * norm1 + norm2 * norm2
+    val normDiff = norm1 - norm2
     var sqDist = 0.0
     val precisionBound1 = 2.0 * EPSILON * sumSquaredNorm / (normDiff * normDiff + EPSILON)
     if (precisionBound1 < precision) {

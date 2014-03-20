@@ -19,28 +19,30 @@ package org.apache.spark.mllib.clustering
 
 import scala.collection.mutable.ArrayBuffer
 
-import breeze.linalg.{DenseVector => BDV, Vector => BV, squaredDistance => breezeSquaredDistance,
-  norm => breezeNorm}
-
+import breeze.linalg.{DenseVector => BDV, Vector => BV, norm => breezeNorm}
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
- * A breeze vector with its squared norm for fast distance computation.
- * See [[org.apache.spark.mllib.clustering.KMeans.fastSquaredDistance()]].
+ * A breeze vector with its norm for fast distance computation.
+ *
+ * @see [[org.apache.spark.mllib.clustering.KMeans#fastSquaredDistance]]
  */
 private[clustering]
-class BreezeVectorWithSquaredNorm(val vector: BV[Double], val squaredNorm: Double)
-  extends Serializable {
-  def this(vector: BV[Double]) = {
-    this(vector, {val nrm = breezeNorm(vector, 2.0); nrm * nrm})
-  }
+class BreezeVectorWithNorm(val vector: BV[Double], val norm: Double) extends Serializable {
+
+  def this(vector: BV[Double]) = this(vector, breezeNorm(vector, 2.0))
+
+  def this(array: Array[Double]) = this(new BDV[Double](array))
+
+  def this(v: Vector) = this(v.toBreeze)
+
   /** Converts the vector to a dense vector. */
-  def toDense = new BreezeVectorWithSquaredNorm(vector.toDenseVector, squaredNorm)
+  def toDense = new BreezeVectorWithNorm(vector.toDenseVector, norm)
 }
 
 /**
@@ -135,23 +137,20 @@ class KMeans private (
    */
   def run(data: RDD[Vector])(implicit d: DummyImplicit): KMeansModel = {
     // Compute squared norms and cache them.
-    val squaredNorms = data.map { v =>
-      val nrm = breezeNorm(v.toBreeze, 2.0)
-      nrm * nrm
-    }
-    squaredNorms.persist()
-    val breezeData = data.map(_.toBreeze).zip(squaredNorms).map { case (v, squaredNorm) =>
-      new BreezeVectorWithSquaredNorm(v, squaredNorm)
+    val norms = data.map(v => breezeNorm(v.toBreeze, 2.0))
+    norms.persist()
+    val breezeData = data.map(_.toBreeze).zip(norms).map { case (v, norm) =>
+      new BreezeVectorWithNorm(v, norm)
     }
     val model = runBreeze(breezeData)
-    squaredNorms.unpersist()
+    norms.unpersist()
     model
   }
 
   /**
    * Implementation of K-Means using breeze.
    */
-  private def runBreeze(data: RDD[BreezeVectorWithSquaredNorm]): KMeansModel = {
+  private def runBreeze(data: RDD[BreezeVectorWithNorm]): KMeansModel = {
 
     val sc = data.sparkContext
 
@@ -217,7 +216,7 @@ class KMeans private (
           val (sum, count) = totalContribs((i, j))
           if (count != 0) {
             sum /= count.toDouble
-            val newCenter = new BreezeVectorWithSquaredNorm(sum)
+            val newCenter = new BreezeVectorWithNorm(sum)
             if (KMeans.fastSquaredDistance(newCenter, centers(run)(j)) > epsilon * epsilon) {
               changed = true
             }
@@ -257,12 +256,12 @@ class KMeans private (
   /**
    * Initialize `runs` sets of cluster centers at random.
    */
-  private def initRandom(data: RDD[BreezeVectorWithSquaredNorm])
-  : Array[Array[BreezeVectorWithSquaredNorm]] = {
+  private def initRandom(data: RDD[BreezeVectorWithNorm])
+  : Array[Array[BreezeVectorWithNorm]] = {
     // Sample all the cluster centers in one pass to avoid repeated scans
     val sample = data.takeSample(true, runs * k, new XORShiftRandom().nextInt()).toSeq
     Array.tabulate(runs)(r => sample.slice(r * k, (r + 1) * k).map { v =>
-      new BreezeVectorWithSquaredNorm(v.vector.toDenseVector, v.squaredNorm)
+      new BreezeVectorWithNorm(v.vector.toDenseVector, v.norm)
     }.toArray)
   }
 
@@ -275,8 +274,8 @@ class KMeans private (
    *
    * The original paper can be found at http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf.
    */
-  private def initKMeansParallel(data: RDD[BreezeVectorWithSquaredNorm])
-  : Array[Array[BreezeVectorWithSquaredNorm]] = {
+  private def initKMeansParallel(data: RDD[BreezeVectorWithNorm])
+  : Array[Array[BreezeVectorWithNorm]] = {
     // Initialize each run's center to a random point
     val seed = new XORShiftRandom().nextInt()
     val sample = data.takeSample(true, runs, seed).toSeq
@@ -381,55 +380,18 @@ object KMeans {
   }
 
   /**
-   * Return the index of the closest point in `centers` to `point`, as well as its distance.
-   */
-  private[mllib] def findClosest(centers: Array[Array[Double]], point: Array[Double])
-    : (Int, Double) =
-  {
-    var bestDistance = Double.PositiveInfinity
-    var bestIndex = 0
-    for (i <- 0 until centers.length) {
-      val distance = MLUtils.squaredDistance(point, centers(i))
-      if (distance < bestDistance) {
-        bestDistance = distance
-        bestIndex = i
-      }
-    }
-    (bestIndex, bestDistance)
-  }
-
-  /**
-   * Returns the index of the closest center to the given point, as well as the squared distance.
-   */
-  private[mllib] def findClosest(centers: TraversableOnce[BV[Double]], point: BV[Double])
-    : (Int, Double) = {
-    var bestDistance = Double.PositiveInfinity
-    var bestIndex = 0
-    var i = 0
-    centers.foreach { v =>
-      val distance: Double = breezeSquaredDistance(v, point)
-      if (distance < bestDistance) {
-        bestDistance = distance
-        bestIndex = i
-      }
-      i += 1
-    }
-    (bestIndex, bestDistance)
-  }
-
-  /**
    * Returns the index of the closest center to the given point, as well as the squared distance.
    */
   private[mllib] def findClosest(
-      centers: TraversableOnce[BreezeVectorWithSquaredNorm],
-      point: BreezeVectorWithSquaredNorm): (Int, Double) = {
+      centers: TraversableOnce[BreezeVectorWithNorm],
+      point: BreezeVectorWithNorm): (Int, Double) = {
     var bestDistance = Double.PositiveInfinity
     var bestIndex = 0
     var i = 0
     centers.foreach { center =>
       // Since `\|a - b\| \geq |\|a\| - \|b\||`, we can use this lower bound to avoid unnecessary
       // distance computation.
-      var lowerBoundOfSqDist = math.sqrt(center.squaredNorm) - math.sqrt(point.squaredNorm)
+      var lowerBoundOfSqDist = center.norm - point.norm
       lowerBoundOfSqDist = lowerBoundOfSqDist * lowerBoundOfSqDist
       if (lowerBoundOfSqDist < bestDistance) {
         val distance: Double = fastSquaredDistance(center, point)
@@ -444,41 +406,21 @@ object KMeans {
   }
 
   /**
-   * Return the K-means cost of a given point against the given cluster centers.
-   */
-  private[mllib] def pointCost(centers: Array[Array[Double]], point: Array[Double]): Double = {
-    var bestDistance = Double.PositiveInfinity
-    for (i <- 0 until centers.length) {
-      val distance = MLUtils.squaredDistance(point, centers(i))
-      if (distance < bestDistance) {
-        bestDistance = distance
-      }
-    }
-    bestDistance
-  }
-
-  /**
-   * Returns the K-means cost of a given point against the given cluster centers.
-   */
-  private[mllib] def pointCost(centers: TraversableOnce[BV[Double]], point: BV[Double]): Double =
-    findClosest(centers, point)._2
-
-  /**
    * Returns the K-means cost of a given point against the given cluster centers.
    */
   private[mllib] def pointCost(
-      centers: TraversableOnce[BreezeVectorWithSquaredNorm],
-      point: BreezeVectorWithSquaredNorm): Double =
+      centers: TraversableOnce[BreezeVectorWithNorm],
+      point: BreezeVectorWithNorm): Double =
     findClosest(centers, point)._2
 
   /**
    * Returns the squared Euclidean distance between two vectors computed by
-   * [[org.apache.spark.mllib.util.MLUtils.fastSquaredDistance()]].
+   * [[org.apache.spark.mllib.util.MLUtils#fastSquaredDistance]].
    */
   private[clustering]
-  def fastSquaredDistance(v1: BreezeVectorWithSquaredNorm, v2: BreezeVectorWithSquaredNorm)
+  def fastSquaredDistance(v1: BreezeVectorWithNorm, v2: BreezeVectorWithNorm)
   : Double = {
-    MLUtils.fastSquaredDistance(v1.vector, v1.squaredNorm, v2.vector, v2.squaredNorm)
+    MLUtils.fastSquaredDistance(v1.vector, v1.norm, v2.vector, v2.norm)
   }
 
   def main(args: Array[String]) {
