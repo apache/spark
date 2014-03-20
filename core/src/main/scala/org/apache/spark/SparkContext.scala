@@ -1262,10 +1262,7 @@ object SparkContext extends Logging {
     master match {
       case "local" =>
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
-        // Use user specified in config, up to all available cores
-        val realCores = Runtime.getRuntime.availableProcessors()
-        val toUseCores = math.min(sc.conf.getInt("spark.cores.max", realCores), realCores)
-        val backend = new LocalBackend(scheduler, toUseCores)
+        val backend = new LocalBackend(scheduler, 1)
         scheduler.initialize(backend)
         scheduler
 
