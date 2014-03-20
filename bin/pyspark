@@ -36,7 +36,7 @@ if [ ! -f "$FWDIR/RELEASE" ]; then
   fi
 fi
 
-. $FWDIR/bin/load-spark-env
+. $FWDIR/bin/load-spark-env.sh
 
 # Figure out which Python executable to use
 if [ -z "$PYSPARK_PYTHON" ] ; then

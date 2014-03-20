@@ -63,7 +63,7 @@ then
   shift
 fi
 
-. "$SPARK_PREFIX/bin/load-spark-env"
+. "$SPARK_PREFIX/bin/load-spark-env.sh"
 
 if [ "$HOSTLIST" = "" ]; then
   if [ "$SPARK_SLAVES" = "" ]; then
