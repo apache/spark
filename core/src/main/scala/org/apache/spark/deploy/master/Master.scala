@@ -671,16 +671,16 @@ private[spark] class Master(
       appConf.set("spark.eventLog.compress", "true")
       appConf.set("spark.io.compression.codec", codec)
     }
-    val replayerBus = new ReplayListenerBus(appConf)
+    val replayBus = new ReplayListenerBus(appConf)
     val ui = new SparkUI(
       appConf,
-      replayerBus,
+      replayBus,
       "%s (finished)".format(appName),
       "/history/%s".format(app.id))
 
     // Do not call ui.bind() to avoid creating a new server for each application
     ui.start()
-    val success = replayerBus.replay(eventLogDir)
+    val success = replayBus.replay(eventLogDir)
     if (!success) {
       ui.stop()
       None

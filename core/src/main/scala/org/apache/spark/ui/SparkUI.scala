@@ -36,7 +36,7 @@ private[spark] class SparkUI(
     val listenerBus: SparkListenerBus,
     val appName: String,
     val basePath: String = "")
-  extends Logging {
+  extends WebUI("SparkUI") with Logging {
 
   def this(sc: SparkContext) = this(sc, sc.conf, sc.listenerBus, sc.appName)
   def this(conf: SparkConf, listenerBus: SparkListenerBus, appName: String, basePath: String) =
@@ -49,7 +49,6 @@ private[spark] class SparkUI(
 
   private val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
   private val port = conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
-  private var serverInfo: Option[ServerInfo] = None
 
   private val storage = new BlockManagerUI(this)
   private val jobs = new JobProgressUI(this)
@@ -76,20 +75,6 @@ private[spark] class SparkUI(
   // Maintain executor storage status through Spark events
   val storageStatusListener = new StorageStatusListener
 
-  /** Bind the HTTP server which backs this web interface */
-  def bind() {
-    try {
-      serverInfo = Some(startJettyServer(host, port, handlers, sc.conf))
-      logInfo("Started Spark Web UI at http://%s:%d".format(host, boundPort))
-    } catch {
-      case e: Exception =>
-        logError("Failed to create Spark JettyUtils", e)
-        System.exit(1)
-    }
-  }
-
-  def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
-
   /** Initialize all components of the server */
   def start() {
     storage.start()
@@ -105,9 +90,21 @@ private[spark] class SparkUI(
     listenerBus.addListener(exec.listener)
   }
 
-  def stop() {
-    assert(serverInfo.isDefined, "Attempted to stop a SparkUI that was not bound to a server!")
-    serverInfo.get.server.stop()
+  /** Bind to the HTTP server behind this web interface. */
+  override def bind() {
+    try {
+      serverInfo = Some(startJettyServer(host, port, handlers, sc.conf))
+      logInfo("Started Spark Web UI at http://%s:%d".format(host, boundPort))
+    } catch {
+      case e: Exception =>
+        logError("Failed to create Spark JettyUtils", e)
+        System.exit(1)
+    }
+  }
+
+  /** Stop the server behind this web interface. Only valid after bind(). */
+  override def stop() {
+    super.stop()
     logInfo("Stopped Spark Web UI at %s".format(appUIAddress))
   }
 

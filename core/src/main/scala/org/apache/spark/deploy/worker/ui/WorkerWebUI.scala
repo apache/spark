@@ -24,7 +24,7 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.worker.Worker
-import org.apache.spark.ui.{JettyUtils, ServerInfo, SparkUI, UIUtils}
+import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -33,7 +33,7 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  */
 private[spark]
 class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[Int] = None)
-  extends Logging {
+  extends WebUI("WorkerWebUI") with Logging {
 
   val timeout = AkkaUtils.askTimeout(worker.conf)
 
@@ -41,7 +41,6 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
   private val port = requestedPort.getOrElse(
     worker.conf.get("worker.ui.port",  WorkerWebUI.DEFAULT_PORT).toInt)
   private val indexPage = new IndexPage(this)
-  private var serverInfo: Option[ServerInfo] = None
 
   private val handlers: Seq[ServletContextHandler] = {
     worker.metricsSystem.getServletHandlers ++
@@ -58,9 +57,10 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
     )
   }
 
-  def bind() {
+  /** Bind to the HTTP server behind this web interface. */
+  override def bind() {
     try {
-      serverInfo = Some(JettyUtils.startJettyServer(host, port, handlers, worker.conf))
+      serverInfo = Some(startJettyServer(host, port, handlers, worker.conf))
       logInfo("Started Worker web UI at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>
@@ -68,8 +68,6 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
         System.exit(1)
     }
   }
-
-  def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
 
   private def log(request: HttpServletRequest): String = {
     val defaultBytes = 100 * 1024
@@ -187,10 +185,6 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
     (startByte, endByte)
   }
 
-  def stop() {
-    assert(serverInfo.isDefined, "Attempted to stop a Worker UI that was not bound to a server!")
-    serverInfo.get.server.stop()
-  }
 }
 
 private[spark] object WorkerWebUI {
