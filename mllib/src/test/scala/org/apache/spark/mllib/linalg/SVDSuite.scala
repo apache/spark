@@ -28,6 +28,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 
+import org.apache.spark.mllib.util._
+
 import org.jblas._
 
 class SVDSuite extends FunSuite with BeforeAndAfterAll {
@@ -54,43 +56,77 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     ret
   }
 
-  def assertMatrixEquals(a: DoubleMatrix, b: DoubleMatrix) {
-    assert(a.rows == b.rows && a.columns == b.columns, "dimension mismatch")
-    val diff = DoubleMatrix.zeros(a.rows, a.columns)
-    Array.tabulate(a.rows, a.columns){(i, j) =>
-      diff.put(i, j,
-          Math.min(Math.abs(a.get(i, j) - b.get(i, j)),
-          Math.abs(a.get(i, j) + b.get(i, j))))  }
-    assert(diff.norm1 < EPSILON, "matrix mismatch: " + diff.norm1)
+  def assertMatrixApproximatelyEquals(a: DoubleMatrix, b: DoubleMatrix) {
+    assert(a.rows == b.rows && a.columns == b.columns,
+      "dimension mismatch: $a.rows vs $b.rows and $a.columns vs $b.columns")
+    for (i <- 0 until a.columns) {
+      val aCol = a.getColumn(i)
+      val bCol = b.getColumn(i)
+      val diff = Math.min(aCol.sub(bCol).norm1, aCol.add(bCol).norm1)
+      assert(diff < EPSILON, "matrix mismatch: " + diff)
+    }
   }
 
   test("full rank matrix svd") {
     val m = 10
     val n = 3
-    val data = sc.makeRDD(Array.tabulate(m,n){ (a, b) =>
-      MatrixEntry(a, b, (a + 2).toDouble * (b + 1) / (1 + a + b)) }.flatten )
+    val datarr = Array.tabulate(m,n){ (a, b) =>
+      MatrixEntry(a, b, (a + 2).toDouble * (b + 1) / (1 + a + b)) }.flatten
+    val data = sc.makeRDD(datarr, 3)
 
     val a = SparseMatrix(data, m, n)
 
-    val decomposed = SVD.sparseSVD(a, n)
+    val decomposed = new SVD().setK(n).compute(a)
     val u = decomposed.U
     val v = decomposed.V
     val s = decomposed.S
 
-    val densea = getDenseMatrix(a)
-    val svd = Singular.sparseSVD(densea)
+    val denseA = getDenseMatrix(a)
+    val svd = Singular.sparseSVD(denseA)
 
     val retu = getDenseMatrix(u)
     val rets = getDenseMatrix(s)
     val retv = getDenseMatrix(v)
-  
+ 
+ 
     // check individual decomposition  
-    assertMatrixEquals(retu, svd(0))
-    assertMatrixEquals(rets, DoubleMatrix.diag(svd(1)))
-    assertMatrixEquals(retv, svd(2))
+    assertMatrixApproximatelyEquals(retu, svd(0))
+    assertMatrixApproximatelyEquals(rets, DoubleMatrix.diag(svd(1)))
+    assertMatrixApproximatelyEquals(retv, svd(2))
 
     // check multiplication guarantee
-    assertMatrixEquals(retu.mmul(rets).mmul(retv.transpose), densea)  
+    assertMatrixApproximatelyEquals(retu.mmul(rets).mmul(retv.transpose), denseA)  
+  }
+
+ test("dense full rank matrix svd") {
+    val m = 10
+    val n = 3
+    val datarr = Array.tabulate(m,n){ (a, b) =>
+      MatrixEntry(a, b, (a + 2).toDouble * (b + 1) / (1 + a + b)) }.flatten
+    val data = sc.makeRDD(datarr, 3)
+
+    val a = LAUtils.sparseToTallSkinnyDense(SparseMatrix(data, m, n))
+
+    val decomposed = new SVD().setK(n).setComputeU(true).compute(a)
+    val u = LAUtils.denseToSparse(decomposed.U)
+    val v = decomposed.V
+    val s = decomposed.S
+
+    val denseA = getDenseMatrix(LAUtils.denseToSparse(a))
+    val svd = Singular.sparseSVD(denseA)
+
+    val retu = getDenseMatrix(u)
+    val rets = DoubleMatrix.diag(new DoubleMatrix(s))
+    val retv = new DoubleMatrix(v)
+
+
+    // check individual decomposition  
+    assertMatrixApproximatelyEquals(retu, svd(0))
+    assertMatrixApproximatelyEquals(rets, DoubleMatrix.diag(svd(1)))
+    assertMatrixApproximatelyEquals(retv, svd(2))
+
+    // check multiplication guarantee
+    assertMatrixApproximatelyEquals(retu.mmul(rets).mmul(retv.transpose), denseA)
   }
 
  test("rank one matrix svd") {
@@ -102,7 +138,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
 
     val a = SparseMatrix(data, m, n)
 
-    val decomposed = SVD.sparseSVD(a, k)
+    val decomposed = new SVD().setK(k).compute(a)
     val u = decomposed.U
     val s = decomposed.S
     val v = decomposed.V
@@ -110,20 +146,20 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
 
     assert(retrank == 1, "rank returned not one")
 
-    val densea = getDenseMatrix(a)
-    val svd = Singular.sparseSVD(densea)
+    val denseA = getDenseMatrix(a)
+    val svd = Singular.sparseSVD(denseA)
 
     val retu = getDenseMatrix(u)
     val rets = getDenseMatrix(s)
     val retv = getDenseMatrix(v)
 
     // check individual decomposition  
-    assertMatrixEquals(retu, svd(0).getColumn(0))
-    assertMatrixEquals(rets, DoubleMatrix.diag(svd(1).getRow(0)))
-    assertMatrixEquals(retv, svd(2).getColumn(0))
+    assertMatrixApproximatelyEquals(retu, svd(0).getColumn(0))
+    assertMatrixApproximatelyEquals(rets, DoubleMatrix.diag(svd(1).getRow(0)))
+    assertMatrixApproximatelyEquals(retv, svd(2).getColumn(0))
 
      // check multiplication guarantee
-    assertMatrixEquals(retu.mmul(rets).mmul(retv.transpose), densea)  
+    assertMatrixApproximatelyEquals(retu.mmul(rets).mmul(retv.transpose), denseA)  
   }
 
  test("truncated with k") {
@@ -135,14 +171,14 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     
     val k = 1 // only one svalue above this
 
-    val decomposed = SVD.sparseSVD(a, k)
+    val decomposed = new SVD().setK(k).compute(a)
     val u = decomposed.U
     val s = decomposed.S
     val v = decomposed.V
     val retrank = s.data.collect().length
 
-    val densea = getDenseMatrix(a)
-    val svd = Singular.sparseSVD(densea)
+    val denseA = getDenseMatrix(a)
+    val svd = Singular.sparseSVD(denseA)
 
     val retu = getDenseMatrix(u)
     val rets = getDenseMatrix(s)
@@ -151,8 +187,8 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     assert(retrank == 1, "rank returned not one")
     
     // check individual decomposition  
-    assertMatrixEquals(retu, svd(0).getColumn(0))
-    assertMatrixEquals(rets, DoubleMatrix.diag(svd(1).getRow(0)))
-    assertMatrixEquals(retv, svd(2).getColumn(0))
+    assertMatrixApproximatelyEquals(retu, svd(0).getColumn(0))
+    assertMatrixApproximatelyEquals(rets, DoubleMatrix.diag(svd(1).getRow(0)))
+    assertMatrixApproximatelyEquals(retv, svd(2).getColumn(0))
   }
 }
