@@ -122,7 +122,7 @@ object SparkBuild extends Build {
 
   lazy val allProjects = packageProjects ++ allExternalRefs ++ Seq[ProjectReference](examples, tools, assemblyProj)
 
-  def sharedSettings = Defaults.defaultSettings ++ MimaBuild.mimaSettings ++ Seq(
+  def sharedSettings = Defaults.defaultSettings ++ MimaBuild.mimaSettings(file(sparkHome)) ++ Seq(
     organization       := "org.apache.spark",
     version            := "1.0.0-incubating-SNAPSHOT",
     scalaVersion       := "2.10.3",

@@ -129,7 +129,7 @@ fi
 
 # Compute classpath using external script
 CLASSPATH=`$FWDIR/bin/compute-classpath.sh`
-
+CLASSPATH="$CLASSPATH:$SPARK_TOOLS_JAR"
 if [ "$1" == "org.apache.spark.tools.JavaAPICompletenessChecker" ]; then
   CLASSPATH="$CLASSPATH:$SPARK_TOOLS_JAR"
 fi
