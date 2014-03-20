@@ -26,6 +26,7 @@ import org.scalatest.matchers.ShouldMatchers
 
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.regression._
+import org.apache.spark.mllib.util.LocalSparkContext
 
 object GradientDescentSuite {
 
@@ -62,17 +63,7 @@ object GradientDescentSuite {
   }
 }
 
-class GradientDescentSuite extends FunSuite with BeforeAndAfterAll with ShouldMatchers {
-  @transient private var sc: SparkContext = _
-
-  override def beforeAll() {
-    sc = new SparkContext("local", "test")
-  }
-
-  override def afterAll() {
-    sc.stop()
-    System.clearProperty("spark.driver.port")
-  }
+class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
 
   test("Assert the loss is decreasing.") {
     val nPoints = 10000
