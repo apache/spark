@@ -46,7 +46,7 @@ object ReceiverSupervisorStrategy {
  * A receiver trait to be mixed in with your Actor to gain access to
  * the API for pushing received data into Spark Streaming for being processed.
  *
- * Find more details at: http://spark-project.org/docs/latest/streaming-custom-receivers.html
+ * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
  * 
  * @example {{{
  *  class MyActor extends Actor with Receiver{
