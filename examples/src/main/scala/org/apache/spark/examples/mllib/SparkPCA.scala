@@ -18,42 +18,34 @@
 package org.apache.spark.examples.mllib
       
 import org.apache.spark.SparkContext
-import org.apache.spark.mllib.linalg.SVD
+import org.apache.spark.mllib.linalg.PCA
 import org.apache.spark.mllib.linalg.MatrixEntry
 import org.apache.spark.mllib.linalg.SparseMatrix
+import org.apache.spark.mllib.util._
+
 
 /**
- * Compute SVD of an example matrix
- * Input file should be comma separated, 1 indexed of the form
- * i,j,value
- * Where i is the column, j the row, and value is the matrix entry
- * 
- * For example input file, see:
- * mllib/data/als/test.data  (example is 4 x 4)
+ * Compute PCA of an example matrix.
  */
-object SparkSVD {
+object SparkPCA {
   def main(args: Array[String]) {
-   if (args.length != 4) {
-      System.err.println("Usage: SparkSVD <master> <file> m n")
+    if (args.length != 3) {
+      System.err.println("Usage: SparkPCA <master> m n")
       System.exit(1)
     }
-    val sc = new SparkContext(args(0), "SVD",
+    val sc = new SparkContext(args(0), "PCA",
       System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
 
-    // Load and parse the data file
-    val data = sc.textFile(args(1)).map { line =>
-      val parts = line.split(',')
-      MatrixEntry(parts(0).toInt - 1, parts(1).toInt - 1, parts(2).toDouble)
-    }
     val m = args(2).toInt
     val n = args(3).toInt
 
-    // recover largest singular vector
-    val decomposed = new SVD().setK(1).compute(SparseMatrix(data, m, n))
-    val u = decomposed.U.data
-    val s = decomposed.S.data
-    val v = decomposed.V.data
+    // Make example matrix
+    val data = Array.tabulate(m, n) { (a, b) =>
+      (a + 2).toDouble * (b + 1) / (1 + a + b) }
 
-    println("singular values = " + s.collect().mkString)
+    // recover top principal component
+    val coeffs = new PCA().setK(1).compute(sc.makeRDD(data))
+
+    println("top principal component = " + coeffs.mkString(", "))
   }
 }
