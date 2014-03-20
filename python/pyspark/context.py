@@ -162,12 +162,18 @@ class SparkContext(object):
         self._temp_dir = \
             self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
 
-    # Initialize SparkContext in function to allow subclass specific initialization
     def _initialize_context(self, jconf):
+        """
+        Initialize SparkContext in function to allow subclass specific initialization
+        """
         return self._jvm.JavaSparkContext(jconf)
 
     @classmethod
     def _ensure_initialized(cls, instance=None, gateway=None):
+        """
+        Checks whether a SparkContext is initialized or not.
+        Throws error if a SparkContext is already running.
+        """
         with SparkContext._lock:
             if not SparkContext._gateway:
                 SparkContext._gateway = gateway or launch_gateway()
