@@ -1031,7 +1031,7 @@ class SparkContext(
    * Clean a closure to make it ready to serialized and send to tasks
    * (removes unreferenced variables in $outer's, updates REPL variables)
    */
-  private[spark] def clean[F <: AnyRef](f: F): F = {
+  private[spark] def clean[F <: AnyRef : ClassTag](f: F): F = {
     clean(f, true)
   }
 
@@ -1039,9 +1039,8 @@ class SparkContext(
    * Clean a closure to make it ready to serialized and send to tasks
    * (removes unreferenced variables in $outer's, updates REPL variables)
    */
-  private[spark] def clean[F <: AnyRef](f: F, checkSerializable: Boolean): F = {
+  private[spark] def clean[F <: AnyRef : ClassTag](f: F, checkSerializable: Boolean): F = {
     ClosureCleaner.clean(f, checkSerializable)
-    f
   }
 
   /**

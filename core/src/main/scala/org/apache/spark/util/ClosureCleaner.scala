@@ -22,6 +22,8 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import scala.collection.mutable.Map
 import scala.collection.mutable.Set
 
+import scala.reflect.ClassTag
+
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor, Type}
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 
@@ -103,7 +105,7 @@ private[spark] object ClosureCleaner extends Logging {
     }
   }
   
-  def clean(func: AnyRef, checkSerializable: Boolean = true) {
+  def clean[F <: AnyRef : ClassTag](func: F, checkSerializable: Boolean = true): F = {
     // TODO: cache outerClasses / innerClasses / accessedFields
     val outerClasses = getOuterClasses(func)
     val innerClasses = getInnerClasses(func)
@@ -155,12 +157,15 @@ private[spark] object ClosureCleaner extends Logging {
     
     if (checkSerializable) {
       ensureSerializable(func)
+    } else {
+      func
     }
   }
 
-  private def ensureSerializable(func: AnyRef) {
+  private def ensureSerializable[T: ClassTag](func: T) = {
     try {
-      SparkEnv.get.closureSerializer.newInstance().serialize(func)
+      val serializer = SparkEnv.get.closureSerializer.newInstance()
+      serializer.deserialize[T](serializer.serialize[T](func))
     } catch {
       case ex: Exception => throw new SparkException("Task not serializable: " + ex.toString)
     }
