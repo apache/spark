@@ -70,10 +70,10 @@ class StorageLevel private(
   def toInt: Int = {
     var ret = 0
     if (useDisk_) {
-      ret |= 4
+      ret |= 8
     }
     if (useMemory_) {
-      ret |= 2
+      ret |= 4
     }
     if (useTachyon_) {
       ret |= 2
@@ -91,8 +91,8 @@ class StorageLevel private(
 
   override def readExternal(in: ObjectInput) {
     val flags = in.readByte()
-    useDisk_ = (flags & 4) != 0
-    useMemory_ = (flags & 2) != 0
+    useDisk_ = (flags & 8) != 0
+    useMemory_ = (flags & 4) != 0
     useTachyon_ = (flags & 2) != 0
     deserialized_ = (flags & 1) != 0
     replication_ = in.readByte()
