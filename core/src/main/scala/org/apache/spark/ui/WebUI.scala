@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy
+package org.apache.spark.ui
 
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -23,12 +23,15 @@ import java.util.Date
 /**
  * Utilities used throughout the web UI.
  */
-private[spark] object DeployWebUI {
-  val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+private[spark] object WebUI {
+  // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
+  private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
+    override def initialValue() = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+  }
 
-  def formatDate(date: Date): String = DATE_FORMAT.format(date)
+  def formatDate(date: Date): String = dateFormat.get.format(date)
 
-  def formatDate(timestamp: Long): String = DATE_FORMAT.format(new Date(timestamp))
+  def formatDate(timestamp: Long): String = dateFormat.get.format(new Date(timestamp))
 
   def formatDuration(milliseconds: Long): String = {
     val seconds = milliseconds.toDouble / 1000

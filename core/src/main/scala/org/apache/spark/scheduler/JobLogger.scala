@@ -53,6 +53,9 @@ class JobLogger(val user: String, val logDirName: String)
   private val jobIDToPrintWriter = new HashMap[Int, PrintWriter]
   private val stageIDToJobID = new HashMap[Int, Int]
   private val jobIDToStages = new HashMap[Int, ListBuffer[Stage]]
+  private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
+    override def initialValue() = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+  }
   private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvents]
 
@@ -116,7 +119,7 @@ class JobLogger(val user: String, val logDirName: String)
     var writeInfo = info
     if (withTime) {
       val date = new Date(System.currentTimeMillis())
-      writeInfo = DATE_FORMAT.format(date) + ": " +info
+      writeInfo = dateFormat.get.format(date) + ": " + info
     }
     jobIDToPrintWriter.get(jobID).foreach(_.println(writeInfo))
   }

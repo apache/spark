@@ -23,7 +23,7 @@ import scala.xml.Node
 import scala.collection.mutable.HashSet
 
 import org.apache.spark.scheduler.{SchedulingMode, StageInfo, TaskInfo}
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{WebUI, UIUtils}
 import org.apache.spark.util.Utils
 
 
@@ -31,7 +31,6 @@ import org.apache.spark.util.Utils
 private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgressUI) {
 
   val listener = parent.listener
-  val dateFmt = parent.dateFmt
   val isFairScheduler = listener.sc.getSchedulingMode == SchedulingMode.FAIR
 
   def toNodeSeq(): Seq[Node] = {
@@ -75,7 +74,7 @@ private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgr
 
   private def stageRow(s: StageInfo): Seq[Node] = {
     val submissionTime = s.submissionTime match {
-      case Some(t) => dateFmt.format(new Date(t))
+      case Some(t) => WebUI.formatDate(new Date(t))
       case None => "Unknown"
     }
 

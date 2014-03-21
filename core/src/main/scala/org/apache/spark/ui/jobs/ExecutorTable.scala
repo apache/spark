@@ -27,7 +27,6 @@ import scala.collection.mutable
 private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) {
 
   val listener = parent.listener
-  val dateFmt = parent.dateFmt
   val isFairScheduler = listener.sc.getSchedulingMode == SchedulingMode.FAIR
 
   def toNodeSeq(): Seq[Node] = {

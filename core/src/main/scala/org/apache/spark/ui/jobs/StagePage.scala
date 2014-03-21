@@ -26,6 +26,7 @@ import scala.xml.Node
 import org.apache.spark.{ExceptionFailure}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.ui.UIUtils._
+import org.apache.spark.ui.WebUI
 import org.apache.spark.ui.Page._
 import org.apache.spark.util.{Utils, Distribution}
 import org.apache.spark.scheduler.TaskInfo
@@ -33,7 +34,6 @@ import org.apache.spark.scheduler.TaskInfo
 /** Page showing statistics and task list for a given stage */
 private[spark] class StagePage(parent: JobProgressUI) {
   def listener = parent.listener
-  val dateFmt = parent.dateFmt
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
@@ -248,7 +248,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
       <td>{info.status}</td>
       <td>{info.taskLocality}</td>
       <td>{info.host}</td>
-      <td>{dateFmt.format(new Date(info.launchTime))}</td>
+      <td>{WebUI.formatDate(new Date(info.launchTime))}</td>
       <td sorttable_customkey={duration.toString}>
         {formatDuration}
       </td>

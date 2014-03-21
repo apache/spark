@@ -25,10 +25,10 @@ import akka.pattern.ask
 import javax.servlet.http.HttpServletRequest
 import net.liftweb.json.JsonAST.JValue
 
-import org.apache.spark.deploy.{DeployWebUI, JsonProtocol}
+import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{WebUI, UIUtils}
 import org.apache.spark.util.Utils
 
 private[spark] class IndexPage(parent: MasterWebUI) {
@@ -164,10 +164,10 @@ private[spark] class IndexPage(parent: MasterWebUI) {
       <td sorttable_customkey={app.desc.memoryPerSlave.toString}>
         {Utils.megabytesToString(app.desc.memoryPerSlave)}
       </td>
-      <td>{DeployWebUI.formatDate(app.submitDate)}</td>
+      <td>{WebUI.formatDate(app.submitDate)}</td>
       <td>{app.desc.user}</td>
       <td>{app.state.toString}</td>
-      <td>{DeployWebUI.formatDuration(app.duration)}</td>
+      <td>{WebUI.formatDuration(app.duration)}</td>
     </tr>
   }
 

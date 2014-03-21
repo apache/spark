@@ -56,7 +56,7 @@ private[spark] class Worker(
   Utils.checkHost(host, "Expected hostname")
   assert (port > 0)
 
-  val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For worker and executor IDs
+  def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For worker and executor IDs
 
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
   val HEARTBEAT_MILLIS = conf.getLong("spark.worker.timeout", 60) * 1000 / 4
@@ -309,7 +309,7 @@ private[spark] class Worker(
   }
 
   def generateWorkerId(): String = {
-    "worker-%s-%s-%d".format(DATE_FORMAT.format(new Date), host, port)
+    "worker-%s-%s-%d".format(createDateFormat.format(new Date), host, port)
   }
 
   override def postStop() {
