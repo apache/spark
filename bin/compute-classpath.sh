@@ -33,23 +33,43 @@ fi
 # Build up classpath
 CLASSPATH="$SPARK_CLASSPATH:$FWDIR/conf"
 
+# Support for interacting with Hive.  Since hive pulls in a lot of dependencies that might break
+# existing Spark applications, it is not included in the standard spark assembly.  Instead, we only
+# include it in the classpath if the user has explicitly requested it by running "sbt hive/assembly"
+# Hopefully we will find a way to avoid uber-jars entirely and deploy only the needed packages in
+# the future.
+if [ -f "$FWDIR"/sql/hive/target/scala-$SCALA_VERSION/spark-hive-assembly-*.jar ]; then
+  echo "Hive assembly found, including hive support.  If this isn't desired run sbt hive/clean."
+
+  # Datanucleus jars do not work if only included in the uberjar as plugin.xml metadata is lost.
+  DATANUCLEUSJARS=$(JARS=("$FWDIR/lib_managed/jars"/datanucleus-*.jar); IFS=:; echo "${JARS[*]}")
+  CLASSPATH=$CLASSPATH:$DATANUCLEUSJARS
+
+  ASSEMBLY_DIR="$FWDIR/sql/hive/target/scala-$SCALA_VERSION/"
+else
+  ASSEMBLY_DIR="$FWDIR/assembly/target/scala-$SCALA_VERSION/"
+fi
+
 # First check if we have a dependencies jar. If so, include binary classes with the deps jar
-if [ -f "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*hadoop*-deps.jar ]; then
+if [ -f "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar ]; then
   CLASSPATH="$CLASSPATH:$FWDIR/core/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/repl/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/mllib/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/bagel/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/graphx/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/streaming/target/scala-$SCALA_VERSION/classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/sql/catalyst/target/scala-$SCALA_VERSION/classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/sql/core/target/scala-$SCALA_VERSION/classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/sql/hive/target/scala-$SCALA_VERSION/classes"
 
-  DEPS_ASSEMBLY_JAR=`ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*hadoop*-deps.jar`
+  DEPS_ASSEMBLY_JAR=`ls "$ASSEMBLY_DIR"/spark*-assembly*hadoop*-deps.jar`
   CLASSPATH="$CLASSPATH:$DEPS_ASSEMBLY_JAR"
 else
   # Else use spark-assembly jar from either RELEASE or assembly directory
   if [ -f "$FWDIR/RELEASE" ]; then
-    ASSEMBLY_JAR=`ls "$FWDIR"/jars/spark-assembly*.jar`
+    ASSEMBLY_JAR=`ls "$FWDIR"/jars/spark*-assembly*.jar`
   else
-    ASSEMBLY_JAR=`ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*hadoop*.jar`
+    ASSEMBLY_JAR=`ls "$ASSEMBLY_DIR"/spark*-assembly*hadoop*.jar`
   fi
   CLASSPATH="$CLASSPATH:$ASSEMBLY_JAR"
 fi
@@ -62,6 +82,9 @@ if [[ $SPARK_TESTING == 1 ]]; then
   CLASSPATH="$CLASSPATH:$FWDIR/bagel/target/scala-$SCALA_VERSION/test-classes"
   CLASSPATH="$CLASSPATH:$FWDIR/graphx/target/scala-$SCALA_VERSION/test-classes"
   CLASSPATH="$CLASSPATH:$FWDIR/streaming/target/scala-$SCALA_VERSION/test-classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/sql/catalyst/target/scala-$SCALA_VERSION/test-classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/sql/core/target/scala-$SCALA_VERSION/test-classes"
+  CLASSPATH="$CLASSPATH:$FWDIR/sql/hive/target/scala-$SCALA_VERSION/test-classes"
 fi
 
 # Add hadoop conf dir if given -- otherwise FileSystem.*, etc fail !

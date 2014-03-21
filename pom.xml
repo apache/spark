@@ -91,6 +91,9 @@
     <module>mllib</module>
     <module>tools</module>
     <module>streaming</module>
+    <module>sql/catalyst</module>
+    <module>sql/core</module>
+    <module>sql/hive</module>
     <module>repl</module>
     <module>assembly</module>
     <module>external/twitter</module>
@@ -118,6 +121,8 @@
     <protobuf.version>2.4.1</protobuf.version>
     <yarn.version>0.23.7</yarn.version>
     <hbase.version>0.94.6</hbase.version>
+    <hive.version>0.12.0</hive.version>
+    <parquet.version>1.3.2</parquet.version>
 
     <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
