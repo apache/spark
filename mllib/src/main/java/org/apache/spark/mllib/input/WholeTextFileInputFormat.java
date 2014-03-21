@@ -31,22 +31,22 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 
 /**
  * The specific InputFormat reads files in HDFS or local disk. It will be called by
- * HadoopRDD to generate new BatchFilesRecordReader.
+ * HadoopRDD to generate new WholeTextFileRecordReader.
  */
-public class BatchFilesInputFormat
-    extends CombineFileInputFormat<String, Text> {
+public class WholeTextFileInputFormat
+  extends CombineFileInputFormat<String, Text> {
 
-    @Override
-    protected boolean isSplitable(JobContext context, Path file) {
-        return false;
-    }
-    @Override
-    public RecordReader<String, Text> createRecordReader(
-            InputSplit split,
-            TaskAttemptContext context) throws IOException {
-        return new CombineFileRecordReader<String, Text>(
-                (CombineFileSplit)split,
-                context,
-                (Class) BatchFilesRecordReader.class);
-    }
+  @Override
+  protected boolean isSplitable(JobContext context, Path file) {
+    return false;
+  }
+  @Override
+  public RecordReader<String, Text> createRecordReader(
+      InputSplit split,
+      TaskAttemptContext context) throws IOException {
+    return new CombineFileRecordReader<String, Text>(
+      (CombineFileSplit)split,
+      context,
+      (Class) WholeTextFileRecordReader.class);
+  }
 }

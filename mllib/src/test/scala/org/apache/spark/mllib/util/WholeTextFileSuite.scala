@@ -18,38 +18,43 @@
 package org.apache.spark.mllib.util
 
 
-import java.io.{InputStreamReader, BufferedReader, DataOutputStream, FileOutputStream}
+import java.io.{BufferedReader, DataOutputStream, FileOutputStream, InputStreamReader}
 import java.nio.file.Files
 import java.nio.file.{Path => JPath}
 import java.nio.file.{Paths => JPaths}
 
+import scala.collection.immutable.IndexedSeq
+
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
-import org.apache.hadoop.hdfs.MiniDFSCluster
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hdfs.MiniDFSCluster
 import org.apache.hadoop.io.Text
 
 import org.apache.spark.mllib.util.MLUtils._
 import org.apache.spark.SparkContext
 
 /**
- * Tests HDFS IO and local disk IO of [[smallTextFiles]] in MLutils. HDFS tests create a mock DFS in
+ * Tests HDFS IO and local disk IO of [[wholeTextFile]] in MLutils. HDFS tests create a mock DFS in
  * memory, while local disk test create a temp directory. All these temporal storages are deleted
  * in the end.
  */
 
-class SmallTextFilesSuite extends FunSuite with BeforeAndAfterAll {
+class WholeTextFileSuite extends FunSuite with BeforeAndAfterAll {
   private var sc: SparkContext = _
   private var dfs: MiniDFSCluster = _
 
   override def beforeAll() {
     sc = new SparkContext("local", "test")
-    sc.hadoopConfiguration.set("dfs.datanode.data.dir.perm", SmallTextFilesSuite.dirPermission())
-    dfs = new MiniDFSCluster(sc.hadoopConfiguration, 4, true,
-                             Array("/rack0", "/rack0", "/rack1", "/rack1"),
-                             Array("host0", "host1", "host2", "host3"))
+    sc.hadoopConfiguration.set("dfs.datanode.data.dir.perm", WholeTextFileSuite.dirPermission())
+    dfs = new MiniDFSCluster(
+      sc.hadoopConfiguration,
+      4,
+      true,
+      Array("/rack0", "/rack0", "/rack1", "/rack1"),
+      Array("host0", "host1", "host2", "host3"))
   }
 
   override def afterAll() {
@@ -72,16 +77,16 @@ class SmallTextFilesSuite extends FunSuite with BeforeAndAfterAll {
 
   /**
    * This code will test the behaviors on HDFS. There are three aspects to test:
-   *    1) is all files are read.
-   *    2) is the fileNames are read correctly.
-   *    3) is the contents must be the same.
+   *   1) is all files are read.
+   *   2) is the fileNames are read correctly.
+   *   3) is the contents must be the same.
    */
   test("Small file input || HDFS IO") {
     val fs: FileSystem = dfs.getFileSystem
     val dir = "/foo/"
     val inputDir: Path = new Path(dir)
 
-    SmallTextFilesSuite.fileNames.zip(SmallTextFilesSuite.filesContents).foreach {
+    WholeTextFileSuite.fileNames.zip(WholeTextFileSuite.filesContents).foreach {
       case (fname, contents) =>
         createHDFSFile(fs, inputDir, fname, contents)
     }
@@ -93,15 +98,15 @@ class SmallTextFilesSuite extends FunSuite with BeforeAndAfterAll {
       s"hdfs://${dfs.getNameNode.getNameNodeAddress.getHostName}:${dfs.getNameNodePort}$dir"
     println(s"HDFS address dir is $hdfsAddressDir")
 
-    val res = smallTextFiles(sc, hdfsAddressDir).collect()
+    val res = wholeTextFile(sc, hdfsAddressDir).collect()
 
-    assert(res.size === SmallTextFilesSuite.fileNames.size,
+    assert(res.size === WholeTextFileSuite.fileNames.size,
       "Number of files read out do not fit with the actual value")
 
     for ((fname, contents) <- res) {
-      assert(SmallTextFilesSuite.fileNames.contains(fname),
+      assert(WholeTextFileSuite.fileNames.contains(fname),
         s"Missing file name $fname.")
-      assert(contents.hashCode === SmallTextFilesSuite.hashCodeOfContents(fname),
+      assert(contents.hashCode === WholeTextFileSuite.hashCodeOfContents(fname),
         s"file $fname contents can not match")
     }
   }
@@ -115,35 +120,35 @@ class SmallTextFilesSuite extends FunSuite with BeforeAndAfterAll {
 
   /**
    * This code will test the behaviors on native file system. There are three aspects:
-   *    1) is all files are read.
-   *    2) is the fileNames are read correctly.
-   *    3) is the contents must be the same.
+   *   1) is all files are read.
+   *   2) is the fileNames are read correctly.
+   *   3) is the contents must be the same.
    */
   test("Small file input || native disk IO") {
 
     sc.hadoopConfiguration.clear()
 
-    val dir = Files.createTempDirectory("smallfiles")
+    val dir = Files.createTempDirectory("wholefiles")
     println(s"native disk address is ${dir.toString}")
 
-    SmallTextFilesSuite.fileNames.zip(SmallTextFilesSuite.filesContents).foreach {
+    WholeTextFileSuite.fileNames.zip(WholeTextFileSuite.filesContents).foreach {
       case (fname, contents) =>
         createNativeFile(dir, fname, contents)
     }
 
-    val res = smallTextFiles(sc, dir.toString).collect()
+    val res = wholeTextFile(sc, dir.toString).collect()
 
-    assert(res.size === SmallTextFilesSuite.fileNames.size,
+    assert(res.size === WholeTextFileSuite.fileNames.size,
       "Number of files read out do not fit with the actual value")
 
     for ((fname, contents) <- res) {
-      assert(SmallTextFilesSuite.fileNames.contains(fname),
+      assert(WholeTextFileSuite.fileNames.contains(fname),
         s"Missing file name $fname.")
-      assert(contents.hashCode === SmallTextFilesSuite.hashCodeOfContents(fname),
+      assert(contents.hashCode === WholeTextFileSuite.hashCodeOfContents(fname),
         s"file $fname contents can not match")
     }
 
-    SmallTextFilesSuite.fileNames.foreach { fname =>
+    WholeTextFileSuite.fileNames.foreach { fname =>
       Files.deleteIfExists(JPaths.get(s"${dir.toString}/$fname"))
     }
     Files.deleteIfExists(dir)
@@ -151,23 +156,18 @@ class SmallTextFilesSuite extends FunSuite with BeforeAndAfterAll {
 }
 
 /**
- * Some final values are defined here. chineseWordsSpark is refer to the Chinese character version
- * of "Spark", we use UTF-8 to encode the bytes together, with a '\n' in the end. fileNames and
- * fileContents represent the test data that will be used later. hashCodeOfContents is a Map of
- * fileName to the hashcode of contents, which is used for the comparison of contents, i.e. the
- * "read in" contents should be same with the "read out" ones.
+ * Some final values are defined here. fileNames and fileContents represent the test data that will
+ * be used later. hashCodeOfContents is a Map of fileName to the hashcode of contents, which is used
+ * for the comparison of contents.
  */
 
-object SmallTextFilesSuite {
-  private val chineseWordsSpark = Array(
-    0xe7.toByte, 0x81.toByte, 0xab.toByte,
-    0xe8.toByte, 0x8a.toByte, 0xb1.toByte,
-    '\n'.toByte)
+object WholeTextFileSuite {
+  private val testWords: IndexedSeq[Byte] = "Spark is easy to use.\n".map(_.toByte)
 
   private val fileNames = Array("part-00000", "part-00001", "part-00002")
 
-  private val filesContents = Array(7, 70, 700).map { upperBound =>
-    Stream.continually(chineseWordsSpark.toList.toStream).flatten.take(upperBound).toArray
+  private val filesContents = Array(10, 100, 1000).map { upperBound =>
+    Stream.continually(testWords.toList.toStream).flatten.take(upperBound).toArray
   }
 
   private val hashCodeOfContents = fileNames.zip(filesContents).map { case (fname, contents) =>
