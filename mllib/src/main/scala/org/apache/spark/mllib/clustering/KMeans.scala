@@ -20,30 +20,13 @@ package org.apache.spark.mllib.clustering
 import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseVector => BDV, Vector => BV, norm => breezeNorm}
+
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
-
-/**
- * A breeze vector with its norm for fast distance computation.
- *
- * @see [[org.apache.spark.mllib.clustering.KMeans#fastSquaredDistance]]
- */
-private[clustering]
-class BreezeVectorWithNorm(val vector: BV[Double], val norm: Double) extends Serializable {
-
-  def this(vector: BV[Double]) = this(vector, breezeNorm(vector, 2.0))
-
-  def this(array: Array[Double]) = this(new BDV[Double](array))
-
-  def this(v: Vector) = this(v.toBreeze)
-
-  /** Converts the vector to a dense vector. */
-  def toDense = new BreezeVectorWithNorm(vector.toDenseVector, norm)
-}
 
 /**
  * K-means clustering with support for multiple parallel runs and a k-means++ like initialization
@@ -60,8 +43,7 @@ class KMeans private (
     var initializationMode: String,
     var initializationSteps: Int,
     var epsilon: Double)
-  extends Serializable with Logging
-{
+  extends Serializable with Logging {
   def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4)
 
   /** Set the number of clusters to create (k). Default: 2. */
@@ -127,15 +109,7 @@ class KMeans private (
    * Train a K-means model on the given set of points; `data` should be cached for high
    * performance, because this is an iterative algorithm.
    */
-  def run(data: RDD[Array[Double]]): KMeansModel = {
-    run(data.map(v => Vectors.dense(v)))
-  }
-
-  /**
-   * Train a K-means model on the given set of points; `data` should be cached for high
-   * performance, because this is an iterative algorithm.
-   */
-  def run(data: RDD[Vector])(implicit d: DummyImplicit): KMeansModel = {
+  def run(data: RDD[Vector]): KMeansModel = {
     // Compute squared norms and cache them.
     val norms = data.map(v => breezeNorm(v.toBreeze, 2.0))
     norms.persist()
@@ -248,9 +222,7 @@ class KMeans private (
 
     logInfo(s"The cost for the best run is $minCost.")
 
-    new KMeansModel(centers(bestRun).map { v =>
-      v.vector.toArray
-    })
+    new KMeansModel(centers(bestRun).map(c => Vectors.fromBreeze(c.vector)))
   }
 
   /**
@@ -332,51 +304,26 @@ object KMeans {
   val RANDOM = "random"
   val K_MEANS_PARALLEL = "k-means||"
 
-  def train(
-      data: RDD[Array[Double]],
-      k: Int,
-      maxIterations: Int,
-      runs: Int,
-      initializationMode: String)
-    : KMeansModel =
-  {
-    new KMeans().setK(k)
-      .setMaxIterations(maxIterations)
-      .setRuns(runs)
-      .setInitializationMode(initializationMode)
-      .run(data)
-  }
-
-  def train(data: RDD[Array[Double]], k: Int, maxIterations: Int, runs: Int): KMeansModel = {
-    train(data, k, maxIterations, runs, K_MEANS_PARALLEL)
-  }
-
-  def train(data: RDD[Array[Double]], k: Int, maxIterations: Int): KMeansModel = {
-    train(data, k, maxIterations, 1, K_MEANS_PARALLEL)
-  }
-
+  /**
+   * Trains a k-means model using the given set of parameters.
+   *
+   * @param data training points stored as `RDD[Array[Double]]`
+   * @param k number of clusters
+   * @param maxIterations max number of iterations
+   * @param runs number of parallel runs, defaults to 1. The best model is returned.
+   * @param initializationMode initialization model, either "random" or "k-means||" (default).
+   */
   def train(
       data: RDD[Vector],
       k: Int,
       maxIterations: Int,
-      runs: Int,
-      initializationMode: String
-  )(implicit d: DummyImplicit): KMeansModel = {
+      runs: Int = 1,
+      initializationMode: String = K_MEANS_PARALLEL): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
       .run(data)
-  }
-
-  def train(data: RDD[Vector], k: Int, maxIterations: Int, runs: Int)
-           (implicit d: DummyImplicit): KMeansModel = {
-    train(data, k, maxIterations, runs, K_MEANS_PARALLEL)
-  }
-
-  def train(data: RDD[Vector], k: Int, maxIterations: Int)
-           (implicit d: DummyImplicit): KMeansModel = {
-    train(data, k, maxIterations, 1, K_MEANS_PARALLEL)
   }
 
   /**
@@ -431,14 +378,34 @@ object KMeans {
     val (master, inputFile, k, iters) = (args(0), args(1), args(2).toInt, args(3).toInt)
     val runs = if (args.length >= 5) args(4).toInt else 1
     val sc = new SparkContext(master, "KMeans")
-    val data = sc.textFile(inputFile).map(line => line.split(' ').map(_.toDouble)).cache()
+    val data = sc.textFile(inputFile)
+      .map(line => Vectors.dense(line.split(' ').map(_.toDouble)))
+      .cache()
     val model = KMeans.train(data, k, iters, runs)
     val cost = model.computeCost(data)
     println("Cluster centers:")
     for (c <- model.clusterCenters) {
-      println("  " + c.mkString(" "))
+      println("  " + c)
     }
     println("Cost: " + cost)
     System.exit(0)
   }
+}
+
+/**
+ * A breeze vector with its norm for fast distance computation.
+ *
+ * @see [[org.apache.spark.mllib.clustering.KMeans#fastSquaredDistance]]
+ */
+private[clustering]
+class BreezeVectorWithNorm(val vector: BV[Double], val norm: Double) extends Serializable {
+
+  def this(vector: BV[Double]) = this(vector, breezeNorm(vector, 2.0))
+
+  def this(array: Array[Double]) = this(new BDV[Double](array))
+
+  def this(v: Vector) = this(v.toBreeze)
+
+  /** Converts the vector to a dense vector. */
+  def toDense = new BreezeVectorWithNorm(vector.toDenseVector, norm)
 }

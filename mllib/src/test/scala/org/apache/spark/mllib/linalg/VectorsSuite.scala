@@ -28,10 +28,16 @@ class VectorsSuite extends FunSuite {
   val indices = Array(0, 3, 5, 10, 13)
   val values = Array(0.1, 0.5, 0.3, -0.8, -1.0)
 
-  test("dense vector construction") {
+  test("dense vector construction with varargs") {
+    val vec = Vectors.dense(arr: _*).asInstanceOf[DenseVector]
+    assert(vec.size === arr.length)
+    assert(vec.values.eq(arr))
+  }
+
+  test("dense vector construction from a double array") {
    val vec = Vectors.dense(arr).asInstanceOf[DenseVector]
-   assert(vec.size === arr.length)
-   assert(vec.values.eq(arr))
+    assert(vec.size === arr.length)
+    assert(vec.values.eq(arr))
   }
 
   test("sparse vector construction") {
@@ -53,5 +59,26 @@ class VectorsSuite extends FunSuite {
     assert(vec.size === n)
     assert(vec.indices === indices)
     assert(vec.values === values)
+  }
+
+  test("vector equals") {
+    val dv1 = Vectors.dense(1.0, 0.0, 2.0)
+    val dv2 = Vectors.dense(1.0, 0.0, 2.0)
+    val sv1 = Vectors.sparse(3, Seq((0, 1.0), (2, 2.0)))
+    val sv2 = Vectors.sparse(3, Seq((0, 1.0), (2, 2.0)))
+
+    val vectors = Seq(dv1, dv2, sv1, sv2)
+
+    for (v <- vectors; u <- vectors) {
+      assert(v === u)
+      assert(v.## === u.##)
+    }
+
+    val another = Vectors.dense(1.0, 1.0, 2.0)
+
+    for (v <- vectors) {
+      assert(v != another)
+      assert(v.## != another.##)
+    }
   }
 }

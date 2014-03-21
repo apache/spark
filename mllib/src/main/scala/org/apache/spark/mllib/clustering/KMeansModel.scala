@@ -24,15 +24,10 @@ import org.apache.spark.mllib.linalg.Vector
 /**
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
  */
-class KMeansModel(val clusterCenters: Array[Array[Double]]) extends Serializable {
+class KMeansModel(val clusterCenters: Array[Vector]) extends Serializable {
 
   /** Total number of clusters. */
   def k: Int = clusterCenters.length
-
-  /** Return the cluster index that a given point belongs to. */
-  def predict(point: Array[Double]): Int = {
-    KMeans.findClosest(clusterCentersWithNorm, new BreezeVectorWithNorm(point))._1
-  }
 
   /** Returns the cluster index that a given point belongs to. */
   def predict(point: Vector): Int = {
@@ -49,16 +44,7 @@ class KMeansModel(val clusterCenters: Array[Array[Double]]) extends Serializable
    * Return the K-means cost (sum of squared distances of points to their nearest center) for this
    * model on the given data.
    */
-  def computeCost(data: RDD[Array[Double]]): Double = {
-    val centersWithNorm = clusterCentersWithNorm
-    data.map(p => KMeans.pointCost(centersWithNorm, new BreezeVectorWithNorm(p))).sum()
-  }
-
-  /**
-   * Return the K-means cost (sum of squared distances of points to their nearest center) for this
-   * model on the given data.
-   */
-  def computeCost(data: RDD[Vector])(implicit d: DummyImplicit): Double = {
+  def computeCost(data: RDD[Vector]): Double = {
     val centersWithNorm = clusterCentersWithNorm
     data.map(p => KMeans.pointCost(centersWithNorm, new BreezeVectorWithNorm(p))).sum()
   }
