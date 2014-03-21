@@ -21,9 +21,6 @@
 FWDIR="$(cd `dirname $0`/..; pwd)"
 cd $FWDIR
 
-# Download Hive Compatability Files
-dev/download-hive-tests.sh
-
 # Remove work directory
 rm -rf ./work
 
