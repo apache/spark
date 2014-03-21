@@ -31,6 +31,9 @@ import TestSQLContext._
 import TestData._
 
 class SQLQuerySuite extends QueryTest {
+  // Make sure the tables are loaded.
+  TestData
+
   test("agg") {
     checkAnswer(
       sql("SELECT a, SUM(b) FROM testData2 GROUP BY a"),
