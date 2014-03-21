@@ -44,7 +44,10 @@ class FileLogger(
     overwrite: Boolean = true)
   extends Logging {
 
-  private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+  private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
+    override def initialValue(): SimpleDateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+  }
+
   private val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
   private var fileIndex = 0
 
@@ -111,7 +114,7 @@ class FileLogger(
   def log(msg: String, withTime: Boolean = false) {
     val writeInfo = if (!withTime) msg else {
       val date = new Date(System.currentTimeMillis())
-      DATE_FORMAT.format(date) + ": " + msg
+      dateFormat.get.format(date) + ": " + msg
     }
     writer.foreach(_.print(writeInfo))
   }

@@ -55,7 +55,9 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
   private val jobIdToPrintWriter = new HashMap[Int, PrintWriter]
   private val stageIdToJobId = new HashMap[Int, Int]
   private val jobIdToStageIds = new HashMap[Int, Seq[Int]]
-  private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+  private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
+    override def initialValue() = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+  }
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent]
 
   createLogDir()
@@ -128,7 +130,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
     var writeInfo = info
     if (withTime) {
       val date = new Date(System.currentTimeMillis())
-      writeInfo = DATE_FORMAT.format(date) + ": " + info
+      writeInfo = dateFormat.get.format(date) + ": " + info
     }
     jobIdToPrintWriter.get(jobId).foreach(_.println(writeInfo))
   }
