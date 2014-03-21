@@ -62,6 +62,10 @@ case class SparkListenerBlockManagerRemoved(blockManagerId: BlockManagerId)
 
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
+case class SparkListenerApplicationStart(appName: String, time: Long) extends SparkListenerEvent
+
+case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
+
 /** An event used in the listener to shutdown the listener daemon thread. */
 private[spark] case object SparkListenerShutdown extends SparkListenerEvent
 
@@ -125,6 +129,16 @@ trait SparkListener {
    * Called when an RDD is manually unpersisted by the application
    */
   def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) { }
+
+  /**
+   * Called when the application starts
+   */
+  def onApplicationStart(applicationStart: SparkListenerApplicationStart) { }
+
+  /**
+   * Called when the application ends
+   */
+  def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) { }
 }
 
 /**

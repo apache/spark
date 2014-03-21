@@ -62,6 +62,10 @@ private[spark] object JsonProtocol {
         blockManagerRemovedToJson(blockManagerRemoved)
       case unpersistRDD: SparkListenerUnpersistRDD =>
         unpersistRDDToJson(unpersistRDD)
+      case applicationStart: SparkListenerApplicationStart =>
+        applicationStartToJson(applicationStart)
+      case applicationEnd: SparkListenerApplicationEnd =>
+        applicationEndToJson(applicationEnd)
 
       // Not used, but keeps compiler happy
       case SparkListenerShutdown => JNothing
@@ -155,6 +159,17 @@ private[spark] object JsonProtocol {
   def unpersistRDDToJson(unpersistRDD: SparkListenerUnpersistRDD): JValue = {
     ("Event" -> Utils.getFormattedClassName(unpersistRDD)) ~
     ("RDD ID" -> unpersistRDD.rddId)
+  }
+
+  def applicationStartToJson(applicationStart: SparkListenerApplicationStart): JValue = {
+    ("Event" -> Utils.getFormattedClassName(applicationStart)) ~
+    ("App Name" -> applicationStart.appName) ~
+    ("Timestamp" -> applicationStart.time)
+  }
+
+  def applicationEndToJson(applicationEnd: SparkListenerApplicationEnd): JValue = {
+    ("Event" -> Utils.getFormattedClassName(applicationEnd)) ~
+    ("Timestamp" -> applicationEnd.time)
   }
 
 
@@ -372,6 +387,8 @@ private[spark] object JsonProtocol {
     val blockManagerAdded = Utils.getFormattedClassName(SparkListenerBlockManagerAdded)
     val blockManagerRemoved = Utils.getFormattedClassName(SparkListenerBlockManagerRemoved)
     val unpersistRDD = Utils.getFormattedClassName(SparkListenerUnpersistRDD)
+    val applicationStart = Utils.getFormattedClassName(SparkListenerApplicationStart)
+    val applicationEnd = Utils.getFormattedClassName(SparkListenerApplicationEnd)
 
     (json \ "Event").extract[String] match {
       case `stageSubmitted` => stageSubmittedFromJson(json)
@@ -385,6 +402,8 @@ private[spark] object JsonProtocol {
       case `blockManagerAdded` => blockManagerAddedFromJson(json)
       case `blockManagerRemoved` => blockManagerRemovedFromJson(json)
       case `unpersistRDD` => unpersistRDDFromJson(json)
+      case `applicationStart` => applicationStartFromJson(json)
+      case `applicationEnd` => applicationEndFromJson(json)
     }
   }
 
@@ -454,6 +473,16 @@ private[spark] object JsonProtocol {
 
   def unpersistRDDFromJson(json: JValue): SparkListenerUnpersistRDD = {
     SparkListenerUnpersistRDD((json \ "RDD ID").extract[Int])
+  }
+
+  def applicationStartFromJson(json: JValue): SparkListenerApplicationStart = {
+    val appName = (json \ "App Name").extract[String]
+    val time = (json \ "Timestamp").extract[Long]
+    SparkListenerApplicationStart(appName, time)
+  }
+
+  def applicationEndFromJson(json: JValue): SparkListenerApplicationEnd = {
+    SparkListenerApplicationEnd((json \ "Timestamp").extract[Long])
   }
 
 

@@ -228,6 +228,7 @@ class SparkContext(
   dagScheduler.start()
 
   postEnvironmentUpdate()
+  postApplicationStart()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = {
@@ -826,6 +827,7 @@ class SparkContext(
 
   /** Shut down the SparkContext. */
   def stop() {
+    postApplicationEnd()
     ui.stop()
     eventLogger.foreach(_.stop())
     // Do this only if not stopped already - best case effort.
@@ -1065,6 +1067,20 @@ class SparkContext(
 
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
+
+  /** Post the application start event */
+  private def postApplicationStart() {
+    listenerBus.post(SparkListenerApplicationStart(appName, startTime))
+  }
+
+  /**
+   * Post the application end event to all listeners immediately, rather than adding it
+   * to the event queue for it to be asynchronously processed eventually. Otherwise, a race
+   * condition exists in which the listeners may stop before this event has been propagated.
+   */
+  private def postApplicationEnd() {
+    listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis), blocking = true)
+  }
 
   /** Post the environment update event once the task scheduler is ready */
   private def postEnvironmentUpdate() {

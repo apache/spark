@@ -30,7 +30,7 @@ import org.apache.spark.deploy.SparkUIContainer
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
-import org.apache.spark.scheduler.ReplayListenerBus
+import org.apache.spark.scheduler.{ApplicationListener, ReplayListenerBus}
 
 /**
  * A web server that re-renders SparkUIs of finished applications.
@@ -59,11 +59,7 @@ class HistoryServer(val baseLogDir: String, requestedPort: Int, conf: SparkConf)
       (request: HttpServletRequest) => indexPage.render(request), securityMgr = securityManager)
   )
 
-  // A mapping from an event log path to the associated, already rendered, SparkUI
-  val logPathToUI = mutable.HashMap[String, SparkUI]()
-
-  // A mapping from an event log path to a timestamp of when it was last updated
-  val logPathToLastUpdated = mutable.HashMap[String, Long]()
+  val appIdToInfo = mutable.HashMap[String, ApplicationHistoryInfo]()
 
   /** Bind to the HTTP server behind this web interface */
   override def bind() {
@@ -77,6 +73,12 @@ class HistoryServer(val baseLogDir: String, requestedPort: Int, conf: SparkConf)
     }
     checkForLogs()
   }
+
+  /** Parse app ID from the given log path. */
+  def getAppId(logPath: String): String = logPath.split("/").last
+
+  /** Return the address of this server. */
+  def getAddress = "http://" + host + ":" + boundPort
 
   /**
    * Check for any updated event logs.
@@ -92,45 +94,55 @@ class HistoryServer(val baseLogDir: String, requestedPort: Int, conf: SparkConf)
     // Render any missing or outdated SparkUI
     logDirs.foreach { dir =>
       val path = dir.getPath.toString
-      val lastUpdated = dir.getModificationTime
-      if (!logPathToLastUpdated.contains(path) ||
-          logPathToLastUpdated.getOrElse(path, -1L) < lastUpdated) {
-        maybeRenderUI(path, lastUpdated)
+      val appId = getAppId(path)
+      val lastUpdated = {
+        val logFiles = fileSystem.listStatus(dir.getPath)
+        if (logFiles != null) logFiles.map(_.getModificationTime).max else dir.getModificationTime
+      }
+      if (!appIdToInfo.contains(appId) || appIdToInfo(appId).lastUpdated < lastUpdated) {
+        maybeRenderUI(appId, path, lastUpdated)
       }
     }
 
     // Remove any outdated SparkUIs
-    val logPaths = logDirs.map(_.getPath.toString)
-    logPathToUI.foreach { case (path, ui) =>
-      if (!logPaths.contains(path)) {
-        detachUI(ui)
-        logPathToUI.remove(path)
-        logPathToLastUpdated.remove(path)
+    val appIds = logDirs.map { dir => getAppId(dir.getPath.toString) }
+    appIdToInfo.foreach { case (appId, info) =>
+      if (!appIds.contains(appId)) {
+        detachUI(info.ui)
+        appIdToInfo.remove(appId)
       }
     }
   }
 
   /** Attempt to render a new SparkUI from event logs residing in the given log directory. */
-  def maybeRenderUI(logPath: String, lastUpdated: Long) {
-    val appName = getAppName(logPath)
+  private def maybeRenderUI(appId: String, logPath: String, lastUpdated: Long) {
     val replayBus = new ReplayListenerBus(conf)
-    val ui = new SparkUI(conf, replayBus, appName, "/history/%s".format(appName))
+    val appListener = new ApplicationListener
+    replayBus.addListener(appListener)
+    val ui = new SparkUI(conf, replayBus, appId, "/history/%s".format(appId))
 
     // Do not call ui.bind() to avoid creating a new server for each application
     ui.start()
     val success = replayBus.replay(logPath)
     if (success) {
       attachUI(ui)
-      logPathToUI(logPath) = ui
-      logPathToLastUpdated(logPath) = lastUpdated
+      if (!appListener.started) {
+        logWarning("Application has event logs but has not started: %s".format(appId))
+      }
+      val appName = appListener.appName
+      val startTime = appListener.startTime
+      val endTime = appListener.endTime
+      val info = ApplicationHistoryInfo(appName, startTime, endTime, lastUpdated, logPath, ui)
+
+      // If the UI already exists, terminate it and replace it
+      appIdToInfo.remove(appId).foreach { info => detachUI(info.ui) }
+      appIdToInfo(appId) = info
+
+      // Use mnemonic original app name rather than app ID
+      val originalAppName = "%s (history)".format(appName)
+      ui.setAppName(originalAppName)
     }
   }
-
-  /** Parse app name from the given log path. */
-  def getAppName(logPath: String): String = logPath.split("/").last
-
-  /** Return the address of this server. */
-  def getAddress = "http://" + host + ":" + boundPort
 
 }
 
@@ -146,4 +158,15 @@ object HistoryServer {
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
     while(true) { Thread.sleep(Int.MaxValue) }
   }
+}
+
+private[spark] case class ApplicationHistoryInfo(
+    name: String,
+    startTime: Long,
+    endTime: Long,
+    lastUpdated: Long,
+    logPath: String,
+    ui: SparkUI) {
+  def started = startTime != -1
+  def finished = endTime != -1
 }

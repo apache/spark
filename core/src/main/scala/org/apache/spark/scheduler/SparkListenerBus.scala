@@ -61,6 +61,10 @@ private[spark] trait SparkListenerBus {
         sparkListeners.foreach(_.onBlockManagerRemoved(blockManagerRemoved))
       case unpersistRDD: SparkListenerUnpersistRDD =>
         sparkListeners.foreach(_.onUnpersistRDD(unpersistRDD))
+      case applicationStart: SparkListenerApplicationStart =>
+        sparkListeners.foreach(_.onApplicationStart(applicationStart))
+      case applicationEnd: SparkListenerApplicationEnd =>
+        sparkListeners.foreach(_.onApplicationEnd(applicationEnd))
       case SparkListenerShutdown =>
     }
   }

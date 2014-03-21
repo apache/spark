@@ -90,6 +90,10 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
     logEvent(event, flushLogger = true)
   override def onUnpersistRDD(event: SparkListenerUnpersistRDD) =
     logEvent(event, flushLogger = true)
+  override def onApplicationStart(event: SparkListenerApplicationStart) =
+    logEvent(event, flushLogger = true)
+  override def onApplicationEnd(event: SparkListenerApplicationEnd) =
+    logEvent(event, flushLogger = true)
 
   def stop() = logger.stop()
 }

@@ -23,22 +23,18 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.ui.{SparkUI, UIUtils}
+import org.apache.spark.deploy.DeployWebUI
+import org.apache.spark.ui.UIUtils
 
 private[spark] class IndexPage(parent: HistoryServer) {
-  val dateFmt = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+  private val dateFmt = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 
   def render(request: HttpServletRequest): Seq[Node] = {
     // Check if logs have been updated
     parent.checkForLogs()
 
-    // Populate app table, with most recently modified first
-    val appRows = parent.logPathToLastUpdated.toSeq
-      .sortBy { case (path, lastUpdated) => -lastUpdated }
-      .map { case (path, lastUpdated) =>
-        // (appName, lastUpdated, UI)
-        (parent.getAppName(path), lastUpdated, parent.logPathToUI(path))
-      }
+    // Populate app table, with most recently modified app first
+    val appRows = parent.appIdToInfo.values.toSeq.sortBy { app => -app.lastUpdated }
     val appTable = UIUtils.listingTable(appHeader, appRow, appRows)
 
     val content =
@@ -54,14 +50,31 @@ private[spark] class IndexPage(parent: HistoryServer) {
     UIUtils.basicSparkPage(content, "History Server")
   }
 
-  private val appHeader = Seq[String]("App Name", "Last Updated")
+  private val appHeader = Seq(
+    "App Name",
+    "Started",
+    "Finished",
+    "Duration",
+    "Log Directory",
+    "Last Updated")
 
-  private def appRow(info: (String, Long, SparkUI)): Seq[Node] = {
-    info match { case (appName, lastUpdated, ui) =>
-      <tr>
-        <td><a href={parent.getAddress + ui.basePath}>{appName}</a></td>
-        <td>{dateFmt.format(new Date(lastUpdated))}</td>
-      </tr>
-    }
+  private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
+    val appName = if (info.started) info.name else parent.getAppId(info.logPath)
+    val uiAddress = parent.getAddress + info.ui.basePath
+    val startTime = if (info.started) dateFmt.format(new Date(info.startTime)) else "Not started"
+    val endTime = if (info.finished) dateFmt.format(new Date(info.endTime)) else "Not finished"
+    val difference = if (info.started && info.finished) info.endTime - info.startTime else -1L
+    val duration = if (difference > 0) DeployWebUI.formatDuration(difference) else "---"
+    val logDirectory = parent.getAppId(info.logPath)
+    val lastUpdated = dateFmt.format(new Date(info.lastUpdated))
+
+    <tr>
+      <td><a href={uiAddress}>{appName}</a></td>
+      <td>{startTime}</td>
+      <td>{endTime}</td>
+      <td>{duration}</td>
+      <td>{logDirectory}</td>
+      <td>{lastUpdated}</td>
+    </tr>
   }
 }

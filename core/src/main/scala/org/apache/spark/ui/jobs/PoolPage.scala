@@ -27,11 +27,12 @@ import org.apache.spark.ui.UIUtils
 
 /** Page showing specific pool details */
 private[ui] class PoolPage(parent: JobProgressUI) {
-  private val appName = parent.appName
   private val basePath = parent.basePath
   private val live = parent.live
   private val sc = parent.sc
   private lazy val listener = parent.listener
+
+  private def appName = parent.appName
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {

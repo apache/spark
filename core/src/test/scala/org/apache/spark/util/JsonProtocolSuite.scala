@@ -52,6 +52,8 @@ class JsonProtocolSuite extends FunSuite {
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(
       BlockManagerId("Scarce", "to be counted...", 100, 200))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
+    val applicationStart = SparkListenerApplicationStart("The winner of all", 42L)
+    val applicationEnd = SparkListenerApplicationEnd(42L)
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -64,6 +66,8 @@ class JsonProtocolSuite extends FunSuite {
     testEvent(blockManagerAdded, blockManagerAddedJsonString)
     testEvent(blockManagerRemoved, blockManagerRemovedJsonString)
     testEvent(unpersistRdd, unpersistRDDJsonString)
+    testEvent(applicationStart, applicationStartJsonString)
+    testEvent(applicationEnd, applicationEndJsonString)
   }
 
   test("Dependent Classes") {
@@ -211,6 +215,11 @@ class JsonProtocolSuite extends FunSuite {
         assertEquals(e1.blockManagerId, e2.blockManagerId)
       case (e1: SparkListenerUnpersistRDD, e2: SparkListenerUnpersistRDD) =>
         assert(e1.rddId == e2.rddId)
+      case (e1: SparkListenerApplicationStart, e2: SparkListenerApplicationStart) =>
+        assert(e1.appName == e2.appName)
+        assert(e1.time == e2.time)
+      case (e1: SparkListenerApplicationEnd, e2: SparkListenerApplicationEnd) =>
+        assert(e1.time == e2.time)
       case (SparkListenerShutdown, SparkListenerShutdown) =>
       case _ => fail("Events don't match in types!")
     }
@@ -554,6 +563,16 @@ class JsonProtocolSuite extends FunSuite {
   private val unpersistRDDJsonString =
     """
       {"Event":"SparkListenerUnpersistRDD","RDD ID":12345}
+    """
+
+  private val applicationStartJsonString =
+    """
+      {"Event":"SparkListenerApplicationStart","App Name":"The winner of all","Timestamp":42}
+    """
+
+  private val applicationEndJsonString =
+    """
+      {"Event":"SparkListenerApplicationEnd","Timestamp":42}
     """
 
  }

@@ -34,7 +34,7 @@ private[spark] class SparkUI(
     val sc: SparkContext,
     conf: SparkConf,
     val listenerBus: SparkListenerBus,
-    val appName: String,
+    var appName: String,
     val basePath: String = "")
   extends WebUI("SparkUI") with Logging {
 
@@ -74,6 +74,8 @@ private[spark] class SparkUI(
 
   // Maintain executor storage status through Spark events
   val storageStatusListener = new StorageStatusListener
+
+  def setAppName(name: String) = appName = name
 
   /** Initialize all components of the server */
   def start() {
