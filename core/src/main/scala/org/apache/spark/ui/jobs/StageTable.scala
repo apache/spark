@@ -23,13 +23,12 @@ import scala.collection.mutable.HashMap
 import scala.xml.Node
 
 import org.apache.spark.scheduler.{StageInfo, TaskInfo}
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{WebUI, UIUtils}
 import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
   private val basePath = parent.basePath
-  private val dateFmt = parent.dateFmt
   private lazy val listener = parent.listener
   private lazy val isFairScheduler = parent.isFairScheduler
 
@@ -82,7 +81,7 @@ private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
     val description = listener.stageIdToDescription.get(s.stageId)
       .map(d => <div><em>{d}</em></div><div>{nameLink}</div>).getOrElse(nameLink)
     val submissionTime = s.submissionTime match {
-      case Some(t) => dateFmt.format(new Date(t))
+      case Some(t) => WebUI.formatDate(new Date(t))
       case None => "Unknown"
     }
     val finishTime = s.completionTime.getOrElse(System.currentTimeMillis)
