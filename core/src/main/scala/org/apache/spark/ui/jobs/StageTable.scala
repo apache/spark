@@ -63,7 +63,7 @@ private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
     val startPct = (started.toDouble/total)*100
     val completePct = (completed.toDouble/total)*100
     val completeWidth = "width: %s%%; position: absolute;".format(completePct)
-    val startWidth = "width: %s%%; left: %s%%; position: absolute;".format(startPct,completePct)
+    val startWidth = "width: %s%%; left: %s%%; position: absolute;".format(startPct, completePct)
 
     <div class="progress">
       <span style="text-align:center; position:absolute; width:100%; z-index: 1;">
