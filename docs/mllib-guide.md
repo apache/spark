@@ -105,7 +105,7 @@ missing entries of a user-item association matrix.  MLlib currently supports
 model-based collaborative filtering, in which users and products are described
 by a small set of latent factors that can be used to predict missing entries.
 In particular, we implement the [alternating least squares
-(ALS)](http://www2.research.att.com/~volinsky/papers/ieeecomputer.pdf)
+(ALS)](http://dx.doi.org/10.1109/MC.2009.263)
 algorithm to learn these latent factors. The implementation in MLlib has the
 following parameters:
 
@@ -124,7 +124,7 @@ the entries in the user-item matrix as *explicit* preferences given by the user 
 It is common in many real-world use cases to only have access to *implicit feedback* 
 (e.g. views, clicks, purchases, likes, shares etc.). The approach used in MLlib to deal with 
 such data is taken from 
-[Collaborative Filtering for Implicit Feedback Datasets](http://www2.research.att.com/~yifanhu/PUB/cf.pdf).
+[Collaborative Filtering for Implicit Feedback Datasets](http://dx.doi.org/10.1109/ICDM.2008.22).
 Essentially instead of trying to model the matrix of ratings directly, this approach treats the data as 
 a combination of binary preferences and *confidence values*. The ratings are then related 
 to the level of confidence in observed user preferences, rather than explicit ratings given to items. 
