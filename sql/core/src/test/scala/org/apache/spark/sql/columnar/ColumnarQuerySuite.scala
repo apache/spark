@@ -25,9 +25,7 @@ class ColumnarQuerySuite extends DslQueryTest {
 
   test("simple columnar query") {
     val plan = TestSqlContext.executePlan(testData).executedPlan
-    val attributes = plan.output
-    val relation = InMemoryColumnarRelation("t1", plan)
-    val scan = SparkLogicalPlan(InMemoryColumnarTableScan(attributes, relation))
+    val scan = SparkLogicalPlan(InMemoryColumnarTableScan(plan.output, plan))
 
     checkAnswer(scan, testData.data)
   }

@@ -19,19 +19,20 @@ package org.apache.spark.sql
 package columnar
 
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Attribute}
-import org.apache.spark.sql.columnar.ColumnType._
-import org.apache.spark.sql.execution.LeafNode
+import org.apache.spark.sql.execution.{SparkPlan, LeafNode}
 
-case class InMemoryColumnarTableScan(
-    attributes: Seq[Attribute],
-    relation: InMemoryColumnarRelation)
+case class InMemoryColumnarTableScan(attributes: Seq[Attribute], child: SparkPlan)
   extends LeafNode {
+
+  // For implicit conversion from `DataType` to `ColumnType`
+  import ColumnType._
 
   override def output: Seq[Attribute] = attributes
 
   lazy val cachedColumnBuffers = {
-    val cached = relation.child.execute().mapPartitions { iterator =>
-      val columnBuilders = relation.child.output.map { a =>
+    val output = child.output
+    val cached = child.execute().mapPartitions { iterator =>
+      val columnBuilders = output.map { a =>
         ColumnBuilder(a.dataType.typeId, 0, a.name)
       }.toArray
 
@@ -48,7 +49,7 @@ case class InMemoryColumnarTableScan(
       Iterator.single(columnBuilders.map(_.build()))
     }.cache()
 
-    cached.setName(relation.child.toString)
+    cached.setName(child.toString)
     // Force the materialization of the cached RDD.
     cached.count()
     cached
@@ -60,7 +61,7 @@ case class InMemoryColumnarTableScan(
       assert(!iterator.hasNext)
 
       new Iterator[Row] {
-        val columnAccessors = columnBuffers.map(buffer => ColumnAccessor(buffer))
+        val columnAccessors = columnBuffers.map(ColumnAccessor(_))
         val nextRow = new GenericMutableRow(columnAccessors.length)
 
         override def next() = {
