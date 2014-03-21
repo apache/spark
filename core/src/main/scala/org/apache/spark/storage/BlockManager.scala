@@ -658,8 +658,8 @@ private[spark] class BlockManager(
           }
         }
 
-        // Now that the block is in either the memory or disk store, let other threads read it,
-        // and tell the master about it.
+        // Now that the block is in either the memory, tachyon or disk store,
+        // let other threads read it, and tell the master about it.
         marked = true
         myInfo.markReady(size)
         if (tellMaster) {
