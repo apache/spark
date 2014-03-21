@@ -1,0 +1,4 @@
+like(str, pattern) - Checks if str matches pattern
+Example:
+  > SELECT a.* FROM srcpart a WHERE a.hr like '%2' LIMIT 1;
+  27      val_27  2008-04-08      12

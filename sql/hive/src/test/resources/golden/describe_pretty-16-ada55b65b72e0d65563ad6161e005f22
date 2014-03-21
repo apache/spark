@@ -1,0 +1,37 @@
+col_name           data_type     comment	 	 
+	 	 
+col1               int           col1 one line comment	 	 
+col2               string        col2	 	 
+                                 two lines comment	 	 
+col3               string        col3	 	 
+                                 three lines	 	 
+                                 comment	 	 
+col4               string        col4 very long comment that	 	 
+                                 is greater than 80 chars	 	 
+                                 and is likely to spill into	 	 
+                                 multiple lines	 	 
+col5               string        col5 very long multi-line	 	 
+                                 comment where each line is	 	 
+                                 very long by itself and is	 	 
+                                 likely to spill	 	 
+                                 into multiple lines.  Lorem	 	 
+                                 ipsum dolor sit amet,	 	 
+                                 consectetur adipiscing	 	 
+                                 elit. Proin in dolor nisl,	 	 
+                                 sodales	 	 
+                                 adipiscing tortor. Integer	 	 
+                                 venenatis	 	 
+col6               string        This comment has a very	 	 
+                                 long single word ABCDEFGHIJ	 	 
+                                 KLMNOPQRSTUVXYZabcdefghijkl	 	 
+                                 mnopqrstuvzxyz123 which	 	 
+                                 will not fit in a line by	 	 
+                                 itself for small column	 	 
+                                 widths.	 	 
+col7_nocomment     string        None	 	 
+ds                 string        None	 	 
+	 	 
+# Partition Information	 	 
+col_name           data_type     comment	 	 
+	 	 
+ds                 string        None	 	 

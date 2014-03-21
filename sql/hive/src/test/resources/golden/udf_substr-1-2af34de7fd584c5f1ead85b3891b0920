@@ -1,0 +1,10 @@
+substr(str, pos[, len]) - returns the substring of str that starts at pos and is of length len orsubstr(bin, pos[, len]) - returns the slice of byte array that starts at pos and is of length len
+Synonyms: substring
+pos is a 1-based index. If pos<0 the starting position is determined by counting backwards from the end of str.
+Example:
+   > SELECT substr('Facebook', 5) FROM src LIMIT 1;
+  'book'
+  > SELECT substr('Facebook', -5) FROM src LIMIT 1;
+  'ebook'
+  > SELECT substr('Facebook', 5, 1) FROM src LIMIT 1;
+  'b'
