@@ -21,11 +21,48 @@ import java.net.{URLClassLoader, URL}
 
 /**
  * The addURL method in URLClassLoader is protected. We subclass it to make this accessible.
+ * We also make changes so user classes can come before the default classes.
  */
-private[spark] class ExecutorURLClassLoader(urls: Array[URL], parent: ClassLoader)
-  extends URLClassLoader(urls, parent) {
 
-  override def addURL(url: URL) {
-    super.addURL(url)
+private[spark] class ExecutorURLClassLoader(urls: Array[URL], parent: ClassLoader, userFirst: Boolean)
+  extends ClassLoader {
+  class OverridenURLClassLoader(urls: Array[URL], parent: ClassLoader) extends URLClassLoader(urls, parent){
+    override def addURL(url: URL) {
+      super.addURL(url)
+    }
+    override def findClass(name: String): Class[_] = { 
+      super.findClass(name)
+    }
+  }
+  val userClassLoader = new OverridenURLClassLoader(urls, null)
+
+  object childClassLoader extends ClassLoader(parent) {
+    override def findClass(name: String): Class[_] = {
+      super.findClass(name)
+    }
+  }
+
+  override def findClass(name: String): Class[_] = {
+    if (!userFirst) {
+      try {
+        childClassLoader.findClass(name)
+      } catch {
+        case e: ClassNotFoundException => userClassLoader.findClass(name)
+      }
+    } else {
+      try {
+        userClassLoader.findClass(name)
+      } catch {
+        case e: ClassNotFoundException => childClassLoader.findClass(name)
+      }
+    }
+  }
+
+  def addURL(url: URL) {
+    userClassLoader.addURL(url)
+  }
+
+  def getURLs() = {
+    userClassLoader.getURLs()
   }
 }

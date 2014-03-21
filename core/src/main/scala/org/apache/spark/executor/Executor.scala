@@ -299,7 +299,8 @@ private[spark] class Executor(
     val urls = currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }.toArray
-    new ExecutorURLClassLoader(urls, loader)
+    val userClassPathFirst = conf.getBoolean("spark.classpath.userClassPathFirst", false)
+    new ExecutorURLClassLoader(urls, loader, userClassPathFirst)
   }
 
   /**

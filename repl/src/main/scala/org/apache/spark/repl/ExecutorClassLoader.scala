@@ -31,13 +31,12 @@ import org.apache.spark.util.Utils
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm._
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 
-
 /**
  * A ClassLoader that reads classes from a Hadoop FileSystem or HTTP URI,
  * used to load classes defined by the interpreter when the REPL is used
  */
-class ExecutorClassLoader(classUri: String, parent: ClassLoader)
-extends ClassLoader(parent) {
+class ExecutorClassLoader(classUri: String, parent: ClassLoader, userClassPathFirst: Boolean)
+extends ClassLoader {
   val uri = new URI(classUri)
   val directory = uri.getPath
 
@@ -49,8 +48,27 @@ extends ClassLoader(parent) {
       FileSystem.get(uri, new Configuration())
     }
   }
-  
+
   override def findClass(name: String): Class[_] = {
+    userClassPathFirst match {
+      case true => findClassLocally(name).getOrElse(parent.findClass(name))
+      case false => {
+        try {
+          parent.findClass(name)
+        } catch {
+          case e: ClassNotFoundException => {
+            val classOption = findClassLocally(name)
+            classOption match {
+              case None => throw new ClassNotFoundException(name, e)
+              case Some(a) => a
+            }
+          }
+        }
+      }
+    }
+  }
+
+  def findClassLocaly(name: String): Option[Class[_]] = {
     try {
       val pathInDirectory = name.replace('.', '/') + ".class"
       val inputStream = {
@@ -68,9 +86,9 @@ extends ClassLoader(parent) {
       }
       val bytes = readAndTransformClass(name, inputStream)
       inputStream.close()
-      return defineClass(name, bytes, 0, bytes.length)
+      Some(defineClass(name, bytes, 0, bytes.length))
     } catch {
-      case e: Exception => throw new ClassNotFoundException(name, e)
+      case e: Exception => None
     }
   }
   
