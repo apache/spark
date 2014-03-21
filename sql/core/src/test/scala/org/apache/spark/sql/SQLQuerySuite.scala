@@ -200,9 +200,26 @@ class SQLQuerySuite extends QueryTest {
       sql(
         """
           |SELECT * FROM
-          |  (SELECT * FROM upperCaseData WHERE N <= 4) left FULL OUTER JOIN
-          |  (SELECT * FROM upperCaseData WHERE N >= 3) right
-          |    ON left.N = right.N
+          |  (SELECT * FROM upperCaseData WHERE N <= 4) leftTable FULL OUTER JOIN
+          |  (SELECT * FROM upperCaseData WHERE N >= 3) rightTable
+          |    ON leftTable.N = rightTable.N
+        """.stripMargin),
+      (1, "A", null, null) ::
+      (2, "B", null, null) ::
+      (3, "C", 3, "C") ::
+      (4, "D", 4, "D") ::
+      (null, null, 5, "E") ::
+      (null, null, 6, "F") :: Nil)
+  }
+
+  test("mixed-case keywords") {
+    checkAnswer(
+      sql(
+        """
+          |SeleCT * from
+          |  (select * from upperCaseData WherE N <= 4) leftTable fuLL OUtER joiN
+          |  (sElEcT * FROM upperCaseData whERe N >= 3) rightTable
+          |    oN leftTable.N = rightTable.N
         """.stripMargin),
       (1, "A", null, null) ::
       (2, "B", null, null) ::
