@@ -40,6 +40,14 @@ extends ClassLoader {
   val uri = new URI(classUri)
   val directory = uri.getPath
 
+  class ParentLoader(parent: ClassLoader) extends ClassLoader(parent) {
+    override def findClass(name: String): Class[_] = {
+      super.findClass(name)
+    }
+  }
+
+  val parentLoader = new ParentLoader(parent)
+
   // Hadoop FileSystem object for our URI, if it isn't using HTTP
   var fileSystem: FileSystem = {
     if (uri.getScheme() == "http") {
@@ -51,10 +59,10 @@ extends ClassLoader {
 
   override def findClass(name: String): Class[_] = {
     userClassPathFirst match {
-      case true => findClassLocally(name).getOrElse(parent.findClass(name))
+      case true => findClassLocally(name).getOrElse(parentLoader.findClass(name))
       case false => {
         try {
-          parent.findClass(name)
+          parentLoader.findClass(name)
         } catch {
           case e: ClassNotFoundException => {
             val classOption = findClassLocally(name)
@@ -68,7 +76,7 @@ extends ClassLoader {
     }
   }
 
-  def findClassLocaly(name: String): Option[Class[_]] = {
+  def findClassLocally(name: String): Option[Class[_]] = {
     try {
       val pathInDirectory = name.replace('.', '/') + ".class"
       val inputStream = {
