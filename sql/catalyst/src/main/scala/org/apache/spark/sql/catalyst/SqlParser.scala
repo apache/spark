@@ -138,7 +138,7 @@ class SqlParser extends StandardTokenParsers {
   /** Generate all variations of upper and lower case of a given string */
   private def allCaseVersions(s: String, prefix: String = ""): Stream[String] = {
     if (s == "") {
-      Stream(prefix + "")
+      Stream(prefix)
     } else {
       allCaseVersions(s.tail, prefix + s.head.toLower) ++
         allCaseVersions(s.tail, prefix + s.head.toUpper)
