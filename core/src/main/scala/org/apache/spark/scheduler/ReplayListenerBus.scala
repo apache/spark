@@ -130,7 +130,7 @@ private[spark] class ReplayListenerBus(logDir: String) extends SparkListenerBus 
 
   /** If a compression codec is specified, wrap the given stream in a compression stream. */
   private def wrapForCompression(stream: InputStream): InputStream = {
-    compressionCodec.map { codec => codec.compressedInputStream(stream) }.getOrElse(stream)
+    compressionCodec.map(_.compressedInputStream(stream)).getOrElse(stream)
   }
 
   /** Return a list of paths representing files found in the given directory. */

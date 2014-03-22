@@ -19,20 +19,20 @@ package org.apache.spark.deploy.history
 
 import java.net.URI
 
-import org.apache.spark.SparkConf
-import org.apache.spark.util.{Utils, IntParam}
 import org.apache.hadoop.fs.Path
+
+import org.apache.spark.util.{IntParam, Utils}
 
 /**
  * Command-line parser for the master.
  */
-private[spark] class HistoryServerArguments(args: Array[String], conf: SparkConf) {
+private[spark] class HistoryServerArguments(args: Array[String]) {
   var port = 18080
   var logDir = ""
 
   parse(args.toList)
 
-  def parse(args: List[String]): Unit = {
+  private def parse(args: List[String]): Unit = {
     args match {
       case ("--port" | "-p") :: IntParam(value) :: tail =>
         port = value
@@ -53,7 +53,7 @@ private[spark] class HistoryServerArguments(args: Array[String], conf: SparkConf
     validateLogDir()
   }
 
-  def validateLogDir() {
+  private def validateLogDir() {
     if (logDir == "") {
       System.err.println("Logging directory must be specified.")
       printUsageAndExit(1)
@@ -66,10 +66,7 @@ private[spark] class HistoryServerArguments(args: Array[String], conf: SparkConf
     }
   }
 
-  /**
-   * Print usage and exit JVM with the given exit code.
-   */
-  def printUsageAndExit(exitCode: Int) {
+  private def printUsageAndExit(exitCode: Int) {
     System.err.println(
       "Usage: HistoryServer [options]\n" +
       "\n" +

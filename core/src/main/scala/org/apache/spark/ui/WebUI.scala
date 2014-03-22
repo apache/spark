@@ -64,6 +64,6 @@ private[spark] object WebUI {
       return "%.0f min".format(minutes)
     }
     val hours = minutes / 60
-    return "%.1f h".format(hours)
+    "%.1f h".format(hours)
   }
 }

@@ -33,25 +33,28 @@ import org.apache.spark.util.Utils
 import org.apache.spark.scheduler.{ApplicationListener, ReplayListenerBus}
 
 /**
- * A web server that re-renders SparkUIs of finished applications.
+ * A web server that renders SparkUIs of finished applications.
  *
  * For the standalone mode, MasterWebUI already achieves this functionality. Thus, the
  * main use case of the HistoryServer is in other deploy modes (e.g. Yarn or Mesos).
  *
  * The logging directory structure is as follows: Within the given base directory, each
- * application's event logs are maintained in the application's own sub-directory.
+ * application's event logs are maintained in the application's own sub-directory. This
+ * is the same structure as maintained in the event log write code path in
+ * EventLoggingListener.
  *
  * @param baseLogDir The base directory in which event logs are found
  * @param requestedPort The requested port to which this server is to be bound
  */
-class HistoryServer(val baseLogDir: String, requestedPort: Int, conf: SparkConf)
+class HistoryServer(val baseLogDir: String, requestedPort: Int)
   extends SparkUIContainer("History Server") with Logging {
 
+  private val fileSystem = Utils.getHadoopFileSystem(new URI(baseLogDir))
   private val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
   private val port = requestedPort
-  private val indexPage = new IndexPage(this)
-  private val fileSystem = Utils.getHadoopFileSystem(new URI(baseLogDir))
+  private val conf = new SparkConf
   private val securityManager = new SecurityManager(conf)
+  private val indexPage = new IndexPage(this)
 
   // A timestamp of when the disk was last accessed to check for log updates
   private var lastLogCheck = -1L
@@ -84,8 +87,8 @@ class HistoryServer(val baseLogDir: String, requestedPort: Int, conf: SparkConf)
    * from the application's event logs, attaches this UI to itself, and stores metadata
    * information for this application.
    *
-   * If the logs for an existing finished application are no longer found, remove all
-   * associated information and detach the SparkUI.
+   * If the logs for an existing finished application are no longer found, the server
+   * removes all associated information and detaches the SparkUI.
    */
   def checkForLogs() {
     if (logCheckReady) {
@@ -137,7 +140,7 @@ class HistoryServer(val baseLogDir: String, requestedPort: Int, conf: SparkConf)
       if (success) {
         attachUI(ui)
         val appName = if (appListener.applicationStarted) appListener.appName else appId
-        ui.setAppName("%s (history)".format(appName))
+        ui.setAppName("%s (finished)".format(appName))
         val startTime = appListener.startTime
         val endTime = appListener.endTime
         val info = ApplicationHistoryInfo(appName, startTime, endTime, lastUpdated, logPath, ui)
@@ -155,7 +158,7 @@ class HistoryServer(val baseLogDir: String, requestedPort: Int, conf: SparkConf)
   /** Return the address of this server. */
   def getAddress = "http://" + host + ":" + boundPort
 
-  /** Return when this directory is last modified. */
+  /** Return when this directory was last modified. */
   private def getModificationTime(dir: FileStatus): Long = {
     val logFiles = fileSystem.listStatus(dir.getPath)
     if (logFiles != null) {
@@ -171,6 +174,16 @@ class HistoryServer(val baseLogDir: String, requestedPort: Int, conf: SparkConf)
   }
 }
 
+/**
+ * The recommended way of starting and stopping a HistoryServer is through the scripts
+ * start-history-server.sh and stop-history-server.sh. The path to a base log directory
+ * is must be specified, while the requested UI port is optional. For example:
+ *
+ *   ./sbin/spark-history-server.sh /tmp/spark-events 18080
+ *   ./sbin/spark-history-server.sh hdfs://1.2.3.4:9000/spark-events
+ *
+ * This launches the HistoryServer as a Spark daemon.
+ */
 object HistoryServer {
   val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
 
@@ -178,13 +191,13 @@ object HistoryServer {
   val UPDATE_INTERVAL_SECONDS = 5
 
   def main(argStrings: Array[String]) {
-    val conf = new SparkConf
-    val args = new HistoryServerArguments(argStrings, conf)
-    val server = new HistoryServer(args.logDir, args.port, conf)
+    val args = new HistoryServerArguments(argStrings)
+    val server = new HistoryServer(args.logDir, args.port)
     server.bind()
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
     while(true) { Thread.sleep(Int.MaxValue) }
+    server.stop()
   }
 }
 

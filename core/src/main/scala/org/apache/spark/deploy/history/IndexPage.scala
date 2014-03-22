@@ -17,8 +17,6 @@
 
 package org.apache.spark.deploy.history
 
-import java.text.SimpleDateFormat
-import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
@@ -26,7 +24,6 @@ import scala.xml.Node
 import org.apache.spark.ui.{UIUtils, WebUI}
 
 private[spark] class IndexPage(parent: HistoryServer) {
-  private val dateFmt = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 
   def render(request: HttpServletRequest): Seq[Node] = {
     parent.checkForLogs()
@@ -59,12 +56,12 @@ private[spark] class IndexPage(parent: HistoryServer) {
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
     val appName = if (info.started) info.name else parent.getAppId(info.logPath)
     val uiAddress = parent.getAddress + info.ui.basePath
-    val startTime = if (info.started) dateFmt.format(new Date(info.startTime)) else "Not started"
-    val endTime = if (info.finished) dateFmt.format(new Date(info.endTime)) else "Not finished"
+    val startTime = if (info.started) WebUI.formatDate(info.startTime) else "Not started"
+    val endTime = if (info.finished) WebUI.formatDate(info.endTime) else "Not finished"
     val difference = if (info.started && info.finished) info.endTime - info.startTime else -1L
     val duration = if (difference > 0) WebUI.formatDuration(difference) else "---"
     val logDirectory = parent.getAppId(info.logPath)
-    val lastUpdated = dateFmt.format(new Date(info.lastUpdated))
+    val lastUpdated = WebUI.formatDate(info.lastUpdated)
     <tr>
       <td><a href={uiAddress}>{appName}</a></td>
       <td>{startTime}</td>
