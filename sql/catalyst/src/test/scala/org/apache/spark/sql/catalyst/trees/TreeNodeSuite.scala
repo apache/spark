@@ -15,15 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package trees
+package org.apache.spark.sql.catalyst.trees
 
 import scala.collection.mutable.ArrayBuffer
 
-import expressions._
+import org.scalatest.FunSuite
 
-import org.scalatest.{FunSuite}
+import org.apache.spark.sql.catalyst.expressions._
 
 class TreeNodeSuite extends FunSuite {
 
@@ -60,8 +58,8 @@ class TreeNodeSuite extends FunSuite {
     val expected = Seq("+", "1", "*", "2", "-", "3", "4")
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
     expression transformDown {
-      case b: BinaryExpression => {actual.append(b.symbol); b}
-      case l: Literal => {actual.append(l.toString); l}
+      case b: BinaryExpression => actual.append(b.symbol); b
+      case l: Literal => actual.append(l.toString); l
     }
 
     assert(expected === actual)
@@ -72,8 +70,8 @@ class TreeNodeSuite extends FunSuite {
     val expected = Seq("1", "2", "3", "4", "-", "*", "+")
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
     expression transformUp {
-      case b: BinaryExpression => {actual.append(b.symbol); b}
-      case l: Literal => {actual.append(l.toString); l}
+      case b: BinaryExpression => actual.append(b.symbol); b
+      case l: Literal => actual.append(l.toString); l
     }
 
     assert(expected === actual)

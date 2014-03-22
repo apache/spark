@@ -21,8 +21,8 @@ package analysis
 
 import org.scalatest.FunSuite
 
-import catalyst.types._
-
+import org.apache.spark.sql.catalyst.types._
+import scala.Some
 
 class HiveTypeCoercionSuite extends FunSuite {
 

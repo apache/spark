@@ -19,13 +19,12 @@ package org.apache.spark.sql
 package catalyst
 package optimizer
 
-import types.IntegerType
-import util._
-import plans.logical.{LogicalPlan, LocalRelation}
-import rules._
-import expressions._
-import dsl.plans._
-import dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.types.IntegerType
 
 class ConstantFoldingSuite extends OptimizerTest {
 
@@ -106,7 +105,7 @@ class ConstantFoldingSuite extends OptimizerTest {
           Literal(5) + 'a as Symbol("c1"),
           'a + Literal(2) + Literal(3) as Symbol("c2"),
           Literal(2) * 'a + Literal(4) as Symbol("c3"),
-          'a * (Literal(7)) as Symbol("c4"))
+          'a * Literal(7) as Symbol("c4"))
         .analyze
 
     comparePlans(optimized, correctAnswer)

@@ -19,7 +19,7 @@ package org.apache.spark.sql
 package catalyst
 package expressions
 
-import types._
+import org.apache.spark.sql.catalyst.types.NativeType
 
 /**
  * Represents one row of output from a relational operator.  Allows both generic access by ordinal,
@@ -209,6 +209,6 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
       }
       i += 1
     }
-    return 0
+    0
   }
 }

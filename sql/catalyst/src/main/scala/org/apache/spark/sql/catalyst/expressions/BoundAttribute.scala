@@ -19,10 +19,9 @@ package org.apache.spark.sql
 package catalyst
 package expressions
 
-import rules._
-import errors._
-
-import catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.errors.attachTree
+import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
  * A bound reference points to a specific slot in the input tuple, allowing the actual value

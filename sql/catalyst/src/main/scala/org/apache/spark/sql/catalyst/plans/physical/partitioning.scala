@@ -20,8 +20,8 @@ package catalyst
 package plans
 package physical
 
-import expressions._
-import types._
+import org.apache.spark.sql.catalyst.expressions.{SortOrder, Expression}
+import org.apache.spark.sql.catalyst.types.IntegerType
 
 /**
  * Specifies how tuples that share common expressions will be distributed when a query is executed

@@ -2,10 +2,8 @@ package org.apache.spark.sql
 package catalyst
 package optimizer
 
-import expressions._
-import plans.logical._
-import rules._
-import util._
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules._
 
 import dsl.plans._
 import dsl.expressions._

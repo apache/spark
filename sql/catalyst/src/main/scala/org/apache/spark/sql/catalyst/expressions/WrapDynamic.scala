@@ -21,7 +21,7 @@ package expressions
 
 import scala.language.dynamics
 
-import types._
+import org.apache.spark.sql.catalyst.types.DataType
 
 case object DynamicType extends DataType
 

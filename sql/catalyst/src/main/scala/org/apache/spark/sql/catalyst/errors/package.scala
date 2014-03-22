@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 package catalyst
 
-import trees._
+import org.apache.spark.sql.catalyst.trees.TreeNode
 
 /**
  * Functions for attaching and retrieving trees that are associated with errors.

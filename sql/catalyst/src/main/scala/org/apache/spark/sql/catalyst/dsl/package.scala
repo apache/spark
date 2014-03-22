@@ -19,13 +19,12 @@ package org.apache.spark.sql
 package catalyst
 
 import scala.language.implicitConversions
-import scala.reflect.runtime.universe.TypeTag
 
-import analysis.UnresolvedAttribute
-import expressions._
-import plans._
-import plans.logical._
-import types._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
+import org.apache.spark.sql.catalyst.types._
 
 /**
  * Provides experimental support for generating catalyst schemas for scala objects.

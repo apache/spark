@@ -19,7 +19,7 @@ package org.apache.spark.sql
 package catalyst
 package trees
 
-import errors._
+import org.apache.spark.sql.catalyst.errors._
 
 object TreeNode {
   private val currentId = new java.util.concurrent.atomic.AtomicLong

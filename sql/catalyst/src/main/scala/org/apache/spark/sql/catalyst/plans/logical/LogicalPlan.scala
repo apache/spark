@@ -20,9 +20,9 @@ package catalyst
 package plans
 package logical
 
-import catalyst.expressions._
-import catalyst.errors._
-import catalyst.types.StructType
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.StructType
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   self: Product =>

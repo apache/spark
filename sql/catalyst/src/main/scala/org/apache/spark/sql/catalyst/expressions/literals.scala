@@ -19,7 +19,7 @@ package org.apache.spark.sql
 package catalyst
 package expressions
 
-import types._
+import org.apache.spark.sql.catalyst.types._
 
 object Literal {
   def apply(v: Any): Literal = v match {
