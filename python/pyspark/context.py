@@ -383,7 +383,7 @@ class SparkContext(object):
             raise Exception("storageLevel must be of type pyspark.StorageLevel")
 
         newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
-        return newStorageLevel(storageLevel.useDisk, storageLevel.useMemory,
+        return newStorageLevel(storageLevel.useDisk, storageLevel.useMemory, storageLevel.userTachyon,
             storageLevel.deserialized, storageLevel.replication)
 
     def setJobGroup(self, groupId, description):
