@@ -164,8 +164,10 @@ class SparseVector(val n: Int, val indices: Array[Int], val values: Array[Double
 
   override def toArray: Array[Double] = {
     val data = new Array[Double](n)
-    indices.view.zip(values).foreach { case (i, x) =>
-      data.update(i, x)
+    var i = 0
+    while (i < n) {
+      data(indices(i)) = values(i)
+      i += 1
     }
     data
   }
