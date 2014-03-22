@@ -15,18 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg.rdd
+package org.apache.spark.mllib.rdd
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.scalatest.FunSuite
 
-/**
- * Factory methods for `RDD[Vector]`.
- */
-object VectorRDDs {
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.LocalSparkContext
 
-  /**
-   * Converts an `RDD[Array[Double]]` to `RDD[Vector]`.
-   */
-  def fromArrayRDD(rdd: RDD[Array[Double]]): RDD[Vector] = rdd.map(v => Vectors.dense(v))
+class VectorRDDsSuite extends FunSuite with LocalSparkContext {
+
+  test("from array rdd") {
+    val data = Seq(Array(1.0, 2.0), Array(3.0, 4.0))
+    val arrayRdd = sc.parallelize(data, 2)
+    val vectorRdd = VectorRDDs.fromArrayRDD(arrayRdd)
+    assert(arrayRdd.collect().map(v => Vectors.dense(v)) === vectorRdd.collect())
+  }
 }
