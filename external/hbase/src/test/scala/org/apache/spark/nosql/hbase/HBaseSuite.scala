@@ -44,5 +44,9 @@ class HBaseSuite extends FunSuite with LocalSparkContext {
       result = rs.next()
       i += 1
     }
+
+    rs.close()
+    htable.close()
+    util.shutdownMiniCluster()
   }
 }
