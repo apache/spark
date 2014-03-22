@@ -21,8 +21,6 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 
-import org.apache.commons.math3.util.Precision.EPSILON
-
 import org.jblas.DoubleMatrix
 
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -33,6 +31,14 @@ import breeze.linalg.{Vector => BV, SparseVector => BSV, squaredDistance => bree
  * Helper methods to load, save and pre-process data used in ML Lib.
  */
 object MLUtils {
+
+  private[util] lazy val EPSILON = {
+    var eps = 1.0
+    while ((1.0 + (eps / 2.0)) != 1.0) {
+      eps /= 2.0
+    }
+    eps
+  }
 
   /**
    * Load labeled data from a file. The data format used here is

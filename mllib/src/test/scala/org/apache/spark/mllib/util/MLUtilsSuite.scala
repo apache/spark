@@ -26,6 +26,11 @@ import org.apache.spark.mllib.util.MLUtils._
 
 class MLUtilsSuite extends FunSuite {
 
+  test("epsilon computation") {
+    assert(1.0 + EPSILON > 1.0, s"EPSILON is too small: $EPSILON.")
+    assert(1.0 + EPSILON / 2.0 === 1.0, s"EPSILON is too big: $EPSILON.")
+  }
+
   test("fast squared distance") {
     val a = (30 to 0 by -1).map(math.pow(2.0, _)).toArray
     val n = a.length
