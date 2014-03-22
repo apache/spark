@@ -133,7 +133,6 @@ object StorageLevel {
   val MEMORY_AND_DISK_2 = new StorageLevel(true, true, false, true, 2)
   val MEMORY_AND_DISK_SER = new StorageLevel(true, true, false, false)
   val MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, false, 2)
-  
   val TACHYON = new StorageLevel(false, false, true, false)
 
   /** Create a new StorageLevel object */

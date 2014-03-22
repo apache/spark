@@ -23,7 +23,7 @@ To write a Spark application, you need to add a dependency on Spark. If you use 
 
     groupId = org.apache.spark
     artifactId = spark-core_{{site.SCALA_BINARY_VERSION}}
-    version = {{site.SPARK_VERSION}} 
+    version = {{site.SPARK_VERSION}}
 
 In addition, if you wish to access an HDFS cluster, you need to add a dependency on `hadoop-client` for your version of HDFS:
 
@@ -73,14 +73,14 @@ The master URL passed to Spark can be in one of the following formats:
 <table class="table">
 <tr><th>Master URL</th><th>Meaning</th></tr>
 <tr><td> local </td><td> Run Spark locally with one worker thread (i.e. no parallelism at all). </td></tr>
-<tr><td> local[K] </td><td> Run Spark locally with K worker threads (ideally, set this to the number of cores on your machine). 
+<tr><td> local[K] </td><td> Run Spark locally with K worker threads (ideally, set this to the number of cores on your machine).
 </td></tr>
-<tr><td> spark://HOST:PORT </td><td> Connect to the given <a href="spark-standalone.html">Spark standalone 
-        cluster</a> master. The port must be whichever one your master is configured to use, which is 7077 by default. 
+<tr><td> spark://HOST:PORT </td><td> Connect to the given <a href="spark-standalone.html">Spark standalone
+        cluster</a> master. The port must be whichever one your master is configured to use, which is 7077 by default.
 </td></tr>
-<tr><td> mesos://HOST:PORT </td><td> Connect to the given <a href="running-on-mesos.html">Mesos</a> cluster. 
-        The host parameter is the hostname of the Mesos master. The port must be whichever one the master is configured to use, 
-        which is 5050 by default. 
+<tr><td> mesos://HOST:PORT </td><td> Connect to the given <a href="running-on-mesos.html">Mesos</a> cluster.
+        The host parameter is the hostname of the Mesos master. The port must be whichever one the master is configured to use,
+        which is 5050 by default.
 </td></tr>
 </table>
 
@@ -313,14 +313,16 @@ We recommend going through the following process to select one:
 * If your RDDs fit comfortably with the default storage level (`MEMORY_ONLY`), leave them that way. This is the most
   CPU-efficient option, allowing operations on the RDDs to run as fast as possible.
 * If not, try using `MEMORY_ONLY_SER` and [selecting a fast serialization library](tuning.html) to make the objects
-  much more space-efficient, but still reasonably fast to access.
+  much more space-efficient, but still reasonably fast to access. You can also use `Tachyon` mode
+  to store the data off the heap in [Tachyon](http://tachyon-project.org/). This will significantly
+  reduce JVM GC overhead.
 * Don't spill to disk unless the functions that computed your datasets are expensive, or they filter a large
   amount of the data. Otherwise, recomputing a partition is about as fast as reading it from disk.
 * Use the replicated storage levels if you want fast fault recovery (e.g. if using Spark to serve requests from a web
   application). *All* the storage levels provide full fault tolerance by recomputing lost data, but the replicated ones
   let you continue running tasks on the RDD without waiting to recompute a lost partition.
- 
-If you want to define your own storage level (say, with replication factor of 3 instead of 2), then use the function factor method `apply()` of the [`StorageLevel`](api/core/index.html#org.apache.spark.storage.StorageLevel$) singleton object.  
+
+If you want to define your own storage level (say, with replication factor of 3 instead of 2), then use the function factor method `apply()` of the [`StorageLevel`](api/core/index.html#org.apache.spark.storage.StorageLevel$) singleton object.
 
 # Shared Variables
 
