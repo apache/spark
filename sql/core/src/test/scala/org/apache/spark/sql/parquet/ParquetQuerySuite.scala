@@ -33,7 +33,7 @@ import parquet.hadoop.util.ContextUtil
 
 class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
   override def beforeAll() {
-    ParquetTestData.writeFile
+    ParquetTestData.writeFile()
   }
 
   override def afterAll() {

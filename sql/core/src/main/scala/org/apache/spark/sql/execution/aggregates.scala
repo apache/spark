@@ -19,13 +19,10 @@ package org.apache.spark.sql
 package execution
 
 import org.apache.spark.SparkContext
-
-import catalyst.errors._
-import catalyst.expressions._
-import catalyst.plans.physical.{UnspecifiedDistribution, ClusteredDistribution, AllTuples}
-import catalyst.types._
-
 import org.apache.spark.rdd.PartitionLocalRDDFunctions._
+import org.apache.spark.sql.catalyst.errors._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.physical._
 
 /**
  * Groups input data by `groupingExpressions` and computes the `aggregateExpressions` for each

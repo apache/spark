@@ -18,17 +18,12 @@
 package org.apache.spark.sql
 package execution
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
-
-import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.test._
 
-
 import TestSQLContext._
+import org.apache.spark.sql.QueryTest
 
 /**
  * This is an example TGF that uses UnresolvedAttributes 'name and 'age to access specific columns

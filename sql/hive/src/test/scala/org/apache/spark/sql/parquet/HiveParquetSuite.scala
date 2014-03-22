@@ -90,7 +90,7 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
 
   override def beforeAll() {
     // write test data
-    ParquetTestData.writeFile
+    ParquetTestData.writeFile()
     // Override initial Parquet test table
     TestHive.catalog.registerTable(Some[String]("parquet"), "testsource", ParquetTestData.testData)
   }

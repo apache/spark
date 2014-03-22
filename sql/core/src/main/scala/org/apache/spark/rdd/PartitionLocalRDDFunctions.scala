@@ -23,7 +23,6 @@ import scala.reflect._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
-import org.apache.spark.Aggregator
 import org.apache.spark.SparkContext._
 import org.apache.spark.util.collection.AppendOnlyMap
 

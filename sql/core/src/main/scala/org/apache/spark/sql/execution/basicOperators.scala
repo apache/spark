@@ -23,18 +23,17 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 
-import catalyst.errors._
-import catalyst.expressions._
-import catalyst.plans.physical.{UnspecifiedDistribution, OrderedDistribution}
-import catalyst.plans.logical.LogicalPlan
-import catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.errors._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.physical.{UnspecifiedDistribution, OrderedDistribution}
+import org.apache.spark.sql.catalyst.ScalaReflection
 
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
 
   def execute() = child.execute().mapPartitions { iter =>
-    @transient val resuableProjection = new MutableProjection(projectList)
-    iter.map(resuableProjection)
+    @transient val reusableProjection = new MutableProjection(projectList)
+    iter.map(reusableProjection)
   }
 }
 

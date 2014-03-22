@@ -19,28 +19,28 @@ package org.apache.spark.sql.parquet
 
 import java.io.{IOException, FileNotFoundException}
 
-import org.apache.hadoop.fs.{Path, FileSystem}
+import scala.collection.JavaConversions._
+
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.fs.permission.FsAction
+import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, BaseRelation}
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.ArrayType
-import org.apache.spark.sql.catalyst.expressions.{Row, AttributeReference, Attribute}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-
-import parquet.schema.{MessageTypeParser, MessageType}
-import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
-import parquet.schema.{PrimitiveType => ParquetPrimitiveType}
-import parquet.schema.{Type => ParquetType}
-import parquet.schema.Type.Repetition
-import parquet.io.api.{Binary, RecordConsumer}
-import parquet.hadoop.{Footer, ParquetFileWriter, ParquetFileReader}
 import parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
 import parquet.hadoop.util.ContextUtil
+import parquet.hadoop.{Footer, ParquetFileWriter, ParquetFileReader}
+import parquet.io.api.{Binary, RecordConsumer}
+import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
+import parquet.schema.Type.Repetition
+import parquet.schema.{MessageTypeParser, MessageType}
+import parquet.schema.{PrimitiveType => ParquetPrimitiveType}
+import parquet.schema.{Type => ParquetType}
 
-import scala.collection.JavaConversions._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.expressions.{Row, AttributeReference, Attribute}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, BaseRelation}
+import org.apache.spark.sql.catalyst.types.ArrayType
+import org.apache.spark.sql.catalyst.types._
 
 /**
  * Relation that consists of data stored in a Parquet columnar format.
@@ -55,7 +55,7 @@ import scala.collection.JavaConversions._
  * @param tableName The name of the relation that can be used in queries.
  * @param path The path to the Parquet file.
  */
-case class ParquetRelation(val tableName: String, val path: String) extends BaseRelation {
+case class ParquetRelation(tableName: String, path: String) extends BaseRelation {
 
   /** Schema derived from ParquetFile **/
   def parquetSchema: MessageType =
@@ -145,11 +145,10 @@ object ParquetTypesConverter {
     case ParquetPrimitiveTypeName.FLOAT => FloatType
     case ParquetPrimitiveTypeName.INT32 => IntegerType
     case ParquetPrimitiveTypeName.INT64 => LongType
-    case ParquetPrimitiveTypeName.INT96 => {
+    case ParquetPrimitiveTypeName.INT96 =>
       // TODO: add BigInteger type? TODO(andre) use DecimalType instead????
       sys.error("Warning: potential loss of precision: converting INT96 to long")
       LongType
-    }
     case _ => sys.error(
       s"Unsupported parquet datatype $parquetType")
   }
@@ -186,11 +185,10 @@ object ParquetTypesConverter {
 
   def convertToAttributes(parquetSchema: MessageType) : Seq[Attribute] = {
     parquetSchema.getColumns.map {
-      case (desc) => {
+      case (desc) =>
         val ctype = toDataType(desc.getType)
         val name: String = desc.getPath.mkString(".")
         new AttributeReference(name, ctype, false)()
-      }
     }
   }
 
@@ -245,7 +243,7 @@ object ParquetTypesConverter {
    * Try to read Parquet metadata at the given Path. We first see if there is a summary file
    * in the parent directory. If so, this is used. Else we read the actual footer at the given
    * location.
-   * @param path The path at which we expect one (or more) Parquet files.
+   * @param origPath The path at which we expect one (or more) Parquet files.
    * @return The `ParquetMetadata` containing among other things the schema.
    */
   def readMetaData(origPath: Path): ParquetMetadata = {

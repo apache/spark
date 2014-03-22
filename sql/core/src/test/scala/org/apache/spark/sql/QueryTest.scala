@@ -17,23 +17,17 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.FunSuite
 
-import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.test._
 
 /* Implicits */
-import TestSQLContext._
 
 class QueryTest extends FunSuite {
   /**
    * Runs the plan and makes sure the answer matches the expected result.
-   * @param plan the query to be executed
+   * @param rdd the [[SchemaRDD]] to be executed
    * @param expectedAnswer the expected result, can either be an Any, Seq[Product], or Seq[ Seq[Any] ].
    */
   protected def checkAnswer(rdd: SchemaRDD, expectedAnswer: Any): Unit = {
