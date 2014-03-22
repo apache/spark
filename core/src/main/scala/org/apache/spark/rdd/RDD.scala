@@ -668,7 +668,7 @@ abstract class RDD[T: ClassTag](
    *
    * In case of iterating it consumes memory as the biggest partition in cluster.
    */
-  def toLocallyIterable: Stream[T] = {
+  def toLocalIterator: Iterator[T] = {
     def collectPartition(p: Int): Array[T] = {
       sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p), allowLocal = false).head
     }
@@ -678,7 +678,7 @@ abstract class RDD[T: ClassTag](
         collectPartition(p).toStream
       }
     }
-    buffer
+    buffer.iterator
   }
 
   /**

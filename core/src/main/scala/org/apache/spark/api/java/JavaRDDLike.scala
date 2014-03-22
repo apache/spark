@@ -287,13 +287,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    *
    * In case of iterating it consumes memory as the biggest partition in cluster.
    */
-  def toLocallyIterable(): JIterable[T] = {
-    new JIterable[T](){
-      def iterator(): JIterator[T] =  {
-        import scala.collection.JavaConversions._
-        rdd.toLocallyIterable.iterator
-      }
-    }
+  def toLocalIterator(): JIterator[T] = {
+     import scala.collection.JavaConversions._
+     rdd.toLocalIterator
   }
 
 

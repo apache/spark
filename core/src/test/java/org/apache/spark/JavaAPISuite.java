@@ -151,10 +151,10 @@ public class JavaAPISuite implements Serializable {
   }
 
     @Test
-    public void toLocallyIterable() {
+    public void toLocalIterator() {
         List<Integer> correct = Arrays.asList(1, 2, 3, 4);
         JavaRDD<Integer> rdd = sc.parallelize(correct);
-        List<Integer> result = Lists.newArrayList(rdd.toLocallyIterable());
+        List<Integer> result = Lists.newArrayList(rdd.toLocalIterator());
         Assert.assertTrue(correct.equals(result));
     }
 
