@@ -32,7 +32,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.catalyst.plans.logical.{BaseRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{BaseRelation, LogicalPlan, LowerCaseSchema}
 import org.apache.spark.sql.catalyst.plans.logical.{NativeCommand, ExplainCommand}
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution._
@@ -108,7 +108,15 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient
-  override lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
+  override lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog {
+    override def lookupRelation(
+      databaseName: Option[String],
+      tableName: String,
+      alias: Option[String] = None): LogicalPlan = {
+
+      LowerCaseSchema(super.lookupRelation(databaseName, tableName, alias))
+    }
+  }
 
   /* An analyzer that uses the Hive metastore. */
   @transient

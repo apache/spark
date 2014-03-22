@@ -27,28 +27,14 @@ import org.apache.spark.sql.catalyst.types._
 
 object Optimizer extends RuleExecutor[LogicalPlan] {
   val batches =
-    Batch("Subqueries", Once,
-      EliminateSubqueries) ::
     Batch("ConstantFolding", Once,
       ConstantFolding,
       BooleanSimplification,
       SimplifyCasts) ::
     Batch("Filter Pushdown", Once,
-      EliminateSubqueries,
       CombineFilters,
       PushPredicateThroughProject,
       PushPredicateThroughInnerJoin) :: Nil
-}
-
-/**
- * Removes [[catalyst.plans.logical.Subquery Subquery]] operators from the plan.  Subqueries are
- * only required to provide scoping information for attributes and can be removed once analysis is
- * complete.
- */
-object EliminateSubqueries extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Subquery(_, child) => child
-  }
 }
 
 /**

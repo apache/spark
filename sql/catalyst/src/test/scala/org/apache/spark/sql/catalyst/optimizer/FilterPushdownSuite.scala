@@ -2,6 +2,8 @@ package org.apache.spark.sql
 package catalyst
 package optimizer
 
+
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
@@ -14,9 +16,8 @@ class FilterPushdownSuite extends OptimizerTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", Once,
-        EliminateSubqueries) ::
+        EliminateAnalysisOperators) ::
       Batch("Filter Pushdown", Once,
-        EliminateSubqueries,
         CombineFilters,
         PushPredicateThroughProject,
         PushPredicateThroughInnerJoin) :: Nil
@@ -155,7 +156,7 @@ class FilterPushdownSuite extends OptimizerTest {
     }
     val optimized = Optimize(originalQuery.analyze)
 
-    comparePlans(optimizer.EliminateSubqueries(originalQuery.analyze), optimized)
+    comparePlans(analysis.EliminateAnalysisOperators(originalQuery.analyze), optimized)
   }
 
   test("joins: conjunctive predicates") {
@@ -174,7 +175,7 @@ class FilterPushdownSuite extends OptimizerTest {
       left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
 
-    comparePlans(optimized, optimizer.EliminateSubqueries(correctAnswer))
+    comparePlans(optimized, analysis.EliminateAnalysisOperators(correctAnswer))
   }
 
   test("joins: conjunctive predicates #2") {
@@ -193,7 +194,7 @@ class FilterPushdownSuite extends OptimizerTest {
       left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
 
-    comparePlans(optimized, optimizer.EliminateSubqueries(correctAnswer))
+    comparePlans(optimized, analysis.EliminateAnalysisOperators(correctAnswer))
   }
 
   test("joins: conjunctive predicates #3") {
@@ -216,6 +217,6 @@ class FilterPushdownSuite extends OptimizerTest {
           condition = Some("z.a".attr === "x.b".attr))
         .analyze
 
-    comparePlans(optimized, optimizer.EliminateSubqueries(correctAnswer))
+    comparePlans(optimized, analysis.EliminateAnalysisOperators(correctAnswer))
   }
 }
