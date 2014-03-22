@@ -53,6 +53,9 @@ class HistoryServer(val baseLogDir: String, requestedPort: Int, conf: SparkConf)
   private val fileSystem = Utils.getHadoopFileSystem(new URI(baseLogDir))
   private val securityManager = new SecurityManager(conf)
 
+  // A timestamp of when the disk was last accessed to check for log updates
+  private var lastLogCheck = -1L
+
   private val handlers = Seq[ServletContextHandler](
     createStaticHandler(HistoryServer.STATIC_RESOURCE_DIR, "/static"),
     createServletHandler("/",
@@ -74,80 +77,105 @@ class HistoryServer(val baseLogDir: String, requestedPort: Int, conf: SparkConf)
     checkForLogs()
   }
 
+  /**
+   * Check for any updates to event logs in the base directory.
+   *
+   * If a new finished application is found, the server renders the associated SparkUI
+   * from the application's event logs, attaches this UI to itself, and stores metadata
+   * information for this application.
+   *
+   * If the logs for an existing finished application are no longer found, remove all
+   * associated information and detach the SparkUI.
+   */
+  def checkForLogs() {
+    if (logCheckReady) {
+      lastLogCheck = System.currentTimeMillis
+      val logStatus = fileSystem.listStatus(new Path(baseLogDir))
+      val logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
+
+      // Render SparkUI for any new completed applications
+      logDirs.foreach { dir =>
+        val path = dir.getPath.toString
+        val appId = getAppId(path)
+        val lastUpdated = getModificationTime(dir)
+        if (!appIdToInfo.contains(appId)) {
+          maybeRenderUI(appId, path, lastUpdated)
+        }
+      }
+
+      // Remove any outdated SparkUIs
+      val appIds = logDirs.map { dir => getAppId(dir.getPath.toString) }
+      appIdToInfo.foreach { case (appId, info) =>
+        if (!appIds.contains(appId)) {
+          detachUI(info.ui)
+          appIdToInfo.remove(appId)
+        }
+      }
+    }
+  }
+
+  /**
+   * Render a new SparkUI from the event logs if the associated application is finished.
+   *
+   * HistoryServer looks for a special file that indicates application completion in the given
+   * directory. If this file exists, the associated application is regarded to be complete, in
+   * which case the server proceeds to render the SparkUI. Otherwise, the server does nothing.
+   */
+  private def maybeRenderUI(appId: String, logPath: String, lastUpdated: Long) {
+    val replayBus = new ReplayListenerBus(logPath)
+    replayBus.start()
+
+    // If the application completion file is found
+    if (replayBus.isApplicationComplete) {
+      val ui = new SparkUI(replayBus, appId, "/history/%s".format(appId))
+      val appListener = new ApplicationListener
+      replayBus.addListener(appListener)
+
+      // Do not call ui.bind() to avoid creating a new server for each application
+      ui.start()
+      val success = replayBus.replay()
+      if (success) {
+        attachUI(ui)
+        val appName = if (appListener.applicationStarted) appListener.appName else appId
+        ui.setAppName("%s (history)".format(appName))
+        val startTime = appListener.startTime
+        val endTime = appListener.endTime
+        val info = ApplicationHistoryInfo(appName, startTime, endTime, lastUpdated, logPath, ui)
+        appIdToInfo(appId) = info
+      }
+    } else {
+      logWarning("Skipping incomplete application: %s".format(logPath))
+    }
+    replayBus.stop()
+  }
+
   /** Parse app ID from the given log path. */
   def getAppId(logPath: String): String = logPath.split("/").last
 
   /** Return the address of this server. */
   def getAddress = "http://" + host + ":" + boundPort
 
-  /**
-   * Check for any updated event logs.
-   *
-   * If a new application is found, render the associated SparkUI and remember it.
-   * If an existing application is updated, re-render the associated SparkUI.
-   * If an existing application is removed, remove the associated SparkUI.
-   */
-  def checkForLogs() {
-    val logStatus = fileSystem.listStatus(new Path(baseLogDir))
-    val logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
-
-    // Render any missing or outdated SparkUI
-    logDirs.foreach { dir =>
-      val path = dir.getPath.toString
-      val appId = getAppId(path)
-      val lastUpdated = {
-        val logFiles = fileSystem.listStatus(dir.getPath)
-        if (logFiles != null) logFiles.map(_.getModificationTime).max else dir.getModificationTime
-      }
-      if (!appIdToInfo.contains(appId) || appIdToInfo(appId).lastUpdated < lastUpdated) {
-        maybeRenderUI(appId, path, lastUpdated)
-      }
-    }
-
-    // Remove any outdated SparkUIs
-    val appIds = logDirs.map { dir => getAppId(dir.getPath.toString) }
-    appIdToInfo.foreach { case (appId, info) =>
-      if (!appIds.contains(appId)) {
-        detachUI(info.ui)
-        appIdToInfo.remove(appId)
-      }
+  /** Return when this directory is last modified. */
+  private def getModificationTime(dir: FileStatus): Long = {
+    val logFiles = fileSystem.listStatus(dir.getPath)
+    if (logFiles != null) {
+      logFiles.map(_.getModificationTime).max
+    } else {
+      dir.getModificationTime
     }
   }
 
-  /** Attempt to render a new SparkUI from event logs residing in the given log directory. */
-  private def maybeRenderUI(appId: String, logPath: String, lastUpdated: Long) {
-    val replayBus = new ReplayListenerBus(conf)
-    val appListener = new ApplicationListener
-    replayBus.addListener(appListener)
-    val ui = new SparkUI(conf, replayBus, appId, "/history/%s".format(appId))
-
-    // Do not call ui.bind() to avoid creating a new server for each application
-    ui.start()
-    val success = replayBus.replay(logPath)
-    if (success) {
-      attachUI(ui)
-      if (!appListener.started) {
-        logWarning("Application has event logs but has not started: %s".format(appId))
-      }
-      val appName = appListener.appName
-      val startTime = appListener.startTime
-      val endTime = appListener.endTime
-      val info = ApplicationHistoryInfo(appName, startTime, endTime, lastUpdated, logPath, ui)
-
-      // If the UI already exists, terminate it and replace it
-      appIdToInfo.remove(appId).foreach { info => detachUI(info.ui) }
-      appIdToInfo(appId) = info
-
-      // Use mnemonic original app name rather than app ID
-      val originalAppName = "%s (history)".format(appName)
-      ui.setAppName(originalAppName)
-    }
+  /** Return whether the last log check has happened sufficiently long ago. */
+  private def logCheckReady: Boolean = {
+    System.currentTimeMillis - lastLogCheck > HistoryServer.UPDATE_INTERVAL_SECONDS * 1000
   }
-
 }
 
 object HistoryServer {
   val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
+
+  // Minimum interval between each check for logs, which requires a disk access
+  val UPDATE_INTERVAL_SECONDS = 5
 
   def main(argStrings: Array[String]) {
     val conf = new SparkConf

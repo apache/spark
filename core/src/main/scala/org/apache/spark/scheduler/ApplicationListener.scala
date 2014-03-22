@@ -29,13 +29,13 @@ private[spark] class ApplicationListener extends SparkListener {
   var startTime = -1L
   var endTime = -1L
 
-  def started = startTime != -1
+  def applicationStarted = startTime != -1
 
-  def finished = endTime != -1
+  def applicationFinished = endTime != -1
 
-  def duration: Long = {
+  def applicationDuration: Long = {
     val difference = endTime - startTime
-    if (started && finished && difference > 0) difference else -1L
+    if (applicationStarted && applicationFinished && difference > 0) difference else -1L
   }
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {

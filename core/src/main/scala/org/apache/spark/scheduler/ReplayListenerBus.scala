@@ -31,38 +31,62 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
 
 /**
- * An EventBus that replays logged events from persisted storage
+ * An EventBus that replays logged events from persisted storage.
+ *
+ * This class expects files to be appropriately prefixed as specified in EventLoggingListener.
+ * There exists a one-to-one mapping between ReplayListenerBus and event logging applications.
  */
-private[spark] class ReplayListenerBus(conf: SparkConf) extends SparkListenerBus with Logging {
-  private val compressed = conf.getBoolean("spark.eventLog.compress", false)
-
-  // Only used if compression is enabled
-  private lazy val compressionCodec = CompressionCodec.createCodec(conf)
+private[spark] class ReplayListenerBus(logDir: String) extends SparkListenerBus with Logging {
+  private val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
+  private var applicationComplete = false
+  private var compressionCodec: Option[CompressionCodec] = None
+  private var logPaths = Array[Path]()
+  private var started = false
+  private var replayed = false
 
   /**
-   * Return a list of paths representing log files in the given directory.
+   * Prepare state for reading event logs.
+   *
+   * This gathers relevant files in the given directory and extracts meaning from each category.
+   * More specifically, this involves looking for event logs, the compression codec file
+   * (if event logs are compressed), and the application completion file (if the application
+   * has run to completion).
    */
-  private def getLogFilePaths(logDir: String, fileSystem: FileSystem): Array[Path] = {
-    val path = new Path(logDir)
-    if (!fileSystem.exists(path) || !fileSystem.getFileStatus(path).isDir) {
-      logWarning("Log path provided is not a valid directory: %s".format(logDir))
-      return Array[Path]()
-    }
-    val logStatus = fileSystem.listStatus(path)
-    if (logStatus == null || !logStatus.exists(!_.isDir)) {
-      logWarning("Log path provided contains no log files: %s".format(logDir))
-      return Array[Path]()
-    }
-    logStatus.filter(!_.isDir).map(_.getPath).sortBy(_.getName)
+  def start() {
+    val filePaths = getFilePaths(logDir, fileSystem)
+    logPaths = filePaths.filter { file => EventLoggingListener.isEventLogFile(file.getName) }
+    compressionCodec =
+      filePaths.find { file =>
+        EventLoggingListener.isCompressionCodecFile(file.getName)
+      }.map { file =>
+        val codec = EventLoggingListener.parseCompressionCodec(file.getName)
+        val conf = new SparkConf
+        conf.set("spark.io.compression.codec", codec)
+        CompressionCodec.createCodec(conf)
+      }
+    applicationComplete =
+      filePaths.exists { file =>
+        EventLoggingListener.isApplicationCompleteFile(file.getName)
+      }
+    started = true
+  }
+
+  /** Return whether the associated application signaled completion. */
+  def isApplicationComplete: Boolean = {
+    assert(started, "ReplayListenerBus not started yet")
+    applicationComplete
   }
 
   /**
-   * Replay each event in the order maintained in the given logs.
+   * Replay each event in the order maintained in the given logs. This should only be called
+   * exactly once. Return whether event logs are actually found.
    */
-  def replay(logDir: String): Boolean = {
-    val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
-    val logPaths = getLogFilePaths(logDir, fileSystem)
+  def replay(): Boolean = {
+    assert(started, "ReplayListenerBus must be started before replaying logged events")
+    assert(!replayed, "ReplayListenerBus cannot replay events more than once")
+
     if (logPaths.length == 0) {
+      logWarning("Log path provided contains no log files: %s".format(logDir))
       return false
     }
 
@@ -72,15 +96,11 @@ private[spark] class ReplayListenerBus(conf: SparkConf) extends SparkListenerBus
       var fileStream: Option[InputStream] = None
       var bufferedStream: Option[InputStream] = None
       var compressStream: Option[InputStream] = None
-      var currentLine = ""
+      var currentLine = "<not started>"
       try {
-        currentLine = "<not started>"
         fileStream = Some(fileSystem.open(path))
         bufferedStream = Some(new FastBufferedInputStream(fileStream.get))
-        compressStream =
-          if (compressed) {
-            Some(compressionCodec.compressedInputStream(bufferedStream.get))
-          } else bufferedStream
+        compressStream = Some(wrapForCompression(bufferedStream.get))
 
         // Parse each line as an event and post it to all attached listeners
         val lines = Source.fromInputStream(compressStream.get).getLines()
@@ -98,7 +118,33 @@ private[spark] class ReplayListenerBus(conf: SparkConf) extends SparkListenerBus
         compressStream.foreach(_.close())
       }
     }
-    fileSystem.close()
+
+    replayed = true
     true
+  }
+
+  /** Stop the file system. */
+  def stop() {
+    fileSystem.close()
+  }
+
+  /** If a compression codec is specified, wrap the given stream in a compression stream. */
+  private def wrapForCompression(stream: InputStream): InputStream = {
+    compressionCodec.map { codec => codec.compressedInputStream(stream) }.getOrElse(stream)
+  }
+
+  /** Return a list of paths representing files found in the given directory. */
+  private def getFilePaths(logDir: String, fileSystem: FileSystem): Array[Path] = {
+    val path = new Path(logDir)
+    if (!fileSystem.exists(path) || !fileSystem.getFileStatus(path).isDir) {
+      logWarning("Log path provided is not a valid directory: %s".format(logDir))
+      return Array[Path]()
+    }
+    val logStatus = fileSystem.listStatus(path)
+    if (logStatus == null || !logStatus.exists(!_.isDir)) {
+      logWarning("No files are found in the given log directory: %s".format(logDir))
+      return Array[Path]()
+    }
+    logStatus.filter(!_.isDir).map(_.getPath).sortBy(_.getName)
   }
 }

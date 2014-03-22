@@ -164,14 +164,11 @@ class SparkContext(
   private[spark] val eventLogger: Option[EventLoggingListener] = {
     if (conf.getBoolean("spark.eventLog.enabled", false)) {
       val logger = new EventLoggingListener(appName, conf)
+      logger.start()
       listenerBus.addListener(logger)
       Some(logger)
     } else None
   }
-
-  // Information needed to replay logged events, if any
-  private[spark] val eventLoggingInfo: Option[EventLoggingInfo] =
-    eventLogger.map { logger => Some(logger.info) }.getOrElse(None)
 
   // At this point, all relevant SparkListeners have been registered, so begin releasing events
   listenerBus.start()

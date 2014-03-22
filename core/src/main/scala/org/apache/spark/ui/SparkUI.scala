@@ -39,8 +39,8 @@ private[spark] class SparkUI(
   extends WebUI("SparkUI") with Logging {
 
   def this(sc: SparkContext) = this(sc, sc.conf, sc.listenerBus, sc.appName)
-  def this(conf: SparkConf, listenerBus: SparkListenerBus, appName: String, basePath: String) =
-    this(null, conf, listenerBus, appName, basePath)
+  def this(listenerBus: SparkListenerBus, appName: String, basePath: String) =
+    this(null, new SparkConf, listenerBus, appName, basePath)
 
   // If SparkContext is not provided, assume the associated application is not live
   val live = sc != null

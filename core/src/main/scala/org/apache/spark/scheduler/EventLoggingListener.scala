@@ -36,6 +36,8 @@ import org.apache.spark.util.{JsonProtocol, FileLogger}
 private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
   extends SparkListener with Logging {
 
+  import EventLoggingListener._
+
   private val shouldCompress = conf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = conf.getBoolean("spark.eventLog.overwrite", false)
   private val outputBufferSize = conf.getInt("spark.eventLog.buffer.kb", 100) * 1024
@@ -46,15 +48,18 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
   private val logger =
     new FileLogger(logDir, conf, outputBufferSize, shouldCompress, shouldOverwrite)
 
-  // Information needed to replay the events logged by this listener later
-  val info = {
-    val compressionCodec = if (shouldCompress) {
-      Some(conf.get("spark.io.compression.codec", CompressionCodec.DEFAULT_COMPRESSION_CODEC))
-    } else None
-    EventLoggingInfo(logDir, compressionCodec)
+  /**
+   * Begin logging events. If compression is used, log a file that indicates which compression
+   * library is used.
+   */
+  def start() {
+    logInfo("Logging events to %s".format(logDir))
+    if (shouldCompress) {
+      val codec = conf.get("spark.io.compression.codec", CompressionCodec.DEFAULT_COMPRESSION_CODEC)
+      logger.newFile(COMPRESSION_CODEC_PREFIX + codec)
+    }
+    logger.newFile(LOG_PREFIX + logger.fileIndex)
   }
-
-  logInfo("Logging events to %s".format(logDir))
 
   /** Log the event as JSON */
   private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
@@ -95,8 +100,36 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
   override def onApplicationEnd(event: SparkListenerApplicationEnd) =
     logEvent(event, flushLogger = true)
 
-  def stop() = logger.stop()
+  /**
+   * Stop logging events. In addition, create an empty special file to indicate application
+   * completion.
+   */
+  def stop() = {
+    logger.newFile(APPLICATION_COMPLETE)
+    logger.stop()
+  }
 }
 
-// If compression is not enabled, compressionCodec is None
-private[spark] case class EventLoggingInfo(logDir: String, compressionCodec: Option[String])
+private[spark] object EventLoggingListener {
+  val LOG_PREFIX = "EVENT_LOG_"
+  val COMPRESSION_CODEC_PREFIX = "COMPRESSION_CODEC_"
+  val APPLICATION_COMPLETE = "APPLICATION_COMPLETE"
+
+  def isEventLogFile(fileName: String): Boolean = {
+    fileName.contains(LOG_PREFIX)
+  }
+
+  def isCompressionCodecFile(fileName: String): Boolean = {
+    fileName.contains(COMPRESSION_CODEC_PREFIX)
+  }
+
+  def isApplicationCompleteFile(fileName: String): Boolean = {
+    fileName == APPLICATION_COMPLETE
+  }
+
+  def parseCompressionCodec(fileName: String): String = {
+    if (isCompressionCodecFile(fileName)) {
+      fileName.replaceAll(COMPRESSION_CODEC_PREFIX, "")
+    } else ""
+  }
+}

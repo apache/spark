@@ -149,7 +149,6 @@ private[spark] class Master(
 
   override def postStop() {
     webUi.stop()
-    appIdToUI.values.foreach(_.stop())
     masterMetricsSystem.stop()
     applicationMetricsSystem.stop()
     persistenceEngine.close()
@@ -622,10 +621,7 @@ private[spark] class Master(
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
         completedApps.take(toRemove).foreach( a => {
-          appIdToUI.remove(a.id).foreach { ui =>
-            ui.stop()
-            webUi.detachUI(ui)
-          }
+          appIdToUI.remove(a.id).foreach { ui => webUi.detachUI(ui) }
           applicationMetricsSystem.removeSource(a.appSource)
         })
         completedApps.trimStart(toRemove)
@@ -663,28 +659,14 @@ private[spark] class Master(
    */
   def startPersistedSparkUI(app: ApplicationInfo): Option[SparkUI] = {
     val appName = app.desc.name
-    val eventLogInfo = app.desc.eventLogInfo.getOrElse { return None }
-    val eventLogDir = eventLogInfo.logDir
-    val eventCompressionCodec = eventLogInfo.compressionCodec
-    val appConf = new SparkConf
-    eventCompressionCodec.foreach { codec =>
-      appConf.set("spark.eventLog.compress", "true")
-      appConf.set("spark.io.compression.codec", codec)
-    }
-    val replayBus = new ReplayListenerBus(appConf)
-    val ui = new SparkUI(
-      appConf,
-      replayBus,
-      "%s (finished)".format(appName),
-      "/history/%s".format(app.id))
+    val eventLogDir = app.desc.eventLogDir.getOrElse { return None }
+    val replayBus = new ReplayListenerBus(eventLogDir)
+    val ui = new SparkUI(replayBus, "%s (finished)".format(appName), "/history/%s".format(app.id))
 
     // Do not call ui.bind() to avoid creating a new server for each application
     ui.start()
-    val success = replayBus.replay(eventLogDir)
-    if (!success) {
-      ui.stop()
-      None
-    } else Some(ui)
+    val success = replayBus.replay()
+    if (success) Some(ui) else None
   }
 
   /** Generate a new app ID given a app's submission date */

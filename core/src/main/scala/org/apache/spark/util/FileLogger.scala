@@ -46,7 +46,7 @@ class FileLogger(
 
   private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   private val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
-  private var fileIndex = 0
+  var fileIndex = 0
 
   // Only used if compression is enabled
   private lazy val compressionCodec = CompressionCodec.createCodec(conf)
@@ -54,10 +54,9 @@ class FileLogger(
   // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
 
-  private var writer: Option[PrintWriter] = {
-    createLogDir()
-    Some(createWriter())
-  }
+  private var writer: Option[PrintWriter] = None
+
+  createLogDir()
 
   /**
    * Create a logging directory with the given path.
@@ -81,8 +80,8 @@ class FileLogger(
   /**
    * Create a new writer for the file identified by the given path.
    */
-  private def createWriter(): PrintWriter = {
-    val logPath = logDir + "/" + fileIndex
+  private def createWriter(fileName: String): PrintWriter = {
+    val logPath = logDir + "/" + fileName
     val uri = new URI(logPath)
 
     /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
@@ -144,13 +143,17 @@ class FileLogger(
   }
 
   /**
-   * Start a writer for a new file if one does not already exit.
+   * Start a writer for a new file, closing the existing one if it exists.
+   * @param fileName Name of the new file, defaulting to the file index if not provided.
    */
-  def start() {
-    writer.getOrElse {
-      fileIndex += 1
-      writer = Some(createWriter())
+  def newFile(fileName: String = "") {
+    fileIndex += 1
+    writer.foreach(_.close())
+    val name = fileName match {
+      case "" => fileIndex.toString
+      case _ => fileName
     }
+    writer = Some(createWriter(name))
   }
 
   /**

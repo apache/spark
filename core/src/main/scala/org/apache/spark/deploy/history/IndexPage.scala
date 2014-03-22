@@ -30,19 +30,18 @@ private[spark] class IndexPage(parent: HistoryServer) {
   private val dateFmt = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    // Check if logs have been updated
     parent.checkForLogs()
 
     // Populate app table, with most recently modified app first
     val appRows = parent.appIdToInfo.values.toSeq.sortBy { app => -app.lastUpdated }
     val appTable = UIUtils.listingTable(appHeader, appRow, appRows)
-
     val content =
       <div class="row-fluid">
         <div class="span12">
           <ul class="unstyled">
             <li><strong>Event Log Location: </strong> {parent.baseLogDir}</li>
-            <h4>Applications</h4> {appTable}
+            <br></br>
+            <h4>Finished Applications</h4> {appTable}
           </ul>
         </div>
       </div>
@@ -67,7 +66,6 @@ private[spark] class IndexPage(parent: HistoryServer) {
     val duration = if (difference > 0) DeployWebUI.formatDuration(difference) else "---"
     val logDirectory = parent.getAppId(info.logPath)
     val lastUpdated = dateFmt.format(new Date(info.lastUpdated))
-
     <tr>
       <td><a href={uiAddress}>{appName}</a></td>
       <td>{startTime}</td>
