@@ -17,19 +17,17 @@
 
 package org.apache.spark.mllib.linalg
 
-import scala.collection.JavaConverters._
-
 import org.scalatest.FunSuite
 
 class VectorsSuite extends FunSuite {
 
-  val arr = Array(0.1, 0.2, 0.3, 0.4)
-  val n = 20
-  val indices = Array(0, 3, 5, 10, 13)
-  val values = Array(0.1, 0.5, 0.3, -0.8, -1.0)
+  val arr = Array(0.1, 0.0, 0.3, 0.4)
+  val n = 4
+  val indices = Array(0, 2, 3)
+  val values = Array(0.1, 0.3, 0.4)
 
   test("dense vector construction with varargs") {
-    val vec = Vectors.dense(arr: _*).asInstanceOf[DenseVector]
+    val vec = Vectors.dense(arr).asInstanceOf[DenseVector]
     assert(vec.size === arr.length)
     assert(vec.values.eq(arr))
   }
@@ -54,18 +52,21 @@ class VectorsSuite extends FunSuite {
     assert(vec.values === values)
   }
 
-  test("sparse vector construction with unordered elements stored as Java Iterable") {
-    val vec = Vectors.sparse(n, indices.toSeq.zip(values).reverse.asJava).asInstanceOf[SparseVector]
-    assert(vec.size === n)
-    assert(vec.indices === indices)
-    assert(vec.values === values)
+  test("dense to array") {
+    val vec = Vectors.dense(arr).asInstanceOf[DenseVector]
+    assert(vec.toArray.eq(arr))
+  }
+
+  test("sparse to array") {
+    val vec = Vectors.sparse(n, indices, values).asInstanceOf[SparseVector]
+    assert(vec.toArray === arr)
   }
 
   test("vector equals") {
-    val dv1 = Vectors.dense(1.0, 0.0, 2.0)
-    val dv2 = Vectors.dense(1.0, 0.0, 2.0)
-    val sv1 = Vectors.sparse(3, Seq((0, 1.0), (2, 2.0)))
-    val sv2 = Vectors.sparse(3, Seq((0, 1.0), (2, 2.0)))
+    val dv1 = Vectors.dense(arr.clone())
+    val dv2 = Vectors.dense(arr.clone())
+    val sv1 = Vectors.sparse(n, indices.clone(), values.clone())
+    val sv2 = Vectors.sparse(n, indices.clone(), values.clone())
 
     val vectors = Seq(dv1, dv2, sv1, sv2)
 
@@ -74,7 +75,7 @@ class VectorsSuite extends FunSuite {
       assert(v.## === u.##)
     }
 
-    val another = Vectors.dense(1.0, 1.0, 2.0)
+    val another = Vectors.dense(0.1, 0.2, 0.3, 0.4)
 
     for (v <- vectors) {
       assert(v != another)
