@@ -17,15 +17,12 @@
 
 package org.apache.spark.storage
 
-import java.io.File
 import tachyon.client.TachyonFile
 
 /**
- * References a particular segment of a file (potentially the entire file),
- * based off an offset and a length.
+ * References a particular segment of a file (potentially the entire file), based off an offset and
+ * a length.
  */
-
-private[spark] class TachyonFileSegment(val file: TachyonFile, val offset: Long, val length: Long) 
-{
+private[spark] class TachyonFileSegment(val file: TachyonFile, val offset: Long, val length: Long) {
   override def toString = "(name=%s, offset=%d, length=%d)".format(file.getPath(), offset, length)
 }

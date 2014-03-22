@@ -60,9 +60,16 @@ private[spark] class BlockManager(
 
   private[storage] val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
   private[storage] val diskStore = new DiskStore(this, diskBlockManager)
-  
   var tachyonInitialized = false
-  private[storage] var innerTachyonStore: TachyonStore = null
+  private[storage] lazy val tachyonStore : TachyonStore = {
+    val storeDir = conf.get("spark.tachyonstore.dir", System.getProperty("java.io.tmpdir"))
+    val tachyonStorePath = s"${storeDir}/${appId}/${this.executorId}"
+    val tachyonMaster = conf.get("spark.tachyonmaster.address",  "localhost:19998")
+    val tachyonBlockManager = new TachyonBlockManager(
+      shuffleBlockManager, tachyonStorePath, tachyonMaster)
+    tachyonInitialized = true
+    new TachyonStore(this, tachyonBlockManager)
+  }
 
   // If we use Netty for shuffle, start a new Netty-based shuffle sender service.
   private val nettyPort: Int = {
@@ -101,23 +108,6 @@ private[spark] class BlockManager(
   var asyncReregisterTask: Future[Unit] = null
   val asyncReregisterLock = new Object
 
-  private[storage] lazy val tachyonStore : TachyonStore = {
-   if (!tachyonInitialized) {
-     initializeTachyonStore() 
-   }
-   this.innerTachyonStore
-  }
-  
-  private def initializeTachyonStore() {
-    val storeDir = conf.get("spark.tachyonstore.dir", System.getProperty("java.io.tmpdir"))
-    val tachyonStorePath = s"${storeDir}/${appId}/${this.executorId}"
-    val tachyonMaster = conf.get("spark.tachyonmaster.address",  "localhost:19998")
-    val tachyonBlockManager = new TachyonBlockManager(
-      shuffleBlockManager, tachyonStorePath, tachyonMaster)
-    this.innerTachyonStore = new TachyonStore(this, tachyonBlockManager)
-    this.tachyonInitialized = true
-  }
-  
   private def heartBeat() {
     if (!master.sendHeartBeat(blockManagerId)) {
       reregister()
@@ -636,7 +626,7 @@ private[spark] class BlockManager(
             case Right(newBytes) => bytesAfterPut = newBytes
             case _ =>
           } 
-        }else {
+        } else {
           // Save directly to disk.
           // Don't get back the bytes unless we replicate them.
           val askForBytes = level.replication > 1
@@ -658,7 +648,7 @@ private[spark] class BlockManager(
           }
         }
 
-        // Now that the block is in either the memory, tachyon or disk store,
+        // Now that the block is in either the memory, tachyon, or disk store,
         // let other threads read it, and tell the master about it.
         marked = true
         myInfo.markReady(size)
@@ -822,11 +812,10 @@ private[spark] class BlockManager(
       // Removals are idempotent in disk store and memory store. At worst, we get a warning.
       val removedFromMemory = memoryStore.remove(blockId)
       val removedFromDisk = diskStore.remove(blockId)
-      val removedFromTachyon = 
-        if (tachyonInitialized == true) tachyonStore.remove(blockId) else false
+      val removedFromTachyon = if (tachyonInitialized) tachyonStore.remove(blockId) else false
       if (!removedFromMemory && !removedFromDisk && !removedFromTachyon) {
         logWarning("Block " + blockId + " could not be removed as it was not found in either " +
-          "the disk, memory or tachyon store")
+          "the disk, memory, or tachyon store")
       }
       blockInfo.remove(blockId)
       if (tellMaster && info.tellMaster) {
@@ -939,7 +928,7 @@ private[spark] class BlockManager(
     blockInfo.clear()
     memoryStore.clear()
     diskStore.clear()
-    if(tachyonInitialized == true) {
+    if(tachyonInitialized) {
       tachyonStore.clear() 
     }
     metadataCleaner.cancel()

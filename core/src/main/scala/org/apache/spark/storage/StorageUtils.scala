@@ -48,11 +48,10 @@ case class RDDInfo(id: Int, name: String, storageLevel: StorageLevel,
   extends Ordered[RDDInfo] {
   override def toString = {
     import Utils.bytesToString
-    ("RDD \"%s\" (%d) Storage: %s; CachedPartitions: %d; TotalPartitions: %d; MemorySize: %s;" + 
-    "TachyonSize: %s; DiskSize: %s").format(
-        name, id, storageLevel.toString, numCachedPartitions, numPartitions, 
-        bytesToString(memSize), bytesToString(tachyonSize), bytesToString(diskSize))     
-         
+    ("RDD \"%s\" (%d) Storage: %s; CachedPartitions: %d; TotalPartitions: %d; MemorySize: %s;" +
+      "TachyonSize: %s; DiskSize: %s").format(
+        name, id, storageLevel.toString, numCachedPartitions, numPartitions,
+        bytesToString(memSize), bytesToString(tachyonSize), bytesToString(diskSize))
   }
 
   override def compare(that: RDDInfo) = {
@@ -96,14 +95,8 @@ object StorageUtils {
       sc.persistentRdds.get(rddId).map { r =>
         val rddName = Option(r.name).getOrElse(rddId.toString)
         val rddStorageLevel = r.getStorageLevel
-        RDDInfo(rddId, 
-          rddName, 
-          rddStorageLevel, 
-          rddBlocks.length, 
-          r.partitions.size, 
-          memSize, 
-          tachyonSize, 
-          diskSize)
+        RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, r.partitions.size, memSize,
+          tachyonSize, diskSize)
       }
     }.flatten.toArray
 

@@ -17,7 +17,6 @@
 
 package org.apache.spark.storage
 
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.{Date, Random}
 
@@ -47,7 +46,7 @@ private[spark] class TachyonBlockManager(
   val client = if (master != null && master != "") TachyonFS.get(master) else null
   if (client == null) {
     logError("Failed to connect to the Tachyon as the master address is not configured")
-     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
+    System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
   }
     
   private val MAX_DIR_CREATION_ATTEMPTS = 10
@@ -136,8 +135,8 @@ private[spark] class TachyonBlockManager(
         }
       }
       if (!foundLocalDir) {
-        logError("Failed " + MAX_DIR_CREATION_ATTEMPTS +
-          " attempts to create tachyon dir in " + rootDir)
+        logError("Failed " + MAX_DIR_CREATION_ATTEMPTS + " attempts to create tachyon dir in " +
+          rootDir)
         System.exit(ExecutorExitCode.TACHYON_STORE_FAILED_TO_CREATE_DIR)
       }
       logInfo("Created tachyon directory at " + tachyonDir)

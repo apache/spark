@@ -156,12 +156,12 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(master.getLocations("a1").size === 0, "master did not remove a1")
     assert(master.getLocations("a2").size === 0, "master did not remove a2")
   }
-  
+
   test("master + 2 managers interaction") {
     store = new BlockManager("exec1", actorSystem, master, serializer, 2000, conf, securityMgr)
     store2 = new BlockManager("exec2", actorSystem, master, new KryoSerializer(conf), 2000, conf,
       securityMgr)
-    
+
     val peers = master.getPeers(store.blockManagerId, 1)
     assert(peers.size === 1, "master did not return the other manager as a peer")
     assert(peers.head === store2.blockManagerId, "peer returned by master is not the other manager")
@@ -407,7 +407,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(store.memoryStore.contains(rdd(0, 2)), "rdd_0_2 was not in store")
     assert(store.memoryStore.contains(rdd(0, 3)), "rdd_0_3 was not in store")
   }
-  
+
   test("tachyon storage") {
     val tachyonUnitTestEnabled = conf.getBoolean("spark.test.tachyon.enable", false)
     if (tachyonUnitTestEnabled) {
