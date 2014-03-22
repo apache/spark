@@ -130,8 +130,7 @@ object MLUtils {
    * @param path The directory you should specified, such as
    *             hdfs://[address]:[port]/[dir]
    *
-   * @return RDD[(fileName: String, content: String)]
-   *         i.e. the first is the file name of a file, the second one is its content.
+   * @return The first String is a file name, the second one is its content.
    */
   def wholeTextFile(sc: SparkContext, path: String): RDD[(String, String)] = {
     sc.newAPIHadoopFile(

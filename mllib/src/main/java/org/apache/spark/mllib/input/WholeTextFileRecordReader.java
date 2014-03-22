@@ -31,9 +31,9 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 
 /**
- * Reads an entire file out in <filename, content> format.
+ * Reads an entire file out in (filename, content) format. Each element in split is an record of a
+ * unique, whole file. File name is full path name for easy deduplicate.
  */
-
 public class WholeTextFileRecordReader extends RecordReader<String, Text> {
   private Path path;
 
@@ -69,19 +69,19 @@ public class WholeTextFileRecordReader extends RecordReader<String, Text> {
 
   @Override
   public String getCurrentKey() throws IOException, InterruptedException {
-        return key;
-    }
+    return key;
+  }
 
   @Override
   public Text getCurrentValue() throws IOException, InterruptedException{
-        return value;
-    }
+    return value;
+  }
 
   @Override
   public boolean nextKeyValue() throws IOException {
     if (!processed) {
       if (key == null) {
-        key = path.getName();
+        key = path.toString();
       }
       if (value == null) {
         value = new Text();
