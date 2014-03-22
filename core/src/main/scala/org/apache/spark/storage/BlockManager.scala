@@ -101,7 +101,7 @@ private[spark] class BlockManager(
   var asyncReregisterTask: Future[Unit] = null
   val asyncReregisterLock = new Object
 
-  private def tachyonStore : TachyonStore = synchronized {
+  private[storage] lazy val tachyonStore : TachyonStore = {
    if (!tachyonInitialized) {
      initializeTachyonStore() 
    }
