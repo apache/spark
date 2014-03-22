@@ -114,12 +114,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   @transient
   override lazy val analyzer = new Analyzer(catalog, HiveFunctionRegistry, caseSensitive = false)
 
-  def tables: Seq[BaseRelation] = {
-    // TODO: Move this functionallity to Catalog. Make client protected.
-    val allTables = catalog.client.getAllTables("default")
-    allTables.map(catalog.lookupRelation(None, _, None)).collect { case b: BaseRelation => b }
-  }
-
   /**
    * Runs the specified SQL query using Hive.
    */
