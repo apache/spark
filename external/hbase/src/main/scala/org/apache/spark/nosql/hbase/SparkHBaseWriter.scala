@@ -17,7 +17,7 @@
 
 package org.apache.spark.nosql.hbase
 
-import org.apache.hadoop.hbase.client.{Put, HTable}
+import org.apache.hadoop.hbase.client.{HConnectionManager, Put, HTable}
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.commons.codec.binary.Hex
@@ -99,13 +99,7 @@ class SparkHBaseWriter(conf: HBaseConf)
 
   def close() {
     Option(htable) match {
-      case Some(t) => {
-        try {
-          t.close()
-        } catch {
-          case ex: Exception => logWarning("Close HBase table failed.", ex)
-        }
-      }
+      case Some(t) => t.close()
       case None => logWarning("HBase table variable is null!")
     }
   }

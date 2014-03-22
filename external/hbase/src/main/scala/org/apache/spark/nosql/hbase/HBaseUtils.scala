@@ -19,12 +19,14 @@ package org.apache.spark.nosql.hbase
 
 import org.apache.hadoop.io.Text
 import org.apache.spark.rdd.RDD
+import org.apache.spark.Logging
 
 /**
  * A public object that provides HBase support.
  * You could save RDD into HBase through [[org.apache.spark.nosql.hbase.HBaseUtils.saveAsHBaseTable]] method.
  */
-object HBaseUtils {
+object HBaseUtils
+  extends Logging {
 
   /**
    * Save [[org.apache.spark.rdd.RDD[Text]]] as a HBase table
@@ -59,7 +61,11 @@ object HBaseUtils {
           writer.write(record)
         }
       } finally {
-        writer.close()
+        try {
+          writer.close()
+        } catch {
+          case ex: Exception => logWarning("Close HBase table failed.", ex)
+        }
       }
     }
 
