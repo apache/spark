@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.columnar
 
-import org.apache.spark.sql.{TestData, TestSQLContext, DslQueryTest}
 import org.apache.spark.sql.execution.SparkLogicalPlan
+import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.{TestData, DslQuerySuite}
 
-class ColumnarQuerySuite extends DslQueryTest {
+class ColumnarQuerySuite extends DslQuerySuite {
   import TestData._
+  import TestSQLContext._
 
   test("simple columnar query") {
-    val plan = TestSQLContext.executePlan(testData).executedPlan
+    val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
     val scan = SparkLogicalPlan(InMemoryColumnarTableScan(plan.output, plan))
 
-    checkAnswer(scan, testData.data)
+    checkAnswer(scan, testData.collect().toSeq)
   }
 }

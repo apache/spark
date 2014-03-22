@@ -26,7 +26,6 @@ import catalyst.rules.Rule
 import catalyst.errors._
 import catalyst.expressions._
 import catalyst.plans.physical._
-import execution.SparkSqlSerializer
 
 case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
 
