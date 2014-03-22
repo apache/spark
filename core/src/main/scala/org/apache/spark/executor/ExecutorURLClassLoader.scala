@@ -36,25 +36,34 @@ private[spark] class ExecutorURLClassLoader(urls: Array[URL], parent: ClassLoade
   }
   val userClassLoader = new OverridenURLClassLoader(urls, null)
 
-  object childClassLoader extends ClassLoader(parent) {
+  class ParentClassLoader(myParent: ClassLoader) extends ClassLoader(parent) {
     override def findClass(name: String): Class[_] = {
+      println("parent class loader quest")
       super.findClass(name)
     }
   }
+  val parentClassLoader = new ParentClassLoader(parent)
 
   override def findClass(name: String): Class[_] = {
+    println("looking for "+name)
     if (!userFirst) {
       try {
-        childClassLoader.findClass(name)
+        println("loooking in parent")
+        val c = parentClassLoader.findClass(name)
+        println("found in parent")
+        c
       } catch {
-        case e: ClassNotFoundException => userClassLoader.findClass(name)
+        case e: ClassNotFoundException => {
+          println("could not find in parent")
+          userClassLoader.findClass(name)
+        }
       }
     } else {
       try {
         userClassLoader.findClass(name)
       } catch {
         case e: ClassNotFoundException => {
-          childClassLoader.findClass(name)
+          parentClassLoader.findClass(name)
         }
       }
     }
