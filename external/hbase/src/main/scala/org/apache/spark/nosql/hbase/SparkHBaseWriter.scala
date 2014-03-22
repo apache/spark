@@ -24,14 +24,16 @@ import org.apache.commons.codec.binary.Hex
 import org.apache.hadoop.hbase.HConstants
 import org.apache.hadoop.conf.Configuration
 import java.io.IOException
+import org.apache.spark.Logging
 
 /**
  * Internal helper class that saves an RDD using a HBase OutputFormat. This is only public
- * because we need to access this class from the `spark` package to use some package-private HBase
+ * because we need to access this class from the `hbase` package to use some package-private HBase
  * functions, but this class should not be used directly by users.
  */
 private[hbase]
-class SparkHBaseWriter(conf: HBaseConf) {
+class SparkHBaseWriter(conf: HBaseConf)
+  extends Logging {
 
   private var htable: HTable = null
 
@@ -72,35 +74,46 @@ class SparkHBaseWriter(conf: HBaseConf) {
   }
 
   /**
-   * Convert a string record to [[org.apache.hadoop.hbase.client.Put]]
+   * Convert a [[org.apache.hadoop.io.Text]] record to [[org.apache.hadoop.hbase.client.Put]]
+   * and put it to HBase
    * @param record
    * @return
    */
-  def parseRecord(record: String) = {
-    val fields = record.split(delimiter)
-    val put = new Put(toByteArray(fields(0), rowkeyType))
+  def write(record: Text) = {
+    val fields = record.toString.split(delimiter)
 
-    List.range(1, fields.size) foreach {
-      i => put.add(columns(i - 1).family, columns(i - 1).qualifier,
-        toByteArray(fields(i), columns(i - 1).typ))
+    // Check the format of record
+    if (fields.size == columns.length + 1) {
+      val put = new Put(toByteArray(fields(0), rowkeyType))
+
+      List.range(1, fields.size) foreach {
+        i => put.add(columns(i - 1).family, columns(i - 1).qualifier,
+          toByteArray(fields(i), columns(i - 1).typ))
+      }
+
+      htable.put(put)
+    } else {
+      logWarning(s"Record ($record) is unacceptable.")
     }
-
-    put
-  }
-
-  def write(record: Text) {
-    val put = parseRecord(record.toString)
-    htable.put(put)
   }
 
   def close() {
-    htable.close()
+    Option(htable) match {
+      case Some(t) => {
+        try {
+          t.close()
+        } catch {
+          case ex: Exception => logWarning("Close HBase table failed.", ex)
+        }
+      }
+      case None => logWarning("HBase table variable is null!")
+    }
   }
 }
 
 /**
  * Contains the types which supported to
- * parse from [[java.lang.String]] into [[scala.Array[ B y t e]]]
+ * parse from [[java.lang.String]] into [[scala.Array[Byte]]]
  */
 object HBaseType {
   val Boolean = "bool"

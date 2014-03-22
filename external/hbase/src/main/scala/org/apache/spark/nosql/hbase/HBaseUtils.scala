@@ -28,6 +28,13 @@ object HBaseUtils {
 
   /**
    * Save [[org.apache.spark.rdd.RDD[Text]]] as a HBase table
+   *
+   * The format of record in RDD should looks like this:
+   *   rowkey|delimiter|column|delimiter|column|delimiter|...
+   * For example (if delimiter is ","):
+   *   0001,apple,banana
+   * "0001" is rowkey field while "apple" and "banana" are column fields.
+   *
    * @param rdd [[org.apache.spark.rdd.RDD[Text]]]
    * @param zkHost the zookeeper hosts. e.g. "10.232.98.10,10.232.98.11,10.232.98.12"
    * @param zkPort the zookeeper client listening port. e.g. "2181"
@@ -46,6 +53,7 @@ object HBaseUtils {
 
       try {
         writer.init()
+
         while (iter.hasNext) {
           val record = iter.next()
           writer.write(record)
