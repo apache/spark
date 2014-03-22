@@ -30,7 +30,7 @@ import java.io.IOException
  * because we need to access this class from the `spark` package to use some package-private HBase
  * functions, but this class should not be used directly by users.
  */
-private[apache]
+private[hbase]
 class SparkHBaseWriter(conf: HBaseConf) {
 
   private var htable: HTable = null
@@ -59,7 +59,7 @@ class SparkHBaseWriter(conf: HBaseConf) {
    * @param kind the type of field
    * @return
    */
-  def toByteArr(field: String, kind: String) = kind match {
+  def toByteArray(field: String, kind: String) = kind match {
     case HBaseType.Boolean => Bytes.toBytes(field.toBoolean)
     case HBaseType.Short => Bytes.toBytes(field.toShort)
     case HBaseType.Int => Bytes.toBytes(field.toInt)
@@ -78,11 +78,11 @@ class SparkHBaseWriter(conf: HBaseConf) {
    */
   def parseRecord(record: String) = {
     val fields = record.split(delimiter)
-    val put = new Put(toByteArr(fields(0), rowkeyType))
+    val put = new Put(toByteArray(fields(0), rowkeyType))
 
     List.range(1, fields.size) foreach {
       i => put.add(columns(i - 1).family, columns(i - 1).qualifier,
-        toByteArr(fields(i), columns(i - 1).typ))
+        toByteArray(fields(i), columns(i - 1).typ))
     }
 
     put
