@@ -138,7 +138,7 @@ object StorageLevel {
   /** Create a new StorageLevel object */
   def apply(useDisk: Boolean, useMemory: Boolean, useTachyon: Boolean, 
     deserialized: Boolean, replication: Int = 1) = getCachedStorageLevel(
-          new StorageLevel(useDisk, useMemory, useTachyon, deserialized, replication))
+      new StorageLevel(useDisk, useMemory, useTachyon, deserialized, replication))
 
   /** Create a new StorageLevel object from its integer representation */
   def apply(flags: Int, replication: Int) =

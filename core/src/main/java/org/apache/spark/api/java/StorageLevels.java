@@ -44,7 +44,8 @@ public class StorageLevels {
    * @param replication replication factor
    */
   @Deprecated
-  public static StorageLevel create(boolean useDisk, boolean useMemory, boolean deserialized, int replication) {
+  public static StorageLevel create(boolean useDisk, boolean useMemory, boolean deserialized,
+      int replication) {
     return StorageLevel.apply(useDisk, useMemory, false, deserialized, replication);
   }
 
