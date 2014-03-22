@@ -30,10 +30,8 @@ import org.apache.spark.util.Utils
 
 
 /**
- * Creates and maintains the logical mapping between logical blocks and tachyon fs
- * locations. By default, one block is mapped to one file with a name given by its BlockId.
- * However, it is also possible to have a block map to only a segment of a file, by calling
- * mapBlockToFileSegment().
+ * Creates and maintains the logical mapping between logical blocks and tachyon fs locations. By
+ * default, one block is mapped to one file with a name given by its BlockId.
  *
  * @param rootDirs The directories to use for storing block files. Data will be hashed among these.
  */
@@ -44,11 +42,12 @@ private[spark] class TachyonBlockManager(
   extends TachyonFilePathResolver with Logging {
 
   val client = if (master != null && master != "") TachyonFS.get(master) else null
+
   if (client == null) {
     logError("Failed to connect to the Tachyon as the master address is not configured")
-    System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
+    System.exit(ExecutorExitCode.TACHYON_STORE_FAILED_TO_INITIALIZE)
   }
-    
+
   private val MAX_DIR_CREATION_ATTEMPTS = 10
   private val subDirsPerTachyonDir = 
     shuffleManager.conf.get("spark.tachyonStore.subDirectories", "64").toInt

@@ -122,7 +122,7 @@ private class TachyonStore(
     val segment = tachyonManager.getBlockLocation(blockId)
     val file = tachyonManager.getFile(blockId)
     val is = file.getInStream(ReadType.CACHE)
-    var buffer : ByteBuffer = null
+    var buffer: ByteBuffer = null
     if (is != null){
       val size = segment.length - segment.offset
       val bs = new Array[Byte](size.asInstanceOf[Int])
