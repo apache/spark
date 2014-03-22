@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rdd
+package org.apache.spark.mllib.rdd
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.{TaskContext, Partition}
+import org.apache.spark.rdd.RDD
 
-private[spark]
+private[mllib]
 class SlidingRDDPartition[T](val idx: Int, val prev: Partition, val tail: Seq[T])
   extends Partition with Serializable {
   override val index: Int = idx
@@ -33,14 +34,16 @@ class SlidingRDDPartition[T](val idx: Int, val prev: Partition, val tail: Seq[T]
  * window over them. The ordering is first based on the partition index and then the ordering of
  * items within each partition. This is similar to sliding in Scala collections, except that it
  * becomes an empty RDD if the window size is greater than the total number of items. It needs to
- * trigger a Spark job if the parent RDD has more than one partitions.
+ * trigger a Spark job if the parent RDD has more than one partitions. To make this operation
+ * efficient, the number of items per partition should be larger than the window size and the
+ * window size should be small, e.g., 2.
  *
  * @param parent the parent RDD
  * @param windowSize the window size, must be greater than 1
  *
- * @see [[org.apache.spark.rdd.RDD#sliding]]
+ * @see [[org.apache.spark.mllib.rdd.RDDFunctions#sliding]]
  */
-private[spark]
+private[mllib]
 class SlidingRDD[T: ClassTag](@transient val parent: RDD[T], val windowSize: Int)
   extends RDD[Seq[T]](parent) {
 
