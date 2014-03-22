@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.ObjectWritable
 import org.apache.hadoop.io.Writable
 
-class SerializableWritable[T <: Writable](@transient var t: T) extends Serializable {
+private[spark] class SerializableWritable[T <: Writable](@transient var t: T) extends Serializable {
   def value = t
   override def toString = t.toString
 

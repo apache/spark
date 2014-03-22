@@ -43,7 +43,7 @@ private[spark] class UnionPartition[T: ClassTag](idx: Int, rdd: RDD[T], splitInd
   }
 }
 
-class UnionRDD[T: ClassTag](
+private[spark] class UnionRDD[T: ClassTag](
     sc: SparkContext,
     @transient var rdds: Seq[RDD[T]])
   extends RDD[T](sc, Nil) {  // Nil since we implement getDependencies

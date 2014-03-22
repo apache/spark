@@ -18,6 +18,8 @@
 package org.apache.spark.util.random
 
 /**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
  * A class with pseudorandom behavior.
  */
 trait Pseudorandom {

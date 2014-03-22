@@ -94,7 +94,13 @@ private[spark] class JavaSerializerInstance(counterReset: Int) extends Serialize
 }
 
 /**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
  * A Spark serializer that uses Java's built-in serialization.
+ *
+ * Note that this serializer is not guaranteed to be wire-compatible across different versions of
+ * Spark. It is intended to be used to serialize/de-serialize data within a single
+ * Spark application.
  */
 class JavaSerializer(conf: SparkConf) extends Serializer with Externalizable {
   private var counterReset = conf.getInt("spark.serializer.objectStreamReset", 10000)

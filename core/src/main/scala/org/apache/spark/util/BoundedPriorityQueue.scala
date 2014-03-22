@@ -24,6 +24,8 @@ import scala.collection.JavaConverters._
 import scala.collection.generic.Growable
 
 /**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
  * Bounded priority queue. This class wraps the original PriorityQueue
  * class and modifies it such that only the top K elements are retained.
  * The top K elements are defined by an implicit Ordering[A].

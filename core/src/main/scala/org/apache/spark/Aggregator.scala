@@ -20,6 +20,8 @@ package org.apache.spark
 import org.apache.spark.util.collection.{AppendOnlyMap, ExternalAppendOnlyMap}
 
 /**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
  * A set of functions used to aggregate data.
  *
  * @param createCombiner function to create the initial value of the aggregation.

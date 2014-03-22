@@ -18,6 +18,8 @@
 package org.apache.spark.util
 
 /**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
  * A tuple of 2 elements. This can be used as an alternative to Scala's Tuple2 when we want to
  * minimize object allocation.
  *

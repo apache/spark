@@ -21,6 +21,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.executor.TaskMetrics
 
+/**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
+ * Contextual information about a task which can be read or mutated during execution.
+ */
 class TaskContext(
   val stageId: Int,
   val partitionId: Int,

@@ -25,8 +25,14 @@ import org.xerial.snappy.{SnappyInputStream, SnappyOutputStream}
 import org.apache.spark.SparkConf
 
 /**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
  * CompressionCodec allows the customization of choosing different compression implementations
  * to be used in block storage.
+ *
+ * Note: The wire protocol for a codec is not guaranteed compatible across versions of Spark.
+ *       This is intended for use as an internal compression utility within a single
+ *       Spark application.
  */
 trait CompressionCodec {
 
@@ -52,7 +58,13 @@ private[spark] object CompressionCodec {
 
 
 /**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
  * LZF implementation of [[org.apache.spark.io.CompressionCodec]].
+ *
+ * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
+ *       of Spark. This is intended for use as an internal compression utility within a single Spark
+ *       application.
  */
 class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
@@ -65,8 +77,14 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
 
 /**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
  * Snappy implementation of [[org.apache.spark.io.CompressionCodec]].
  * Block size can be configured by spark.io.compression.snappy.block.size.
+ *
+ * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
+ *       of Spark. This is intended for use as an internal compression utility within a single Spark
+ *       application.
  */
 class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
 

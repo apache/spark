@@ -28,6 +28,8 @@ private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
 }
 
 /**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
  * The resulting RDD from a shuffle (e.g. repartitioning of data).
  * @param prev the parent RDD.
  * @param part the partitioner used to partition the RDD

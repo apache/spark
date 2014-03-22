@@ -19,6 +19,11 @@ package org.apache.spark.executor
 
 import org.apache.spark.storage.{BlockId, BlockStatus}
 
+/**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
+ * Metrics tracked during the execution of a task.
+ */
 class TaskMetrics extends Serializable {
   /**
    * Host's name the task runs on
@@ -82,6 +87,11 @@ object TaskMetrics {
 }
 
 
+/**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
+ * Metrics pertaining to shuffle data read in a given task.
+ */
 class ShuffleReadMetrics extends Serializable {
   /**
    * Absolute time when this task finished reading shuffle data
@@ -116,6 +126,11 @@ class ShuffleReadMetrics extends Serializable {
   var remoteBytesRead: Long = _
 }
 
+/**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
+ * Metrics pertaining to shuffle data written in a given task.
+ */
 class ShuffleWriteMetrics extends Serializable {
   /**
    * Number of bytes written for the shuffle by this task

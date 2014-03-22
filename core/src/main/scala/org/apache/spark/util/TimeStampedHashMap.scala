@@ -34,7 +34,7 @@ import org.apache.spark.Logging
  * @param updateTimeStampOnGet When enabled, the timestamp of a pair will be
  *                             updated when it is accessed
  */
-class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = false)
+private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = false)
   extends Map[A, B]() with Logging {
   val internalMap = new ConcurrentHashMap[A, (B, Long)]()
 

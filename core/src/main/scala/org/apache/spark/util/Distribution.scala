@@ -29,7 +29,7 @@ import scala.collection.immutable.IndexedSeq
  *
  * Assumes you are giving it a non-empty set of data
  */
-class Distribution(val data: Array[Double], val startIdx: Int, val endIdx: Int) {
+private[spark] class Distribution(val data: Array[Double], val startIdx: Int, val endIdx: Int) {
   require(startIdx < endIdx)
   def this(data: Traversable[Double]) = this(data.toArray, 0, data.size)
   java.util.Arrays.sort(data, startIdx, endIdx)

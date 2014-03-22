@@ -26,15 +26,21 @@ import org.apache.spark.util.{ByteBufferInputStream, NextIterator}
 import org.apache.spark.SparkEnv
 
 /**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
  * A serializer. Because some serialization libraries are not thread safe, this class is used to
  * create [[org.apache.spark.serializer.SerializerInstance]] objects that do the actual
  * serialization and are guaranteed to only be called from one thread at a time.
  *
  * Implementations of this trait should implement:
+ *
  * 1. a zero-arg constructor or a constructor that accepts a [[org.apache.spark.SparkConf]]
  * as parameter. If both constructors are defined, the latter takes precedence.
  *
  * 2. Java serialization interface.
+ *
+ * Note that serializers are not required to be wire-compatible across different versions of Spark.
+ * They are intended to be used to serialize/de-serialize data within a single Spark application.
  */
 trait Serializer {
   def newInstance(): SerializerInstance
@@ -49,6 +55,8 @@ object Serializer {
 
 
 /**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
  * An instance of a serializer, for use by one thread at a time.
  */
 trait SerializerInstance {
@@ -81,6 +89,8 @@ trait SerializerInstance {
 
 
 /**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
  * A stream for writing serialized objects.
  */
 trait SerializationStream {
@@ -98,6 +108,8 @@ trait SerializationStream {
 
 
 /**
+ * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ *
  * A stream for reading serialized objects.
  */
 trait DeserializationStream {
