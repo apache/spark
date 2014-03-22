@@ -26,7 +26,7 @@ import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
 import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
-import scala.io.Source
+import scala.io.{Codec, Source}
 import scala.reflect.ClassTag
 
 import com.google.common.io.Files
@@ -643,6 +643,11 @@ private[spark] object Utils extends Logging {
     val environment = builder.environment()
     for ((key, value) <- extraEnvironment) {
       environment.put(key, value)
+    }
+    implicit val codec = if (System.getProperty("os.name").startsWith("Windows")) {
+      Codec.ISO8859
+    } else {
+      Codec.UTF8
     }
     val process = builder.start()
     new Thread("read stderr for " + command(0)) {
