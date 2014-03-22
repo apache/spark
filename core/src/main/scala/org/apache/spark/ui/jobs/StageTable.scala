@@ -59,11 +59,13 @@ private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
 
   private def makeProgressBar(started: Int, completed: Int, failed: String, total: Int): Seq[Node] =
   {
-    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
-    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
+    val startPct = (started.toDouble/total)*100
+    val completePct = (completed.toDouble/total)*100
+    val completeWidth = "width: %s%%; position: absolute;".format(completePct)
+    val startWidth = "width: %s%%; left: %s%%; position: absolute;".format(startPct, completePct)
 
     <div class="progress">
-      <span style="text-align:center; position:absolute; width:100%;">
+      <span style="text-align:center; position:absolute; width:100%; z-index: 1;">
         {completed}/{total} {failed}
       </span>
       <div class="bar bar-completed" style={completeWidth}></div>
