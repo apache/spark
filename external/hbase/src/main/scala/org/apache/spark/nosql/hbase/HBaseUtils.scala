@@ -21,7 +21,7 @@ import org.apache.hadoop.io.Text
 import org.apache.spark.rdd.RDD
 
 /**
- * A public object that provide HBase supports.
+ * A public object that provides HBase support.
  * You could save RDD into HBase through [[org.apache.spark.nosql.hbase.HBaseUtils.saveAsHBaseTable]] method.
  */
 object HBaseUtils {
@@ -29,7 +29,7 @@ object HBaseUtils {
   /**
    * Save [[org.apache.spark.rdd.RDD[Text]]] as a HBase table
    *
-   * The format of record in RDD should looks like this:
+   * The format of records in RDD should look like this:
    *   rowkey|delimiter|column|delimiter|column|delimiter|...
    * For example (if delimiter is ","):
    *   0001,apple,banana
