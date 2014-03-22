@@ -34,7 +34,6 @@ public class StorageLevels {
   public static final StorageLevel MEMORY_AND_DISK_2 = new StorageLevel(true, true, false, true, 2);
   public static final StorageLevel MEMORY_AND_DISK_SER = new StorageLevel(true, true, false, false, 1);
   public static final StorageLevel MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, false, 2);
-
   public static final StorageLevel TACHYON = new StorageLevel(false, false, true, false, 1);
 
   /**
