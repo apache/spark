@@ -51,7 +51,7 @@ private[spark] class Master(
 
   val conf = new SparkConf
 
-  val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
+  def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
   val WORKER_TIMEOUT = conf.getLong("spark.worker.timeout", 60) * 1000
   val RETAINED_APPLICATIONS = conf.getInt("spark.deploy.retainedApplications", 200)
   val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
@@ -671,7 +671,7 @@ private[spark] class Master(
 
   /** Generate a new app ID given a app's submission date */
   def newApplicationId(submitDate: Date): String = {
-    val appId = "app-%s-%04d".format(DATE_FORMAT.format(submitDate), nextAppNumber)
+    val appId = "app-%s-%04d".format(createDateFormat.format(submitDate), nextAppNumber)
     nextAppNumber += 1
     appId
   }
@@ -695,7 +695,7 @@ private[spark] class Master(
   }
 
   def newDriverId(submitDate: Date): String = {
-    val appId = "driver-%s-%04d".format(DATE_FORMAT.format(submitDate), nextDriverNumber)
+    val appId = "driver-%s-%04d".format(createDateFormat.format(submitDate), nextDriverNumber)
     nextDriverNumber += 1
     appId
   }

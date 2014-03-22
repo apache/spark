@@ -23,13 +23,12 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.ui.Page._
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{WebUI, UIUtils}
 import org.apache.spark.util.{Utils, Distribution}
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: JobProgressUI) {
   private val basePath = parent.basePath
-  private val dateFmt = parent.dateFmt
   private lazy val listener = parent.listener
 
   private def appName = parent.appName
@@ -254,7 +253,7 @@ private[ui] class StagePage(parent: JobProgressUI) {
         <td>{info.status}</td>
         <td>{info.taskLocality}</td>
         <td>{info.host}</td>
-        <td>{dateFmt.format(new Date(info.launchTime))}</td>
+        <td>{WebUI.formatDate(new Date(info.launchTime))}</td>
         <td sorttable_customkey={duration.toString}>
           {formatDuration}
         </td>

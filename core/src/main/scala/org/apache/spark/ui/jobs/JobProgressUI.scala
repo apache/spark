@@ -17,7 +17,6 @@
 
 package org.apache.spark.ui.jobs
 
-import java.text.SimpleDateFormat
 import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.servlet.ServletContextHandler
@@ -31,7 +30,6 @@ import org.apache.spark.util.Utils
 /** Web UI showing progress status of all jobs in the given SparkContext. */
 private[ui] class JobProgressUI(parent: SparkUI) {
   val basePath = parent.basePath
-  val dateFmt = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   val live = parent.live
   val sc = parent.sc
 

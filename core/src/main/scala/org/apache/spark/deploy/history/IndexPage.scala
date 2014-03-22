@@ -23,8 +23,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.deploy.DeployWebUI
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{UIUtils, WebUI}
 
 private[spark] class IndexPage(parent: HistoryServer) {
   private val dateFmt = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
@@ -63,7 +62,7 @@ private[spark] class IndexPage(parent: HistoryServer) {
     val startTime = if (info.started) dateFmt.format(new Date(info.startTime)) else "Not started"
     val endTime = if (info.finished) dateFmt.format(new Date(info.endTime)) else "Not finished"
     val difference = if (info.started && info.finished) info.endTime - info.startTime else -1L
-    val duration = if (difference > 0) DeployWebUI.formatDuration(difference) else "---"
+    val duration = if (difference > 0) WebUI.formatDuration(difference) else "---"
     val logDirectory = parent.getAppId(info.logPath)
     val lastUpdated = dateFmt.format(new Date(info.lastUpdated))
     <tr>
