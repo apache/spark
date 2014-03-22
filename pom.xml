@@ -101,6 +101,7 @@
     <module>external/flume</module>
     <module>external/zeromq</module>
     <module>external/mqtt</module>
+    <module>external/hbase</module>
     <module>examples</module>
   </modules>
 
