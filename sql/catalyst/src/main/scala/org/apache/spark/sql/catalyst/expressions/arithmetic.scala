@@ -22,7 +22,6 @@ package expressions
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.types._
 
-
 case class UnaryMinus(child: Expression) extends UnaryExpression {
   type EvaluatedType = Any
 

@@ -20,7 +20,7 @@ package catalyst
 package expressions
 
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.types.{IntegralType, FractionalType, NumericType, DataType}
+import org.apache.spark.sql.catalyst.types.{DataType, FractionalType, IntegralType, NumericType}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 
 abstract class Expression extends TreeNode[Expression] {

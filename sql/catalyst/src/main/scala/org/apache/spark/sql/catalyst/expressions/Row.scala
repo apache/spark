@@ -209,6 +209,6 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
       }
       i += 1
     }
-    0
+    return 0
   }
 }

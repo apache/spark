@@ -19,7 +19,7 @@ package org.apache.spark.sql
 package catalyst
 package analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, NamedExpression, Expression, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.BaseRelation
 import org.apache.spark.sql.catalyst.trees.TreeNode
 

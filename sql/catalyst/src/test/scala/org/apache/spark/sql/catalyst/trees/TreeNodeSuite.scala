@@ -24,7 +24,6 @@ import org.scalatest.FunSuite
 import org.apache.spark.sql.catalyst.expressions._
 
 class TreeNodeSuite extends FunSuite {
-
   test("top node changed") {
     val after = Literal(1) transform { case Literal(1, _) => Literal(2) }
     assert(after === Literal(2))

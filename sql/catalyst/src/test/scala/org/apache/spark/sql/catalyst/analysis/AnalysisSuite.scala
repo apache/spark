@@ -21,8 +21,10 @@ package analysis
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
+
+/* Implicit conversions */
+import org.apache.spark.sql.catalyst.dsl.expressions._
 
 class AnalysisSuite extends FunSuite {
   val analyze = SimpleAnalyzer

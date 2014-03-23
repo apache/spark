@@ -8,8 +8,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 
-/* Implicit conversions for creating query plans */
-
 /**
  * Provides helper methods for comparing plans produced by optimization rules with the expected
  * result

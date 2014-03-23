@@ -100,7 +100,7 @@ object BooleanSimplification extends Rule[LogicalPlan] {
  */
 object CombineFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case ff@Filter(fc, nf@Filter(nc, grandChild)) => Filter(And(nc, fc), grandChild)
+    case ff @ Filter(fc, nf @ Filter(nc, grandChild)) => Filter(And(nc, fc), grandChild)
   }
 }
 
@@ -113,8 +113,8 @@ object CombineFilters extends Rule[LogicalPlan] {
  */
 object PushPredicateThroughProject extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case filter@Filter(condition, project@Project(fields, grandChild)) =>
-      val sourceAliases = fields.collect { case a@Alias(c, _) =>
+    case filter @ Filter(condition, project @ Project(fields, grandChild)) =>
+      val sourceAliases = fields.collect { case a @ Alias(c, _) =>
         (a.toAttribute: Attribute) -> c
       }.toMap
       project.copy(child = filter.copy(

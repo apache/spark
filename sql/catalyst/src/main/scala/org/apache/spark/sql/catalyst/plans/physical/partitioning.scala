@@ -20,7 +20,7 @@ package catalyst
 package plans
 package physical
 
-import org.apache.spark.sql.catalyst.expressions.{SortOrder, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder}
 import org.apache.spark.sql.catalyst.types.IntegerType
 
 /**

@@ -19,7 +19,7 @@ package org.apache.spark.sql
 package catalyst
 package expressions
 
-import org.apache.spark.sql.catalyst.types.{StringType, BooleanType}
+import org.apache.spark.sql.catalyst.types.{BooleanType, StringType}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 
 trait Predicate extends Expression {

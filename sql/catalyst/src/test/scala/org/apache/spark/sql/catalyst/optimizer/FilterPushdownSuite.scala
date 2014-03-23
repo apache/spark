@@ -5,8 +5,9 @@ package optimizer
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
-import dsl.plans._
-import dsl.expressions._
+/* Implicit conversions */
+import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.dsl.expressions._
 
 class FilterPushdownSuite extends OptimizerTest {
 

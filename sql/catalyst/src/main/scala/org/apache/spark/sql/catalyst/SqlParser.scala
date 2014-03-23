@@ -39,7 +39,6 @@ import org.apache.spark.sql.catalyst.types._
  * for a SQL like language should checkout the HiveQL support in the sql/hive sub-project.
  */
 class SqlParser extends StandardTokenParsers {
-
   def apply(input: String): LogicalPlan = {
     phrase(query)(new lexical.Scanner(input)) match {
       case Success(r, x) => r
