@@ -25,11 +25,11 @@ if [ -z "$SPARK_ENV_LOADED" ]; then
   export SPARK_ENV_LOADED=1
 
   # Returns the parent of the directory this script lives in.
-  FWDIR="$(cd `dirname $0`/..; pwd)"
+  parent_dir="$(cd `dirname $0`/..; pwd)"
 
-  SPARK_CONF_DIR=${SPARK_CONF_DIR:-"$FWDIR/conf"}
+  use_conf_dir=${SPARK_CONF_DIR:-"$parent_dir/conf"}
 
-  if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
-    . "${SPARK_CONF_DIR}/spark-env.sh"
+  if [ -f "${use_conf_dir}/spark-env.sh" ]; then
+    . "${use_conf_dir}/spark-env.sh"
   fi
 fi
