@@ -23,23 +23,22 @@ import scala.collection.JavaConversions._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.permission.FsAction
-import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
 
 import parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
 import parquet.hadoop.util.ContextUtil
-import parquet.hadoop.{Footer, ParquetFileWriter, ParquetFileReader}
+import parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
 import parquet.io.api.{Binary, RecordConsumer}
 import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
 import parquet.schema.Type.Repetition
-import parquet.schema.{MessageTypeParser, MessageType}
+import parquet.schema.{MessageType, MessageTypeParser}
 import parquet.schema.{PrimitiveType => ParquetPrimitiveType}
 import parquet.schema.{Type => ParquetType}
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.{Row, AttributeReference, Attribute}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, BaseRelation}
-import org.apache.spark.sql.catalyst.types.ArrayType
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
+import org.apache.spark.sql.catalyst.plans.logical.{BaseRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.types._
 
 /**

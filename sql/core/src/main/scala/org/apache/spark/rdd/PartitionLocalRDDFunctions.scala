@@ -22,9 +22,11 @@ import scala.language.implicitConversions
 import scala.reflect._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark._
-import org.apache.spark.SparkContext._
+import org.apache.spark.{Aggregator, InterruptibleIterator, Logging}
 import org.apache.spark.util.collection.AppendOnlyMap
+
+/* Implicit conversions */
+import org.apache.spark.SparkContext._
 
 /**
  * Extra functions on RDDs that perform only local operations.  These can be used when data has

@@ -19,10 +19,12 @@ package org.apache.spark.sql
 package execution
 
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.PartitionLocalRDDFunctions._
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+
+/* Implicit conversions */
+import org.apache.spark.rdd.PartitionLocalRDDFunctions._
 
 /**
  * Groups input data by `groupingExpressions` and computes the `aggregateExpressions` for each

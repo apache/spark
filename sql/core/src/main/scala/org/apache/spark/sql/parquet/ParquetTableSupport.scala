@@ -22,12 +22,12 @@ import org.apache.hadoop.conf.Configuration
 import parquet.column.ParquetProperties
 import parquet.hadoop.ParquetOutputFormat
 import parquet.hadoop.api.ReadSupport.ReadContext
-import parquet.hadoop.api.{WriteSupport, ReadSupport}
+import parquet.hadoop.api.{ReadSupport, WriteSupport}
 import parquet.io.api._
-import parquet.schema.{MessageTypeParser, MessageType}
+import parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{Row, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
 import org.apache.spark.sql.catalyst.types._
 
 /**

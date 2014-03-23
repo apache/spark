@@ -25,7 +25,7 @@ import org.apache.spark.SparkContext
 
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{UnspecifiedDistribution, OrderedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.ScalaReflection
 
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {

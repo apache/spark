@@ -27,14 +27,14 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
 
 import parquet.hadoop.util.ContextUtil
-import parquet.hadoop.{ParquetOutputFormat, ParquetInputFormat}
+import parquet.hadoop.{ParquetInputFormat, ParquetOutputFormat}
 import parquet.io.InvalidRecordException
 import parquet.schema.MessageType
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Row, Attribute, Expression}
-import org.apache.spark.sql.execution.{SparkPlan, UnaryNode, LeafNode}
-import org.apache.spark.{TaskContext, SerializableWritable, SparkContext}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
+import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
+import org.apache.spark.{SerializableWritable, SparkContext, TaskContext}
 
 /**
  * Parquet table scan operator. Imports the file that backs the given

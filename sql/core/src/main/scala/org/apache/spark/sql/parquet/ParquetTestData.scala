@@ -23,7 +23,7 @@ import org.apache.hadoop.mapreduce.Job
 
 import parquet.hadoop.ParquetWriter
 import parquet.hadoop.util.ContextUtil
-import parquet.schema.{MessageTypeParser, MessageType}
+import parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.util.getTempFilePath

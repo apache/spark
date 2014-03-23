@@ -20,7 +20,7 @@ package execution
 
 
 import com.esotericsoftware.kryo.{Kryo, Serializer}
-import com.esotericsoftware.kryo.io.{Output, Input}
+import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.spark.{SparkConf, RangePartitioner, HashPartitioner}
 import org.apache.spark.rdd.ShuffledRDD
