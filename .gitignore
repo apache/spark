@@ -45,4 +45,3 @@ dist/
 spark-*-bin.tar.gz
 unit-tests.log
 /lib/
-sql/hive/src/test/resources

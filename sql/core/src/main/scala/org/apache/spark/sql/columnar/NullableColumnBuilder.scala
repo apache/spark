@@ -26,7 +26,7 @@ import java.nio.{ByteOrder, ByteBuffer}
  * - positions for each null, in ascending order
  * - the non-null data (column data type, compression type, data...)
  */
-trait NullableColumnBuilder extends ColumnBuilder {
+private[sql] trait NullableColumnBuilder extends ColumnBuilder {
   private var nulls: ByteBuffer = _
   private var pos: Int = _
   private var nullCount: Int = _

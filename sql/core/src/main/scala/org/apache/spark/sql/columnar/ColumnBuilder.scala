@@ -23,7 +23,7 @@ import java.nio.{ByteOrder, ByteBuffer}
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 
-trait ColumnBuilder {
+private[sql] trait ColumnBuilder {
   /**
    * Initializes with an approximate lower bound on the expected number of elements in this column.
    */
@@ -34,7 +34,7 @@ trait ColumnBuilder {
   def build(): ByteBuffer
 }
 
-abstract class BasicColumnBuilder[T <: DataType, JvmType] extends ColumnBuilder {
+private[sql] abstract class BasicColumnBuilder[T <: DataType, JvmType] extends ColumnBuilder {
   import ColumnBuilder._
 
   private var columnName: String = _
@@ -69,59 +69,60 @@ abstract class BasicColumnBuilder[T <: DataType, JvmType] extends ColumnBuilder 
   }
 }
 
-abstract class NativeColumnBuilder[T <: NativeType](val columnType: NativeColumnType[T])
+private[sql] abstract class NativeColumnBuilder[T <: NativeType](
+    val columnType: NativeColumnType[T])
   extends BasicColumnBuilder[T, T#JvmType]
   with NullableColumnBuilder
 
-class BooleanColumnBuilder extends NativeColumnBuilder(BOOLEAN) {
+private[sql] class BooleanColumnBuilder extends NativeColumnBuilder(BOOLEAN) {
   override def doAppendFrom(row: Row, ordinal: Int) {
     appendValue(row.getBoolean(ordinal))
   }
 }
 
-class IntColumnBuilder extends NativeColumnBuilder(INT) {
+private[sql] class IntColumnBuilder extends NativeColumnBuilder(INT) {
   override def doAppendFrom(row: Row, ordinal: Int) {
     appendValue(row.getInt(ordinal))
   }
 }
 
-class ShortColumnBuilder extends NativeColumnBuilder(SHORT) {
+private[sql] class ShortColumnBuilder extends NativeColumnBuilder(SHORT) {
   override def doAppendFrom(row: Row, ordinal: Int) {
     appendValue(row.getShort(ordinal))
   }
 }
 
-class LongColumnBuilder extends NativeColumnBuilder(LONG) {
+private[sql] class LongColumnBuilder extends NativeColumnBuilder(LONG) {
   override def doAppendFrom(row: Row, ordinal: Int) {
     appendValue(row.getLong(ordinal))
   }
 }
 
-class ByteColumnBuilder extends NativeColumnBuilder(BYTE) {
+private[sql] class ByteColumnBuilder extends NativeColumnBuilder(BYTE) {
   override def doAppendFrom(row: Row, ordinal: Int) {
     appendValue(row.getByte(ordinal))
   }
 }
 
-class DoubleColumnBuilder extends NativeColumnBuilder(DOUBLE) {
+private[sql] class DoubleColumnBuilder extends NativeColumnBuilder(DOUBLE) {
   override def doAppendFrom(row: Row, ordinal: Int) {
     appendValue(row.getDouble(ordinal))
   }
 }
 
-class FloatColumnBuilder extends NativeColumnBuilder(FLOAT) {
+private[sql] class FloatColumnBuilder extends NativeColumnBuilder(FLOAT) {
   override def doAppendFrom(row: Row, ordinal: Int) {
     appendValue(row.getFloat(ordinal))
   }
 }
 
-class StringColumnBuilder extends NativeColumnBuilder(STRING) {
+private[sql] class StringColumnBuilder extends NativeColumnBuilder(STRING) {
   override def doAppendFrom(row: Row, ordinal: Int) {
     appendValue(row.getString(ordinal))
   }
 }
 
-class BinaryColumnBuilder
+private[sql] class BinaryColumnBuilder
   extends BasicColumnBuilder[BinaryType.type, Array[Byte]]
   with NullableColumnBuilder {
 
@@ -133,7 +134,7 @@ class BinaryColumnBuilder
 }
 
 // TODO (lian) Add support for array, struct and map
-class GenericColumnBuilder
+private[sql] class GenericColumnBuilder
   extends BasicColumnBuilder[DataType, Array[Byte]]
   with NullableColumnBuilder {
 
@@ -146,7 +147,7 @@ class GenericColumnBuilder
   }
 }
 
-object ColumnBuilder {
+private[sql] object ColumnBuilder {
   val DEFAULT_INITIAL_BUFFER_SIZE = 10 * 1024 * 104
 
   private[columnar] def ensureFreeSpace(orig: ByteBuffer, size: Int) = {

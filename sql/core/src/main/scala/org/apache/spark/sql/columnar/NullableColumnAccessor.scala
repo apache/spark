@@ -21,7 +21,7 @@ import java.nio.{ByteOrder, ByteBuffer}
 
 import org.apache.spark.sql.catalyst.expressions.MutableRow
 
-trait NullableColumnAccessor extends ColumnAccessor {
+private[sql] trait NullableColumnAccessor extends ColumnAccessor {
   private var nullsBuffer: ByteBuffer = _
   private var nullCount: Int = _
   private var seenNulls: Int = 0

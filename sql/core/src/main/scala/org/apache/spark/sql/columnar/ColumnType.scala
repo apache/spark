@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.types._
  * @tparam T Scala data type for the column.
  * @tparam JvmType Underlying Java type to represent the elements.
  */
-sealed abstract class ColumnType[T <: DataType, JvmType](
+private[sql] sealed abstract class ColumnType[T <: DataType, JvmType](
     val typeId: Int,
     val defaultSize: Int) {
 
@@ -56,7 +56,7 @@ sealed abstract class ColumnType[T <: DataType, JvmType](
   def clone(v: JvmType): JvmType = v
 }
 
-private[columnar] abstract class NativeColumnType[T <: NativeType](
+private[sql] abstract class NativeColumnType[T <: NativeType](
     val dataType: T,
     typeId: Int,
     defaultSize: Int)
@@ -68,7 +68,7 @@ private[columnar] abstract class NativeColumnType[T <: NativeType](
   def scalaTag = dataType.tag
 }
 
-object INT extends NativeColumnType(IntegerType, 0, 4) {
+private[sql] object INT extends NativeColumnType(IntegerType, 0, 4) {
   def append(v: Int, buffer: ByteBuffer) {
     buffer.putInt(v)
   }
@@ -78,7 +78,7 @@ object INT extends NativeColumnType(IntegerType, 0, 4) {
   }
 }
 
-object LONG extends NativeColumnType(LongType, 1, 8) {
+private[sql] object LONG extends NativeColumnType(LongType, 1, 8) {
   override def append(v: Long, buffer: ByteBuffer) {
     buffer.putLong(v)
   }
@@ -88,7 +88,7 @@ object LONG extends NativeColumnType(LongType, 1, 8) {
   }
 }
 
-object FLOAT extends NativeColumnType(FloatType, 2, 4) {
+private[sql] object FLOAT extends NativeColumnType(FloatType, 2, 4) {
   override def append(v: Float, buffer: ByteBuffer) {
     buffer.putFloat(v)
   }
@@ -98,7 +98,7 @@ object FLOAT extends NativeColumnType(FloatType, 2, 4) {
   }
 }
 
-object DOUBLE extends NativeColumnType(DoubleType, 3, 8) {
+private[sql] object DOUBLE extends NativeColumnType(DoubleType, 3, 8) {
   override def append(v: Double, buffer: ByteBuffer) {
     buffer.putDouble(v)
   }
@@ -108,7 +108,7 @@ object DOUBLE extends NativeColumnType(DoubleType, 3, 8) {
   }
 }
 
-object BOOLEAN extends NativeColumnType(BooleanType, 4, 1) {
+private[sql] object BOOLEAN extends NativeColumnType(BooleanType, 4, 1) {
   override def append(v: Boolean, buffer: ByteBuffer) {
     buffer.put(if (v) 1.toByte else 0.toByte)
   }
@@ -118,7 +118,7 @@ object BOOLEAN extends NativeColumnType(BooleanType, 4, 1) {
   }
 }
 
-object BYTE extends NativeColumnType(ByteType, 5, 1) {
+private[sql] object BYTE extends NativeColumnType(ByteType, 5, 1) {
   override def append(v: Byte, buffer: ByteBuffer) {
     buffer.put(v)
   }
@@ -128,7 +128,7 @@ object BYTE extends NativeColumnType(ByteType, 5, 1) {
   }
 }
 
-object SHORT extends NativeColumnType(ShortType, 6, 2) {
+private[sql] object SHORT extends NativeColumnType(ShortType, 6, 2) {
   override def append(v: Short, buffer: ByteBuffer) {
     buffer.putShort(v)
   }
@@ -138,7 +138,7 @@ object SHORT extends NativeColumnType(ShortType, 6, 2) {
   }
 }
 
-object STRING extends NativeColumnType(StringType, 7, 8) {
+private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   override def actualSize(v: String): Int = v.getBytes.length + 4
 
   override def append(v: String, buffer: ByteBuffer) {
@@ -154,7 +154,9 @@ object STRING extends NativeColumnType(StringType, 7, 8) {
   }
 }
 
-sealed abstract class ByteArrayColumnType[T <: DataType](typeId: Int, defaultSize: Int)
+private[sql] sealed abstract class ByteArrayColumnType[T <: DataType](
+    typeId: Int,
+    defaultSize: Int)
   extends ColumnType[T, Array[Byte]](typeId, defaultSize) {
 
   override def actualSize(v: Array[Byte]) = v.length + 4
@@ -171,14 +173,14 @@ sealed abstract class ByteArrayColumnType[T <: DataType](typeId: Int, defaultSiz
   }
 }
 
-object BINARY extends ByteArrayColumnType[BinaryType.type](8, 16)
+private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](8, 16)
 
 // Used to process generic objects (all types other than those listed above). Objects should be
 // serialized first before appending to the column `ByteBuffer`, and is also extracted as serialized
 // byte array.
-object GENERIC extends ByteArrayColumnType[DataType](9, 16)
+private[sql] object GENERIC extends ByteArrayColumnType[DataType](9, 16)
 
-object ColumnType {
+private[sql] object ColumnType {
   implicit def dataTypeToColumnType(dataType: DataType): ColumnType[_, _] = {
     dataType match {
       case IntegerType => INT
