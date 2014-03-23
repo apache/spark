@@ -18,14 +18,15 @@
 package org.apache.spark.util;
 
 /**
- * A class loader which makes findClass accesiable to the child
+ * A class loader which makes findClass accesible to the child
  */
 public class ParentClassLoader extends ClassLoader {
-    public ParentClassLoader(ClassLoader parent) {
-	super(parent);
+    public ParentClassLoader(ClassLoader myParent) {
+	super(myParent);
     }
+
     @Override
     public Class<?> findClass(String name) throws ClassNotFoundException {
-	return super.loadClass(name);
+	return super.findClass(name);
     }
 }

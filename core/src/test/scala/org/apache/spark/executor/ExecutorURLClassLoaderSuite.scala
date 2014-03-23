@@ -28,8 +28,8 @@ class ExecutorURLClassLoaderSuite extends FunSuite {
   val urls = List(new File(spark_home + "/core/src/test/resources/fake-spark-class.jar").toURI.toURL).toArray
   val urls2 = List(new File(spark_home + "/core/src/test/resources/fake-spark-class-2.jar").toURI.toURL).toArray
   test("child first") {
-    val parentLoader = new ExecutorURLClassLoader(urls2, null, false)
-    val classLoader = new ExecutorURLClassLoader(urls, parentLoader, true)
+    val parentLoader = new URLClassLoader(urls2, null)
+    val classLoader = new ChildExecutorURLClassLoader(urls, parentLoader)
     val fakeClass = classLoader.loadClass("org.apache.spark.test.FakeClass2").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "1")
@@ -37,7 +37,7 @@ class ExecutorURLClassLoaderSuite extends FunSuite {
 
   test("parent first") {
     val parentLoader = new URLClassLoader(urls2, null)
-    val classLoader = new ExecutorURLClassLoader(urls, parentLoader, false)
+    val classLoader = new ExecutorURLClassLoader(urls, parentLoader)
     val fakeClass = classLoader.loadClass("org.apache.spark.test.FakeClass1").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "2")

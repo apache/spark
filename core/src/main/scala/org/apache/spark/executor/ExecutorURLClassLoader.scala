@@ -26,8 +26,13 @@ import org.apache.spark.util.ParentClassLoader
  * We also make changes so user classes can come before the default classes.
  */
 
-private[spark] class ExecutorURLClassLoader(urls: Array[URL], parent: ClassLoader, userFirst: Boolean)
-  extends ClassLoader {
+trait AddableURLClassLoader extends ClassLoader {
+  def addURL(url: URL)
+  def getURLs(): Array[URL]
+}
+
+private[spark] class ChildExecutorURLClassLoader(urls: Array[URL], parent: ClassLoader)
+  extends ClassLoader with AddableURLClassLoader {
 
   object userClassLoader extends URLClassLoader(urls, null){
     override def addURL(url: URL) {
@@ -41,22 +46,11 @@ private[spark] class ExecutorURLClassLoader(urls: Array[URL], parent: ClassLoade
   val parentClassLoader = new ParentClassLoader(parent)
 
   override def findClass(name: String): Class[_] = {
-    if (!userFirst) {
-      try {
-        val c = parentClassLoader.findClass(name)
-        c
-      } catch {
-        case e: ClassNotFoundException => {
-          userClassLoader.findClass(name)
-        }
-      }
-    } else {
-      try {
-        userClassLoader.findClass(name)
-      } catch {
-        case e: ClassNotFoundException => {
-          parentClassLoader.findClass(name)
-        }
+    try {
+      userClassLoader.findClass(name)
+    } catch {
+      case e: ClassNotFoundException => {
+        parentClassLoader.findClass(name)
       }
     }
   }
@@ -69,3 +63,12 @@ private[spark] class ExecutorURLClassLoader(urls: Array[URL], parent: ClassLoade
     userClassLoader.getURLs()
   }
 }
+
+private[spark] class ExecutorURLClassLoader(urls: Array[URL], parent: ClassLoader)
+  extends URLClassLoader(urls, parent) with AddableURLClassLoader {
+
+  override def addURL(url: URL) {
+    super.addURL(url)
+  }
+}
+

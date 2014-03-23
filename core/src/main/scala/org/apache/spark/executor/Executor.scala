@@ -291,8 +291,8 @@ private[spark] class Executor(
    * Create a ClassLoader for use in tasks, adding any JARs specified by the user or any classes
    * created by the interpreter to the search path
    */
-  private def createClassLoader(): ExecutorURLClassLoader = {
-    val loader = Thread.currentThread().getContextClassLoader
+  private def createClassLoader(): AddableURLClassLoader = {
+    val loader = this.getClass.getClassLoader
 
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.
@@ -300,7 +300,10 @@ private[spark] class Executor(
       new File(uri.split("/").last).toURI.toURL
     }.toArray
     val userClassPathFirst = conf.getBoolean("spark.classpath.userClassPathFirst", false)
-    new ExecutorURLClassLoader(urls, loader, userClassPathFirst)
+    userClassPathFirst match {
+      case true => new ChildExecutorURLClassLoader(urls, loader)
+      case false => new ExecutorURLClassLoader(urls, loader)
+    }
   }
 
   /**
