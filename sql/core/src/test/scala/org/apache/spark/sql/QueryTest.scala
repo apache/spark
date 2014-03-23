@@ -33,7 +33,7 @@ import TestSQLContext._
 class QueryTest extends FunSuite {
   /**
    * Runs the plan and makes sure the answer matches the expected result.
-   * @param plan the query to be executed
+   * @param rdd the [[SchemaRDD]] to be executed
    * @param expectedAnswer the expected result, can either be an Any, Seq[Product], or Seq[ Seq[Any] ].
    */
   protected def checkAnswer(rdd: SchemaRDD, expectedAnswer: Any): Unit = {
