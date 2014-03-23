@@ -28,6 +28,8 @@ import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
 //import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
 object SparkBuild extends Build {
+  val SPARK_VERSION = "1.0.0-incubating-SNAPSHOT" 
+
   // Hadoop version to build against. For example, "1.0.4" for Apache releases, or
   // "2.0.0-mr1-cdh4.2.0" for Cloudera Hadoop. Note that these variables can be set
   // through the environment variables SPARK_HADOOP_VERSION and SPARK_YARN.
@@ -124,7 +126,7 @@ object SparkBuild extends Build {
 
   def sharedSettings = Defaults.defaultSettings ++ MimaBuild.mimaSettings(file(sparkHome)) ++ Seq(
     organization       := "org.apache.spark",
-    version            := "1.0.0-incubating-SNAPSHOT",
+    version            := SPARK_VERSION,
     scalaVersion       := "2.10.3",
     scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation",
       "-target:" + SCALAC_JVM_VERSION),

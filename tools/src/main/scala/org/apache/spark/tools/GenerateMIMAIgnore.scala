@@ -21,78 +21,121 @@ import java.io.File
 import java.util.jar.JarFile
 
 import scala.collection.mutable
-import scala.collection.JavaConversions.enumerationAsScalaIterator
+import scala.collection.JavaConversions._
+import scala.reflect.runtime.universe.runtimeMirror
+import scala.util.Try
 
 /**
- * Mima(TODO: Paste URL here) generates a lot of false positives as it does not detect
- * private[x] as internal APIs.
+ * A tool for generating classes to be excluded during binary checking with MIMA. It is expected
+ * that this tool is run with ./spark-class.
+ *
+ * MIMA itself only supports JVM-level visibility and doesn't account for package-private classes.
+ * This tool looks at all currently package-private classes and generates exclusions for them. Note
+ * that this approach is not sound. It can lead to false positives if we move or rename a previously
+ * package-private class. It can lead to false negatives if someone explicitly makes a class
+ * package-private that wasn't before. This exists only to help catch certain classes of changes
+ * which might be difficult to catch during review.
  */
 object GenerateMIMAIgnore {
+  private val classLoader = Thread.currentThread().getContextClassLoader
+  private val mirror = runtimeMirror(classLoader)
 
-  def classesWithPrivateWithin(packageName: String, excludePackages: Seq[String]): Set[String] = {
-    import scala.reflect.runtime.universe.runtimeMirror
-    val classLoader: ClassLoader = Thread.currentThread().getContextClassLoader
-    val mirror = runtimeMirror(classLoader)
-    val classes = Utils.getClasses(packageName, classLoader)
+  private def classesPrivateWithin(packageName: String): Set[String] = {
+
+    val classes = getClasses(packageName, classLoader)
     val privateClasses = mutable.HashSet[String]()
-    for (x <- classes) {
-      try {
-        // some of the classnames throw malformed class name exceptions and weird Match errors.
-        if (excludePackages.forall(!x.startsWith(_)) &&
-          mirror.staticClass(x).privateWithin.toString.trim != "<none>") {
-          privateClasses += x
+
+    def isPackagePrivate(className: String) = {
+     try {
+       /* Couldn't figure out if it's possible to determine a-priori whether a given symbol
+          is a module or class. */
+
+       val privateAsClass = mirror
+         .staticClass(className)
+         .privateWithin
+         .fullName
+         .startsWith(packageName)
+
+       val privateAsModule = mirror
+         .staticModule(className)
+         .privateWithin
+         .fullName
+         .startsWith(packageName)
+
+       privateAsClass || privateAsModule
+     } catch {
+        case _: Throwable => {
+          println("Error determining visibility: " + className)
+          false
         }
-      } catch {
-        case e: Throwable => // println(e)
       }
     }
-    privateClasses.toSet
+
+    for (className <- classes) {
+      val directlyPrivateSpark = isPackagePrivate(className)
+
+      /* Inner classes defined within a private[spark] class or object are effectively
+         invisible, so we account for them as package private. */
+      val indirectlyPrivateSpark = {
+        val maybeOuter = className.toString.takeWhile(_ != '$')
+        if (maybeOuter != className) {
+          isPackagePrivate(maybeOuter)
+        } else {
+          false
+        }
+      }
+      if (directlyPrivateSpark || indirectlyPrivateSpark) privateClasses += className
+    }
+    privateClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet
   }
 
   def main(args: Array[String]) {
-    scala.tools.nsc.io.File(".mima-exclude").
-      writeAll(classesWithPrivateWithin("org.apache.spark", args).mkString("\n"))
-    println("Created : .mima-exclude in current directory.")
+    scala.tools.nsc.io.File(".mima-excludes").
+      writeAll(classesPrivateWithin("org.apache.spark").mkString("\n"))
+    println("Created : .mima-excludes in current directory.")
   }
-
-}
-
-object Utils {
 
   /**
    * Get all classes in a package from a jar file.
    */
-  def getAllClasses(jarPath: String, packageName: String) = {
+  private def getAllClasses(jarPath: String, packageName: String) = {
     val jar = new JarFile(new File(jarPath))
     val enums = jar.entries().map(_.getName).filter(_.startsWith(packageName))
     val classes = mutable.HashSet[Class[_]]()
     for (entry <- enums) {
       if (!entry.endsWith("/") && !entry.endsWith("MANIFEST.MF") && !entry.endsWith("properties")) {
-        try {
-          classes += Class.forName(entry.trim.replaceAll(".class", "").replace('/', '.'))
-        } catch {
-          case e: Throwable => // println(e) // It may throw a few ClassNotFoundExceptions
-        }
+        classes += Class.forName(entry.trim.replaceAll(".class", "").replace('/', '.'))
       }
     }
     classes
+  }
+
+  private def shouldExclude(name: String) = {
+    // Heuristic to remove JVM classes that do not correspond to user-facing classes in Scala
+    Try(mirror.staticClass(name)).isFailure ||
+    name.contains("anon") ||
+    name.endsWith("class") ||
+    name.contains("$sp")
   }
 
   /**
    * Scans all classes accessible from the context class loader which belong to the given package
    * and subpackages both from directories and jars present on the classpath.
    */
-  def getClasses(packageName: String,
-      classLoader: ClassLoader = Thread.currentThread().getContextClassLoader): Set[String] = {
+  private def getClasses(packageName: String,
+      classLoader: ClassLoader = Thread.currentThread().getContextClassLoader): Seq[String] = {
     val path = packageName.replace('.', '/')
-    val resources = classLoader.getResources(path).toArray
+    val resources = classLoader.getResources(path)
+
     val jars = resources.filter(x => x.getProtocol == "jar")
       .map(_.getFile.split(":")(1).split("!")(0))
     val classesFromJars = jars.map(getAllClasses(_, path)).flatten
+
     val dirs = resources.filter(x => x.getProtocol == "file")
-      .map(x => new File(x.getFile.split(":")(1)))
+      .map(x => new File(x.getFile.split(":").last))
     val classFromDirs = dirs.map(findClasses(_, packageName)).flatten
-    (classFromDirs ++ classesFromJars).map(_.getCanonicalName).filter(_ != null).toSet
+
+    (classFromDirs ++ classesFromJars).map(_.getName).filter(!shouldExclude(_)).toSeq
   }
 
   private def findClasses(directory: File, packageName: String): Seq[Class[_]] = {
@@ -105,8 +148,8 @@ object Utils {
       if (file.isDirectory) {
         classes ++= findClasses(file, packageName + "." + file.getName)
       } else if (file.getName.endsWith(".class")) {
-        classes += Class.forName(packageName + '.' + file.getName.substring(0,
-          file.getName.length() - 6))
+        val className = file.getName.substring(0, file.getName.length() - 6)
+        classes += Class.forName(packageName + '.' + className)
       }
     }
     classes
