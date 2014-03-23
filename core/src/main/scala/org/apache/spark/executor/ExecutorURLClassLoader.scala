@@ -19,6 +19,8 @@ package org.apache.spark.executor
 
 import java.net.{URLClassLoader, URL}
 
+import org.apache.spark.util.ParentClassLoader
+
 /**
  * The addURL method in URLClassLoader is protected. We subclass it to make this accessible.
  * We also make changes so user classes can come before the default classes.
@@ -36,11 +38,7 @@ private[spark] class ExecutorURLClassLoader(urls: Array[URL], parent: ClassLoade
     }
   }
 
-  object parentClassLoader extends ClassLoader(parent) {
-    override def findClass(name: String): Class[_] = {
-      super.findClass(name)
-    }
-  }
+  val parentClassLoader = new ParentClassLoader(parent)
 
   override def findClass(name: String): Class[_] = {
     if (!userFirst) {
