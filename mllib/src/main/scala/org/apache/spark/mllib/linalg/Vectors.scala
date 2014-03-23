@@ -165,7 +165,8 @@ class SparseVector(val n: Int, val indices: Array[Int], val values: Array[Double
   override def toArray: Array[Double] = {
     val data = new Array[Double](n)
     var i = 0
-    while (i < n) {
+    val nnz = indices.length
+    while (i < nnz) {
       data(indices(i)) = values(i)
       i += 1
     }
