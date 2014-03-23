@@ -52,7 +52,7 @@ object SparkBuild extends Build {
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
   lazy val repl = Project("repl", file("repl"), settings = replSettings)
-    .dependsOn(core, graphx, bagel, mllib)
+    .dependsOn(core, graphx, bagel, mllib, sql)
 
   lazy val tools = Project("tools", file("tools"), settings = toolsSettings) dependsOn(core) dependsOn(streaming)
 
@@ -60,12 +60,19 @@ object SparkBuild extends Build {
 
   lazy val graphx = Project("graphx", file("graphx"), settings = graphxSettings) dependsOn(core)
 
+  lazy val catalyst = Project("catalyst", file("sql/catalyst"), settings = catalystSettings) dependsOn(core)
+
+  lazy val sql = Project("sql", file("sql/core"), settings = sqlCoreSettings) dependsOn(core, catalyst)
+
+  // Since hive is its own assembly, it depends on all of the modules.
+  lazy val hive = Project("hive", file("sql/hive"), settings = hiveSettings) dependsOn(sql, graphx, bagel, mllib, streaming, repl)
+
   lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn(core)
 
   lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn(core)
 
   lazy val assemblyProj = Project("assembly", file("assembly"), settings = assemblyProjSettings)
-    .dependsOn(core, graphx, bagel, mllib, repl, streaming) dependsOn(maybeYarn: _*) dependsOn(maybeGanglia: _*)
+    .dependsOn(core, graphx, bagel, mllib, streaming, repl, sql) dependsOn(maybeYarn: _*) dependsOn(maybeGanglia: _*)
 
   lazy val assembleDeps = TaskKey[Unit]("assemble-deps", "Build assembly of dependencies and packages Spark projects")
 
@@ -131,13 +138,13 @@ object SparkBuild extends Build {
   lazy val allExternalRefs = Seq[ProjectReference](externalTwitter, externalKafka, externalFlume, externalZeromq, externalMqtt)
 
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
-    .dependsOn(core, mllib, graphx, bagel, streaming, externalTwitter) dependsOn(allExternal: _*)
+    .dependsOn(core, mllib, graphx, bagel, streaming, externalTwitter, hive) dependsOn(allExternal: _*)
 
-  // Everything except assembly, tools, java8Tests and examples belong to packageProjects
-  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx) ++ maybeYarnRef ++ maybeGangliaRef
+  // Everything except assembly, hive, tools, java8Tests and examples belong to packageProjects
+  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx, catalyst, sql) ++ maybeYarnRef ++ maybeGangliaRef
 
   lazy val allProjects = packageProjects ++ allExternalRefs ++
-    Seq[ProjectReference](examples, tools, assemblyProj) ++ maybeJava8Tests
+    Seq[ProjectReference](examples, tools, assemblyProj, hive) ++ maybeJava8Tests
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization       := "org.apache.spark",
@@ -164,7 +171,7 @@ object SparkBuild extends Build {
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
     // Remove certain packages from Scaladoc
-    scalacOptions in (Compile,doc) := Seq("-skip-packages", Seq(
+    scalacOptions in (Compile,doc) := Seq("-groups", "-skip-packages", Seq(
       "akka",
       "org.apache.spark.network",
       "org.apache.spark.deploy",
@@ -238,10 +245,10 @@ object SparkBuild extends Build {
 
     libraryDependencies ++= Seq(
         "io.netty"          % "netty-all"       % "4.0.17.Final",
-        "org.eclipse.jetty" % "jetty-server"    % "9.1.3.v20140225",
-        "org.eclipse.jetty" % "jetty-util" % "9.1.3.v20140225",
-        "org.eclipse.jetty" % "jetty-plus" % "9.1.3.v20140225",
-        "org.eclipse.jetty" % "jetty-security" % "9.1.3.v20140225",
+        "org.eclipse.jetty" % "jetty-server"    % "7.6.8.v20121106",
+        "org.eclipse.jetty" % "jetty-util" % "7.6.8.v20121106",
+        "org.eclipse.jetty" % "jetty-plus" % "7.6.8.v20121106",
+        "org.eclipse.jetty" % "jetty-security" % "7.6.8.v20121106",
         /** Workaround for SPARK-959. Dependency used by org.eclipse.jetty. Fixed in ivy 2.3.0. */
         "org.eclipse.jetty.orbit" % "javax.servlet" % "2.5.0.v201103041518" artifacts Artifact("javax.servlet", "jar", "jar"),
         "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
@@ -360,6 +367,61 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
       "org.jblas" % "jblas" % "1.2.3"
     )
+  )
+
+  def catalystSettings = sharedSettings ++ Seq(
+    name := "catalyst",
+    // The mechanics of rewriting expression ids to compare trees in some test cases makes
+    // assumptions about the the expression ids being contiguious.  Running tests in parallel breaks
+    // this non-deterministically.  TODO: FIX THIS.
+    parallelExecution in Test := false,
+    libraryDependencies ++= Seq(
+      "org.scalatest" %% "scalatest" % "1.9.1" % "test",
+      "com.typesafe" %% "scalalogging-slf4j" % "1.0.1"
+    )
+  )
+
+  def sqlCoreSettings = sharedSettings ++ Seq(
+    name := "spark-sql",
+    libraryDependencies ++= Seq(
+      "com.twitter" % "parquet-column" % "1.3.2",
+      "com.twitter" % "parquet-hadoop" % "1.3.2"
+    )
+  )
+
+  // Since we don't include hive in the main assembly this project also acts as an alternative
+  // assembly jar.
+  def hiveSettings = sharedSettings ++ assemblyProjSettings ++ Seq(
+    name := "spark-hive",
+    jarName in assembly <<= version map { v => "spark-hive-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" },
+    jarName in packageDependency <<= version map { v => "spark-hive-assembly-" + v + "-hadoop" + hadoopVersion + "-deps.jar" },
+    javaOptions += "-XX:MaxPermSize=1g",
+    libraryDependencies ++= Seq(
+      "org.apache.hive" % "hive-metastore" % "0.12.0",
+      "org.apache.hive" % "hive-exec" % "0.12.0",
+      "org.apache.hive" % "hive-serde" % "0.12.0"
+    ),
+    // Multiple queries rely on the TestHive singleton.  See comments there for more details.
+    parallelExecution in Test := false,
+    // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
+    // only for this subproject.
+    scalacOptions <<= scalacOptions map { currentOpts: Seq[String] =>
+      currentOpts.filterNot(_ == "-deprecation")
+    },
+    initialCommands in console :=
+      """
+        |import org.apache.spark.sql.catalyst.analysis._
+        |import org.apache.spark.sql.catalyst.dsl._
+        |import org.apache.spark.sql.catalyst.errors._
+        |import org.apache.spark.sql.catalyst.expressions._
+        |import org.apache.spark.sql.catalyst.plans.logical._
+        |import org.apache.spark.sql.catalyst.rules._
+        |import org.apache.spark.sql.catalyst.types._
+        |import org.apache.spark.sql.catalyst.util._
+        |import org.apache.spark.sql.execution
+        |import org.apache.spark.sql.hive._
+        |import org.apache.spark.sql.hive.TestHive._
+        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
   )
 
   def streamingSettings = sharedSettings ++ Seq(

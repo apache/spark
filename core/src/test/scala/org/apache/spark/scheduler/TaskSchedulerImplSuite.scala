@@ -19,8 +19,6 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.scalatest.FunSuite
 
 import org.apache.spark._
@@ -270,9 +268,9 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
     val taskScheduler = new TaskSchedulerImpl(sc) 
     taskScheduler.initialize(new FakeSchedulerBackend)
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
-    var dagScheduler = new DAGScheduler(taskScheduler) {
+    val dagScheduler = new DAGScheduler(sc, taskScheduler) {
       override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorGained(execId: String, host: String) {}
+      override def executorAdded(execId: String, host: String) {}
     }
 
     val numFreeCores = 1
@@ -291,7 +289,7 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
       assert(1 === taskDescriptions.length)
       taskDescriptions(0).executorId
     }
-    var count = selectedExecutorIds.count(_ == workerOffers(0).executorId)
+    val count = selectedExecutorIds.count(_ == workerOffers(0).executorId)
     assert(count > 0)
     assert(count < numTrials)
   }

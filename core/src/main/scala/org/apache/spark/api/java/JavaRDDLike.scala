@@ -479,6 +479,26 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
+   * Returns the maximum element from this RDD as defined by the specified
+   * Comparator[T].
+   * @params comp the comparator that defines ordering
+   * @return the maximum of the RDD
+   * */
+  def max(comp: Comparator[T]): T = {
+    rdd.max()(Ordering.comparatorToOrdering(comp))
+  }
+
+  /**
+   * Returns the minimum element from this RDD as defined by the specified
+   * Comparator[T].
+   * @params comp the comparator that defines ordering
+   * @return the minimum of the RDD
+   * */
+  def min(comp: Comparator[T]): T = {
+    rdd.min()(Ordering.comparatorToOrdering(comp))
+  }
+
+  /**
    * Returns the first K elements from this RDD using the
    * natural ordering for T while maintain the order.
    * @param num the number of top elements to return
