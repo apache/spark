@@ -23,13 +23,12 @@ import scala.collection.mutable.HashMap
 import scala.xml.Node
 
 import org.apache.spark.scheduler.{StageInfo, TaskInfo}
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{WebUI, UIUtils}
 import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
   private val basePath = parent.basePath
-  private val dateFmt = parent.dateFmt
   private lazy val listener = parent.listener
   private lazy val isFairScheduler = parent.isFairScheduler
 
@@ -60,13 +59,11 @@ private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
 
   private def makeProgressBar(started: Int, completed: Int, failed: String, total: Int): Seq[Node] =
   {
-    val startPct = (started.toDouble/total)*100
-    val completePct = (completed.toDouble/total)*100
-    val completeWidth = "width: %s%%; position: absolute;".format(completePct)
-    val startWidth = "width: %s%%; left: %s%%; position: absolute;".format(startPct,completePct)
+    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
+    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
 
     <div class="progress">
-      <span style="text-align:center; position:absolute; width:100%; z-index: 1;">
+      <span style="text-align:center; position:absolute; width:100%; left:0;">
         {completed}/{total} {failed}
       </span>
       <div class="bar bar-completed" style={completeWidth}></div>
@@ -84,7 +81,7 @@ private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
     val description = listener.stageIdToDescription.get(s.stageId)
       .map(d => <div><em>{d}</em></div><div>{nameLink}</div>).getOrElse(nameLink)
     val submissionTime = s.submissionTime match {
-      case Some(t) => dateFmt.format(new Date(t))
+      case Some(t) => WebUI.formatDate(new Date(t))
       case None => "Unknown"
     }
     val finishTime = s.completionTime.getOrElse(System.currentTimeMillis)

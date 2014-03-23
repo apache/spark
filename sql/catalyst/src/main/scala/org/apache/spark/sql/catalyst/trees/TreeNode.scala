@@ -336,6 +336,21 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     children.foreach(_.generateTreeString(depth + 1, builder))
     builder
   }
+
+  /**
+   * Returns a 'scala code' representation of this `TreeNode` and its children.  Intended for use
+   * when debugging where the prettier toString function is obfuscating the actual structure. In the
+   * case of 'pure' `TreeNodes` that only contain primitives and other TreeNodes, the result can be
+   * pasted in the REPL to build an equivalent Tree.
+   */
+  def asCode: String = {
+    val args = productIterator.map {
+      case tn: TreeNode[_] => tn.asCode
+      case s: String => "\"" + s + "\""
+      case other => other.toString
+    }
+    s"$nodeName(${args.mkString(",")})"
+  }
 }
 
 /**

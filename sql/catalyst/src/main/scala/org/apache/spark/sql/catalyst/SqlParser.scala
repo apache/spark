@@ -51,7 +51,9 @@ class SqlParser extends StandardTokenParsers {
   }
 
   protected case class Keyword(str: String)
-  protected implicit def asParser(k: Keyword): Parser[String] = k.str
+
+  protected implicit def asParser(k: Keyword): Parser[String] =
+    allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
 
   protected class SqlLexical extends StdLexical {
     case class FloatLit(chars: String) extends Token {
@@ -133,7 +135,17 @@ class SqlParser extends StandardTokenParsers {
       .filter(_.getReturnType == classOf[Keyword])
       .map(_.invoke(this).asInstanceOf[Keyword])
 
-  lexical.reserved ++= reservedWords.map(_.str)
+  /** Generate all variations of upper and lower case of a given string */
+  private def allCaseVersions(s: String, prefix: String = ""): Stream[String] = {
+    if (s == "") {
+      Stream(prefix)
+    } else {
+      allCaseVersions(s.tail, prefix + s.head.toLower) ++
+        allCaseVersions(s.tail, prefix + s.head.toUpper)
+    }
+  }
+
+  lexical.reserved ++= reservedWords.flatMap(w => allCaseVersions(w.str))
 
   lexical.delimiters += (
     "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
