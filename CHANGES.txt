@@ -1,4 +1,385 @@
 Spark Change Log
+----------------
+Release 0.9.1
+
+  Fix to Stage UI to display numbers on progress bar
+  Emtiaz Ahmed <emtiazahmed@gmail.com>
+  2014-03-21 18:07:05 -0700
+  Commit: 5e7ac0d, github.com/apache/spark/pull/201
+
+  SPARK-1284: Fix improper use of SimpleDateFormat
+  zsxwing <zsxwing@gmail.com>
+  2014-03-21 16:39:23 -0700
+  Commit: 8856076, github.com/apache/spark/pull/179
+
+  [SPARK-1273] use doi links in mllib-guide
+  Xiangrui Meng <meng@databricks.com>
+  2014-03-21 14:35:32 -0700
+  Commit: d68549e, github.com/apache/spark/pull/198
+
+  Removed incubating from Spark version in all the pom.xml.
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-03-20 18:02:55 -0700
+  Commit: 8b1e793
+
+  Bumped versions to Spark 0.9.1
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-03-20 16:55:35 -0700
+  Commit: 8a882ef, github.com/apache/spark/pull/190
+
+  SPARK-1032. If Yarn app fails before registering, app master stays aroun...
+  Sandy Ryza <sandy@cloudera.com>
+  2014-03-20 16:50:44 -0500
+  Commit: c6630d3, github.com/apache/spark/pull/28
+
+  SPARK-1051. On YARN, executors don't doAs submitting user
+  Sandy Ryza <sandy@cloudera.com>
+  2014-03-20 14:48:05 -0500
+  Commit: 748f002, github.com/apache/spark/pull/29
+
+  [SPARK-1285] Backporting updates to streaming docs to branch 0.9
+  Aaron Kimball <aaron@magnify.io>, Tathagata Das <tathagata.das1565@gmail.com>, Chen Chao <crazyjvm@gmail.com>, Andrew Or <andrewor14@gmail.com>
+  2014-03-20 12:27:47 -0700
+  Commit: 1e36690, github.com/apache/spark/pull/183
+
+  [SPARK-1273] MLlib bug fixes, improvements, and doc updates for v0.9.1
+  Xiangrui Meng <meng@databricks.com>, Sean Owen <sowen@cloudera.com>, Andrew Tulloch <andrew@tullo.ch>, Chen Chao <crazyjvm@gmail.com>
+  2014-03-19 19:05:26 -0700
+  Commit: 1cc979e, github.com/apache/spark/pull/175
+
+  [SPARK-1275] Made dev/run-tests executable.
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-03-19 16:10:45 -0700
+  Commit: a4eef65, github.com/apache/spark/pull/178
+
+  Update the yarn alpha version to 0.9.1-incubating-SNAPSHOT
+  Thomas Graves <tgraves@apache.org>
+  2014-03-19 12:41:11 -0500
+  Commit: 72875b2
+
+  SPARK-1203 fix saving to hdfs from yarn
+  Thomas Graves <tgraves@apache.org>
+  2014-03-19 08:19:47 -0500
+  Commit: 250ec27, github.com/apache/spark/pull/173
+
+  bugfix: Wrong "Duration" in "Active Stages" in stages page
+  shiyun.wxm <shiyun.wxm@taobao.com>
+  2014-03-19 01:42:42 -0700
+  Commit: d385b5a, github.com/apache/spark/pull/170
+
+  [SPARK-1274] Add dev scripts to merge PRs and create releases from master to branch-0.9
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-03-18 22:09:16 -0700
+  Commit: 7ec78bc, github.com/apache/spark/pull/176
+
+  Bundle tachyon:  SPARK-1269
+  Nick Lanham <nick@afternight.org>
+  2014-03-18 22:05:18 -0700
+  Commit: 0183ddd, github.com/apache/spark/pull/137
+
+  [Spark-1261] add instructions for running python examples to doc overview page
+  Diana Carroll <dcarroll@cloudera.com>
+  2014-03-17 17:37:03 -0700
+  Commit: 20d9458, github.com/apache/spark/pull/162
+
+  SPARK-1244: Throw exception if map output status exceeds frame size
+  Patrick Wendell <pwendell@gmail.com>, Andrew Or <andrewor14@gmail.com>
+  2014-03-17 14:06:28 -0700
+  Commit: 4562140, github.com/apache/spark/pull/152
+
+  SPARK-1240: handle the case of empty RDD when takeSample
+  CodingCat <zhunansjtu@gmail.com>
+  2014-03-16 22:40:22 -0700
+  Commit: af7e8b1, github.com/apache/spark/pull/135
+
+  SPARK-977 Added Python RDD.zip function
+  Prabin Banka <prabin.banka@imaginea.com>
+  2014-03-16 22:16:17 -0700
+  Commit: 1dc1e98, github.com/apache/spark/pull/76
+
+  Spark-1163, Added missing Python RDD functions
+  prabinb <prabin.banka@imaginea.com>
+  2014-03-16 22:14:53 -0700
+  Commit: 249930a, github.com/apache/spark/pull/92
+
+  SPARK-1168, Added foldByKey to pyspark.
+  Prashant Sharma <prashant.s@imaginea.com>
+  2014-03-16 22:13:33 -0700
+  Commit: 4480505, github.com/apache/spark/pull/115
+
+  Updated link for pyspark examples in docs
+  Jyotiska NK <jyotiska123@gmail.com>
+  2014-03-16 22:12:51 -0700
+  Commit: e74e79a, github.com/apache/spark/pull/22
+
+  SPARK-1019: pyspark RDD take() throws an NPE
+  Patrick Wendell <pwendell@gmail.com>
+  2014-03-12 23:17:17 -0700
+  Commit: ef74e44, github.com/apache/spark/pull/112
+
+  Fix example bug: compile error
+  jianghan <jianghan@xiaomi.com>
+  2014-03-12 19:46:48 -0700
+  Commit: 87e4dd5, github.com/apache/spark/pull/132
+
+  SPARK-1162 Added top in python.
+  Prashant Sharma <prashant.s@imaginea.com>
+  2014-03-12 15:57:54 -0700
+  Commit: 51a77e9, github.com/apache/spark/pull/93
+
+  Version fix in pom file
+  Patrick Wendell <pwendell@gmail.com>
+  2014-03-11 14:48:01 -0700
+  Commit: 7049164
+
+  Log4j build fix on 0.9 branch
+  Patrick Wendell <pwendell@gmail.com>
+  2014-03-11 11:53:29 -0700
+  Commit: 6cbd580
+
+  SPARK-1167: Remove metrics-ganglia from default build due to LGPL issues...
+  Patrick Wendell <pwendell@gmail.com>
+  2014-03-11 11:24:21 -0700
+  Commit: 0c91927, github.com/apache/spark/pull/108
+
+  For outputformats that are Configurable, call setConf before sending data to them.
+  Bryn Keller <bryn.keller@intel.com>
+  2014-03-09 17:47:46 -0700
+  Commit: 6f0db0a, github.com/apache/spark/pull/638
+
+  SPARK-1190: Do not initialize log4j if slf4j log4j backend is not being used
+  Patrick Wendell <pwendell@gmail.com>
+  2014-03-08 16:02:56 -0800
+  Commit: 0f0d044, github.com/apache/spark/pull/107
+
+  SPARK-1184: Update the distribution tar.gz to include spark-assembly jar
+  Mark Grover <mark@apache.org>
+  2014-03-05 16:55:36 -0800
+  Commit: 0fc0fdb, github.com/apache/spark/pull/78
+
+  SPARK-1109 wrong API docs for pyspark map function
+  Prashant Sharma <prashant.s@imaginea.com>
+  2014-03-04 15:33:00 -0800
+  Commit: 7ea89ec, github.com/apache/spark/pull/73
+
+  Add Jekyll tag to isolate "production-only" doc components. (0.9 version)
+  Patrick Wendell <pwendell@gmail.com>
+  2014-03-02 18:18:44 -0800
+  Commit: 267d96c, github.com/apache/spark/pull/57
+
+  Removed reference to incubation in Spark user docs.
+  Reynold Xin <rxin@apache.org>
+  2014-02-27 21:14:18 -0800
+  Commit: f2bf44a, github.com/apache/spark/pull/2
+
+  [SPARK-1089] fix the regression problem on ADD_JARS in 0.9
+  CodingCat <zhunansjtu@gmail.com>
+  2014-02-26 23:42:53 -0800
+  Commit: bc5e7d7, github.com/apache/spark/pull/13
+
+  Removed reference to incubation in README.md.
+  Reynold Xin <rxin@apache.org>
+  2014-02-26 16:53:56 -0800
+  Commit: 349764d, github.com/apache/spark/pull/1
+
+  SPARK-1115: Catch depickling errors
+  Bouke van der Bijl <boukevanderbijl@gmail.com>
+  2014-02-26 14:53:30 -0800
+  Commit: 886a466, github.com/apache/incubator-spark/pull/644
+
+  SPARK-1135: fix broken anchors in docs
+  Matei Zaharia <matei@databricks.com>
+  2014-02-26 11:56:12 -0800
+  Commit: 6fe72dd, github.com/apache/spark/pull/3
+
+  Fix removal from shuffleToMapStage to search for a key-value pair with our stage instead of using our shuffleID.
+  Matei Zaharia <matei@databricks.com>
+  2014-02-24 17:01:21 -0800
+  Commit: 0661cdc
+
+  SPARK-1124: Fix infinite retries of reduce stage when a map stage failed
+  Matei Zaharia <matei@databricks.com>
+  2014-02-24 17:00:47 -0800
+  Commit: 5e74b8e
+
+  [SPARK-1055] fix the SCALA_VERSION and SPARK_VERSION in docker file
+  CodingCat <zhunansjtu@gmail.com>, Nan Zhu <CodingCat@users.noreply.github.com>
+  2014-02-22 15:39:41 -0800
+  Commit: 00db30c, github.com/apache/incubator-spark/pull/634
+
+  SPARK-1117: update accumulator docs
+  Xiangrui Meng <meng@databricks.com>
+  2014-02-21 22:44:59 -0800
+  Commit: ed58742, github.com/apache/incubator-spark/pull/631
+
+  [SPARK-1113] External spilling - fix Int.MaxValue hash code collision bug
+  Andrew Or <andrewor14@gmail.com>
+  2014-02-21 20:06:09 -0800
+  Commit: 84131fe, github.com/apache/incubator-spark/pull/624
+
+  MLLIB-25: Implicit ALS runs out of memory for moderately large numbers of features
+  Sean Owen <sowen@cloudera.com>
+  2014-02-21 13:39:17 -0800
+  Commit: 998abae, github.com/apache/incubator-spark/pull/629
+
+  SPARK-1111: URL Validation Throws Error for HDFS URL's
+  Patrick Wendell <pwendell@gmail.com>
+  2014-02-21 11:12:38 -0800
+  Commit: b3fff96, github.com/apache/incubator-spark/pull/625
+
+  Super minor: Add require for mergeCombiners in combineByKey
+  Aaron Davidson <aaron@databricks.com>
+  2014-02-20 16:46:29 -0800
+  Commit: 3c44ff4, github.com/apache/incubator-spark/pull/623
+
+  [SPARK-1105] fix site scala version error in docs
+  CodingCat <zhunansjtu@gmail.com>
+  2014-02-19 15:56:24 -0800
+  Commit: 289d761, github.com/apache/incubator-spark/pull/618
+
+  Revert "[SPARK-1105] fix site scala version error in doc"
+  Patrick Wendell <pwendell@gmail.com>
+  2014-02-18 17:47:34 -0800
+  Commit: 7bde72e
+
+  [SPARK-1105] fix site scala version error in doc
+  CodingCat <zhunansjtu@gmail.com>
+  2014-02-18 16:33:41 -0800
+  Commit: 0f0395c, github.com/apache/incubator-spark/pull/616
+
+  Worker registration logging fix
+  Andrew Ash <andrew@andrewash.com>
+  2014-02-17 09:52:16 -0800
+  Commit: b0b5288, github.com/apache/incubator-spark/pull/608
+
+  fix for https://spark-project.atlassian.net/browse/SPARK-1052
+  Bijay Bisht <bijay.bisht@gmail.com>
+  2014-02-16 16:52:57 -0800
+  Commit: e797c1a, github.com/apache/incubator-spark/pull/568
+
+  Add c3 instance types to Spark EC2
+  Christian Lundgren <christian.lundgren@gameanalytics.com>
+  2014-02-13 12:44:21 -0800
+  Commit: 19b4bb2, github.com/apache/incubator-spark/pull/595
+
+  SPARK-1088: Create a script for running tests so we can have version specific testing on Jenkins (branch-0.9)
+  Reynold Xin <rxin@apache.org>
+  2014-02-12 23:42:58 -0800
+  Commit: e5b86b1, github.com/apache/incubator-spark/pull/593
+
+  Ported hadoopClient jar for < 1.0.1 fix
+  Bijay Bisht <bijay.bisht@gmail.com>
+  2014-02-12 23:42:10 -0800
+  Commit: 8093de1, github.com/apache/incubator-spark/pull/584
+
+  754bc18 2014-02-12 14:26:39 -0800
+  Merge pull request #590 from rxin/scalastyle.
+  [SPARK-1085: Fix Jenkins pull request builder for branch-0.9 (scalastyle command not found)]
+
+  28f88c5 2014-02-11 22:43:09 -0800
+  Merge pull request #583 from colorant/zookeeper.
+  [Minor fix for ZooKeeperPersistenceEngine to use configured working dir]
+
+  e70690f 2014-02-09 23:33:35 -0800
+  Revert "Merge pull request #560 from pwendell/logging. Closes #560."
+  [This reverts commit 2e3d1c31db55c7f961e559e47bb497ae15cb74d7.]
+
+  de22abc 2014-02-08 23:37:05 -0800
+  Merge pull request #562 from jyotiska/master. Closes #562.
+  [Added example Python code for sort]
+
+  2e3d1c3 2014-02-08 23:35:41 -0800
+  Merge pull request #560 from pwendell/logging. Closes #560.
+  [[WIP] SPARK-1067: Default log4j initialization causes errors for those not using log4j]
+
+  22e0a3b 2014-02-08 13:00:07 -0800
+  Merge pull request #561 from Qiuzhuang/master. Closes #561.
+  [Kill drivers in postStop() for Worker.]
+
+  ce179f6 2014-02-06 22:06:30 -0800
+  Merge pull request #533 from andrewor14/master. Closes #533.
+  [External spilling - generalize batching logic]
+
+  24e5298 2014-02-06 16:15:36 -0800
+  Merge pull request #450 from kayousterhout/fetch_failures. Closes #450.
+  [Only run ResubmitFailedStages event after a fetch fails]
+
+  94896bb 2014-02-06 16:13:10 -0800
+  Merge pull request #321 from kayousterhout/ui_kill_fix. Closes #321.
+  [Inform DAG scheduler about all started/finished tasks.]
+
+  44a2b03 2014-02-05 23:38:25 -0800
+  Merge pull request #545 from kayousterhout/fix_progress. Closes #545.
+  [Fix off-by-one error with task progress info log.]
+
+  b044b0b 2014-02-05 23:37:38 -0800
+  Merge pull request #526 from tgravescs/yarn_client_stop_am_fix. Closes #526.
+  [spark on yarn - yarn-client mode doesn't always exit immediately]
+
+  d815cfa 2014-02-04 09:47:25 -0800
+  Merge pull request #534 from sslavic/patch-1. Closes #534.
+  [Fixed wrong path to compute-classpath.cmd]
+
+  f3cba2d 2014-02-04 09:46:00 -0800
+  Merge pull request #535 from sslavic/patch-2. Closes #535.
+  [Fixed typo in scaladoc]
+
+  5f63f32 2014-02-03 22:44:30 -0800
+  Merge pull request #449 from CrazyJvm/master
+  [SPARK-1028 : fix "set MASTER automatically fails" bug.]
+
+  6e4d089 2014-02-03 22:42:43 -0800
+  Merge pull request #414 from soulmachine/code-style
+  [Code clean up for mllib]
+
+  0021ef9 2014-02-03 22:42:01 -0800
+  Merge pull request #445 from kayousterhout/exec_lost
+  [Fail rather than hanging if a task crashes the JVM.]
+
+  dc8adf1 2014-02-03 22:41:30 -0800
+  Merge pull request #489 from ash211/patch-6
+  [Clarify spark.default.parallelism]
+
+  574741f 2014-02-03 22:40:55 -0800
+  Merge pull request #493 from kayousterhout/double_add
+  [Fixed bug where task set managers are added to queue twice]
+
+  1280e8a 2014-02-03 22:40:29 -0800
+  Merge pull request #511 from JoshRosen/SPARK-1040
+  [Fix ClassCastException in JavaPairRDD.collectAsMap() (SPARK-1040)]
+
+  2c6c9b9 2014-02-03 22:39:59 -0800
+  Merge pull request #504 from JoshRosen/SPARK-1025
+  [Fix PySpark hang when input files are deleted (SPARK-1025)]
+
+  b10f607 2014-02-03 22:39:10 -0800
+  Merge pull request #516 from sarutak/master
+  [modified SparkPluginBuild.scala to use https protocol for accessing gith...]
+
+  18520f5 2014-02-03 22:37:38 -0800
+  Merge pull request #490 from hsaputra/modify_checkoption_with_isdefined
+  [Replace the check for None Option with isDefined and isEmpty in Scala code]
+
+  a414071 2014-01-31 16:54:33 -0800
+  Merge pull request #524 from rxin/doc
+  [Added spark.shuffle.file.buffer.kb to configuration doc.]
+
+  a41a83c 2014-01-31 16:53:26 -0800
+  Merge pull request #527 from ankurdave/graphx-assembly-pom
+  [Add GraphX to assembly/pom.xml]
+
+  d18fe1f 2014-01-28 21:55:15 -0800
+  Merge pull request #497 from tdas/docs-update
+  [Updated Spark Streaming Programming Guide]
+
+  5edbd17 2014-01-28 21:32:58 -0800
+  Merge pull request #523 from JoshRosen/SPARK-1043
+  [Switch from MUTF8 to UTF8 in PySpark serializers.]
+
+  [maven-release-plugin] prepare for next development iteration
+  Ubuntu <ubuntu@ip-10-109-132-81.ec2.internal>
+  2014-01-24 06:15:15 +0000
+  Commit: 0f60ef2
 
 Release 0.9.0-incubating
 
