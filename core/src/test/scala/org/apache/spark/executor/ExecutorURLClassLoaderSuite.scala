@@ -24,8 +24,9 @@ import org.scalatest.FunSuite
 
 class ExecutorURLClassLoaderSuite extends FunSuite {
 
-  val urls = List(new File("/home/holden/repos/spark/core/src/test/resources/fake-spark-class.jar").toURI.toURL).toArray
-  val urls2 = List(new File("/home/holden/repos/spark/core/src/test/resources/fake-spark-class-2.jar").toURI.toURL).toArray
+  val spark_home = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.home")).get
+  val urls = List(new File(spark_home + "/core/src/test/resources/fake-spark-class.jar").toURI.toURL).toArray
+  val urls2 = List(new File(spark_home + "/core/src/test/resources/fake-spark-class-2.jar").toURI.toURL).toArray
   test("child first") {
     val parentLoader = new ExecutorURLClassLoader(urls2, null, false)
     val classLoader = new ExecutorURLClassLoader(urls, parentLoader, true)
