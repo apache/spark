@@ -19,21 +19,23 @@ package org.apache.spark.sql.parquet
 
 import java.io.File
 
-import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 import org.apache.spark.sql.hive.TestHive
 
-
 class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
-
   val filename = getTempFilePath("parquettest").getCanonicalFile.toURI.toString
 
   // runs a SQL and optionally resolves one Parquet table
-  def runQuery(querystr: String, tableName: Option[String] = None, filename: Option[String] = None): Array[Row] = {
+  def runQuery(
+      querystr: String,
+      tableName: Option[String] = None,
+      filename: Option[String] = None): Array[Row] = {
+
     // call to resolve references in order to get CREATE TABLE AS to work
     val query = TestHive
       .parseSql(querystr)
@@ -151,7 +153,7 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
     (rddOne, rddTwo).zipped.foreach {
       (a,b) => (a,b).zipped.toArray.zipWithIndex.foreach {
         case ((value_1:Array[Byte], value_2:Array[Byte]), index) =>
-          assert(new String(value_1) === new String(value_2), s"table $tableName row ${counter} field ${fieldNames(index)} don't match")
+          assert(new String(value_1) === new String(value_2), s"table $tableName row $counter field ${fieldNames(index)} don't match")
         case ((value_1, value_2), index) =>
           assert(value_1 === value_2, s"table $tableName row $counter field ${fieldNames(index)} don't match")
       }

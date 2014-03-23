@@ -19,11 +19,6 @@ package org.apache.spark.sql
 package hive
 package execution
 
-
-import java.io._
-
-import util._
-
 /**
  * Runs the test cases that are included in the hive distribution.
  */
