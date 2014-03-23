@@ -132,7 +132,8 @@
     <repository>
       <id>maven-repo</id> <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
-      <url>https://repo.maven.apache.org/maven2</url>
+      <!-- HTTPS is unavailable for Maven Central -->
+      <url>http://repo.maven.apache.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
