@@ -46,24 +46,24 @@ object GenerateMIMAIgnore {
     val privateClasses = mutable.HashSet[String]()
 
     def isPackagePrivate(className: String) = {
-     try {
-       /* Couldn't figure out if it's possible to determine a-priori whether a given symbol
-          is a module or class. */
+      try {
+        /* Couldn't figure out if it's possible to determine a-priori whether a given symbol
+           is a module or class. */
 
-       val privateAsClass = mirror
-         .staticClass(className)
-         .privateWithin
-         .fullName
-         .startsWith(packageName)
+        val privateAsClass = mirror
+          .staticClass(className)
+          .privateWithin
+          .fullName
+          .startsWith(packageName)
 
-       val privateAsModule = mirror
-         .staticModule(className)
-         .privateWithin
-         .fullName
-         .startsWith(packageName)
+        val privateAsModule = mirror
+          .staticModule(className)
+          .privateWithin
+          .fullName
+          .startsWith(packageName)
 
-       privateAsClass || privateAsModule
-     } catch {
+        privateAsClass || privateAsModule
+      } catch {
         case _: Throwable => {
           println("Error determining visibility: " + className)
           false
@@ -95,26 +95,11 @@ object GenerateMIMAIgnore {
     println("Created : .mima-excludes in current directory.")
   }
 
-  /**
-   * Get all classes in a package from a jar file.
-   */
-  private def getAllClasses(jarPath: String, packageName: String) = {
-    val jar = new JarFile(new File(jarPath))
-    val enums = jar.entries().map(_.getName).filter(_.startsWith(packageName))
-    val classes = mutable.HashSet[Class[_]]()
-    for (entry <- enums) {
-      if (!entry.endsWith("/") && !entry.endsWith("MANIFEST.MF") && !entry.endsWith("properties")) {
-        classes += Class.forName(entry.trim.replaceAll(".class", "").replace('/', '.'))
-      }
-    }
-    classes
-  }
 
   private def shouldExclude(name: String) = {
     // Heuristic to remove JVM classes that do not correspond to user-facing classes in Scala
-    Try(mirror.staticClass(name)).isFailure ||
     name.contains("anon") ||
-    name.endsWith("class") ||
+    name.endsWith("$class") ||
     name.contains("$sp")
   }
 
@@ -123,22 +108,22 @@ object GenerateMIMAIgnore {
    * and subpackages both from directories and jars present on the classpath.
    */
   private def getClasses(packageName: String,
-      classLoader: ClassLoader = Thread.currentThread().getContextClassLoader): Seq[String] = {
+      classLoader: ClassLoader = Thread.currentThread().getContextClassLoader): Set[String] = {
     val path = packageName.replace('.', '/')
     val resources = classLoader.getResources(path)
 
     val jars = resources.filter(x => x.getProtocol == "jar")
       .map(_.getFile.split(":")(1).split("!")(0))
-    val classesFromJars = jars.map(getAllClasses(_, path)).flatten
+    val classesFromJars = jars.map(getClassesFromJar(_, path)).flatten
 
     val dirs = resources.filter(x => x.getProtocol == "file")
       .map(x => new File(x.getFile.split(":").last))
-    val classFromDirs = dirs.map(findClasses(_, packageName)).flatten
+    val classFromDirs = dirs.map(getClassesFromDir(_, packageName)).flatten
 
-    (classFromDirs ++ classesFromJars).map(_.getName).filter(!shouldExclude(_)).toSeq
+    (classFromDirs ++ classesFromJars).map(_.getName).filterNot(shouldExclude).toSet
   }
 
-  private def findClasses(directory: File, packageName: String): Seq[Class[_]] = {
+  private def getClassesFromDir(directory: File, packageName: String): Seq[Class[_]] = {
     val classes = mutable.ArrayBuffer[Class[_]]()
     if (!directory.exists()) {
       return classes
@@ -146,11 +131,24 @@ object GenerateMIMAIgnore {
     val files = directory.listFiles()
     for (file <- files) {
       if (file.isDirectory) {
-        classes ++= findClasses(file, packageName + "." + file.getName)
+        classes ++= getClassesFromDir(file, packageName + "." + file.getName)
       } else if (file.getName.endsWith(".class")) {
-        val className = file.getName.substring(0, file.getName.length() - 6)
+        val className = file.getName.stripSuffix(".class")
         classes += Class.forName(packageName + '.' + className)
       }
+    }
+    classes
+  }
+
+  /**
+   * Get all classes in a package from a jar file.
+   */
+  private def getClassesFromJar(jarPath: String, packageName: String) = {
+    val jar = new JarFile(new File(jarPath))
+    val enums = jar.entries().map(_.getName).filter(_.startsWith(packageName))
+    val classes = mutable.HashSet[Class[_]]()
+    for (entry <- enums if entry.endsWith(".class")) {
+      classes += Class.forName(entry.trim.replaceAll(".class", "").replace('/', '.'))
     }
     classes
   }

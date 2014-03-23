@@ -8,8 +8,8 @@ object MimaBuild {
     import com.typesafe.tools.mima.core._
     import com.typesafe.tools.mima.core.ProblemFilters._
 
-    // Excludes relevant to all Spark versions
-    val defaultExcludes = Seq(excludePackage("org.apache.spark.repl"))
+    // Excludes placed here will be used for all Spark versions
+    val defaultExcludes = Seq()
 
     // Read package-private excludes from file
     val excludeFilePath = (base.getAbsolutePath + "/.mima-excludes")
@@ -51,7 +51,7 @@ object MimaBuild {
         case _ => Seq()
       }
 
-    packagePrivateExcludes ++ versionExcludes
+    defaultExcludes ++ packagePrivateExcludes ++ versionExcludes
   }
 
   def mimaSettings(sparkHome: File) = mimaDefaultSettings ++ Seq(
