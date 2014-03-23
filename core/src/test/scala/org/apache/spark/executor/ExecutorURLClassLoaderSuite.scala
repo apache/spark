@@ -22,8 +22,6 @@ import java.net.URLClassLoader
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.test.FakeClass
-
 class ExecutorURLClassLoaderSuite extends FunSuite {
 
   val urls = List(new File("/home/holden/repos/spark/core/src/test/resources/fake-spark-class.jar").toURI.toURL).toArray
