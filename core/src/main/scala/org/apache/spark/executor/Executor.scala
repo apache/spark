@@ -38,8 +38,7 @@ private[spark] class Executor(
     executorId: String,
     slaveHostname: String,
     properties: Seq[(String, String)],
-    isLocal: Boolean = false,
-    appId: String = null)
+    isLocal: Boolean = false)
   extends Logging
 {
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
@@ -104,7 +103,7 @@ private[spark] class Executor(
   private val env = {
     if (!isLocal) {
       val _env = SparkEnv.create(conf, executorId, slaveHostname, 0,
-        isDriver = false, isLocal = false, appId)
+        isDriver = false, isLocal = false)
       SparkEnv.set(_env)
       _env.metricsSystem.registerSource(executorSource)
       _env

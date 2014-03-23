@@ -48,8 +48,7 @@ private[spark] class BlockManager(
     val defaultSerializer: Serializer,
     maxMemory: Long,
     val conf: SparkConf,
-    securityManager: SecurityManager,
-    appId: String = "test")
+    securityManager: SecurityManager)
   extends Logging {
 
   val shuffleBlockManager = new ShuffleBlockManager(this)
@@ -63,8 +62,9 @@ private[spark] class BlockManager(
   var tachyonInitialized = false
   private[storage] lazy val tachyonStore : TachyonStore = {
     val storeDir = conf.get("spark.tachyonstore.dir", System.getProperty("java.io.tmpdir"))
-    val tachyonStorePath = s"${storeDir}/${appId}/${this.executorId}"
-    val tachyonMaster = conf.get("spark.tachyonmaster.address",  "localhost:19998")
+    val appFolderName = conf.get("spark.tachyonstore.foldername")
+    val tachyonStorePath = s"${storeDir}/${appFolderName}/${this.executorId}"
+    val tachyonMaster = conf.get("spark.tachyonmaster.address",  "tachyon://localhost:19998")
     val tachyonBlockManager = new TachyonBlockManager(
       shuffleBlockManager, tachyonStorePath, tachyonMaster)
     tachyonInitialized = true
@@ -134,9 +134,9 @@ private[spark] class BlockManager(
    * Construct a BlockManager with a memory limit set based on system properties.
    */
   def this(execId: String, actorSystem: ActorSystem, master: BlockManagerMaster,
-    serializer: Serializer, conf: SparkConf, securityManager: SecurityManager, appId: String) = {
+    serializer: Serializer, conf: SparkConf, securityManager: SecurityManager) = {
     this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf), conf, 
-      securityManager, appId)
+      securityManager)
   }
 
   /**

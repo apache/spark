@@ -92,7 +92,6 @@ private[spark] class ExecutorRunner(
   def substituteVariables(argument: String): String = argument match {
     case "{{WORKER_URL}}" => workerUrl
     case "{{EXECUTOR_ID}}" => execId.toString
-    case "{{APP_ID}}" => appId.toString
     case "{{HOSTNAME}}" => host
     case "{{CORES}}" => cores.toString
     case other => other

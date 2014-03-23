@@ -21,12 +21,10 @@ import java.io._
 import java.net.URI
 import java.util.{Properties, UUID}
 import java.util.concurrent.atomic.AtomicInteger
-
 import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.reflect.{ClassTag, classTag}
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
@@ -34,7 +32,6 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, Sequence
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
-
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
@@ -45,6 +42,7 @@ import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage.{BlockManagerSource, RDDInfo, StorageStatus, StorageUtils}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
+import java.util.Random
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -127,6 +125,11 @@ class SparkContext(
 
   val master = conf.get("spark.master")
   val appName = conf.get("spark.app.name")
+  
+  // Generate the random name for a temp folder in Tachyon
+  // Add a timestamp as the suffix here to make it more safe
+  val tachyonFolderName = new Random().nextInt() + "_" + System.currentTimeMillis()
+  conf.set("spark.tachyonstore.foldername", tachyonFolderName)
 
   val isLocal = (master == "local" || master.startsWith("local["))
 
@@ -139,8 +142,7 @@ class SparkContext(
     conf.get("spark.driver.host"),
     conf.get("spark.driver.port").toInt,
     isDriver = true,
-    isLocal = isLocal,
-    "<driver>" + appName)
+    isLocal = isLocal)
   SparkEnv.set(env)
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
