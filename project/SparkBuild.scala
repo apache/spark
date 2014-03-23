@@ -264,6 +264,7 @@ object SparkBuild extends Build {
   val slf4jVersion = "1.7.5"
 
   val excludeNetty = ExclusionRule(organization = "org.jboss.netty")
+  val excludeEclipseJetty = ExclusionRule(organization = "org.eclipse.jetty")
   val excludeAsm = ExclusionRule(organization = "org.ow2.asm")
   val excludeOldAsm = ExclusionRule(organization = "asm")
   val excludeCommonsLogging = ExclusionRule(organization = "commons-logging")
@@ -273,6 +274,7 @@ object SparkBuild extends Build {
   val excludeJackson = ExclusionRule(organization = "org.codehaus.jackson")
   val excludeHadoop = ExclusionRule(organization = "org.apache.hadoop")
   val excludeCurator = ExclusionRule(organization = "org.apache.curator")
+  val excludePowermock = ExclusionRule(organization = "org.powermock")
 
 
   def coreSettings = sharedSettings ++ Seq(
@@ -311,7 +313,7 @@ object SparkBuild extends Build {
         "com.codahale.metrics"       % "metrics-graphite" % "3.0.0",
         "com.twitter"               %% "chill"            % "0.3.1" excludeAll(excludeAsm),
         "com.twitter"                % "chill-java"       % "0.3.1" excludeAll(excludeAsm),
-        "org.tachyonproject"         % "tachyon"          % "0.4.1" excludeAll(excludeKyro, excludeHadoop, excludeCurator, excludeJackson, excludeNetty, excludeAsm),
+        "org.tachyonproject"         % "tachyon"          % "0.4.1" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
         "com.clearspring.analytics"  % "stream"           % "2.5.1"
       ),
     libraryDependencies ++= maybeAvro
