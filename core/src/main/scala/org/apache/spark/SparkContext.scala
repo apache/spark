@@ -902,7 +902,6 @@ class SparkContext(
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
       resultHandler, localProperties.get)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
-    rdd.doCheckpoint()
   }
 
   /**
