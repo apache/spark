@@ -21,10 +21,9 @@ package expressions
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
 
-/* Implict conversions */
+/* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
 
 class ExpressionEvaluationSuite extends FunSuite {

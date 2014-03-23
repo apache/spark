@@ -18,14 +18,13 @@
 package org.apache.spark.sql
 package execution
 
-import org.apache.spark.{SparkConf, RangePartitioner, HashPartitioner}
 import org.apache.spark.rdd.ShuffledRDD
+import org.apache.spark.sql.catalyst.errors.attachTree
+import org.apache.spark.sql.catalyst.expressions.{MutableProjection, RowOrdering}
+import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.util.MutablePair
-
-import catalyst.rules.Rule
-import catalyst.errors._
-import catalyst.expressions._
-import catalyst.plans.physical._
+import org.apache.spark.{HashPartitioner, RangePartitioner, SparkConf}
 
 case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
 
@@ -35,7 +34,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 
   def execute() = attachTree(this , "execute") {
     newPartitioning match {
-      case HashPartitioning(expressions, numPartitions) => {
+      case HashPartitioning(expressions, numPartitions) =>
         // TODO: Eliminate redundant expressions in grouping key and value.
         val rdd = child.execute().mapPartitions { iter =>
           val hashExpressions = new MutableProjection(expressions)
@@ -46,8 +45,8 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         val shuffled = new ShuffledRDD[Row, Row, MutablePair[Row, Row]](rdd, part)
         shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
         shuffled.map(_._2)
-      }
-      case RangePartitioning(sortingExpressions, numPartitions) => {
+
+      case RangePartitioning(sortingExpressions, numPartitions) =>
         // TODO: RangePartitioner should take an Ordering.
         implicit val ordering = new RowOrdering(sortingExpressions)
 
@@ -60,9 +59,9 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
 
         shuffled.map(_._1)
-      }
+
       case SinglePartition =>
-        child.execute().coalesce(1, true)
+        child.execute().coalesce(1, shuffle = true)
 
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.

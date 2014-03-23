@@ -19,21 +19,20 @@ package org.apache.spark.sql.parquet
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.mapreduce.Job
+import parquet.hadoop.ParquetFileWriter
+import parquet.hadoop.util.ContextUtil
+import parquet.schema.MessageTypeParser
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 import org.apache.spark.sql.test.TestSQLContext
 
-import org.apache.hadoop.mapreduce.Job
-import org.apache.hadoop.fs.{Path, FileSystem}
-
-import parquet.schema.MessageTypeParser
-import parquet.hadoop.ParquetFileWriter
-import parquet.hadoop.util.ContextUtil
-
 class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
   override def beforeAll() {
-    ParquetTestData.writeFile
+    ParquetTestData.writeFile()
   }
 
   override def afterAll() {

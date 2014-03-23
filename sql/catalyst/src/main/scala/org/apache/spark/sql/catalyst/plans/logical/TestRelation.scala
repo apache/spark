@@ -20,8 +20,7 @@ package catalyst
 package plans
 package logical
 
-import expressions._
-import rules._
+import org.apache.spark.sql.catalyst.expressions.Attribute
 
 object LocalRelation {
   def apply(output: Attribute*) =

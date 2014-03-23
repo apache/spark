@@ -17,13 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
-
-import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.test._
 
 /* Implicits */
@@ -37,8 +31,7 @@ class SQLQuerySuite extends QueryTest {
   test("agg") {
     checkAnswer(
       sql("SELECT a, SUM(b) FROM testData2 GROUP BY a"),
-      Seq((1,3),(2,3),(3,3))
-    )
+      Seq((1,3),(2,3),(3,3)))
   }
 
   test("select *") {
@@ -88,13 +81,11 @@ class SQLQuerySuite extends QueryTest {
   ignore("null count") {
     checkAnswer(
       sql("SELECT a, COUNT(b) FROM testData3"),
-      Seq((1,0), (2, 1))
-    )
+      Seq((1,0), (2, 1)))
 
     checkAnswer(
       testData3.groupBy()(Count('a), Count('b), Count(1), CountDistinct('a :: Nil), CountDistinct('b :: Nil)),
-      (2, 1, 2, 2, 1) :: Nil
-    )
+      (2, 1, 2, 2, 1) :: Nil)
   }
 
   test("inner join where, one match per row") {
@@ -104,8 +95,7 @@ class SQLQuerySuite extends QueryTest {
         (1, "A", 1, "a"),
         (2, "B", 2, "b"),
         (3, "C", 3, "c"),
-        (4, "D", 4, "d")
-      ))
+        (4, "D", 4, "d")))
   }
 
   test("inner join ON, one match per row") {
@@ -115,8 +105,7 @@ class SQLQuerySuite extends QueryTest {
         (1, "A", 1, "a"),
         (2, "B", 2, "b"),
         (3, "C", 3, "c"),
-        (4, "D", 4, "d")
-      ))
+        (4, "D", 4, "d")))
   }
 
   test("inner join, where, multiple matches") {
@@ -129,8 +118,7 @@ class SQLQuerySuite extends QueryTest {
       (1,1,1,1) ::
       (1,1,1,2) ::
       (1,2,1,1) ::
-      (1,2,1,2) :: Nil
-    )
+      (1,2,1,2) :: Nil)
   }
 
   test("inner join, no matches") {
@@ -164,7 +152,7 @@ class SQLQuerySuite extends QueryTest {
         row => Seq.fill(16)((row ++ row).toSeq)).collect().toSeq)
   }
 
-  ignore("cartisian product join") {
+  ignore("cartesian product join") {
     checkAnswer(
       testData3.join(testData3),
       (1, null, 1, null) ::

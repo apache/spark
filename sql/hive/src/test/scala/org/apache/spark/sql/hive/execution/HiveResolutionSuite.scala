@@ -23,8 +23,6 @@ package execution
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
 class HiveResolutionSuite extends HiveComparisonTest {
-  import TestHive._
-
   createQueryTest("table.attr",
     "SELECT src.key FROM src ORDER BY key LIMIT 1")
 

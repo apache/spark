@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{OneToOneDependency, Dependency, Partition, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.types.BooleanType
+import org.apache.spark.{Dependency, OneToOneDependency, Partition, TaskContext}
 
 /**
  * <span class="badge" style="float: right; background-color: darkblue;">ALPHA COMPONENT</span>

@@ -4,13 +4,9 @@ package optimizer
 
 import org.scalatest.FunSuite
 
-import types.IntegerType
-import util._
-import plans.logical.{LogicalPlan, LocalRelation}
-import expressions._
-import dsl._
-
-/* Implicit conversions for creating query plans */
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util._
 
 /**
  * Provides helper methods for comparing plans produced by optimization rules with the expected

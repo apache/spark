@@ -18,11 +18,12 @@
 package org.apache.spark.sql
 package hive
 
-import java.io.{InputStreamReader, BufferedReader}
+import java.io.{BufferedReader, InputStreamReader}
 
-import catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
 
+/* Implicit conversions */
 import scala.collection.JavaConversions._
 
 /**

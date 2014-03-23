@@ -19,8 +19,9 @@ package org.apache.spark.sql
 package catalyst
 package analysis
 
-import plans.logical.{LogicalPlan, Subquery}
 import scala.collection.mutable
+
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 
 /**
  * An interface for looking up relations by name.  Used by an [[Analyzer]].

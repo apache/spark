@@ -19,7 +19,7 @@ package org.apache.spark.sql
 package catalyst
 package rules
 
-import trees._
+import org.apache.spark.sql.catalyst.trees.TreeNode
 
 abstract class Rule[TreeType <: TreeNode[_]] extends Logging {
 

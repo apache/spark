@@ -18,13 +18,12 @@
 package org.apache.spark.sql
 package hive
 
-import catalyst.expressions._
-import catalyst.planning._
-import catalyst.plans._
-import catalyst.plans.logical.{BaseRelation, LogicalPlan}
-
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.planning._
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.{BaseRelation, LogicalPlan}
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.parquet.{ParquetRelation, InsertIntoParquetTable, ParquetTableScan}
+import org.apache.spark.sql.parquet.{InsertIntoParquetTable, ParquetRelation, ParquetTableScan}
 
 trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.

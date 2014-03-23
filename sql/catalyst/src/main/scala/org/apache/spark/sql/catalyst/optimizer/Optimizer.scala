@@ -19,11 +19,11 @@ package org.apache.spark.sql
 package catalyst
 package optimizer
 
-import catalyst.expressions._
-import catalyst.plans.logical._
-import catalyst.rules._
-import catalyst.types.BooleanType
-import catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.types._
 
 object Optimizer extends RuleExecutor[LogicalPlan] {
   val batches =
@@ -73,7 +73,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
 object BooleanSimplification extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
-      case and @ And(left, right) => {
+      case and @ And(left, right) =>
         (left, right) match {
           case (Literal(true, BooleanType), r) => r
           case (l, Literal(true, BooleanType)) => l
@@ -81,8 +81,8 @@ object BooleanSimplification extends Rule[LogicalPlan] {
           case (_, Literal(false, BooleanType)) => Literal(false)
           case (_, _) => and
         }
-      }
-      case or @ Or(left, right) => {
+
+      case or @ Or(left, right) =>
         (left, right) match {
           case (Literal(true, BooleanType), _) => Literal(true)
           case (_, Literal(true, BooleanType)) => Literal(true)
@@ -90,7 +90,6 @@ object BooleanSimplification extends Rule[LogicalPlan] {
           case (l, Literal(false, BooleanType)) => l
           case (_, _) => or
         }
-      }
     }
   }
 }
@@ -101,7 +100,7 @@ object BooleanSimplification extends Rule[LogicalPlan] {
  */
 object CombineFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case ff@Filter(fc, nf@Filter(nc, grandChild)) => Filter(And(nc, fc), grandChild)
+    case ff @ Filter(fc, nf @ Filter(nc, grandChild)) => Filter(And(nc, fc), grandChild)
   }
 }
 
@@ -114,8 +113,10 @@ object CombineFilters extends Rule[LogicalPlan] {
  */
 object PushPredicateThroughProject extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case filter@Filter(condition, project@Project(fields, grandChild)) =>
-      val sourceAliases = fields.collect { case a@Alias(c, _) => a.toAttribute -> c }.toMap
+    case filter @ Filter(condition, project @ Project(fields, grandChild)) =>
+      val sourceAliases = fields.collect { case a @ Alias(c, _) =>
+        (a.toAttribute: Attribute) -> c
+      }.toMap
       project.copy(child = filter.copy(
         replaceAlias(condition, sourceAliases),
         grandChild))

@@ -19,7 +19,7 @@ package org.apache.spark.sql
 package catalyst
 package expressions
 
-import types._
+import org.apache.spark.sql.catalyst.types.DataType
 
 case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expression])
   extends Expression {

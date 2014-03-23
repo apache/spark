@@ -20,12 +20,11 @@ package hive
 package execution
 
 import java.io._
+
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 
-import catalyst.plans.logical.{ExplainCommand, NativeCommand}
-import catalyst.plans._
-import catalyst.util._
-
+import org.apache.spark.sql.catalyst.plans.logical.{ExplainCommand, NativeCommand}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.Sort
 
 /**
@@ -38,7 +37,8 @@ import org.apache.spark.sql.execution.Sort
  * See the documentation of public vals in this class for information on how test execution can be
  * configured using system properties.
  */
-abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
+abstract class HiveComparisonTest
+  extends FunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
 
   /**
    * When set, any cache files that result in test failures will be deleted.  Used when the test

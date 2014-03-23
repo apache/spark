@@ -22,14 +22,13 @@ import java.text.NumberFormat
 import java.util.Date
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.ql.exec.{FileSinkOperator, Utilities}
+import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
+import org.apache.hadoop.hive.ql.plan.FileSinkDesc
 import org.apache.hadoop.io.Writable
 
 import org.apache.spark.Logging
 import org.apache.spark.SerializableWritable
-
-import org.apache.hadoop.hive.ql.exec.{Utilities, FileSinkOperator}
-import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
-import org.apache.hadoop.hive.ql.plan.FileSinkDesc
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.
