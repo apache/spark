@@ -62,7 +62,7 @@ extends ClassLoader {
       case true => findClassLocally(name).getOrElse(parentLoader.findClass(name))
       case false => {
         try {
-          parentLoader.findClass(name)
+          parentLoader.loadClass(name)
         } catch {
           case e: ClassNotFoundException => {
             val classOption = findClassLocally(name)
