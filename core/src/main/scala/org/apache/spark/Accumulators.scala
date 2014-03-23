@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.{ObjectInputStream, Serializable}
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.generic.Growable
 import scala.collection.mutable.Map
@@ -43,7 +44,7 @@ class Accumulable[R, T] (
     param: AccumulableParam[R, T])
   extends Serializable {
 
-  val id = Accumulators.newId
+  val id = Accumulators.nextAccumID.getAndIncrement
   @transient private var value_ = initialValue // Current value on master
   val zero = param.zero(initialValue)  // Zero value to be passed to workers
   private var deserialized = false
@@ -237,12 +238,7 @@ private object Accumulators {
   // TODO: Use soft references? => need to make readObject work properly then
   val originals = Map[Long, Accumulable[_, _]]()
   val localAccums = Map[Thread, Map[Long, Accumulable[_, _]]]()
-  var lastId: Long = 0
-
-  def newId: Long = synchronized {
-    lastId += 1
-    lastId
-  }
+  var nextAccumID = new AtomicLong(0)
 
   def register(a: Accumulable[_, _], original: Boolean): Unit = synchronized {
     if (original) {
