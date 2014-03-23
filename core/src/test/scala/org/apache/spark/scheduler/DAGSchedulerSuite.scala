@@ -375,6 +375,10 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     assertDataStructuresEmpty
   }
 
+  test("accmulator is calculated for only once when the rdd is recomputed") {
+
+  }
+
   test("cached post-shuffle") {
     val shuffleOneRdd = makeRdd(2, Nil)
     val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
