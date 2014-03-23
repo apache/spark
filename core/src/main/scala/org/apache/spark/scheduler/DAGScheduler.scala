@@ -116,6 +116,8 @@ class DAGScheduler(
   private val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.DAG_SCHEDULER, this.cleanup, env.conf)
 
+  private val stageIdToFinishedTasks = new HashMap[Int, HashSet[Long]]
+
   taskScheduler.setDAGScheduler(this)
 
   /**
@@ -808,14 +810,17 @@ class DAGScheduler(
       logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
       stageToInfos(stage).completionTime = Some(System.currentTimeMillis())
       listenerBus.post(SparkListenerStageCompleted(stageToInfos(stage)))
+      stageIdToFinishedTasks -= stage.id
       runningStages -= stage
     }
     event.reason match {
       case Success =>
         logInfo("Completed " + task)
-        if (event.accumUpdates != null) {
-          Accumulators.add(event.accumUpdates) // TODO: do this only if task wasn't resubmitted
+        if (stageIdToFinishedTasks.contains(stage.id) &&
+          stageIdToFinishedTasks(stage.id).contains(task.tid)) {
+          Accumulators.add(event.accumUpdates)
         }
+        stageIdToFinishedTasks.getOrElseUpdate(stage.id, new HashSet[Long]) += task.tid
         pendingTasks(stage) -= task
         task match {
           case rt: ResultTask[_, _] =>

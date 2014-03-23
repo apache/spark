@@ -56,6 +56,9 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
 
   def preferredLocations: Seq[TaskLocation] = Nil
 
+
+  var tid = 0L
+
   // Map output tracker epoch. Will be set by TaskScheduler.
   var epoch: Long = -1
 
