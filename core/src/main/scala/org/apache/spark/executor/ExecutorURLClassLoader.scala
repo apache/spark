@@ -26,7 +26,8 @@ import java.net.{URLClassLoader, URL}
 
 private[spark] class ExecutorURLClassLoader(urls: Array[URL], parent: ClassLoader, userFirst: Boolean)
   extends ClassLoader {
-  class OverridenURLClassLoader(urls: Array[URL], parent: ClassLoader) extends URLClassLoader(urls, parent){
+
+  object userClassLoader extends URLClassLoader(urls, null){
     override def addURL(url: URL) {
       super.addURL(url)
     }
@@ -34,27 +35,20 @@ private[spark] class ExecutorURLClassLoader(urls: Array[URL], parent: ClassLoade
       super.findClass(name)
     }
   }
-  val userClassLoader = new OverridenURLClassLoader(urls, null)
 
-  class ParentClassLoader(myParent: ClassLoader) extends ClassLoader(parent) {
+  object parentClassLoader extends ClassLoader(parent) {
     override def findClass(name: String): Class[_] = {
-      println("parent class loader quest")
       super.findClass(name)
     }
   }
-  val parentClassLoader = new ParentClassLoader(parent)
 
   override def findClass(name: String): Class[_] = {
-    println("looking for "+name)
     if (!userFirst) {
       try {
-        println("loooking in parent")
         val c = parentClassLoader.findClass(name)
-        println("found in parent")
         c
       } catch {
         case e: ClassNotFoundException => {
-          println("could not find in parent")
           userClassLoader.findClass(name)
         }
       }
