@@ -19,9 +19,9 @@ package org.apache.spark.sql
 package catalyst
 package expressions
 
-import errors._
-import trees._
-import types._
+import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.types.{DataType, FractionalType, IntegralType, NumericType}
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 
 abstract class Expression extends TreeNode[Expression] {
   self: Product =>

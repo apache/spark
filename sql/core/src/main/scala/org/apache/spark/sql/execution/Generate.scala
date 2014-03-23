@@ -18,8 +18,7 @@
 package org.apache.spark.sql
 package execution
 
-import catalyst.expressions._
-import catalyst.types._
+import org.apache.spark.sql.catalyst.expressions._
 
 /**
  * Applies a [[catalyst.expressions.Generator Generator]] to a stream of input rows, combining the

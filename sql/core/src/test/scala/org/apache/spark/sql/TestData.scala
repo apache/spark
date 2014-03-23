@@ -37,16 +37,14 @@ object TestData {
       TestData2(2, 1) ::
       TestData2(2, 2) ::
       TestData2(3, 1) ::
-      TestData2(3, 2) :: Nil
-    )
+      TestData2(3, 2) :: Nil)
   testData2.registerAsTable("testData2")
 
   // TODO: There is no way to express null primitives as case classes currently...
   val testData3 =
     logical.LocalRelation('a.int, 'b.int).loadData(
       (1, null) ::
-      (2, 2) :: Nil
-    )
+      (2, 2) :: Nil)
 
   case class UpperCaseData(N: Int, L: String)
   val upperCaseData =
@@ -56,8 +54,7 @@ object TestData {
       UpperCaseData(3, "C") ::
       UpperCaseData(4, "D") ::
       UpperCaseData(5, "E") ::
-      UpperCaseData(6, "F") :: Nil
-    )
+      UpperCaseData(6, "F") :: Nil)
   upperCaseData.registerAsTable("upperCaseData")
 
   case class LowerCaseData(n: Int, l: String)
@@ -66,7 +63,6 @@ object TestData {
       LowerCaseData(1, "a") ::
       LowerCaseData(2, "b") ::
       LowerCaseData(3, "c") ::
-      LowerCaseData(4, "d") :: Nil
-    )
+      LowerCaseData(4, "d") :: Nil)
   lowerCaseData.registerAsTable("lowerCaseData")
 }

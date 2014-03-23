@@ -19,8 +19,8 @@ package org.apache.spark.sql
 package catalyst
 package expressions
 
-import types._
-import catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.types.{BooleanType, StringType}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 
 trait Predicate extends Expression {
   self: Product =>

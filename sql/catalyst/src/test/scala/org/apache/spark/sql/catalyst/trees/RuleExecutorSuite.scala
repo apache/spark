@@ -21,8 +21,8 @@ package trees
 
 import org.scalatest.FunSuite
 
-import expressions._
-import rules._
+import org.apache.spark.sql.catalyst.expressions.{Expression, IntegerLiteral, Literal}
+import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 
 class RuleExecutorSuite extends FunSuite {
   object DecrementLiterals extends Rule[Expression] {

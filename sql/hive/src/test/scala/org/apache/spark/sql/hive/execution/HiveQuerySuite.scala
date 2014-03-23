@@ -19,7 +19,6 @@ package org.apache.spark.sql
 package hive
 package execution
 
-
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */

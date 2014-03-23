@@ -21,8 +21,8 @@ package planning
 
 import scala.annotation.tailrec
 
-import expressions._
-import plans.logical._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
  * A pattern that matches any number of filter operations on top of another relational operator.

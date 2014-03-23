@@ -19,8 +19,8 @@ package org.apache.spark.sql
 package catalyst
 package rules
 
-import trees._
-import util._
+import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.sideBySide
 
 abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
@@ -52,19 +52,19 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     batches.foreach { batch =>
       var iteration = 1
       var lastPlan = curPlan
-      curPlan = batch.rules.foldLeft(curPlan) { case (curPlan, rule) => rule(curPlan) }
+      curPlan = batch.rules.foldLeft(curPlan) { case (plan, rule) => rule(plan) }
 
       // Run until fix point (or the max number of iterations as specified in the strategy.
       while (iteration < batch.strategy.maxIterations && !curPlan.fastEquals(lastPlan)) {
         lastPlan = curPlan
         curPlan = batch.rules.foldLeft(curPlan) {
-          case (curPlan, rule) =>
-            val result = rule(curPlan)
-            if (!result.fastEquals(curPlan)) {
+          case (plan, rule) =>
+            val result = rule(plan)
+            if (!result.fastEquals(plan)) {
               logger.debug(
                 s"""
                   |=== Applying Rule ${rule.ruleName} ===
-                  |${sideBySide(curPlan.treeString, result.treeString).mkString("\n")}
+                  |${sideBySide(plan.treeString, result.treeString).mkString("\n")}
                 """.stripMargin)
             }
 

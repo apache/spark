@@ -17,17 +17,16 @@
 
 package org.apache.spark.sql.parquet
 
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.Job
 
-import parquet.schema.{MessageTypeParser, MessageType}
-import parquet.hadoop.util.ContextUtil
 import parquet.hadoop.ParquetWriter
+import parquet.hadoop.util.ContextUtil
+import parquet.schema.{MessageType, MessageTypeParser}
 
-import org.apache.spark.sql.catalyst.util.getTempFilePath
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import java.nio.charset.Charset
+import org.apache.spark.sql.catalyst.util.getTempFilePath
 
 object ParquetTestData {
 
@@ -69,7 +68,7 @@ object ParquetTestData {
 
   lazy val testData = new ParquetRelation("testData", testFile.toURI.toString)
 
-  def writeFile = {
+  def writeFile() = {
     testFile.delete
     val path: Path = new Path(testFile.toURI)
     val job = new Job()

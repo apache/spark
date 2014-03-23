@@ -18,25 +18,26 @@
 package org.apache.spark.sql
 package hive
 
-import java.io.{PrintStream, InputStreamReader, BufferedReader, File}
-import java.util.{ArrayList => JArrayList}
 import scala.language.implicitConversions
 
-import org.apache.spark.SparkContext
+import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
+import java.util.{ArrayList => JArrayList}
+
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.ql.processors.{CommandProcessorResponse, CommandProcessorFactory}
-import org.apache.hadoop.hive.ql.processors.CommandProcessor
 import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.processors._
+import org.apache.hadoop.hive.ql.session.SessionState
+
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-
-import catalyst.analysis.{Analyzer, OverrideCatalog}
-import catalyst.expressions.GenericRow
-import catalyst.plans.logical.{BaseRelation, LogicalPlan, NativeCommand, ExplainCommand}
-import catalyst.types._
-
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, OverrideCatalog}
+import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.catalyst.plans.logical.{BaseRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{NativeCommand, ExplainCommand}
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution._
 
+/* Implicit conversions */
 import scala.collection.JavaConversions._
 
 /**

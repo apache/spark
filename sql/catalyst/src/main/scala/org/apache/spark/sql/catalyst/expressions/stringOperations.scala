@@ -19,7 +19,7 @@ package org.apache.spark.sql
 package catalyst
 package expressions
 
-import catalyst.types.BooleanType
+import org.apache.spark.sql.catalyst.types.BooleanType
 
 case class Like(left: Expression, right: Expression) extends BinaryExpression {
   def dataType = BooleanType
