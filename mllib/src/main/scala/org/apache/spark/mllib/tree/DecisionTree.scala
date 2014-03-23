@@ -1114,7 +1114,7 @@ object DecisionTree extends Serializable with Logging {
   /**
    * Calculates the classifier accuracy.
    */
-  def accuracyScore(model: DecisionTreeModel, data: RDD[LabeledPoint],
+  private def accuracyScore(model: DecisionTreeModel, data: RDD[LabeledPoint],
       threshold: Double = 0.5): Double = {
     def predictedValue(features: Array[Double]) = {
       if (model.predict(features) < threshold) 0.0 else 1.0
@@ -1130,7 +1130,7 @@ object DecisionTree extends Serializable with Logging {
   /**
    * Calculates the mean squared error for regression.
    */
-  def meanSquaredError(tree: DecisionTreeModel, data: RDD[LabeledPoint]): Double = {
+  private def meanSquaredError(tree: DecisionTreeModel, data: RDD[LabeledPoint]): Double = {
     data.map { y =>
       val err = tree.predict(y.features) - y.label
       err * err
