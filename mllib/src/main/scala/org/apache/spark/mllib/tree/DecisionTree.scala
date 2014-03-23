@@ -247,7 +247,7 @@ object DecisionTree extends Serializable with Logging {
    * @param bins possible bins for all features
    * @return array of splits with best splits for all nodes at a given level.
    */
-  def findBestSplits(
+  private def findBestSplits(
       input: RDD[LabeledPoint],
       parentImpurities: Array[Double],
       strategy: Strategy,
@@ -885,7 +885,7 @@ object DecisionTree extends Serializable with Logging {
    *         .model.Split] of size (numFeatures, numSplits-1) and bins is an Array of [org.apache
    *         .spark.mllib.tree.model.Bin] of size (numFeatures, numSplits1)
    */
-  def findSplitsBins(
+  private def findSplitsBins(
       input: RDD[LabeledPoint],
       strategy: Strategy): (Array[Array[Split]], Array[Array[Bin]]) = {
     val count = input.count()
