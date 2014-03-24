@@ -34,3 +34,6 @@ SparkMemberHandlers.scala
 sbt
 sbt-launch-lib.bash
 plugins.sbt
+work
+.*\.q
+golden

@@ -17,6 +17,7 @@
 # limitations under the License.
 #
 
+
 acquire_rat_jar () {
 
   URL1="http://search.maven.org/remotecontent?filepath=org/apache/rat/apache-rat/${RAT_VERSION}/apache-rat-${RAT_VERSION}.jar"
@@ -47,3 +48,33 @@ acquire_rat_jar () {
     printf "Launching rat from ${JAR}\n"
   fi
 }
+
+# Go to the Spark project root directory
+FWDIR="$(cd `dirname $0`/..; pwd)"
+cd $FWDIR
+
+if test -x "$JAVA_HOME/bin/java"; then
+    declare java_cmd="$JAVA_HOME/bin/java"
+else 
+    declare java_cmd=java
+fi
+
+export RAT_VERSION=0.10
+export rat_jar=$FWDIR/lib/apache-rat-${RAT_VERSION}.jar
+mkdir -p $FWDIR/lib
+
+[[ -f "$rat_jar" ]] || acquire_rat_jar || {
+    echo "Download failed. Obtain the rat jar manually and place it at $rat_jar"
+    exit 1
+}
+
+$java_cmd -jar $rat_jar -E $FWDIR/.rat-excludes  -d $FWDIR > rat-results.txt
+
+ERRORS=$(cat rat-results.txt | grep -e "??")
+
+if test ! -z "$ERRORS"; then 
+    echo -e "Found errors: $ERRORS\n"
+    exit 1
+else 
+    echo -e "RAT checks passed."
+fi
