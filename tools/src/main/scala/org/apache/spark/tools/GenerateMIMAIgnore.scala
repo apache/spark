@@ -113,9 +113,10 @@ object GenerateMIMAIgnore {
 
     val jars = resources.filter(x => x.getProtocol == "jar")
       .map(_.getFile.split(":")(1).split("!")(0)).toSeq
-    val classesFromJars = jars.map(getClassesFromJar(_, path)).flatten
 
-    classesFromJars.map(_.getName).filterNot(shouldExclude).toSet
+    jars.flatMap(getClassesFromJar(_, path))
+      .map(_.getName)
+      .filterNot(shouldExclude).toSet
   }
 
   /**
