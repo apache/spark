@@ -23,7 +23,6 @@ import java.util.jar.JarFile
 import scala.collection.mutable
 import scala.collection.JavaConversions._
 import scala.reflect.runtime.universe.runtimeMirror
-import scala.util.Try
 
 /**
  * A tool for generating classes to be excluded during binary checking with MIMA. It is expected
@@ -113,31 +112,10 @@ object GenerateMIMAIgnore {
     val resources = classLoader.getResources(path)
 
     val jars = resources.filter(x => x.getProtocol == "jar")
-      .map(_.getFile.split(":")(1).split("!")(0))
+      .map(_.getFile.split(":")(1).split("!")(0)).toSeq
     val classesFromJars = jars.map(getClassesFromJar(_, path)).flatten
 
-    val dirs = resources.filter(x => x.getProtocol == "file")
-      .map(x => new File(x.getFile.split(":").last))
-    val classFromDirs = dirs.map(getClassesFromDir(_, packageName)).flatten
-
-    (classFromDirs ++ classesFromJars).map(_.getName).filterNot(shouldExclude).toSet
-  }
-
-  private def getClassesFromDir(directory: File, packageName: String): Seq[Class[_]] = {
-    val classes = mutable.ArrayBuffer[Class[_]]()
-    if (!directory.exists()) {
-      return classes
-    }
-    val files = directory.listFiles()
-    for (file <- files) {
-      if (file.isDirectory) {
-        classes ++= getClassesFromDir(file, packageName + "." + file.getName)
-      } else if (file.getName.endsWith(".class")) {
-        val className = file.getName.stripSuffix(".class")
-        classes += Class.forName(packageName + '.' + className)
-      }
-    }
-    classes
+    classesFromJars.map(_.getName).filterNot(shouldExclude).toSet
   }
 
   /**
@@ -146,10 +124,8 @@ object GenerateMIMAIgnore {
   private def getClassesFromJar(jarPath: String, packageName: String) = {
     val jar = new JarFile(new File(jarPath))
     val enums = jar.entries().map(_.getName).filter(_.startsWith(packageName))
-    val classes = mutable.HashSet[Class[_]]()
-    for (entry <- enums if entry.endsWith(".class")) {
-      classes += Class.forName(entry.trim.replaceAll(".class", "").replace('/', '.'))
-    }
+    val classes = for (entry <- enums if entry.endsWith(".class"))
+      yield Class.forName(entry.replace('/', '.').stripSuffix(".class"))
     classes
   }
 }
