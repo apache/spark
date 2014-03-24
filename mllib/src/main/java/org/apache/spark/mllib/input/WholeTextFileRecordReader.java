@@ -19,8 +19,8 @@ package org.apache.spark.mllib.input;
 
 import java.io.IOException;
 
+import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
-import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -91,7 +91,7 @@ public class WholeTextFileRecordReader extends RecordReader<String, Text> {
       FSDataInputStream fileIn = null;
       try {
         fileIn = fs.open(path);
-        byte[] innerBuffer = IOUtils.toByteArray(fileIn);
+        byte[] innerBuffer = ByteStreams.toByteArray(fileIn);
         value.set(innerBuffer, 0, innerBuffer.length);
       } finally {
         Closeables.close(fileIn, false);

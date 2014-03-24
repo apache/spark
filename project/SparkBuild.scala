@@ -358,7 +358,6 @@ object SparkBuild extends Build {
   def mllibSettings = sharedSettings ++ Seq(
     name := "spark-mllib",
     libraryDependencies ++= Seq(
-      "commons-io"               % "commons-io"         % "2.4",
       "org.jblas"                % "jblas"              % "1.2.3"
     )
   )

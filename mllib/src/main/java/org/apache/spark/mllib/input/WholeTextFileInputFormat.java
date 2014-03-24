@@ -30,7 +30,7 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 
 /**
- * An <code>org.apache.hadoop.mapreduce.lib.CombineFileInputFormat</code> for reading whole text
+ * An {@link org.apache.hadoop.mapreduce.lib.input.CombineFileInputFormat} for reading whole text
  * files. Each file is read as key-value pair, where the key is the file path and the value is the
  * entire content of file.
  */

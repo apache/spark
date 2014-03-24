@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.util
 
-
 import java.io.DataOutputStream
 import java.io.FileOutputStream
 import java.nio.file.Files
