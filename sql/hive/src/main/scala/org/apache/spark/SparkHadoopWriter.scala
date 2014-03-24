@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.mapred
+package org.apache.spark
 
 import java.io.IOException
 import java.text.NumberFormat
@@ -25,10 +25,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.exec.{FileSinkOperator, Utilities}
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
 import org.apache.hadoop.hive.ql.plan.FileSinkDesc
+import org.apache.hadoop.mapred._
 import org.apache.hadoop.io.Writable
-
-import org.apache.spark.Logging
-import org.apache.spark.SerializableWritable
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.
