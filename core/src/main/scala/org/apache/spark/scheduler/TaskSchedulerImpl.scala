@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 import java.util.{TimerTask, Timer}
+import java.util.concurrent.{LinkedBlockingDeque, TimeUnit, ThreadPoolExecutor}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.concurrent.duration._
@@ -30,9 +31,7 @@ import scala.util.Random
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
-import org.apache.spark.util.Utils
-import scala.collection.mutable
-import java.util.concurrent.{LinkedBlockingDeque, TimeUnit, ThreadPoolExecutor}
+
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -96,9 +95,6 @@ private[spark] class TaskSchedulerImpl(
   val mapOutputTracker = SparkEnv.get.mapOutputTracker
 
   var schedulableBuilder: SchedulableBuilder = null
-
-  private val serializeWorkerPool = new ThreadPoolExecutor(20, 60, 60, TimeUnit.SECONDS,
-    new LinkedBlockingDeque[Runnable]())
 
   var rootPool: Pool = null
   // default scheduler is FIFO
@@ -205,6 +201,13 @@ private[spark] class TaskSchedulerImpl(
    */
   def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
     SparkEnv.set(sc.env)
+    // Make thread pool local for shutdown before the function returns
+    // This is for driver can exit normally which not call sc.stop or sys.exit
+    val serializeWorkerPool = new ThreadPoolExecutor(
+      conf.getInt("spark.scheduler.task.serialize.threads.min", 20),
+      conf.getInt("spark.scheduler.task.serialize.threads.max", 60),
+      conf.getInt("spark.scheduler.task.serialize.threads.keepalive", 60), TimeUnit.SECONDS,
+      new LinkedBlockingDeque[Runnable]())
 
     // Mark each slave as alive and remember its hostname
     for (o <- offers) {
@@ -230,8 +233,7 @@ private[spark] class TaskSchedulerImpl(
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     var launchedTask = false
-    val serializingTask = new HashSet[Long]
-    serializingTask.clear()
+    val serializingTaskNum = new AtomicLong(0)
     for (taskSet <- sortedTaskSets; maxLocality <- TaskLocality.values) {
       do {
         launchedTask = false
@@ -239,7 +241,7 @@ private[spark] class TaskSchedulerImpl(
           val execId = shuffledOffers(i).executorId
           val host = shuffledOffers(i).host
           for (taskDesc <- taskSet.resourceOffer(execId, host, availableCpus(i), maxLocality)) {
-            serializingTask += taskDesc.taskId
+            serializingTaskNum.getAndIncrement()
             serializeWorkerPool.execute(new Runnable {
               override def run() {
                 // Serialize and return the task
@@ -256,9 +258,7 @@ private[spark] class TaskSchedulerImpl(
                 tasks.synchronized {
                   tasks(i) += task
                 }
-                serializingTask.synchronized {
-                  serializingTask -= taskDesc.taskId
-                }
+                serializingTaskNum.getAndDecrement()
               }
             })
 
@@ -277,15 +277,16 @@ private[spark] class TaskSchedulerImpl(
 
     do {
       Thread.sleep(1)
-    } while(!serializingTask.isEmpty) 
+    } while(serializingTaskNum.get() != 0)
 
     if (tasks.size > 0) {
       hasLaunchedTask = true
     }
+    if (serializeWorkerPool != null) {
+      serializeWorkerPool.shutdown()
+    }
     return tasks
   }
-
-
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
     var failedExecutor: Option[String] = None
