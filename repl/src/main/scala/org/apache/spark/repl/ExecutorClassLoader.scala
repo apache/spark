@@ -59,7 +59,7 @@ extends ClassLoader {
 
   override def findClass(name: String): Class[_] = {
     userClassPathFirst match {
-      case true => findClassLocally(name).getOrElse(parentLoader.findClass(name))
+      case true => findClassLocally(name).getOrElse(parentLoader.loadClass(name))
       case false => {
         try {
           parentLoader.loadClass(name)

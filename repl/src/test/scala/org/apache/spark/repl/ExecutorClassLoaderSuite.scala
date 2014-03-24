@@ -27,8 +27,8 @@ class ExecutorClassLoaderSuite extends FunSuite {
   val spark_home = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.home")).get
   val url1 = "file://" + spark_home + "/core/src/test/resources/classes1/"
   val urls2 = List(new File(spark_home + "/core/src/test/resources/classes2/").toURI.toURL).toArray
+
   test("child first") {
-    println("url1 "+url1)
     val parentLoader = new URLClassLoader(urls2, null)
     val classLoader = new ExecutorClassLoader(url1, parentLoader, true)
     val fakeClass = classLoader.loadClass("org.apache.spark.test.FakeClass2").newInstance()
@@ -45,12 +45,19 @@ class ExecutorClassLoaderSuite extends FunSuite {
   }
 
   test("child first can fall back") {
-    println("url1 "+url1)
     val parentLoader = new URLClassLoader(urls2, null)
     val classLoader = new ExecutorClassLoader(url1, parentLoader, true)
     val fakeClass = classLoader.loadClass("org.apache.spark.test.FakeClass3").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "2")
+  }
+
+  test("child first can fail") {
+    val parentLoader = new URLClassLoader(urls2, null)
+    val classLoader = new ExecutorClassLoader(url1, parentLoader, true)
+    intercept[java.lang.ClassNotFoundException] {
+      classLoader.loadClass("org.apache.spark.test.FakeClassDoesNotExist").newInstance()
+    }
   }
 
 }

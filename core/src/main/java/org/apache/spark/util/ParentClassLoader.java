@@ -27,7 +27,7 @@ public class ParentClassLoader extends ClassLoader {
 
     @Override
     public Class<?> findClass(String name) throws ClassNotFoundException {
-	return super.loadClass(name);
+	return super.findClass(name);
     }
 
     @Override
