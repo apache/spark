@@ -23,7 +23,7 @@ import java.util.StringTokenizer
 import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
-import scala.io.Source
+import scala.io.{Codec, Source}
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
@@ -69,6 +69,12 @@ class PipedRDD[T: ClassTag](
 
     val proc = pb.start()
     val env = SparkEnv.get
+    
+    implicit val codec = if (System.getProperty("os.name").startsWith("Windows")) {
+      Codec.ISO8859
+    } else {
+      Codec.UTF8
+    }
 
     // Start a thread to print the process's stderr to ours
     new Thread("stderr reader for " + command) {
