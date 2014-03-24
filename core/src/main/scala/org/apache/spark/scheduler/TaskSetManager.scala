@@ -397,7 +397,6 @@ private[spark] class TaskSetManager(
           // Found a task; do some bookkeeping and return a task description
           val task = tasks(index)
           val taskId = sched.newTaskId()
-          task.tid = taskId
           // Figure out whether this should count as a preferred launch
           logInfo("Starting task %s:%d as TID %s on executor %s: %s (%s)".format(
             taskSet.id, index, taskId, execId, host, taskLocality))

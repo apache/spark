@@ -174,6 +174,15 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     }
   }
 
+  private def completeWithAccumulator(taskSet: TaskSet, results: Seq[(TaskEndReason, Any)]) {
+    assert(taskSet.tasks.size >= results.size)
+    for ((result, i) <- results.zipWithIndex) {
+      if (i < taskSet.tasks.size) {
+        runEvent(CompletionEvent(taskSet.tasks(i), result._1, result._2, Map[Long, Any]((0, 1)), null, null))
+      }
+    }
+  }
+
   /** Sends the rdd to the scheduler for scheduling. */
   private def submit(
       rdd: RDD[_],
@@ -375,8 +384,33 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     assertDataStructuresEmpty
   }
 
-  test("accmulator is calculated for only once when the rdd is recomputed") {
-
+  test("accumulator is not calculated for resubmitted tasks") {
+    //just for register
+    new Accumulator[Int](0, SparkContext.IntAccumulatorParam)
+    val shuffleOneRdd = makeRdd(2, Nil)
+    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
+    val shuffleTwoRdd = makeRdd(2, List(shuffleDepOne))
+    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, null)
+    val finalRdd = makeRdd(1, List(shuffleDepTwo))
+    submit(finalRdd, Array(0))
+    // have the first stage complete normally
+    completeWithAccumulator(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    // have the second stage complete normally
+    completeWithAccumulator(taskSets(1), Seq(
+      (Success, makeMapStatus("hostA", 1)),
+      (Success, makeMapStatus("hostC", 1))))
+    // fail the third stage because hostA went down
+    completeWithAccumulator(taskSets(2), Seq(
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleDepTwo.shuffleId, 0, 0), null)))
+    scheduler.resubmitFailedStages()
+    completeWithAccumulator(taskSets(3), Seq((Success, makeMapStatus("hostA", 2))))
+    completeWithAccumulator(taskSets(4), Seq((Success, makeMapStatus("hostA", 1))))
+    completeWithAccumulator(taskSets(5), Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+    assert(Accumulators.originals(0).value === 5)
+    assertDataStructuresEmpty
   }
 
   test("cached post-shuffle") {
@@ -441,5 +475,6 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     assert(scheduler.runningStages.isEmpty)
     assert(scheduler.shuffleToMapStage.isEmpty)
     assert(scheduler.waitingStages.isEmpty)
+    assert(scheduler.stageIdToAccumulators.isEmpty)
   }
 }

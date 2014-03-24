@@ -21,7 +21,7 @@ import java.io.NotSerializableException
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, ListBuffer}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
@@ -33,6 +33,8 @@ import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
+import scala.collection.mutable
+
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -116,7 +118,7 @@ class DAGScheduler(
   private val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.DAG_SCHEDULER, this.cleanup, env.conf)
 
-  private val stageIdToFinishedTasks = new HashMap[Int, HashSet[Long]]
+  val stageIdToAccumulators = new HashMap[Int, ListBuffer[(Long, Any)]]
 
   taskScheduler.setDAGScheduler(this)
 
@@ -391,7 +393,6 @@ class DAGScheduler(
               // data structures based on StageId
               stageIdToStage -= stageId
               stageIdToJobIds -= stageId
-
               logDebug("After removal of stage %d, remaining stages = %d"
                 .format(stageId, stageIdToStage.size))
             }
@@ -407,12 +408,14 @@ class DAGScheduler(
     independentStages.toSet
   }
 
-  private def jobIdToStageIdsRemove(jobId: Int) {
+  private def jobIdToStageIdsRemove(jobId: Int): Set[Int] = {
     if (!jobIdToStageIds.contains(jobId)) {
-      logDebug("Trying to remove unregistered job " + jobId)
+      logWarning("Trying to remove unregistered job " + jobId)
+      return null
     } else {
-      removeJobAndIndependentStages(jobId)
+      val removedStages = removeJobAndIndependentStages(jobId)
       jobIdToStageIds -= jobId
+      return removedStages
     }
   }
 
@@ -810,17 +813,18 @@ class DAGScheduler(
       logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
       stageToInfos(stage).completionTime = Some(System.currentTimeMillis())
       listenerBus.post(SparkListenerStageCompleted(stageToInfos(stage)))
-      stageIdToFinishedTasks -= stage.id
       runningStages -= stage
     }
     event.reason match {
       case Success =>
         logInfo("Completed " + task)
-        if (stageIdToFinishedTasks.contains(stage.id) &&
-          stageIdToFinishedTasks(stage.id).contains(task.tid)) {
-          Accumulators.add(event.accumUpdates)
+        if (!stageIdToAccumulators.contains(stage.id) ||
+          stageIdToAccumulators(stage.id).size < stage.numPartitions) {
+          stageIdToAccumulators.getOrElseUpdate(stage.id, new ListBuffer[(Long, Any)])
+          for ((id, value) <- event.accumUpdates) {
+            stageIdToAccumulators(stage.id) += id -> value
+          }
         }
-        stageIdToFinishedTasks.getOrElseUpdate(stage.id, new HashSet[Long]) += task.tid
         pendingTasks(stage) -= task
         task match {
           case rt: ResultTask[_, _] =>
@@ -835,7 +839,13 @@ class DAGScheduler(
                     activeJobs -= job
                     resultStageToJob -= stage
                     markStageAsFinished(stage)
-                    jobIdToStageIdsRemove(job.jobId)
+                    jobIdToStageIdsRemove(job.jobId).foreach(stageId =>  {
+                      //accumulator operations
+                      for (accumValues <- stageIdToAccumulators(stageId)) {
+                        Accumulators.add(accumValues._1, accumValues._2)
+                      }
+                      stageIdToAccumulators -= stageId
+                    })
                     listenerBus.post(SparkListenerJobEnd(job.jobId, JobSucceeded))
                   }
                   job.listener.taskSucceeded(rt.outputId, event.result)
@@ -907,7 +917,6 @@ class DAGScheduler(
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
         // Mark the stage that the reducer was in as unrunnable
         val failedStage = stageIdToStage(task.stageId)
-        runningStages -= failedStage
         // TODO: Cancel running tasks in the stage
         logInfo("Marking " + failedStage + " (" + failedStage.name +
           ") for resubmision due to a fetch failure")
@@ -929,6 +938,10 @@ class DAGScheduler(
         }
         failedStages += failedStage
         failedStages += mapStage
+        if (runningStages.contains(failedStage)) {
+          stageIdToAccumulators -= failedStage.id
+        }
+        runningStages -= failedStage
         // TODO: mark the executor as failed only if there were lots of fetch failures on it
         if (bmAddress != null) {
           handleExecutorLost(bmAddress.executorId, Some(task.epoch))

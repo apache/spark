@@ -44,7 +44,9 @@ class Accumulable[R, T] (
     param: AccumulableParam[R, T])
   extends Serializable {
 
-  val id = Accumulators.nextAccumID.getAndIncrement
+  val id = Accumulators.nextAccumID.get()
+  Accumulators.nextAccumID.getAndIncrement
+
   @transient private var value_ = initialValue // Current value on master
   val zero = param.zero(initialValue)  // Zero value to be passed to workers
   private var deserialized = false
@@ -271,6 +273,12 @@ private object Accumulators {
       if (originals.contains(id)) {
         originals(id).asInstanceOf[Accumulable[Any, Any]] ++= value
       }
+    }
+  }
+
+  def add(value: (Long, Any)): Unit = synchronized {
+    if (originals.contains(value._1)) {
+      originals(value._1).asInstanceOf[Accumulable[Any, Any]] += value._2
     }
   }
 }
