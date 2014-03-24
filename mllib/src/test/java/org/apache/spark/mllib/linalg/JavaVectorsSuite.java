@@ -15,26 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util
+package org.apache.spark.mllib.linalg;
 
-import org.scalatest.Suite
-import org.scalatest.BeforeAndAfterAll
+import java.io.Serializable;
 
-import org.apache.spark.SparkContext
+import com.google.common.collect.Lists;
 
-trait LocalSparkContext extends BeforeAndAfterAll { self: Suite =>
-  @transient var sc: SparkContext = _
+import scala.Tuple2;
 
-  override def beforeAll() {
-    sc = new SparkContext("local", "test")
-    super.beforeAll()
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class JavaVectorsSuite implements Serializable {
+
+  @Test
+  public void denseArrayConstruction() {
+    Vector v = Vectors.dense(1.0, 2.0, 3.0);
+    assertArrayEquals(new double[]{1.0, 2.0, 3.0}, v.toArray(), 0.0);
   }
 
-  override def afterAll() {
-    if (sc != null) {
-      sc.stop()
-    }
-    System.clearProperty("spark.driver.port")
-    super.afterAll()
+  @Test
+  public void sparseArrayConstruction() {
+    Vector v = Vectors.sparse(3, Lists.newArrayList(
+        new Tuple2<Integer, Double>(0, 2.0),
+        new Tuple2<Integer, Double>(2, 3.0)));
+    assertArrayEquals(new double[]{2.0, 0.0, 3.0}, v.toArray(), 0.0);
   }
 }

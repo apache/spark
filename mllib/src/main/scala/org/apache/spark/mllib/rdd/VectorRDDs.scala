@@ -15,26 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util
+package org.apache.spark.mllib.rdd
 
-import org.scalatest.Suite
-import org.scalatest.BeforeAndAfterAll
+import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
-import org.apache.spark.SparkContext
+/**
+ * Factory methods for `RDD[Vector]`.
+ */
+object VectorRDDs {
 
-trait LocalSparkContext extends BeforeAndAfterAll { self: Suite =>
-  @transient var sc: SparkContext = _
-
-  override def beforeAll() {
-    sc = new SparkContext("local", "test")
-    super.beforeAll()
-  }
-
-  override def afterAll() {
-    if (sc != null) {
-      sc.stop()
-    }
-    System.clearProperty("spark.driver.port")
-    super.afterAll()
-  }
+  /**
+   * Converts an `RDD[Array[Double]]` to `RDD[Vector]`.
+   */
+  def fromArrayRDD(rdd: RDD[Array[Double]]): RDD[Vector] = rdd.map(v => Vectors.dense(v))
 }
