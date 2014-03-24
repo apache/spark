@@ -100,6 +100,14 @@ private[spark] class PythonRDD[T: ClassTag](
       }
     }.start()
 
+    /*
+     * Partial fix for SPARK-1019: Attempts to stop reading the input stream since
+     * other completion callbacks might invalidate the input. Because interruption
+     * is not synchronous this still leaves a potential race where the interruption is
+     * processed only after the stream becomes invalid.
+     */
+    context.addOnCompleteCallback(() => context.interrupted = true)
+
     // Return an iterator that read lines from the process's stdout
     val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
     val stdoutIterator = new Iterator[Array[Byte]] {

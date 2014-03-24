@@ -1,0 +1,1 @@
+stack(n, cols...) - turns k columns into n rows of size k/n each

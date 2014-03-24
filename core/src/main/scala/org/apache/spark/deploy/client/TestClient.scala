@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.client
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, Logging}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -45,8 +45,9 @@ private[spark] object TestClient {
 
   def main(args: Array[String]) {
     val url = args(0)
+    val conf = new SparkConf
     val (actorSystem, port) = AkkaUtils.createActorSystem("spark", Utils.localIpAddress, 0,
-      conf = new SparkConf)
+      conf = conf, securityManager = new SecurityManager(conf))
     val desc = new ApplicationDescription(
       "TestClient", Some(1), 512, Command("spark.deploy.client.TestExecutor", Seq(), Map()),
       Some("dummy-spark-home"), "ignored")

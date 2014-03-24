@@ -19,11 +19,16 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.scalatest.FunSuite
 
 import org.apache.spark._
+
+class FakeSchedulerBackend extends SchedulerBackend {
+  def start() {}
+  def stop() {}
+  def reviveOffers() {}
+  def defaultParallelism() = 1
+}
 
 class FakeTaskSetManager(
     initPriority: Int,
@@ -107,7 +112,8 @@ class FakeTaskSetManager(
 
 class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Logging {
 
-  def createDummyTaskSetManager(priority: Int, stage: Int, numTasks: Int, cs: TaskSchedulerImpl, taskSet: TaskSet): FakeTaskSetManager = {
+  def createDummyTaskSetManager(priority: Int, stage: Int, numTasks: Int, cs: TaskSchedulerImpl,
+      taskSet: TaskSet): FakeTaskSetManager = {
     new FakeTaskSetManager(priority, stage, numTasks, cs , taskSet)
   }
 
@@ -135,10 +141,7 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
   test("FIFO Scheduler Test") {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
-    var tasks = ArrayBuffer[Task[_]]()
-    val task = new FakeTask(0)
-    tasks += task
-    val taskSet = new TaskSet(tasks.toArray,0,0,0,null)
+    val taskSet = FakeTask.createTaskSet(1)
 
     val rootPool = new Pool("", SchedulingMode.FIFO, 0, 0)
     val schedulableBuilder = new FIFOSchedulableBuilder(rootPool)
@@ -162,10 +165,7 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
   test("Fair Scheduler Test") {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
-    var tasks = ArrayBuffer[Task[_]]()
-    val task = new FakeTask(0)
-    tasks += task
-    val taskSet = new TaskSet(tasks.toArray,0,0,0,null)
+    val taskSet = FakeTask.createTaskSet(1)
 
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
     System.setProperty("spark.scheduler.allocation.file", xmlPath)
@@ -219,10 +219,7 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
   test("Nested Pool Test") {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
-    var tasks = ArrayBuffer[Task[_]]()
-    val task = new FakeTask(0)
-    tasks += task
-    val taskSet = new TaskSet(tasks.toArray,0,0,0,null)
+    val taskSet = FakeTask.createTaskSet(1)
 
     val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
     val pool0 = new Pool("0", SchedulingMode.FAIR, 3, 1)
@@ -264,5 +261,36 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
     checkTaskSetId(rootPool, 4)
     checkTaskSetId(rootPool, 6)
     checkTaskSetId(rootPool, 2)
+  }
+
+  test("Scheduler does not always schedule tasks on the same workers") {
+    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val taskScheduler = new TaskSchedulerImpl(sc) 
+    taskScheduler.initialize(new FakeSchedulerBackend)
+    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
+    val dagScheduler = new DAGScheduler(sc, taskScheduler) {
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
+      override def executorAdded(execId: String, host: String) {}
+    }
+
+    val numFreeCores = 1
+    val workerOffers = Seq(new WorkerOffer("executor0", "host0", numFreeCores),
+      new WorkerOffer("executor1", "host1", numFreeCores))
+    // Repeatedly try to schedule a 1-task job, and make sure that it doesn't always
+    // get scheduled on the same executor. While there is a chance this test will fail
+    // because the task randomly gets placed on the first executor all 1000 times, the
+    // probability of that happening is 2^-1000 (so sufficiently small to be considered
+    // negligible).
+    val numTrials = 1000
+    val selectedExecutorIds = 1.to(numTrials).map { _ =>
+      val taskSet = FakeTask.createTaskSet(1)
+      taskScheduler.submitTasks(taskSet)
+      val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+      assert(1 === taskDescriptions.length)
+      taskDescriptions(0).executorId
+    }
+    val count = selectedExecutorIds.count(_ == workerOffers(0).executorId)
+    assert(count > 0)
+    assert(count < numTrials)
   }
 }
