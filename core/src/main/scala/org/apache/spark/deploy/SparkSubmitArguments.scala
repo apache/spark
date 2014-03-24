@@ -143,30 +143,32 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
     System.err.println(
       """Usage: spark-submit <primary binary> [options]
         |Options:
-        |  --master MASTER_URL          spark://host:port, mesos://host:port, yarn, or local.
-        |  --deploy-mode DEPLOY_MODE    Mode to deploy the app in, either \"client\" or \"cluster\".
-        |  --class CLASS_NAME           Name of your application's main class (required for Java apps).
-        |  --arg ARG                    Argument to be passed to your application's main class.
-        |                               Multiple invocations are possible, each will be passed in order.
-        |  --driver-memory MEM          Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb).
-        |  --name NAME                  The name of your application (Default: Spark).
+        |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local.
+        |  --deploy-mode DEPLOY_MODE   Mode to deploy the app in, either 'client' or 'cluster'.
+        |  --class CLASS_NAME          Name of your app's main class (required for Java apps).
+        |  --arg ARG                   Argument to be passed to your application's main class. This
+        |                              option can be specified multiple times for multiple args.
+        |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: 512M).
+        |  --name NAME                 The name of your application (Default: 'Spark').
         |
         | Spark standalone with cluster deploy mode only:
-        |  --driver-cores CORES         Cores for driver.
-        |  --supervise                  Whether to restart the driver on failure.
+        |  --driver-cores NUM          Cores for driver (Default: 1).
+        |  --supervise                 If given, restarts the driver on failure.
         |
         | Spark standalone and Mesos only:
-        |  --total-executor-cores CORES Total cores for all executors.
+        |  --total-executor-cores NUM  Total cores for all executors.
         |
         | YARN-only:
-        |  --executor-cores NUM         Number of cores per executor (Default: 1).
-        |  --executor-memory MEM        Memory per executor (e.g. 1000M, 2G) (Default: 1G).
-        |  --more-jars JARS             For \"cluster\" deploy mode, a comma-separated list of local jars
-        |                               that you want SparkContext.addJar to work with.
-        |  --queue QUEUE                The YARN queue to submit the application to (Default: 'default').
-        |  --num-executors NUM          Number of executors to start (Default: 2).
-        |  --files FILES                Comma separated list of files to be placed next to all executors.
-        |  --archives ARCHIVES          Comma separated list of archives to be extracted next to all executors.""".stripMargin
+        |  --executor-cores NUM        Number of cores per executor (Default: 1).
+        |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
+        |  --more-jars JARS            For 'cluster' deploy mode, a comma-separated list of local
+        |                              jars that you want SparkContext.addJar to work with.
+        |  --queue QUEUE_NAME          The YARN queue to submit to (Default: 'default').
+        |  --num-executors NUM         Number of executors to start (Default: 2).
+        |  --files FILES               Comma separated list of files to be placed next to all
+        |                              executors.
+        |  --archives ARCHIVES         Comma separated list of archives to be extracted next to
+        |                              all executors.""".stripMargin
     )
     System.exit(exitCode)
   }
