@@ -49,10 +49,10 @@ class StorageStatus(
 
 private[spark]
 class RDDInfo(
-	val id: Int, 
-	val name: String,
-	val numPartitions: Int,
-	val storageLevel: StorageLevel) extends Ordered[RDDInfo] {
+  val id: Int,
+  val name: String,
+  val numPartitions: Int,
+  val storageLevel: StorageLevel) extends Ordered[RDDInfo] {
 
   var numCachedPartitions = 0
   var memSize = 0L
@@ -112,7 +112,7 @@ object StorageUtils {
 
     val rddStorageInfos = blockStatusMap.flatMap { case (rddId, blocks) =>
       // Add up memory, disk and Tachyon sizes
-      val persistedBlocks = 
+      val persistedBlocks =
         blocks.filter { status => status.memSize + status.diskSize + status.tachyonSize > 0 }
       val memSize = persistedBlocks.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
       val diskSize = persistedBlocks.map(_.diskSize).reduceOption(_ + _).getOrElse(0L)

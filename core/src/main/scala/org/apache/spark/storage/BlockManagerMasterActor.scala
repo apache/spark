@@ -313,8 +313,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 }
 
 private[spark] case class BlockStatus(
-    storageLevel: StorageLevel, 
-    memSize: Long, 
+    storageLevel: StorageLevel,
+    memSize: Long,
     diskSize: Long,
     tachyonSize: Long)
 
@@ -339,14 +339,14 @@ private[spark] class BlockManagerInfo(
   }
 
   def updateBlockInfo(
-      blockId: BlockId, 
-      storageLevel: StorageLevel, 
+      blockId: BlockId,
+      storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long, 
+      diskSize: Long,
       tachyonSize: Long) {
-    
+
     updateLastSeenMs()
-    
+
     if (_blocks.containsKey(blockId)) {
       // The block exists on the slave already.
       val originalLevel: StorageLevel = _blocks.get(blockId).storageLevel
@@ -355,7 +355,7 @@ private[spark] class BlockManagerInfo(
         _remainingMem += memSize
       }
     }
-    
+
     if (storageLevel.isValid) {
       /* isValid means it is either stored in-memory or on-disk.
        * But the memSize here indicates the data size in or dropped from memory,
@@ -391,8 +391,8 @@ private[spark] class BlockManagerInfo(
           Utils.bytesToString(_remainingMem)))
       }
       if (blockStatus.storageLevel.useDisk) {
-		logInfo("Removed %s on %s on disk (size: %s)".format(
-		  blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.diskSize)))
+        logInfo("Removed %s on %s on disk (size: %s)".format(
+          blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.diskSize)))
       }
       if (blockStatus.storageLevel.useTachyon) {
         logInfo("Removed %s on %s on tachyon (size: %s)".format(
