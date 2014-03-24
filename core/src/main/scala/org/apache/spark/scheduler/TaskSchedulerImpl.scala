@@ -275,9 +275,9 @@ private[spark] class TaskSchedulerImpl(
       } while (launchedTask)
     }
 
-    while(!serializingTask.isEmpty) {
-      Thread.sleep(1000)
-    }
+    do {
+      Thread.sleep(1)
+    } while(!serializingTask.isEmpty) 
 
     if (tasks.size > 0) {
       hasLaunchedTask = true
