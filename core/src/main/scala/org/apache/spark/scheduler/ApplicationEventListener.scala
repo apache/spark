@@ -24,7 +24,7 @@ package org.apache.spark.scheduler
  * SparkListenerApplicationEnd will be received. Otherwise, only the latest event
  * of each type will take effect.
  */
-private[spark] class ApplicationListener extends SparkListener {
+private[spark] class ApplicationEventListener extends SparkListener {
   var appName = "<Not Started>"
   var startTime = -1L
   var endTime = -1L

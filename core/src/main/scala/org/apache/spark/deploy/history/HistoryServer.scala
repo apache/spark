@@ -30,7 +30,7 @@ import org.apache.spark.deploy.SparkUIContainer
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
-import org.apache.spark.scheduler.{ApplicationListener, ReplayListenerBus}
+import org.apache.spark.scheduler.{ApplicationEventListener, ReplayListenerBus}
 
 /**
  * A web server that renders SparkUIs of finished applications.
@@ -131,7 +131,7 @@ class HistoryServer(val baseLogDir: String, requestedPort: Int)
     // If the application completion file is found
     if (replayBus.isApplicationComplete) {
       val ui = new SparkUI(replayBus, appId, "/history/%s".format(appId))
-      val appListener = new ApplicationListener
+      val appListener = new ApplicationEventListener
       replayBus.addListener(appListener)
 
       // Do not call ui.bind() to avoid creating a new server for each application

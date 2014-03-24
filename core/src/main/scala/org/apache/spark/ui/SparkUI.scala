@@ -75,7 +75,9 @@ private[spark] class SparkUI(
   // Maintain executor storage status through Spark events
   val storageStatusListener = new StorageStatusListener
 
-  def setAppName(name: String) = appName = name
+  def setAppName(name: String) {
+    appName = name
+  }
 
   /** Initialize all components of the server */
   def start() {

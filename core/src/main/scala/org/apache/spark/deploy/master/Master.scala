@@ -666,6 +666,7 @@ private[spark] class Master(
     // Do not call ui.bind() to avoid creating a new server for each application
     ui.start()
     val success = replayBus.replay()
+    replayBus.stop()
     if (success) Some(ui) else None
   }
 

@@ -31,7 +31,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
 
 /**
- * An EventBus that replays logged events from persisted storage.
+ * A SparkListenerBus that replays logged events from persisted storage.
  *
  * This class expects files to be appropriately prefixed as specified in EventLoggingListener.
  * There exists a one-to-one mapping between ReplayListenerBus and event logging applications.
@@ -64,10 +64,9 @@ private[spark] class ReplayListenerBus(logDir: String) extends SparkListenerBus 
         conf.set("spark.io.compression.codec", codec)
         CompressionCodec.createCodec(conf)
       }
-    applicationComplete =
-      filePaths.exists { file =>
-        EventLoggingListener.isApplicationCompleteFile(file.getName)
-      }
+    applicationComplete = filePaths.exists { file =>
+      EventLoggingListener.isApplicationCompleteFile(file.getName)
+    }
     started = true
   }
 
