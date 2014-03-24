@@ -30,11 +30,11 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 
 /**
- * The specific InputFormat reads files in HDFS or local disk into pair (filename, content) format.
- * It will be called by HadoopRDD to generate new WholeTextFileRecordReader.
+ * An <code>org.apache.hadoop.mapreduce.lib.CombineFileInputFormat</code> for reading whole text
+ * files. Each file is read as key-value pair, where the key is the file path and the value is the
+ * entire content of file.
  */
-public class WholeTextFileInputFormat
-  extends CombineFileInputFormat<String, Text> {
+public class WholeTextFileInputFormat extends CombineFileInputFormat<String, Text> {
 
   @Override
   protected boolean isSplitable(JobContext context, Path file) {

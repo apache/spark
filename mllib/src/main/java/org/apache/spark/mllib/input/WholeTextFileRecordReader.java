@@ -31,8 +31,9 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 
 /**
- * Reads an entire file out in (filename, content) format. Each element in split is an record of a
- * unique, whole file. File name is full path name for easy deduplicate.
+ * An <code>org.apache.hadoop.mapreduce.RecordReader</code> for reading whole text file out in
+ * (filename, content) format. Each element in split is an record of a unique, whole file. File name
+ * is the full path name for easy deduplicate.
  */
 public class WholeTextFileRecordReader extends RecordReader<String, Text> {
   private Path path;

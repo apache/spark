@@ -358,9 +358,6 @@ object SparkBuild extends Build {
   def mllibSettings = sharedSettings ++ Seq(
     name := "spark-mllib",
     libraryDependencies ++= Seq(
-      "com.sun.jersey"           % "jersey-core"        % "1.8"           % "test",
-      "org.mortbay.jetty"        % "jetty"              % "6.1.26"        % "test",
-      "org.apache.hadoop"        % "hadoop-test"        % hadoopVersion   % "test",
       "commons-io"               % "commons-io"         % "2.4",
       "org.jblas"                % "jblas"              % "1.2.3"
     )

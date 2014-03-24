@@ -124,13 +124,9 @@ object MLUtils {
   }
 
   /**
-   * Reads a bunch of whole files from HDFS, or a local file system (available on all nodes), or any
-   * Hadoop-supported file system URI, and return an RDD[(String, String)].
-   *
-   * @param path The directory you should specified, such as
-   *             hdfs://[address]:[port]/[dir]
-   *
-   * @return The first String is a file name, the second one is its content.
+   * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI, and return it as an RDD of (filename, content) both in String
+   * format.
    */
   def wholeTextFile(sc: SparkContext, path: String): RDD[(String, String)] = {
     sc.newAPIHadoopFile(

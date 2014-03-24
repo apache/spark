@@ -53,62 +53,54 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
     val out = new DataOutputStream(new FileOutputStream(s"${inputDir.toString}/$fileName"))
     out.write(contents, 0, contents.length)
     out.close()
-    println("Wrote native file")
   }
 
   /**
    * This code will test the behaviors of WholeTextFileRecordReader based on local disk. There are
    * three aspects to check:
-   *   1) is all files are read.
-   *   2) is the fileNames are read correctly.
-   *   3) is the contents must be the same.
+   *   1) Whether all files are read;
+   *   2) Whether paths are read correctly;
+   *   3) Does the contents be the same.
    */
   test("Correctness of WholeTextFileRecordReader.") {
 
-    val dir = Files.createTempDirectory("wholefiles")
-    println(s"native disk address is ${dir.toString}")
+    val dir = Files.createTempDirectory("wholeFiles")
+    println(s"Local disk address is ${dir.toString}.")
 
-    WholeTextFileRecordReaderSuite.fileNames
-      .zip(WholeTextFileRecordReaderSuite.filesContents)
-      .foreach { case (fname, contents) =>
-        createNativeFile(dir, fname, contents)
+    WholeTextFileRecordReaderSuite.files.foreach { case (filename, contents) =>
+      createNativeFile(dir, filename, contents)
     }
 
     val res = wholeTextFile(sc, dir.toString).collect()
 
     assert(res.size === WholeTextFileRecordReaderSuite.fileNames.size,
-      "Number of files read out do not fit with the actual value")
+      "Number of files read out does not fit with the actual value.")
 
-    for ((fname, contents) <- res) {
-      val shortName = fname.split('/').last
+    for ((filename, contents) <- res) {
+      val shortName = filename.split('/').last
       assert(WholeTextFileRecordReaderSuite.fileNames.contains(shortName),
-        s"Missing file name $fname.")
-      assert(contents.hashCode === WholeTextFileRecordReaderSuite.hashCodeOfContents(shortName),
-        s"file $fname contents can not match")
+        s"Missing file name $filename.")
+      assert(contents === new Text(WholeTextFileRecordReaderSuite.files(shortName)).toString,
+        s"file $filename contents can not match.")
     }
 
-    WholeTextFileRecordReaderSuite.fileNames.foreach { fname =>
-      Files.deleteIfExists(Paths.get(s"${dir.toString}/$fname"))
+    WholeTextFileRecordReaderSuite.fileNames.foreach { filename =>
+      Files.deleteIfExists(Paths.get(s"${dir.toString}/$filename"))
     }
     Files.deleteIfExists(dir)
   }
 }
 
 /**
- * Some final values are defined here. fileNames and fileContents represent the test data that will
- * be used later. hashCodeOfContents is a Map of fileName to the hashcode of contents, which is used
- * for the comparison of contents.
+ * Files to be tested are defined here.
  */
 object WholeTextFileRecordReaderSuite {
   private val testWords: IndexedSeq[Byte] = "Spark is easy to use.\n".map(_.toByte)
 
   private val fileNames = Array("part-00000", "part-00001", "part-00002")
+  private val fileLengths = Array(10, 100, 1000)
 
-  private val filesContents = Array(10, 100, 1000).map { upperBound =>
-    Stream.continually(testWords.toList.toStream).flatten.take(upperBound).toArray
-  }
-
-  private val hashCodeOfContents = fileNames.zip(filesContents).map { case (fname, contents) =>
-    fname -> new Text(contents).toString.hashCode
+  private val files = fileLengths.zip(fileNames).map { case (upperBound, filename) =>
+    filename -> Stream.continually(testWords.toList.toStream).flatten.take(upperBound).toArray
   }.toMap
 }
