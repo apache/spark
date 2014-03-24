@@ -75,7 +75,6 @@ class PipedRDD[T: ClassTag](
     } else {
       Codec.UTF8
     }
-
     // Start a thread to print the process's stderr to ours
     new Thread("stderr reader for " + command) {
       override def run() {
