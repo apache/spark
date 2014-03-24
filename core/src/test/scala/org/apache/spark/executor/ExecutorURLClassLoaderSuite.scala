@@ -27,6 +27,7 @@ class ExecutorURLClassLoaderSuite extends FunSuite {
   val spark_home = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.home")).get
   val urls = List(new File(spark_home + "/core/src/test/resources/fake-spark-class.jar").toURI.toURL).toArray
   val urls2 = List(new File(spark_home + "/core/src/test/resources/fake-spark-class-2.jar").toURI.toURL).toArray
+
   test("child first") {
     val parentLoader = new URLClassLoader(urls2, null)
     val classLoader = new ChildExecutorURLClassLoader(urls, parentLoader)
@@ -42,4 +43,13 @@ class ExecutorURLClassLoaderSuite extends FunSuite {
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "2")
   }
+
+  test("child first can fall back") {
+    val parentLoader = new URLClassLoader(urls2, null)
+    val classLoader = new ChildExecutorURLClassLoader(urls, parentLoader)
+    val fakeClass = classLoader.loadClass("org.apache.spark.test.FakeClass3").newInstance()
+    val fakeClassVersion = fakeClass.toString
+    assert(fakeClassVersion === "2")
+  }
+
 }
