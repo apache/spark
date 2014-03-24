@@ -28,7 +28,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.SecurityManager
-import org.apache.spark.ui.JettyUtils
+import org.apache.spark.ui.JettyUtils._
 
 class MetricsServlet(val property: Properties, val registry: MetricRegistry,
     securityMgr: SecurityManager) extends Sink {
@@ -46,10 +46,8 @@ class MetricsServlet(val property: Properties, val registry: MetricRegistry,
     new MetricsModule(TimeUnit.SECONDS, TimeUnit.MILLISECONDS, servletShowSample))
 
   def getHandlers = Array[ServletContextHandler](
-    JettyUtils.createServletHandler(servletPath, 
-      JettyUtils.createServlet(
-        new JettyUtils.ServletParams(request => getMetricsSnapshot(request), "text/json"),
-        securityMgr) )
+    createServletHandler(servletPath,
+      new ServletParams(request => getMetricsSnapshot(request), "text/json"), securityMgr)
   )
 
   def getMetricsSnapshot(request: HttpServletRequest): String = {

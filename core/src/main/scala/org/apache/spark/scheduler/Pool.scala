@@ -62,7 +62,7 @@ private[spark] class Pool(
   override def addSchedulable(schedulable: Schedulable) {
     schedulableQueue += schedulable
     schedulableNameToSchedulable(schedulable.name) = schedulable
-    schedulable.parent= this
+    schedulable.parent = this
   }
 
   override def removeSchedulable(schedulable: Schedulable) {

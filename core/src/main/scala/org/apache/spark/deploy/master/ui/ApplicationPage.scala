@@ -23,7 +23,6 @@ import scala.concurrent.Await
 import scala.xml.Node
 
 import akka.pattern.ask
-import javax.servlet.http.HttpServletRequest
 import org.json4s.JValue
 
 import org.apache.spark.deploy.JsonProtocol
@@ -83,7 +82,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
               </li>
               <li><strong>Submit Date:</strong> {app.submitDate}</li>
               <li><strong>State:</strong> {app.state}</li>
-              <li><strong><a href={app.appUiUrl}>Application Detail UI</a></strong></li>
+              <li><strong><a href={app.desc.appUiUrl}>Application Detail UI</a></strong></li>
             </ul>
           </div>
         </div>
