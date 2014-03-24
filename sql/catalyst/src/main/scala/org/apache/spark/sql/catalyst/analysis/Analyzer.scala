@@ -55,7 +55,9 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       StarExpansion ::
       ResolveFunctions ::
       GlobalAggregates ::
-      typeCoercionRules :_*)
+      typeCoercionRules :_*),
+    Batch("AnalysisOperators", fixedPoint,
+      EliminateAnalysisOperators)
   )
 
   /**
@@ -80,6 +82,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         case s: Star => s.copy(table = s.table.map(_.toLowerCase))
         case UnresolvedAttribute(name) => UnresolvedAttribute(name.toLowerCase)
         case Alias(c, name) => Alias(c, name.toLowerCase)()
+        case GetField(c, name) => GetField(c, name.toLowerCase)
       }
     }
   }
@@ -184,3 +187,17 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       exprs.collect { case _: Star => true }.nonEmpty
   }
 }
+
+/**
+ * Removes [[catalyst.plans.logical.Subquery Subquery]] operators from the plan.  Subqueries are
+ * only required to provide scoping information for attributes and can be removed once analysis is
+ * complete.  Similarly, this node also removes
+ * [[catalyst.plans.logical.LowerCaseSchema LowerCaseSchema]] operators.
+ */
+object EliminateAnalysisOperators extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Subquery(_, child) => child
+    case LowerCaseSchema(child) => child
+  }
+}
+

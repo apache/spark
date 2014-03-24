@@ -73,11 +73,11 @@ trait HiveStrategies {
       case p @ FilteredOperation(predicates, relation: MetastoreRelation)
         if relation.isPartitioned =>
 
-        val partitionKeyIds = relation.partitionKeys.map(_.id).toSet
+        val partitionKeyIds = relation.partitionKeys.map(_.exprId).toSet
 
         // Filter out all predicates that only deal with partition keys
         val (pruningPredicates, otherPredicates) = predicates.partition {
-          _.references.map(_.id).subsetOf(partitionKeyIds)
+          _.references.map(_.exprId).subsetOf(partitionKeyIds)
         }
 
         val scan = HiveTableScan(
