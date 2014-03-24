@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+package org.apache.spark.sql
 package catalyst
 
 /**

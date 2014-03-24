@@ -18,18 +18,19 @@
 package org.apache.spark.sql
 package hive
 
-import scala.collection.JavaConversions._
-
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
 
-import catalyst.analysis._
-import catalyst.expressions._
-import catalyst.plans._
-import catalyst.plans.logical
-import catalyst.plans.logical._
-import catalyst.types._
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.types._
+
+/* Implicit conversions */
+import scala.collection.JavaConversions._
 
 /**
  * Used when we need to start parsing the AST before deciding that we are going to pass the command
@@ -48,7 +49,7 @@ case class AddJar(jarPath: String) extends Command
 
 case class AddFile(filePath: String) extends Command
 
-/** Provides a mapping from HiveQL statments to catalyst logical plans and expression trees. */
+/** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 object HiveQl {
   protected val nativeCommands = Seq(
     "TOK_DESCFUNCTION",
@@ -150,13 +151,13 @@ object HiveQl {
     }
 
     /**
-     * Returns a scala.Seq equivilent to [s] or Nil if [s] is null.
+     * Returns a scala.Seq equivalent to [s] or Nil if [s] is null.
      */
     private def nilIfEmpty[A](s: java.util.List[A]): Seq[A] =
       Option(s).map(_.toSeq).getOrElse(Nil)
 
     /**
-     * Returns this ASTNode with the text changed to `newText``.
+     * Returns this ASTNode with the text changed to `newText`.
      */
     def withText(newText: String): ASTNode = {
       n.token.asInstanceOf[org.antlr.runtime.CommonToken].setText(newText)
@@ -667,7 +668,7 @@ object HiveQl {
     case Token(allJoinTokens(joinToken),
            relation1 ::
            relation2 :: other) =>
-      assert(other.size <= 1, s"Unhandled join child ${other}")
+      assert(other.size <= 1, s"Unhandled join child $other")
       val joinType = joinToken match {
         case "TOK_JOIN" => Inner
         case "TOK_RIGHTOUTERJOIN" => RightOuter

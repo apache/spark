@@ -19,9 +19,10 @@ package org.apache.spark.sql
 package hive
 package execution
 
-import scala.collection.JavaConversions._
-
 import org.apache.spark.sql.hive.TestHive
+
+/* Implicit conversions */
+import scala.collection.JavaConversions._
 
 /**
  * A set of test cases that validate partition and column pruning.

@@ -18,15 +18,16 @@
 package org.apache.spark.sql
 package catalyst
 
-import trees._
+import org.apache.spark.sql.catalyst.trees.TreeNode
 
 /**
  * Functions for attaching and retrieving trees that are associated with errors.
  */
 package object errors {
 
-  class TreeNodeException[TreeType <: TreeNode[_]]
-    (tree: TreeType, msg: String, cause: Throwable) extends Exception(msg, cause) {
+  class TreeNodeException[TreeType <: TreeNode[_]](
+      tree: TreeType, msg: String, cause: Throwable)
+    extends Exception(msg, cause) {
 
     // Yes, this is the same as a default parameter, but... those don't seem to work with SBT
     // external project dependencies for some reason.

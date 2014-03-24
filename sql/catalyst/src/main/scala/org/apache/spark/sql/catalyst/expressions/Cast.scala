@@ -19,7 +19,7 @@ package org.apache.spark.sql
 package catalyst
 package expressions
 
-import types._
+import org.apache.spark.sql.catalyst.types._
 
 /** Cast the child expression to the target data type. */
 case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
@@ -40,7 +40,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     case (StringType, ShortType) => a: Any => castOrNull(a, _.toShort)
     case (StringType, ByteType) => a: Any => castOrNull(a, _.toByte)
     case (StringType, DecimalType) => a: Any => castOrNull(a, BigDecimal(_))
-    case (BooleanType, ByteType) => a: Any => a match {
+    case (BooleanType, ByteType) => {
       case null => null
       case true => 1.toByte
       case false => 0.toByte

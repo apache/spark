@@ -20,7 +20,7 @@ package catalyst
 package plans
 package logical
 
-import expressions._
+import org.apache.spark.sql.catalyst.expressions._
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)

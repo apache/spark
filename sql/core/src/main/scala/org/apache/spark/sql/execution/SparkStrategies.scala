@@ -20,13 +20,13 @@ package execution
 
 import org.apache.spark.SparkContext
 
-import catalyst.expressions._
-import catalyst.planning._
-import catalyst.plans._
-import catalyst.plans.logical.LogicalPlan
-import catalyst.plans.physical._
-import parquet.ParquetRelation
-import parquet.InsertIntoParquetTable
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.planning._
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.parquet.InsertIntoParquetTable
 
 abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
@@ -172,7 +172,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
-    // TOOD: Set
+    // TODO: Set
     val numPartitions = 200
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Distinct(child) =>

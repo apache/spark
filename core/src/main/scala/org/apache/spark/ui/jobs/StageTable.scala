@@ -63,7 +63,7 @@ private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
     val startWidth = "width: %s%%".format((started.toDouble/total)*100)
 
     <div class="progress">
-      <span style="text-align:center; position:absolute; width:100%;">
+      <span style="text-align:center; position:absolute; width:100%; left:0;">
         {completed}/{total} {failed}
       </span>
       <div class="bar bar-completed" style={completeWidth}></div>

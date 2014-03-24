@@ -15,27 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package analysis
+package org.apache.spark.mllib.linalg;
 
-import org.scalatest.FunSuite
+import java.io.Serializable;
 
-import analysis._
-import expressions._
-import plans.logical._
-import types._
+import com.google.common.collect.Lists;
 
-import dsl._
-import dsl.expressions._
+import scala.Tuple2;
 
-class AnalysisSuite extends FunSuite {
-  val analyze = SimpleAnalyzer
+import org.junit.Test;
+import static org.junit.Assert.*;
 
-  val testRelation = LocalRelation('a.int)
+public class JavaVectorsSuite implements Serializable {
 
-  test("analyze project") {
-    assert(analyze(Project(Seq(UnresolvedAttribute("a")), testRelation)) === Project(testRelation.output, testRelation))
+  @Test
+  public void denseArrayConstruction() {
+    Vector v = Vectors.dense(1.0, 2.0, 3.0);
+    assertArrayEquals(new double[]{1.0, 2.0, 3.0}, v.toArray(), 0.0);
+  }
 
+  @Test
+  public void sparseArrayConstruction() {
+    Vector v = Vectors.sparse(3, Lists.newArrayList(
+        new Tuple2<Integer, Double>(0, 2.0),
+        new Tuple2<Integer, Double>(2, 3.0)));
+    assertArrayEquals(new double[]{2.0, 0.0, 3.0}, v.toArray(), 0.0);
   }
 }

@@ -19,7 +19,7 @@ package org.apache.spark.sql
 package catalyst
 package analysis
 
-import expressions._
+import org.apache.spark.sql.catalyst.expressions.Expression
 
 /** A catalog for looking up user defined functions, used by an [[Analyzer]]. */
 trait FunctionRegistry {

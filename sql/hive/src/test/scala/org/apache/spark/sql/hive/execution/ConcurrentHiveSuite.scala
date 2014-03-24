@@ -20,7 +20,6 @@ package sql
 package hive
 package execution
 
-
 import org.scalatest.{FunSuite, BeforeAndAfterAll}
 
 class ConcurrentHiveSuite extends FunSuite with BeforeAndAfterAll {

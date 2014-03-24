@@ -27,12 +27,12 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.Deserializer
 
-import catalyst.analysis.Catalog
-import catalyst.expressions._
-import catalyst.plans.logical
-import catalyst.plans.logical._
-import catalyst.rules._
-import catalyst.types._
+import org.apache.spark.sql.catalyst.analysis.Catalog
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.types._
 
 import scala.collection.JavaConversions._
 
@@ -45,7 +45,7 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
       db: Option[String],
       tableName: String,
       alias: Option[String]): LogicalPlan = {
-    val databaseName = db.getOrElse(hive.sessionState.getCurrentDatabase())
+    val databaseName = db.getOrElse(hive.sessionState.getCurrentDatabase)
     val table = client.getTable(databaseName, tableName)
     val partitions: Seq[Partition] =
       if (table.isPartitioned) {
@@ -91,7 +91,7 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
   object CreateTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case InsertIntoCreatedTable(db, tableName, child) =>
-        val databaseName = db.getOrElse(SessionState.get.getCurrentDatabase())
+        val databaseName = db.getOrElse(SessionState.get.getCurrentDatabase)
 
         createTable(databaseName, tableName, child.output)
 
@@ -123,8 +123,8 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
         } else {
           // Only do the casting when child output data types differ from table output data types.
           val castedChildOutput = child.output.zip(table.output).map {
-            case (input, table) if input.dataType != table.dataType =>
-              Alias(Cast(input, table.dataType), input.name)()
+            case (input, output) if input.dataType != output.dataType =>
+              Alias(Cast(input, output.dataType), input.name)()
             case (input, _) => input
           }
 
@@ -135,7 +135,7 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
 
   /**
    * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
-   * For now, if this functionallity is desired mix in the in-memory [[OverrideCatalog]].
+   * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
    */
   override def registerTable(
       databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit = ???

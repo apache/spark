@@ -17,21 +17,18 @@
 
 package org.apache.spark.sql.catalyst
 
-import scala.util.matching.Regex
-import scala.util.parsing.combinator._
+import scala.util.parsing.combinator.lexical.StdLexical
+import scala.util.parsing.combinator.syntactical.StandardTokenParsers
 import scala.util.parsing.input.CharArrayReader.EofCh
-import lexical._
-import syntactical._
-import token._
 
-import analysis._
-import expressions._
-import plans._
-import plans.logical._
-import types._
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.types._
 
 /**
- * A very simple SQL parser.  Based loosly on:
+ * A very simple SQL parser.  Based loosely on:
  * https://github.com/stephentu/scala-sql-parser/blob/master/src/main/scala/parser.scala
  *
  * Limitations:
@@ -39,10 +36,9 @@ import types._
  *  - Keywords must be capital.
  *
  * This is currently included mostly for illustrative purposes.  Users wanting more complete support
- * for a SQL like language should checkout the HiveQL support in the sql/hive subproject.
+ * for a SQL like language should checkout the HiveQL support in the sql/hive sub-project.
  */
 class SqlParser extends StandardTokenParsers {
-
   def apply(input: String): LogicalPlan = {
     phrase(query)(new lexical.Scanner(input)) match {
       case Success(r, x) => r
@@ -196,7 +192,7 @@ class SqlParser extends StandardTokenParsers {
 
   protected lazy val from: Parser[LogicalPlan] = FROM ~> relations
 
-  // Based very loosly on the MySQL Grammar.
+  // Based very loosely on the MySQL Grammar.
   // http://dev.mysql.com/doc/refman/5.0/en/join.html
   protected lazy val relations: Parser[LogicalPlan] =
     relation ~ "," ~ relation ^^ { case r1 ~ _ ~ r2 => Join(r1, r2, Inner, None) } |
@@ -261,9 +257,9 @@ class SqlParser extends StandardTokenParsers {
     andExpression * (OR ^^^ { (e1: Expression, e2: Expression) => Or(e1,e2) })
 
   protected lazy val andExpression: Parser[Expression] =
-    comparisionExpression * (AND ^^^ { (e1: Expression, e2: Expression) => And(e1,e2) })
+    comparisonExpression * (AND ^^^ { (e1: Expression, e2: Expression) => And(e1,e2) })
 
-  protected lazy val comparisionExpression: Parser[Expression] =
+  protected lazy val comparisonExpression: Parser[Expression] =
     termExpression ~ "=" ~ termExpression ^^ { case e1 ~ _ ~ e2 => Equals(e1, e2) } |
     termExpression ~ "<" ~ termExpression ^^ { case e1 ~ _ ~ e2 => LessThan(e1, e2) } |
     termExpression ~ "<=" ~ termExpression ^^ { case e1 ~ _ ~ e2 => LessThanOrEqual(e1, e2) } |

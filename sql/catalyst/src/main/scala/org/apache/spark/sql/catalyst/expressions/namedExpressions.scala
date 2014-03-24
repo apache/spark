@@ -19,8 +19,8 @@ package org.apache.spark.sql
 package catalyst
 package expressions
 
-import catalyst.analysis.UnresolvedAttribute
-import types._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.types._
 
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
@@ -30,7 +30,7 @@ object NamedExpression {
 /**
  * A globally (within this JVM) id for a given named expression.
  * Used to identify with attribute output by a relation is being
- * referenced in a subsuqent computation.
+ * referenced in a subsequent computation.
  */
 case class ExprId(id: Long)
 

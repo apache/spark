@@ -19,7 +19,7 @@ package org.apache.spark.sql
 package catalyst
 package expressions
 
-import types.DoubleType
+import org.apache.spark.sql.catalyst.types.DoubleType
 
 case object Rand extends LeafExpression {
   def dataType = DoubleType
