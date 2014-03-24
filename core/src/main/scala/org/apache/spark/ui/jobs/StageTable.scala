@@ -129,4 +129,3 @@ private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
     </tr>
   }
 }
-
