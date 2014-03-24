@@ -28,7 +28,7 @@
   <artifactId>spark-tools_2.10</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Tools</name>
-  <url>http://spark.incubator.apache.org/</url>
+  <url>http://spark.apache.org/</url>
 
   <dependencies>
     <dependency>
