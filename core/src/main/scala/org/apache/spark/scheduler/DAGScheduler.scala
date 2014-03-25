@@ -33,7 +33,6 @@ import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
-import scala.collection.mutable
 
 
 /**
@@ -118,7 +117,8 @@ class DAGScheduler(
   private val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.DAG_SCHEDULER, this.cleanup, env.conf)
 
-  val stageIdToAccumulators = new HashMap[Int, ListBuffer[(Long, Any)]]
+  // stageId -> (splitId -> (acumulatorId, accumulatorValue))
+  val stageIdToAccumulators = new HashMap[Int, HashMap[Int, ListBuffer[(Long, Any)]]]
 
   taskScheduler.setDAGScheduler(this)
 
@@ -411,7 +411,7 @@ class DAGScheduler(
   private def jobIdToStageIdsRemove(jobId: Int): Set[Int] = {
     if (!jobIdToStageIds.contains(jobId)) {
       logWarning("Trying to remove unregistered job " + jobId)
-      return null
+      return Set[Int]()
     } else {
       val removedStages = removeJobAndIndependentStages(jobId)
       jobIdToStageIds -= jobId
@@ -818,11 +818,14 @@ class DAGScheduler(
     event.reason match {
       case Success =>
         logInfo("Completed " + task)
-        if (!stageIdToAccumulators.contains(stage.id) ||
-          stageIdToAccumulators(stage.id).size < stage.numPartitions) {
-          stageIdToAccumulators.getOrElseUpdate(stage.id, new ListBuffer[(Long, Any)])
+        if (event.accumUpdates != null &&
+          (!stageIdToAccumulators.contains(stage.id) ||
+            !stageIdToAccumulators(stage.id).contains(task.partitionId))) {
+          stageIdToAccumulators.getOrElseUpdate(stage.id,
+            new HashMap[Int, ListBuffer[(Long, Any)]]).
+            getOrElseUpdate(task.partitionId, new ListBuffer[(Long, Any)])
           for ((id, value) <- event.accumUpdates) {
-            stageIdToAccumulators(stage.id) += id -> value
+            stageIdToAccumulators(stage.id)(task.partitionId) += id -> value
           }
         }
         pendingTasks(stage) -= task
@@ -839,12 +842,12 @@ class DAGScheduler(
                     activeJobs -= job
                     resultStageToJob -= stage
                     markStageAsFinished(stage)
-                    jobIdToStageIdsRemove(job.jobId).foreach(stageId =>  {
-                      //accumulator operations
-                      for (accumValues <- stageIdToAccumulators(stageId)) {
-                        Accumulators.add(accumValues._1, accumValues._2)
+                    jobIdToStageIdsRemove(job.jobId).foreach(sid => {
+                      for (partitionIdToAccum <- stageIdToAccumulators(sid);
+                           accum <- partitionIdToAccum._2) {
+                        Accumulators.add(accum)
                       }
-                      stageIdToAccumulators -= stageId
+                      stageIdToAccumulators -= sid
                     })
                     listenerBus.post(SparkListenerJobEnd(job.jobId, JobSucceeded))
                   }
