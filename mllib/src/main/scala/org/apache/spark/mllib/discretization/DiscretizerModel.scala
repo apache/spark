@@ -19,6 +19,9 @@ package org.apache.spark.mllib.discretization
 
 import org.apache.spark.rdd.RDD
 
+/**
+ * DiscretizerModel provides a template with the basic methods for future discretizers.
+ */
 trait DiscretizerModel extends Serializable {
   /**
    * Return the thresholds used to discretized the given feature
