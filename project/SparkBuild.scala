@@ -259,8 +259,7 @@ object SparkBuild extends Build {
         "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
         "com.novocode"      % "junit-interface" % "0.10"   % "test",
         "org.easymock"      % "easymock"        % "3.1"    % "test",
-        "org.mockito"       % "mockito-all"     % "1.8.5"  % "test",
-        "commons-io"        % "commons-io"      % "2.4"    % "test"
+        "org.mockito"       % "mockito-all"     % "1.8.5"  % "test"
     ),
 
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
@@ -439,10 +438,7 @@ object SparkBuild extends Build {
 
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",
-    previousArtifact := sparkPreviousArtifact("spark-streaming"),
-    libraryDependencies ++= Seq(
-      "commons-io" % "commons-io" % "2.4"
-    )
+    previousArtifact := sparkPreviousArtifact("spark-streaming")
   )
 
   def yarnCommonSettings = sharedSettings ++ Seq(
