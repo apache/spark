@@ -158,7 +158,7 @@ abstract class RDD[T: ClassTag](
    */
   def unpersist(blocking: Boolean = true): RDD[T] = {
     logInfo("Removing RDD " + id + " from persistence list")
-    sc.unpersistRDD(this, blocking)
+    sc.unpersistRDD(this.id, blocking)
     storageLevel = StorageLevel.NONE
     this
   }

@@ -98,13 +98,6 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     listeners += listener
   }
 
-  /** Unpersists RDD and remove all blocks for it from memory and disk. */
-  def unpersistRDD(rddId: Int, blocking: Boolean) {
-    logDebug("Unpersisted RDD " + rddId)
-    sc.env.blockManager.master.removeRdd(rddId, blocking)
-    sc.persistentRdds.remove(rddId)
-  }
-
   /** Register an object for cleanup. */
   private def registerForCleanup(objectForCleanup: AnyRef, task: CleanupTask) {
     referenceBuffer += new WeakReferenceWithCleanupTask(objectForCleanup, task)
@@ -136,7 +129,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   private def doCleanupRDD(rddId: Int) {
     try {
       logDebug("Cleaning RDD " + rddId)
-      unpersistRDD(rddId, false)
+      sc.unpersistRDD(rddId, false)
       listeners.foreach(_.rddCleaned(rddId))
       logInfo("Cleaned RDD " + rddId)
     } catch {
