@@ -877,7 +877,8 @@ class SparkContext(
    * has overridden the call site, this will return the user's version.
    */
   private[spark] def getCallSite(): String = {
-    Option(getLocalProperty("externalCallSite")).getOrElse(Utils.formatCallSiteInfo())
+    val defaultCallSite = Utils.getCallSiteInfo
+    Option(getLocalProperty("externalCallSite")).getOrElse(defaultCallSite.toString)
   }
 
   /**
