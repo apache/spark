@@ -529,7 +529,10 @@ private[spark] object Utils extends Logging {
       }
     }
     if (!file.delete()) {
-      throw new IOException("Failed to delete: " + file)
+      // Delete can also fail if the file simply did not exist
+      if (file.exists()) {
+        throw new IOException("Failed to delete: " + file.getAbsolutePath)
+      }
     }
   }
 
