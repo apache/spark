@@ -150,7 +150,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
   private def removeShuffle(shuffleId: Int) {
     // Nothing to do in the BlockManagerMasterActor data structures
     val removeMsg = RemoveShuffle(shuffleId)
-    blockManagerInfo.values.map { bm =>
+    blockManagerInfo.values.foreach { bm =>
       bm.slaveActor ! removeMsg
     }
   }

@@ -39,9 +39,9 @@ private[util] case class TimeStampedValue[T](timestamp: Long, value: T)
 private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = false)
   extends WrappedJavaHashMap[A, B, A, TimeStampedValue[B]] with Logging {
 
-  protected[util] val internalJavaMap = new ConcurrentHashMap[A, TimeStampedValue[B]]()
+  private[util] val internalJavaMap = new ConcurrentHashMap[A, TimeStampedValue[B]]()
 
-  protected[util] def newInstance[K1, V1](): WrappedJavaHashMap[K1, V1, _, _] = {
+  private[util] def newInstance[K1, V1](): WrappedJavaHashMap[K1, V1, _, _] = {
     new TimeStampedHashMap[K1, V1]()
   }
 

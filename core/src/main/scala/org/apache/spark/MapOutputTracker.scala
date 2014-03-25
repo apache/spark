@@ -70,7 +70,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * their cache of map output locations if this happens.
    */
   protected var epoch: Long = 0
-  protected val epochLock = new java.lang.Object
+  protected val epochLock = new AnyRef
 
   /** Remembers which map output locations are currently being fetched on a worker */
   private val fetching = new HashSet[Int]
@@ -305,7 +305,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     cachedSerializedStatuses.clear()
   }
 
-  protected def cleanup(cleanupTime: Long) {
+  private def cleanup(cleanupTime: Long) {
     mapStatuses.clearOldValues(cleanupTime)
     cachedSerializedStatuses.clearOldValues(cleanupTime)
   }

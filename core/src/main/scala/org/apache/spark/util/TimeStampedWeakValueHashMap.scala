@@ -51,11 +51,11 @@ private[spark] class TimeStampedWeakValueHashMap[A, B]()
   /** Counter for counting the number of inserts */
   private val insertCounts = new AtomicInteger(0)
 
-  protected[util] val internalJavaMap: util.Map[A, TimeStampedWeakValue[B]] = {
+  private[util] val internalJavaMap: util.Map[A, TimeStampedWeakValue[B]] = {
     new ConcurrentHashMap[A, TimeStampedWeakValue[B]]()
   }
 
-  protected[util] def newInstance[K1, V1](): WrappedJavaHashMap[K1, V1, _, _] = {
+  private[util] def newInstance[K1, V1](): WrappedJavaHashMap[K1, V1, _, _] = {
     new TimeStampedWeakValueHashMap[K1, V1]()
   }
 
@@ -68,15 +68,12 @@ private[spark] class TimeStampedWeakValueHashMap[A, B]()
   }
 
   override def get(key: A): Option[B] = {
-    Option(internalJavaMap.get(key)) match {
-      case Some(weakValue) =>
-        val value = weakValue.weakValue.get
-        if (value == null) {
-          internalJavaMap.remove(key)
-        }
-        Option(value)
-      case None =>
-        None
+    Option(internalJavaMap.get(key)).flatMap { weakValue =>
+      val value = weakValue.weakValue.get
+      if (value == null) {
+        internalJavaMap.remove(key)
+      }
+      Option(value)
     }
   }
 

@@ -17,11 +17,11 @@
 
 package org.apache.spark.util
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
-import scala.util.Random
-
 import java.util
 import java.lang.ref.WeakReference
+
+import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+import scala.util.Random
 
 import org.scalatest.FunSuite
 
@@ -203,9 +203,9 @@ class WrappedJavaHashMapSuite extends FunSuite {
 }
 
 class TestMap[A, B] extends WrappedJavaHashMap[A, B, A, B] {
-  protected[util] val internalJavaMap: util.Map[A, B] = new util.HashMap[A, B]()
+  private[util] val internalJavaMap: util.Map[A, B] = new util.HashMap[A, B]()
 
-  protected[util] def newInstance[K1, V1](): WrappedJavaHashMap[K1, V1, _, _] = {
+  private[util] def newInstance[K1, V1](): WrappedJavaHashMap[K1, V1, _, _] = {
     new TestMap[K1, V1]
   }
 }

@@ -45,14 +45,14 @@ import scala.reflect.ClassTag
 private[spark] class BoundedHashMap[A, B](bound: Int, useLRU: Boolean)
   extends WrappedJavaHashMap[A, B, A, B] with SynchronizedMap[A, B] {
 
-  protected[util] val internalJavaMap = Collections.synchronizedMap(new LinkedHashMap[A, B](
+  private[util] val internalJavaMap = Collections.synchronizedMap(new LinkedHashMap[A, B](
     bound / 8, (0.75).toFloat, useLRU) {
     override protected def removeEldestEntry(eldest: JMapEntry[A, B]): Boolean = {
       size() > bound
     }
   })
 
-  protected[util] def newInstance[K1, V1](): WrappedJavaHashMap[K1, V1, _, _] = {
+  private[util] def newInstance[K1, V1](): WrappedJavaHashMap[K1, V1, _, _] = {
     new BoundedHashMap[K1, V1](bound, useLRU)
   }
 

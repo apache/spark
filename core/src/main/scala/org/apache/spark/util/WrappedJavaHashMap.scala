@@ -46,11 +46,15 @@ private[spark] abstract class WrappedJavaHashMap[K, V, IK, IV] extends Map[K, V]
 
   /* Methods that must be defined. */
 
-  /** Internal Java HashMap that is being wrapped. */
-  protected[util] val internalJavaMap: JMap[IK, IV]
+  /**
+   * Internal Java HashMap that is being wrapped.
+   * Scoped private[util] so that rest of Spark code cannot
+   * directly access the internal map.
+   */
+  private[util] val internalJavaMap: JMap[IK, IV]
 
   /** Method to get a new instance of the internal Java HashMap. */
-  protected[util] def newInstance[K1, V1](): WrappedJavaHashMap[K1, V1, _, _]
+  private[util] def newInstance[K1, V1](): WrappedJavaHashMap[K1, V1, _, _]
 
   /*
     Methods that convert between internal and external types. These implementations
