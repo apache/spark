@@ -17,10 +17,8 @@
 
 package org.apache.spark.mllib.util
 
-import org.apache.hadoop.io.Text
 import org.jblas.DoubleMatrix
 
-import org.apache.spark.mllib.input.WholeTextFileInputFormat
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
@@ -121,18 +119,5 @@ object MLUtils {
       i += 1
     }
     sum
-  }
-
-  /**
-   * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
-   * Hadoop-supported file system URI, and return it as an RDD of (filename, content) both in String
-   * format.
-   */
-  def wholeTextFile(sc: SparkContext, path: String): RDD[(String, String)] = {
-    sc.newAPIHadoopFile(
-      path,
-      classOf[WholeTextFileInputFormat],
-      classOf[String],
-      classOf[Text]).mapValues(_.toString)
   }
 }

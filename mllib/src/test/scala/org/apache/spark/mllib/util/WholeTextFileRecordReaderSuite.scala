@@ -30,8 +30,8 @@ import org.scalatest.FunSuite
 
 import org.apache.hadoop.io.Text
 
-import org.apache.spark.mllib.util.MLUtils._
 import org.apache.spark.SparkContext
+import org.apache.spark.mllib.MLContext._
 
 /**
  * Tests the correctness of [[org.apache.spark.mllib.input.WholeTextFileRecordReader]]. A temporary
@@ -70,7 +70,7 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
       createNativeFile(dir, filename, contents)
     }
 
-    val res = wholeTextFile(sc, dir.toString).collect()
+    val res = sc.wholeTextFile(dir.toString).collect()
 
     assert(res.size === WholeTextFileRecordReaderSuite.fileNames.size,
       "Number of files read out does not fit with the actual value.")
