@@ -174,6 +174,9 @@ object SparkBuild extends Build {
     resolvers ++= Seq("sonatype-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
       "sonatype-staging" at "https://oss.sonatype.org/service/local/staging/deploy/maven2/"),
 
+    // For Cloudera Hadoop distribution
+    resolvers ++= Seq("cloudera" at "https://repository.cloudera.com/artifactory/cloudera-repos/"),
+
     publishMavenStyle := true,
 
     //useGpg in Global := true,
