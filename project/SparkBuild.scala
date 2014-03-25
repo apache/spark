@@ -322,7 +322,7 @@ object SparkBuild extends Build {
         "com.codahale.metrics"       % "metrics-graphite" % "3.0.0",
         "com.twitter"               %% "chill"            % "0.3.1" excludeAll(excludeAsm),
         "com.twitter"                % "chill-java"       % "0.3.1" excludeAll(excludeAsm),
-        "org.tachyonproject"         % "tachyon"          % "0.4.1" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
+        "org.tachyonproject"         % "tachyon"          % "0.4.1-thrift" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
         "com.clearspring.analytics"  % "stream"           % "2.5.1"
       ),
     libraryDependencies ++= maybeAvro
