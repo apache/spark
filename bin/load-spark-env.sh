@@ -17,22 +17,19 @@
 # limitations under the License.
 #
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+# This script loads spark-env.sh if it exists, and ensures it is only loaded once.
+# spark-env.sh is loaded from SPARK_CONF_DIR if set, or within the current directory's
+# conf/ subdirectory.
 
-. "$sbin/spark-config.sh"
+if [ -z "$SPARK_ENV_LOADED" ]; then
+  export SPARK_ENV_LOADED=1
 
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
+  # Returns the parent of the directory this script lives in.
+  parent_dir="$(cd `dirname $0`/..; pwd)"
 
-# do before the below calls as they exec
-if [ -e "$sbin"/../tachyon/bin/tachyon ]; then
-  "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/../tachyon/bin/tachyon killAll tachyon.worker.Worker
-fi
+  use_conf_dir=${SPARK_CONF_DIR:-"$parent_dir/conf"}
 
-if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
-  "$sbin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker 1
-else
-  for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
-    "$sbin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
-  done
+  if [ -f "${use_conf_dir}/spark-env.sh" ]; then
+    . "${use_conf_dir}/spark-env.sh"
+  fi
 fi

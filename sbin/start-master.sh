@@ -39,9 +39,7 @@ done
 
 . "$sbin/spark-config.sh"
 
-if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
-  . "${SPARK_CONF_DIR}/spark-env.sh"
-fi
+. "$SPARK_PREFIX/bin/load-spark-env.sh"
 
 if [ "$SPARK_MASTER_PORT" = "" ]; then
   SPARK_MASTER_PORT=7077

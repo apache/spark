@@ -86,9 +86,7 @@ spark_rotate_log ()
     fi
 }
 
-if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
-  . "${SPARK_CONF_DIR}/spark-env.sh"
-fi
+. "$SPARK_PREFIX/bin/load-spark-env.sh"
 
 if [ "$SPARK_IDENT_STRING" = "" ]; then
   export SPARK_IDENT_STRING="$USER"

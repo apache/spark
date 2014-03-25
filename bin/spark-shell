@@ -81,9 +81,7 @@ done
 # Set MASTER from spark-env if possible
 DEFAULT_SPARK_MASTER_PORT=7077
 if [ -z "$MASTER" ]; then
-  if [ -e "$FWDIR/conf/spark-env.sh" ]; then
-    . "$FWDIR/conf/spark-env.sh"
-  fi
+  . $FWDIR/bin/load-spark-env.sh
   if [ "x" != "x$SPARK_MASTER_IP" ]; then
     if [ "y" != "y$SPARK_MASTER_PORT" ]; then
       SPARK_MASTER_PORT="${SPARK_MASTER_PORT}"
