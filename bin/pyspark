@@ -60,7 +60,7 @@ fi
 
 # Only use ipython if no command line arguments were provided [SPARK-1134]
 if [[ "$IPYTHON" = "1" && $# = 0 ]] ; then
-  exec ipython $IPYTHON_OPTS
+  exec ipython 
 else
   exec "$PYSPARK_PYTHON" "$@"
 fi
