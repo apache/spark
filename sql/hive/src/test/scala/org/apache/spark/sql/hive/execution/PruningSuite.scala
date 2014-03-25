@@ -33,7 +33,7 @@ class PruningSuite extends HiveComparisonTest {
   createPruningTest("Column pruning: with partitioned table",
     "SELECT key FROM srcpart WHERE ds = '2008-04-08' LIMIT 3",
     Seq("key"),
-    Seq("key", "ds"),
+    Seq("key"),
     Seq(
       Seq("2008-04-08", "11"),
       Seq("2008-04-08", "12")))
@@ -97,7 +97,7 @@ class PruningSuite extends HiveComparisonTest {
   createPruningTest("Partition pruning: with filter on string partition key",
     "SELECT value, hr FROM srcpart1 WHERE ds = '2008-04-08'",
     Seq("value", "hr"),
-    Seq("value", "hr", "ds"),
+    Seq("value", "hr"),
     Seq(
       Seq("2008-04-08", "11"),
       Seq("2008-04-08", "12")))
@@ -113,14 +113,14 @@ class PruningSuite extends HiveComparisonTest {
   createPruningTest("Partition pruning: left only 1 partition",
     "SELECT value, hr FROM srcpart1 WHERE ds = '2008-04-08' AND hr < 12",
     Seq("value", "hr"),
-    Seq("value", "hr", "ds"),
+    Seq("value", "hr"),
     Seq(
       Seq("2008-04-08", "11")))
 
   createPruningTest("Partition pruning: all partitions pruned",
     "SELECT value, hr FROM srcpart1 WHERE ds = '2014-01-27' AND hr = 11",
     Seq("value", "hr"),
-    Seq("value", "hr", "ds"),
+    Seq("value", "hr"),
     Seq.empty)
 
   createPruningTest("Partition pruning: pruning with both column key and partition key",
@@ -147,8 +147,8 @@ class PruningSuite extends HiveComparisonTest {
           (columnNames, partValues)
       }.head
 
-      assert(actualOutputColumns sameElements expectedOutputColumns, "Output columns mismatch")
-      assert(actualScannedColumns sameElements expectedScannedColumns, "Scanned columns mismatch")
+      assert(actualOutputColumns === expectedOutputColumns, "Output columns mismatch")
+      assert(actualScannedColumns === expectedScannedColumns, "Scanned columns mismatch")
 
       assert(
         actualPartValues.length === expectedPartValues.length,

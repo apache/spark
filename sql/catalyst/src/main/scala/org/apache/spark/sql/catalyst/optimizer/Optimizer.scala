@@ -30,6 +30,7 @@ object Optimizer extends RuleExecutor[LogicalPlan] {
     Batch("ConstantFolding", Once,
       ConstantFolding,
       BooleanSimplification,
+      SimplifyFilters,
       SimplifyCasts) ::
     Batch("Filter Pushdown", Once,
       CombineFilters,
@@ -87,6 +88,22 @@ object BooleanSimplification extends Rule[LogicalPlan] {
 object CombineFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ff @ Filter(fc, nf @ Filter(nc, grandChild)) => Filter(And(nc, fc), grandChild)
+  }
+}
+
+/**
+ * Removes filters that can be evaluated trivially.  This is done either by eliding the filter for
+ * cases where it will always evaluate to `true`, or substituting a dummy empty relation when the
+ * filter will always evaluate to `false`.
+ */
+object SimplifyFilters extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Filter(Literal(true, BooleanType), child) =>
+      child
+    case Filter(Literal(null, _), child) =>
+      LocalRelation(child.output)
+    case Filter(Literal(false, BooleanType), child) =>
+      LocalRelation(child.output)
   }
 }
 
