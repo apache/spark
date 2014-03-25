@@ -34,7 +34,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
 
-
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
  * stages for each job, keeps track of which RDDs and stage outputs are materialized, and finds a
@@ -842,13 +841,8 @@ class DAGScheduler(
                     activeJobs -= job
                     resultStageToJob -= stage
                     markStageAsFinished(stage)
-                    jobIdToStageIdsRemove(job.jobId).foreach(sid => {
-                      for (partitionIdToAccum <- stageIdToAccumulators(sid);
-                           accum <- partitionIdToAccum._2) {
-                        Accumulators.add(accum)
-                      }
-                      stageIdToAccumulators -= sid
-                    })
+                    val stagesToRemove = jobIdToStageIdsRemove(job.jobId)
+                    cleanup(stagesToRemove.asInstanceOf[Set[Any]])
                     listenerBus.post(SparkListenerJobEnd(job.jobId, JobSucceeded))
                   }
                   job.listener.taskSucceeded(rt.outputId, event.result)
@@ -1118,6 +1112,16 @@ class DAGScheduler(
         t.clearOldValues(cleanupTime)
         logInfo("%s %d --> %d".format(s, sizeBefore, t.size))
       }
+  }
+
+  private def cleanup(keys: Set[Any]) {
+    keys.asInstanceOf[Set[Int]].foreach(sid => {
+      for (partitionIdToAccum <- stageIdToAccumulators(sid);
+           accum <- partitionIdToAccum._2) {
+        Accumulators.add(accum)
+      }
+      stageIdToAccumulators -= sid
+    })
   }
 
   def stop() {

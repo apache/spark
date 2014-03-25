@@ -46,7 +46,6 @@ class Accumulable[R, T] (
 
   val id = Accumulators.newId
   @transient private var value_ = initialValue // Current value on master
-
   val zero = param.zero(initialValue)  // Zero value to be passed to workers
   private var deserialized = false
 
