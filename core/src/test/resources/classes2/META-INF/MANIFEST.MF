@@ -1,9 +1,0 @@
-Manifest-Version: 1.0
-Implementation-Vendor: fake-spark-class
-Implementation-Title: fake spark class
-Implementation-Version: 0.0.1
-Implementation-Vendor-Id: fake-spark-class
-Specification-Vendor: fake-spark-class
-Specification-Title: fake spark class
-Specification-Version: 0.0.1
-
