@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 import java.util.{TimerTask, Timer}
+import java.util.concurrent.{LinkedBlockingDeque, TimeUnit, ThreadPoolExecutor}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.concurrent.duration._
@@ -30,6 +31,7 @@ import scala.util.Random
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -93,6 +95,7 @@ private[spark] class TaskSchedulerImpl(
   val mapOutputTracker = SparkEnv.get.mapOutputTracker
 
   var schedulableBuilder: SchedulableBuilder = null
+
   var rootPool: Pool = null
   // default scheduler is FIFO
   val schedulingMode: SchedulingMode = SchedulingMode.withName(
@@ -198,6 +201,13 @@ private[spark] class TaskSchedulerImpl(
    */
   def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
     SparkEnv.set(sc.env)
+    // Make thread pool local for shutdown before the function returns
+    // This is for driver can exit normally which not call sc.stop or sys.exit
+    val serializeWorkerPool = new ThreadPoolExecutor(
+      conf.getInt("spark.scheduler.task.serialize.threads.min", 20),
+      conf.getInt("spark.scheduler.task.serialize.threads.max", 60),
+      conf.getInt("spark.scheduler.task.serialize.threads.keepalive", 60), TimeUnit.SECONDS,
+      new LinkedBlockingDeque[Runnable]())
 
     // Mark each slave as alive and remember its hostname
     for (o <- offers) {
@@ -219,18 +229,40 @@ private[spark] class TaskSchedulerImpl(
         taskSet.parent.name, taskSet.name, taskSet.runningTasks))
     }
 
+    val ser = SparkEnv.get.closureSerializer.newInstance()
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     var launchedTask = false
+    val serializingTaskNum = new AtomicLong(0)
     for (taskSet <- sortedTaskSets; maxLocality <- TaskLocality.values) {
       do {
         launchedTask = false
         for (i <- 0 until shuffledOffers.size) {
           val execId = shuffledOffers(i).executorId
           val host = shuffledOffers(i).host
-          for (task <- taskSet.resourceOffer(execId, host, availableCpus(i), maxLocality)) {
-            tasks(i) += task
-            val tid = task.taskId
+          for (taskDesc <- taskSet.resourceOffer(execId, host, availableCpus(i), maxLocality)) {
+            serializingTaskNum.getAndIncrement()
+            serializeWorkerPool.execute(new Runnable {
+              override def run() {
+                // Serialize and return the task
+                val startTime = System.currentTimeMillis()
+                // We rely on the DAGScheduler to catch non-serializable closures and RDDs, so in here
+                // we assume the task can be serialized without exceptions.
+                val serializedTask = Task.serializeWithDependencies(
+                  taskDesc.taskObject, sc.addedFiles, sc.addedJars, ser)
+                val timeTaken = System.currentTimeMillis() - startTime
+                logInfo("Serialized task %s as %d bytes in %d ms".format(
+                  taskDesc.taskName, serializedTask.limit, timeTaken))
+                val task = new TaskDescription(taskDesc.taskId, taskDesc.executorId,
+                    taskDesc.taskName, taskDesc.index, serializedTask)
+                tasks.synchronized {
+                  tasks(i) += task
+                }
+                serializingTaskNum.getAndDecrement()
+              }
+            })
+
+            val tid = taskDesc.taskId
             taskIdToTaskSetId(tid) = taskSet.taskSet.id
             taskIdToExecutorId(tid) = execId
             activeExecutorIds += execId
@@ -243,8 +275,15 @@ private[spark] class TaskSchedulerImpl(
       } while (launchedTask)
     }
 
+    do {
+      Thread.sleep(1)
+    } while(serializingTaskNum.get() != 0)
+
     if (tasks.size > 0) {
       hasLaunchedTask = true
+    }
+    if (serializeWorkerPool != null) {
+      serializeWorkerPool.shutdown()
     }
     return tasks
   }

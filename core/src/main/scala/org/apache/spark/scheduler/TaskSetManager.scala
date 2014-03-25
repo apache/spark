@@ -32,6 +32,10 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.{Clock, SystemClock}
 
+private[spark]  class TaskDescWithoutSerializedTask(
+    val taskId: Long, val executorId: String, val taskName: String, val index: Int,
+    val taskObject: Task[_])
+
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
  * each task, retries tasks if they fail (up to a limited number of times), and
@@ -386,7 +390,7 @@ private[spark] class TaskSetManager(
       host: String,
       availableCpus: Int,
       maxLocality: TaskLocality.TaskLocality)
-    : Option[TaskDescription] =
+    : Option[TaskDescWithoutSerializedTask] =
   {
     if (!isZombie && availableCpus >= CPUS_PER_TASK) {
       val curTime = clock.getTime()
@@ -412,19 +416,12 @@ private[spark] class TaskSetManager(
           // Update our locality level for delay scheduling
           currentLocalityIndex = getLocalityIndex(taskLocality)
           lastLaunchTime = curTime
-          // Serialize and return the task
-          val startTime = clock.getTime()
-          // We rely on the DAGScheduler to catch non-serializable closures and RDDs, so in here
-          // we assume the task can be serialized without exceptions.
-          val serializedTask = Task.serializeWithDependencies(
-            task, sched.sc.addedFiles, sched.sc.addedJars, ser)
-          val timeTaken = clock.getTime() - startTime
+
           addRunningTask(taskId)
-          logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
-            taskSet.id, index, serializedTask.limit, timeTaken))
+
           val taskName = "task %s:%d".format(taskSet.id, index)
           sched.dagScheduler.taskStarted(task, info)
-          return Some(new TaskDescription(taskId, execId, taskName, index, serializedTask))
+          return Some(new TaskDescWithoutSerializedTask(taskId, execId, taskName, index, task))
         }
         case _ =>
       }

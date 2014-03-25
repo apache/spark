@@ -82,11 +82,11 @@ class FakeTaskSetManager(
       host: String,
       availableCpus: Int,
       maxLocality: TaskLocality.TaskLocality)
-    : Option[TaskDescription] =
+    : Option[TaskDescWithoutSerializedTask] =
   {
     if (tasksSuccessful + numRunningTasks < numTasks) {
       increaseRunningTasks(1)
-      Some(new TaskDescription(0, execId, "task 0:0", 0, null))
+      Some(new TaskDescWithoutSerializedTask(0, execId, "task 0:0", 0, null))
     } else {
       None
     }
