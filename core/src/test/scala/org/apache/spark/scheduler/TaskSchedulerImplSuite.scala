@@ -80,7 +80,6 @@ class FakeTaskSetManager(
   override def resourceOffer(
       execId: String,
       host: String,
-      availableCpus: Int,
       maxLocality: TaskLocality.TaskLocality)
     : Option[TaskDescription] =
   {
@@ -125,7 +124,7 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
          manager.parent.name, manager.parent.runningTasks, manager.name, manager.runningTasks))
     }
     for (taskSet <- taskSetQueue) {
-      taskSet.resourceOffer("execId_1", "hostname_1", 1, TaskLocality.ANY) match {
+      taskSet.resourceOffer("execId_1", "hostname_1", TaskLocality.ANY) match {
         case Some(task) =>
           return taskSet.stageId
         case None => {}
@@ -307,14 +306,20 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
       override def executorAdded(execId: String, host: String) {}
     }
 
+    // Give zero core offers. Should not generate any tasks
+    val zeroCoreWorkerOffers = Seq(new WorkerOffer("executor0", "host0", 0),
+      new WorkerOffer("executor1", "host1", 0))
+    val taskSet = FakeTask.createTaskSet(1)
+    taskScheduler.submitTasks(taskSet)
+    var taskDescriptions = taskScheduler.resourceOffers(zeroCoreWorkerOffers).flatten
+    assert(0 === taskDescriptions.length)
+
+    // No tasks should run as we only have 1 core free.
     val numFreeCores = 1
     val singleCoreWorkerOffers = Seq(new WorkerOffer("executor0", "host0", numFreeCores),
       new WorkerOffer("executor1", "host1", numFreeCores))
-
-    // No tasks should run as we only have 1 core free.
-    val taskSet = FakeTask.createTaskSet(1)
     taskScheduler.submitTasks(taskSet)
-    var taskDescriptions = taskScheduler.resourceOffers(singleCoreWorkerOffers).flatten
+    taskDescriptions = taskScheduler.resourceOffers(singleCoreWorkerOffers).flatten
     assert(0 === taskDescriptions.length)
 
     // Now change the offers to have 2 cores in one executor and verify if it

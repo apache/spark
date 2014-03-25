@@ -381,11 +381,10 @@ private[spark] class TaskSetManager(
   def resourceOffer(
       execId: String,
       host: String,
-      availableCpus: Int,
       maxLocality: TaskLocality.TaskLocality)
     : Option[TaskDescription] =
   {
-    if (!isZombie && availableCpus > 0) {
+    if (!isZombie) {
       val curTime = clock.getTime()
 
       var allowedLocality = getAllowedLocalityLevel(curTime)
