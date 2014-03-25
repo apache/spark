@@ -188,8 +188,8 @@ object SparkBuild extends Build {
       "MQTT Repository"      at "https://repo.eclipse.org/content/repositories/paho-releases/",
       "Cloudera Repository"  at "https://repository.cloudera.com/artifactory/cloudera-repos/",
       // For Sonatype publishing
-      "sonatype-snapshots"   at "https://oss.sonatype.org/content/repositories/snapshots",
-      "sonatype-staging"     at "https://oss.sonatype.org/service/local/staging/deploy/maven2/",
+      // "sonatype-snapshots"   at "https://oss.sonatype.org/content/repositories/snapshots",
+      // "sonatype-staging"     at "https://oss.sonatype.org/service/local/staging/deploy/maven2/",
       // also check the local Maven repository ~/.m2
       Resolver.mavenLocal
     ),
@@ -322,7 +322,7 @@ object SparkBuild extends Build {
         "com.codahale.metrics"       % "metrics-graphite" % "3.0.0",
         "com.twitter"               %% "chill"            % "0.3.1" excludeAll(excludeAsm),
         "com.twitter"                % "chill-java"       % "0.3.1" excludeAll(excludeAsm),
-        "org.tachyonproject"         % "tachyon"          % "0.4.1" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
+        "org.tachyonproject"         % "tachyon"          % "0.4.1-thrift" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
         "com.clearspring.analytics"  % "stream"           % "2.5.1"
       ),
     libraryDependencies ++= maybeAvro

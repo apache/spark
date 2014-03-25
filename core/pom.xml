@@ -208,7 +208,7 @@
     <dependency>
       <groupId>org.tachyonproject</groupId>
       <artifactId>tachyon</artifactId>
-      <version>0.4.1</version>
+      <version>0.4.1-thrift</version>
       <exclusions>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
