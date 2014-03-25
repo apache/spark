@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.util.Utils
-
+import org.apache.spark.util.ParentClassLoader
 
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm._
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
@@ -35,18 +35,17 @@ import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
  * A ClassLoader that reads classes from a Hadoop FileSystem or HTTP URI,
  * used to load classes defined by the interpreter when the REPL is used
  */
-class ExecutorClassLoader(classUri: String, parent: ClassLoader, userClassPathFirst: Boolean)
+class ExecutorClassLoader(classUri: String, parent: ClassLoader) extends FlexibleExecutorClassLoader(classUri, parent, false) {
+}
+/**
+ * Allows the user to specify if user class path should be first
+ */ 
+class FlexibleExecutorClassLoader(classUri: String, parent: ClassLoader, userClassPathFirst: Boolean)
 extends ClassLoader {
   val uri = new URI(classUri)
   val directory = uri.getPath
 
-  class ParentLoader(parent: ClassLoader) extends ClassLoader(parent) {
-    override def findClass(name: String): Class[_] = {
-      super.findClass(name)
-    }
-  }
-
-  val parentLoader = new ParentLoader(parent)
+  val parentLoader = new ParentClassLoader(parent)
 
   // Hadoop FileSystem object for our URI, if it isn't using HTTP
   var fileSystem: FileSystem = {
