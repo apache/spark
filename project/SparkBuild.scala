@@ -124,6 +124,9 @@ object SparkBuild extends Build {
 
   lazy val externalTwitter = Project("external-twitter", file("external/twitter"), settings = twitterSettings)
     .dependsOn(streaming % "compile->compile;test->test")
+ 
+  lazy val externalAmazonKinesis= Project("external-amazonkinesis", file("external/AmazonKinesis"), settings = kinesisSettings)
+    .dependsOn(streaming % "compile->compile;test->test")
 
   lazy val externalKafka = Project("external-kafka", file("external/kafka"), settings = kafkaSettings)
     .dependsOn(streaming % "compile->compile;test->test")
@@ -137,8 +140,8 @@ object SparkBuild extends Build {
   lazy val externalMqtt = Project("external-mqtt", file("external/mqtt"), settings = mqttSettings)
     .dependsOn(streaming % "compile->compile;test->test")
 
-  lazy val allExternal = Seq[ClasspathDependency](externalTwitter, externalKafka, externalFlume, externalZeromq, externalMqtt)
-  lazy val allExternalRefs = Seq[ProjectReference](externalTwitter, externalKafka, externalFlume, externalZeromq, externalMqtt)
+  lazy val allExternal = Seq[ClasspathDependency](externalAmazonKinesis,externalTwitter, externalKafka, externalFlume, externalZeromq, externalMqtt)
+  lazy val allExternalRefs = Seq[ProjectReference](externalAmazonKinesis,externalTwitter, externalKafka, externalFlume, externalZeromq, externalMqtt)
 
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
     .dependsOn(core, mllib, graphx, bagel, streaming, externalTwitter, hive) dependsOn(allExternal: _*)
@@ -518,6 +521,14 @@ object SparkBuild extends Build {
     previousArtifact := sparkPreviousArtifact("spark-streaming-twitter"),
     libraryDependencies ++= Seq(
       "org.twitter4j" % "twitter4j-stream" % "3.0.3" excludeAll(excludeNetty)
+    )
+  )
+
+  def kinesisSettings() = sharedSettings ++ Seq(
+    name := "spark-streaming-kinesis",
+    libraryDependencies ++= Seq(
+    "com.amazonaws" % "amazon-kinesis-client" % "1.0.0",
+    "com.amazonaws" % "aws-java-sdk" % "1.7.3"
     )
   )
 
