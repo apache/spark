@@ -100,14 +100,6 @@ private[spark] class Stage(
     id
   }
 
-  def attempId = {
-    if (nextAttemptId == 0) {
-      throw new SparkException("You haven't call newAttempId " +
-        "before you access the attempId of the stage for the first time")
-    }
-    nextAttemptId - 1
-  }
-
   val name = callSite.getOrElse(rdd.getCreationSite)
 
   override def toString = "Stage " + id
