@@ -135,6 +135,11 @@ class SparkContext(
   // An asynchronous listener bus for Spark events
   private[spark] val listenerBus = new LiveListenerBus
 
+  /**
+   * Return the listener bus held by the driver.
+   */
+  def getListenerBus: SparkListenerBus = listenerBus
+
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.create(
     conf,
