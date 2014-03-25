@@ -688,7 +688,7 @@ private[spark] object Utils extends Logging {
    */
   def getCallSiteInfo: CallSiteInfo = {
     val trace = Thread.currentThread.getStackTrace().filter( el =>
-      (!el.getMethodName.contains("getStackTrace")))
+      ((!el.getMethodName.contains("getStackTrace")) && (el.getClassName != "scala.Option")))
 
     // Keep crawling up the stack trace until we find the first function not inside of the spark
     // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
