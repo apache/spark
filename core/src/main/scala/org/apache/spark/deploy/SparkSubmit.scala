@@ -125,12 +125,12 @@ object SparkSubmit {
       new OptionAssigner(appArgs.files, YARN, true, clOption = "--files"),
       new OptionAssigner(appArgs.archives, YARN, false, sysProp = "spark.yarn.dist.archives"),
       new OptionAssigner(appArgs.archives, YARN, true, clOption = "--archives"),
-      new OptionAssigner(appArgs.moreJars, YARN, true, clOption = "--addJars")
+      new OptionAssigner(appArgs.jars, YARN, true, clOption = "--addJars")
     )
 
     // more jars
-    if (appArgs.moreJars != null && !deployOnCluster) {
-      for (jar <- appArgs.moreJars.split(",")) {
+    if (appArgs.jars != null && !deployOnCluster) {
+      for (jar <- appArgs.jars.split(",")) {
         childClasspath += jar
       }
     }

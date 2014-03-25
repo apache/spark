@@ -39,7 +39,7 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
   var primaryResource: String = null
   var name: String = null
   var childArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
-  var moreJars: String = null
+  var jars: String = null
 
   loadEnvVars()
   parseArgs(args.toList)
@@ -123,8 +123,8 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
       childArgs += value
       parseOpts(tail)
 
-    case ("--more-jars") :: value :: tail =>
-      moreJars = value
+    case ("--jars") :: value :: tail =>
+      jars = value
       parseOpts(tail)
 
     case ("--help" | "-h") :: tail =>
@@ -150,6 +150,9 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
         |                              option can be specified multiple times for multiple args.
         |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: 512M).
         |  --name NAME                 The name of your application (Default: 'Spark').
+        |  --jars JARS                 A comma-separated list of local jars to include on the
+        |                              driver classpath and that SparkContext.addJar will work
+        |                              with. Doesn't work on standalone with 'cluster' deploy mode.
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
@@ -161,8 +164,6 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
         | YARN-only:
         |  --executor-cores NUM        Number of cores per executor (Default: 1).
         |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
-        |  --more-jars JARS            For 'cluster' deploy mode, a comma-separated list of local
-        |                              jars that you want SparkContext.addJar to work with.
         |  --queue QUEUE_NAME          The YARN queue to submit to (Default: 'default').
         |  --num-executors NUM         Number of executors to start (Default: 2).
         |  --files FILES               Comma separated list of files to be placed next to all

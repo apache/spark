@@ -71,15 +71,22 @@ Where options are any of:
 - **--name** - Name of the application.
 - **--arg** - Argument to be passed to the application's main class. This option can be specified
   multiple times to pass multiple arguments.
-  
+- **--jars** - A comma-separated list of local jars to include on the driver classpath and that
+  SparkContext.addJar will work with. Doesn't work on standalone with 'cluster' deploy mode.
+
+The following currently only work for Spark standalone with cluster deploy mode:
+- **--driver-cores** - Cores for driver (Default: 1).
+- **--supervise** - If given, restarts the driver on failure.
+
+The following only works for Spark standalone and Mesos only:
+-  **--total-executor-cores** - Total cores for all executors.
+
 The following currently only work for YARN:
 
 - **--queue** - The YARN queue to place the application in.
 - **--files** - Comma separated list of files to be placed next to all executors
 - **--archives** - Comma separated list of archives to be extracted next to all executors
 - **--num-executors** - Number of executors to start.
-- **--more-jars** - For the "cluster" deploy mode, a comma-separated list of local jars
-  that you want SparkContext.addJar to work with.
 
 The master and deploy mode can also be set with the MASTER and DEPLOY_MODE environment variables.
 Values for these options passed via command line will override the environment variables.

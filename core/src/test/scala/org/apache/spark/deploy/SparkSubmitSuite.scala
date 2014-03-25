@@ -30,7 +30,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
   test("handles YARN cluster mode") {
     val clArgs = Array("thejar.jar", "--deploy-mode", "cluster",
       "--master", "yarn", "--executor-memory", "5g", "--executor-cores", "5",
-      "--class", "org.SomeClass", "--more-jars", "one.jar,two.jar,three.jar",
+      "--class", "org.SomeClass", "--jars", "one.jar,two.jar,three.jar",
       "--arg", "arg1", "--arg", "arg2", "--driver-memory", "4g",
       "--queue", "thequeue", "--files", "file1.txt,file2.txt",
       "--archives", "archive1.txt,archive2.txt", "--num-executors", "6")
@@ -56,7 +56,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
   test("handles YARN client mode") {
     val clArgs = Array("thejar.jar", "--deploy-mode", "client",
       "--master", "yarn", "--executor-memory", "5g", "--executor-cores", "5",
-      "--class", "org.SomeClass", "--more-jars", "one.jar,two.jar,three.jar",
+      "--class", "org.SomeClass", "--jars", "one.jar,two.jar,three.jar",
       "--arg", "arg1", "--arg", "arg2", "--driver-memory", "4g",
       "--queue", "thequeue", "--files", "file1.txt,file2.txt",
       "--archives", "archive1.txt,archive2.txt", "--num-executors", "6")
