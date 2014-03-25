@@ -94,7 +94,7 @@ class EntropyMinimizationDiscretizer private (
       case Some(a) => a
       case None =>
         val featureValues = data.map({
-          case LabeledPoint(label, values) => (values(feature), label.toString)
+          case LabeledPoint(label, values) => (values(feature), label.toString.trim)
         })
         val sortedValues = featureValues.sortByKey()
         val initial_candidates = initialThresholds(sortedValues)
