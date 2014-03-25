@@ -17,12 +17,12 @@
 
 package org.apache.spark.rdd
 
+import java.io.{IOException, ObjectOutputStream}
+
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Dependency, RangeDependency, SparkContext, Partition, TaskContext}
-
-import java.io.{ObjectOutputStream, IOException}
+import org.apache.spark.{Dependency, Partition, RangeDependency, SparkContext, TaskContext}
 
 private[spark] class UnionPartition[T: ClassTag](idx: Int, rdd: RDD[T], splitIndex: Int)
   extends Partition {

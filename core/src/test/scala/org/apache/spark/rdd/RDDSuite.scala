@@ -18,13 +18,15 @@
 package org.apache.spark.rdd
 
 import scala.collection.mutable.HashMap
+import scala.collection.parallel.mutable
+
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts._
-import org.scalatest.time.{Span, Millis}
+import org.scalatest.time.{Millis, Span}
+
+import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd._
-import scala.collection.parallel.mutable
-import org.apache.spark._
 
 class RDDSuite extends FunSuite with SharedSparkContext {
 
@@ -45,6 +47,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(nums.glom().map(_.toList).collect().toList === List(List(1, 2), List(3, 4)))
     assert(nums.collect({ case i if i >= 3 => i.toString }).collect().toList === List("3", "4"))
     assert(nums.keyBy(_.toString).collect().toList === List(("1", 1), ("2", 2), ("3", 3), ("4", 4)))
+    assert(nums.max() === 4)
+    assert(nums.min() === 1)
     val partitionSums = nums.mapPartitions(iter => Iterator(iter.reduceLeft(_ + _)))
     assert(partitionSums.collect().toList === List(3, 7))
 
@@ -455,6 +459,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
   test("takeSample") {
     val data = sc.parallelize(1 to 100, 2)
+
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=false, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
@@ -484,6 +489,12 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       // Chance of getting all distinct elements is still quite low, so test we got < 100
       assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
     }
+  }
+
+  test("takeSample from an empty rdd") {
+    val emptySet = sc.parallelize(Seq.empty[Int], 2)
+    val sample = emptySet.takeSample(false, 20, 1)
+    assert(sample.length === 0)
   }
 
   test("randomSplit") {

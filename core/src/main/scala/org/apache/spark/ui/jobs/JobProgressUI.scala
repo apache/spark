@@ -17,45 +17,44 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.concurrent.duration._
-
-import java.text.SimpleDateFormat
-
 import javax.servlet.http.HttpServletRequest
 
-import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.servlet.ServletContextHandler
 
-import scala.Seq
-import scala.collection.mutable.{HashSet, ListBuffer, HashMap, ArrayBuffer}
-
-import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.{ExceptionFailure, SparkContext, Success}
-import org.apache.spark.scheduler._
-import collection.mutable
+import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.SchedulingMode
-import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.ui.JettyUtils._
+import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
-private[spark] class JobProgressUI(val sc: SparkContext) {
-  private var _listener: Option[JobProgressListener] = None
-  def listener = _listener.get
-  val dateFmt = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+private[ui] class JobProgressUI(parent: SparkUI) {
+  val appName = parent.appName
+  val basePath = parent.basePath
+  val live = parent.live
+  val sc = parent.sc
+
+  lazy val listener = _listener.get
+  lazy val isFairScheduler = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
 
   private val indexPage = new IndexPage(this)
   private val stagePage = new StagePage(this)
   private val poolPage = new PoolPage(this)
+  private var _listener: Option[JobProgressListener] = None
 
   def start() {
-    _listener = Some(new JobProgressListener(sc))
-    sc.addSparkListener(listener)
+    val conf = if (live) sc.conf else new SparkConf
+    _listener = Some(new JobProgressListener(conf))
   }
 
   def formatDuration(ms: Long) = Utils.msDurationToString(ms)
 
-  def getHandlers = Seq[(String, Handler)](
-    ("/stages/stage", (request: HttpServletRequest) => stagePage.render(request)),
-    ("/stages/pool", (request: HttpServletRequest) => poolPage.render(request)),
-    ("/stages", (request: HttpServletRequest) => indexPage.render(request))
+  def getHandlers = Seq[ServletContextHandler](
+    createServletHandler("/stages/stage",
+      (request: HttpServletRequest) => stagePage.render(request), parent.securityManager, basePath),
+    createServletHandler("/stages/pool",
+      (request: HttpServletRequest) => poolPage.render(request), parent.securityManager, basePath),
+    createServletHandler("/stages",
+      (request: HttpServletRequest) => indexPage.render(request), parent.securityManager, basePath)
   )
 }

@@ -17,9 +17,7 @@
 
 package org.apache.spark
 
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.Serializer
-
 
 private[spark] abstract class ShuffleFetcher {
 
@@ -31,7 +29,7 @@ private[spark] abstract class ShuffleFetcher {
       shuffleId: Int,
       reduceId: Int,
       context: TaskContext,
-      serializer: Serializer = SparkEnv.get.serializerManager.default): Iterator[T]
+      serializer: Serializer = SparkEnv.get.serializer): Iterator[T]
 
   /** Stop the fetcher */
   def stop() {}

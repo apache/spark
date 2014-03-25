@@ -20,11 +20,12 @@ package org.apache.spark.scheduler
 import scala.Tuple2
 import scala.collection.mutable.{HashMap, Map}
 
+import org.scalatest.{BeforeAndAfter, FunSuite}
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.scalatest.{BeforeAndAfter, FunSuite}
 
 /**
  * Tests for DAGScheduler. These tests directly call the event processing functions in DAGScheduler
@@ -93,7 +94,12 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     cacheLocations.clear()
     results.clear()
     mapOutputTracker = new MapOutputTrackerMaster(conf)
-    scheduler = new DAGScheduler(taskScheduler, mapOutputTracker, blockManagerMaster, sc.env) {
+    scheduler = new DAGScheduler(
+        taskScheduler,
+        sc.listenerBus,
+        mapOutputTracker,
+        blockManagerMaster,
+        sc.env) {
       override def runLocally(job: ActiveJob) {
         // don't bother with the thread while unit testing
         runLocallyWithinThread(job)
@@ -421,15 +427,15 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
   private def assertDataStructuresEmpty = {
     assert(scheduler.pendingTasks.isEmpty)
     assert(scheduler.activeJobs.isEmpty)
-    assert(scheduler.failed.isEmpty)
-    assert(scheduler.idToActiveJob.isEmpty)
+    assert(scheduler.failedStages.isEmpty)
+    assert(scheduler.stageIdToActiveJob.isEmpty)
     assert(scheduler.jobIdToStageIds.isEmpty)
     assert(scheduler.stageIdToJobIds.isEmpty)
     assert(scheduler.stageIdToStage.isEmpty)
     assert(scheduler.stageToInfos.isEmpty)
     assert(scheduler.resultStageToJob.isEmpty)
-    assert(scheduler.running.isEmpty)
+    assert(scheduler.runningStages.isEmpty)
     assert(scheduler.shuffleToMapStage.isEmpty)
-    assert(scheduler.waiting.isEmpty)
+    assert(scheduler.waitingStages.isEmpty)
   }
 }

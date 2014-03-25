@@ -20,10 +20,9 @@ package org.apache.spark.io
 import java.io.{InputStream, OutputStream}
 
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
-
 import org.xerial.snappy.{SnappyInputStream, SnappyOutputStream}
-import org.apache.spark.{SparkEnv, SparkConf}
 
+import org.apache.spark.SparkConf
 
 /**
  * CompressionCodec allows the customization of choosing different compression implementations
@@ -39,8 +38,7 @@ trait CompressionCodec {
 
 private[spark] object CompressionCodec {
   def createCodec(conf: SparkConf): CompressionCodec = {
-    createCodec(conf, conf.get(
-      "spark.io.compression.codec", classOf[LZFCompressionCodec].getName))
+    createCodec(conf, conf.get("spark.io.compression.codec", DEFAULT_COMPRESSION_CODEC))
   }
 
   def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
@@ -48,6 +46,8 @@ private[spark] object CompressionCodec {
       .getConstructor(classOf[SparkConf])
     ctor.newInstance(conf).asInstanceOf[CompressionCodec]
   }
+
+  val DEFAULT_COMPRESSION_CODEC = classOf[LZFCompressionCodec].getName
 }
 
 

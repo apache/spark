@@ -1,6 +1,6 @@
 Welcome to the Spark documentation!
 
-This readme will walk you through navigating and building the Spark documentation, which is included here with the Spark source code. You can also find documentation specific to release versions of Spark at http://spark.incubator.apache.org/documentation.html.
+This readme will walk you through navigating and building the Spark documentation, which is included here with the Spark source code. You can also find documentation specific to release versions of Spark at http://spark.apache.org/documentation.html.
 
 Read on to learn more about viewing documentation in plain text (i.e., markdown) or building the documentation yourself. Why build it yourself? So that you have the docs that corresponds to whichever version of Spark you currently have checked out of revision control.
 
@@ -10,9 +10,22 @@ We include the Spark documentation as part of the source (as opposed to using a 
 
 In this directory you will find textfiles formatted using Markdown, with an ".md" suffix. You can read those text files directly if you want. Start with index.md.
 
-To make things quite a bit prettier and make the links easier to follow, generate the html version of the documentation based on the src directory by running `jekyll build` in the docs directory. Use the command `SKIP_SCALADOC=1 jekyll build` to skip building and copying over the scaladoc which can be timely. To use the `jekyll` command, you will need to have Jekyll installed, the easiest way to do this is via a Ruby Gem, see the [jekyll installation instructions](http://jekyllrb.com/docs/installation). This will create a directory called _site containing index.html as well as the rest of the compiled files. Read more about Jekyll at https://github.com/mojombo/jekyll/wiki.
+The markdown code can be compiled to HTML using the 
+[Jekyll tool](http://jekyllrb.com).
+To use the `jekyll` command, you will need to have Jekyll installed. 
+The easiest way to do this is via a Ruby Gem, see the 
+[jekyll installation instructions](http://jekyllrb.com/docs/installation). 
+Compiling the site with Jekyll will create a directory called 
+_site containing index.html as well as the rest of the compiled files.
 
-In addition to generating the site as html from the markdown files, jekyll can serve up the site via a webserver. To build and run a local webserver use the command `jekyll serve` (or the faster variant `SKIP_SCALADOC=1 jekyll serve`), which runs the webserver on port 4000, then visit the site at http://localhost:4000.
+You can modify the default Jekyll build as follows:
+
+    # Skip generating API docs (which takes a while)
+    $ SKIP_SCALADOC=1 jekyll build
+    # Serve content locally on port 4000
+    $ jekyll serve --watch
+    # Build the site with extra features used on the live page
+    $ PRODUCTION=1 jekyll build
 
 ## Pygments
 

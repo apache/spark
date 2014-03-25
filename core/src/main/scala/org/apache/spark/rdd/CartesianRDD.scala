@@ -17,10 +17,11 @@
 
 package org.apache.spark.rdd
 
-import java.io.{ObjectOutputStream, IOException}
-import scala.reflect.ClassTag
-import org.apache.spark._
+import java.io.{IOException, ObjectOutputStream}
 
+import scala.reflect.ClassTag
+
+import org.apache.spark._
 
 private[spark]
 class CartesianPartition(

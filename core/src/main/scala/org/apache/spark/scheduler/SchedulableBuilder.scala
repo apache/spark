@@ -20,9 +20,9 @@ package org.apache.spark.scheduler
 import java.io.{FileInputStream, InputStream}
 import java.util.{NoSuchElementException, Properties}
 
-import org.apache.spark.{SparkConf, Logging}
-
 import scala.xml.XML
+
+import org.apache.spark.{Logging, SparkConf}
 
 /**
  * An interface to build Schedulable tree

@@ -17,11 +17,11 @@
 
 package org.apache.spark.storage
 
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.{CountDownLatch, Executors}
+import java.util.concurrent.atomic.AtomicLong
 
-import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.SparkContext
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
 /**

@@ -29,8 +29,10 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.mapred.Master
+import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords._
@@ -68,12 +70,13 @@ trait ClientBase extends Logging {
   def validateArgs() = {
     Map(
       (System.getenv("SPARK_JAR") == null) -> "Error: You must set SPARK_JAR environment variable!",
-      (args.userJar == null) -> "Error: You must specify a user jar!",
+      ((args.userJar == null && args.amClass == classOf[ApplicationMaster].getName) ->
+          "Error: You must specify a user jar when running in standalone mode!"),
       (args.userClass == null) -> "Error: You must specify a user class!",
-      (args.numWorkers <= 0) -> "Error: You must specify at least 1 worker!",
+      (args.numExecutors <= 0) -> "Error: You must specify at least 1 executor!",
       (args.amMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: AM memory size must be" +
         "greater than: " + YarnAllocationHandler.MEMORY_OVERHEAD),
-      (args.workerMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: Worker memory size" +
+      (args.executorMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: Executor memory size" +
         "must be greater than: " + YarnAllocationHandler.MEMORY_OVERHEAD.toString)
     ).foreach { case(cond, errStr) =>
       if (cond) {
@@ -92,9 +95,9 @@ trait ClientBase extends Logging {
     logInfo("Max mem capabililty of a single resource in this cluster " + maxMem)
 
     // If we have requested more then the clusters max for a single resource then exit.
-    if (args.workerMemory > maxMem) {
-      logError("Required worker memory (%d MB), is above the max threshold (%d MB) of this cluster.".
-        format(args.workerMemory, maxMem))
+    if (args.executorMemory > maxMem) {
+      logError("Required executor memory (%d MB), is above the max threshold (%d MB) of this cluster.".
+        format(args.executorMemory, maxMem))
       System.exit(1)
     }
     val amMem = args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD
@@ -271,8 +274,9 @@ trait ClientBase extends Logging {
     ClientBase.populateClasspath(yarnConf, sparkConf, log4jConfLocalRes != null, env)
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDir
+    env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
 
-    // Set the environment variables to be passed on to the Workers.
+    // Set the environment variables to be passed on to the executors.
     distCacheMgr.setDistFilesEnv(env)
     distCacheMgr.setDistArchivesEnv(env)
 
@@ -356,9 +360,9 @@ trait ClientBase extends Logging {
         " --class " + args.userClass +
         " --jar " + args.userJar +
         userArgsToString(args) +
-        " --worker-memory " + args.workerMemory +
-        " --worker-cores " + args.workerCores +
-        " --num-workers " + args.numWorkers +
+        " --executor-memory " + args.executorMemory +
+        " --executor-cores " + args.executorCores +
+        " --num-executors " + args.numExecutors +
         " 1> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout" +
         " 2> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 
@@ -377,8 +381,49 @@ object ClientBase {
 
   // Based on code from org.apache.hadoop.mapreduce.v2.util.MRApps
   def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String]) {
-    for (c <- conf.getStrings(YarnConfiguration.YARN_APPLICATION_CLASSPATH)) {
+    val classpathEntries = Option(conf.getStrings(
+      YarnConfiguration.YARN_APPLICATION_CLASSPATH)).getOrElse(
+        getDefaultYarnApplicationClasspath())
+    for (c <- classpathEntries) {
       Apps.addToEnvironment(env, Environment.CLASSPATH.name, c.trim)
+    }
+
+    val mrClasspathEntries = Option(conf.getStrings(
+      "mapreduce.application.classpath")).getOrElse(
+        getDefaultMRApplicationClasspath())
+    if (mrClasspathEntries != null) {
+      for (c <- mrClasspathEntries) {
+        Apps.addToEnvironment(env, Environment.CLASSPATH.name, c.trim)
+      }
+    }
+  }
+
+  def getDefaultYarnApplicationClasspath(): Array[String] = {
+    try {
+      val field = classOf[MRJobConfig].getField("DEFAULT_YARN_APPLICATION_CLASSPATH")
+      field.get(null).asInstanceOf[Array[String]]
+    } catch {
+      case err: NoSuchFieldError => null
+      case err: NoSuchFieldException => null
+    }
+  }
+
+  /**
+   * In Hadoop 0.23, the MR application classpath comes with the YARN application
+   * classpath.  In Hadoop 2.0, it's an array of Strings, and in 2.2+ it's a String.
+   * So we need to use reflection to retrieve it.
+   */
+  def getDefaultMRApplicationClasspath(): Array[String] = {
+    try {
+      val field = classOf[MRJobConfig].getField("DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH")
+      if (field.getType == classOf[String]) {
+        StringUtils.getStrings(field.get(null).asInstanceOf[String])
+      } else {
+        field.get(null).asInstanceOf[Array[String]]
+      }
+    } catch {
+      case err: NoSuchFieldError => null
+      case err: NoSuchFieldException => null
     }
   }
 

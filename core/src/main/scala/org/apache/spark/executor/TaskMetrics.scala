@@ -17,21 +17,23 @@
 
 package org.apache.spark.executor
 
+import org.apache.spark.storage.{BlockId, BlockStatus}
+
 class TaskMetrics extends Serializable {
   /**
-   * Host's name the task runs on 
+   * Host's name the task runs on
    */
   var hostname: String = _
 
   /**
    * Time taken on the executor to deserialize this task
    */
-  var executorDeserializeTime: Int = _
+  var executorDeserializeTime: Long = _
 
   /**
    * Time the executor spends actually running the task (including fetching shuffle data)
    */
-  var executorRunTime: Int = _
+  var executorRunTime: Long = _
 
   /**
    * The number of bytes this task transmitted back to the driver as the TaskResult
@@ -68,6 +70,11 @@ class TaskMetrics extends Serializable {
    * here
    */
   var shuffleWriteMetrics: Option[ShuffleWriteMetrics] = None
+
+  /**
+   * Storage statuses of any blocks that have been updated as a result of this task.
+   */
+  var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
 }
 
 object TaskMetrics {
@@ -102,13 +109,6 @@ class ShuffleReadMetrics extends Serializable {
    * still not finished processing block A, it is not considered to be blocking on block B.
    */
   var fetchWaitTime: Long = _
-
-  /**
-   * Total time spent fetching remote shuffle blocks. This aggregates the time spent fetching all
-   * input blocks. Since block fetches are both pipelined and parallelized, this can
-   * exceed fetchWaitTime and executorRunTime.
-   */
-  var remoteFetchTime: Long = _
 
   /**
    * Total number of remote bytes read from the shuffle by this task

@@ -89,7 +89,7 @@ public final class JavaKafkaWordCount {
       }
     });
 
-    JavaPairDStream<String, Integer> wordCounts = words.map(
+    JavaPairDStream<String, Integer> wordCounts = words.mapToPair(
       new PairFunction<String, String, Integer>() {
         @Override
         public Tuple2<String, Integer> call(String s) {

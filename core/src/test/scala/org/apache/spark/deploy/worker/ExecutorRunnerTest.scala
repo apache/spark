@@ -21,7 +21,7 @@ import java.io.File
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.deploy.{ExecutorState, Command, ApplicationDescription}
+import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
 
 class ExecutorRunnerTest extends FunSuite {
   test("command includes appId") {

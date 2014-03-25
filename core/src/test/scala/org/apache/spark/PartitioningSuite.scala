@@ -18,13 +18,12 @@
 package org.apache.spark
 
 import scala.math.abs
-import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.{FunSuite, PrivateMethodTester}
 
 import org.apache.spark.SparkContext._
-import org.apache.spark.util.StatCounter
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.StatCounter
 
 class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMethodTester {
 
@@ -172,6 +171,8 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     assert(abs(6.0/2 - rdd.mean) < 0.01)
     assert(abs(1.0 - rdd.variance) < 0.01)
     assert(abs(1.0 - rdd.stdev) < 0.01)
+    assert(stats.max === 4.0)
+    assert(stats.min === 2.0)
 
     // Add other tests here for classes that should be able to handle empty partitions correctly
   }

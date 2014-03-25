@@ -29,7 +29,6 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.ByteBufferInputStream
 
-
 /**
  * A unit of execution. We have two kinds of Task's in Spark:
  * - [[org.apache.spark.scheduler.ShuffleMapTask]]

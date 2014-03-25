@@ -17,10 +17,11 @@
 
 package org.apache.spark.util.collection
 
+import java.util.Comparator
+
 import scala.collection.mutable.HashSet
 
 import org.scalatest.FunSuite
-import java.util.Comparator
 
 class AppendOnlyMapSuite extends FunSuite {
   test("initialization") {

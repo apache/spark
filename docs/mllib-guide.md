@@ -29,6 +29,7 @@ The following links provide a detailed explanation of the methods and usage exam
   * Gradient Descent and Stochastic Gradient Descent
 * <a href="mllib-linear-algebra.html">Linear Algebra</a>
   * Singular Value Decomposition
+  * Principal Component Analysis
 
 # Dependencies
 MLlib uses the [jblas](https://github.com/mikiobraun/jblas) linear algebra library, which itself

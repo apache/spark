@@ -44,10 +44,6 @@ private[spark] class YarnClientSchedulerBackend(
   override def start() {
     super.start()
 
-    val userJar = System.getenv("SPARK_YARN_APP_JAR")
-    if (userJar == null)
-      throw new SparkException("env SPARK_YARN_APP_JAR is not set")
-
     val driverHost = conf.get("spark.driver.host")
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort
@@ -55,22 +51,26 @@ private[spark] class YarnClientSchedulerBackend(
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += (
       "--class", "notused",
-      "--jar", userJar,
+      "--jar", null,
       "--args", hostport,
-      "--master-class", "org.apache.spark.deploy.yarn.WorkerLauncher"
+      "--am-class", "org.apache.spark.deploy.yarn.ExecutorLauncher"
     )
 
     // process any optional arguments, use the defaults already defined in ClientArguments 
     // if things aren't specified
-    Map("--master-memory" -> "SPARK_MASTER_MEMORY",
-      "--num-workers" -> "SPARK_WORKER_INSTANCES",
-      "--worker-memory" -> "SPARK_WORKER_MEMORY",
-      "--worker-cores" -> "SPARK_WORKER_CORES",
-      "--queue" -> "SPARK_YARN_QUEUE",
-      "--name" -> "SPARK_YARN_APP_NAME",
-      "--files" -> "SPARK_YARN_DIST_FILES",
-      "--archives" -> "SPARK_YARN_DIST_ARCHIVES")
-    .foreach { case (optName, optParam) => addArg(optName, optParam, argsArrayBuf) }
+    Map("SPARK_MASTER_MEMORY" -> "--driver-memory",
+      "SPARK_DRIVER_MEMORY" -> "--driver-memory",
+      "SPARK_WORKER_INSTANCES" -> "--num-executors",
+      "SPARK_WORKER_MEMORY" -> "--executor-memory",
+      "SPARK_WORKER_CORES" -> "--executor-cores",
+      "SPARK_EXECUTOR_INSTANCES" -> "--num-executors",
+      "SPARK_EXECUTOR_MEMORY" -> "--executor-memory",
+      "SPARK_EXECUTOR_CORES" -> "--executor-cores",
+      "SPARK_YARN_QUEUE" -> "--queue",
+      "SPARK_YARN_APP_NAME" -> "--name",
+      "SPARK_YARN_DIST_FILES" -> "--files",
+      "SPARK_YARN_DIST_ARCHIVES" -> "--archives")
+    .foreach { case (optParam, optName) => addArg(optName, optParam, argsArrayBuf) }
       
     logDebug("ClientArguments called with: " + argsArrayBuf)
     val args = new ClientArguments(argsArrayBuf.toArray, conf)
@@ -81,7 +81,7 @@ private[spark] class YarnClientSchedulerBackend(
 
   def waitForApp() {
 
-    // TODO : need a better way to find out whether the workers are ready or not
+    // TODO : need a better way to find out whether the executors are ready or not
     // maybe by resource usage report?
     while(true) {
       val report = client.getApplicationReport(appId)

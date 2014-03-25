@@ -17,11 +17,11 @@
 
 package org.apache.spark.util.random
 
+import java.util.Random
+
+import cern.jet.random.Poisson
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.mock.EasyMockSugar
-
-import java.util.Random
-import cern.jet.random.Poisson
 
 class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar {
 

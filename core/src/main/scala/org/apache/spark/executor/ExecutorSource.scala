@@ -17,11 +17,10 @@
 
 package org.apache.spark.executor
 
-import com.codahale.metrics.{Gauge, MetricRegistry}
-
-import org.apache.hadoop.fs.FileSystem
-
 import scala.collection.JavaConversions._
+
+import com.codahale.metrics.{Gauge, MetricRegistry}
+import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.metrics.source.Source
 

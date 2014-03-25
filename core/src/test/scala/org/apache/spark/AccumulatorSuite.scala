@@ -17,12 +17,11 @@
 
 package org.apache.spark
 
+import scala.collection.mutable
+
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
-import collection.mutable
-import java.util.Random
-import scala.math.exp
-import scala.math.signum
+
 import org.apache.spark.SparkContext._
 
 class AccumulatorSuite extends FunSuite with ShouldMatchers with LocalSparkContext {

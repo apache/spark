@@ -17,6 +17,7 @@
 
 package org.apache.spark.api.java
 
+import java.util
 import java.util.{Map => JMap}
 
 import scala.collection.JavaConversions
@@ -91,6 +92,24 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment))
 
   private[spark] val env = sc.env
+
+  def isLocal: java.lang.Boolean = sc.isLocal
+
+  def sparkUser: String = sc.sparkUser
+
+  def master: String = sc.master
+
+  def appName: String = sc.appName
+
+  def jars: util.List[String] = sc.jars
+
+  def startTime: java.lang.Long = sc.startTime
+
+  /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
+  def defaultParallelism: java.lang.Integer = sc.defaultParallelism
+
+  /** Default min number of partitions for Hadoop RDDs when not given by user */
+  def defaultMinSplits: java.lang.Integer = sc.defaultMinSplits
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {
@@ -415,6 +434,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * Clear the job's list of JARs added by `addJar` so that they do not get downloaded to
    * any new nodes.
    */
+  @deprecated("adding jars no longer creates local copies that need to be deleted", "1.0.0")
   def clearJars() {
     sc.clearJars()
   }
@@ -423,6 +443,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * Clear the job's list of files added by `addFile` so that they do not get downloaded to
    * any new nodes.
    */
+  @deprecated("adding files no longer creates local copies that need to be deleted", "1.0.0")
   def clearFiles() {
     sc.clearFiles()
   }

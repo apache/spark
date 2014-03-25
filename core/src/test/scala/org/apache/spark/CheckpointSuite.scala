@@ -17,11 +17,14 @@
 
 package org.apache.spark
 
-import scala.reflect.ClassTag
-import org.scalatest.FunSuite
 import java.io.File
-import org.apache.spark.rdd._
+
+import scala.reflect.ClassTag
+
+import org.scalatest.FunSuite
+
 import org.apache.spark.SparkContext._
+import org.apache.spark.rdd._
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 import org.apache.spark.util.Utils
 

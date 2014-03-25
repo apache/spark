@@ -25,7 +25,7 @@ import org.apache.spark.util.Utils
 
 /**
  *
- * This scheduler launch worker through Yarn - by call into Client to launch WorkerLauncher as AM.
+ * This scheduler launches executors through Yarn - by calling into Client to launch ExecutorLauncher as AM.
  */
 private[spark] class YarnClientClusterScheduler(sc: SparkContext, conf: Configuration) extends TaskSchedulerImpl(sc) {
 
@@ -40,7 +40,7 @@ private[spark] class YarnClientClusterScheduler(sc: SparkContext, conf: Configur
 
   override def postStartHook() {
 
-    // The yarn application is running, but the worker might not yet ready
+    // The yarn application is running, but the executor might not yet ready
     // Wait for a few seconds for the slaves to bootstrap and register with master - best case attempt
     Thread.sleep(2000L)
     logInfo("YarnClientClusterScheduler.postStartHook done")
