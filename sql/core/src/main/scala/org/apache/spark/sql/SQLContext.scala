@@ -118,7 +118,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
       TopK ::
       PartialAggregation ::
       SparkEquiInnerJoin ::
-      ParquetScans ::
+      ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::
       BroadcastNestedLoopJoin :: Nil

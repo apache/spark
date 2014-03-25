@@ -133,8 +133,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     results
   }
 
-  // TODO: Move this.
-
   SessionState.start(sessionState)
 
   /**
@@ -191,7 +189,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     override val strategies: Seq[Strategy] = Seq(
       TopK,
-      ParquetScans,
+      ParquetOperations,
       HiveTableScans,
       DataSinks,
       Scripts,

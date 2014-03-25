@@ -166,7 +166,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  object ParquetScans extends Strategy {
+  object ParquetOperations extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // TODO: need to support writing to other types of files.
       case logical.WriteToFile(path, child) =>
