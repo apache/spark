@@ -26,6 +26,11 @@ import org.apache.spark.sql.catalyst.types._
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
 
+import types._
+import expressions._
+import dsl._
+import dsl.expressions._
+
 
 /**
  * Root class of expression evaluation test
@@ -50,7 +55,7 @@ trait ExpressionEvaluationSuite extends FunSuite {
    */
   def executor(exprs: Seq[Expression]): ExprEvalTest
   
-  val data: Row = new GenericRow(Array(1, null, 1.0, true, 4, 5, null, "abcccd"))
+  val data: Row = new GenericRow(Array(1, null, 1.0, true, 4, 5, null, "abcccd", "a%"))
 
   // TODO add to DSL
   val c1 = BoundReference(0, AttributeReference("a", IntegerType)())
@@ -61,37 +66,72 @@ trait ExpressionEvaluationSuite extends FunSuite {
   val c6 = BoundReference(5, AttributeReference("f", IntegerType)())
   val c7 = BoundReference(6, AttributeReference("g", StringType)())
   val c8 = BoundReference(7, AttributeReference("h", StringType)())
+  val c9 = BoundReference(8, AttributeReference("i", StringType)())
   
-  def verify(expected: Seq[(Boolean, Any)], result: Row, input: Row) {
+  /**
+   * Compare each of the field if it equals the expected value.
+   * 
+   * expected is a sequence of (Any, Any), 
+   * and the first element indicates:
+   *   true:  the expected value is field is null
+   *   false: the expected value is not null
+   *   Exception Class: the expected exception class while computing the value 
+   * the second element is the real value when first element equals false(not null)
+   */
+  def verify(expected: Seq[(Any, Any)], result: Row, input: Row) {
     Seq.tabulate(expected.size) { i =>
       expected(i) match {
         case (false, expected) => {
-          assert(result.isNullAt(i) == false, s"Input:($input), Output field:$i shouldn't be null")
+          assert(result.isNullAt(i) == false, 
+            s"Input:($input), Output field:$i shouldn't be null")
+
           val real = result.apply(i)
-          assert(real == expected, s"Input:($input), Output field:$i is expected as $expected, but got $real")
+          assert(real == expected, 
+            s"Input:($input), Output field:$i is expected as $expected, but got $real")
         }
         case (true, _) => {
-          assert(result.isNullAt(i), s"Input:($input), Output field:$i is expected as null")
+          assert(result.isNullAt(i) == true, s"Input:($input), Output field:$i is expected as null")
+        }
+        case (exception: Class[_], _) => {
+          assert(result.isNullAt(i) == false, 
+            s"Input:($input), Output field:$i should be exception")
+
+          val real = result.apply(i).getClass.getName
+          val expect = exception.getName
+          assert(real == expect, 
+            s"Input:($input), Output field:$i expect exception $expect, but got $real")
         }
       }
     }
   }
 
-  def verify(expecteds: Seq[Seq[(Boolean, Any)]], results: Seq[Row], inputs: Seq[Row]) {
+  def verify(expecteds: Seq[Seq[(Any, Any)]], results: Seq[Row], inputs: Seq[Row]) {
     Range(0, expecteds.length).foreach { i =>
       verify(expecteds(i), results(i), inputs(i))
     }
   }
   
-  def run(exprs: Seq[Expression], expected: Seq[(Boolean, Any)], input: Row) {
-    val tester = executor(exprs)
-    verify(expected, tester.engine.apply(input), input)
+  def proc(tester: ExprEvalTest, input: Row): Row = {
+    try {
+      tester.engine.apply(input)
+    } catch {
+      case x: Any => {
+        println(x.printStackTrace())
+        new GenericRow(Array(x.asInstanceOf[Any]))
+      }
+    }
   }
   
-  def run(exprs: Seq[Expression], expecteds: Seq[Seq[(Boolean, Any)]], inputs: Seq[Row]) {
+  def run(exprs: Seq[Expression], expected: Seq[(Any, Any)], input: Row) {
     val tester = executor(exprs)
     
-    verify(expecteds, inputs.map(tester.engine.apply(_)), inputs)
+    verify(expected, proc(tester,input), input)
+  }
+  
+  def run(exprs: Seq[Expression], expecteds: Seq[Seq[(Any, Any)]], inputs: Seq[Row]) {
+    val tester = executor(exprs)
+    
+    verify(expecteds, inputs.map(proc(tester,_)), inputs)
   }
   
   test("logical") {
@@ -131,6 +171,43 @@ trait ExpressionEvaluationSuite extends FunSuite {
         (false, -1))
 
     run(exprs, expecteds, data)
+  }
+
+  test("string like / rlike") {
+    val exprs = Seq(
+      Like(c7, Literal("a", StringType)),
+      Like(c7, Literal(null, StringType)),
+      Like(c8, Literal(null, StringType)),
+      Like(c8, Literal("a_c", StringType)),
+      Like(c8, Literal("a%c", StringType)),
+      Like(c8, Literal("a%d", StringType)),
+      Like(c8, Literal("a\\%d", StringType)), // to escape the %
+      Like(c8, c9),
+      RLike(c7, Literal("a+", StringType)),
+      RLike(c7, Literal(null, StringType)),
+      RLike(c8, Literal(null, StringType)),
+      RLike(c8, Literal("a.*", StringType))
+    )
+
+    val expecteds = Seq(
+      (true, false),
+      (true, false),
+      (true, false),
+      (false, false),
+      (false, false),
+      (false, true),
+      (false, false),
+      (false, true),
+      (true, false),
+      (true, false),
+      (true, false),
+      (false, true))
+
+    run(exprs, expecteds, data)
+    
+    val expr = Seq(RLike(c8, Literal("[a.(*])", StringType)))
+    val expected = Seq((classOf[java.util.regex.PatternSyntaxException], false))
+    run(expr, expected, data)
   }
 
   test("literals") {
