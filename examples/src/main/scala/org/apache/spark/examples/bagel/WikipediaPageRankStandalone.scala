@@ -116,11 +116,13 @@ object WikipediaPageRankStandalone {
     for (i <- 1 to numIterations) {
       val contribs = links.groupWith(ranks).flatMap {
         case (id, (linksWrapper, rankWrapper)) =>
-          if (linksWrapper.length > 0) {
-            if (rankWrapper.length > 0) {
-              linksWrapper(0).map(dest => (dest, rankWrapper(0) / linksWrapper(0).size))
+          if (linksWrapper.hasNext) {
+            val linksWrapperHead = linksWrapper.next
+            if (rankWrapper.hasNext) {
+              val rankWrapperHead = rankWrapper.next
+              linksWrapperHead.map(dest => (dest, rankWrapperHead / linksWrapperHead.size))
             } else {
-              linksWrapper(0).map(dest => (dest, defaultRank / linksWrapper(0).size))
+              linksWrapperHead.map(dest => (dest, defaultRank / linksWrapperHead.size))
             }
           } else {
             Array[(String, Double)]()

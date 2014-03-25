@@ -38,8 +38,9 @@ object LAUtils {
       case (i, cols) =>
         val rowArray = Array.ofDim[Double](n)
         var j = 0
-        while (j < cols.size) {
-          rowArray(cols(j)._1) = cols(j)._2
+        while (cols.hasNext) {
+          val element = cols.next
+          rowArray(element._1) = element._2
           j += 1
         }
         MatrixRow(i, rowArray)

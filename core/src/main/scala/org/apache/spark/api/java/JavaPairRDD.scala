@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.java
 
-import java.util.{Comparator, List => JList}
+import java.util.{Comparator, List => JList, Iterator => JIterator}
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
@@ -250,14 +250,14 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Group the values for each key in the RDD into a single sequence. Allows controlling the
    * partitioning of the resulting key-value pair RDD by passing a Partitioner.
    */
-  def groupByKey(partitioner: Partitioner): JavaPairRDD[K, JList[V]] =
+  def groupByKey(partitioner: Partitioner): JavaPairRDD[K, JIterator[V]] =
     fromRDD(groupByResultToJava(rdd.groupByKey(partitioner)))
 
   /**
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
    * resulting RDD with into `numPartitions` partitions.
    */
-  def groupByKey(numPartitions: Int): JavaPairRDD[K, JList[V]] =
+  def groupByKey(numPartitions: Int): JavaPairRDD[K, JIterator[V]] =
     fromRDD(groupByResultToJava(rdd.groupByKey(numPartitions)))
 
   /**
@@ -367,7 +367,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
    * resulting RDD with the existing partitioner/parallelism level.
    */
-  def groupByKey(): JavaPairRDD[K, JList[V]] =
+  def groupByKey(): JavaPairRDD[K, JIterator[V]] =
     fromRDD(groupByResultToJava(rdd.groupByKey()))
 
   /**
@@ -462,7 +462,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * list of values for that key in `this` as well as `other`.
    */
   def cogroup[W](other: JavaPairRDD[K, W], partitioner: Partitioner)
-  : JavaPairRDD[K, (JList[V], JList[W])] =
+  : JavaPairRDD[K, (JIterator[V], JIterator[W])] =
     fromRDD(cogroupResultToJava(rdd.cogroup(other, partitioner)))
 
   /**
@@ -470,14 +470,14 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * tuple with the list of values for that key in `this`, `other1` and `other2`.
    */
   def cogroup[W1, W2](other1: JavaPairRDD[K, W1], other2: JavaPairRDD[K, W2],
-      partitioner: Partitioner): JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] =
+      partitioner: Partitioner): JavaPairRDD[K, (JIterator[V], JIterator[W1], JIterator[W2])] =
     fromRDD(cogroupResult2ToJava(rdd.cogroup(other1, other2, partitioner)))
 
   /**
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
-  def cogroup[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (JList[V], JList[W])] =
+  def cogroup[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (JIterator[V], JIterator[W])] =
     fromRDD(cogroupResultToJava(rdd.cogroup(other)))
 
   /**
@@ -485,7 +485,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * tuple with the list of values for that key in `this`, `other1` and `other2`.
    */
   def cogroup[W1, W2](other1: JavaPairRDD[K, W1], other2: JavaPairRDD[K, W2])
-  : JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] =
+  : JavaPairRDD[K, (JIterator[V], JIterator[W1], JIterator[W2])] =
     fromRDD(cogroupResult2ToJava(rdd.cogroup(other1, other2)))
 
   /**
@@ -493,7 +493,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * list of values for that key in `this` as well as `other`.
    */
   def cogroup[W](other: JavaPairRDD[K, W], numPartitions: Int)
-  : JavaPairRDD[K, (JList[V], JList[W])] =
+  : JavaPairRDD[K, (JIterator[V], JIterator[W])] =
     fromRDD(cogroupResultToJava(rdd.cogroup(other, numPartitions)))
 
   /**
@@ -501,16 +501,16 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * tuple with the list of values for that key in `this`, `other1` and `other2`.
    */
   def cogroup[W1, W2](other1: JavaPairRDD[K, W1], other2: JavaPairRDD[K, W2], numPartitions: Int)
-  : JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] =
+  : JavaPairRDD[K, (JIterator[V], JIterator[W1], JIterator[W2])] =
     fromRDD(cogroupResult2ToJava(rdd.cogroup(other1, other2, numPartitions)))
 
   /** Alias for cogroup. */
-  def groupWith[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (JList[V], JList[W])] =
+  def groupWith[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (JIterator[V], JIterator[W])] =
     fromRDD(cogroupResultToJava(rdd.groupWith(other)))
 
   /** Alias for cogroup. */
   def groupWith[W1, W2](other1: JavaPairRDD[K, W1], other2: JavaPairRDD[K, W2])
-  : JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] =
+  : JavaPairRDD[K, (JIterator[V], JIterator[W1], JIterator[W2])] =
     fromRDD(cogroupResult2ToJava(rdd.groupWith(other1, other2)))
 
   /**
@@ -695,21 +695,21 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 
 object JavaPairRDD {
   private[spark]
-  def groupByResultToJava[K: ClassTag, T](rdd: RDD[(K, Seq[T])]): RDD[(K, JList[T])] = {
-    rddToPairRDDFunctions(rdd).mapValues(seqAsJavaList)
+  def groupByResultToJava[K: ClassTag, T](rdd: RDD[(K, Iterator[T])]): RDD[(K, JIterator[T])] = {
+    rddToPairRDDFunctions(rdd).mapValues(asJavaIterator)
   }
 
   private[spark]
   def cogroupResultToJava[K: ClassTag, V, W](
-      rdd: RDD[(K, (Seq[V], Seq[W]))]): RDD[(K, (JList[V], JList[W]))] = {
-    rddToPairRDDFunctions(rdd).mapValues(x => (seqAsJavaList(x._1), seqAsJavaList(x._2)))
+      rdd: RDD[(K, (Iterator[V], Iterator[W]))]): RDD[(K, (JIterator[V], JIterator[W]))] = {
+    rddToPairRDDFunctions(rdd).mapValues(x => (asJavaIterator(x._1), asJavaIterator(x._2)))
   }
 
   private[spark]
   def cogroupResult2ToJava[K: ClassTag, V, W1, W2](
-      rdd: RDD[(K, (Seq[V], Seq[W1], Seq[W2]))]): RDD[(K, (JList[V], JList[W1], JList[W2]))] = {
+      rdd: RDD[(K, (Iterator[V], Iterator[W1], Iterator[W2]))]): RDD[(K, (JIterator[V], JIterator[W1], JIterator[W2]))] = {
     rddToPairRDDFunctions(rdd)
-      .mapValues(x => (seqAsJavaList(x._1), seqAsJavaList(x._2), seqAsJavaList(x._3)))
+      .mapValues(x => (asJavaIterator(x._1), asJavaIterator(x._2), asJavaIterator(x._3)))
   }
 
   def fromRDD[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)]): JavaPairRDD[K, V] = {
