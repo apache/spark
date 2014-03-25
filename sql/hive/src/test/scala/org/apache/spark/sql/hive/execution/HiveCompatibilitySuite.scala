@@ -65,6 +65,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "describe_comment_nonascii",
     "udf5",
     "udf_java_method",
+    "create_merge_compressed",
 
     // Weird DDL differences result in failures on jenkins.
     "create_like2",
@@ -252,7 +253,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "cp_mj_rc",
     "create_insert_outputformat",
     "create_like_view",
-    "create_merge_compressed",
     "create_nested_type",
     "create_skewed_table1",
     "create_struct_table",
