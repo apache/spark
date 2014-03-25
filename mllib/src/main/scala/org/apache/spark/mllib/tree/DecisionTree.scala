@@ -245,7 +245,7 @@ object DecisionTree extends Serializable with Logging {
     new DecisionTree(strategy).train(input: RDD[LabeledPoint])
   }
 
-  val InvalidBinIndex = -1
+  private val InvalidBinIndex = -1
 
   /**
    * Returns an array of optimal splits for all nodes at a given level

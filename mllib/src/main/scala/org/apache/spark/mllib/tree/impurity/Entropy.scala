@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import javax.naming.OperationNotSupportedException
+import java.lang.UnsupportedOperationException
 
 /**
  * Class for calculating [[http://en.wikipedia.org/wiki/Binary_entropy_function entropy]] during
@@ -45,5 +45,5 @@ object Entropy extends Impurity {
    }
 
   def calculate(count: Double, sum: Double, sumSquares: Double): Double =
-    throw new OperationNotSupportedException("Entropy.calculate")
+    throw new UnsupportedOperationException("Entropy.calculate")
 }

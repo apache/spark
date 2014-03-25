@@ -17,15 +17,14 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import javax.naming.OperationNotSupportedException
-import org.apache.spark.Logging
+import java.lang.UnsupportedOperationException
 
 /**
  * Class for calculating variance during regression
  */
-object Variance extends Impurity with Logging {
+object Variance extends Impurity {
    def calculate(c0: Double, c1: Double): Double
-   = throw new OperationNotSupportedException("Variance.calculate")
+   = throw new UnsupportedOperationException("Variance.calculate")
 
   /**
    * variance calculation

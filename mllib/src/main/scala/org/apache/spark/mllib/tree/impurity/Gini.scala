@@ -17,11 +17,11 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import javax.naming.OperationNotSupportedException
+import java.lang.UnsupportedOperationException
 
 /**
- * Class for calculating the [[http://en.wikipedia.org/wiki/Gini_coefficient Gini
- * coefficent]] during binary classification
+ * Class for calculating the [[http://en.wikipedia
+ * .org/wiki/Decision_tree_learning#Gini_impurity]] during binary classification
  */
 object Gini extends Impurity {
 
@@ -43,6 +43,6 @@ object Gini extends Impurity {
   }
 
   def calculate(count: Double, sum: Double, sumSquares: Double): Double =
-    throw new OperationNotSupportedException("Gini.calculate")
+    throw new UnsupportedOperationException("Gini.calculate")
 
 }

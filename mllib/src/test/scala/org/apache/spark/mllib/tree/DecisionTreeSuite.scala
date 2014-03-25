@@ -17,22 +17,15 @@
 
 package org.apache.spark.mllib.tree
 
-import scala.util.Random
-
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
-
-import org.jblas._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
 import org.apache.spark.mllib.tree.model.Filter
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.configuration.Algo._
-import scala.collection.mutable
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 
 class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {

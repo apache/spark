@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.Logging
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 
 /**
