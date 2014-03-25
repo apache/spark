@@ -72,7 +72,8 @@ class FailureSuite extends FunSuite with LocalSparkContext {
             throw new Exception("Intentional task failure")
           }
         }
-        (k, v(0) * v(0))
+        val vHead = v.next()
+        (k, vHead * vHead)
       }.collect()
     FailureSuiteState.synchronized {
       assert(FailureSuiteState.tasksRun === 4)
@@ -137,5 +138,3 @@ class FailureSuite extends FunSuite with LocalSparkContext {
 
   // TODO: Need to add tests with shuffle fetch failures.
 }
-
-
