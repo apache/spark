@@ -35,7 +35,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{BooleanType, DataType}
 import org.apache.spark.sql.execution._
-import org.apache.spark.{TaskContext, SparkException}
+import org.apache.spark.{SparkHiveHadoopWriter, TaskContext, SparkException}
 
 /* Implicits */
 import scala.collection.JavaConversions._
