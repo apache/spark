@@ -579,6 +579,13 @@ Apart from these, the following properties are also available, and may be useful
     out and giving up. 
   </td>
 </tr>
+<tr>
+  <td>spark.task.cpus</td>
+  <td>1</td>
+  <td>
+    Number of cores to allocate for each task.
+  </td>
+</tr>
 </table>
 
 ## Viewing Spark Properties
