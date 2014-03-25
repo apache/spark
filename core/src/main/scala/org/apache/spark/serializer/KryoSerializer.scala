@@ -34,10 +34,14 @@ import org.apache.spark.storage.{GetBlock, GotBlock, PutBlock}
 /**
  * A Spark serializer that uses the [[https://code.google.com/p/kryo/ Kryo serialization library]].
  */
-class KryoSerializer(conf: SparkConf) extends org.apache.spark.serializer.Serializer with Logging {
-  private val bufferSize = {
-    conf.getInt("spark.kryoserializer.buffer.mb", 2) * 1024 * 1024
-  }
+class KryoSerializer(conf: SparkConf)
+  extends org.apache.spark.serializer.Serializer
+  with Logging
+  with Serializable {
+
+  private val bufferSize = conf.getInt("spark.kryoserializer.buffer.mb", 2) * 1024 * 1024
+  private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", true)
+  private val registrator = conf.getOption("spark.kryo.registrator")
 
   def newKryoOutput() = new KryoOutput(bufferSize)
 
@@ -48,7 +52,7 @@ class KryoSerializer(conf: SparkConf) extends org.apache.spark.serializer.Serial
 
     // Allow disabling Kryo reference tracking if user knows their object graphs don't have loops.
     // Do this before we invoke the user registrator so the user registrator can override this.
-    kryo.setReferences(conf.getBoolean("spark.kryo.referenceTracking", true))
+    kryo.setReferences(referenceTracking)
 
     for (cls <- KryoSerializer.toRegister) kryo.register(cls)
 
@@ -58,7 +62,7 @@ class KryoSerializer(conf: SparkConf) extends org.apache.spark.serializer.Serial
 
     // Allow the user to register their own classes by setting spark.kryo.registrator
     try {
-      for (regCls <- conf.getOption("spark.kryo.registrator")) {
+      for (regCls <- registrator) {
         logDebug("Running user registrator: " + regCls)
         val reg = Class.forName(regCls, true, classLoader).newInstance()
           .asInstanceOf[KryoRegistrator]

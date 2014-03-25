@@ -18,16 +18,19 @@
 package org.apache.spark.mllib.clustering;
 
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import static org.junit.Assert.*;
+
+import com.google.common.collect.Lists;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.Vectors;
 
 public class JavaKMeansSuite implements Serializable {
   private transient JavaSparkContext sc;
@@ -44,72 +47,45 @@ public class JavaKMeansSuite implements Serializable {
     System.clearProperty("spark.driver.port");
   }
 
-  // L1 distance between two points
-  double distance1(double[] v1, double[] v2) {
-    double distance = 0.0;
-    for (int i = 0; i < v1.length; ++i) {
-      distance = Math.max(distance, Math.abs(v1[i] - v2[i]));
-    }
-    return distance;
-  }
-
-  // Assert that two sets of points are equal, within EPSILON tolerance
-  void assertSetsEqual(double[][] v1, double[][] v2) {
-    double EPSILON = 1e-4;
-    Assert.assertTrue(v1.length == v2.length);
-    for (int i = 0; i < v1.length; ++i) {
-      double minDistance = Double.MAX_VALUE;
-      for (int j = 0; j < v2.length; ++j) {
-        minDistance = Math.min(minDistance, distance1(v1[i], v2[j]));
-      }
-      Assert.assertTrue(minDistance <= EPSILON);
-    }
-
-    for (int i = 0; i < v2.length; ++i) {
-      double minDistance = Double.MAX_VALUE;
-      for (int j = 0; j < v1.length; ++j) {
-        minDistance = Math.min(minDistance, distance1(v2[i], v1[j]));
-      }
-      Assert.assertTrue(minDistance <= EPSILON);
-    }
-  }
-
-
   @Test
   public void runKMeansUsingStaticMethods() {
-    List<double[]> points = new ArrayList<double[]>();
-    points.add(new double[]{1.0, 2.0, 6.0});
-    points.add(new double[]{1.0, 3.0, 0.0});
-    points.add(new double[]{1.0, 4.0, 6.0});
+    List<Vector> points = Lists.newArrayList(
+      Vectors.dense(1.0, 2.0, 6.0),
+      Vectors.dense(1.0, 3.0, 0.0),
+      Vectors.dense(1.0, 4.0, 6.0)
+    );
 
-    double[][] expectedCenter = { {1.0, 3.0, 4.0} };
+    Vector expectedCenter = Vectors.dense(1.0, 3.0, 4.0);
 
-    JavaRDD<double[]> data = sc.parallelize(points, 2);
-    KMeansModel model = KMeans.train(data.rdd(), 1, 1);
-    assertSetsEqual(model.clusterCenters(), expectedCenter);
+    JavaRDD<Vector> data = sc.parallelize(points, 2);
+    KMeansModel model = KMeans.train(data.rdd(), 1, 1, 1, KMeans.K_MEANS_PARALLEL());
+    assertEquals(1, model.clusterCenters().length);
+    assertEquals(expectedCenter, model.clusterCenters()[0]);
 
     model = KMeans.train(data.rdd(), 1, 1, 1, KMeans.RANDOM());
-    assertSetsEqual(model.clusterCenters(), expectedCenter);
+    assertEquals(expectedCenter, model.clusterCenters()[0]);
   }
 
   @Test
   public void runKMeansUsingConstructor() {
-    List<double[]> points = new ArrayList<double[]>();
-    points.add(new double[]{1.0, 2.0, 6.0});
-    points.add(new double[]{1.0, 3.0, 0.0});
-    points.add(new double[]{1.0, 4.0, 6.0});
+    List<Vector> points = Lists.newArrayList(
+      Vectors.dense(1.0, 2.0, 6.0),
+      Vectors.dense(1.0, 3.0, 0.0),
+      Vectors.dense(1.0, 4.0, 6.0)
+    );
 
-    double[][] expectedCenter = { {1.0, 3.0, 4.0} };
+    Vector expectedCenter = Vectors.dense(1.0, 3.0, 4.0);
 
-    JavaRDD<double[]> data = sc.parallelize(points, 2);
+    JavaRDD<Vector> data = sc.parallelize(points, 2);
     KMeansModel model = new KMeans().setK(1).setMaxIterations(5).run(data.rdd());
-    assertSetsEqual(model.clusterCenters(), expectedCenter);
+    assertEquals(1, model.clusterCenters().length);
+    assertEquals(expectedCenter, model.clusterCenters()[0]);
 
-    model = new KMeans().setK(1)
-                        .setMaxIterations(1)
-                        .setRuns(1)
-                        .setInitializationMode(KMeans.RANDOM())
-                        .run(data.rdd());
-    assertSetsEqual(model.clusterCenters(), expectedCenter);
+    model = new KMeans()
+      .setK(1)
+      .setMaxIterations(1)
+      .setInitializationMode(KMeans.RANDOM())
+      .run(data.rdd());
+    assertEquals(expectedCenter, model.clusterCenters()[0]);
   }
 }

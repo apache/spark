@@ -23,10 +23,12 @@ For its Scala API, Spark {{site.SPARK_VERSION}} depends on Scala {{site.SCALA_BI
 
 # Running the Examples and Shell
 
-Spark comes with several sample programs in the `examples` directory.
-To run one of the samples, use `./bin/run-example <class> <params>` in the top-level Spark directory
+Spark comes with several sample programs.  Scala and Java examples are in the `examples` directory, and Python examples are in `python/examples`.
+To run one of the Java or Scala sample programs, use `./bin/run-example <class> <params>` in the top-level Spark directory
 (the `bin/run-example` script sets up the appropriate paths and launches that program).
 For example, try `./bin/run-example org.apache.spark.examples.SparkPi local`.
+To run a Python sample program, use `./bin/pyspark <sample-program> <params>`.  For example, try `./bin/pyspark ./python/examples/pi.py local`.
+
 Each example prints usage help when run with no parameters.
 
 Note that all of the sample programs take a `<master>` parameter specifying the cluster URL
@@ -76,6 +78,7 @@ For this version of Spark (0.8.1) Hadoop 2.2.x (or newer) users will have to bui
   * [Java Programming Guide](java-programming-guide.html): using Spark from Java
   * [Python Programming Guide](python-programming-guide.html): using Spark from Python
 * [Spark Streaming](streaming-programming-guide.html): Spark's API for processing data streams
+* [Spark SQL](sql-programming-guide.html): Support for running relational queries on Spark
 * [MLlib (Machine Learning)](mllib-guide.html): Spark's built-in machine learning library
 * [Bagel (Pregel on Spark)](bagel-programming-guide.html): simple graph processing model
 * [GraphX (Graphs on Spark)](graphx-programming-guide.html): Spark's new API for graphs

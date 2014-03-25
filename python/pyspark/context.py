@@ -20,6 +20,7 @@ import shutil
 import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
+from collections import namedtuple
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
@@ -29,6 +30,7 @@ from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
+from pyspark import rdd
 from pyspark.rdd import RDD
 
 from py4j.java_collections import ListConverter
@@ -83,6 +85,11 @@ class SparkContext(object):
             ...
         ValueError:...
         """
+        if rdd._extract_concise_traceback() is not None:
+            self._callsite = rdd._extract_concise_traceback()
+        else:
+            tempNamedTuple = namedtuple("Callsite", "function file linenum")
+            self._callsite = tempNamedTuple(function=None, file=None, linenum=None)
         SparkContext._ensure_initialized(self, gateway=gateway)
 
         self.environment = environment or {}
@@ -169,7 +176,14 @@ class SparkContext(object):
 
             if instance:
                 if SparkContext._active_spark_context and SparkContext._active_spark_context != instance:
-                    raise ValueError("Cannot run multiple SparkContexts at once")
+                    currentMaster = SparkContext._active_spark_context.master
+                    currentAppName = SparkContext._active_spark_context.appName
+                    callsite = SparkContext._active_spark_context._callsite
+
+                    # Raise error if there is already a running Spark context
+                    raise ValueError("Cannot run multiple SparkContexts at once; existing SparkContext(app=%s, master=%s)" \
+                        " created by %s at %s:%s " \
+                        % (currentAppName, currentMaster, callsite.function, callsite.file, callsite.linenum))
                 else:
                     SparkContext._active_spark_context = instance
 

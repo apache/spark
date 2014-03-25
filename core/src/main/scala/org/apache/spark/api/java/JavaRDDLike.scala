@@ -19,7 +19,6 @@ package org.apache.spark.api.java
 
 import java.util.{Comparator, List => JList}
 
-import scala.Tuple2
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
@@ -283,7 +282,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * Return an array that contains all of the elements in this RDD.
+   * @deprecated As of Spark 1.0.0, toArray() is deprecated, use {@link #collect()} instead
    */
+  @Deprecated
   def toArray(): JList[T] = collect()
 
   /**
@@ -478,6 +479,26 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
+   * Returns the maximum element from this RDD as defined by the specified
+   * Comparator[T].
+   * @params comp the comparator that defines ordering
+   * @return the maximum of the RDD
+   * */
+  def max(comp: Comparator[T]): T = {
+    rdd.max()(Ordering.comparatorToOrdering(comp))
+  }
+
+  /**
+   * Returns the minimum element from this RDD as defined by the specified
+   * Comparator[T].
+   * @params comp the comparator that defines ordering
+   * @return the minimum of the RDD
+   * */
+  def min(comp: Comparator[T]): T = {
+    rdd.min()(Ordering.comparatorToOrdering(comp))
+  }
+
+  /**
    * Returns the first K elements from this RDD using the
    * natural ordering for T while maintain the order.
    * @param num the number of top elements to return
@@ -500,8 +521,4 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   def name(): String = rdd.name
 
-  /** Reset generator */
-  def setGenerator(_generator: String) = {
-    rdd.setGenerator(_generator)
-  }
 }

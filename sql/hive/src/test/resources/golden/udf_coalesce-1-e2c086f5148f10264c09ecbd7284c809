@@ -1,0 +1,4 @@
+coalesce(a1, a2, ...) - Returns the first non-null argument
+Example:
+  > SELECT coalesce(NULL, 1, NULL) FROM src LIMIT 1;
+  1

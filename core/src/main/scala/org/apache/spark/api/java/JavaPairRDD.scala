@@ -26,7 +26,7 @@ import com.google.common.base.Optional
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
-import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
+import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, Job}
 
 import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.Partitioner._
@@ -556,6 +556,14 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       outputFormatClass: Class[F],
       conf: Configuration) {
     rdd.saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass, conf)
+  }
+
+  /**
+   * Output the RDD to any Hadoop-supported storage system, using
+   * a Configuration object for that storage system.
+   */
+  def saveAsNewAPIHadoopDataset(conf: Configuration) {
+    rdd.saveAsNewAPIHadoopDataset(conf)
   }
 
   /** Output the RDD to any Hadoop-supported file system. */

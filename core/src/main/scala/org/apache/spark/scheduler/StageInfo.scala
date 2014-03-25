@@ -17,28 +17,25 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection._
-
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.storage.RDDInfo
 
 /**
  * Stores information about a stage to pass from the scheduler to SparkListeners.
- *
- * taskInfos stores the metrics for all tasks that have completed, including redundant, speculated
- * tasks.
  */
-class StageInfo(
-    stage: Stage,
-    val taskInfos: mutable.Buffer[(TaskInfo, TaskMetrics)] =
-    mutable.Buffer[(TaskInfo, TaskMetrics)]()
-) {
-  val stageId = stage.id
+private[spark]
+class StageInfo(val stageId: Int, val name: String, val numTasks: Int, val rddInfo: RDDInfo) {
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
   var completionTime: Option[Long] = None
-  val rddName = stage.rdd.name
-  val name = stage.name
-  val numPartitions = stage.numPartitions
-  val numTasks = stage.numTasks
   var emittedTaskSizeWarning = false
+}
+
+private[spark]
+object StageInfo {
+  def fromStage(stage: Stage): StageInfo = {
+    val rdd = stage.rdd
+    val rddName = Option(rdd.name).getOrElse(rdd.id.toString)
+    val rddInfo = new RDDInfo(rdd.id, rddName, rdd.partitions.size, rdd.getStorageLevel)
+    new StageInfo(stage.id, stage.name, stage.numTasks, rddInfo)
+  }
 }

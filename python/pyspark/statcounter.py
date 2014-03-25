@@ -26,7 +26,9 @@ class StatCounter(object):
         self.n = 0L    # Running count of our values
         self.mu = 0.0  # Running mean of our values
         self.m2 = 0.0  # Running variance numerator (sum of (x - mean)^2)
-
+        self.maxValue = float("-inf")
+        self.minValue = float("inf")
+        
         for v in values:
             self.merge(v)
             
@@ -36,6 +38,11 @@ class StatCounter(object):
         self.n += 1
         self.mu += delta / self.n
         self.m2 += delta * (value - self.mu)
+        if self.maxValue < value:
+            self.maxValue = value
+        if self.minValue > value:
+            self.minValue = value
+            
         return self
 
     # Merge another StatCounter into this one, adding up the internal statistics.
@@ -49,7 +56,10 @@ class StatCounter(object):
             if self.n == 0:
                 self.mu = other.mu
                 self.m2 = other.m2
-                self.n = other.n       
+                self.n = other.n
+                self.maxValue = other.maxValue
+                self.minValue = other.minValue
+                
             elif other.n != 0:        
                 delta = other.mu - self.mu
                 if other.n * 10 < self.n:
@@ -58,6 +68,9 @@ class StatCounter(object):
                     self.mu = other.mu - (delta * self.n) / (self.n + other.n)
                 else:
                     self.mu = (self.mu * self.n + other.mu * other.n) / (self.n + other.n)
+                
+                    self.maxValue = max(self.maxValue, other.maxValue)
+                    self.minValue = min(self.minValue, other.minValue)
         
                 self.m2 += other.m2 + (delta * delta * self.n * other.n) / (self.n + other.n)
                 self.n += other.n
@@ -76,6 +89,12 @@ class StatCounter(object):
     def sum(self):
         return self.n * self.mu
 
+    def min(self):
+        return self.minValue
+
+    def max(self):
+        return self.maxValue
+    
     # Return the variance of the values.
     def variance(self):
         if self.n == 0:
@@ -105,5 +124,5 @@ class StatCounter(object):
         return math.sqrt(self.sampleVariance())
 
     def __repr__(self):
-        return "(count: %s, mean: %s, stdev: %s)" % (self.count(), self.mean(), self.stdev())
+        return "(count: %s, mean: %s, stdev: %s, max: %s, min: %s)" % (self.count(), self.mean(), self.stdev(), self.max(), self.min())
 

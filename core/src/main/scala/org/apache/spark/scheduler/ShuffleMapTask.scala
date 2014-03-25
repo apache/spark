@@ -25,6 +25,7 @@ import scala.collection.mutable.HashMap
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.rdd.{RDD, RDDCheckpointData}
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage._
 
 private[spark] object ShuffleMapTask {
@@ -151,7 +152,7 @@ private[spark] class ShuffleMapTask(
 
     try {
       // Obtain all the block writers for shuffle blocks.
-      val ser = SparkEnv.get.serializerManager.get(dep.serializerClass, SparkEnv.get.conf)
+      val ser = Serializer.getSerializer(dep.serializer)
       shuffle = shuffleBlockManager.forMapTask(dep.shuffleId, partitionId, numOutputSplits, ser)
 
       // Write the map output to its associated buckets.

@@ -46,10 +46,10 @@ class ClientDistributedCacheManager() extends Logging {
 
   /**
    * Add a resource to the list of distributed cache resources. This list can
-   * be sent to the ApplicationMaster and possibly the workers so that it can 
+   * be sent to the ApplicationMaster and possibly the executors so that it can
    * be downloaded into the Hadoop distributed cache for use by this application.
    * Adds the LocalResource to the localResources HashMap passed in and saves 
-   * the stats of the resources to they can be sent to the workers and verified.
+   * the stats of the resources to they can be sent to the executors and verified.
    *
    * @param fs FileSystem
    * @param conf Configuration
