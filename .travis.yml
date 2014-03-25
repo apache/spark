@@ -1,0 +1,22 @@
+ language: scala
+ scala:
+   - "2.10.3"
+ jdk:
+   - oraclejdk7
+ env:
+  matrix:
+   - TEST=sql/test
+   - TEST=hive/test
+   - TEST=catalyst/test
+   - TEST=streaming/test
+   - TEST=graphx/test
+   - TEST=mllib/test
+   - TEST=graphx/test
+   - TEST=bagel/test
+ cache:
+   directories:
+     - $HOME/.m2
+     - $HOME/.ivy2
+     - $HOME/.sbt
+ script:
+   - "sbt ++$TRAVIS_SCALA_VERSION scalastyle $TEST"
