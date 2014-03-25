@@ -15,16 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
-package execution
+package org.apache.spark.sql.hive.execution
+
+import org.apache.spark.sql.hive.TestHive._
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
 class HiveQuerySuite extends HiveComparisonTest {
-  import TestHive._
-
   createQueryTest("Simple Average",
     "SELECT AVG(key) FROM src")
 

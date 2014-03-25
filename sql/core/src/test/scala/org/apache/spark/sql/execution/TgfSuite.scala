@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package execution
+package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions._

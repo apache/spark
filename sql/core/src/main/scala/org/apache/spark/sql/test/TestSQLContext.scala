@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark
-package sql
-package test
+package org.apache.spark.sql.test
+
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.SQLContext
 
 /** A SQLContext that can be used for local testing. */
 object TestSQLContext

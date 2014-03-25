@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package analysis
+package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -89,7 +87,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
 
   /**
    * Replaces [[UnresolvedAttribute]]s with concrete
-   * [[expressions.AttributeReference AttributeReferences]] from a logical plan node's children.
+   * [[catalyst.expressions.AttributeReference AttributeReferences]] from a logical plan node's
+   * children.
    */
   object ResolveReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
@@ -106,7 +105,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   }
 
   /**
-   * Replaces [[UnresolvedFunction]]s with concrete [[expressions.Expression Expressions]].
+   * Replaces [[UnresolvedFunction]]s with concrete [[catalyst.expressions.Expression Expressions]].
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
