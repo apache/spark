@@ -227,7 +227,7 @@ object Bagel extends Logging {
     var numMsgs = sc.accumulator(0)
     var numActiveVerts = sc.accumulator(0)
     val processed = grouped.flatMapValues {
-      case (_, vs) if vs.size == 0 => None
+      case (_, vs) if !vs.hasNext => None
       case (c, vs) =>
         val (newVert, newMsgs) =
           compute(vs.next,
