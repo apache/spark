@@ -291,7 +291,7 @@ private[spark] class Executor(
    * Create a ClassLoader for use in tasks, adding any JARs specified by the user or any classes
    * created by the interpreter to the search path
    */
-  private def createClassLoader(): AddableURLClassLoader = {
+  private def createClassLoader(): MutableURLClassLoader = {
     val loader = this.getClass.getClassLoader
 
     // For each of the jars in the jarSet, add them to the class loader.

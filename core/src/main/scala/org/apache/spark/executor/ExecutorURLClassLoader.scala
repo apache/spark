@@ -32,9 +32,9 @@ private[spark] trait MutableURLClassLoader extends ClassLoader {
 }
 
 private[spark] class ChildExecutorURLClassLoader(urls: Array[URL], parent: ClassLoader)
-  extends ClassLoader with AddableURLClassLoader {
+  extends ClassLoader with MutableURLClassLoader {
 
-  private val userClassLoader = new URLClassLoader(urls, null){
+  private object userClassLoader extends URLClassLoader(urls, null){
     override def addURL(url: URL) {
       super.addURL(url)
     }
@@ -65,7 +65,7 @@ private[spark] class ChildExecutorURLClassLoader(urls: Array[URL], parent: Class
 }
 
 private[spark] class ExecutorURLClassLoader(urls: Array[URL], parent: ClassLoader)
-  extends URLClassLoader(urls, parent) with AddableURLClassLoader {
+  extends URLClassLoader(urls, parent) with MutableURLClassLoader {
 
   override def addURL(url: URL) {
     super.addURL(url)

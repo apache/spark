@@ -15,23 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util;
+package org.apache.spark.util
 
 /**
  * A class loader which makes findClass accesible to the child
  */
-public class ParentClassLoader extends ClassLoader {
-    public ParentClassLoader(ClassLoader myParent) {
-	super(myParent);
-    }
+private[spark] class ParentClassLoader(parent: ClassLoader) extends ClassLoader(parent) {
 
-    @Override
-    public Class<?> findClass(String name) throws ClassNotFoundException {
-	return super.findClass(name);
-    }
+  override def findClass(name: String) = {
+    super.findClass(name)
+  }
 
-    @Override
-    public Class<?> loadClass(String name) throws ClassNotFoundException {
-	return super.loadClass(name);
-    }
+  override def loadClass(name: String): Class[_] = {
+    super.loadClass(name)
+  }
 }
