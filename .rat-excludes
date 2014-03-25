@@ -40,3 +40,5 @@ work
 golden
 test.out/*
 .*iml
+./core/src/test/resources/fake-*.jar
+./core/src/test/resources/classes*/*
