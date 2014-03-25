@@ -133,8 +133,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     results
   }
 
-  // TODO: Move this.
-
   SessionState.start(sessionState)
 
   /**
@@ -191,8 +189,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     override val strategies: Seq[Strategy] = Seq(
       TopK,
-      ColumnPrunings,
-      PartitionPrunings,
+      ParquetOperations,
       HiveTableScans,
       DataSinks,
       Scripts,
@@ -217,7 +214,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     override lazy val optimizedPlan =
       optimizer(catalog.PreInsertionCasts(catalog.CreateTables(analyzed)))
 
-    // TODO: We are loosing schema here.
     override lazy val toRdd: RDD[Row] =
       analyzed match {
         case NativeCommand(cmd) =>
