@@ -57,7 +57,11 @@ object MimaBuild {
     val versionExcludes =
       SparkBuild.SPARK_VERSION match {
         case v if v.startsWith("1.0") =>
-          Seq(excludePackage("org.apache.spark.api.java")) ++
+          Seq(
+             excludePackage("org.apache.spark.api.java"),
+             excludePackage("org.apache.spark.streaming.api.java"),
+             excludePackage("org.apache.spark.mllib")
+           ) ++
            excludeSparkClass("rdd.ClassTags") ++
            excludeSparkClass("util.XORShiftRandom") ++
            excludeSparkClass("mllib.recommendation.MFDataGenerator") ++
