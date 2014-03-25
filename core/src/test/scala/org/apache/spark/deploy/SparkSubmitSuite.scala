@@ -40,14 +40,14 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     childArgsStr should include ("--jar thejar.jar")
     childArgsStr should include ("--class org.SomeClass")
     childArgsStr should include ("--addJars one.jar,two.jar,three.jar")
-    childArgsStr should include ("--worker-memory 5g")
-    childArgsStr should include ("--master-memory 4g")
-    childArgsStr should include ("--worker-cores 5")
+    childArgsStr should include ("--executor-memory 5g")
+    childArgsStr should include ("--driver-memory 4g")
+    childArgsStr should include ("--executor-cores 5")
     childArgsStr should include ("--args arg1 --args arg2")
     childArgsStr should include ("--queue thequeue")
     childArgsStr should include ("--files file1.txt,file2.txt")
     childArgsStr should include ("--archives archive1.txt,archive2.txt")
-    childArgsStr should include ("--num-workers 6")
+    childArgsStr should include ("--num-executors 6")
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
     classpath should have length (0)
     sysProps should have size (0)
@@ -69,22 +69,22 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     classpath should contain ("two.jar")
     classpath should contain ("three.jar")
     sysProps("spark.executor.memory") should be ("5g")
-    sysProps("spark.cores.max") should be ("5")
+    sysProps("spark.executor.cores") should be ("5")
     sysProps("spark.yarn.queue") should be ("thequeue")
     sysProps("spark.yarn.dist.files") should be ("file1.txt,file2.txt")
     sysProps("spark.yarn.dist.archives") should be ("archive1.txt,archive2.txt")
-    sysProps("spark.worker.instances") should be ("6")
+    sysProps("spark.executor.instances") should be ("6")
   }
 
   test("handles standalone cluster mode") {
     val clArgs = Array("thejar.jar", "--deploy-mode", "cluster",
-      "--master", "spark://h:p", "--executor-memory", "5g", "--executor-cores", "5",
-      "--class", "org.SomeClass", "--arg", "arg1", "--arg", "arg2", "--supervise",
-      "--driver-memory", "4g")
+      "--master", "spark://h:p", "--class", "org.SomeClass", "--arg", "arg1", "--arg", "arg2",
+      "--supervise", "--driver-memory", "4g", "--driver-cores", "5")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     val childArgsStr = childArgs.mkString(" ")
-    childArgsStr.startsWith("--memory 5g --cores 5 --supervise") should be (true)
+    print("child args: " + childArgsStr)
+    childArgsStr.startsWith("--memory 4g --cores 5 --supervise") should be (true)
     childArgsStr should include ("launch spark://h:p thejar.jar org.SomeClass arg1 arg2")
     mainClass should be ("org.apache.spark.deploy.Client")
     classpath should have length (0)
@@ -93,7 +93,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
 
   test("handles standalone client mode") {
     val clArgs = Array("thejar.jar", "--deploy-mode", "client",
-      "--master", "spark://h:p", "--executor-memory", "5g", "--executor-cores", "5",
+      "--master", "spark://h:p", "--executor-memory", "5g", "--total-executor-cores", "5",
       "--class", "org.SomeClass", "--arg", "arg1", "--arg", "arg2",
       "--driver-memory", "4g")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -107,7 +107,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
 
   test("handles mesos client mode") {
     val clArgs = Array("thejar.jar", "--deploy-mode", "client",
-      "--master", "mesos://h:p", "--executor-memory", "5g", "--executor-cores", "5",
+      "--master", "mesos://h:p", "--executor-memory", "5g", "--total-executor-cores", "5",
       "--class", "org.SomeClass", "--arg", "arg1", "--arg", "arg2",
       "--driver-memory", "4g")
     val appArgs = new SparkSubmitArguments(clArgs)
