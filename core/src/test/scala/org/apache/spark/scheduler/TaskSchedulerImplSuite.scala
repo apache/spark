@@ -293,4 +293,37 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
     assert(count > 0)
     assert(count < numTrials)
   }
+
+  test("Scheduler correctly accounts for multiple CPUs per task") {
+    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val taskCpus = 2
+
+    sc.conf.set("spark.task.cpus", taskCpus.toString)
+    val taskScheduler = new TaskSchedulerImpl(sc)
+    taskScheduler.initialize(new FakeSchedulerBackend)
+    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
+    val dagScheduler = new DAGScheduler(sc, taskScheduler) {
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
+      override def executorAdded(execId: String, host: String) {}
+    }
+
+    val numFreeCores = 1
+    val singleCoreWorkerOffers = Seq(new WorkerOffer("executor0", "host0", numFreeCores),
+      new WorkerOffer("executor1", "host1", numFreeCores))
+
+    // No tasks should run as we only have 1 core free.
+    val taskSet = FakeTask.createTaskSet(1)
+    taskScheduler.submitTasks(taskSet)
+    var taskDescriptions = taskScheduler.resourceOffers(singleCoreWorkerOffers).flatten
+    assert(0 === taskDescriptions.length)
+
+    // Now change the offers to have 2 cores in one executor and verify if it
+    // is chosen.
+    val multiCoreWorkerOffers = Seq(new WorkerOffer("executor0", "host0", taskCpus),
+      new WorkerOffer("executor1", "host1", numFreeCores))
+    taskScheduler.submitTasks(taskSet)
+    taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
+    assert(1 === taskDescriptions.length)
+    assert("executor0" === taskDescriptions(0).executorId)
+  }
 }

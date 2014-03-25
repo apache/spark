@@ -56,9 +56,6 @@ private[spark] class TaskSetManager(
 {
   val conf = sched.sc.conf
 
-  // CPUs to request per task
-  val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)
-
   /*
    * Sometimes if an executor is dead or in an otherwise invalid state, the driver
    * does not realize right away leading to repeated task failures. If enabled,
@@ -388,7 +385,7 @@ private[spark] class TaskSetManager(
       maxLocality: TaskLocality.TaskLocality)
     : Option[TaskDescription] =
   {
-    if (!isZombie && availableCpus >= CPUS_PER_TASK) {
+    if (!isZombie) {
       val curTime = clock.getTime()
 
       var allowedLocality = getAllowedLocalityLevel(curTime)
