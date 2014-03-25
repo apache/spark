@@ -27,7 +27,8 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.Deserializer
 
-import org.apache.spark.sql.catalyst.analysis.Catalog
+
+import org.apache.spark.sql.catalyst.analysis.{Catalog, EliminateAnalysisOperators}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -96,7 +97,8 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
         createTable(databaseName, tableName, child.output)
 
         InsertIntoTable(
-          lookupRelation(Some(databaseName), tableName, None).asInstanceOf[BaseRelation],
+          EliminateAnalysisOperators(
+            lookupRelation(Some(databaseName), tableName, None)),
           Map.empty,
           child,
           overwrite = false)
