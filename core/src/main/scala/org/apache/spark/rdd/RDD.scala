@@ -147,6 +147,7 @@ abstract class RDD[T: ClassTag](
     }
     storageLevel = newLevel
     // Register the RDD with the SparkContext
+    sc.cleaner.registerRDDForCleanup(this)
     sc.persistentRdds(id) = this
     this
   }
@@ -1101,22 +1102,5 @@ abstract class RDD[T: ClassTag](
 
   def toJavaRDD() : JavaRDD[T] = {
     new JavaRDD(this)(elementClassTag)
-  }
-
-  override def finalize() {
-    try {
-      sc.cleaner.scheduleRDDCleanup(id)
-    } catch {
-      case t: Throwable =>
-        // Paranoia - If logError throws error as well, report to stderr.
-        try {
-          logError("Error in finalize", t)
-        } catch {
-          case _ : Throwable =>
-            System.err.println("Error in finalize (and could not write to logError): " + t)
-        }
-    } finally {
-      super.finalize()
-    }
   }
 }

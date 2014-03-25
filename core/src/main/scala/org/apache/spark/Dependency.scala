@@ -53,24 +53,7 @@ class ShuffleDependency[K, V](
 
   val shuffleId: Int = rdd.context.newShuffleId()
 
-  override def finalize() {
-    try {
-      if (rdd != null) {
-        rdd.sparkContext.cleaner.scheduleShuffleCleanup(shuffleId)
-      }
-    } catch {
-      case t: Throwable =>
-        // Paranoia - If logError throws error as well, report to stderr.
-        try {
-          logError("Error in finalize", t)
-        } catch {
-          case _ : Throwable =>
-            System.err.println("Error in finalize (and could not write to logError): " + t)
-        }
-    } finally {
-      super.finalize()
-    }
-  }
+  rdd.sparkContext.cleaner.registerShuffleForCleanup(this)
 }
 
 

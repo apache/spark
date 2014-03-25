@@ -9,7 +9,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.storage.{RDDBlockId, ShuffleBlockId}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{ShuffleCoGroupSplitDep, RDD}
 import scala.util.Random
 import java.lang.ref.WeakReference
 
@@ -23,18 +23,28 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
 
   test("cleanup RDD") {
     val rdd = newRDD.persist()
-    rdd.count()
+    val collected = rdd.collect().toList
     val tester = new CleanerTester(sc, rddIds = Seq(rdd.id))
-    cleaner.scheduleRDDCleanup(rdd.id)
+
+    // Explicit cleanup
+    cleaner.cleanupRDD(rdd)
     tester.assertCleanup
+
+    // verify that RDDs can be re-executed after cleaning up
+    assert(rdd.collect().toList === collected)
   }
 
   test("cleanup shuffle") {
-    val rdd = newShuffleRDD
-    rdd.count()
-    val tester = new CleanerTester(sc, shuffleIds = Seq(0))
-    cleaner.scheduleShuffleCleanup(0)
+    val (rdd, shuffleDeps) = newRDDWithShuffleDependencies
+    val collected = rdd.collect().toList
+    val tester = new CleanerTester(sc, shuffleIds = shuffleDeps.map(_.shuffleId))
+
+    // Explicit cleanup
+    shuffleDeps.foreach(s => cleaner.cleanupShuffle(s))
     tester.assertCleanup
+
+    // Verify that shuffles can be re-executed after cleaning up
+    assert(rdd.collect().toList === collected)
   }
 
   test("automatically cleanup RDD") {
@@ -43,7 +53,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     
     // test that GC does not cause RDD cleanup due to a strong reference
     val preGCTester =  new CleanerTester(sc, rddIds = Seq(rdd.id))
-    doGC()
+    runGC()
     intercept[Exception] {
       preGCTester.assertCleanup(timeout(1000 millis))
     }
@@ -51,7 +61,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     // test that GC causes RDD cleanup after dereferencing the RDD
     val postGCTester = new CleanerTester(sc, rddIds = Seq(rdd.id))
     rdd = null  // make RDD out of scope
-    doGC()
+    runGC()
     postGCTester.assertCleanup
   }
 
@@ -61,7 +71,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
 
     // test that GC does not cause shuffle cleanup due to a strong reference
     val preGCTester =  new CleanerTester(sc, shuffleIds = Seq(0))
-    doGC()
+    runGC()
     intercept[Exception] {
       preGCTester.assertCleanup(timeout(1000 millis))
     }
@@ -69,7 +79,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     // test that GC causes shuffle cleanup after dereferencing the RDD
     val postGCTester = new CleanerTester(sc, shuffleIds = Seq(0))
     rdd = null  // make RDD out of scope, so that corresponding shuffle goes out of scope
-    doGC()
+    runGC()
     postGCTester.assertCleanup
   }
 
@@ -87,7 +97,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     }
 
     val buffer = new ArrayBuffer[RDD[_]]
-    for (i <- 1 to 1000) {
+    for (i <- 1 to 500) {
       buffer += randomRDD
     }
 
@@ -95,18 +105,16 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     val shuffleIds = 0 until sc.newShuffleId
 
     val preGCTester =  new CleanerTester(sc, rddIds, shuffleIds)
+    runGC()
     intercept[Exception] {
       preGCTester.assertCleanup(timeout(1000 millis))
     }
-
     // test that GC causes shuffle cleanup after dereferencing the RDD
     val postGCTester = new CleanerTester(sc, rddIds, shuffleIds)
     buffer.clear()
-    doGC()
+    runGC()
     postGCTester.assertCleanup
   }
-
-  // TODO (TD): Test that cleaned up RDD and shuffle can be recomputed again correctly.
 
   def newRDD = sc.makeRDD(1 to 10)
 
@@ -114,15 +122,30 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
 
   def newShuffleRDD = newPairRDD.reduceByKey(_ + _)
 
-  def doGC() {
+  def newRDDWithShuffleDependencies: (RDD[_], Seq[ShuffleDependency[_, _]]) = {
+    def getAllDependencies(rdd: RDD[_]): Seq[Dependency[_]] = {
+      rdd.dependencies ++ rdd.dependencies.flatMap { dep =>
+        getAllDependencies(dep.rdd)
+      }
+    }
+    val rdd = newShuffleRDD
+
+    // Get all the shuffle dependencies
+    val shuffleDeps = getAllDependencies(rdd).filter(_.isInstanceOf[ShuffleDependency[_, _]])
+      .map(_.asInstanceOf[ShuffleDependency[_, _]])
+    (rdd, shuffleDeps)
+  }
+
+  /** Run GC and make sure it actually has run */
+  def runGC() {
     val weakRef = new WeakReference(new Object())
     val startTime = System.currentTimeMillis
     System.gc() // Make a best effort to run the garbage collection. It *usually* runs GC.
-    System.runFinalization()  // Make a best effort to call finalizer on all cleaned objects.
+    // Wait until a weak reference object has been GCed
     while(System.currentTimeMillis - startTime < 10000 && weakRef.get != null) {
       System.gc()
       System.runFinalization()
-      Thread.sleep(100)
+      Thread.sleep(200)
     }
   }
 
@@ -149,10 +172,14 @@ class CleanerTester(sc: SparkContext, rddIds: Seq[Int] = Nil, shuffleIds: Seq[In
     }
   }
 
+  val MAX_VALIDATION_ATTEMPTS = 10
+  val VALIDATION_ATTEMPT_INTERVAL = 100
+
   logInfo("Attempting to validate before cleanup:\n" + uncleanedResourcesToString)
   preCleanupValidate()
   sc.cleaner.attachListener(cleanerListener)
 
+  /** Assert that all the stuff has been cleaned up */
   def assertCleanup(implicit waitTimeout: Eventually.Timeout) {
     try {
       eventually(waitTimeout, interval(10 millis)) {
@@ -165,6 +192,7 @@ class CleanerTester(sc: SparkContext, rddIds: Seq[Int] = Nil, shuffleIds: Seq[In
     }
   }
 
+  /** Verify that RDDs, shuffles, etc. occupy resources */
   private def preCleanupValidate() {
     assert(rddIds.nonEmpty || shuffleIds.nonEmpty, "Nothing to cleanup")
 
@@ -181,14 +209,34 @@ class CleanerTester(sc: SparkContext, rddIds: Seq[Int] = Nil, shuffleIds: Seq[In
       "One or more shuffles' blocks cannot be found in disk manager, cannot start cleaner test")
   }
 
+  /**
+   * Verify that RDDs, shuffles, etc. do not occupy resources. Tests multiple times as there is
+   * as there is not guarantee on how long it will take clean up the resources.
+   */
   private def postCleanupValidate() {
-    // Verify all the RDDs have been persisted
-    assert(rddIds.forall(!sc.persistentRdds.contains(_)))
-    assert(rddIds.forall(rddId => !blockManager.master.contains(rddBlockId(rddId))))
+    var attempts = 0
+    while (attempts < MAX_VALIDATION_ATTEMPTS) {
+      attempts += 1
+      logInfo("Attempt: " + attempts)
+      try {
+        // Verify all the RDDs have been unpersisted
+        assert(rddIds.forall(!sc.persistentRdds.contains(_)))
+        assert(rddIds.forall(rddId => !blockManager.master.contains(rddBlockId(rddId))))
 
-    // Verify all the shuffle have been deregistered and cleaned up
-    assert(shuffleIds.forall(!mapOutputTrackerMaster.containsShuffle(_)))
-    assert(shuffleIds.forall(shuffleId => !diskBlockManager.containsBlock(shuffleBlockId(shuffleId))))
+        // Verify all the shuffle have been deregistered and cleaned up
+        assert(shuffleIds.forall(!mapOutputTrackerMaster.containsShuffle(_)))
+        assert(shuffleIds.forall(shuffleId =>
+          !diskBlockManager.containsBlock(shuffleBlockId(shuffleId))))
+        return
+      } catch {
+        case t: Throwable =>
+          if (attempts >= MAX_VALIDATION_ATTEMPTS) {
+            throw t
+          } else {
+            Thread.sleep(VALIDATION_ATTEMPT_INTERVAL)
+          }
+      }
+    }
   }
 
   private def uncleanedResourcesToString = {
