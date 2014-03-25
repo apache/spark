@@ -8,7 +8,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import scala.util.Random
 import org.apache.spark.mllib.util.InfoTheory
 
-object EMDDiscretizerSuite {
+object EntropyMinimizationDiscretizerSuite {
     val nFeatures = 5
     val nDatapoints = 50
     val nLabels = 3
@@ -27,7 +27,7 @@ object EMDDiscretizerSuite {
 	}
 }
 
-class EMDDiscretizerSuite extends FunSuite with LocalSparkContext {
+class EntropyMinimizationDiscretizerSuite extends FunSuite with LocalSparkContext {
     
     test("EMD discretization") {
         val rnd = new Random()
@@ -46,7 +46,7 @@ class EMDDiscretizerSuite extends FunSuite with LocalSparkContext {
 		
 		val rdd = sc.parallelize(shuffledData, 3)
 		
-		val thresholds = EMDDiscretizer(rdd, Seq(0)).getThresholdsForFeature(0)
+		val thresholds = EntropyMinimizationDiscretizer(rdd, Seq(0)).getThresholdsForFeature(0)
 				
 		val thresholdsArray = thresholds.toArray
 		if (math.abs(thresholdsArray(1) - 33.5) > 1.55) {

@@ -30,7 +30,7 @@ import scala.collection.mutable
  * This class contains methods to discretize continuous values with the method proposed in
  * [Fayyad and Irani, Multi-Interval Discretization of Continuous-Valued Attributes, 1993]
  */
-class EMDDiscretizer private (
+class EntropyMinimizationDiscretizer private (
     @transient var data: RDD[LabeledPoint],
     @transient var continousFeatures: Seq[Int],
     var elementsPerPartition: Int = 18000,
@@ -47,7 +47,7 @@ class EMDDiscretizer private (
    *
    * @param data RDD[LabeledPoint] to be discretized
    */
-  def setData(data: RDD[LabeledPoint]): EMDDiscretizer = {
+  def setData(data: RDD[LabeledPoint]): EntropyMinimizationDiscretizer = {
     this.data = data
     this
   }
@@ -57,7 +57,7 @@ class EMDDiscretizer private (
    *
    * @param continuousFeatures Indexes of features to be discretized
    */
-  def setContinuousFeatures(continuousFeatures: Seq[Int]): EMDDiscretizer = {
+  def setContinuousFeatures(continuousFeatures: Seq[Int]): EntropyMinimizationDiscretizer = {
     this.continousFeatures = continuousFeatures
     this
   }
@@ -68,7 +68,7 @@ class EMDDiscretizer private (
    * @param ratio Maximum number of elements for a partition
    * @return The Discretizer with the parameter changed
    */
-  def setElementsPerPartition(ratio: Int): EMDDiscretizer = {
+  def setElementsPerPartition(ratio: Int): EntropyMinimizationDiscretizer = {
     this.elementsPerPartition = ratio
     this
   }
@@ -79,7 +79,7 @@ class EMDDiscretizer private (
    * @param maxBins Maximum number of discrete values
    * @return The Discretizer with the parameter changed
    */
-  def setMaxBins(maxBins: Int): EMDDiscretizer = {
+  def setMaxBins(maxBins: Int): EntropyMinimizationDiscretizer = {
     this.maxBins = maxBins
     this
   }
@@ -388,15 +388,15 @@ class EMDDiscretizer private (
 
 }
 
-object EMDDiscretizer {
+object EntropyMinimizationDiscretizer {
 
   def apply(
       data: RDD[LabeledPoint],
       continuousFeatures: Seq[Int])
-    : EMDDiscretizer = {
-    new EMDDiscretizer(data, continuousFeatures)
+    : EntropyMinimizationDiscretizer = {
+    new EntropyMinimizationDiscretizer(data, continuousFeatures)
   }
 
-  def apply: EMDDiscretizer = new EMDDiscretizer()
+  def apply: EntropyMinimizationDiscretizer = new EntropyMinimizationDiscretizer()
 
 }
