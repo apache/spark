@@ -679,7 +679,13 @@ private[spark] object Utils extends Logging {
   private val SPARK_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
 
   private[spark] class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String,
-                                    val firstUserLine: Int, val firstUserClass: String)
+                                    val firstUserLine: Int, val firstUserClass: String) {
+
+    /** Returns a printable version of the call site info suitable for logs. */
+    override def toString = {
+      "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine)
+    }
+  }
 
   /**
    * When called inside a class in the spark package, returns the name of the user code class
@@ -687,8 +693,8 @@ private[spark] object Utils extends Logging {
    * This is used, for example, to tell users where in their code each RDD got created.
    */
   def getCallSiteInfo: CallSiteInfo = {
-    val trace = Thread.currentThread.getStackTrace().filter( el =>
-      (!el.getMethodName.contains("getStackTrace")))
+    val trace = Thread.currentThread.getStackTrace()
+      .filterNot(_.getMethodName.contains("getStackTrace"))
 
     // Keep crawling up the stack trace until we find the first function not inside of the spark
     // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
@@ -719,12 +725,6 @@ private[spark] object Utils extends Logging {
       }
     }
     new CallSiteInfo(lastSparkMethod, firstUserFile, firstUserLine, firstUserClass)
-  }
-
-  /** Returns a printable version of the call site info suitable for logs. */
-  def formatCallSiteInfo(callSiteInfo: CallSiteInfo = Utils.getCallSiteInfo) = {
-    "%s at %s:%s".format(callSiteInfo.lastSparkMethod, callSiteInfo.firstUserFile,
-                         callSiteInfo.firstUserLine)
   }
 
   /** Return a string containing part of a file from byte 'start' to 'end'. */
