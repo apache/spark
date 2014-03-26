@@ -76,7 +76,7 @@ case class Limit(limit: Int, child: SparkPlan)(@transient sc: SparkContext) exte
 
   override def execute() = {
     child.execute()
-      .mapPartitions(_.take(limit))
+      .mapPartitions(_.take(limit).map(_.copy()))
       .coalesce(1, shuffle = true)
       .mapPartitions(_.take(limit))
   }
