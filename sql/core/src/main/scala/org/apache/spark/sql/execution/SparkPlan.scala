@@ -15,16 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package execution
+package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.{Logging, Row}
 import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.catalyst.plans.{QueryPlan, logical}
+import org.apache.spark.sql.catalyst.plans.physical._
 
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
   self: Product =>
@@ -47,7 +46,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
   def executeCollect(): Array[Row] = execute().collect()
 
   protected def buildRow(values: Seq[Any]): Row =
-    new catalyst.expressions.GenericRow(values.toArray)
+    new GenericRow(values.toArray)
 }
 
 /**
