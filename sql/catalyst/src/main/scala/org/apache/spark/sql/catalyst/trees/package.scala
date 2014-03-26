@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
+package org.apache.spark.sql.catalyst
+
+import org.apache.spark.sql.Logger
 
 /**
  * A library for easily manipulating trees of operators.  Operators that extend TreeNode are

@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package execution
+package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.{SQLContext, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -175,7 +175,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         InsertIntoParquetTable(relation, planLater(child))(sparkContext) :: Nil
       case logical.InsertIntoTable(table: ParquetRelation, partition, child, overwrite) =>
         InsertIntoParquetTable(table, planLater(child))(sparkContext) :: Nil
-      case PhysicalOperation(projectList, filters, relation: parquet.ParquetRelation) =>
+      case PhysicalOperation(projectList, filters, relation: ParquetRelation) =>
         // TODO: Should be pushing down filters as well.
         pruneFilterProject(
           projectList,

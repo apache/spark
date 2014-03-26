@@ -82,11 +82,10 @@ object ParquetRelation {
   type RowType = org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 
   /**
-   * Creates a new ParquetRelation and underlying Parquetfile for the given
-   * LogicalPlan. Note that this is used inside [[SparkStrategies]] to
-   * create a resolved relation as a data sink for writing to a Parquetfile.
-   * The relation is empty but is initialized with ParquetMetadata and
-   * can be inserted into.
+   * Creates a new ParquetRelation and underlying Parquetfile for the given LogicalPlan. Note that
+   * this is used inside [[org.apache.spark.sql.execution.SparkStrategies SparkStrategies]] to
+   * create a resolved relation as a data sink for writing to a Parquetfile. The relation is empty
+   * but is initialized with ParquetMetadata and can be inserted into.
    *
    * @param pathString The directory the Parquetfile will be stored in.
    * @param child The child node that will be used for extracting the schema.

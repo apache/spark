@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package columnar
+package org.apache.spark.sql.columnar
 
-import java.nio.{ByteOrder, ByteBuffer}
+import java.nio.{ByteBuffer, ByteOrder}
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.columnar.ColumnBuilder._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 
 private[sql] trait ColumnBuilder {
@@ -35,7 +36,6 @@ private[sql] trait ColumnBuilder {
 }
 
 private[sql] abstract class BasicColumnBuilder[T <: DataType, JvmType] extends ColumnBuilder {
-  import ColumnBuilder._
 
   private var columnName: String = _
   protected var buffer: ByteBuffer = _

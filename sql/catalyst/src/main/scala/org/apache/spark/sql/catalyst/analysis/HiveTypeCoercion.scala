@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package analysis
+package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
@@ -37,8 +35,8 @@ trait HiveTypeCoercion {
       StringToIntegralCasts, FunctionArgumentConversion)
 
   /**
-   * Applies any changes to [[catalyst.expressions.AttributeReference AttributeReference]] dataTypes
-   * that are made by other rules to instances higher in the query tree.
+   * Applies any changes to [[catalyst.expressions.AttributeReference AttributeReference]] data
+   * types that are made by other rules to instances higher in the query tree.
    */
   object PropagateTypes extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {

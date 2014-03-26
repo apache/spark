@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package columnar
+package org.apache.spark.sql.columnar
 
 import java.nio.{ByteOrder, ByteBuffer}
 

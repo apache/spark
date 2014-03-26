@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
+package org.apache.spark.sql.catalyst
 
 /**
  * A framework for applying batches rewrite rules to trees, possibly to fixed point.

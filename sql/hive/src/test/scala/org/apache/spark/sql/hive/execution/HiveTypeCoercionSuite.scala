@@ -21,7 +21,6 @@ package org.apache.spark.sql.hive.execution
  * A set of tests that validate type promotion rules.
  */
 class HiveTypeCoercionSuite extends HiveComparisonTest {
-
   val baseTypes = Seq("1", "1.0", "1L", "1S", "1Y", "'1'")
 
   baseTypes.foreach { i =>

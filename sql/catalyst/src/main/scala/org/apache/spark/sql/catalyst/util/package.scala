@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
+package org.apache.spark.sql.catalyst
 
 import java.io.{PrintWriter, ByteArrayOutputStream, FileInputStream, File}
 

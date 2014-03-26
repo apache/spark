@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
+package org.apache.spark.sql.hive
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -29,6 +28,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
 
+import org.apache.spark.sql.Logging
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types

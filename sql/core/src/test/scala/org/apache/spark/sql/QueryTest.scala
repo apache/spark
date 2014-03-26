@@ -22,8 +22,6 @@ import org.scalatest.FunSuite
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 
-/* Implicits */
-
 class QueryTest extends FunSuite {
   /**
    * Runs the plan and makes sure the answer matches the expected result.

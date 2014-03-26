@@ -135,8 +135,7 @@ object RowWriteSupport {
 }
 
 /**
- * A `parquet.io.api.GroupConverter` that is able to convert a Parquet record
- * to a [[org.apache.spark.sql.catalyst.expressions.Row]] object.
+ * A `parquet.io.api.GroupConverter` that is able to convert a Parquet record to a `Row` object.
  *
  * @param schema The corresponding Catalyst schema in the form of a list of attributes.
  */

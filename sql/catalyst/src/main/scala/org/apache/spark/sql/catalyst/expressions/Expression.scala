@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package expressions
+package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.types.{DataType, FractionalType, IntegralType, NumericType}
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 
 abstract class Expression extends TreeNode[Expression] {
   self: Product =>
@@ -69,7 +68,7 @@ abstract class Expression extends TreeNode[Expression] {
   def childrenResolved = !children.exists(!_.resolved)
 
   /**
-   * A set of helper functions that return the correct descendant of [[scala.math.Numeric]] type
+   * A set of helper functions that return the correct descendant of `scala.math.Numeric[T]` type
    * and do any casting necessary of child evaluation.
    */
   @inline

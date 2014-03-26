@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
-package execution
+package org.apache.spark.sql.hive.execution
 
-import TestHive._
+import org.apache.spark.sql.hive.TestHive
+import org.apache.spark.sql.hive.TestHive._
 
 case class Data(a: Int, B: Int, n: Nested)
 case class Nested(a: Int, B: Int)

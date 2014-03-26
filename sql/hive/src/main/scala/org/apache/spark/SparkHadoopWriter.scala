@@ -113,11 +113,10 @@ class SparkHiveHadoopWriter(
         cmtr.commitTask(taCtxt)
         logInfo (taID + ": Committed")
       } catch {
-        case e: IOException => {
+        case e: IOException =>
           logError("Error committing the output of task: " + taID.value, e)
           cmtr.abortTask(taCtxt)
           throw e
-        }
       }
     } else {
       logWarning ("No need to commit output of task: " + taID.value)
@@ -161,12 +160,12 @@ class SparkHiveHadoopWriter(
     taskContext
   }
 
-  private def setIDs(jobid: Int, splitid: Int, attemptid: Int) {
-    jobID = jobid
-    splitID = splitid
-    attemptID = attemptid
+  private def setIDs(jobId: Int, splitId: Int, attemptId: Int) {
+    jobID = jobId
+    splitID = splitId
+    attemptID = attemptId
 
-    jID = new SerializableWritable[JobID](SparkHadoopWriter.createJobID(now, jobid))
+    jID = new SerializableWritable[JobID](SparkHadoopWriter.createJobID(now, jobId))
     taID = new SerializableWritable[TaskAttemptID](
       new TaskAttemptID(new TaskID(jID.value, true, splitID), attemptID))
   }

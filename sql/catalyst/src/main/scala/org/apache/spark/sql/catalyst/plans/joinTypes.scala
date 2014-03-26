@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package plans
+package org.apache.spark.sql.catalyst.plans
 
 sealed abstract class JoinType
 case object Inner extends JoinType

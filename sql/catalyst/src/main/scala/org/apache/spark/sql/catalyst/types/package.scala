@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
+package org.apache.spark.sql.catalyst
 /**
  * Contains a type system for attributes produced by relations, including complex types like
  * structs, arrays and maps.

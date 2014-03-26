@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package optimizer
+package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
@@ -125,7 +123,6 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] {
         grandChild))
   }
 
-  //
   def replaceAlias(condition: Expression, sourceAliases: Map[Attribute, Expression]): Expression = {
     condition transform {
       case a: AttributeReference => sourceAliases.getOrElse(a, a)

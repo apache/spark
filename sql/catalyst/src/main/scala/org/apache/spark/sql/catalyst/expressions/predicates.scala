@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package expressions
+package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.types.{BooleanType, StringType}
+import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.types.{BooleanType, StringType}
 
 trait Predicate extends Expression {
   self: Product =>

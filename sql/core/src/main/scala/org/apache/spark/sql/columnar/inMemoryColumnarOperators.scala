@@ -15,17 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package columnar
+package org.apache.spark.sql.columnar
 
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Attribute}
 import org.apache.spark.sql.execution.{SparkPlan, LeafNode}
+import org.apache.spark.sql.Row
+
+/* Implicit conversions */
+import org.apache.spark.sql.columnar.ColumnType._
 
 private[sql] case class InMemoryColumnarTableScan(attributes: Seq[Attribute], child: SparkPlan)
   extends LeafNode {
-
-  // For implicit conversion from `DataType` to `ColumnType`
-  import ColumnType._
 
   override def output: Seq[Attribute] = attributes
 

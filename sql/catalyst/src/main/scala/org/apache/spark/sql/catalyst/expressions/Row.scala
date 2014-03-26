@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package expressions
+package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.types.NativeType
 

@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
+package org.apache.spark.sql.hive
 
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._

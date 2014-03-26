@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
+package org.apache.spark.sql.catalyst
 
 /**
  * A set of classes that can be used to represent trees of relational expressions.  A key goal of
@@ -46,6 +45,6 @@ package catalyst
  * ability to reason about which subquery produced a given attribute.
  *
  * ==Evaluation==
- * The result of expressions can be evaluated using the [[Evaluate]] object.
+ * The result of expressions can be evaluated using the `Expression.apply(Row)` method.
  */
 package object expressions

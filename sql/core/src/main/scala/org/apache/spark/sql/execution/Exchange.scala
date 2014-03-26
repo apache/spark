@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package execution
+package org.apache.spark.sql.execution
 
+import org.apache.spark.{HashPartitioner, RangePartitioner, SparkConf}
 import org.apache.spark.rdd.ShuffledRDD
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions.{MutableProjection, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.util.MutablePair
-import org.apache.spark.{HashPartitioner, RangePartitioner, SparkConf}
 
 case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
 

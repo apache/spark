@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package execution
+package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.errors._

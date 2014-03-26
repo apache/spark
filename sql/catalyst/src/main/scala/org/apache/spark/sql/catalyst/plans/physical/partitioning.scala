@@ -15,10 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package plans
-package physical
+package org.apache.spark.sql.catalyst.plans.physical
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder}
 import org.apache.spark.sql.catalyst.types.IntegerType

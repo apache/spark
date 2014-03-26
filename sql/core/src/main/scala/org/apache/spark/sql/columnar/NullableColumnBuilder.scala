@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package columnar
+package org.apache.spark.sql.columnar
 
-import java.nio.{ByteOrder, ByteBuffer}
+import java.nio.{ByteBuffer, ByteOrder}
+
+import org.apache.spark.sql.Row
 
 /**
  * Builds a nullable column. The byte buffer of a nullable column contains:

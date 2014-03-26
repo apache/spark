@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark
-package sql
-package hive
-package execution
+package org.apache.spark.sql.hive.execution
 
-import org.scalatest.{FunSuite, BeforeAndAfterAll}
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.hive.TestHiveContext
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 class ConcurrentHiveSuite extends FunSuite with BeforeAndAfterAll {
   ignore("multiple instances not supported") {

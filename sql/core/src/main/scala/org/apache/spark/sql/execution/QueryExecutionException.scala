@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package execution
+package org.apache.spark.sql.execution
 
 class QueryExecutionException(message: String) extends Exception(message)

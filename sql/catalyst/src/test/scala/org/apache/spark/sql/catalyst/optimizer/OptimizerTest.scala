@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package optimizer
+package org.apache.spark.sql.catalyst.optimizer
 
 import org.scalatest.FunSuite
 

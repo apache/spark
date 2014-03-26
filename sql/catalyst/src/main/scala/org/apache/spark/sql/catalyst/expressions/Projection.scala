@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
-package expressions
+package org.apache.spark.sql.catalyst.expressions
 
 /**
  * Converts a [[Row]] to another Row given a sequence of expression that define each column of the
