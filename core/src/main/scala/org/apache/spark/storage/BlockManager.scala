@@ -820,8 +820,20 @@ private[spark] class BlockManager(
     // from RDD.id to blocks.
     logInfo("Removing RDD " + rddId)
     val blocksToRemove = blockInfo.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
-    blocksToRemove.foreach(blockId => removeBlock(blockId, tellMaster = false))
+    blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster = false) }
     blocksToRemove.size
+  }
+
+  /**
+   * Remove all blocks belonging to the given broadcast.
+   */
+  def removeBroadcast(broadcastId: Long) {
+    logInfo("Removing broadcast " + broadcastId)
+    val blocksToRemove = blockInfo.keys.filter(_.isBroadcast).collect {
+      case bid: BroadcastBlockId if bid.broadcastId == broadcastId => bid
+      case bid: BroadcastHelperBlockId if bid.broadcastId.broadcastId == broadcastId => bid
+    }
+    blocksToRemove.foreach { blockId => removeBlock(blockId) }
   }
 
   /**

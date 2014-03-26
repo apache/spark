@@ -100,6 +100,10 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       removeShuffle(shuffleId)
       sender ! true
 
+    case RemoveBroadcast(broadcastId, removeFromDriver) =>
+      removeBroadcast(broadcastId, removeFromDriver)
+      sender ! true
+
     case RemoveBlock(blockId) =>
       removeBlockFromWorkers(blockId)
       sender ! true
@@ -151,9 +155,15 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   private def removeShuffle(shuffleId: Int) {
     // Nothing to do in the BlockManagerMasterActor data structures
     val removeMsg = RemoveShuffle(shuffleId)
-    blockManagerInfo.values.foreach { bm =>
-      bm.slaveActor ! removeMsg
-    }
+    blockManagerInfo.values.foreach { bm => bm.slaveActor ! removeMsg }
+  }
+
+  private def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean) {
+    // TODO(aor): Consolidate usages of <driver>
+    val removeMsg = RemoveBroadcast(broadcastId)
+    blockManagerInfo.values
+      .filter { info => removeFromDriver || info.blockManagerId.executorId != "<driver>" }
+      .foreach { bm => bm.slaveActor ! removeMsg }
   }
 
   private def removeBlockManager(blockManagerId: BlockManagerId) {

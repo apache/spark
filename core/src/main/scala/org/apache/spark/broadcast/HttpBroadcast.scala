@@ -186,7 +186,7 @@ private[spark] object HttpBroadcast extends Logging {
    * and delete the associated broadcast file.
    */
   def unpersist(id: Long, removeFromDriver: Boolean) = synchronized {
-    //SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver)
+    SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver)
     if (removeFromDriver) {
       val file = new File(broadcastDir, BroadcastBlockId(id).name)
       files.remove(file.toString)

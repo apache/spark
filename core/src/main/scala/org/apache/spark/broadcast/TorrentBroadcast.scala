@@ -232,7 +232,7 @@ private[spark] object TorrentBroadcast extends Logging {
    * If removeFromDriver is true, also remove these persisted blocks on the driver.
    */
   def unpersist(id: Long, removeFromDriver: Boolean) = synchronized {
-    //SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver)
+    SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver)
   }
 
 }

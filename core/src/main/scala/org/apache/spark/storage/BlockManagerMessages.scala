@@ -22,9 +22,11 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import akka.actor.ActorRef
 
 private[storage] object BlockManagerMessages {
+
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from the master to slaves.
   //////////////////////////////////////////////////////////////////////////////////
+
   sealed trait ToBlockManagerSlave
 
   // Remove a block from the slaves that have it. This can only be used to remove
@@ -37,10 +39,15 @@ private[storage] object BlockManagerMessages {
   // Remove all blocks belonging to a specific shuffle.
   case class RemoveShuffle(shuffleId: Int) extends ToBlockManagerSlave
 
+  // Remove all blocks belonging to a specific broadcast.
+  case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
+    extends ToBlockManagerSlave
+
 
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from slaves to the master.
   //////////////////////////////////////////////////////////////////////////////////
+
   sealed trait ToBlockManagerMaster
 
   case class RegisterBlockManager(
@@ -57,8 +64,7 @@ private[storage] object BlockManagerMessages {
       var storageLevel: StorageLevel,
       var memSize: Long,
       var diskSize: Long)
-    extends ToBlockManagerMaster
-    with Externalizable {
+    extends ToBlockManagerMaster with Externalizable {
 
     def this() = this(null, null, null, 0, 0)  // For deserialization only
 
@@ -80,7 +86,8 @@ private[storage] object BlockManagerMessages {
   }
 
   object UpdateBlockInfo {
-    def apply(blockManagerId: BlockManagerId,
+    def apply(
+        blockManagerId: BlockManagerId,
         blockId: BlockId,
         storageLevel: StorageLevel,
         memSize: Long,

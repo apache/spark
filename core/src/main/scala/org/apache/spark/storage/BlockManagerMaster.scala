@@ -127,6 +127,13 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
   }
 
   /**
+   * Remove all blocks belonging to the given broadcast.
+   */
+  def removeBroadcast(broadcastId: Long, removeFromMaster: Boolean) {
+    askDriverWithReply(RemoveBroadcast(broadcastId, removeFromMaster))
+  }
+
+  /**
    * Return the memory status for each block manager, in the form of a map from
    * the block manager's id to two long values. The first value is the maximum
    * amount of memory allocated for the block manager, while the second is the
