@@ -114,12 +114,12 @@ class PythonMLLibAPI extends Serializable {
       java.util.LinkedList[java.lang.Object] = {
     val data = dataBytesJRDD.rdd.map(xBytes => {
         val x = deserializeDoubleVector(xBytes)
-        LabeledPoint(x(0), x.slice(1, x.length))
+        LabeledPoint(x(0), Vectors.dense(x.slice(1, x.length)))
     })
     val initialWeights = deserializeDoubleVector(initialWeightsBA)
     val model = trainFunc(data, initialWeights)
     val ret = new java.util.LinkedList[java.lang.Object]()
-    ret.add(serializeDoubleVector(model.weights))
+    ret.add(serializeDoubleVector(model.weights.toArray))
     ret.add(model.intercept: java.lang.Double)
     ret
   }
@@ -127,61 +127,112 @@ class PythonMLLibAPI extends Serializable {
   /**
    * Java stub for Python mllib LinearRegressionWithSGD.train()
    */
-  def trainLinearRegressionModelWithSGD(dataBytesJRDD: JavaRDD[Array[Byte]],
-      numIterations: Int, stepSize: Double, miniBatchFraction: Double,
+  def trainLinearRegressionModelWithSGD(
+      dataBytesJRDD: JavaRDD[Array[Byte]],
+      numIterations: Int,
+      stepSize: Double,
+      miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
-    trainRegressionModel((data, initialWeights) =>
-        LinearRegressionWithSGD.train(data, numIterations, stepSize,
-                                      miniBatchFraction, initialWeights),
-        dataBytesJRDD, initialWeightsBA)
+    trainRegressionModel(
+      (data, initialWeights) =>
+        LinearRegressionWithSGD.train(
+          data,
+          numIterations,
+          stepSize,
+          miniBatchFraction,
+          Vectors.dense(initialWeights)),
+      dataBytesJRDD,
+      initialWeightsBA)
   }
 
   /**
    * Java stub for Python mllib LassoWithSGD.train()
    */
-  def trainLassoModelWithSGD(dataBytesJRDD: JavaRDD[Array[Byte]], numIterations: Int,
-      stepSize: Double, regParam: Double, miniBatchFraction: Double,
+  def trainLassoModelWithSGD(
+      dataBytesJRDD: JavaRDD[Array[Byte]],
+      numIterations: Int,
+      stepSize: Double,
+      regParam: Double,
+      miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
-    trainRegressionModel((data, initialWeights) =>
-        LassoWithSGD.train(data, numIterations, stepSize, regParam,
-                           miniBatchFraction, initialWeights),
-        dataBytesJRDD, initialWeightsBA)
+    trainRegressionModel(
+      (data, initialWeights) =>
+        LassoWithSGD.train(
+          data,
+          numIterations,
+          stepSize,
+          regParam,
+          miniBatchFraction,
+          Vectors.dense(initialWeights)),
+      dataBytesJRDD,
+      initialWeightsBA)
   }
 
   /**
    * Java stub for Python mllib RidgeRegressionWithSGD.train()
    */
-  def trainRidgeModelWithSGD(dataBytesJRDD: JavaRDD[Array[Byte]], numIterations: Int,
-      stepSize: Double, regParam: Double, miniBatchFraction: Double,
+  def trainRidgeModelWithSGD(
+      dataBytesJRDD: JavaRDD[Array[Byte]],
+      numIterations: Int,
+      stepSize: Double,
+      regParam: Double,
+      miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
-    trainRegressionModel((data, initialWeights) =>
-        RidgeRegressionWithSGD.train(data, numIterations, stepSize, regParam,
-                                     miniBatchFraction, initialWeights),
-        dataBytesJRDD, initialWeightsBA)
+    trainRegressionModel(
+      (data, initialWeights) =>
+        RidgeRegressionWithSGD.train(
+          data,
+          numIterations,
+          stepSize,
+          regParam,
+          miniBatchFraction,
+          Vectors.dense(initialWeights)),
+      dataBytesJRDD,
+      initialWeightsBA)
   }
 
   /**
    * Java stub for Python mllib SVMWithSGD.train()
    */
-  def trainSVMModelWithSGD(dataBytesJRDD: JavaRDD[Array[Byte]], numIterations: Int,
-      stepSize: Double, regParam: Double, miniBatchFraction: Double,
+  def trainSVMModelWithSGD(
+      dataBytesJRDD: JavaRDD[Array[Byte]],
+      numIterations: Int,
+      stepSize: Double,
+      regParam: Double,
+      miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
-    trainRegressionModel((data, initialWeights) =>
-        SVMWithSGD.train(data, numIterations, stepSize, regParam,
-                                     miniBatchFraction, initialWeights),
-        dataBytesJRDD, initialWeightsBA)
+    trainRegressionModel(
+      (data, initialWeights) =>
+        SVMWithSGD.train(
+          data,
+          numIterations,
+          stepSize,
+          regParam,
+          miniBatchFraction,
+          Vectors.dense(initialWeights)),
+      dataBytesJRDD,
+      initialWeightsBA)
   }
 
   /**
    * Java stub for Python mllib LogisticRegressionWithSGD.train()
    */
-  def trainLogisticRegressionModelWithSGD(dataBytesJRDD: JavaRDD[Array[Byte]],
-      numIterations: Int, stepSize: Double, miniBatchFraction: Double,
+  def trainLogisticRegressionModelWithSGD(
+      dataBytesJRDD: JavaRDD[Array[Byte]],
+      numIterations: Int,
+      stepSize: Double,
+      miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
-    trainRegressionModel((data, initialWeights) =>
-        LogisticRegressionWithSGD.train(data, numIterations, stepSize,
-                                     miniBatchFraction, initialWeights),
-        dataBytesJRDD, initialWeightsBA)
+    trainRegressionModel(
+      (data, initialWeights) =>
+        LogisticRegressionWithSGD.train(
+          data,
+          numIterations,
+          stepSize,
+          miniBatchFraction,
+          Vectors.dense(initialWeights)),
+      dataBytesJRDD,
+      initialWeightsBA)
   }
 
   /**
@@ -192,7 +243,7 @@ class PythonMLLibAPI extends Serializable {
   {
     val data = dataBytesJRDD.rdd.map(xBytes => {
       val x = deserializeDoubleVector(xBytes)
-      LabeledPoint(x(0), x.slice(1, x.length))
+      LabeledPoint(x(0), Vectors.dense(x.slice(1, x.length)))
     })
     val model = NaiveBayes.train(data, lambda)
     val ret = new java.util.LinkedList[java.lang.Object]()

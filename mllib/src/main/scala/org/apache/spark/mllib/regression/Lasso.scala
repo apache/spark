@@ -17,12 +17,13 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
-import org.jblas.DoubleMatrix
+import breeze.linalg.{Vector => BV, DenseVector => BDV}
 
 /**
  * Regression model trained using Lasso.
@@ -31,16 +32,16 @@ import org.jblas.DoubleMatrix
  * @param intercept Intercept computed for this model.
  */
 class LassoModel(
-    override val weights: Array[Double],
+    override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept)
   with RegressionModel with Serializable {
 
   override protected def predictPoint(
-      dataMatrix: DoubleMatrix,
-      weightMatrix: DoubleMatrix,
+      dataMatrix: Vector,
+      weightMatrix: Vector,
       intercept: Double): Double = {
-    dataMatrix.dot(weightMatrix) + intercept
+    weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
   }
 }
 
@@ -71,8 +72,8 @@ class LassoWithSGD private (
   super.setIntercept(false)
 
   var yMean = 0.0
-  var xColMean: DoubleMatrix = _
-  var xColSd: DoubleMatrix = _
+  var xColMean: BV[Double] = _
+  var xColSd: BV[Double] = _
 
   /**
    * Construct a Lasso object with default parameters
@@ -85,33 +86,29 @@ class LassoWithSGD private (
     this
   }
 
-  override protected def createModel(weights: Array[Double], intercept: Double) = {
-    val weightsMat = new DoubleMatrix(weights.length, 1, weights: _*)
-    val weightsScaled = weightsMat.div(xColSd)
-    val interceptScaled = yMean - weightsMat.transpose().mmul(xColMean.div(xColSd)).get(0)
+  override protected def createModel(weights: Vector, intercept: Double) = {
+    val weightsMat = weights.toBreeze
+    val weightsScaled = weightsMat :/ xColSd
+    val interceptScaled = yMean - weightsMat.dot(xColMean :/ xColSd)
 
-    new LassoModel(weightsScaled.data, interceptScaled)
+    new LassoModel(Vectors.fromBreeze(weightsScaled), interceptScaled)
   }
 
-  override def run(
-      input: RDD[LabeledPoint],
-      initialWeights: Array[Double])
-    : LassoModel =
-  {
-    val nfeatures: Int = input.first.features.length
+  override def run(input: RDD[LabeledPoint], initialWeights: Vector): LassoModel = {
+    val nfeatures: Int = input.first.features.size
     val nexamples: Long = input.count()
 
     // To avoid penalizing the intercept, we center and scale the data.
     val stats = MLUtils.computeStats(input, nfeatures, nexamples)
     yMean = stats._1
-    xColMean = stats._2
-    xColSd = stats._3
+    xColMean = stats._2.toBreeze
+    xColSd = stats._3.toBreeze
 
     val normalizedData = input.map { point =>
       val yNormalized = point.label - yMean
-      val featuresMat = new DoubleMatrix(nfeatures, 1, point.features:_*)
-      val featuresNormalized = featuresMat.sub(xColMean).divi(xColSd)
-      LabeledPoint(yNormalized, featuresNormalized.toArray)
+      val featuresMat = point.features.toBreeze
+      val featuresNormalized = (featuresMat - xColMean) :/ xColSd
+      LabeledPoint(yNormalized, Vectors.fromBreeze(featuresNormalized))
     }
 
     super.run(normalizedData, initialWeights)
@@ -144,7 +141,7 @@ object LassoWithSGD {
       stepSize: Double,
       regParam: Double,
       miniBatchFraction: Double,
-      initialWeights: Array[Double])
+      initialWeights: Vector)
     : LassoModel =
   {
     new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input,
@@ -222,7 +219,8 @@ object LassoWithSGD {
     val sc = new SparkContext(args(0), "Lasso")
     val data = MLUtils.loadLabeledData(sc, args(1))
     val model = LassoWithSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
-    println("Weights: " + model.weights.mkString("[", ", ", "]"))
+
+    println("Weights: " + model.weights)
     println("Intercept: " + model.intercept)
 
     sc.stop()

@@ -25,8 +25,7 @@ import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.mllib.util.DataValidators
-
-import org.jblas.DoubleMatrix
+import org.apache.spark.mllib.linalg.Vector
 
 /**
  * Classification model trained using Logistic Regression.
@@ -35,14 +34,14 @@ import org.jblas.DoubleMatrix
  * @param intercept Intercept computed for this model.
  */
 class LogisticRegressionModel(
-    override val weights: Array[Double],
+    override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept)
   with ClassificationModel with Serializable {
 
-  override def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
+  override def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
       intercept: Double) = {
-    val margin = dataMatrix.mmul(weightMatrix).get(0) + intercept
+    val margin = weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
     round(1.0/ (1.0 + math.exp(margin * -1)))
   }
 }
@@ -73,7 +72,7 @@ class LogisticRegressionWithSGD private (
    */
   def this() = this(1.0, 100, 0.0, 1.0)
 
-  def createModel(weights: Array[Double], intercept: Double) = {
+  def createModel(weights: Vector, intercept: Double) = {
     new LogisticRegressionModel(weights, intercept)
   }
 }
@@ -105,11 +104,9 @@ object LogisticRegressionWithSGD {
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double,
-      initialWeights: Array[Double])
-    : LogisticRegressionModel =
-  {
-    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction).run(
-      input, initialWeights)
+      initialWeights: Vector): LogisticRegressionModel = {
+    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction)
+      .run(input, initialWeights)
   }
 
   /**
@@ -128,11 +125,9 @@ object LogisticRegressionWithSGD {
       input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
-      miniBatchFraction: Double)
-    : LogisticRegressionModel =
-  {
-    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction).run(
-      input)
+      miniBatchFraction: Double): LogisticRegressionModel = {
+    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction)
+      .run(input)
   }
 
   /**
@@ -150,9 +145,7 @@ object LogisticRegressionWithSGD {
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
-      stepSize: Double)
-    : LogisticRegressionModel =
-  {
+      stepSize: Double): LogisticRegressionModel = {
     train(input, numIterations, stepSize, 1.0)
   }
 
@@ -168,9 +161,7 @@ object LogisticRegressionWithSGD {
    */
   def train(
       input: RDD[LabeledPoint],
-      numIterations: Int)
-    : LogisticRegressionModel =
-  {
+      numIterations: Int): LogisticRegressionModel = {
     train(input, numIterations, 1.0, 1.0)
   }
 
@@ -183,7 +174,7 @@ object LogisticRegressionWithSGD {
     val sc = new SparkContext(args(0), "LogisticRegression")
     val data = MLUtils.loadLabeledData(sc, args(1))
     val model = LogisticRegressionWithSGD.train(data, args(3).toInt, args(2).toDouble)
-    println("Weights: " + model.weights.mkString("[", ", ", "]"))
+    println("Weights: " + model.weights)
     println("Intercept: " + model.intercept)
 
     sc.stop()

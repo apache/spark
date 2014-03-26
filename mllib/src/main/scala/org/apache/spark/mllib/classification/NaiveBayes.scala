@@ -25,6 +25,7 @@ import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.linalg.Vector
 
 /**
  * Model for Naive Bayes Classifiers.
@@ -39,9 +40,11 @@ class NaiveBayesModel(val pi: Array[Double], val theta: Array[Array[Double]])
   private val _pi = new DoubleMatrix(pi.length, 1, pi: _*)
   private val _theta = new DoubleMatrix(theta)
 
-  def predict(testData: RDD[Array[Double]]): RDD[Double] = testData.map(predict)
+  override def predict(testData: RDD[Vector]): RDD[Double] = testData.map(predict)
 
-  def predict(testData: Array[Double]): Double = {
+  override def predict(testData: Vector): Double = predict(testData.toArray)
+
+  private def predict(testData: Array[Double]): Double = {
     val dataMatrix = new DoubleMatrix(testData.length, 1, testData: _*)
     val result = _pi.add(_theta.mmul(dataMatrix))
     result.argmax()
@@ -70,9 +73,18 @@ class NaiveBayes private (var lambda: Double)
   /**
    * Run the algorithm with the configured parameters on an input RDD of LabeledPoint entries.
    *
-   * @param data RDD of (label, array of features) pairs.
+   * @param data RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    */
   def run(data: RDD[LabeledPoint]) = {
+    runRaw(data.map(v => (v.label, v.features.toArray)))
+  }
+
+  /**
+   * Run the algorithm with the configured parameters on an input RDD of LabeledPoint entries.
+   *
+   * @param data RDD of (label, array of features) pairs.
+   */
+  private def runRaw(data: RDD[(Double, Array[Double])]) = {
     // Aggregates all sample points to driver side to get sample count and summed feature vector
     // for each label.  The shape of `zeroCombiner` & `aggregated` is:
     //
@@ -80,7 +92,7 @@ class NaiveBayes private (var lambda: Double)
     val zeroCombiner = mutable.Map.empty[Int, (Int, DoubleMatrix)]
     val aggregated = data.aggregate(zeroCombiner)({ (combiner, point) =>
       point match {
-        case LabeledPoint(label, features) =>
+        case (label, features) =>
           val (count, featuresSum) = combiner.getOrElse(label.toInt, (0, DoubleMatrix.zeros(1)))
           val fs = new DoubleMatrix(features.length, 1, features: _*)
           combiner += label.toInt -> (count + 1, featuresSum.addi(fs))
