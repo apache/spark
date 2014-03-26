@@ -289,8 +289,10 @@ class SVD {
     val rows = data.map(entry =>
       (entry.i, (entry.j, entry.mval))).groupByKey()
     println("rows "+rows)
+    rows.foreach{e => println("r "+e)}
     val emits = rows.flatMap {
-      case (rowind, cols) =>
+      case (rowind, colsI) =>
+        val cols = colsI.toList
         cols.flatMap {
           case (colind1, mval1) =>
             cols.map {
