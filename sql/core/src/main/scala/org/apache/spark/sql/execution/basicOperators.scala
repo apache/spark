@@ -20,13 +20,14 @@ package execution
 
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext
-
+import org.apache.spark.{HashPartitioner, SparkConf, SparkContext}
+import org.apache.spark.rdd.{RDD, ShuffledRDD}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{OrderedDistribution, UnspecifiedDistribution}
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.util.MutablePair
+
 
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
   override def output = projectList.map(_.toAttribute)
@@ -70,6 +71,9 @@ case class Union(children: Seq[SparkPlan])(@transient sc: SparkContext) extends 
  * data to a single partition to compute the global limit.
  */
 case class Limit(limit: Int, child: SparkPlan)(@transient sc: SparkContext) extends UnaryNode {
+  // TODO: Implement a partition local limit, and use a strategy to generate the proper limit plan:
+  // partition local limit -> exchange into one partition -> partition local limit again
+
   override def otherCopyArgs = sc :: Nil
 
   override def output = child.output
@@ -77,10 +81,14 @@ case class Limit(limit: Int, child: SparkPlan)(@transient sc: SparkContext) exte
   override def executeCollect() = child.execute().map(_.copy()).take(limit)
 
   override def execute() = {
-    child.execute()
-      .mapPartitions(_.take(limit).map(_.copy()))
-      .coalesce(1, shuffle = true)
-      .mapPartitions(_.take(limit))
+    val rdd = child.execute().mapPartitions { iter =>
+      val mutablePair = new MutablePair[Boolean, Row]()
+      iter.take(limit).map(row => mutablePair.update(false, row))
+    }
+    val part = new HashPartitioner(1)
+    val shuffled = new ShuffledRDD[Boolean, Row, MutablePair[Boolean, Row]](rdd, part)
+    shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
+    shuffled.mapPartitions(_.take(limit).map(_._2))
   }
 }
 
