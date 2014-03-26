@@ -530,7 +530,7 @@ object HiveQl {
 
         val withLimit =
           limitClause.map(l => nodeToExpr(l.getChildren.head))
-            .map(StopAfter(_, withSort))
+            .map(Limit(_, withSort))
             .getOrElse(withSort)
 
         // TOK_INSERT_INTO means to add files to the table.
@@ -603,7 +603,7 @@ object HiveQl {
         case Token("TOK_TABLESPLITSAMPLE",
                Token("TOK_ROWCOUNT", Nil) ::
                Token(count, Nil) :: Nil) =>
-          StopAfter(Literal(count.toInt), relation)
+          Limit(Literal(count.toInt), relation)
         case Token("TOK_TABLESPLITSAMPLE",
                Token("TOK_PERCENT", Nil) ::
                Token(fraction, Nil) :: Nil) =>
