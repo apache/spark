@@ -17,12 +17,9 @@
 
 package org.apache.spark.mllib
 
-import org.apache.hadoop.io.Text
-
 import org.apache.spark.mllib.input.WholeTextFileInputFormat
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 
 /**
  * Extra functions available on SparkContext of mllib through an implicit conversion. Import
@@ -32,19 +29,25 @@ class MLContext(self: SparkContext) {
 
   /**
    * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
-   * Hadoop-supported file system URI. Each file is read as a single record and returned in a
-   * key-value pair, where the key is the path of each file, and the value is the content of each
-   * file.
+   * Hadoop-supported file system URI. For example,
+   *   {{{
+   *   hdfs://a-hdfs-path/part-00000
+   *   hdfs://a-hdfs-path/part-00001
+   *   ...
+   *   hdfs://a-hdfs-path/part-nnnnn
+   *   }}}
+   * then `hdfs://a-hdfs-path` can be treated as the path.
+   * Each file is read as a single record and returned in a key-value pair, where the key is the
+   * path of each file, and the value is the content of each file.
    */
   def wholeTextFile(path: String): RDD[(String, String)] = {
     self.newAPIHadoopFile(
       path,
       classOf[WholeTextFileInputFormat],
       classOf[String],
-      classOf[Text]).mapValues(_.toString)
+      classOf[String])
   }
 }
-
 
 /**
  * The MLContext object contains a number of implicit conversions and parameters for use with

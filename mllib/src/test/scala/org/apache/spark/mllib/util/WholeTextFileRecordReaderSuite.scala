@@ -18,12 +18,12 @@
 package org.apache.spark.mllib.util
 
 import java.io.DataOutputStream
+import java.io.File
 import java.io.FileOutputStream
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
 
 import scala.collection.immutable.IndexedSeq
+
+import com.google.common.io.Files
 
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
@@ -34,7 +34,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.mllib.MLContext._
 
 /**
- * Tests the correctness of [[org.apache.spark.mllib.input.WholeTextFileRecordReader]]. A temporary
+ * Tests the correctness of
+ * [[org.apache.spark.mllib.input.WholeTextFileRecordReader WholeTextFileRecordReader]]. A temporary
  * directory is created as fake input. Temporal storage would be deleted in the end.
  */
 class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
@@ -48,7 +49,7 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
     sc.stop()
   }
 
-  private def createNativeFile(inputDir: Path, fileName: String, contents: Array[Byte]) = {
+  private def createNativeFile(inputDir: File, fileName: String, contents: Array[Byte]) = {
     val out = new DataOutputStream(new FileOutputStream(s"${inputDir.toString}/$fileName"))
     out.write(contents, 0, contents.length)
     out.close()
@@ -63,7 +64,7 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
    */
   test("Correctness of WholeTextFileRecordReader.") {
 
-    val dir = Files.createTempDirectory("wholeFiles")
+    val dir = Files.createTempDir()
     println(s"Local disk address is ${dir.toString}.")
 
     WholeTextFileRecordReaderSuite.files.foreach { case (filename, contents) =>
@@ -83,10 +84,7 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
         s"file $filename contents can not match.")
     }
 
-    WholeTextFileRecordReaderSuite.fileNames.foreach { filename =>
-      Files.deleteIfExists(Paths.get(s"${dir.toString}/$filename"))
-    }
-    Files.deleteIfExists(dir)
+    dir.delete()
   }
 }
 
