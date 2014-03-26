@@ -693,7 +693,7 @@ class RDD(object):
         """
         Get the top N elements from a RDD.
 
-        Note: It returns the list sorted in ascending order.
+        Note: It returns the list sorted in descending order.
         >>> sc.parallelize([10, 4, 2, 12, 3]).top(1)
         [12]
         >>> sc.parallelize([2, 3, 4, 5, 6]).cache().top(2)
