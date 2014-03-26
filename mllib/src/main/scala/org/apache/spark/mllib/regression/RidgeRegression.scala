@@ -21,8 +21,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.util.MLUtils
-
-import org.jblas.DoubleMatrix
+import org.apache.spark.mllib.linalg.Vector
 
 /**
  * Regression model trained using RidgeRegression.
@@ -31,7 +30,7 @@ import org.jblas.DoubleMatrix
  * @param intercept Intercept computed for this model.
  */
 class RidgeRegressionModel(
-    override val weights: Array[Double],
+    override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept)
   with RegressionModel with Serializable {

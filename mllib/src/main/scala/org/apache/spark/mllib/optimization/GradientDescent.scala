@@ -20,9 +20,9 @@ package org.apache.spark.mllib.optimization
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 
-import org.jblas.DoubleMatrix
-
 import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.mllib.linalg.Vector
 
 /**
  * Class used to solve an optimization problem using Gradient Descent.
@@ -91,8 +91,7 @@ class GradientDescent(var gradient: Gradient, var updater: Updater)
     this
   }
 
-  def optimize(data: RDD[(Double, Array[Double])], initialWeights: Array[Double])
-    : Array[Double] = {
+  def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
 
     val (weights, stochasticLossHistory) = GradientDescent.runMiniBatchSGD(
         data,
@@ -133,14 +132,14 @@ object GradientDescent extends Logging {
    *         stochastic loss computed for every iteration.
    */
   def runMiniBatchSGD(
-    data: RDD[(Double, Array[Double])],
+    data: RDD[(Double, Vector)],
     gradient: Gradient,
     updater: Updater,
     stepSize: Double,
     numIterations: Int,
     regParam: Double,
     miniBatchFraction: Double,
-    initialWeights: Array[Double]) : (Array[Double], Array[Double]) = {
+    initialWeights: Vector): (Vector, Vector) = {
 
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
 
@@ -148,7 +147,7 @@ object GradientDescent extends Logging {
     val miniBatchSize = nexamples * miniBatchFraction
 
     // Initialize weights as a column vector
-    var weights = new DoubleMatrix(initialWeights.length, 1, initialWeights:_*)
+    var weights = initialWeights.toBreeze.toDenseVector
 
     /**
      * For the first iteration, the regVal will be initialized as sum of sqrt of

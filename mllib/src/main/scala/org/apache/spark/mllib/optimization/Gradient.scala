@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.optimization
 
-import org.jblas.DoubleMatrix
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
  * Class used to compute the gradient for a loss function, given a single data point.
@@ -26,17 +26,13 @@ abstract class Gradient extends Serializable {
   /**
    * Compute the gradient and loss given the features of a single data point.
    *
-   * @param data - Feature values for one data point. Column matrix of size dx1
-   *               where d is the number of features.
-   * @param label - Label for this data item.
-   * @param weights - Column matrix containing weights for every feature.
+   * @param data features for one data point
+   * @param label label for this data point
+   * @param weights weights/coefficients corresponding to features
    *
-   * @return A tuple of 2 elements. The first element is a column matrix containing the computed
-   *         gradient and the second element is the loss computed at this data point.
-   *
+   * @return (gradient: Vector, loss: Double)
    */
-  def compute(data: DoubleMatrix, label: Double, weights: DoubleMatrix): 
-      (DoubleMatrix, Double)
+  def compute(data: Vector, label: Double, weights: Vector): (Vector, Double)
 }
 
 /**
@@ -44,12 +40,12 @@ abstract class Gradient extends Serializable {
  * See also the documentation for the precise formulation.
  */
 class LogisticGradient extends Gradient {
-  override def compute(data: DoubleMatrix, label: Double, weights: DoubleMatrix): 
-      (DoubleMatrix, Double) = {
-    val margin: Double = -1.0 * data.dot(weights)
+  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
+    val brzData = data.toBreeze
+    val brzWeights = data.toBreeze
+    val margin: Double = -1.0 * brzWeights.dot(brzData)
     val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
-
-    val gradient = data.mul(gradientMultiplier)
+    val gradient = brzData * gradientMultiplier
     val loss =
       if (label > 0) {
         math.log(1 + math.exp(margin))
@@ -57,7 +53,7 @@ class LogisticGradient extends Gradient {
         math.log(1 + math.exp(margin)) - margin
       }
 
-    (gradient, loss)
+    (Vectors.fromBreeze(gradient), loss)
   }
 }
 
@@ -68,14 +64,14 @@ class LogisticGradient extends Gradient {
  * See also the documentation for the precise formulation.
  */
 class LeastSquaresGradient extends Gradient {
-  override def compute(data: DoubleMatrix, label: Double, weights: DoubleMatrix): 
-      (DoubleMatrix, Double) = {
-    val diff: Double = data.dot(weights) - label
-
+  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
+    val brzData = data.toBreeze
+    val brzWeights = weights.toBreeze
+    val diff: Double = brzWeights.dot(brzData) - label
     val loss = diff * diff
-    val gradient =  data.mul(2.0 * diff)
+    val gradient = brzData * (2.0 * diff)
 
-    (gradient, loss)
+    (Vectors.fromBreeze(gradient), loss)
   }
 }
 
@@ -85,19 +81,19 @@ class LeastSquaresGradient extends Gradient {
  * NOTE: This assumes that the labels are {0,1}
  */
 class HingeGradient extends Gradient {
-  override def compute(data: DoubleMatrix, label: Double, weights: DoubleMatrix):
-      (DoubleMatrix, Double) = {
-
-    val dotProduct = data.dot(weights)
+  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
+    val brzData = data.toBreeze
+    val brzWeights = weights.toBreeze
+    val dotProduct = brzWeights.dot(brzData)
 
     // Our loss function with {0, 1} labels is max(0, 1 - (2y – 1) (f_w(x)))
     // Therefore the gradient is -(2y - 1)*x
     val labelScaled = 2 * label - 1.0
 
     if (1.0 > labelScaled * dotProduct) {
-      (data.mul(-labelScaled), 1.0 - labelScaled * dotProduct)
+      (Vectors.fromBreeze(brzData * (-labelScaled)), 1.0 - labelScaled * dotProduct)
     } else {
-      (DoubleMatrix.zeros(1, weights.length), 0.0)
+      (Vectors.dense(new Array[Double](weights.size)), 0.0)
     }
   }
 }
