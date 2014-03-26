@@ -19,7 +19,6 @@ package org.apache.spark.mllib
 
 import org.apache.hadoop.io.Text
 
-import org.apache.spark.Logging
 import org.apache.spark.mllib.input.WholeTextFileInputFormat
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
@@ -29,7 +28,7 @@ import org.apache.spark.SparkContext._
  * Extra functions available on SparkContext of mllib through an implicit conversion. Import
  * `org.apache.spark.mllib.MLContext._` at the top of your program to use these functions.
  */
-class MLContext(self: SparkContext) extends Logging {
+class MLContext(self: SparkContext) {
 
   /**
    * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
@@ -51,6 +50,6 @@ class MLContext(self: SparkContext) extends Logging {
  * The MLContext object contains a number of implicit conversions and parameters for use with
  * various mllib features.
  */
-object MLContext extends Logging {
-  implicit def mlContextToSparkContext(sc: SparkContext) = new MLContext(sc)
+object MLContext {
+  implicit def sparkContextToMLContext(sc: SparkContext) = new MLContext(sc)
 }
