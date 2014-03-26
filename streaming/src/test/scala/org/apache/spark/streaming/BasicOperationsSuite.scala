@@ -245,8 +245,8 @@ class BasicOperationsSuite extends TestSuiteBase {
     val inputData1 = Seq( Seq("a", "a", "b"), Seq("a", ""), Seq(""), Seq() )
     val inputData2 = Seq( Seq("a", "a", "b"), Seq("b", ""), Seq(), Seq()   )
     val outputData = Seq(
-      Seq( ("a", (Seq(1, 1).toIterator, Seq("x", "x"))).toIterator, ("b", (Seq(1).toIterator, Seq("x").toIterator)) ),
-      Seq( ("a", (Seq(1).toIterator, Seq())).toIterator, ("b", (Seq().toIterator, Seq("x").toIterator)), ("", (Seq(1).toIterator, Seq("x").toIterator)) ),
+      Seq( ("a", (Seq(1, 1).toIterator, Seq("x", "x").toIterator)), ("b", (Seq(1).toIterator, Seq("x").toIterator)) ),
+      Seq( ("a", (Seq(1).toIterator, Seq().toIterator)), ("b", (Seq().toIterator, Seq("x").toIterator)), ("", (Seq(1).toIterator, Seq("x").toIterator)) ),
       Seq( ("", (Seq(1).toIterator, Seq().toIterator)) ),
       Seq(  )
     )
