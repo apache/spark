@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
+package org.apache.spark.sql.catalyst
 
 /**
  * Provides a logical query plan [[Analyzer]] and supporting classes for performing analysis.

@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package trees
+package org.apache.spark.sql.catalyst.trees
 
 import org.scalatest.FunSuite
 
