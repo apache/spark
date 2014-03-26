@@ -43,7 +43,7 @@ sbin=`cd "$sbin"; pwd`
 
 # If the slaves file is specified in the command line,
 # then it takes precedence over the definition in
-# spark-env.sh. Save it here.
+# load-spark-env.sh. Save it here.
 HOSTLIST=$SPARK_SLAVES
 
 # Check if --config is passed as an argument. It is an optional parameter.
