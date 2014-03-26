@@ -36,7 +36,6 @@ CLASSPATH="$SPARK_CLASSPATH:$FWDIR/conf"
 # Hopefully we will find a way to avoid uber-jars entirely and deploy only the needed packages in
 # the future.
 if [ -f "$FWDIR"/sql/hive/target/scala-$SCALA_VERSION/spark-hive-assembly-*.jar ]; then
-  echo "Hive assembly found, including hive support.  If this isn't desired run sbt hive/clean."
 
   # Datanucleus jars do not work if only included in the uberjar as plugin.xml metadata is lost.
   DATANUCLEUSJARS=$(JARS=("$FWDIR/lib_managed/jars"/datanucleus-*.jar); IFS=:; echo "${JARS[*]}")
