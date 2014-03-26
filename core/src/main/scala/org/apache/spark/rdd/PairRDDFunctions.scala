@@ -298,8 +298,9 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    */
   def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = {
     this.cogroup(other, partitioner).flatMapValues { case (vs, ws) =>
+      val vlist = vs.toList
       val wlist = ws.toList
-      for (v <- vs; w <- wlist.iterator) yield (v, w)
+      for (v <- vlist; w <- wlist) yield (v, w)
     }
   }
 
@@ -314,8 +315,9 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       if (ws.isEmpty) {
         vs.map(v => (v, None))
       } else {
+        val vlist = vs.toList
         val wlist = ws.toList
-        for (v <- vs; w <- wlist.iterator) yield (v, Some(w))
+        for (v <- vlist; w <- wlist) yield (v, Some(w))
       }
     }
   }
@@ -332,8 +334,9 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       if (vs.isEmpty) {
         ws.map(w => (None, w))
       } else {
+        val vlist = vs.toList
         val wlist = ws.toList
-        for (v <- vs; w <- wlist) yield (Some(v), w)
+        for (v <- vlist; w <- wlist) yield (Some(v), w)
       }
     }
   }
