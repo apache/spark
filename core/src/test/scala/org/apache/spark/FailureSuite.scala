@@ -107,7 +107,7 @@ class FailureSuite extends FunSuite with LocalSparkContext {
     FailureSuiteState.clear()
   }
 
-  test("failure because task closure is not serializable") {
+  test("failure because closure in final-stage task is not serializable") {
     sc = new SparkContext("local[1,1]", "test")
     val a = new NonSerializable
 
@@ -118,12 +118,26 @@ class FailureSuite extends FunSuite with LocalSparkContext {
     assert(thrown.getClass === classOf[SparkException])
     assert(thrown.getMessage.contains("NotSerializableException"))
 
+    FailureSuiteState.clear()
+  }
+
+  test("failure because closure in early-stage task is not serializable") {
+    sc = new SparkContext("local[1,1]", "test")
+    val a = new NonSerializable
+
     // Non-serializable closure in an earlier stage
     val thrown1 = intercept[SparkException] {
       sc.parallelize(1 to 10, 2).map(x => (x, a)).partitionBy(new HashPartitioner(3)).count()
     }
     assert(thrown1.getClass === classOf[SparkException])
     assert(thrown1.getMessage.contains("NotSerializableException"))
+
+    FailureSuiteState.clear()
+  }
+
+  test("failure because closure in foreach task is not serializable") {
+    sc = new SparkContext("local[1,1]", "test")
+    val a = new NonSerializable
 
     // Non-serializable closure in foreach function
     val thrown2 = intercept[SparkException] {
@@ -134,6 +148,7 @@ class FailureSuite extends FunSuite with LocalSparkContext {
 
     FailureSuiteState.clear()
   }
+
 
   // TODO: Need to add tests with shuffle fetch failures.
 }
