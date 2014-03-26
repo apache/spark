@@ -356,7 +356,9 @@ object SparkBuild extends Build {
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def toolsSettings = sharedSettings ++ Seq(
-    name := "spark-tools"
+    name := "spark-tools",
+    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v ),
+    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-reflect"  % v )
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def graphxSettings = sharedSettings ++ Seq(
