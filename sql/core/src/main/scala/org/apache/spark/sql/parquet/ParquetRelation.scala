@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
-import java.io.IOException
+import java.io.IOException,
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -26,9 +26,10 @@ import org.apache.hadoop.mapreduce.Job
 
 import parquet.hadoop.util.ContextUtil
 import parquet.hadoop.{ParquetOutputFormat, Footer, ParquetFileWriter, ParquetFileReader}
+
 import parquet.hadoop.metadata.{CompressionCodecName, FileMetaData, ParquetMetadata}
 import parquet.io.api.{Binary, RecordConsumer}
-import parquet.schema.{Type => ParquetType, PrimitiveType => ParquetPrimitiveType, MessageType, MessageTypeParser}
+import parquet.schema.{Type => ParquetType, PrimitiveType => ParquetPrimitiveType, MessageType, MessageTypeParser, GroupType => ParquetGroupType, OriginalType => ParquetOriginalType, ConversionPatterns}
 import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
 import parquet.schema.Type.Repetition
 
@@ -172,7 +173,7 @@ private[sql] object ParquetRelation {
 }
 
 private[parquet] object ParquetTypesConverter {
-  def toDataType(parquetType : ParquetPrimitiveTypeName): DataType = parquetType match {
+  def toPrimitiveDataType(parquetType : ParquetPrimitiveTypeName): DataType = parquetType match {
     // for now map binary to string type
     // TODO: figure out how Parquet uses strings or why we can't use them in a MessageType schema
     case ParquetPrimitiveTypeName.BINARY => StringType
@@ -190,15 +191,61 @@ private[parquet] object ParquetTypesConverter {
       s"Unsupported parquet datatype $parquetType")
   }
 
-  def fromDataType(ctype: DataType): ParquetPrimitiveTypeName = ctype match {
-    case StringType => ParquetPrimitiveTypeName.BINARY
-    case BooleanType => ParquetPrimitiveTypeName.BOOLEAN
-    case DoubleType => ParquetPrimitiveTypeName.DOUBLE
-    case ArrayType(ByteType) => ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY
-    case FloatType => ParquetPrimitiveTypeName.FLOAT
-    case IntegerType => ParquetPrimitiveTypeName.INT32
-    case LongType => ParquetPrimitiveTypeName.INT64
-    case _ => sys.error(s"Unsupported datatype $ctype")
+  def toDataType(parquetType: ParquetType): DataType = {
+    if (parquetType.isPrimitive) toPrimitiveDataType(parquetType.asPrimitiveType.getPrimitiveTypeName)
+    else {
+      val groupType = parquetType.asGroupType()
+      parquetType.getOriginalType match {
+        case ParquetOriginalType.LIST | ParquetOriginalType.ENUM => {
+          val fields = groupType.getFields.map(toDataType(_))
+          new ArrayType(fields.apply(0)) // array fields should have the same type
+        }
+        case _ => { // everything else nested becomes a Struct
+        val fields = groupType
+            .getFields
+            .map(ptype => new StructField(
+            ptype.getName,
+            toDataType(ptype),
+            ptype.getRepetition != Repetition.REQUIRED))
+          new StructType(fields)
+        }
+      }
+    }
+  }
+
+  def fromPrimitiveDataType(ctype: DataType): Option[ParquetPrimitiveTypeName] = ctype match {
+    case StringType => Some(ParquetPrimitiveTypeName.BINARY)
+    case BooleanType => Some(ParquetPrimitiveTypeName.BOOLEAN)
+    case DoubleType => Some(ParquetPrimitiveTypeName.DOUBLE)
+    case ArrayType(ByteType) => Some(ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY)
+    case FloatType => Some(ParquetPrimitiveTypeName.FLOAT)
+    case IntegerType => Some(ParquetPrimitiveTypeName.INT32)
+    case LongType => Some(ParquetPrimitiveTypeName.INT64)
+    case _ => None
+  }
+
+  def fromComplexDataType(ctype: DataType, name: String, nullable: Boolean = true): ParquetType = {
+    val repetition =
+      if (nullable) Repetition.OPTIONAL
+      else Repetition.REQUIRED
+    val primitiveType = fromPrimitiveDataType(ctype)
+    if (primitiveType.isDefined) {
+      new ParquetPrimitiveType(repetition, primitiveType.get, name)
+    } else {
+      ctype match {
+        case ArrayType(elementType: DataType) => {
+          val parquetElementType = fromComplexDataType(elementType, name + "_values", false)
+          new ParquetGroupType(repetition, name, parquetElementType)
+        }
+        case StructType(structFields) => {
+          val fields = structFields.map {
+            field => fromComplexDataType(field.dataType, field.name, false)
+          }
+          new ParquetGroupType(repetition, name, fields)
+        }
+        case _ => sys.error(s"Unsupported datatype $ctype")
+      }
+    }
   }
 
   def consumeType(consumer: RecordConsumer, ctype: DataType, record: Row, index: Int): Unit = {
@@ -217,23 +264,18 @@ private[parquet] object ParquetTypesConverter {
     }
   }
 
-  def getSchema(schemaString : String) : MessageType =
+  def getSchema(schemaString: String) : MessageType =
     MessageTypeParser.parseMessageType(schemaString)
 
-  def convertToAttributes(parquetSchema: MessageType) : Seq[Attribute] = {
-    parquetSchema.getColumns.map {
-      case (desc) =>
-        val ctype = toDataType(desc.getType)
-        val name: String = desc.getPath.mkString(".")
-        new AttributeReference(name, ctype, false)()
-    }
+  def convertToAttributes(parquetSchema: ParquetType): Seq[Attribute] = {
+    parquetSchema
+      .asGroupType()
+      .getFields
+      .map(field => new AttributeReference(field.getName, toDataType(field), field.getRepetition != Repetition.REQUIRED)())
   }
 
-  // TODO: allow nesting?
   def convertFromAttributes(attributes: Seq[Attribute]): MessageType = {
-    val fields: Seq[ParquetType] = attributes.map {
-      a => new ParquetPrimitiveType(Repetition.OPTIONAL, fromDataType(a.dataType), a.name)
-    }
+    val fields = attributes.map(attribute => fromComplexDataType(attribute.dataType, attribute.name, attribute.nullable))
     new MessageType("root", fields)
   }
 

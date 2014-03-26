@@ -65,6 +65,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   override def beforeAll() {
     ParquetTestData.writeFile()
     ParquetTestData.writeFilterFile()
+    ParquetTestData.writeNestedFile1()
     testRDD = parquetFile(ParquetTestData.testDir.toString)
     testRDD.registerAsTable("testsource")
     parquetFile(ParquetTestData.testFilterDir.toString)
@@ -74,6 +75,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   override def afterAll() {
     Utils.deleteRecursively(ParquetTestData.testDir)
     Utils.deleteRecursively(ParquetTestData.testFilterDir)
+    Utils.deleteRecursively(ParquetTestData.testNestedDir1)
     // here we should also unregister the table??
   }
 
@@ -362,5 +364,40 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   test("SPARK-1913 regression: columns only referenced by pushed down filters should remain") {
     val query = sql(s"SELECT mystring FROM testfiltersource WHERE myint < 10")
     assert(query.collect().size === 10)
+  }
+
+  test("Importing nested File") {
+    ParquetTestData.readNestedFile()
+    val result = getRDD(ParquetTestData.testNestedData1).collect()
+    /*assert(result.size === 15)
+    result.zipWithIndex.foreach {
+      case (row, index) => {
+        val checkBoolean =
+          if (index % 3 == 0)
+            row(0) == true
+          else
+            row(0) == false
+        assert(checkBoolean === true, s"boolean field value in line $index did not match")
+        if (index % 5 == 0) assert(row(1) === 5, s"int field value in line $index did not match")
+        assert(row(2) === "abc", s"string field value in line $index did not match")
+        assert(row(3) === (index.toLong << 33), s"long value in line $index did not match")
+        assert(row(4) === 2.5F, s"float field value in line $index did not match")
+        assert(row(5) === 4.5D, s"double field value in line $index did not match")
+      }
+    }*/
+  }
+
+  /**
+   * Creates an empty SchemaRDD backed by a ParquetRelation.
+   *
+   * TODO: since this is so experimental it is better to have it here and not
+   * in SQLContext. Also note that when creating new AttributeReferences
+   * one needs to take care not to create duplicate Attribute ID's.
+   */
+  private def createParquetFile(path: String, schema: (Tuple2[String, DataType])*): SchemaRDD = {
+    val attributes = schema.map(t => new AttributeReference(t._1, t._2)())
+    new SchemaRDD(
+      TestSQLContext,
+      parquet.ParquetRelation.createEmpty(path, attributes, sparkContext.hadoopConfiguration))
   }
 }

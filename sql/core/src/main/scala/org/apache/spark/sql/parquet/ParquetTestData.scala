@@ -17,14 +17,19 @@
 
 package org.apache.spark.sql.parquet
 
+import java.io.File
+
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.mapreduce.Job
 
 import parquet.example.data.{GroupWriter, Group}
 import parquet.example.data.simple.SimpleGroup
-import parquet.hadoop.ParquetWriter
+import parquet.hadoop.{ParquetReader, ParquetFileReader, ParquetWriter}
 import parquet.hadoop.api.WriteSupport
 import parquet.hadoop.api.WriteSupport.WriteContext
+import parquet.hadoop.example.GroupReadSupport
+import parquet.hadoop.util.ContextUtil
 import parquet.io.api.RecordConsumer
 import parquet.schema.{MessageType, MessageTypeParser}
 
@@ -100,9 +105,39 @@ private[sql] object ParquetTestData {
 
   lazy val testData = new ParquetRelation(testDir.toURI.toString)
 
+  val testNestedSchema1 =
+    // from blogpost example, source:
+    // https://blog.twitter.com/2013/dremel-made-simple-with-parquet
+    // note: instead of string we have to use binary (?) otherwise
+    // Parquet gives us:
+    // IllegalArgumentException: expected one of [INT64, INT32, BOOLEAN,
+    //   BINARY, FLOAT, DOUBLE, INT96, FIXED_LEN_BYTE_ARRAY]
+    """
+      |message AddressBook {
+      |required binary owner;
+      |repeated binary ownerPhoneNumbers;
+      |repeated group contacts {
+      |required binary name;
+      |optional binary phoneNumber;
+      |}
+      |}
+    """.stripMargin
+
+  val testNestedDir1 = Utils.createTempDir()
+
+  lazy val testNestedData1 = new ParquetRelation(testNestedDir1.toURI.toString)
+
+  // Implicit
+  // TODO: get rid of this since it is confusing!
+  implicit def makePath(dir: File): Path = {
+    new Path(new Path(dir.toURI), new Path("part-r-0.parquet"))
+  }
+
   def writeFile() = {
-    testDir.delete
+    testDir.delete()
     val path: Path = new Path(new Path(testDir.toURI), new Path("part-r-0.parquet"))
+    val job = new Job()
+    val configuration: Configuration = ContextUtil.getConfiguration(job)
     val schema: MessageType = MessageTypeParser.parseMessageType(testSchema)
     val writeSupport = new TestGroupWriteSupport(schema)
     val writer = new ParquetWriter[Group](path, writeSupport)
@@ -149,6 +184,61 @@ private[sql] object ParquetTestData {
       writer.write(record)
     }
     writer.close()
+  }
+
+  def writeNestedFile1() {
+    // example data from https://blog.twitter.com/2013/dremel-made-simple-with-parquet
+    testNestedDir1.delete()
+    val path: Path = testNestedDir1
+    val schema: MessageType = MessageTypeParser.parseMessageType(testNestedSchema1)
+
+    val r1 = new SimpleGroup(schema)
+    r1.add(0, "Julien Le Dem")
+    r1.add(1, "555 123 4567")
+    r1.add(1, "555 666 1337")
+    r1.addGroup(2)
+      .append("name", "Dmitriy Ryaboy")
+      .append("phoneNumber", "555 987 6543")
+    r1.addGroup(2)
+      .append("name", "Chris Aniszczyk")
+
+    val r2 = new SimpleGroup(schema)
+    r2.add(0, "A. Nonymous")
+
+    // ParquetWriter initializes GroupWriteSupport with an empty configuration
+    // (it is after all not intended to be used in this way?)
+    // and members are private so we need to make our own
+    val writeSupport = new WriteSupport[Group] {
+      var groupWriter: GroupWriter = null
+      override def prepareForWrite(recordConsumer: RecordConsumer): Unit = {
+        groupWriter = new GroupWriter(recordConsumer, schema)
+      }
+      override def init(configuration: Configuration): WriteContext = {
+        new WriteContext(schema, new java.util.HashMap[String, String]())
+      }
+      override def write(record: Group) {
+        groupWriter.write(record)
+      }
+    }
+    val writer = new ParquetWriter[Group](path, writeSupport)
+    writer.write(r1)
+    writer.write(r2)
+    writer.close()
+  }
+
+  def readNestedFile(): Unit = {
+    val configuration = new Configuration()
+    val fs: FileSystem = testNestedDir1.getFileSystem(configuration)
+    val schema: MessageType = MessageTypeParser.parseMessageType(testNestedSchema1)
+    val outputStatus: FileStatus = fs.getFileStatus(testNestedDir1)
+    val footers = ParquetFileReader.readFooter(configuration, outputStatus)
+    val reader = new ParquetReader(testNestedDir1, new GroupReadSupport())
+    val first = reader.read()
+    assert(first != null)
+    val second = reader.read()
+    assert(second != null)
+    assert(schema != null)
+    assert(footers != null)
   }
 }
 
