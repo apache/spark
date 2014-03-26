@@ -707,7 +707,8 @@ object JavaPairRDD {
 
   private[spark]
   def cogroupResult2ToJava[K: ClassTag, V, W1, W2](
-      rdd: RDD[(K, (Iterator[V], Iterator[W1], Iterator[W2]))]): RDD[(K, (JIterator[V], JIterator[W1], JIterator[W2]))] = {
+      rdd: RDD[(K, (Iterator[V], Iterator[W1], Iterator[W2]))])
+      : RDD[(K, (JIterator[V], JIterator[W1], JIterator[W2]))] = {
     rddToPairRDDFunctions(rdd)
       .mapValues(x => (asJavaIterator(x._1), asJavaIterator(x._2), asJavaIterator(x._3)))
   }

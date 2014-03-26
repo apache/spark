@@ -140,7 +140,8 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
    *                       the new DStream will generate RDDs); must be a multiple of this
    *                       DStream's batching interval
    */
-  def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration): DStream[(K, Iterator[V])] =
+  def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration)
+      : DStream[(K, Iterator[V])] =
   {
     groupByKeyAndWindow(windowDuration, slideDuration, defaultPartitioner())
   }

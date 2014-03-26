@@ -456,7 +456,8 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
-  def cogroup[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (Iterator[V], Iterator[W]))] = {
+  def cogroup[W](other: RDD[(K, W)], partitioner: Partitioner)
+      : RDD[(K, (Iterator[V], Iterator[W]))]  = {
     if (partitioner.isInstanceOf[HashPartitioner] && getKeyClass().isArray) {
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
@@ -477,7 +478,9 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2), partitioner)
     cg.mapValues { case Seq(vs, w1s, w2s) =>
-      (vs.asInstanceOf[Seq[V]].iterator, w1s.asInstanceOf[Seq[W1]].iterator, w2s.asInstanceOf[Seq[W2]].iterator)
+      (vs.asInstanceOf[Seq[V]].iterator,
+       w1s.asInstanceOf[Seq[W1]].iterator,
+       w2s.asInstanceOf[Seq[W2]].iterator)
     }
   }
 
