@@ -1058,7 +1058,9 @@ class SparkContext(config: SparkConf) extends Logging {
       throw new SparkException("SparkContext has been shutdown")
     }
     val callSite = getCallSite
-    val cleanedFunc = clean(func)
+    // There's no need to check this function for serializability,
+    // since it will be run right away.
+    val cleanedFunc = clean(func, false)
     logInfo("Starting job: " + callSite.short)
     val start = System.nanoTime
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
