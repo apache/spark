@@ -210,27 +210,9 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   }
 
   /**
-   * Drop a block from memory, possibly putting it on disk if applicable.
-   */
-  def dropFromMemory(blockId: BlockId) {
-    val entry = entries.synchronized { entries.get(blockId) }
-    // This should never be null if called from ensureFreeSpace as only one
-    // thread should be dropping blocks and removing entries.
-    // However the check is required in other cases.
-    if (entry != null) {
-      val data = if (entry.deserialized) {
-        Left(entry.value.asInstanceOf[ArrayBuffer[Any]])
-      } else {
-        Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
-      }
-      blockManager.dropFromMemory(blockId, data)
-    }
-  }
-
-  /**
-   * Tries to free up a given amount of space to store a particular block, but can fail and return
-   * false if either the block is bigger than our memory or it would require replacing another
-   * block from the same RDD (which leads to a wasteful cyclic replacement pattern for RDDs that
+   * Try to free up a given amount of space to store a particular block, but can fail if
+   * either the block is bigger than our memory or it would require replacing another block
+   * from the same RDD (which leads to a wasteful cyclic replacement pattern for RDDs that
    * don't fit into memory that we want to avoid).
    *
    * Assume that a lock is held by the caller to ensure only one thread is dropping blocks.
@@ -272,7 +254,19 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       if (maxMemory - (currentMemory - selectedMemory) >= space) {
         logInfo(selectedBlocks.size + " blocks selected for dropping")
         for (blockId <- selectedBlocks) {
-          dropFromMemory(blockId)
+          val entry = entries.synchronized { entries.get(blockId) }
+          // This should never be null as only one thread should be dropping
+          // blocks and removing entries. However the check is still here for
+          // future safety.
+          if (entry != null) {
+            val data = if (entry.deserialized) {
+              Left(entry.value.asInstanceOf[ArrayBuffer[Any]])
+            } else {
+              Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
+            }
+            val droppedBlockStatus = blockManager.dropFromMemory(blockId, data)
+            droppedBlockStatus.foreach { status => droppedBlocks += ((blockId, status)) }
+          }
         }
         return ResultWithDroppedBlocks(success = true, droppedBlocks)
       } else {

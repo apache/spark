@@ -18,14 +18,8 @@
 package org.apache.spark
 
 import org.scalatest.FunSuite
-import org.scalatest.concurrent.Timeouts._
-import org.scalatest.time.{Millis, Span}
-import org.scalatest.concurrent.Eventually._
-import org.scalatest.time.SpanSugar._
-import org.scalatest.matchers.ShouldMatchers._
 
 class BroadcastSuite extends FunSuite with LocalSparkContext {
-
 
   override def afterEach() {
     super.afterEach()
@@ -88,47 +82,4 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     assert(results.collect.toSet === (1 to numSlaves).map(x => (x, 10)).toSet)
   }
 
-  def blocksExist(sc: SparkContext, numSlaves: Int) = {
-    val rdd = sc.parallelize(1 to numSlaves, numSlaves)
-    val workerBlocks = rdd.mapPartitions(_ => {
-      val blocks = SparkEnv.get.blockManager.numberOfBlocksInMemory()
-      Seq(blocks).iterator
-    })
-    val totalKnown = workerBlocks.reduce(_ + _) + sc.env.blockManager.numberOfBlocksInMemory()
-
-    totalKnown > 0
-  }
-
-  def testUnpersist(bcFactory: String, removeSource: Boolean) {
-    test("Broadcast unpersist(" + removeSource + ") with " + bcFactory) {
-      val numSlaves = 2
-      System.setProperty("spark.broadcast.factory", bcFactory)
-      sc = new SparkContext("local-cluster[%d, 1, 512]".format(numSlaves), "test")
-      val list = List(1, 2, 3, 4)
-
-      assert(!blocksExist(sc, numSlaves))
-
-      val listBroadcast = sc.broadcast(list, true)
-      val results = sc.parallelize(1 to numSlaves).map(x => (x, listBroadcast.value.sum))
-      assert(results.collect.toSet === (1 to numSlaves).map(x => (x, 10)).toSet)
-
-      assert(blocksExist(sc, numSlaves))
-
-      listBroadcast.unpersist(removeSource)
-
-      eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-        blocksExist(sc, numSlaves) should be (false)
-      }
-
-      if (!removeSource) {
-        val results = sc.parallelize(1 to numSlaves).map(x => (x, listBroadcast.value.sum))
-        assert(results.collect.toSet === (1 to numSlaves).map(x => (x, 10)).toSet)
-      }
-    }
-  }
-
-  for (removeSource <- Seq(true, false)) {
-    testUnpersist("org.apache.spark.broadcast.HttpBroadcastFactory", removeSource)
-    testUnpersist("org.apache.spark.broadcast.TorrentBroadcastFactory", removeSource)
-  }
 }
