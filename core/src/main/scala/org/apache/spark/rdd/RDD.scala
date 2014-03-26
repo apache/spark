@@ -121,7 +121,7 @@ abstract class RDD[T: ClassTag](
   @transient var name: String = null
 
   /** Assign a name to this RDD */
-  def setName(_name: String) = {
+  def setName(_name: String): RDD[T] = {
     name = _name
     this
   }
