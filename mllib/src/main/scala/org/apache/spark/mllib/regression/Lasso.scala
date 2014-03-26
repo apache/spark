@@ -36,8 +36,10 @@ class LassoModel(
   extends GeneralizedLinearModel(weights, intercept)
   with RegressionModel with Serializable {
 
-  override def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
-      intercept: Double) = {
+  override protected def predictPoint(
+      dataMatrix: DoubleMatrix,
+      weightMatrix: DoubleMatrix,
+      intercept: Double): Double = {
     dataMatrix.dot(weightMatrix) + intercept
   }
 }
@@ -66,7 +68,7 @@ class LassoWithSGD private (
     .setMiniBatchFraction(miniBatchFraction)
 
   // We don't want to penalize the intercept, so set this to false.
-  setIntercept(false)
+  super.setIntercept(false)
 
   var yMean = 0.0
   var xColMean: DoubleMatrix = _
@@ -77,10 +79,16 @@ class LassoWithSGD private (
    */
   def this() = this(1.0, 100, 1.0, 1.0)
 
-  def createModel(weights: Array[Double], intercept: Double) = {
-    val weightsMat = new DoubleMatrix(weights.length + 1, 1, (Array(intercept) ++ weights):_*)
+  override def setIntercept(addIntercept: Boolean): this.type = {
+    // TODO: Support adding intercept.
+    if (addIntercept) throw new UnsupportedOperationException("Adding intercept is not supported.")
+    this
+  }
+
+  override protected def createModel(weights: Array[Double], intercept: Double) = {
+    val weightsMat = new DoubleMatrix(weights.length, 1, weights: _*)
     val weightsScaled = weightsMat.div(xColSd)
-    val interceptScaled = yMean - (weightsMat.transpose().mmul(xColMean.div(xColSd)).get(0))
+    val interceptScaled = yMean - weightsMat.transpose().mmul(xColMean.div(xColSd)).get(0)
 
     new LassoModel(weightsScaled.data, interceptScaled)
   }

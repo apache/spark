@@ -42,7 +42,7 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    * @param weightMatrix Column vector containing the weights of the model
    * @param intercept Intercept of the model.
    */
-  def predictPoint(dataMatrix: Vector, weightMatrix: Vector, intercept: Double): Double
+  protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector, intercept: Double): Double
 
   /**
    * Predict values for the given data set using the model trained.
@@ -116,6 +116,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
     run(input, initialWeights)
   }
 
+  /** Prepends one to the input vector. */
   private def prependOne(vector: Vector): Vector = {
     val vectorWithIntercept = vector match {
       case dv: BDV[Double] => BDV.vertcat(BDV.ones(1), dv)
@@ -154,8 +155,6 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
     val intercept = if (addIntercept) brzWeightsWithIntercept(0) else 0.0
     val brzWeights = if (addIntercept) brzWeightsWithIntercept(1 to -1) else brzWeightsWithIntercept
 
-    val model = createModel(Vectors.fromBreeze(brzWeights), intercept)
-
-    model
+    createModel(Vectors.fromBreeze(brzWeights), intercept)
   }
 }
