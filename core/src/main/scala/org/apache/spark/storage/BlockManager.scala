@@ -210,6 +210,11 @@ private[spark] class BlockManager(
   }
 
   /**
+   * For testing. Returns number of blocks BlockManager knows about that are in memory.
+   */
+  def numberOfBlocksInMemory() = blockInfo.keys.count(memoryStore.contains(_))
+
+  /**
    * Get storage level of local block. If no info exists for the block, then returns null.
    */
   def getLevel(blockId: BlockId): StorageLevel = blockInfo.get(blockId).map(_.level).orNull
@@ -812,6 +817,13 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Drop a block from memory, possibly putting it on disk if applicable.
+   */
+  def dropFromMemory(blockId: BlockId) {
+    memoryStore.asInstanceOf[MemoryStore].dropFromMemory(blockId)
+  }
+
+    /**
    * Remove all blocks belonging to the given RDD.
    * @return The number of blocks removed.
    */

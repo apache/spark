@@ -641,8 +641,13 @@ class SparkContext(
    * Broadcast a read-only variable to the cluster, returning a
    * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
    * The variable will be sent to each cluster only once.
+   *
+   * If `registerBlocks` is true, workers will notify driver about blocks they create
+   * and these blocks will be dropped when `unpersist` method of the broadcast variable is called.
    */
-  def broadcast[T](value: T) = env.broadcastManager.newBroadcast[T](value, isLocal)
+  def broadcast[T](value: T, registerBlocks: Boolean = false) = {
+    env.broadcastManager.newBroadcast[T](value, isLocal, registerBlocks)
+  }
 
   /**
    * Add a file to be downloaded with this Spark job on every node.

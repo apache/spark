@@ -27,7 +27,7 @@ import org.apache.spark.SparkConf
  * entire Spark job.
  */
 trait BroadcastFactory {
-  def initialize(isDriver: Boolean, conf: SparkConf,  securityMgr: SecurityManager): Unit
-  def newBroadcast[T](value: T, isLocal: Boolean, id: Long): Broadcast[T]
+  def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager): Unit
+  def newBroadcast[T](value: T, isLocal: Boolean, id: Long, registerBlocks: Boolean): Broadcast[T]
   def stop(): Unit
 }

@@ -29,10 +29,23 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashSet, Utils}
 
-private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
+private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long, registerBlocks: Boolean)
   extends Broadcast[T](id) with Logging with Serializable {
 
   def value = value_
+
+  def unpersist(removeSource: Boolean) {
+    HttpBroadcast.synchronized {
+      SparkEnv.get.blockManager.master.removeBlock(blockId)
+      SparkEnv.get.blockManager.removeBlock(blockId)
+    }
+
+    if (removeSource) {
+      HttpBroadcast.synchronized {
+        HttpBroadcast.cleanupById(id)
+      }
+    }
+  }
 
   def blockId = BroadcastBlockId(id)
 
@@ -54,7 +67,7 @@ private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolea
           logInfo("Started reading broadcast variable " + id)
           val start = System.nanoTime
           value_ = HttpBroadcast.read[T](id)
-          SparkEnv.get.blockManager.putSingle(blockId, value_, StorageLevel.MEMORY_AND_DISK, false)
+          SparkEnv.get.blockManager.putSingle(blockId, value_, StorageLevel.MEMORY_AND_DISK, registerBlocks)
           val time = (System.nanoTime - start) / 1e9
           logInfo("Reading broadcast variable " + id + " took " + time + " s")
         }
@@ -71,8 +84,8 @@ class HttpBroadcastFactory extends BroadcastFactory {
     HttpBroadcast.initialize(isDriver, conf, securityMgr) 
   }
 
-  def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long) =
-    new HttpBroadcast[T](value_, isLocal, id)
+  def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long, registerBlocks: Boolean) =
+    new HttpBroadcast[T](value_, isLocal, id, registerBlocks)
 
   def stop() { HttpBroadcast.stop() }
 }
@@ -136,8 +149,10 @@ private object HttpBroadcast extends Logging {
     logInfo("Broadcast server started at " + serverUri)
   }
 
+  def getFile(id: Long) = new File(broadcastDir, BroadcastBlockId(id).name)
+
   def write(id: Long, value: Any) {
-    val file = new File(broadcastDir, BroadcastBlockId(id).name)
+    val file = getFile(id)
     val out: OutputStream = {
       if (compress) {
         compressionCodec.compressedOutputStream(new FileOutputStream(file))
@@ -183,20 +198,30 @@ private object HttpBroadcast extends Logging {
     obj
   }
 
+  def deleteFile(fileName: String) {
+    try {
+      new File(fileName).delete()
+      logInfo("Deleted broadcast file '" + fileName + "'")
+    } catch {
+      case e: Exception => logWarning("Could not delete broadcast file '" + fileName + "'", e)
+    }
+  }
+
   def cleanup(cleanupTime: Long) {
     val iterator = files.internalMap.entrySet().iterator()
     while(iterator.hasNext) {
       val entry = iterator.next()
       val (file, time) = (entry.getKey, entry.getValue)
       if (time < cleanupTime) {
-        try {
-          iterator.remove()
-          new File(file.toString).delete()
-          logInfo("Deleted broadcast file '" + file + "'")
-        } catch {
-          case e: Exception => logWarning("Could not delete broadcast file '" + file + "'", e)
-        }
+        iterator.remove()
+        deleteFile(file)
       }
     }
+  }
+
+  def cleanupById(id: Long) {
+    val file = getFile(id).getAbsolutePath
+    files.internalMap.remove(file)
+    deleteFile(file)
   }
 }

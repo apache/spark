@@ -53,6 +53,15 @@ import org.apache.spark._
 abstract class Broadcast[T](val id: Long) extends Serializable {
   def value: T
 
+  /**
+   * Removes all blocks of this broadcast from memory (and disk if removeSource is true).
+   *
+   * @param removeSource Whether to remove data from disk as well.
+   *                     Will cause errors if broadcast is accessed on workers afterwards
+   *                     (e.g. in case of RDD re-computation due to executor failure).
+   */
+  def unpersist(removeSource: Boolean = false)
+
   // We cannot have an abstract readObject here due to some weird issues with
   // readObject having to be 'private' in sub-classes.
 
@@ -92,8 +101,8 @@ class BroadcastManager(val _isDriver: Boolean, conf: SparkConf, securityManager:
 
   private val nextBroadcastId = new AtomicLong(0)
 
-  def newBroadcast[T](value_ : T, isLocal: Boolean) =
-    broadcastFactory.newBroadcast[T](value_, isLocal, nextBroadcastId.getAndIncrement())
+  def newBroadcast[T](value_ : T, isLocal: Boolean, registerBlocks: Boolean) =
+    broadcastFactory.newBroadcast[T](value_, isLocal, nextBroadcastId.getAndIncrement(), registerBlocks)
 
   def isDriver = _isDriver
 }
