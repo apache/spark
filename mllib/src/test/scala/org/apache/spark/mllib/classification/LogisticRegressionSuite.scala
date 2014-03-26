@@ -112,7 +112,7 @@ class LogisticRegressionSuite extends FunSuite with LocalSparkContext with Shoul
     val testData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 42)
 
     val initialB = -1.0
-    val initialWeights = Array(initialB)
+    val initialWeights = Vectors.dense(initialB)
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()

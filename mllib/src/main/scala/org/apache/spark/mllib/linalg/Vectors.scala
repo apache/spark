@@ -54,6 +54,12 @@ trait Vector extends Serializable {
    * Converts the instance to a breeze vector.
    */
   private[mllib] def toBreeze: BV[Double]
+
+  /**
+   * Gets the value of the ith element.
+   * @param i index
+   */
+  private[mllib] def apply(i: Int): Double = toBreeze(i)
 }
 
 /**

@@ -17,11 +17,9 @@
 
 package org.apache.spark.mllib.regression
 
-
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkContext
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LinearDataGenerator, LocalSparkContext}
 
 class LassoSuite extends FunSuite with LocalSparkContext {
@@ -51,7 +49,6 @@ class LassoSuite extends FunSuite with LocalSparkContext {
     ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
 
     val model = ls.run(testRDD)
-
     val weight0 = model.weights(0)
     val weight1 = model.weights(1)
     assert(model.intercept >= 1.9 && model.intercept <= 2.1, model.intercept + " not in [1.9, 2.1]")
@@ -79,7 +76,7 @@ class LassoSuite extends FunSuite with LocalSparkContext {
 
     val initialB = -1.0
     val initialC = -1.0
-    val initialWeights = Array(initialB,initialC)
+    val initialWeights = Vectors.dense(Array(initialB, initialC))
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
@@ -88,7 +85,6 @@ class LassoSuite extends FunSuite with LocalSparkContext {
     ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
 
     val model = ls.run(testRDD, initialWeights)
-
     val weight0 = model.weights(0)
     val weight1 = model.weights(1)
     assert(model.intercept >= 1.9 && model.intercept <= 2.1, model.intercept + " not in [1.9, 2.1]")

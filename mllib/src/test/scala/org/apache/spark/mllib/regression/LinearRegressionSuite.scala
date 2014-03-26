@@ -40,11 +40,12 @@ class LinearRegressionSuite extends FunSuite with LocalSparkContext {
     linReg.optimizer.setNumIterations(1000).setStepSize(1.0)
 
     val model = linReg.run(testRDD)
-
     assert(model.intercept >= 2.5 && model.intercept <= 3.5)
-    assert(model.weights.length === 2)
-    assert(model.weights(0) >= 9.0 && model.weights(0) <= 11.0)
-    assert(model.weights(1) >= 9.0 && model.weights(1) <= 11.0)
+
+    val weights = model.weights
+    assert(weights.size === 2)
+    assert(weights(0) >= 9.0 && weights(0) <= 11.0)
+    assert(weights(1) >= 9.0 && weights(1) <= 11.0)
 
     val validationData = LinearDataGenerator.generateLinearInput(
       3.0, Array(10.0, 10.0), 100, 17)
@@ -67,9 +68,11 @@ class LinearRegressionSuite extends FunSuite with LocalSparkContext {
     val model = linReg.run(testRDD)
 
     assert(model.intercept === 0.0)
-    assert(model.weights.length === 2)
-    assert(model.weights(0) >= 9.0 && model.weights(0) <= 11.0)
-    assert(model.weights(1) >= 9.0 && model.weights(1) <= 11.0)
+
+    val weights = model.weights
+    assert(weights.size === 2)
+    assert(weights(0) >= 9.0 && weights(0) <= 11.0)
+    assert(weights(1) >= 9.0 && weights(1) <= 11.0)
 
     val validationData = LinearDataGenerator.generateLinearInput(
       0.0, Array(10.0, 10.0), 100, 17)
