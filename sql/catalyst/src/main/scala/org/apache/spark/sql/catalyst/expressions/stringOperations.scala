@@ -19,15 +19,13 @@ package org.apache.spark.sql
 package catalyst
 package expressions
 
-import org.apache.spark.sql.catalyst.types.BooleanType
 import java.util.regex.Pattern
 
-import catalyst.types.StringType
-import catalyst.types.BooleanType
-import catalyst.trees.TreeNode
-
-import catalyst.errors.`package`.TreeNodeException
 import org.apache.spark.sql.catalyst.types.DataType
+import org.apache.spark.sql.catalyst.types.StringType
+import org.apache.spark.sql.catalyst.types.BooleanType
+import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.errors.`package`.TreeNodeException
 
 
 /**

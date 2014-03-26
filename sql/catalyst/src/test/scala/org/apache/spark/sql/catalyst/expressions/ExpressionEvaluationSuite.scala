@@ -26,10 +26,8 @@ import org.apache.spark.sql.catalyst.types._
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
 
-import types._
-import expressions._
-import dsl._
-import dsl.expressions._
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.dsl._
 
 
 /**
@@ -42,7 +40,7 @@ trait ExprEvalTest {
 }
 
 case class InterpretExprEvalTest(exprs: Seq[Expression]) extends ExprEvalTest {
-  override def engine: Execution = new InterpretedProjection(exprs)
+  override def engine: Execution = new Projection(exprs)
 }
 
 class InterpretExpressionEvaluationSuite extends ExpressionEvaluationSuite {
@@ -116,7 +114,6 @@ trait ExpressionEvaluationSuite extends FunSuite {
       tester.engine.apply(input)
     } catch {
       case x: Any => {
-        println(x.printStackTrace())
         new GenericRow(Array(x.asInstanceOf[Any]))
       }
     }
