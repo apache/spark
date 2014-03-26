@@ -87,17 +87,17 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val retu = getDenseMatrix(u)
     val rets = getDenseMatrix(s)
     val retv = getDenseMatrix(v)
-
-
-    // check individual decomposition
+ 
+ 
+    // check individual decomposition  
     assertMatrixApproximatelyEquals(retu, svd(0))
     assertMatrixApproximatelyEquals(rets, DoubleMatrix.diag(svd(1)))
     assertMatrixApproximatelyEquals(retv, svd(2))
 
     // check multiplication guarantee
-    assertMatrixApproximatelyEquals(retu.mmul(rets).mmul(retv.transpose), denseA)
+    assertMatrixApproximatelyEquals(retu.mmul(rets).mmul(retv.transpose), denseA)  
   }
-/*
+
  test("dense full rank matrix svd") {
     val m = 10
     val n = 3
@@ -120,7 +120,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val retv = new DoubleMatrix(v)
 
 
-    // check individual decomposition
+    // check individual decomposition  
     assertMatrixApproximatelyEquals(retu, svd(0))
     assertMatrixApproximatelyEquals(rets, DoubleMatrix.diag(svd(1)))
     assertMatrixApproximatelyEquals(retv, svd(2))
@@ -131,7 +131,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
 
  test("rank one matrix svd") {
     val m = 10
-    val n = 3
+    val n = 3   
     val data = sc.makeRDD(Array.tabulate(m, n){ (a,b) =>
       MatrixEntry(a, b, 1.0) }.flatten )
     val k = 1
@@ -153,13 +153,13 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val rets = getDenseMatrix(s)
     val retv = getDenseMatrix(v)
 
-    // check individual decomposition
+    // check individual decomposition  
     assertMatrixApproximatelyEquals(retu, svd(0).getColumn(0))
     assertMatrixApproximatelyEquals(rets, DoubleMatrix.diag(svd(1).getRow(0)))
     assertMatrixApproximatelyEquals(retv, svd(2).getColumn(0))
 
      // check multiplication guarantee
-    assertMatrixApproximatelyEquals(retu.mmul(rets).mmul(retv.transpose), denseA)
+    assertMatrixApproximatelyEquals(retu.mmul(rets).mmul(retv.transpose), denseA)  
   }
 
  test("truncated with k") {
@@ -168,7 +168,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val data = sc.makeRDD(Array.tabulate(m,n){ (a, b) =>
       MatrixEntry(a, b, (a + 2).toDouble * (b + 1)/(1 + a + b)) }.flatten )
     val a = SparseMatrix(data, m, n)
-
+    
     val k = 1 // only one svalue above this
 
     val decomposed = new SVD().setK(k).compute(a)
@@ -185,11 +185,10 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val retv = getDenseMatrix(v)
 
     assert(retrank == 1, "rank returned not one")
-
-    // check individual decomposition
+    
+    // check individual decomposition  
     assertMatrixApproximatelyEquals(retu, svd(0).getColumn(0))
     assertMatrixApproximatelyEquals(rets, DoubleMatrix.diag(svd(1).getRow(0)))
     assertMatrixApproximatelyEquals(retv, svd(2).getColumn(0))
   }
- */
 }
