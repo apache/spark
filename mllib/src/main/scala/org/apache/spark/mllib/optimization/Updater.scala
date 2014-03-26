@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.optimization
 
 import scala.math._
-import org.jblas.DoubleMatrix
 
 import breeze.linalg.{norm => brzNorm}
 
@@ -122,7 +121,7 @@ class SquaredL2Updater extends Updater {
       gradient: Vector,
       stepSize: Double,
       iter: Int,
-      regParam: Double): (DoubleMatrix, Double) = {
+      regParam: Double): (Vector, Double) = {
     // add up both updates from the gradient of the loss (= step) as well as
     // the gradient of the regularizer (= regParam * weightsOld)
     // w' = w - thisIterStepSize * (gradient + regParam * w)
@@ -132,7 +131,7 @@ class SquaredL2Updater extends Updater {
       (gradient.toBreeze * thisIterStepSize)
     val norm = brzNorm(brzWeights, 2.0)
 
-    (Vectors.fromBreeze(newWeights), 0.5 * regParam * norm * norm)
+    (Vectors.fromBreeze(brzWeights), 0.5 * regParam * norm * norm)
   }
 }
 

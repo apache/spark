@@ -21,7 +21,9 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
+
+import breeze.linalg.{Vector => BV, DenseVector => BDV}
 
 /**
  * Regression model trained using RidgeRegression.
@@ -36,10 +38,10 @@ class RidgeRegressionModel(
   with RegressionModel with Serializable {
 
   override protected def predictPoint(
-      dataMatrix: DoubleMatrix,
-      weightMatrix: DoubleMatrix,
+      dataMatrix: Vector,
+      weightMatrix: Vector,
       intercept: Double): Double = {
-    dataMatrix.dot(weightMatrix) + intercept
+    weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
   }
 }
 
@@ -71,8 +73,8 @@ class RidgeRegressionWithSGD private (
   super.setIntercept(false)
 
   var yMean = 0.0
-  var xColMean: DoubleMatrix = _
-  var xColSd: DoubleMatrix = _
+  var xColMean: BV[Double] = _
+  var xColSd: BV[Double] = _
 
   /**
    * Construct a RidgeRegression object with default parameters
@@ -85,33 +87,33 @@ class RidgeRegressionWithSGD private (
     this
   }
 
-  override protected def createModel(weights: Array[Double], intercept: Double) = {
-    val weightsMat = new DoubleMatrix(weights.length, 1, weights: _*)
-    val weightsScaled = weightsMat.div(xColSd)
-    val interceptScaled = yMean - weightsMat.transpose().mmul(xColMean.div(xColSd)).get(0)
+  override protected def createModel(weights: Vector, intercept: Double) = {
+    val weightsMat = weights.toBreeze
+    val weightsScaled = weightsMat :/ xColSd
+    val interceptScaled = yMean - weightsMat.dot(xColMean :/ xColSd)
 
-    new RidgeRegressionModel(weightsScaled.data, interceptScaled)
+    new RidgeRegressionModel(Vectors.fromBreeze(weightsScaled), interceptScaled)
   }
 
   override def run(
       input: RDD[LabeledPoint],
-      initialWeights: Array[Double])
+      initialWeights: Vector)
     : RidgeRegressionModel =
   {
-    val nfeatures: Int = input.first().features.length
+    val nfeatures: Int = input.first().features.size
     val nexamples: Long = input.count()
 
     // To avoid penalizing the intercept, we center and scale the data.
     val stats = MLUtils.computeStats(input, nfeatures, nexamples)
     yMean = stats._1
-    xColMean = stats._2
-    xColSd = stats._3
+    xColMean = stats._2.toBreeze
+    xColSd = stats._3.toBreeze
 
     val normalizedData = input.map { point =>
       val yNormalized = point.label - yMean
-      val featuresMat = new DoubleMatrix(nfeatures, 1, point.features:_*)
-      val featuresNormalized = featuresMat.sub(xColMean).divi(xColSd)
-      LabeledPoint(yNormalized, featuresNormalized.toArray)
+      val featuresMat = point.features.toBreeze
+      val featuresNormalized = (featuresMat - xColMean) :/ xColSd
+      LabeledPoint(yNormalized, Vectors.fromBreeze(featuresNormalized))
     }
 
     super.run(normalizedData, initialWeights)
@@ -143,7 +145,7 @@ object RidgeRegressionWithSGD {
       stepSize: Double,
       regParam: Double,
       miniBatchFraction: Double,
-      initialWeights: Array[Double])
+      initialWeights: Vector)
     : RidgeRegressionModel =
   {
     new RidgeRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(
@@ -220,7 +222,8 @@ object RidgeRegressionWithSGD {
     val data = MLUtils.loadLabeledData(sc, args(1))
     val model = RidgeRegressionWithSGD.train(data, args(4).toInt, args(2).toDouble,
         args(3).toDouble)
-    println("Weights: " + model.weights.mkString("[", ", ", "]"))
+
+    println("Weights: " + model.weights)
     println("Intercept: " + model.intercept)
 
     sc.stop()

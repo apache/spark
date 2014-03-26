@@ -17,13 +17,11 @@
 
 package org.apache.spark.mllib.regression
 
-
-import org.jblas.DoubleMatrix
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.util.{LinearDataGenerator, LocalSparkContext}
+import org.jblas.DoubleMatrix
 
+import org.apache.spark.mllib.util.{LinearDataGenerator, LocalSparkContext}
 
 class RidgeRegressionSuite extends FunSuite with LocalSparkContext {
 

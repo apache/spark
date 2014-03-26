@@ -22,7 +22,7 @@ import org.apache.spark.rdd.RDD
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
  * Class used to solve an optimization problem using Gradient Descent.
@@ -139,7 +139,7 @@ object GradientDescent extends Logging {
     numIterations: Int,
     regParam: Double,
     miniBatchFraction: Double,
-    initialWeights: Vector): (Vector, Vector) = {
+    initialWeights: Vector): (Vector, Array[Double]) = {
 
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
 
@@ -147,24 +147,23 @@ object GradientDescent extends Logging {
     val miniBatchSize = nexamples * miniBatchFraction
 
     // Initialize weights as a column vector
-    var weights = initialWeights.toBreeze.toDenseVector
+    var weights = Vectors.dense(initialWeights.toArray)
 
     /**
      * For the first iteration, the regVal will be initialized as sum of sqrt of
      * weights if it's L2 update; for L1 update; the same logic is followed.
      */
     var regVal = updater.compute(
-      weights, new DoubleMatrix(initialWeights.length, 1), 0, 1, regParam)._2
+      weights, Vectors.dense(new Array[Double](weights.size)), 0, 1, regParam)._2
 
     for (i <- 1 to numIterations) {
       // Sample a subset (fraction miniBatchFraction) of the total data
       // compute and sum up the subgradients on this subset (this is one map-reduce)
       val (gradientSum, lossSum) = data.sample(false, miniBatchFraction, 42 + i).map {
         case (y, features) =>
-          val featuresCol = new DoubleMatrix(features.length, 1, features:_*)
-          val (grad, loss) = gradient.compute(featuresCol, y, weights)
-          (grad, loss)
-      }.reduce((a, b) => (a._1.addi(b._1), a._2 + b._2))
+          val (grad, loss) = gradient.compute(features, y, weights)
+          (grad.toBreeze, loss)
+      }.reduce((a, b) => (a._1 += b._1, a._2 + b._2))
 
       /**
        * NOTE(Xinghao): lossSum is computed using the weights from the previous iteration
@@ -172,7 +171,7 @@ object GradientDescent extends Logging {
        */
       stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
       val update = updater.compute(
-        weights, gradientSum.div(miniBatchSize), stepSize, i, regParam)
+        weights, Vectors.fromBreeze(gradientSum / miniBatchSize), stepSize, i, regParam)
       weights = update._1
       regVal = update._2
     }
@@ -180,6 +179,6 @@ object GradientDescent extends Logging {
     logInfo("GradientDescent.runMiniBatchSGD finished. Last 10 stochastic losses %s".format(
       stochasticLossHistory.takeRight(10).mkString(", ")))
 
-    (weights.toArray, stochasticLossHistory.toArray)
+    (weights, stochasticLossHistory.toArray)
   }
 }

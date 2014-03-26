@@ -21,8 +21,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.util.MLUtils
-
-import org.jblas.DoubleMatrix
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
  * Regression model trained using LinearRegression.
@@ -31,15 +30,15 @@ import org.jblas.DoubleMatrix
  * @param intercept Intercept computed for this model.
  */
 class LinearRegressionModel(
-    override val weights: Array[Double],
+    override val weights: Vector,
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with RegressionModel with Serializable {
 
   override protected def predictPoint(
-      dataMatrix: DoubleMatrix,
-      weightMatrix: DoubleMatrix,
+      dataMatrix: Vector,
+      weightMatrix: Vector,
       intercept: Double): Double = {
-    dataMatrix.dot(weightMatrix) + intercept
+    weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
   }
 }
 
@@ -69,7 +68,7 @@ class LinearRegressionWithSGD private (
    */
   def this() = this(1.0, 100, 1.0)
 
-  override protected def createModel(weights: Array[Double], intercept: Double) = {
+  override protected def createModel(weights: Vector, intercept: Double) = {
     new LinearRegressionModel(weights, intercept)
   }
 }
@@ -98,7 +97,7 @@ object LinearRegressionWithSGD {
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double,
-      initialWeights: Array[Double])
+      initialWeights: Vector)
     : LinearRegressionModel =
   {
     new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction).run(input,
@@ -172,7 +171,7 @@ object LinearRegressionWithSGD {
     val sc = new SparkContext(args(0), "LinearRegression")
     val data = MLUtils.loadLabeledData(sc, args(1))
     val model = LinearRegressionWithSGD.train(data, args(3).toInt, args(2).toDouble)
-    println("Weights: " + model.weights.mkString("[", ", ", "]"))
+    println("Weights: " + model.weights)
     println("Intercept: " + model.intercept)
 
     sc.stop()

@@ -17,15 +17,13 @@
 
 package org.apache.spark.mllib.util
 
+import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV,
+  squaredDistance => breezeSquaredDistance}
+
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext._
-
-import org.jblas.DoubleMatrix
-
 import org.apache.spark.mllib.regression.LabeledPoint
-
-import breeze.linalg.{Vector => BV, SparseVector => BSV, squaredDistance => breezeSquaredDistance}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
@@ -54,7 +52,7 @@ object MLUtils {
     sc.textFile(dir).map { line =>
       val parts = line.split(',')
       val label = parts(0).toDouble
-      val features = parts(1).trim().split(' ').map(_.toDouble)
+      val features = Vectors.dense(parts(1).trim().split(' ').map(_.toDouble))
       LabeledPoint(label, features)
     }
   }
@@ -68,7 +66,7 @@ object MLUtils {
    * @param dir Directory to save the data.
    */
   def saveLabeledData(data: RDD[LabeledPoint], dir: String) {
-    val dataStr = data.map(x => x.label + "," + x.features.mkString(" "))
+    val dataStr = data.map(x => x.label + "," + x.features.toArray.mkString(" "))
     dataStr.saveAsTextFile(dir)
   }
 
@@ -76,44 +74,51 @@ object MLUtils {
    * Utility function to compute mean and standard deviation on a given dataset.
    *
    * @param data - input data set whose statistics are computed
-   * @param nfeatures - number of features
-   * @param nexamples - number of examples in input dataset
+   * @param numFeatures - number of features
+   * @param numExamples - number of examples in input dataset
    *
    * @return (yMean, xColMean, xColSd) - Tuple consisting of
    *     yMean - mean of the labels
    *     xColMean - Row vector with mean for every column (or feature) of the input data
    *     xColSd - Row vector standard deviation for every column (or feature) of the input data.
    */
-  def computeStats(data: RDD[LabeledPoint], nfeatures: Int, nexamples: Long):
-      (Double, DoubleMatrix, DoubleMatrix) = {
-    val yMean: Double = data.map { labeledPoint => labeledPoint.label }.reduce(_ + _) / nexamples
+  def computeStats(data: RDD[LabeledPoint], numFeatures: Int, numExamples: Long)
+    : (Double, Vector, Vector) = {
 
-    // NOTE: We shuffle X by column here to compute column sum and sum of squares.
-    val xColSumSq: RDD[(Int, (Double, Double))] = data.flatMap { labeledPoint =>
-      val nCols = labeledPoint.features.length
-      // Traverse over every column and emit (col, value, value^2)
-      Iterator.tabulate(nCols) { i =>
-        (i, (labeledPoint.features(i), labeledPoint.features(i)*labeledPoint.features(i)))
+    val brzData = data.map { case LabeledPoint(label, features) =>
+      (label, features.toBreeze)
+    }
+
+    val aggStats = brzData.aggregate(
+      (0L, 0.0, BDV.zeros[Double](numFeatures), BDV.zeros[Double](numFeatures))
+    )(
+      seqOp = (c , v) => (c, v) match {
+        case ((n, sumLabel, sum, sumSq), (label, features)) =>
+          features.activeIterator.foreach { case (i, x) =>
+            sumSq(i) += x * x
+          }
+          (n + 1L, sumLabel + label, sum += features, sumSq)
+      },
+      combOp = (c1, c2) => (c1, c2) match {
+        case ((n1, sumLabel1, sum1, sumSq1), (n2, sumLabel2, sum2, sumSq2)) =>
+          (n1 + n2, sumLabel1 + sumLabel2, sum1 += sum2, sumSq1 += sumSq2)
       }
-    }.reduceByKey { case(x1, x2) =>
-      (x1._1 + x2._1, x1._2 + x2._2)
-    }
-    val xColSumsMap = xColSumSq.collectAsMap()
+    )
 
-    val xColMean = DoubleMatrix.zeros(nfeatures, 1)
-    val xColSd = DoubleMatrix.zeros(nfeatures, 1)
+    val (nl, sumLabel, sum, sumSq) = aggStats
+    require(nl > 0, "Input data is empty.")
 
-    // Compute mean and unbiased variance using column sums
-    var col = 0
-    while (col < nfeatures) {
-      xColMean.put(col, xColSumsMap(col)._1 / nexamples)
-      val variance =
-        (xColSumsMap(col)._2 - (math.pow(xColSumsMap(col)._1, 2) / nexamples)) / nexamples
-      xColSd.put(col, math.sqrt(variance))
-      col += 1
+    val n = nl.toDouble
+    val yMean = sumLabel / n
+    val mean: BDV[Double] = sum / n
+    val std = new Array[Double](sum.length)
+    var i = 0
+    while (i < numFeatures) {
+      std(i) = sumSq(i) / n - mean(i) * mean(i)
+      i += 1
     }
 
-    (yMean, xColMean, xColSd)
+    (yMean, Vectors.fromBreeze(mean), Vectors.dense(std))
   }
 
   /**
