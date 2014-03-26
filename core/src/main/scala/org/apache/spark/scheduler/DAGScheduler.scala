@@ -914,6 +914,7 @@ class DAGScheduler(
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
         // Mark the stage that the reducer was in as unrunnable
         val failedStage = stageIdToStage(task.stageId)
+        runningStages -= failedStage
         // TODO: Cancel running tasks in the stage
         logInfo("Marking " + failedStage + " (" + failedStage.name +
           ") for resubmision due to a fetch failure")
@@ -935,10 +936,7 @@ class DAGScheduler(
         }
         failedStages += failedStage
         failedStages += mapStage
-        if (runningStages.contains(failedStage)) {
-          stageIdToAccumulators -= failedStage.id
-        }
-        runningStages -= failedStage
+        stageIdToAccumulators -= failedStage.id
         // TODO: mark the executor as failed only if there were lots of fetch failures on it
         if (bmAddress != null) {
           handleExecutorLost(bmAddress.executorId, Some(task.epoch))
