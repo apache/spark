@@ -17,7 +17,10 @@
 
 package org.apache.spark
 
+import java.lang.ref.WeakReference
+
 import scala.collection.mutable.{ArrayBuffer, HashSet, SynchronizedSet}
+import scala.util.Random
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.concurrent.Eventually
@@ -26,9 +29,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.storage.{RDDBlockId, ShuffleBlockId}
-import org.apache.spark.rdd.{ShuffleCoGroupSplitDep, RDD}
-import scala.util.Random
-import java.lang.ref.WeakReference
+import org.apache.spark.rdd.RDD
 
 class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
 
@@ -67,7 +68,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
   test("automatically cleanup RDD") {
     var rdd = newRDD.persist()
     rdd.count()
-    
+
     // test that GC does not cause RDD cleanup due to a strong reference
     val preGCTester =  new CleanerTester(sc, rddIds = Seq(rdd.id))
     runGC()
@@ -171,11 +172,16 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
 
 
 /** Class to test whether RDDs, shuffles, etc. have been successfully cleaned. */
-class CleanerTester(sc: SparkContext, rddIds: Seq[Int] = Nil, shuffleIds: Seq[Int] = Nil)
+class CleanerTester(
+    sc: SparkContext,
+    rddIds: Seq[Int] = Seq.empty,
+    shuffleIds: Seq[Int] = Seq.empty,
+    broadcastIds: Seq[Long] = Seq.empty)
   extends Logging {
 
   val toBeCleanedRDDIds = new HashSet[Int] with SynchronizedSet[Int] ++= rddIds
   val toBeCleanedShuffleIds = new HashSet[Int] with SynchronizedSet[Int] ++= shuffleIds
+  val toBeCleanedBroadcstIds = new HashSet[Long] with SynchronizedSet[Long] ++= broadcastIds
 
   val cleanerListener = new CleanerListener {
     def rddCleaned(rddId: Int): Unit = {
@@ -186,6 +192,11 @@ class CleanerTester(sc: SparkContext, rddIds: Seq[Int] = Nil, shuffleIds: Seq[In
     def shuffleCleaned(shuffleId: Int): Unit = {
       toBeCleanedShuffleIds -= shuffleId
       logInfo("Shuffle " + shuffleId + " cleaned")
+    }
+
+    def broadcastCleaned(broadcastId: Long): Unit = {
+      toBeCleanedBroadcstIds -= broadcastId
+      logInfo("Broadcast" + broadcastId + " cleaned")
     }
   }
 

@@ -29,8 +29,9 @@ import org.apache.spark.storage.BlockManagerMessages._
 private[storage]
 class BlockManagerSlaveActor(
     blockManager: BlockManager,
-    mapOutputTracker: MapOutputTracker
-  ) extends Actor {
+    mapOutputTracker: MapOutputTracker)
+  extends Actor {
+
   override def receive = {
 
     case RemoveBlock(blockId) =>

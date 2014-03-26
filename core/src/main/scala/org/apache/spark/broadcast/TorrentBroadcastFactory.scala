@@ -33,4 +33,11 @@ class TorrentBroadcastFactory extends BroadcastFactory {
 
   def stop() { TorrentBroadcast.stop() }
 
+  /**
+   * Remove all persisted state associated with the torrent broadcast with the given ID.
+   * @param removeFromDriver Whether to remove state from the driver.
+   */
+  def unbroadcast(id: Long, removeFromDriver: Boolean) {
+    TorrentBroadcast.unpersist(id, removeFromDriver)
+  }
 }

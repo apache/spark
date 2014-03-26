@@ -642,7 +642,11 @@ class SparkContext(
    * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
    * The variable will be sent to each cluster only once.
    */
-  def broadcast[T](value: T) = env.broadcastManager.newBroadcast[T](value, isLocal)
+  def broadcast[T](value: T) = {
+    val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
+    cleaner.registerBroadcastForCleanup(bc)
+    bc
+  }
 
   /**
    * Add a file to be downloaded with this Spark job on every node.

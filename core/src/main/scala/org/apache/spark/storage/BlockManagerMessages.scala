@@ -35,7 +35,7 @@ private[storage] object BlockManagerMessages {
   case class RemoveRdd(rddId: Int) extends ToBlockManagerSlave
 
   // Remove all blocks belonging to a specific shuffle.
-  case class RemoveShuffle(shuffleId: Int)
+  case class RemoveShuffle(shuffleId: Int) extends ToBlockManagerSlave
 
 
   //////////////////////////////////////////////////////////////////////////////////

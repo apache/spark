@@ -31,4 +31,12 @@ class HttpBroadcastFactory extends BroadcastFactory {
     new HttpBroadcast[T](value_, isLocal, id)
 
   def stop() { HttpBroadcast.stop() }
+
+  /**
+   * Remove all persisted state associated with the HTTP broadcast with the given ID.
+   * @param removeFromDriver Whether to remove state from the driver.
+   */
+  def unbroadcast(id: Long, removeFromDriver: Boolean) {
+    HttpBroadcast.unpersist(id, removeFromDriver)
+  }
 }

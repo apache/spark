@@ -60,4 +60,8 @@ private[spark] class BroadcastManager(
     broadcastFactory.newBroadcast[T](value_, isLocal, nextBroadcastId.getAndIncrement())
   }
 
+  def unbroadcast(id: Long, removeFromDriver: Boolean) {
+    broadcastFactory.unbroadcast(id, removeFromDriver)
+  }
+
 }

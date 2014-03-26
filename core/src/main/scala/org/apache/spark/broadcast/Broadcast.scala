@@ -50,6 +50,12 @@ import java.io.Serializable
 abstract class Broadcast[T](val id: Long) extends Serializable {
   def value: T
 
+  /**
+   * Remove all persisted state associated with this broadcast.
+   * @param removeFromDriver Whether to remove state from the driver.
+   */
+  def unpersist(removeFromDriver: Boolean)
+
   // We cannot have an abstract readObject here due to some weird issues with
   // readObject having to be 'private' in sub-classes.
 
