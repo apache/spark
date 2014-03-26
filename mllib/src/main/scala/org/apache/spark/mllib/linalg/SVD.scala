@@ -69,11 +69,11 @@ class SVD {
 
   /**
    * Compute SVD using the current set parameters
-   * Returns (U, S, V)  such that A = USV^T 
+   * Returns (U, S, V)  such that A = USV^T
    * U is a row-by-row dense matrix
    * S is a simple double array of singular values
    * V is a 2d array matrix
-   * See [[denseSVD]] for more documentation 
+   * See [[denseSVD]] for more documentation
    */
   def compute(matrix: RDD[Array[Double]]):
   (RDD[Array[Double]], Array[Double], Array[Array[Double]]) = {
@@ -118,6 +118,7 @@ class SVD {
     val m = matrix.m
     val n = matrix.n
 
+    println("matrix "+matrix)
     if (m < n || m <= 0 || n <= 0) {
       throw new IllegalArgumentException("Expecting a tall and skinny matrix m=$m n=$n")
     }
@@ -129,6 +130,7 @@ class SVD {
     val rowIndices = matrix.rows.map(_.i)
 
     // compute SVD
+    println("Computing SVD")
     val (u, sigma, v) = denseSVD(matrix.rows.map(_.data))
 
     if (computeU) {
@@ -286,6 +288,7 @@ class SVD {
     // Compute A^T A, assuming rows are sparse enough to fit in memory
     val rows = data.map(entry =>
       (entry.i, (entry.j, entry.mval))).groupByKey()
+    println("rows "+rows)
     val emits = rows.flatMap {
       case (rowind, cols) =>
         cols.flatMap {
@@ -296,18 +299,26 @@ class SVD {
             }
         }
     }.reduceByKey(_ + _)
+    println("emits ")
+    emits.foreach{e => println("e "+e)}
 
     // Construct jblas A^T A locally
     val ata = DoubleMatrix.zeros(n, n)
     for (entry <- emits.collect()) {
       ata.put(entry._1._1, entry._1._2, entry._2)
     }
+    println("ata "+ata)
 
     // Since A^T A is small, we can compute its SVD directly
     val svd = Singular.sparseSVD(ata)
+    println("init svd")
+    svd.foreach{x => println(x)}
+    println("done")
     val V = svd(0)
+    println("V" + V)
     // This will be updated to rcond
     val sigmas = MatrixFunctions.sqrt(svd(1)).toArray.filter(x => x > 1e-9)
+    println("Sigmas "+sigmas)
 
     if (sigmas.size < k) {
       throw new Exception("Not enough singular values to return k=" + k + " s=" + sigmas.size)
@@ -341,6 +352,8 @@ class SVD {
       // Multiply A by VS^-1
       val aCols = data.map(entry => (entry.j, (entry.i, entry.mval)))
       val bRows = vsirdd.map(entry => (entry._1._1, (entry._1._2, entry._2)))
+      aCols.foreach{x => println("a "+x)}
+      bRows.foreach{x => println("b "+x)}
       val retUdata = aCols.join(bRows).map {
         case (key, ((rowInd, rowVal), (colInd, colVal))) =>
           ((rowInd, colInd), rowVal * colVal)
@@ -393,5 +406,3 @@ object SVD {
     System.exit(0)
   }
 }
-
-
