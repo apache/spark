@@ -35,7 +35,7 @@ class LinearRegressionModel(
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with RegressionModel with Serializable {
 
-  override protected def predictPoint(
+  override def predictPoint(
       dataMatrix: DoubleMatrix,
       weightMatrix: DoubleMatrix,
       intercept: Double): Double = {
@@ -69,7 +69,7 @@ class LinearRegressionWithSGD private (
    */
   def this() = this(1.0, 100, 1.0)
 
-  override protected def createModel(weights: Array[Double], intercept: Double) = {
+  override def createModel(weights: Array[Double], intercept: Double) = {
     new LinearRegressionModel(weights, intercept)
   }
 }

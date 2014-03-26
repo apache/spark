@@ -36,7 +36,7 @@ class LassoModel(
   extends GeneralizedLinearModel(weights, intercept)
   with RegressionModel with Serializable {
 
-  override protected def predictPoint(
+  override def predictPoint(
       dataMatrix: DoubleMatrix,
       weightMatrix: DoubleMatrix,
       intercept: Double): Double = {
@@ -85,7 +85,7 @@ class LassoWithSGD private (
     this
   }
 
-  override protected def createModel(weights: Array[Double], intercept: Double) = {
+  override def createModel(weights: Array[Double], intercept: Double) = {
     val weightsMat = new DoubleMatrix(weights.length, 1, weights: _*)
     val weightsScaled = weightsMat.div(xColSd)
     val interceptScaled = yMean - weightsMat.transpose().mmul(xColMean.div(xColSd)).get(0)
