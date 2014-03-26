@@ -20,10 +20,10 @@ package org.apache.spark.deploy.master
 import scala.collection.JavaConversions._
 
 import akka.serialization.Serialization
-
 import org.apache.curator.framework.CuratorFramework
-import org.apache.spark.{Logging, SparkConf}
 import org.apache.zookeeper.CreateMode
+
+import org.apache.spark.{Logging, SparkConf}
 
 class ZooKeeperPersistenceEngine(serialization: Serialization, conf: SparkConf)
   extends PersistenceEngine
