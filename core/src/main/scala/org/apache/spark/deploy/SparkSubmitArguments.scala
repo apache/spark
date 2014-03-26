@@ -165,11 +165,11 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
         |  --executor-cores NUM        Number of cores per executor (Default: 1).
         |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
         |  --queue QUEUE_NAME          The YARN queue to submit to (Default: 'default').
-        |  --num-executors NUM         Number of executors to start (Default: 2).
-        |  --files FILES               Comma separated list of files to be placed next to all
-        |                              executors.
-        |  --archives ARCHIVES         Comma separated list of archives to be extracted next to
-        |                              all executors.""".stripMargin
+        |  --num-executors NUM         Number of executors to (Default: 2).
+        |  --files FILES               Comma separated list of files to be placed in the working dir
+        |                              of each executor.
+        |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
+        |                              working dir of each executor.""".stripMargin
     )
     System.exit(exitCode)
   }

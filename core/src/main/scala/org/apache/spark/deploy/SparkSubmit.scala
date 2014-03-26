@@ -19,7 +19,6 @@ package org.apache.spark.deploy
 
 import java.io.File
 import java.net.URL
-import java.net.URLClassLoader
 
 import org.apache.spark.executor.ExecutorURLClassLoader
 
@@ -27,6 +26,11 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.Map
 
+/**
+ * Scala code behind the spark-submit script.  The script handles setting up the classpath with
+ * relevant Spark dependencies and provides a layer over the different cluster managers and deploy
+ * modes that Spark supports.
+ */
 object SparkSubmit {
   val YARN = 1
   val STANDALONE = 2
