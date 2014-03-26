@@ -228,12 +228,12 @@ object Bagel extends Logging {
     var numActiveVerts = sc.accumulator(0)
     val processed = grouped.flatMapValues {
       case (_, vs) if !vs.hasNext => None
-      case (c, vs) =>
+      case (c, vs) => {
         val (newVert, newMsgs) =
           compute(vs.next,
-            c.size match {
-              case 1 => Some(c.next)
-              case _ => None
+            c.hasNext match {
+              case true => Some(c.next)
+              case false => None
             }
           )
 
@@ -243,6 +243,7 @@ object Bagel extends Logging {
         }
 
         Some((newVert, newMsgs))
+      }
     }.persist(storageLevel)
 
     // Force evaluation of processed RDD for accurate performance measurements
