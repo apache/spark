@@ -49,14 +49,14 @@ private[mllib] class WholeTextFileRecordReader(
 
   override def close() = {}
 
-  override def getProgress = if(processed) 1.0f else 0.0f
+  override def getProgress = if (processed) 1.0f else 0.0f
 
   override def getCurrentKey = key
 
   override def getCurrentValue = value
 
   override def nextKeyValue = {
-    if(!processed) {
+    if (!processed) {
       val fileIn = fs.open(path)
       val innerBuffer = ByteStreams.toByteArray(fileIn)
 

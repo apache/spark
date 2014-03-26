@@ -29,16 +29,26 @@ class MLContext(self: SparkContext) {
 
   /**
    * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
-   * Hadoop-supported file system URI. For example,
-   *   {{{
-   *   hdfs://a-hdfs-path/part-00000
-   *   hdfs://a-hdfs-path/part-00001
-   *   ...
-   *   hdfs://a-hdfs-path/part-nnnnn
-   *   }}}
-   * then `hdfs://a-hdfs-path` can be treated as the path.
-   * Each file is read as a single record and returned in a key-value pair, where the key is the
-   * path of each file, and the value is the content of each file.
+   * Hadoop-supported file system URI. Each file is read as a single record and returned in a
+   * key-value pair, where the key is the path of each file, the value is the content of each file.
+   *
+   * <p> For example, if you have the following files:
+   * {{{
+   * hdfs://a-hdfs-path/part-00000
+   * hdfs://a-hdfs-path/part-00001
+   * ...
+   * hdfs://a-hdfs-path/part-nnnnn
+   * }}}
+   *
+   * Do `val rdd = mlContext.wholeTextFile("hdfs://a-hdfs-path")`,
+   *
+   * <p> then `rdd` contains
+   * {{{
+   * (a-hdfs-path/part-00000, its content)
+   * (a-hdfs-path/part-00001, its content)
+   * ...
+   * (a-hdfs-path/part-nnnnn, its content)
+   * }}}
    */
   def wholeTextFile(path: String): RDD[(String, String)] = {
     self.newAPIHadoopFile(
