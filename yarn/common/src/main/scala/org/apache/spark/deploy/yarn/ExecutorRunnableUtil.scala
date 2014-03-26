@@ -50,7 +50,8 @@ trait ExecutorRunnableUtil extends Logging {
       slaveId: String,
       hostname: String,
       executorMemory: Int,
-      executorCores: Int) = {
+      executorCores: Int,
+      userSpecifiedLogFile: Boolean) = {
     // Extra options for the JVM
     var JAVA_OPTS = ""
     // Set the JVM memory
@@ -62,7 +63,10 @@ trait ExecutorRunnableUtil extends Logging {
 
     JAVA_OPTS += " -Djava.io.tmpdir=" +
       new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR) + " "
-    JAVA_OPTS += YarnSparkHadoopUtil.getLoggingArgsForContainerCommandLine() + " "
+
+    if (!userSpecifiedLogFile) {
+      JAVA_OPTS += " " + YarnSparkHadoopUtil.getLoggingArgsForContainerCommandLine()
+    }
 
     // Commenting it out for now - so that people can refer to the properties if required. Remove
     // it once cpuset version is pushed out.

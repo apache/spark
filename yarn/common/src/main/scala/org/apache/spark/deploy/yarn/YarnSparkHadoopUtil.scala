@@ -71,13 +71,6 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
 object YarnSparkHadoopUtil {
   def getLoggingArgsForContainerCommandLine(): String = {
-    "-Dlog4j.configuration=container-log4j.properties " +
-      "-Dhadoop.root.logger=INFO,CLA " +
-      // for yarn/stable:
-      "-Dyarn.app.container.log.filesize=0 " +
-      "-Dyarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + " " +
-      // for yarn/alpha:
-      "-Dyarn.app.mapreduce.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + " " +
-      "-Dyarn.app.mapreduce.container.log.filesize=0"
+    "-Dlog4j.configuration=log4j-spark-container.properties"
   }
 }
