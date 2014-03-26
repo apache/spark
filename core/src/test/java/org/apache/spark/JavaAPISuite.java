@@ -18,6 +18,7 @@
 package org.apache.spark;
 
 import java.io.*;
+import java.lang.StringBuilder;
 import java.util.*;
 
 import scala.Tuple2;
@@ -84,6 +85,19 @@ public class JavaAPISuite implements Serializable {
       a.next();
     }
     return size;
+  }
+
+  public String iteratorStr(Iterator<?> a) {
+    StringBuilder str = new StringBuilder();
+    str.append("[");
+    while (a.hasNext()) {
+      str.append(a.next().toString());
+      if (a.hasNext()) {
+        str.append(", ");
+      }
+    }
+    str.append("]");
+    return str.toString();
   }
 
   @SuppressWarnings("unchecked")
@@ -242,8 +256,8 @@ public class JavaAPISuite implements Serializable {
       new Tuple2<String, Integer>("Apples", 3)
     ));
     JavaPairRDD<String, Tuple2<Iterator<String>, Iterator<Integer>>> cogrouped = categories.cogroup(prices);
-    Assert.assertEquals("[Fruit, Citrus]", cogrouped.lookup("Oranges").get(0)._1().toString());
-    Assert.assertEquals("[2]", cogrouped.lookup("Oranges").get(0)._2().toString());
+    Assert.assertEquals("[Fruit, Citrus]", iteratorStr(cogrouped.lookup("Oranges").get(0)._1()));
+    Assert.assertEquals("[2]", iteratorStr(cogrouped.lookup("Oranges").get(0)._2()));
 
     cogrouped.collect();
   }
