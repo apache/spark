@@ -1,6 +1,42 @@
 Spark Change Log
 ----------------
+
 Release 0.9.1
+
+  [SPARK-782] Made Spark use existing shaded ASM and removed Spark's ASM dependency
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-03-25 21:35:36 -0700
+  Commit: da87240, github.com/apache/spark/pull/232
+
+  Revert "[maven-release-plugin] prepare release v0.9.1-rc1"
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-03-25 15:01:52 -0700
+  Commit: 55abe72
+
+  Revert "[maven-release-plugin] prepare for next development iteration"
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-03-25 15:01:36 -0700
+  Commit: b94f997
+
+  [maven-release-plugin] prepare for next development iteration
+  Ubuntu <ubuntu@ip-172-31-18-245.us-west-2.compute.internal>
+  2014-03-24 06:56:16 +0000
+  Commit: 12e237e
+
+  [maven-release-plugin] prepare release v0.9.1-rc1
+  Ubuntu <ubuntu@ip-172-31-18-245.us-west-2.compute.internal>
+  2014-03-24 06:56:10 +0000
+  Commit: 81c6a06
+
+  Removed all occurences of incubator from all the pom.xml.
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-03-23 23:31:59 -0700
+  Commit: 60ddb34
+
+  Updated CHANGES.txt file.
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-03-23 13:16:50 -0700
+  Commit: f176b03
 
   Fix to Stage UI to display numbers on progress bar
   Emtiaz Ahmed <emtiazahmed@gmail.com>
