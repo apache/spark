@@ -44,7 +44,7 @@ abstract class GeneralizedLinearModel(val weights: Array[Double], val intercept:
    * @param weightMatrix Column vector containing the weights of the model
    * @param intercept Intercept of the model.
    */
-  def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
+  protected def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
     intercept: Double): Double
 
   /**
