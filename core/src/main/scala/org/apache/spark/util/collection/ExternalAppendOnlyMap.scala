@@ -55,25 +55,16 @@ import org.apache.spark.storage.{BlockId, BlockManager}
  *   `spark.shuffle.safetyFraction` specifies an additional margin of safety as a fraction of
  *   this threshold, in case map size estimation is not sufficiently accurate.
  */
+
 private[spark] class ExternalAppendOnlyMap[K, V, C](
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C,
     serializer: Serializer = SparkEnv.get.serializer,
     blockManager: BlockManager = SparkEnv.get.blockManager)
-  extends FlexibleExternalAppendOnlyMap[K, V, C, C](createCombiner, mergeValue, mergeCombiners, (x => x),
-    serializer, blockManager) {
-}
-private[spark] class FlexibleExternalAppendOnlyMap[K, V, C, T](
-    createCombiner: V => C,
-    mergeValue: (C, V) => C,
-    mergeCombiners: (C, T) => T,
-    returnCombiner: C => T,
-    serializer: Serializer = SparkEnv.get.serializer,
-    blockManager: BlockManager = SparkEnv.get.blockManager)
-  extends Iterable[(K, T)] with Serializable with Logging {
+  extends Iterable[(K, C)] with Serializable with Logging {
 
-  import FlexibleExternalAppendOnlyMap._
+  import ExternalAppendOnlyMap._
 
   private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
@@ -272,13 +263,13 @@ private[spark] class FlexibleExternalAppendOnlyMap[K, V, C, T](
      * If the given buffer contains a value for the given key, merge that value into
      * baseCombiner and remove the corresponding (K, C) pair from the buffer.
      */
-    private def mergeIfKeyExists(key: K, baseCombiner: T, buffer: StreamBuffer): T = {
+    private def mergeIfKeyExists(key: K, baseCombiner: C, buffer: StreamBuffer): C = {
       var i = 0
       while (i < buffer.pairs.length) {
         val (k, c) = buffer.pairs(i)
         if (k == key) {
           buffer.pairs.remove(i)
-          return mergeCombiners(c, baseCombiner)
+          return mergeCombiners(baseCombiner, c)
         }
         i += 1
       }
@@ -301,8 +292,7 @@ private[spark] class FlexibleExternalAppendOnlyMap[K, V, C, T](
       // Select a key from the StreamBuffer that holds the lowest key hash
       val minBuffer = mergeHeap.dequeue()
       val (minPairs, minHash) = (minBuffer.pairs, minBuffer.minKeyHash)
-      var (minKey, minCombinerC) = minPairs.remove(0)
-      var minCombiner = returnCombiner(minCombinerC)
+      var (minKey, minCombiner) = minPairs.remove(0)
       assert(minKey.hashCode() == minHash)
 
       // For all other streams that may have this key (i.e. have the same minimum key hash),
@@ -428,7 +418,7 @@ private[spark] class FlexibleExternalAppendOnlyMap[K, V, C, T](
   }
 }
 
-private[spark] object FlexibleExternalAppendOnlyMap {
+private[spark] object ExternalAppendOnlyMap {
   private class KCComparator[K, C] extends Comparator[(K, C)] {
     def compare(kc1: (K, C), kc2: (K, C)): Int = {
       kc1._1.hashCode().compareTo(kc2._1.hashCode())
