@@ -129,7 +129,7 @@ class SparkContext(
   // Generate the random name for a temp folder in Tachyon
   // Add a timestamp as the suffix here to make it more safe
   val tachyonFolderName = "spark-" + randomUUID.toString()
-  conf.set("spark.tachyonstore.foldername", tachyonFolderName)
+  conf.set("spark.tachyonStore.folderName", tachyonFolderName)
 
   val isLocal = (master == "local" || master.startsWith("local["))
 

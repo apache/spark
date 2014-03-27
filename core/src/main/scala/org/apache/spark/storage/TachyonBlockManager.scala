@@ -52,9 +52,9 @@ private[spark] class TachyonBlockManager(
   private val subDirsPerTachyonDir = 
     shuffleManager.conf.get("spark.tachyonStore.subDirectories", "64").toInt
 
-  // Create one Tachyon directory for each path mentioned in spark.tachyon.dir; then, inside this
-  // directory, create multiple subdirectories that we will hash files into, in order to avoid
-  // having really large inodes at the top level in Tachyon.
+  // Create one Tachyon directory for each path mentioned in spark.tachyonStore.folderName.dir; 
+  // then, inside this directory, create multiple subdirectories that we will hash files into, 
+  // in order to avoid having really large inodes at the top level in Tachyon.
   private val tachyonDirs: Array[TachyonFile] = createTachyonDirs()
   private val subDirs = Array.fill(tachyonDirs.length)(new Array[TachyonFile](subDirsPerTachyonDir))
 
