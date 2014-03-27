@@ -41,7 +41,8 @@ private[sql] trait ColumnAccessor {
 }
 
 private[sql] abstract class BasicColumnAccessor[T <: DataType, JvmType](
-    buffer: ByteBuffer, columnType: ColumnType[T, JvmType])
+    protected val buffer: ByteBuffer,
+    protected val columnType: ColumnType[T, JvmType])
   extends ColumnAccessor {
 
   protected def initialize() {}
@@ -49,20 +50,20 @@ private[sql] abstract class BasicColumnAccessor[T <: DataType, JvmType](
   def hasNext = buffer.hasRemaining
 
   def extractTo(row: MutableRow, ordinal: Int) {
-    columnType.setField(row, ordinal, columnType.extract(buffer))
+    columnType.setField(row, ordinal, extractSingle(buffer))
   }
+
+  def extractSingle(buffer: ByteBuffer) = columnType.extract(buffer)
 
   protected def underlyingBuffer = buffer
 }
 
 private[sql] abstract class NativeColumnAccessor[T <: NativeType](
     buffer: ByteBuffer,
-    val columnType: NativeColumnType[T])
-  extends BasicColumnAccessor[T, T#JvmType](buffer, columnType)
-  with NullableColumnAccessor {
-
-  type JvmType = T#JvmType
-}
+    columnType: NativeColumnType[T])
+  extends BasicColumnAccessor(buffer, columnType)
+  with NullableColumnAccessor
+  with CompressedColumnAccessor[T]
 
 private[sql] class BooleanColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, BOOLEAN)

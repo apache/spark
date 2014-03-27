@@ -17,10 +17,26 @@
 
 package org.apache.spark.sql.columnar
 
+import java.nio.ByteBuffer
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.types.DataType
+
+class TestNullableColumnAccessor[T <: DataType, JvmType](
+    buffer: ByteBuffer,
+    columnType: ColumnType[T, JvmType])
+  extends BasicColumnAccessor(buffer, columnType)
+  with NullableColumnAccessor
+
+object TestNullableColumnAccessor {
+  def apply[T <: DataType, JvmType](buffer: ByteBuffer, columnType: ColumnType[T, JvmType]) = {
+    // Skips the column type ID
+    buffer.getInt()
+    new TestNullableColumnAccessor(buffer, columnType)
+  }
+}
 
 class NullableColumnAccessorSuite extends FunSuite {
   import ColumnarTestData._
@@ -33,20 +49,20 @@ class NullableColumnAccessorSuite extends FunSuite {
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
 
     test(s"$typeName accessor: empty column") {
-      val builder = ColumnBuilder(columnType.typeId, 4)
-      val accessor = ColumnAccessor(builder.build())
+      val builder = TestNullableColumnBuilder(columnType)
+      val accessor = TestNullableColumnAccessor(builder.build(), columnType)
       assert(!accessor.hasNext)
     }
 
     test(s"$typeName accessor: access null values") {
-      val builder = ColumnBuilder(columnType.typeId, 4)
+      val builder = TestNullableColumnBuilder(columnType)
 
       (0 until 4).foreach { _ =>
         builder.appendFrom(nonNullRandomRow, columnType.typeId)
         builder.appendFrom(nullRow, columnType.typeId)
       }
 
-      val accessor = ColumnAccessor(builder.build())
+      val accessor = TestNullableColumnAccessor(builder.build(), columnType)
       val row = new GenericMutableRow(1)
 
       (0 until 4).foreach { _ =>

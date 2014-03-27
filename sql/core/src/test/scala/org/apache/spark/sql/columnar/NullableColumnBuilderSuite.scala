@@ -19,8 +19,20 @@ package org.apache.spark.sql.columnar
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.sql.catalyst.types.DataType
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.SparkSqlSerializer
+
+class TestNullableColumnBuilder[T <: DataType, JvmType](columnType: ColumnType[T, JvmType])
+  extends BasicColumnBuilder(columnType)
+  with NullableColumnBuilder
+
+object TestNullableColumnBuilder {
+  def apply[T <: DataType, JvmType](columnType: ColumnType[T, JvmType], initialSize: Int = 0) = {
+    val builder = new TestNullableColumnBuilder(columnType)
+    builder.initialize(initialSize)
+    builder
+  }
+}
 
 class NullableColumnBuilderSuite extends FunSuite {
   import ColumnarTestData._
@@ -30,23 +42,21 @@ class NullableColumnBuilderSuite extends FunSuite {
   }
 
   def testNullableColumnBuilder[T <: DataType, JvmType](columnType: ColumnType[T, JvmType]) {
-    val columnBuilder = ColumnBuilder(columnType.typeId)
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
 
     test(s"$typeName column builder: empty column") {
-      columnBuilder.initialize(4)
-
+      val columnBuilder = TestNullableColumnBuilder(columnType)
       val buffer = columnBuilder.build()
 
       // For column type ID
       assert(buffer.getInt() === columnType.typeId)
       // For null count
-      assert(buffer.getInt === 0)
+      assert(buffer.getInt() === 0)
       assert(!buffer.hasRemaining)
     }
 
     test(s"$typeName column builder: buffer size auto growth") {
-      columnBuilder.initialize(4)
+      val columnBuilder = TestNullableColumnBuilder(columnType)
 
       (0 until 4) foreach { _ =>
         columnBuilder.appendFrom(nonNullRandomRow, columnType.typeId)
@@ -61,7 +71,7 @@ class NullableColumnBuilderSuite extends FunSuite {
     }
 
     test(s"$typeName column builder: null values") {
-      columnBuilder.initialize(4)
+      val columnBuilder = TestNullableColumnBuilder(columnType)
 
       (0 until 4) foreach { _ =>
         columnBuilder.appendFrom(nonNullRandomRow, columnType.typeId)

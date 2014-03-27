@@ -29,10 +29,19 @@ private[sql] trait ColumnBuilder {
    */
   def initialize(initialSize: Int, columnName: String = "")
 
+  /**
+   * Gathers statistics information from `row(ordinal)`.
+   */
   def gatherStats(row: Row, ordinal: Int) {}
 
+  /**
+   * Appends `row(ordinal)` to the column builder.
+   */
   def appendFrom(row: Row, ordinal: Int)
 
+  /**
+   * Returns the final columnar byte buffer.
+   */
   def build(): ByteBuffer
 }
 
@@ -40,14 +49,16 @@ private[sql] abstract class BasicColumnBuilder[T <: DataType, JvmType](
     val columnType: ColumnType[T, JvmType])
   extends ColumnBuilder {
 
-  private var columnName: String = _
+  protected var columnName: String = _
 
   protected var buffer: ByteBuffer = _
 
   override def initialize(initialSize: Int, columnName: String = "") = {
     val size = if (initialSize == 0) DEFAULT_INITIAL_BUFFER_SIZE else initialSize
     this.columnName = columnName
-    buffer = ByteBuffer.allocate(4 + 4 + size * columnType.defaultSize)
+
+    // Reserves 4 bytes for column type ID
+    buffer = ByteBuffer.allocate(4 + size * columnType.defaultSize)
     buffer.order(ByteOrder.nativeOrder()).putInt(columnType.typeId)
   }
 
@@ -66,8 +77,9 @@ private[sql] abstract class BasicColumnBuilder[T <: DataType, JvmType](
 private[sql] abstract class NativeColumnBuilder[T <: NativeType](
     protected val columnStats: ColumnStats[T],
     columnType: NativeColumnType[T])
-  extends BasicColumnBuilder[T, T#JvmType](columnType)
-  with NullableColumnBuilder {
+  extends BasicColumnBuilder(columnType)
+  with NullableColumnBuilder
+  with CompressedColumnBuilder[T] {
 
   override def gatherStats(row: Row, ordinal: Int) {
     columnStats.gatherStats(row, ordinal)

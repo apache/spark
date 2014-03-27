@@ -71,7 +71,7 @@ private[sql] trait NullableColumnBuilder extends ColumnBuilder {
     //      |   ...   | Non-null part (without column type ID)
     //      +---------+
     val buffer = ByteBuffer
-      .allocate(4 + nullDataLen + nonNulls.limit)
+      .allocate(4 + 4 + nullDataLen + nonNulls.remaining())
       .order(ByteOrder.nativeOrder())
       .putInt(typeId)
       .putInt(nullCount)
