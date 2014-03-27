@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.catalyst.expressions.{Generator, JoinedRow, Literal, Projection}
 
 /**
- * Applies a [[catalyst.expressions.Generator Generator]] to a stream of input rows, combining the
+ * Applies a Generator to a stream of input rows, combining the
  * output of each into a new stream of rows.  This operation is similar to a `flatMap` in functional
  * programming with one important additional feature, which allows the input rows to be joined with
  * their output.

@@ -73,7 +73,7 @@ class SVD {
    * U is a row-by-row dense matrix
    * S is a simple double array of singular values
    * V is a 2d array matrix
-   * See [[denseSVD]] for more documentation 
+   * See `denseSVD` for more documentation
    */
   def compute(matrix: RDD[Array[Double]]):
   (RDD[Array[Double]], Array[Double], Array[Array[Double]]) = {

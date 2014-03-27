@@ -70,8 +70,8 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 }
 
 /**
- * Ensures that the [[catalyst.plans.physical.Partitioning Partitioning]] of input data meets the
- * [[catalyst.plans.physical.Distribution Distribution]] requirements for each operator by inserting
+ * Ensures that the Partitioning of input data meets the
+ * Distribution requirements for each operator by inserting
  * [[Exchange]] Operators where required.
  */
 object AddExchange extends Rule[SparkPlan] {

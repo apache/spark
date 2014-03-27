@@ -122,7 +122,7 @@ object HiveQl {
 
   /**
    * A set of implicit transformations that allow Hive ASTNodes to be rewritten by transformations
-   * similar to [[catalyst.trees.TreeNode]].
+   * similar to TreeNode.
    *
    * Note that this should be considered very experimental and is not indented as a replacement
    * for TreeNode.  Primarily it should be noted ASTNodes are not immutable and do not appear to
