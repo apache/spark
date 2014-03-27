@@ -206,9 +206,11 @@ private[sql] object ParquetTestData {
       .append("values", "555 666 1337")
       .append("values", "XXX XXX XXXX")
     r1.addGroup(2)
+    //  .addGroup(0)
       .append("name", "Dmitriy Ryaboy")
       .append("phoneNumber", "555 987 6543")
     r1.addGroup(2)
+    //  .addGroup(0)
       .append("name", "Chris Aniszczyk")
 
     val r2 = new SimpleGroup(schema)

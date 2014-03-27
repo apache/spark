@@ -202,9 +202,12 @@ private[parquet] object ParquetTypesConverter {
       parquetType.getOriginalType match {
         // if the schema was constructed programmatically there may be hints how to convert
         // it inside the metadata via the OriginalType field
-        case ParquetOriginalType.LIST | ParquetOriginalType.ENUM => { // TODO: check enums!
-        val fields = groupType.getFields.map(toDataType(_))
-          new ArrayType(fields.apply(0)) // array fields should have the same type
+        case ParquetOriginalType.LIST => { // TODO: check enums!
+          val fields = groupType.getFields.map {
+            field => new StructField(field.getName, toDataType(field), field.getRepetition != Repetition.REQUIRED)
+          }
+          if (fields.size == 1) new ArrayType(fields.apply(0).dataType)
+          new ArrayType(StructType(fields))
         }
         case _ => { // everything else nested becomes a Struct, unless it has a single repeated field
           // in which case it becomes an array (this should correspond to the inverse operation of
@@ -219,11 +222,14 @@ private[parquet] object ParquetTypesConverter {
               ptype.getName,
               toDataType(ptype),
               ptype.getRepetition != Repetition.REQUIRED))
-            new StructType(fields)
+            if (groupType.getFieldCount == 1) { // single field, either optional or required
+              new StructType(fields)
+            } else { // multi field repeated group, which we map into an array of structs
+                new ArrayType(StructType(fields))
+            }
           }
         }
       }
-      //}
     }
   }
 
@@ -251,12 +257,21 @@ private[parquet] object ParquetTypesConverter {
     } else {
       ctype match {
         case ArrayType(elementType: DataType) => {
-          // TODO: "values" is a generic name but without it the Parquet column path would
-          // be incomplete and values may be silently dropped; better would be to give
-          // Array elements a name of some sort (and specify whether they are nullable),
-          // as in StructField
-          val parquetElementType = fromDataType(elementType, "values", nullable=false, inArray=true)
-          ConversionPatterns.listType(repetition, name, parquetElementType)
+          elementType match {
+            case StructType(fields) => { // first case: array of structs
+              val parquetFieldTypes = fields.map(f => fromDataType(f.dataType, f.name, f.nullable, false))
+              new ParquetGroupType(Repetition.REPEATED, name, ParquetOriginalType.LIST, parquetFieldTypes)
+              //ConversionPatterns.listType(Repetition.REPEATED, name, parquetFieldTypes)
+            }
+            case _ => { // second case: array of primitive types
+              // TODO: "values" is a generic name but without it the Parquet column path would
+              // be incomplete and values may be silently dropped; better would be to give
+              // Array elements a name of some sort (and specify whether they are nullable),
+              // as in StructField
+              val parquetElementType = fromDataType(elementType, "values", nullable=false, inArray=true)
+              ConversionPatterns.listType(repetition, name, parquetElementType)
+            }
+          }
         }
         // TODO: test structs inside arrays
         case StructType(structFields) => {
