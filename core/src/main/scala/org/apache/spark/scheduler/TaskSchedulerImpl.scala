@@ -62,6 +62,9 @@ private[spark] class TaskSchedulerImpl(
   // Threshold above which we warn user initial TaskSet may be starved
   val STARVATION_TIMEOUT = conf.getLong("spark.starvation.timeout", 15000)
 
+  // CPUs to request per task
+  val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)
+
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
   val activeTaskSets = new HashMap[String, TaskSetManager]
@@ -228,16 +231,18 @@ private[spark] class TaskSchedulerImpl(
         for (i <- 0 until shuffledOffers.size) {
           val execId = shuffledOffers(i).executorId
           val host = shuffledOffers(i).host
-          for (task <- taskSet.resourceOffer(execId, host, availableCpus(i), maxLocality)) {
-            tasks(i) += task
-            val tid = task.taskId
-            taskIdToTaskSetId(tid) = taskSet.taskSet.id
-            taskIdToExecutorId(tid) = execId
-            activeExecutorIds += execId
-            executorsByHost(host) += execId
-            availableCpus(i) -= taskSet.CPUS_PER_TASK
-            assert (availableCpus(i) >= 0)
-            launchedTask = true
+          if (availableCpus(i) >= CPUS_PER_TASK) {
+            for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
+              tasks(i) += task
+              val tid = task.taskId
+              taskIdToTaskSetId(tid) = taskSet.taskSet.id
+              taskIdToExecutorId(tid) = execId
+              activeExecutorIds += execId
+              executorsByHost(host) += execId
+              availableCpus(i) -= CPUS_PER_TASK
+              assert (availableCpus(i) >= 0)
+              launchedTask = true
+            }
           }
         }
       } while (launchedTask)

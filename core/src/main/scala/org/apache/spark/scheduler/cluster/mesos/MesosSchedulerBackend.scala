@@ -246,7 +246,7 @@ private[spark] class MesosSchedulerBackend(
     val cpuResource = Resource.newBuilder()
       .setName("cpus")
       .setType(Value.Type.SCALAR)
-      .setScalar(Value.Scalar.newBuilder().setValue(1).build())
+      .setScalar(Value.Scalar.newBuilder().setValue(scheduler.CPUS_PER_TASK).build())
       .build()
     MesosTaskInfo.newBuilder()
       .setTaskId(taskId)

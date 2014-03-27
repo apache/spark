@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package types
+package org.apache.spark.sql.catalyst.types
 
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 

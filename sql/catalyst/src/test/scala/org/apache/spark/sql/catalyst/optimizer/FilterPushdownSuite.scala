@@ -15,12 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package optimizer
+package org.apache.spark.sql.catalyst.optimizer
 
-
-import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.analysis
+import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
