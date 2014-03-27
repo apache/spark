@@ -18,8 +18,9 @@
 package org.apache.spark.sql.columnar
 
 import org.scalatest.FunSuite
-import org.apache.spark.sql.catalyst.types.DataType
+
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.types.DataType
 
 class NullableColumnAccessorSuite extends FunSuite {
   import ColumnarTestData._
