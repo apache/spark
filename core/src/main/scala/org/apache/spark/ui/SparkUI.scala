@@ -46,6 +46,7 @@ private[spark] class SparkUI(
   val live = sc != null
 
   val securityManager = if (live) sc.env.securityManager else new SecurityManager(conf)
+  val killEnabled = conf.get("spark.ui.killEnabled", "false").toBoolean
 
   private val bindHost = Utils.localHostName()
   private val publicHost = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(bindHost)

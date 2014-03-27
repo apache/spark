@@ -33,6 +33,7 @@ private[ui] class JobProgressUI(parent: SparkUI) {
   val basePath = parent.basePath
   val live = parent.live
   val sc = parent.sc
+  val killEnabled = parent.killEnabled
 
   lazy val listener = _listener.get
   lazy val isFairScheduler = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
@@ -56,5 +57,5 @@ private[ui] class JobProgressUI(parent: SparkUI) {
       (request: HttpServletRequest) => poolPage.render(request), parent.securityManager, basePath),
     createServletHandler("/stages",
       (request: HttpServletRequest) => indexPage.render(request), parent.securityManager, basePath)
-  )
+    )
 }

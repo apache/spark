@@ -41,7 +41,8 @@ private[ui] class IndexPage(parent: JobProgressUI) {
       val failedStages = listener.failedStages.reverse.toSeq
       val now = System.currentTimeMillis()
 
-      val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
+      val activeStagesTable =
+        new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent, parent.killEnabled)
       val completedStagesTable =
         new StageTable(completedStages.sortBy(_.submissionTime).reverse, parent)
       val failedStagesTable = new StageTable(failedStages.sortBy(_.submissionTime).reverse, parent)

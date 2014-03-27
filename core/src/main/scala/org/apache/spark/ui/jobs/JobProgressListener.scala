@@ -61,6 +61,7 @@ private[ui] class JobProgressListener(conf: SparkConf) extends SparkListener {
   val stageIdToPool = HashMap[Int, String]()
   val stageIdToDescription = HashMap[Int, String]()
   val poolToActiveStages = HashMap[String, HashMap[Int, StageInfo]]()
+  val jobIdToStageIds = HashMap[Int, Seq[Int]]()
 
   val executorIdToBlockManagerId = HashMap[String, BlockManagerId]()
 
