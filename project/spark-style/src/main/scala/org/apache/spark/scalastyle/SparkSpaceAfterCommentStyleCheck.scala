@@ -29,7 +29,7 @@ import scalariform.parser.CompilationUnit
 import scalariform.lexer.Token
 
 class SparkSpaceAfterCommentStartChecker extends ScalariformChecker {
-  val errorKey: String = "space.after.comment.start"
+  val errorKey: String = "insert.a.single.space.after.comment.start"
 
   private def multiLineCommentRegex(comment: Token) =
     Pattern.compile( """/\*\S+.*""", Pattern.DOTALL).matcher(comment.text.trim).matches()
