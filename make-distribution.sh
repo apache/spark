@@ -139,7 +139,14 @@ if [ "$SPARK_TACHYON" == "true" ]; then
   mkdir -p "$DISTDIR/tachyon/src/main/java/tachyon/web"
   cp -r "tachyon-${TACHYON_VERSION}"/{bin,conf,libexec} "$DISTDIR/tachyon"
   cp -r "tachyon-${TACHYON_VERSION}"/src/main/java/tachyon/web/resources "$DISTDIR/tachyon/src/main/java/tachyon/web"
-  sed -i "s|export TACHYON_JAR=\$TACHYON_HOME/target/\(.*\)|# This is set for spark's make-distribution\n  export TACHYON_JAR=\$TACHYON_HOME/../../jars/\1|" "$DISTDIR/tachyon/libexec/tachyon-config.sh"
+
+  if [[ `uname -a` == Darwin* ]]; then
+    # osx sed wants an empty argument to -i option of sed
+    TACHYON_SED="sed -i ''"
+  else
+    TACHYON_SED="sed -i"
+  fi
+  $TACHYON_SED -e "s|export TACHYON_JAR=\$TACHYON_HOME/target/\(.*\)|# This is set for spark's make-distribution\n  export TACHYON_JAR=\$TACHYON_HOME/../../jars/\1|" "$DISTDIR/tachyon/libexec/tachyon-config.sh"
 
   popd > /dev/null
   rm -rf $TMPD
