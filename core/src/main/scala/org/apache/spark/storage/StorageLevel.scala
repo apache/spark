@@ -135,10 +135,15 @@ object StorageLevel {
   val MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, false, 2)
   val OFF_HEAP = new StorageLevel(false, false, true, false)
   
-  /** Create a new StorageLevel object */
+  /** Create a new StorageLevel object without setting useTachyon*/
   def apply(useDisk: Boolean, useMemory: Boolean, useTachyon: Boolean, 
-    deserialized: Boolean, replication: Int = 1) = getCachedStorageLevel(
+    deserialized: Boolean, replication: Int) = getCachedStorageLevel(
       new StorageLevel(useDisk, useMemory, useTachyon, deserialized, replication))
+      
+  /** Create a new StorageLevel object */
+  def apply(useDisk: Boolean, useMemory: Boolean,
+    deserialized: Boolean, replication: Int = 1) = getCachedStorageLevel(
+        new StorageLevel(useDisk, useMemory, false, deserialized, replication))
 
   /** Create a new StorageLevel object from its integer representation */
   def apply(flags: Int, replication: Int) =
