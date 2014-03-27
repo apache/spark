@@ -173,7 +173,7 @@ private[spark] class Executor(
       }
     }
 
-    override def run(): Unit = SparkHadoopUtil.get.runAsUser(sparkUser) { () =>
+    override def run(): Unit = {
       val startTime = System.currentTimeMillis()
       SparkEnv.set(env)
       Thread.currentThread.setContextClassLoader(replClassLoader)
@@ -208,7 +208,7 @@ private[spark] class Executor(
 
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
-        val value = task.run(taskId.toInt)
+        val value = SparkHadoopUtil.get.runAsUser(sparkUser)(() => task.run(taskId.toInt))
         val taskFinish = System.currentTimeMillis()
 
         // If the task has been killed, let's fail it.
