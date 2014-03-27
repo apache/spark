@@ -17,7 +17,7 @@
 
 import sbt._
 import sbt.Classpaths.publishTask
-import Keys._
+import sbt.Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
 import scala.util.Properties
