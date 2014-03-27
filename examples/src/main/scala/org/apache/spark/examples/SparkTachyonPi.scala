@@ -38,7 +38,7 @@ object SparkTachyonPi {
     val n = 100000 * slices
     
     val rdd = spark.parallelize(1 to n, slices)
-    rdd.persist(StorageLevel.TACHYON)
+    rdd.persist(StorageLevel.OFF_HEAP)
     val count = rdd.map { i =>
       val x = random * 2 - 1
       val y = random * 2 - 1
