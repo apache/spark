@@ -3,6 +3,41 @@ Spark Change Log
 
 Release 0.9.1
 
+  Revert "[maven-release-plugin] prepare release v0.9.1-rc2"
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-03-26 21:53:07 -0700
+  Commit: ea5da04
+
+  Revert "[maven-release-plugin] prepare for next development iteration"
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-03-26 21:51:40 -0700
+  Commit: d16e863
+
+  [SPARK-1327] GLM needs to check addIntercept for intercept and weights
+  Xiangrui Meng <meng@databricks.com>
+  2014-03-26 19:30:57 -0700
+  Commit: 4901604, github.com/apache/spark/pull/236
+
+  SPARK-1322, top in pyspark should sort result in descending order.
+  Prashant Sharma <prashant.s@imaginea.com>
+  2014-03-26 11:15:02 -0700
+  Commit: 2f90dc5, github.com/apache/spark/pull/235
+
+  [maven-release-plugin] prepare for next development iteration
+  Ubuntu <ubuntu@ip-172-31-18-245.us-west-2.compute.internal>
+  2014-03-26 09:26:45 +0000
+  Commit: 1f785d4
+
+  [maven-release-plugin] prepare release v0.9.1-rc2
+  Ubuntu <ubuntu@ip-172-31-18-245.us-west-2.compute.internal>
+  2014-03-26 09:26:40 +0000
+  Commit: 1197280
+
+  Updated CHANGES.txt
+  Tathagata Das <tathagata.das1565@gmail.com>
+  2014-03-26 02:10:57 -0700
+  Commit: 7495dba
+
   [SPARK-782] Made Spark use existing shaded ASM and removed Spark's ASM dependency
   Tathagata Das <tathagata.das1565@gmail.com>
   2014-03-25 21:35:36 -0700
