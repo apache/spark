@@ -45,6 +45,13 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext;
 // see http://stackoverflow.com/questions/758570/.
 public class JavaAPISuite extends LocalJavaStreamingContext implements Serializable {
 
+  public void equalIterator(Iterator<?> a, Iterator<?> b) {
+    while (a.hasNext() && b.hasNext()) {
+      Assert.assertEquals(a.next(), b.next());
+    }
+    Assert.assertEquals(a.hasNext(), b.hasNext());
+  }
+
   @SuppressWarnings("unchecked")
   @Test
   public void testCount() {
@@ -1018,9 +1025,22 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
     JavaPairDStream<String, Iterator<String>> grouped = pairStream.groupByKey();
     JavaTestUtils.attachTestOutputStream(grouped);
-    List<List<Tuple2<String, List<String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<String, Iterator<String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assert.assertEquals(expected.size(), result.size());
+    Iterator<List<Tuple2<String, Iterator<String>>>> resultItr = result.iterator();
+    Iterator<List<Tuple2<String, List<String>>>> expectedItr = expected.iterator();
+    while (resultItr.hasNext() && expectedItr.hasNext()) {
+      Iterator<Tuple2<String, Iterator<String>>> resultElements = resultItr.next().iterator();
+      Iterator<Tuple2<String, List<String>>> expectedElements = expectedItr.next().iterator();
+      while (resultElements.hasNext() && expectedElements.hasNext()) {
+        Tuple2<String, Iterator<String>> resultElement = resultElements.next();
+        Tuple2<String, List<String>> expectedElement = expectedElements.next();
+        Assert.assertEquals(expectedElement._1(), resultElement._1());
+        equalIterator(expectedElement._2().iterator(), resultElement._2());
+      }
+      Assert.assertEquals(resultElements.hasNext(), expectedItr.hasNext());
+    }
   }
 
   @SuppressWarnings("unchecked")
