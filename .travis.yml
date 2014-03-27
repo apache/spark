@@ -20,18 +20,13 @@
    - oraclejdk7
  env:
   matrix:
-   - TEST=sql/test
+   - TEST="scalastyle assembly/assembly"
+   - TEST="catalyst/test sql/test streaming/test mllib/test graphx/test bagel/test"
    - TEST=hive/test
-   - TEST=catalyst/test
-   - TEST=streaming/test
-   - TEST=graphx/test
-   - TEST=mllib/test
-   - TEST=graphx/test
-   - TEST=bagel/test
  cache:
    directories:
      - $HOME/.m2
      - $HOME/.ivy2
      - $HOME/.sbt
  script:
-   - "sbt ++$TRAVIS_SCALA_VERSION scalastyle $TEST"
+   - "sbt ++$TRAVIS_SCALA_VERSION $TEST"
