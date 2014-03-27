@@ -1039,7 +1039,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Assert.assertEquals(expectedElement._1(), resultElement._1());
         equalIterator(expectedElement._2().iterator(), resultElement._2());
       }
-      Assert.assertEquals(resultElements.hasNext(), expectedItr.hasNext());
+      Assert.assertEquals(resultElements.hasNext(), expectedElements.hasNext());
     }
   }
 
