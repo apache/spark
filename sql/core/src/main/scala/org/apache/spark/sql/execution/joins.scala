@@ -115,8 +115,9 @@ case class HashJoin(
 
           while (currentMatches == null && streamIter.hasNext) {
             currentRow = streamIter.next()
-            if(!joinKeys(currentRow).anyNull)
+            if(!joinKeys(currentRow).anyNull) {
               currentMatches = hashTable.get(joinKeys.currentValue)
+            }
           }
 
           if (currentMatches == null) {
@@ -168,7 +169,8 @@ case class BroadcastNestedLoopJoin(
 
     val streamedPlusMatches = streamed.execute().mapPartitions { streamedIter =>
       val matchedRows = new ArrayBuffer[Row]
-      val includedBroadcastTuples =  new scala.collection.mutable.BitSet(broadcastedRelation.value.size)
+      val includedBroadcastTuples =
+        new scala.collection.mutable.BitSet(broadcastedRelation.value.size)
       val joinedRow = new JoinedRow
 
       streamedIter.foreach { streamedRow =>
