@@ -1493,9 +1493,23 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
     JavaPairDStream<String, Tuple2<Iterator<String>, Iterator<String>>> grouped = pairStream1.cogroup(pairStream2);
     JavaTestUtils.attachTestOutputStream(grouped);
-    List<List<Tuple2<String, Tuple2<List<String>, List<String>>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<String, Tuple2<Iterator<String>, Iterator<String>>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assert.assertEquals(expected.size(), result.size());
+    Iterator<List<Tuple2<String, Tuple2<Iterator<String>, Iterator<String>>>>> resultItr = result.iterator();
+    Iterator<List<Tuple2<String, Tuple2<List<String>, List<String>>>>> expectedItr = expected.iterator();
+    while (resultItr.hasNext() && expectedItr.hasNext()) {
+      Iterator<Tuple2<String, Tuple2<Iterator<String>, Iterator<String>>>> resultElements = resultItr.next().iterator();
+      Iterator<Tuple2<String, Tuple2<List<String>, List<String>>>> expectedElements = expectedItr.next().iterator();
+      while (resultElements.hasNext() && expectedElements.hasNext()) {
+        Tuple2<String, Tuple2<Iterator<String>, Iterator<String>>> resultElement = resultElements.next();
+        Tuple2<String, Tuple2<List<String>, List<String>>> expectedElement = expectedElements.next();
+        Assert.assertEquals(expectedElement._1(), resultElement._1());
+        equalIterator(expectedElement._2()._1().iterator(), resultElement._2()._1());
+        equalIterator(expectedElement._2()._2().iterator(), resultElement._2()._2());
+      }
+      Assert.assertEquals(resultElements.hasNext(), expectedElements.hasNext());
+    }
   }
 
   @SuppressWarnings("unchecked")
