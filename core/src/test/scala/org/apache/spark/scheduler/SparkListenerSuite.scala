@@ -72,6 +72,20 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     }
   }
 
+  test("bus.stop() waits for the event queue to completely drain") {
+    val sleepyListener = new SleepyListener(1000)
+    val bus = new LiveListenerBus
+    bus.addListener(sleepyListener)
+    (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, JobSucceeded)) }
+
+    bus.start()
+    // since the handler is just thread sleep, the queue should not drain immediately
+    assert(!bus.waitUntilEmpty(0))
+    bus.stop()
+    // bus.stop() should wait until the event queue is drained, ensuring no events are lost
+    assert(bus.waitUntilEmpty(0))
+  }
+
   test("basic creation of StageInfo") {
     val listener = new SaveStageAndTaskInfo
     sc.addSparkListener(listener)
@@ -282,4 +296,11 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
       startedGettingResultTasks += taskGettingResult.taskInfo.index
     }
   }
+
+  class SleepyListener(val sleepTime: Long) extends SparkListener {
+    override def onJobEnd(job: SparkListenerJobEnd) = {
+      Thread.sleep(sleepTime)
+    }
+  }
+
 }

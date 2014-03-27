@@ -835,13 +835,13 @@ class SparkContext(
     if (dagSchedulerCopy != null) {
       metadataCleaner.cancel()
       dagSchedulerCopy.stop()
-      listenerBus.stop()
       taskScheduler = null
       // TODO: Cache.stop()?
       env.stop()
       SparkEnv.set(null)
       ShuffleMapTask.clearCache()
       ResultTask.clearCache()
+      listenerBus.stop()
       logInfo("Successfully stopped SparkContext")
     } else {
       logInfo("SparkContext already stopped")
