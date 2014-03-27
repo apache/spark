@@ -137,7 +137,7 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
 
   /**
    * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
-   * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
+   * For now, if this functionality is desired mix in the in-memory OverrideCatalog.
    */
   override def registerTable(
       databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit = ???

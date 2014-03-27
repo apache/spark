@@ -30,7 +30,7 @@ import org.apache.hadoop.io.Writable
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.
- * It is based on [[SparkHadoopWriter]].
+ * It is based on SparkHadoopWriter.
  */
 protected[spark]
 class SparkHiveHadoopWriter(
