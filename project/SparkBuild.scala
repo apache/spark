@@ -182,11 +182,11 @@ object SparkBuild extends Build {
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
 
     resolvers ++= Seq(
-      "Maven Repository"     at "https://repo.maven.apache.org/maven2",
+      "Maven Repository"     at "http://repo.maven.apache.org/maven2",
       "Apache Repository"    at "https://repository.apache.org/content/repositories/releases",
       "JBoss Repository"     at "https://repository.jboss.org/nexus/content/repositories/releases/",
       "MQTT Repository"      at "https://repo.eclipse.org/content/repositories/paho-releases/",
-      "Cloudera Repository"  at "https://repository.cloudera.com/artifactory/cloudera-repos/",
+      "Cloudera Repository"  at "http://repository.cloudera.com/artifactory/cloudera-repos/",
       // For Sonatype publishing
       // "sonatype-snapshots"   at "https://oss.sonatype.org/content/repositories/snapshots",
       // "sonatype-staging"     at "https://oss.sonatype.org/service/local/staging/deploy/maven2/",

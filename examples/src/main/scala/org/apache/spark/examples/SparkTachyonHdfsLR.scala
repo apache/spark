@@ -61,7 +61,7 @@ object SparkTachyonHdfsLR {
         Seq(new InputFormatInfo(conf, classOf[org.apache.hadoop.mapred.TextInputFormat], inputPath))
       ))
     val lines = sc.textFile(inputPath)
-    val points = lines.map(parsePoint _).persist(StorageLevel.TACHYON)
+    val points = lines.map(parsePoint _).persist(StorageLevel.OFF_HEAP)
     val ITERATIONS = args(2).toInt
 
     // Initialize w to a random value

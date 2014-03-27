@@ -47,7 +47,7 @@ object SparkTachyonPi {
     println("1- Pi is roughly " + 4.0 * count / n)
     
     val rdd2 = spark.parallelize(1 to n, slices)
-    rdd2.persist(StorageLevel.TACHYON)
+    rdd2.persist(StorageLevel.OFF_HEAP)
     val count2 = rdd2.map { i =>
       val x = random * 2 - 1
       val y = random * 2 - 1
