@@ -33,21 +33,23 @@ abstract class DataType {
 
 case object NullType extends DataType
 
+trait PrimitiveType
+
 abstract class NativeType extends DataType {
   type JvmType
   @transient val tag: TypeTag[JvmType]
   val ordering: Ordering[JvmType]
 }
 
-case object StringType extends NativeType {
+case object StringType extends NativeType with PrimitiveType {
   type JvmType = String
   @transient lazy val tag = typeTag[JvmType]
   val ordering = implicitly[Ordering[JvmType]]
 }
-case object BinaryType extends DataType {
+case object BinaryType extends DataType with PrimitiveType {
   type JvmType = Array[Byte]
 }
-case object BooleanType extends NativeType {
+case object BooleanType extends NativeType with PrimitiveType {
   type JvmType = Boolean
   @transient lazy val tag = typeTag[JvmType]
   val ordering = implicitly[Ordering[JvmType]]
@@ -63,7 +65,7 @@ case object TimestampType extends NativeType {
   }
 }
 
-abstract class NumericType extends NativeType {
+abstract class NumericType extends NativeType with PrimitiveType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
   // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
   // type parameter and and add a numeric annotation (i.e., [JvmType : Numeric]). This gets

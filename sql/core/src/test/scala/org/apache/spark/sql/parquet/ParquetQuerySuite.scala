@@ -369,22 +369,17 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   test("Importing nested File") {
     ParquetTestData.readNestedFile()
     val result = getRDD(ParquetTestData.testNestedData1).collect()
-    /*assert(result.size === 15)
-    result.zipWithIndex.foreach {
-      case (row, index) => {
-        val checkBoolean =
-          if (index % 3 == 0)
-            row(0) == true
-          else
-            row(0) == false
-        assert(checkBoolean === true, s"boolean field value in line $index did not match")
-        if (index % 5 == 0) assert(row(1) === 5, s"int field value in line $index did not match")
-        assert(row(2) === "abc", s"string field value in line $index did not match")
-        assert(row(3) === (index.toLong << 33), s"long value in line $index did not match")
-        assert(row(4) === 2.5F, s"float field value in line $index did not match")
-        assert(row(5) === 4.5D, s"double field value in line $index did not match")
-      }
-    }*/
+    assert(result != null)
+    assert(result.size === 2)
+    assert(result(0).size === 3)
+    assert(result(1).apply(1) === null)
+    assert(result(1).apply(2) === null)
+    assert(result(1).apply(0) === "A. Nonymous")
+    assert(result(0).apply(0).isInstanceOf[java.lang.String])
+    assert(result(0).apply(0) === "Julien Le Dem")
+    assert(result(0).apply(1).asInstanceOf[Row].apply(0) === "555 123 4567")
+    assert(result(0).apply(1).asInstanceOf[Row].apply(2) === "XXX XXX XXXX")
+    assert(result(0).apply(1).asInstanceOf[Row].apply(3) === null) // this should not even be there!
   }
 
   /**

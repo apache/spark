@@ -106,20 +106,27 @@ private[sql] object ParquetTestData {
   lazy val testData = new ParquetRelation(testDir.toURI.toString)
 
   val testNestedSchema1 =
-    // from blogpost example, source:
+    // based on blogpost example, source:
     // https://blog.twitter.com/2013/dremel-made-simple-with-parquet
     // note: instead of string we have to use binary (?) otherwise
     // Parquet gives us:
     // IllegalArgumentException: expected one of [INT64, INT32, BOOLEAN,
     //   BINARY, FLOAT, DOUBLE, INT96, FIXED_LEN_BYTE_ARRAY]
+    // Also repeated primitives seem tricky to convert (AvroParquet
+    // only uses them in arrays?) so only use at most one in each group
+    // and nothing else in that group (-> is mapped to array)!
+    // The "values" inside ownerPhoneNumbers is a keyword currently
+    // so that array types can be translated correctly.
     """
       |message AddressBook {
-      |required binary owner;
-      |repeated binary ownerPhoneNumbers;
-      |repeated group contacts {
-      |required binary name;
-      |optional binary phoneNumber;
-      |}
+        |required binary owner;
+        |optional group ownerPhoneNumbers {
+          |repeated binary values;
+        |}
+        |repeated group contacts {
+          |required binary name;
+          |optional binary phoneNumber;
+        |}
       |}
     """.stripMargin
 
@@ -194,8 +201,10 @@ private[sql] object ParquetTestData {
 
     val r1 = new SimpleGroup(schema)
     r1.add(0, "Julien Le Dem")
-    r1.add(1, "555 123 4567")
-    r1.add(1, "555 666 1337")
+    r1.addGroup(1)
+      .append("values", "555 123 4567")
+      .append("values", "555 666 1337")
+      .append("values", "XXX XXX XXXX")
     r1.addGroup(2)
       .append("name", "Dmitriy Ryaboy")
       .append("phoneNumber", "555 987 6543")

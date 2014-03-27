@@ -161,7 +161,7 @@ private[sql] object ParquetRelation {
     }
 
     if (fs.exists(path) &&
-        !fs.getFileStatus(path)
+      !fs.getFileStatus(path)
         .getPermission
         .getUserAction
         .implies(FsAction.READ_WRITE)) {
@@ -173,6 +173,8 @@ private[sql] object ParquetRelation {
 }
 
 private[parquet] object ParquetTypesConverter {
+  def isPrimitiveType(ctype: DataType): Boolean = classOf[PrimitiveType] isAssignableFrom ctype.getClass
+
   def toPrimitiveDataType(parquetType : ParquetPrimitiveTypeName): DataType = parquetType match {
     // for now map binary to string type
     // TODO: figure out how Parquet uses strings or why we can't use them in a MessageType schema
@@ -192,24 +194,36 @@ private[parquet] object ParquetTypesConverter {
   }
 
   def toDataType(parquetType: ParquetType): DataType = {
-    if (parquetType.isPrimitive) toPrimitiveDataType(parquetType.asPrimitiveType.getPrimitiveTypeName)
+    if (parquetType.isPrimitive) {
+      toPrimitiveDataType(parquetType.asPrimitiveType.getPrimitiveTypeName)
+    }
     else {
       val groupType = parquetType.asGroupType()
       parquetType.getOriginalType match {
-        case ParquetOriginalType.LIST | ParquetOriginalType.ENUM => {
-          val fields = groupType.getFields.map(toDataType(_))
+        // if the schema was constructed programmatically there may be hints how to convert
+        // it inside the metadata via the OriginalType field
+        case ParquetOriginalType.LIST | ParquetOriginalType.ENUM => { // TODO: check enums!
+        val fields = groupType.getFields.map(toDataType(_))
           new ArrayType(fields.apply(0)) // array fields should have the same type
         }
-        case _ => { // everything else nested becomes a Struct
-        val fields = groupType
-            .getFields
-            .map(ptype => new StructField(
-            ptype.getName,
-            toDataType(ptype),
-            ptype.getRepetition != Repetition.REQUIRED))
-          new StructType(fields)
+        case _ => { // everything else nested becomes a Struct, unless it has a single repeated field
+          // in which case it becomes an array (this should correspond to the inverse operation of
+          // parquet.schema.ConversionPatterns.listType)
+          if (groupType.getFieldCount == 1 && groupType.getFields.apply(0).getRepetition == Repetition.REPEATED) {
+            val elementType = toDataType(groupType.getFields.apply(0))
+            new ArrayType(elementType)
+          } else {
+            val fields = groupType
+              .getFields
+              .map(ptype => new StructField(
+              ptype.getName,
+              toDataType(ptype),
+              ptype.getRepetition != Repetition.REQUIRED))
+            new StructType(fields)
+          }
         }
       }
+      //}
     }
   }
 
@@ -224,24 +238,32 @@ private[parquet] object ParquetTypesConverter {
     case _ => None
   }
 
-  def fromComplexDataType(ctype: DataType, name: String, nullable: Boolean = true): ParquetType = {
+  def fromDataType(ctype: DataType, name: String, nullable: Boolean = true, inArray: Boolean = false): ParquetType = {
     val repetition =
-      if (nullable) Repetition.OPTIONAL
-      else Repetition.REQUIRED
+      if (inArray) Repetition.REPEATED
+      else {
+        if (nullable) Repetition.OPTIONAL
+        else Repetition.REQUIRED
+      }
     val primitiveType = fromPrimitiveDataType(ctype)
     if (primitiveType.isDefined) {
       new ParquetPrimitiveType(repetition, primitiveType.get, name)
     } else {
       ctype match {
         case ArrayType(elementType: DataType) => {
-          val parquetElementType = fromComplexDataType(elementType, name + "_values", false)
-          new ParquetGroupType(repetition, name, parquetElementType)
+          // TODO: "values" is a generic name but without it the Parquet column path would
+          // be incomplete and values may be silently dropped; better would be to give
+          // Array elements a name of some sort (and specify whether they are nullable),
+          // as in StructField
+          val parquetElementType = fromDataType(elementType, "values", nullable=false, inArray=true)
+          ConversionPatterns.listType(repetition, name, parquetElementType)
         }
+        // TODO: test structs inside arrays
         case StructType(structFields) => {
           val fields = structFields.map {
-            field => fromComplexDataType(field.dataType, field.name, false)
+            field => fromDataType(field.dataType, field.name, field.nullable)
           }
-          new ParquetGroupType(repetition, name, fields)
+          new ParquetGroupType(Repetition.REPEATED, name, fields)
         }
         case _ => sys.error(s"Unsupported datatype $ctype")
       }
@@ -275,7 +297,7 @@ private[parquet] object ParquetTypesConverter {
   }
 
   def convertFromAttributes(attributes: Seq[Attribute]): MessageType = {
-    val fields = attributes.map(attribute => fromComplexDataType(attribute.dataType, attribute.name, attribute.nullable))
+    val fields = attributes.map(attribute => fromDataType(attribute.dataType, attribute.name, attribute.nullable))
     new MessageType("root", fields)
   }
 

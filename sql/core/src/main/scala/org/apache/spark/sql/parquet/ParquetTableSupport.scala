@@ -29,6 +29,8 @@ import parquet.schema.{MessageType, MessageTypeParser}
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.parquet.ParquetRelation.RowType
+import org.apache.spark.sql.parquet.CatalystConverter.FieldType
 
 /**
  * A `parquet.io.api.RecordMaterializer` for Rows.
@@ -143,44 +145,129 @@ private[parquet] object RowWriteSupport {
   val PARQUET_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.schema"
 }
 
-/**
- * A `parquet.io.api.GroupConverter` that is able to convert a Parquet record to a `Row` object.
- *
- * @param schema The corresponding Catalyst schema in the form of a list of attributes.
- */
-private[parquet] class CatalystGroupConverter(
-    schema: Seq[Attribute],
-    protected[parquet] val current: ParquetRelation.RowType) extends GroupConverter {
+private[parquet] object CatalystConverter {
+  type FieldType = StructField
 
-  def this(schema: Seq[Attribute]) = this(schema, new ParquetRelation.RowType(schema.length))
-
-  val converters: Array[Converter] = schema.map {
-    a => a.dataType match {
+  protected[parquet] def createConverter(field: FieldType, fieldIndex: Int, parent: CatalystConverter): Converter = {
+    val fieldType: DataType = field.dataType
+    fieldType match {
+      case ArrayType(elementType: DataType) => {
+        val numberOfFields = 10 // TODO: where do we get this info from?
+        val subArray = new ParquetRelation.RowType(numberOfFields)
+        parent.updateField(fieldIndex, subArray)
+        new CatalystArrayConverter(elementType, fieldIndex, parent, subArray)
+      }
+      case StructType(fields: Seq[StructField]) => {
+        val subArray = new ParquetRelation.RowType(fields.size)
+        parent.updateField(fieldIndex, subArray)
+        new CatalystGroupConverter(fields, fieldIndex, parent, subArray) // TODO: check if field type changes
+      }
       case ctype: NativeType =>
         // note: for some reason matching for StringType fails so use this ugly if instead
         if (ctype == StringType) {
-          new CatalystPrimitiveStringConverter(this, schema.indexOf(a))
+          new CatalystPrimitiveStringConverter(parent, fieldIndex)
         } else {
-          new CatalystPrimitiveConverter(this, schema.indexOf(a))
+          new CatalystPrimitiveConverter(parent, fieldIndex)
         }
       case _ => throw new RuntimeException(
-        s"unable to convert datatype ${a.dataType.toString} in CatalystGroupConverter")
+        s"unable to convert datatype ${field.dataType.toString} in CatalystGroupConverter")
     }
-  }.toArray
+  }
+}
 
-  override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
+trait CatalystConverter {
 
-  private[parquet] def getCurrentRecord: ParquetRelation.RowType = current
+  // the number of fields this group has
+  val size: Int
 
-  override def start(): Unit = {
+  // the index of this converter in the parent
+  protected[parquet] val index: Int
+
+  // the data (possibly nested)
+  protected[parquet] val current: ParquetRelation.RowType
+
+  // the parent converter
+  protected[parquet] val parent: CatalystConverter
+
+  // should be only called in root group converter!
+  def getCurrentRecord: ParquetRelation.RowType = current
+
+  // for child converters to update upstream values
+  protected [parquet] def updateField(fieldIndex: Int, value: Any): Unit = {
+    current.update(fieldIndex, value)
+    if (parent != null) parent.updateField(index, current)
+  }
+
+  protected [parquet] def updateBoolean(fieldIndex: Int, value: Boolean): Unit = {
+    current.setBoolean(fieldIndex, value)
+    if (parent != null) parent.updateField(index, current)
+  }
+
+  protected [parquet] def updateInt(fieldIndex: Int, value: Int): Unit = {
+    current.setInt(fieldIndex, value)
+    if (parent != null) parent.updateField(index, current)
+  }
+
+  protected [parquet] def updateLong(fieldIndex: Int, value: Long): Unit = {
+    current.setLong(fieldIndex, value)
+    if (parent != null) parent.updateField(index, current)
+  }
+
+  protected [parquet] def updateDouble(fieldIndex: Int, value: Double): Unit = {
+    current.setDouble(fieldIndex, value)
+    if (parent != null) parent.updateField(index, current)
+  }
+
+  protected [parquet] def updateFloat(fieldIndex: Int, value: Float): Unit = {
+    current.setFloat(fieldIndex, value)
+    if (parent != null) parent.updateField(index, current)
+  }
+
+  protected [parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit = {
+    current.update(fieldIndex, value.getBytes)
+    if (parent != null) parent.updateField(index, current)
+  }
+
+  protected [parquet] def updateString(fieldIndex: Int, value: Binary): Unit = {
+    current.setString(fieldIndex, value.toStringUsingUTF8)
+    if (parent != null) parent.updateField(index, current)
+  }
+
+  def start(): Unit = {
     var i = 0
-    while (i < schema.length) {
+    while (i < size) {
       current.setNullAt(i)
       i = i + 1
     }
   }
 
-  override def end(): Unit = {}
+  def end(): Unit = {}
+}
+
+/**
+ * A `parquet.io.api.GroupConverter` that is able to convert a Parquet record
+ * to a [[org.apache.spark.sql.catalyst.expressions.Row]] object.
+ *
+ * @param schema The corresponding Catalyst schema in the form of a list of attributes.
+ */
+class CatalystGroupConverter(
+    private[parquet] val schema: Seq[FieldType],
+    protected[parquet] val index: Int,
+    protected[parquet] val parent: CatalystConverter,
+    protected[parquet] val current: RowType) extends GroupConverter with CatalystConverter {
+
+  def this(schema: Seq[FieldType], index:Int, parent: CatalystConverter) =
+    this(schema, index, parent, new ParquetRelation.RowType(schema.length))
+
+  def this(attributes: Seq[Attribute]) =
+    this(attributes.map(a => new FieldType(a.name, a.dataType, a.nullable)), 0, null)
+
+  protected [parquet] val converters: Array[Converter] =
+    schema.map(field => CatalystConverter.createConverter(field, schema.indexOf(field), this)).toArray
+
+  override val size = schema.size
+
+  override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
 }
 
 /**
@@ -190,26 +277,26 @@ private[parquet] class CatalystGroupConverter(
  * @param fieldIndex The index inside the record.
  */
 private[parquet] class CatalystPrimitiveConverter(
-    parent: CatalystGroupConverter,
+    parent: CatalystConverter,
     fieldIndex: Int) extends PrimitiveConverter {
   // TODO: consider refactoring these together with ParquetTypesConverter
   override def addBinary(value: Binary): Unit =
-    parent.getCurrentRecord.update(fieldIndex, value.getBytes)
+    parent.updateBinary(fieldIndex, value)
 
   override def addBoolean(value: Boolean): Unit =
-    parent.getCurrentRecord.setBoolean(fieldIndex, value)
+    parent.updateBoolean(fieldIndex, value)
 
   override def addDouble(value: Double): Unit =
-    parent.getCurrentRecord.setDouble(fieldIndex, value)
+    parent.updateDouble(fieldIndex, value)
 
   override def addFloat(value: Float): Unit =
-    parent.getCurrentRecord.setFloat(fieldIndex, value)
+    parent.updateFloat(fieldIndex, value)
 
   override def addInt(value: Int): Unit =
-    parent.getCurrentRecord.setInt(fieldIndex, value)
+    parent.updateInt(fieldIndex, value)
 
   override def addLong(value: Long): Unit =
-    parent.getCurrentRecord.setLong(fieldIndex, value)
+    parent.updateLong(fieldIndex, value)
 }
 
 /**
@@ -220,8 +307,71 @@ private[parquet] class CatalystPrimitiveConverter(
  * @param fieldIndex The index inside the record.
  */
 private[parquet] class CatalystPrimitiveStringConverter(
-    parent: CatalystGroupConverter,
+    parent: CatalystConverter,
     fieldIndex: Int) extends CatalystPrimitiveConverter(parent, fieldIndex) {
   override def addBinary(value: Binary): Unit =
-    parent.getCurrentRecord.setString(fieldIndex, value.toStringUsingUTF8)
+    parent.updateString(fieldIndex, value)
 }
+
+class CatalystArrayConverter(
+    val elementType: DataType,
+    val size: Int,
+    val index: Int,
+    protected[parquet] val parent: CatalystConverter,
+    protected[parquet] val current: ParquetRelation.RowType)
+  extends GroupConverter with CatalystConverter {
+
+  private var arrayOffset: Int = 0
+
+  def this(elementType: DataType, index: Int, parent: CatalystConverter, current: ParquetRelation.RowType) =
+    this(elementType, current.size, index, parent, current)
+
+  def this(elementType: DataType, size: Int, index: Int, parent: CatalystConverter) =
+    this(elementType, size, index, parent, new ParquetRelation.RowType(size))
+
+  protected[parquet] val converter: Converter = CatalystConverter.createConverter(
+    new CatalystConverter.FieldType("values", elementType, false), 0, this)
+
+  override def getConverter(fieldIndex: Int): Converter = converter
+
+  override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit = {
+    super.updateField(arrayOffset + fieldIndex, value)
+    arrayOffset = arrayOffset + 1
+  }
+
+  override protected[parquet] def updateString(fieldIndex: Int, value: Binary): Unit = {
+    super.updateString(arrayOffset + fieldIndex, value)
+    arrayOffset = arrayOffset + 1
+  }
+
+  override protected[parquet] def updateBoolean(fieldIndex: Int, value: Boolean): Unit = {
+    super.updateBoolean(arrayOffset + fieldIndex, value)
+    arrayOffset = arrayOffset + 1
+  }
+
+  override protected[parquet] def updateInt(fieldIndex: Int, value: Int): Unit = {
+    super.updateInt(arrayOffset + fieldIndex, value)
+    arrayOffset = arrayOffset + 1
+  }
+
+  override protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit = {
+    super.updateLong(arrayOffset + fieldIndex, value)
+    arrayOffset = arrayOffset + 1
+  }
+
+  override protected[parquet] def updateDouble(fieldIndex: Int, value: Double): Unit = {
+    super.updateDouble(arrayOffset + fieldIndex, value)
+    arrayOffset = arrayOffset + 1
+  }
+
+  override protected[parquet] def updateFloat(fieldIndex: Int, value: Float): Unit = {
+    super.updateFloat(arrayOffset + fieldIndex, value)
+    arrayOffset = arrayOffset + 1
+  }
+
+  override protected[parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit = {
+    super.updateBinary(arrayOffset + fieldIndex, value)
+    arrayOffset = arrayOffset + 1
+  }
+}
+
