@@ -128,7 +128,7 @@ if [ "$SPARK_TACHYON" == "true" ]; then
   TACHYON_VERSION="0.4.1"
   TACHYON_URL="https://github.com/amplab/tachyon/releases/download/v${TACHYON_VERSION}/tachyon-${TACHYON_VERSION}-bin.tar.gz"
 
-  TMPD=`mktemp -d`
+  TMPD=`mktemp -d 2>/dev/null || mktemp -d -t 'disttmp'`
 
   pushd $TMPD > /dev/null
   echo "Fetchting tachyon tgz"
