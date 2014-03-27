@@ -17,13 +17,13 @@
 
 package org.apache.spark.mllib.regression
 
+import breeze.linalg.{Vector => BV}
+
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
-
-import breeze.linalg.{Vector => BV, DenseVector => BDV}
 
 /**
  * Regression model trained using RidgeRegression.
@@ -72,9 +72,9 @@ class RidgeRegressionWithSGD private (
   // We don't want to penalize the intercept in RidgeRegression, so set this to false.
   super.setIntercept(false)
 
-  var yMean = 0.0
-  var xColMean: BV[Double] = _
-  var xColSd: BV[Double] = _
+  private var yMean = 0.0
+  private var xColMean: BV[Double] = _
+  private var xColSd: BV[Double] = _
 
   /**
    * Construct a RidgeRegression object with default parameters
@@ -214,8 +214,8 @@ object RidgeRegressionWithSGD {
 
   def main(args: Array[String]) {
     if (args.length != 5) {
-      println("Usage: RidgeRegression <master> <input_dir> <step_size> <regularization_parameter>" +
-        " <niters>")
+      println("Usage: RidgeRegression <master> <input_dir> <step_size> " +
+        "<regularization_parameter> <niters>")
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "RidgeRegression")

@@ -19,8 +19,8 @@ package org.apache.spark.mllib.regression
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.util.{LinearDataGenerator, LocalSparkContext}
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.{LinearDataGenerator, LocalSparkContext}
 
 class LinearRegressionSuite extends FunSuite with LocalSparkContext {
 
@@ -88,7 +88,8 @@ class LinearRegressionSuite extends FunSuite with LocalSparkContext {
 
   // Test if we can correctly learn Y = 10*X1 + 10*X10000
   test("sparse linear regression without intercept") {
-    val denseRDD = sc.parallelize(LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 100, 42), 2)
+    val denseRDD = sc.parallelize(
+      LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 100, 42), 2)
     val sparseRDD = denseRDD.map { case LabeledPoint(label, v) =>
       val sv = Vectors.sparse(10000, Seq((0, v(0)), (9999, v(1))))
       LabeledPoint(label, sv)
@@ -113,9 +114,11 @@ class LinearRegressionSuite extends FunSuite with LocalSparkContext {
     val sparseValidationRDD = sc.parallelize(sparseValidationData, 2)
 
       // Test prediction on RDD.
-    validatePrediction(model.predict(sparseValidationRDD.map(_.features)).collect(), sparseValidationData)
+    validatePrediction(
+      model.predict(sparseValidationRDD.map(_.features)).collect(), sparseValidationData)
 
     // Test prediction on Array.
-    validatePrediction(sparseValidationData.map(row => model.predict(row.features)), sparseValidationData)
+    validatePrediction(
+      sparseValidationData.map(row => model.predict(row.features)), sparseValidationData)
   }
 }

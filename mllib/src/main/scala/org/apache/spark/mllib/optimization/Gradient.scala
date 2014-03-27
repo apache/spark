@@ -37,17 +37,17 @@ abstract class Gradient extends Serializable {
   def compute(data: Vector, label: Double, weights: Vector): (Vector, Double)
 
   /**
-   * Compute the gradient and loss given the features of a single data point, add the gradient to a provided vector to
-   * avoid creating new objects, and return loss.
+   * Compute the gradient and loss given the features of a single data point,
+   * add the gradient to a provided vector to avoid creating new objects, and return loss.
    *
    * @param data features for one data point
    * @param label label for this data point
    * @param weights weights/coefficients corresponding to features
-   * @param gradientAddTo gradient will be added to this vector
+   * @param cumGradient the computed gradient will be added to this vector
    *
-   * @return (gradient: Vector, loss: Double)
+   * @return loss
    */
-  def compute(data: Vector, label: Double, weights: Vector, gradientAddTo: Vector): Double
+  def compute(data: Vector, label: Double, weights: Vector, cumGradient: Vector): Double
 }
 
 /**
@@ -71,13 +71,17 @@ class LogisticGradient extends Gradient {
     (Vectors.fromBreeze(gradient), loss)
   }
 
-  override def compute(data: Vector, label: Double, weights: Vector, gradientAddTo: Vector): Double = {
+  override def compute(
+      data: Vector,
+      label: Double,
+      weights: Vector,
+      cumGradient: Vector): Double = {
     val brzData = data.toBreeze
     val brzWeights = weights.toBreeze
     val margin: Double = -1.0 * brzWeights.dot(brzData)
     val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
 
-    brzAxpy(gradientMultiplier, brzData, gradientAddTo.toBreeze)
+    brzAxpy(gradientMultiplier, brzData, cumGradient.toBreeze)
 
     if (label > 0) {
       math.log(1 + math.exp(margin))
@@ -104,12 +108,16 @@ class LeastSquaresGradient extends Gradient {
     (Vectors.fromBreeze(gradient), loss)
   }
 
-  override def compute(data: Vector, label: Double, weights: Vector, gradientAddTo: Vector): Double = {
+  override def compute(
+      data: Vector,
+      label: Double,
+      weights: Vector,
+      cumGradient: Vector): Double = {
     val brzData = data.toBreeze
     val brzWeights = weights.toBreeze
     val diff = brzWeights.dot(brzData) - label
 
-    brzAxpy(2.0 * diff, brzData, gradientAddTo.toBreeze)
+    brzAxpy(2.0 * diff, brzData, cumGradient.toBreeze)
 
     diff * diff
   }
@@ -137,7 +145,11 @@ class HingeGradient extends Gradient {
     }
   }
 
-  override def compute(data: Vector, label: Double, weights: Vector, gradientAddTo: Vector): Double = {
+  override def compute(
+      data: Vector,
+      label: Double,
+      weights: Vector,
+      cumGradient: Vector): Double = {
     val brzData = data.toBreeze
     val brzWeights = weights.toBreeze
     val dotProduct = brzWeights.dot(brzData)
@@ -147,7 +159,7 @@ class HingeGradient extends Gradient {
     val labelScaled = 2 * label - 1.0
 
     if (1.0 > labelScaled * dotProduct) {
-      brzAxpy(-labelScaled, brzData, gradientAddTo.toBreeze)
+      brzAxpy(-labelScaled, brzData, cumGradient.toBreeze)
       1.0 - labelScaled * dotProduct
     } else {
       0.0

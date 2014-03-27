@@ -17,13 +17,13 @@
 
 package org.apache.spark.mllib.regression
 
+import breeze.linalg.{Vector => BV}
+
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-
-import breeze.linalg.{Vector => BV, DenseVector => BDV}
 
 /**
  * Regression model trained using Lasso.
@@ -142,7 +142,8 @@ object LassoWithSGD {
       regParam: Double,
       miniBatchFraction: Double,
       initialWeights: Vector): LassoModel = {
-    new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input, initialWeights)
+    new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction)
+      .run(input, initialWeights)
   }
 
   /**

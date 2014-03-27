@@ -82,7 +82,10 @@ object MLUtils {
    *     xColMean - Row vector with mean for every column (or feature) of the input data
    *     xColSd - Row vector standard deviation for every column (or feature) of the input data.
    */
-  def computeStats(data: RDD[LabeledPoint], numFeatures: Int, numExamples: Long): (Double, Vector, Vector) = {
+  def computeStats(
+      data: RDD[LabeledPoint],
+      numFeatures: Int,
+      numExamples: Long): (Double, Vector, Vector) = {
     val brzData = data.map { case LabeledPoint(label, features) =>
       (label, features.toBreeze)
     }

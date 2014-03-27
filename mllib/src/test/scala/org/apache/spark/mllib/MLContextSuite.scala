@@ -17,13 +17,16 @@
 
 package org.apache.spark.mllib
 
-import org.apache.spark.mllib.MLContext._
-import org.apache.spark.mllib.util.LocalSparkContext
-import org.scalatest.FunSuite
-import com.google.common.io.Files
 import java.io.File
+
+import org.scalatest.FunSuite
+
 import com.google.common.base.Charsets
+import com.google.common.io.Files
+
+import org.apache.spark.mllib.MLContext._
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.LocalSparkContext
 
 class MLContextSuite extends FunSuite with LocalSparkContext {
   test("libSVMFile") {

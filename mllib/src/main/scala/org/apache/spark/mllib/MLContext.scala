@@ -26,11 +26,11 @@ import org.apache.spark.rdd.RDD
 class MLContext(self: SparkContext) {
   /**
    * Reads labeled data in the LIBSVM format into an RDD[LabeledPoint].
-   * The LIBSVM format is a text-based format used by LIBSVM (http://www.csie.ntu.edu.tw/~cjlin/libsvm/).
+   * The LIBSVM format is a text-based format used by LIBSVM and LIBLINEAR.
    * Each line represents a labeled sparse feature vector using the following format:
    * {{{label index1:value1 index2:value2 ...}}}
    * where the indices are one-based and in ascending order.
-   * This method parses each line into a [[org.apache.spark.mllib.regression.LabeledPoint]] instance,
+   * This method parses each line into a [[org.apache.spark.mllib.regression.LabeledPoint]],
    * where the feature indices are converted to zero-based.
    *
    * @param path file or directory path in any Hadoop-supported file system URI

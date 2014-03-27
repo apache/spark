@@ -21,9 +21,9 @@ import scala.util.Random
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.LocalSparkContext
-import org.apache.spark.mllib.linalg.Vectors
 
 object NaiveBayesSuite {
 
