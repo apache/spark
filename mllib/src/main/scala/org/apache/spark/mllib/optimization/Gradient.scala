@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.optimization
 
+import breeze.linalg.{axpy => brzAxpy}
+
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
@@ -33,6 +35,19 @@ abstract class Gradient extends Serializable {
    * @return (gradient: Vector, loss: Double)
    */
   def compute(data: Vector, label: Double, weights: Vector): (Vector, Double)
+
+  /**
+   * Compute the gradient and loss given the features of a single data point, add the gradient to a provided vector to
+   * avoid creating new objects, and return loss.
+   *
+   * @param data features for one data point
+   * @param label label for this data point
+   * @param weights weights/coefficients corresponding to features
+   * @param gradientAddTo gradient will be added to this vector
+   *
+   * @return (gradient: Vector, loss: Double)
+   */
+  def compute(data: Vector, label: Double, weights: Vector, gradientAddTo: Vector): Double
 }
 
 /**
@@ -55,6 +70,21 @@ class LogisticGradient extends Gradient {
 
     (Vectors.fromBreeze(gradient), loss)
   }
+
+  override def compute(data: Vector, label: Double, weights: Vector, gradientAddTo: Vector): Double = {
+    val brzData = data.toBreeze
+    val brzWeights = weights.toBreeze
+    val margin: Double = -1.0 * brzWeights.dot(brzData)
+    val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
+
+    brzAxpy(gradientMultiplier, brzData, gradientAddTo.toBreeze)
+
+    if (label > 0) {
+      math.log(1 + math.exp(margin))
+    } else {
+      math.log(1 + math.exp(margin)) - margin
+    }
+  }
 }
 
 /**
@@ -72,6 +102,16 @@ class LeastSquaresGradient extends Gradient {
     val gradient = brzData * (2.0 * diff)
 
     (Vectors.fromBreeze(gradient), loss)
+  }
+
+  override def compute(data: Vector, label: Double, weights: Vector, gradientAddTo: Vector): Double = {
+    val brzData = data.toBreeze
+    val brzWeights = weights.toBreeze
+    val diff = brzWeights.dot(brzData) - label
+
+    brzAxpy(2.0 * diff, brzData, gradientAddTo.toBreeze)
+
+    diff * diff
   }
 }
 
@@ -94,6 +134,23 @@ class HingeGradient extends Gradient {
       (Vectors.fromBreeze(brzData * (-labelScaled)), 1.0 - labelScaled * dotProduct)
     } else {
       (Vectors.dense(new Array[Double](weights.size)), 0.0)
+    }
+  }
+
+  override def compute(data: Vector, label: Double, weights: Vector, gradientAddTo: Vector): Double = {
+    val brzData = data.toBreeze
+    val brzWeights = weights.toBreeze
+    val dotProduct = brzWeights.dot(brzData)
+
+    // Our loss function with {0, 1} labels is max(0, 1 - (2y – 1) (f_w(x)))
+    // Therefore the gradient is -(2y - 1)*x
+    val labelScaled = 2 * label - 1.0
+
+    if (1.0 > labelScaled * dotProduct) {
+      brzAxpy(-labelScaled, brzData, gradientAddTo.toBreeze)
+      1.0 - labelScaled * dotProduct
+    } else {
+      0.0
     }
   }
 }
