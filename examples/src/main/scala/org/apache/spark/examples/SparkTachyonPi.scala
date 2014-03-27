@@ -22,7 +22,9 @@ import scala.math.random
 import org.apache.spark._
 import org.apache.spark.storage.StorageLevel
 
-/** Computes an approximation to pi */
+/** Computes an approximation to pi 
+ *  This example uses Tachyon to persist rdds during computation.
+ */
 object SparkTachyonPi {
   def main(args: Array[String]) {
     if (args.length == 0) {
