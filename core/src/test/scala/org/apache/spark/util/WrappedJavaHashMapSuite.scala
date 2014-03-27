@@ -33,11 +33,6 @@ class WrappedJavaHashMapSuite extends FunSuite {
   // Test a simple WrappedJavaHashMap
   testMap(new TestMap[String, String]())
 
-  // Test BoundedHashMap
-  testMap(new BoundedHashMap[String, String](100, true))
-
-  testMapThreadSafety(new BoundedHashMap[String, String](100, true))
-
   // Test TimeStampedHashMap
   testMap(new TimeStampedHashMap[String, String])
 
