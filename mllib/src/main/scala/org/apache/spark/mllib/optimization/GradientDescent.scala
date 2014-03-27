@@ -17,11 +17,10 @@
 
 package org.apache.spark.mllib.optimization
 
-import org.apache.spark.Logging
-import org.apache.spark.rdd.RDD
-
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.Logging
+import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
@@ -92,16 +91,15 @@ class GradientDescent(var gradient: Gradient, var updater: Updater)
   }
 
   def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
-
-    val (weights, stochasticLossHistory) = GradientDescent.runMiniBatchSGD(
-        data,
-        gradient,
-        updater,
-        stepSize,
-        numIterations,
-        regParam,
-        miniBatchFraction,
-        initialWeights)
+    val (weights, _) = GradientDescent.runMiniBatchSGD(
+      data,
+      gradient,
+      updater,
+      stepSize,
+      numIterations,
+      regParam,
+      miniBatchFraction,
+      initialWeights)
     weights
   }
 

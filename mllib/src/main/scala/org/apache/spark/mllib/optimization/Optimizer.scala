@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 
 import org.apache.spark.mllib.linalg.Vector
 
-trait Optimizer {
+trait Optimizer extends Serializable {
 
   /**
    * Solve the provided convex optimization problem. 

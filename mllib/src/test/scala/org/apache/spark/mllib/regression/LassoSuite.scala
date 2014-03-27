@@ -34,7 +34,7 @@ class LassoSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Lasso local random SGD") {
-    val nPoints = 10000
+    val nPoints = 1000
 
     val A = 2.0
     val B = -1.5
@@ -46,7 +46,7 @@ class LassoSuite extends FunSuite with LocalSparkContext {
     testRDD.cache()
 
     val ls = new LassoWithSGD()
-    ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
+    ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(40)
 
     val model = ls.run(testRDD)
     val weight0 = model.weights(0)
@@ -66,23 +66,23 @@ class LassoSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Lasso local random SGD with initial weights") {
-    val nPoints = 10000
+    val nPoints = 1000
 
     val A = 2.0
     val B = -1.5
     val C = 1.0e-2
 
-    val testData = LinearDataGenerator.generateLinearInput(A, Array[Double](B,C), nPoints, 42)
+    val testData = LinearDataGenerator.generateLinearInput(A, Array[Double](B, C), nPoints, 42)
 
     val initialB = -1.0
     val initialC = -1.0
-    val initialWeights = Vectors.dense(Array(initialB, initialC))
+    val initialWeights = Vectors.dense(initialB, initialC)
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
     val ls = new LassoWithSGD()
-    ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
+    ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(40)
 
     val model = ls.run(testRDD, initialWeights)
     val weight0 = model.weights(0)

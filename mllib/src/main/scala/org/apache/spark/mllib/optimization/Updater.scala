@@ -63,8 +63,12 @@ abstract class Updater extends Serializable {
  * Uses a step-size decreasing with the square root of the number of iterations.
  */
 class SimpleUpdater extends Updater {
-  override def compute(weightsOld: Vector, gradient: Vector,
-      stepSize: Double, iter: Int, regParam: Double): (Vector, Double) = {
+  override def compute(
+      weightsOld: Vector,
+      gradient: Vector,
+      stepSize: Double,
+      iter: Int,
+      regParam: Double): (Vector, Double) = {
     val thisIterStepSize = stepSize / math.sqrt(iter)
     val brzWeights = weightsOld.toBreeze - gradient.toBreeze * thisIterStepSize
     (Vectors.fromBreeze(brzWeights), 0)
@@ -101,9 +105,11 @@ class L1Updater extends Updater {
     val brzWeights = weightsOld.toBreeze - gradient.toBreeze * thisIterStepSize
     // Apply proximal operator (soft thresholding)
     val shrinkageVal = regParam * thisIterStepSize
-    (0 until brzWeights.length).foreach { i =>
+    var i = 0
+    while (i < brzWeights.length) {
       val wi = brzWeights(i)
       brzWeights(i) = signum(wi) * max(0.0, abs(wi) - shrinkageVal)
+      i += 1
     }
 
     (Vectors.fromBreeze(brzWeights), brzNorm(brzWeights, 1.0) * regParam)

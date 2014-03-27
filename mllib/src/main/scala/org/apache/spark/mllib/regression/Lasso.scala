@@ -71,9 +71,9 @@ class LassoWithSGD private (
   // We don't want to penalize the intercept, so set this to false.
   super.setIntercept(false)
 
-  var yMean = 0.0
-  var xColMean: BV[Double] = _
-  var xColSd: BV[Double] = _
+  private var yMean = 0.0
+  private var xColMean: BV[Double] = _
+  private var xColSd: BV[Double] = _
 
   /**
    * Construct a Lasso object with default parameters
@@ -141,11 +141,8 @@ object LassoWithSGD {
       stepSize: Double,
       regParam: Double,
       miniBatchFraction: Double,
-      initialWeights: Vector)
-    : LassoModel =
-  {
-    new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input,
-        initialWeights)
+      initialWeights: Vector): LassoModel = {
+    new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input, initialWeights)
   }
 
   /**
@@ -165,9 +162,7 @@ object LassoWithSGD {
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
-      miniBatchFraction: Double)
-    : LassoModel =
-  {
+      miniBatchFraction: Double): LassoModel = {
     new LassoWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input)
   }
 
@@ -187,9 +182,7 @@ object LassoWithSGD {
       input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
-      regParam: Double)
-    : LassoModel =
-  {
+      regParam: Double): LassoModel = {
     train(input, numIterations, stepSize, regParam, 1.0)
   }
 
@@ -205,9 +198,7 @@ object LassoWithSGD {
    */
   def train(
       input: RDD[LabeledPoint],
-      numIterations: Int)
-    : LassoModel =
-  {
+      numIterations: Int): LassoModel = {
     train(input, numIterations, 1.0, 1.0, 1.0)
   }
 

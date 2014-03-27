@@ -23,8 +23,10 @@ import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, norm => breezeNor
   squaredDistance => breezeSquaredDistance}
 
 import org.apache.spark.mllib.util.MLUtils._
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression.LabeledPoint
 
-class MLUtilsSuite extends FunSuite {
+class MLUtilsSuite extends FunSuite with LocalSparkContext {
 
   test("epsilon computation") {
     assert(1.0 + EPSILON > 1.0, s"EPSILON is too small: $EPSILON.")
@@ -48,5 +50,17 @@ class MLUtilsSuite extends FunSuite {
       val fastSquaredDist2 = fastSquaredDistance(v1, norm1, v2.toDenseVector, norm2, precision)
       assert((fastSquaredDist2 - squaredDist) <= precision * squaredDist, s"failed with m = $m")
     }
+  }
+
+  test("compute stats") {
+    val data = Seq.fill(3)(Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0, 2.0, 3.0)),
+      LabeledPoint(0.0, Vectors.dense(3.0, 4.0, 5.0))
+    )).flatten
+    val rdd = sc.parallelize(data, 2)
+    val (meanLabel, mean, std) = MLUtils.computeStats(rdd, 3, 6)
+    assert(meanLabel === 0.5)
+    assert(mean === Vectors.dense(2.0, 3.0, 4.0))
+    assert(std === Vectors.dense(1.0, 1.0, 1.0))
   }
 }

@@ -57,8 +57,7 @@ object GradientDescentSuite {
       if (yVal > 0) 1 else 0
     }
 
-    val testData = (0 until nPoints).map(i => LabeledPoint(y(i), Vectors.dense(Array(x1(i)))))
-    testData
+    (0 until nPoints).map(i => LabeledPoint(y(i), Vectors.dense(x1(i))))
   }
 }
 
@@ -86,7 +85,7 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMa
     }
 
     val dataRDD = sc.parallelize(data, 2).cache()
-    val initialWeightsWithIntercept = Vectors.dense(0.0, initialWeights: _*)
+    val initialWeightsWithIntercept = Vectors.dense(1.0, initialWeights: _*)
 
     val (_, loss) = GradientDescent.runMiniBatchSGD(
       dataRDD,

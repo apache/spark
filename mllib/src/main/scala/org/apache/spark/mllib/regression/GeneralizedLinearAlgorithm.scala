@@ -118,12 +118,12 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   /** Prepends one to the input vector. */
   private def prependOne(vector: Vector): Vector = {
-    val vectorWithIntercept = vector.toBreeze match {
+    val vector1 = vector.toBreeze match {
       case dv: BDV[Double] => BDV.vertcat(BDV.ones[Double](1), dv)
       case sv: BSV[Double] => BSV.vertcat(new BSV[Double](Array(0), Array(1.0), 1), sv)
       case v: Any => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
     }
-    Vectors.fromBreeze(vectorWithIntercept)
+    Vectors.fromBreeze(vector1)
   }
 
   /**
@@ -151,10 +151,14 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
     }
 
     val weightsWithIntercept = optimizer.optimize(data, initialWeightsWithIntercept)
-    val brzWeightsWithIntercept = weightsWithIntercept.toBreeze
-    val intercept = if (addIntercept) brzWeightsWithIntercept(0) else 0.0
-    val brzWeights = if (addIntercept) brzWeightsWithIntercept(1 to -1) else brzWeightsWithIntercept
+    val intercept = if (addIntercept) weightsWithIntercept(0) else 0.0
+    val weights =
+      if (addIntercept) {
+        Vectors.dense(weightsWithIntercept.toArray.slice(1, weightsWithIntercept.size))
+      } else {
+        weightsWithIntercept
+      }
 
-    createModel(Vectors.fromBreeze(brzWeights), intercept)
+    createModel(weights, intercept)
   }
 }

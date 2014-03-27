@@ -42,7 +42,7 @@ abstract class Gradient extends Serializable {
 class LogisticGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val brzData = data.toBreeze
-    val brzWeights = data.toBreeze
+    val brzWeights = weights.toBreeze
     val margin: Double = -1.0 * brzWeights.dot(brzData)
     val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
     val gradient = brzData * gradientMultiplier
@@ -67,7 +67,7 @@ class LeastSquaresGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val brzData = data.toBreeze
     val brzWeights = weights.toBreeze
-    val diff: Double = brzWeights.dot(brzData) - label
+    val diff = brzWeights.dot(brzData) - label
     val loss = diff * diff
     val gradient = brzData * (2.0 * diff)
 

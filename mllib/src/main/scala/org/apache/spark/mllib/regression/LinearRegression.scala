@@ -97,11 +97,9 @@ object LinearRegressionWithSGD {
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double,
-      initialWeights: Vector)
-    : LinearRegressionModel =
-  {
-    new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction).run(input,
-      initialWeights)
+      initialWeights: Vector): LinearRegressionModel = {
+    new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
+      .run(input, initialWeights)
   }
 
   /**
@@ -119,9 +117,7 @@ object LinearRegressionWithSGD {
       input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
-      miniBatchFraction: Double)
-    : LinearRegressionModel =
-  {
+      miniBatchFraction: Double): LinearRegressionModel = {
     new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction).run(input)
   }
 
@@ -139,9 +135,7 @@ object LinearRegressionWithSGD {
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
-      stepSize: Double)
-    : LinearRegressionModel =
-  {
+      stepSize: Double): LinearRegressionModel = {
     train(input, numIterations, stepSize, 1.0)
   }
 
@@ -157,9 +151,7 @@ object LinearRegressionWithSGD {
    */
   def train(
       input: RDD[LabeledPoint],
-      numIterations: Int)
-    : LinearRegressionModel =
-  {
+      numIterations: Int): LinearRegressionModel = {
     train(input, numIterations, 1.0, 1.0)
   }
 

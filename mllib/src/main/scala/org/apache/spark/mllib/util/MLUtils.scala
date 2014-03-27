@@ -82,13 +82,10 @@ object MLUtils {
    *     xColMean - Row vector with mean for every column (or feature) of the input data
    *     xColSd - Row vector standard deviation for every column (or feature) of the input data.
    */
-  def computeStats(data: RDD[LabeledPoint], numFeatures: Int, numExamples: Long)
-    : (Double, Vector, Vector) = {
-
+  def computeStats(data: RDD[LabeledPoint], numFeatures: Int, numExamples: Long): (Double, Vector, Vector) = {
     val brzData = data.map { case LabeledPoint(label, features) =>
       (label, features.toBreeze)
     }
-
     val aggStats = brzData.aggregate(
       (0L, 0.0, BDV.zeros[Double](numFeatures), BDV.zeros[Double](numFeatures))
     )(
@@ -104,9 +101,10 @@ object MLUtils {
           (n1 + n2, sumLabel1 + sumLabel2, sum1 += sum2, sumSq1 += sumSq2)
       }
     )
-
     val (nl, sumLabel, sum, sumSq) = aggStats
+
     require(nl > 0, "Input data is empty.")
+    require(nl == numExamples)
 
     val n = nl.toDouble
     val yMean = sumLabel / n
