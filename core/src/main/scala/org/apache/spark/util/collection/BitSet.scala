@@ -88,7 +88,6 @@ class BitSet(numBits: Int) extends Serializable {
     newBS
   }
 
-
   /**
    * Compute the symmetric difference by performing bit-wise XOR of the two sets returning the
    * result.
@@ -97,14 +96,14 @@ class BitSet(numBits: Int) extends Serializable {
     val newBS = new BitSet(math.max(capacity, other.capacity))
     val smaller = math.min(numWords, other.numWords)
     var ind = 0
-    while ( ind < smaller ) {
+    while (ind < smaller) {
       newBS.words(ind) = words(ind) ^ other.words(ind)
       ind += 1
     }
-    if ( ind < numWords ) {
+    if (ind < numWords) {
       Array.copy( words, ind, newBS.words, ind, numWords - ind )
     }
-    if ( ind < other.numWords ) {
+    if (ind < other.numWords) {
       Array.copy( other.words, ind, newBS.words, ind, other.numWords - ind )
     }
     newBS
@@ -118,11 +117,11 @@ class BitSet(numBits: Int) extends Serializable {
     val newBS = new BitSet(capacity)
     val smaller = math.min(numWords, other.numWords)
     var ind = 0
-    while ( ind < smaller ) {
+    while (ind < smaller) {
       newBS.words(ind) = words(ind) & ~other.words(ind)
       ind += 1
     }
-    if ( ind < numWords ) {
+    if (ind < numWords) {
       Array.copy( words, ind, newBS.words, ind, numWords - ind )
     }
     newBS
