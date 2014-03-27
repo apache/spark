@@ -53,10 +53,8 @@ class HiveQuerySuite extends HiveComparisonTest {
   createQueryTest("length.udf",
     "SELECT length(\"test\") FROM src LIMIT 1")
 
-  ignore("partitioned table scan") {
-    createQueryTest("partitioned table scan",
-      "SELECT ds, hr, key, value FROM srcpart")
-  }
+  createQueryTest("partitioned table scan",
+    "SELECT ds, hr, key, value FROM srcpart")
 
   createQueryTest("hash",
     "SELECT hash('test') FROM src LIMIT 1")
