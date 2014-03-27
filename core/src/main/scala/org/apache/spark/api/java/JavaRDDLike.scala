@@ -391,19 +391,24 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Save this RDD as a text file, using string representations of elements.
    */
-  def saveAsTextFile(path: String) = rdd.saveAsTextFile(path)
+  def saveAsTextFile(path: String): Unit = {
+    rdd.saveAsTextFile(path)
+  }
 
 
   /**
    * Save this RDD as a compressed text file, using string representations of elements.
    */
-  def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]) =
+  def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]): Unit = {
     rdd.saveAsTextFile(path, codec)
+  }
 
   /**
    * Save this RDD as a SequenceFile of serialized objects.
    */
-  def saveAsObjectFile(path: String) = rdd.saveAsObjectFile(path)
+  def saveAsObjectFile(path: String): Unit = {
+    rdd.saveAsObjectFile(path)
+  }
 
   /**
    * Creates tuples of the elements in this RDD by applying `f`.
@@ -420,7 +425,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * executed on this RDD. It is strongly recommended that this RDD is persisted in
    * memory, otherwise saving it on a file will require recomputation.
    */
-  def checkpoint() = rdd.checkpoint()
+  def checkpoint(): Unit = {
+    rdd.checkpoint()
+  }
 
   /**
    * Return whether this RDD has been checkpointed or not

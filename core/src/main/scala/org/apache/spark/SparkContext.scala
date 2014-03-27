@@ -35,6 +35,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
@@ -230,7 +231,7 @@ class SparkContext(
   postEnvironmentUpdate()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
-  val hadoopConfiguration = {
+  val hadoopConfiguration: Configuration = {
     val env = SparkEnv.get
     val hadoopConf = SparkHadoopUtil.get.newConfiguration()
     // Explicitly check for S3 environment variables
@@ -630,7 +631,7 @@ class SparkContext(
    * standard mutable collections. So you can use this with mutable Map, Set, etc.
    */
   def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable, T]
-      (initialValue: R) = {
+      (initialValue: R): Accumulable[R, T] = {
     val param = new GrowableAccumulableParam[R,T]
     new Accumulable(initialValue, param)
   }
@@ -640,7 +641,7 @@ class SparkContext(
    * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
    * The variable will be sent to each cluster only once.
    */
-  def broadcast[T](value: T) = env.broadcastManager.newBroadcast[T](value, isLocal)
+  def broadcast[T](value: T): Broadcast[T] = env.broadcastManager.newBroadcast[T](value, isLocal)
 
   /**
    * Add a file to be downloaded with this Spark job on every node.
@@ -1126,7 +1127,7 @@ object SparkContext extends Logging {
   implicit def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]) = new AsyncRDDActions(rdd)
 
   implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
-      rdd: RDD[(K, V)])   =
+      rdd: RDD[(K, V)]) =
     new SequenceFileRDDFunctions(rdd)
 
   implicit def rddToOrderedRDDFunctions[K <% Ordered[K]: ClassTag, V: ClassTag](
@@ -1163,27 +1164,33 @@ object SparkContext extends Logging {
   }
 
   // Helper objects for converting common types to Writable
-  private def simpleWritableConverter[T, W <: Writable: ClassTag](convert: W => T) = {
+  private def simpleWritableConverter[T, W <: Writable: ClassTag](convert: W => T)
+      : WritableConverter[T] = {
     val wClass = classTag[W].runtimeClass.asInstanceOf[Class[W]]
     new WritableConverter[T](_ => wClass, x => convert(x.asInstanceOf[W]))
   }
 
-  implicit def intWritableConverter() = simpleWritableConverter[Int, IntWritable](_.get)
+  implicit def intWritableConverter(): WritableConverter[Int] =
+    simpleWritableConverter[Int, IntWritable](_.get)
 
-  implicit def longWritableConverter() = simpleWritableConverter[Long, LongWritable](_.get)
+  implicit def longWritableConverter(): WritableConverter[Long] =
+    simpleWritableConverter[Long, LongWritable](_.get)
 
-  implicit def doubleWritableConverter() = simpleWritableConverter[Double, DoubleWritable](_.get)
+  implicit def doubleWritableConverter(): WritableConverter[Double] =
+    simpleWritableConverter[Double, DoubleWritable](_.get)
 
-  implicit def floatWritableConverter() = simpleWritableConverter[Float, FloatWritable](_.get)
+  implicit def floatWritableConverter(): WritableConverter[Float] =
+    simpleWritableConverter[Float, FloatWritable](_.get)
 
-  implicit def booleanWritableConverter() =
+  implicit def booleanWritableConverter(): WritableConverter[Boolean] =
     simpleWritableConverter[Boolean, BooleanWritable](_.get)
 
-  implicit def bytesWritableConverter() = {
+  implicit def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
     simpleWritableConverter[Array[Byte], BytesWritable](_.getBytes)
   }
 
-  implicit def stringWritableConverter() = simpleWritableConverter[String, Text](_.toString)
+  implicit def stringWritableConverter(): WritableConverter[String] =
+    simpleWritableConverter[String, Text](_.toString)
 
   implicit def writableWritableConverter[T <: Writable]() =
     new WritableConverter[T](_.runtimeClass.asInstanceOf[Class[T]], _.asInstanceOf[T])

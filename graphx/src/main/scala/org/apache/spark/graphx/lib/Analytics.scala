@@ -26,7 +26,7 @@ import org.apache.spark.graphx.PartitionStrategy._
  */
 object Analytics extends Logging {
 
-  def main(args: Array[String]) = {
+  def main(args: Array[String]): Unit = {
     val host = args(0)
     val taskType = args(1)
     val fname = args(2)
