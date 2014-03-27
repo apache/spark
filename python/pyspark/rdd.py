@@ -1133,7 +1133,7 @@ class RDD(object):
             return a + b
 
         return self.combineByKey(createCombiner, mergeValue, mergeCombiners,
-                numPartitions)
+                numPartitions).mapValues(lambda x: iter(x))
 
     # TODO: add tests
     def flatMapValues(self, f):
@@ -1180,7 +1180,7 @@ class RDD(object):
 
         >>> x = sc.parallelize([("a", 1), ("b", 4)])
         >>> y = sc.parallelize([("a", 2)])
-        >>> sorted(x.cogroup(y).collect())
+        >>> sorted(list(x.cogroup(y).collect()))
         [('a', ([1], [2])), ('b', ([4], []))]
         """
         return python_cogroup(self, other, numPartitions)

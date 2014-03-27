@@ -88,5 +88,5 @@ def python_cogroup(rdd, other, numPartitions):
                 vbuf.append(v)
             elif n == 2:
                 wbuf.append(v)
-        return (vbuf, wbuf)
+        return (iter(vbuf), iter(wbuf))
     return vs.union(ws).groupByKey(numPartitions).mapValues(dispatch)
