@@ -29,7 +29,7 @@ import akka.actor.{ActorSystem, Cancellable, Props}
 import it.unimi.dsi.fastutil.io.{FastBufferedOutputStream, FastByteArrayOutputStream}
 import sun.nio.ch.DirectBuffer
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv, SparkException, MapOutputTracker}
+import org.apache.spark._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer
@@ -58,7 +58,7 @@ private[spark] class BlockManager(
 
   private val blockInfo = new TimeStampedHashMap[BlockId, BlockInfo]
 
-  private[storage] val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
+  private[storage] val memoryStore = new MemoryStore(this, maxMemory)
   private[storage] val diskStore = new DiskStore(this, diskBlockManager)
 
   // If we use Netty for shuffle, start a new Netty-based shuffle sender service.
@@ -210,9 +210,9 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Get storage level of local block. If no info exists for the block, then returns null.
+   * Get storage level of local block. If no info exists for the block, return None.
    */
-  def getLevel(blockId: BlockId): StorageLevel = blockInfo.get(blockId).map(_.level).orNull
+  def getLevel(blockId: BlockId): Option[StorageLevel] = blockInfo.get(blockId).map(_.level)
 
   /**
    * Tell the master about the current storage status of a block. This will send a block update
@@ -496,9 +496,8 @@ private[spark] class BlockManager(
 
   /**
    * A short circuited method to get a block writer that can write data directly to disk.
-   * The Block will be appended to the File specified by filename.
-   * This is currently used for writing shuffle files out. Callers should handle error
-   * cases.
+   * The Block will be appended to the File specified by filename. This is currently used for
+   * writing shuffle files out. Callers should handle error cases.
    */
   def getDiskWriter(
       blockId: BlockId,
@@ -816,8 +815,7 @@ private[spark] class BlockManager(
    * @return The number of blocks removed.
    */
   def removeRdd(rddId: Int): Int = {
-    // TODO: Instead of doing a linear scan on the blockInfo map, create another map that maps
-    // from RDD.id to blocks.
+    // TODO: Avoid a linear scan by creating another mapping of RDD.id to blocks.
     logInfo("Removing RDD " + rddId)
     val blocksToRemove = blockInfo.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster = false) }
@@ -827,13 +825,13 @@ private[spark] class BlockManager(
   /**
    * Remove all blocks belonging to the given broadcast.
    */
-  def removeBroadcast(broadcastId: Long) {
+  def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean) {
     logInfo("Removing broadcast " + broadcastId)
     val blocksToRemove = blockInfo.keys.filter(_.isBroadcast).collect {
       case bid: BroadcastBlockId if bid.broadcastId == broadcastId => bid
       case bid: BroadcastHelperBlockId if bid.broadcastId.broadcastId == broadcastId => bid
     }
-    blocksToRemove.foreach { blockId => removeBlock(blockId) }
+    blocksToRemove.foreach { blockId => removeBlock(blockId, removeFromDriver) }
   }
 
   /**

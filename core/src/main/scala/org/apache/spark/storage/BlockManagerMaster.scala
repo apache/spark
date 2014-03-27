@@ -147,6 +147,24 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
     askDriverWithReply[Array[StorageStatus]](GetStorageStatus)
   }
 
+  /**
+   * Mainly for testing. Ask the driver to query all executors for their storage levels
+   * regarding this block. This provides an avenue for the driver to learn the storage
+   * levels of blocks it has not been informed of.
+   *
+   * WARNING: This could lead to deadlocks if there are any outstanding messages the
+   * executors are already expecting from the driver. In this case, while the driver is
+   * waiting for the executors to respond to its GetStorageLevel query, the executors
+   * are also waiting for a response from the driver to a prior message.
+   *
+   * The interim solution is to wait for a brief window of time to pass before asking.
+   * This should suffice, since this mechanism is largely introduced for testing only.
+   */
+  def askForStorageLevels(blockId: BlockId, waitTimeMs: Long = 1000) = {
+    Thread.sleep(waitTimeMs)
+    askDriverWithReply[Map[BlockManagerId, StorageLevel]](AskForStorageLevels(blockId))
+  }
+
   /** Stop the driver actor, called only on the Spark driver node */
   def stop() {
     if (driverActor != null) {

@@ -48,16 +48,26 @@ import java.io.Serializable
  * @tparam T Type of the data contained in the broadcast variable.
  */
 abstract class Broadcast[T](val id: Long) extends Serializable {
+
+  /**
+   * Whether this Broadcast is actually usable. This should be false once persisted state is
+   * removed from the driver.
+   */
+  protected var isValid: Boolean = true
+
   def value: T
 
   /**
-   * Remove all persisted state associated with this broadcast.
+   * Remove all persisted state associated with this broadcast. Overriding implementations
+   * should set isValid to false if persisted state is also removed from the driver.
+   *
    * @param removeFromDriver Whether to remove state from the driver.
+   *                         If true, the resulting broadcast should no longer be valid.
    */
   def unpersist(removeFromDriver: Boolean)
 
-  // We cannot have an abstract readObject here due to some weird issues with
-  // readObject having to be 'private' in sub-classes.
+  // We cannot define abstract readObject and writeObject here due to some weird issues
+  // with these methods having to be 'private' in sub-classes.
 
   override def toString = "Broadcast(" + id + ")"
 }

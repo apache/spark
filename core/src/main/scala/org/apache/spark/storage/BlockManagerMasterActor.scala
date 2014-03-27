@@ -21,7 +21,7 @@ import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
 import scala.collection.JavaConversions._
-import scala.concurrent.Future
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 
 import akka.actor.{Actor, ActorRef, Cancellable}
@@ -126,6 +126,9 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     case HeartBeat(blockManagerId) =>
       sender ! heartBeat(blockManagerId)
 
+    case AskForStorageLevels(blockId) =>
+      sender ! askForStorageLevels(blockId)
+
     case other =>
       logWarning("Got unknown message: " + other)
   }
@@ -158,6 +161,11 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     blockManagerInfo.values.foreach { bm => bm.slaveActor ! removeMsg }
   }
 
+  /**
+   * Delegate RemoveBroadcast messages to each BlockManager because the master may not notified
+   * of all broadcast blocks. If removeFromDriver is false, broadcast blocks are only removed
+   * from the executors, but not from the driver.
+   */
   private def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean) {
     // TODO(aor): Consolidate usages of <driver>
     val removeMsg = RemoveBroadcast(broadcastId)
@@ -246,6 +254,19 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     }.toArray
   }
 
+  // For testing. Ask all block managers for the given block's local storage level, if any.
+  private def askForStorageLevels(blockId: BlockId): Map[BlockManagerId, StorageLevel] = {
+    val getStorageLevel = GetStorageLevel(blockId)
+    blockManagerInfo.values.flatMap { info =>
+      val future = info.slaveActor.ask(getStorageLevel)(akkaTimeout)
+      val result = Await.result(future, akkaTimeout)
+      if (result != null) {
+        // If the block does not exist on the slave, the slave replies None
+        result.asInstanceOf[Option[StorageLevel]].map { reply => (info.blockManagerId, reply) }
+      } else None
+    }.toMap
+  }
+
   private def register(id: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
@@ -329,6 +350,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     // Note that this logic will select the same node multiple times if there aren't enough peers
     Array.tabulate[BlockManagerId](size) { i => peers((selfIndex + i + 1) % peers.length) }.toSeq
   }
+
 }
 
 

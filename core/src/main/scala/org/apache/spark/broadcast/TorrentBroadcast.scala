@@ -17,12 +17,12 @@
 
 package org.apache.spark.broadcast
 
-import java.io._
+import java.io.{ByteArrayInputStream, ObjectInputStream, ObjectOutputStream}
 
 import scala.math
 import scala.util.Random
 
-import org.apache.spark._
+import org.apache.spark.{Logging, SparkConf, SparkEnv, SparkException}
 import org.apache.spark.storage.{BroadcastBlockId, BroadcastHelperBlockId, StorageLevel}
 import org.apache.spark.util.Utils
 
@@ -76,10 +76,17 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
    * @param removeFromDriver Whether to remove state from the driver.
    */
   override def unpersist(removeFromDriver: Boolean) {
+    isValid = !removeFromDriver
     TorrentBroadcast.unpersist(id, removeFromDriver)
   }
 
-  // Called by JVM when deserializing an object
+  // Used by the JVM when serializing this object
+  private def writeObject(out: ObjectOutputStream) {
+    assert(isValid, "Attempted to serialize a broadcast variable that has been destroyed!")
+    out.defaultWriteObject()
+  }
+
+  // Used by the JVM when deserializing this object
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     TorrentBroadcast.synchronized {

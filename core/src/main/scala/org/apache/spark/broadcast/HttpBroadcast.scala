@@ -17,8 +17,8 @@
 
 package org.apache.spark.broadcast
 
-import java.io.{File, FileOutputStream, ObjectInputStream, OutputStream}
-import java.net.{URL, URLConnection, URI}
+import java.io.{File, FileOutputStream, ObjectInputStream, ObjectOutputStream, OutputStream}
+import java.net.{URI, URL, URLConnection}
 import java.util.concurrent.TimeUnit
 
 import it.unimi.dsi.fastutil.io.{FastBufferedInputStream, FastBufferedOutputStream}
@@ -49,10 +49,17 @@ private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolea
    * @param removeFromDriver Whether to remove state from the driver.
    */
   override def unpersist(removeFromDriver: Boolean) {
+    isValid = !removeFromDriver
     HttpBroadcast.unpersist(id, removeFromDriver)
   }
 
-  // Called by JVM when deserializing an object
+  // Used by the JVM when serializing this object
+  private def writeObject(out: ObjectOutputStream) {
+    assert(isValid, "Attempted to serialize a broadcast variable that has been destroyed!")
+    out.defaultWriteObject()
+  }
+
+  // Used by the JVM when deserializing this object
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     HttpBroadcast.synchronized {
