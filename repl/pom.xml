@@ -37,10 +37,10 @@
     <profile>
       <id>yarn-alpha</id>
       <dependencies>
-         <dependency>
-           <groupId>org.apache.avro</groupId>
-           <artifactId>avro</artifactId>
-         </dependency>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro</artifactId>
+        </dependency>
       </dependencies>
     </profile>
   </profiles>
@@ -75,6 +75,11 @@
     <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-compiler</artifactId>
+      <version>${scala.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-reflect</artifactId>
       <version>${scala.version}</version>
     </dependency>
     <dependency>

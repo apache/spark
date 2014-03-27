@@ -29,7 +29,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * Spark executor used with Mesos, YARN, and the standalone scheduler.
@@ -120,9 +120,7 @@ private[spark] class Executor(
 
   // Akka's message frame size. If task result is bigger than this, we use the block manager
   // to send the result back.
-  private val akkaFrameSize = {
-    env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size")
-  }
+  private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
 
   // Start worker thread pool
   val threadPool = Utils.newDaemonCachedThreadPool("Executor task launch worker")
@@ -226,10 +224,10 @@ private[spark] class Executor(
 
         for (m <- task.metrics) {
           m.hostname = Utils.localHostName()
-          m.executorDeserializeTime = (taskStart - startTime).toInt
-          m.executorRunTime = (taskFinish - taskStart).toInt
+          m.executorDeserializeTime = taskStart - startTime
+          m.executorRunTime = taskFinish - taskStart
           m.jvmGCTime = gcTime - startGCTime
-          m.resultSerializationTime = (afterSerialization - beforeSerialization).toInt
+          m.resultSerializationTime = afterSerialization - beforeSerialization
         }
 
         val accumUpdates = Accumulators.values
@@ -265,7 +263,7 @@ private[spark] class Executor(
         }
 
         case t: Throwable => {
-          val serviceTime = (System.currentTimeMillis() - taskStart).toInt
+          val serviceTime = System.currentTimeMillis() - taskStart
           val metrics = attemptedTask.flatMap(t => t.metrics)
           for (m <- metrics) {
             m.executorRunTime = serviceTime

@@ -26,7 +26,7 @@ import com.google.common.base.Optional
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
-import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
+import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, Job}
 
 import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.Partitioner._
@@ -125,6 +125,16 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def union(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.union(other.rdd))
+
+  /**
+   * Return the intersection of this RDD and another one. The output will not contain any duplicate
+   * elements, even if the input RDDs did.
+   *
+   * Note that this method performs a shuffle internally.
+   */
+  def intersection(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] =
+    new JavaPairRDD[K, V](rdd.intersection(other.rdd))
+
 
   // first() has to be overridden here so that the generated method has the signature
   // 'public scala.Tuple2 first()'; if the trait's definition is used,
@@ -546,6 +556,14 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
       outputFormatClass: Class[F],
       conf: Configuration) {
     rdd.saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass, conf)
+  }
+
+  /**
+   * Output the RDD to any Hadoop-supported storage system, using
+   * a Configuration object for that storage system.
+   */
+  def saveAsNewAPIHadoopDataset(conf: Configuration) {
+    rdd.saveAsNewAPIHadoopDataset(conf)
   }
 
   /** Output the RDD to any Hadoop-supported file system. */

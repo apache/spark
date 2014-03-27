@@ -22,12 +22,23 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 
 import org.jblas.DoubleMatrix
+
 import org.apache.spark.mllib.regression.LabeledPoint
+
+import breeze.linalg.{Vector => BV, SparseVector => BSV, squaredDistance => breezeSquaredDistance}
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
  */
 object MLUtils {
+
+  private[util] lazy val EPSILON = {
+    var eps = 1.0
+    while ((1.0 + (eps / 2.0)) != 1.0) {
+      eps /= 2.0
+    }
+    eps
+  }
 
   /**
    * Load labeled data from a file. The data format used here is
@@ -106,18 +117,46 @@ object MLUtils {
   }
 
   /**
-   * Return the squared Euclidean distance between two vectors.
+   * Returns the squared Euclidean distance between two vectors. The following formula will be used
+   * if it does not introduce too much numerical error:
+   * <pre>
+   *   \|a - b\|_2^2 = \|a\|_2^2 + \|b\|_2^2 - 2 a^T b.
+   * </pre>
+   * When both vector norms are given, this is faster than computing the squared distance directly,
+   * especially when one of the vectors is a sparse vector.
+   *
+   * @param v1 the first vector
+   * @param norm1 the norm of the first vector, non-negative
+   * @param v2 the second vector
+   * @param norm2 the norm of the second vector, non-negative
+   * @param precision desired relative precision for the squared distance
+   * @return squared distance between v1 and v2 within the specified precision
    */
-  def squaredDistance(v1: Array[Double], v2: Array[Double]): Double = {
-    if (v1.length != v2.length) {
-      throw new IllegalArgumentException("Vector sizes don't match")
+  private[mllib] def fastSquaredDistance(
+      v1: BV[Double],
+      norm1: Double,
+      v2: BV[Double],
+      norm2: Double,
+      precision: Double = 1e-6): Double = {
+    val n = v1.size
+    require(v2.size == n)
+    require(norm1 >= 0.0 && norm2 >= 0.0)
+    val sumSquaredNorm = norm1 * norm1 + norm2 * norm2
+    val normDiff = norm1 - norm2
+    var sqDist = 0.0
+    val precisionBound1 = 2.0 * EPSILON * sumSquaredNorm / (normDiff * normDiff + EPSILON)
+    if (precisionBound1 < precision) {
+      sqDist = sumSquaredNorm - 2.0 * v1.dot(v2)
+    } else if (v1.isInstanceOf[BSV[Double]] || v2.isInstanceOf[BSV[Double]]) {
+      val dot = v1.dot(v2)
+      sqDist = math.max(sumSquaredNorm - 2.0 * dot, 0.0)
+      val precisionBound2 = EPSILON * (sumSquaredNorm + 2.0 * math.abs(dot)) / (sqDist + EPSILON)
+      if (precisionBound2 > precision) {
+        sqDist = breezeSquaredDistance(v1, v2)
+      }
+    } else {
+      sqDist = breezeSquaredDistance(v1, v2)
     }
-    var i = 0
-    var sum = 0.0
-    while (i < v1.length) {
-      sum += (v1(i) - v2(i)) * (v1(i) - v2(i))
-      i += 1
-    }
-    sum
+    sqDist
   }
 }

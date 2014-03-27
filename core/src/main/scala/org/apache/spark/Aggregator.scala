@@ -17,8 +17,6 @@
 
 package org.apache.spark
 
-import scala.{Option, deprecated}
-
 import org.apache.spark.util.collection.{AppendOnlyMap, ExternalAppendOnlyMap}
 
 /**

@@ -121,17 +121,9 @@ abstract class RDD[T: ClassTag](
   @transient var name: String = null
 
   /** Assign a name to this RDD */
-  def setName(_name: String) = {
+  def setName(_name: String): RDD[T] = {
     name = _name
     this
-  }
-
-  /** User-defined generator of this RDD*/
-  @transient var generator = Utils.getCallSiteInfo.firstUserClass
-
-  /** Reset generator*/
-  def setGenerator(_generator: String) = {
-    generator = _generator
   }
 
   /**
@@ -145,9 +137,8 @@ abstract class RDD[T: ClassTag](
       throw new UnsupportedOperationException(
         "Cannot change storage level of an RDD after it was already assigned a level")
     }
+    sc.persistRDD(this)
     storageLevel = newLevel
-    // Register the RDD with the SparkContext
-    sc.persistentRdds(id) = this
     this
   }
 
@@ -165,8 +156,7 @@ abstract class RDD[T: ClassTag](
    */
   def unpersist(blocking: Boolean = true): RDD[T] = {
     logInfo("Removing RDD " + id + " from persistence list")
-    sc.env.blockManager.master.removeRdd(id, blocking)
-    sc.persistentRdds.remove(id)
+    sc.unpersistRDD(this, blocking)
     storageLevel = StorageLevel.NONE
     this
   }
@@ -318,6 +308,7 @@ abstract class RDD[T: ClassTag](
    * Return a sampled subset of this RDD.
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] = {
+    require(fraction >= 0.0, "Invalid fraction value: " + fraction)
     if (withReplacement) {
       new PartitionwiseSampledRDD[T, T](this, new PoissonSampler[T](fraction), seed)
     } else {
@@ -352,6 +343,10 @@ abstract class RDD[T: ClassTag](
       throw new IllegalArgumentException("Negative number of elements requested")
     }
 
+    if (initialCount == 0) {
+      return new Array[T](0)
+    }
+
     if (initialCount > Integer.MAX_VALUE - 1) {
       maxSelected = Integer.MAX_VALUE - 1
     } else {
@@ -370,7 +365,7 @@ abstract class RDD[T: ClassTag](
     var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
 
     // If the first sample didn't turn out large enough, keep trying to take samples;
-    // this shouldn't happen often because we use a big multiplier for thei initial size
+    // this shouldn't happen often because we use a big multiplier for the initial size
     while (samples.length < total) {
       samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
     }
@@ -666,6 +661,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an array that contains all of the elements in this RDD.
    */
+  @deprecated("use collect", "1.0.0")
   def toArray(): Array[T] = collect()
 
   /**
@@ -931,32 +927,61 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Returns the top K elements from this RDD as defined by
-   * the specified implicit Ordering[T].
+   * Returns the top K (largest) elements from this RDD as defined by the specified
+   * implicit Ordering[T]. This does the opposite of [[takeOrdered]]. For example:
+   * {{{
+   *   sc.parallelize([10, 4, 2, 12, 3]).top(1)
+   *   // returns [12]
+   *
+   *   sc.parallelize([2, 3, 4, 5, 6]).top(2)
+   *   // returns [6, 5]
+   * }}}
+   *
    * @param num the number of top elements to return
    * @param ord the implicit ordering for T
    * @return an array of top elements
    */
-  def top(num: Int)(implicit ord: Ordering[T]): Array[T] = {
+  def top(num: Int)(implicit ord: Ordering[T]): Array[T] = takeOrdered(num)(ord.reverse)
+
+  /**
+   * Returns the first K (smallest) elements from this RDD as defined by the specified
+   * implicit Ordering[T] and maintains the ordering. This does the opposite of [[top]].
+   * For example:
+   * {{{
+   *   sc.parallelize([10, 4, 2, 12, 3]).takeOrdered(1)
+   *   // returns [12]
+   *
+   *   sc.parallelize([2, 3, 4, 5, 6]).takeOrdered(2)
+   *   // returns [2, 3]
+   * }}}
+   *
+   * @param num the number of top elements to return
+   * @param ord the implicit ordering for T
+   * @return an array of top elements
+   */
+  def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = {
     mapPartitions { items =>
-      val queue = new BoundedPriorityQueue[T](num)
-      queue ++= items
+      // Priority keeps the largest elements, so let's reverse the ordering.
+      val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
+      queue ++= util.collection.Utils.takeOrdered(items, num)(ord)
       Iterator.single(queue)
     }.reduce { (queue1, queue2) =>
       queue1 ++= queue2
       queue1
-    }.toArray.sorted(ord.reverse)
+    }.toArray.sorted(ord)
   }
 
   /**
-   * Returns the first K elements from this RDD as defined by
-   * the specified implicit Ordering[T] and maintains the
-   * ordering.
-   * @param num the number of top elements to return
-   * @param ord the implicit ordering for T
-   * @return an array of top elements
-   */
-  def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = top(num)(ord.reverse)
+   * Returns the max of this RDD as defined by the implicit Ordering[T].
+   * @return the maximum element of the RDD
+   * */
+  def max()(implicit ord: Ordering[T]):T = this.reduce(ord.max)
+
+  /**
+   * Returns the min of this RDD as defined by the implicit Ordering[T].
+   * @return the minimum element of the RDD
+   * */
+  def min()(implicit ord: Ordering[T]):T = this.reduce(ord.min)
 
   /**
    * Save this RDD as a text file, using string representations of elements.
@@ -1031,8 +1056,9 @@ abstract class RDD[T: ClassTag](
 
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
-  /** Record user function generating this RDD. */
-  @transient private[spark] val origin = sc.getCallSite()
+  /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
+  @transient private[spark] val creationSiteInfo = Utils.getCallSiteInfo
+  private[spark] def getCreationSite: String = creationSiteInfo.toString
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T]
 
@@ -1095,10 +1121,7 @@ abstract class RDD[T: ClassTag](
   }
 
   override def toString: String = "%s%s[%d] at %s".format(
-    Option(name).map(_ + " ").getOrElse(""),
-    getClass.getSimpleName,
-    id,
-    origin)
+    Option(name).map(_ + " ").getOrElse(""), getClass.getSimpleName, id, getCreationSite)
 
   def toJavaRDD() : JavaRDD[T] = {
     new JavaRDD(this)(elementClassTag)

@@ -539,7 +539,7 @@ common ones are as follows.
   <td> <b>updateStateByKey</b>(<i>func</i>) </td>
   <td> Return a new "state" DStream where the state for each key is updated by applying the
   given function on the previous state of the key and the new values for the key. This can be
-  used to maintain arbitrary state data for each ket.</td>
+  used to maintain arbitrary state data for each key.</td>
 </tr>
 <tr><td></td><td></td></tr>
 </table>

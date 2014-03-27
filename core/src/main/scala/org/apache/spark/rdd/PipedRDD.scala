@@ -28,6 +28,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 
+
 /**
  * An RDD that pipes the contents of each parent partition through an external command
  * (printing them one per line) and returns the output as a collection of strings.
@@ -58,6 +59,13 @@ class PipedRDD[T: ClassTag](
     // Add the environmental variables to the process.
     val currentEnvVars = pb.environment()
     envVars.foreach { case (variable, value) => currentEnvVars.put(variable, value) }
+
+    // for compatibility with Hadoop which sets these env variables
+    // so the user code can access the input filename
+    if (split.isInstanceOf[HadoopPartition]) {
+      val hadoopSplit = split.asInstanceOf[HadoopPartition]
+      currentEnvVars.putAll(hadoopSplit.getPipeEnvVars())
+    }
 
     val proc = pb.start()
     val env = SparkEnv.get

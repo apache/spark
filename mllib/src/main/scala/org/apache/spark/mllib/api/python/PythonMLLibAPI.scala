@@ -16,14 +16,16 @@
  */
 
 package org.apache.spark.mllib.api.python
+
+import java.nio.{ByteBuffer, ByteOrder}
+
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.recommendation._
+import org.apache.spark.mllib.regression._
 import org.apache.spark.rdd.RDD
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 /**
  * The Java stubs necessary for the Python mllib bindings.
@@ -205,10 +207,10 @@ class PythonMLLibAPI extends Serializable {
   def trainKMeansModel(dataBytesJRDD: JavaRDD[Array[Byte]], k: Int,
       maxIterations: Int, runs: Int, initializationMode: String):
       java.util.List[java.lang.Object] = {
-    val data = dataBytesJRDD.rdd.map(xBytes => deserializeDoubleVector(xBytes))
+    val data = dataBytesJRDD.rdd.map(xBytes => Vectors.dense(deserializeDoubleVector(xBytes)))
     val model = KMeans.train(data, k, maxIterations, runs, initializationMode)
     val ret = new java.util.LinkedList[java.lang.Object]()
-    ret.add(serializeDoubleMatrix(model.clusterCenters))
+    ret.add(serializeDoubleMatrix(model.clusterCenters.map(_.toArray)))
     ret
   }
 

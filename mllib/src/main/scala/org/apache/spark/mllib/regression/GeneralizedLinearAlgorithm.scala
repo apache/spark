@@ -119,7 +119,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    */
   def run(input: RDD[LabeledPoint]) : M = {
     val nfeatures: Int = input.first().features.length
-    val initialWeights = Array.fill(nfeatures)(1.0)
+    val initialWeights = new Array[Double](nfeatures)
     run(input, initialWeights)
   }
 
@@ -134,27 +134,30 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
       throw new SparkException("Input validation failed.")
     }
 
-    // Add a extra variable consisting of all 1.0's for the intercept.
+    // Prepend an extra variable consisting of all 1.0's for the intercept.
     val data = if (addIntercept) {
-      input.map(labeledPoint => (labeledPoint.label, Array(1.0, labeledPoint.features:_*)))
+      input.map(labeledPoint => (labeledPoint.label, 1.0 +: labeledPoint.features))
     } else {
       input.map(labeledPoint => (labeledPoint.label, labeledPoint.features))
     }
 
     val initialWeightsWithIntercept = if (addIntercept) {
-      Array(1.0, initialWeights:_*)
+      0.0 +: initialWeights
     } else {
       initialWeights
     }
 
-    val weights = optimizer.optimize(data, initialWeightsWithIntercept)
-    val intercept = weights(0)
-    val weightsScaled = weights.tail
+    val weightsWithIntercept = optimizer.optimize(data, initialWeightsWithIntercept)
 
-    val model = createModel(weightsScaled, intercept)
+    val (intercept, weights) = if (addIntercept) {
+      (weightsWithIntercept(0), weightsWithIntercept.tail)
+    } else {
+      (0.0, weightsWithIntercept)
+    }
 
-    logInfo("Final model weights " + model.weights.mkString(","))
-    logInfo("Final model intercept " + model.intercept)
-    model
+    logInfo("Final weights " + weights.mkString(","))
+    logInfo("Final intercept " + intercept)
+
+    createModel(weights, intercept)
   }
 }

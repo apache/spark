@@ -34,8 +34,13 @@ else
 fi
 
 JAVA_VERSION=$($java_cmd -version 2>&1 | sed 's/java version "\(.*\)\.\(.*\)\..*"/\1\2/; 1q')
-[ "$JAVA_VERSION" -ge 18 ] && echo "" || echo "[Warn] Java 8 tests will not run, because JDK version is < 1.8."
+[ "$JAVA_VERSION" -ge 18 ] && echo "" || echo "[Warn] Java 8 tests will not run because JDK version is < 1.8."
 
+echo "========================================================================="
+echo "Running Apache RAT checks"
+echo "========================================================================="
+
+dev/check-license
 
 echo "========================================================================="
 echo "Running Scala style checks"
@@ -54,3 +59,10 @@ if [ -z "$PYSPARK_PYTHON" ]; then
   export PYSPARK_PYTHON=/usr/local/bin/python2.7
 fi
 ./python/run-tests
+
+echo "========================================================================="
+echo "Detecting binary incompatibilites with MiMa"
+echo "========================================================================="
+./bin/spark-class org.apache.spark.tools.GenerateMIMAIgnore
+sbt/sbt mima-report-binary-issues
+

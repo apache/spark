@@ -37,10 +37,10 @@
            a Hadoop 0.23.X issue -->
       <id>yarn-alpha</id>
       <dependencies>
-         <dependency>
-           <groupId>org.apache.avro</groupId>
-           <artifactId>avro</artifactId>
-         </dependency>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro</artifactId>
+        </dependency>
       </dependencies>
     </profile>
   </profiles>
@@ -59,6 +59,11 @@
       <groupId>org.jblas</groupId>
       <artifactId>jblas</artifactId>
       <version>1.2.3</version>
+    </dependency>
+    <dependency>
+      <groupId>org.scalanlp</groupId>
+      <artifactId>breeze_${scala.binary.version}</artifactId>
+      <version>0.7</version>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>

@@ -36,10 +36,10 @@
     <profile>
       <id>yarn-alpha</id>
       <dependencies>
-         <dependency>
-           <groupId>org.apache.avro</groupId>
-           <artifactId>avro</artifactId>
-         </dependency>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro</artifactId>
+        </dependency>
       </dependencies>
     </profile>
   </profiles>
@@ -54,6 +54,14 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-streaming_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-reflect</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-compiler</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>

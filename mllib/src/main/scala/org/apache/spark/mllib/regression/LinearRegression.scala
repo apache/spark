@@ -31,13 +31,14 @@ import org.jblas.DoubleMatrix
  * @param intercept Intercept computed for this model.
  */
 class LinearRegressionModel(
-                  override val weights: Array[Double],
-                  override val intercept: Double)
-  extends GeneralizedLinearModel(weights, intercept)
-  with RegressionModel with Serializable {
+    override val weights: Array[Double],
+    override val intercept: Double)
+  extends GeneralizedLinearModel(weights, intercept) with RegressionModel with Serializable {
 
-  override def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
-                            intercept: Double) = {
+  override def predictPoint(
+      dataMatrix: DoubleMatrix,
+      weightMatrix: DoubleMatrix,
+      intercept: Double): Double = {
     dataMatrix.dot(weightMatrix) + intercept
   }
 }
@@ -55,8 +56,7 @@ class LinearRegressionWithSGD private (
     var stepSize: Double,
     var numIterations: Int,
     var miniBatchFraction: Double)
-  extends GeneralizedLinearAlgorithm[LinearRegressionModel]
-  with Serializable {
+  extends GeneralizedLinearAlgorithm[LinearRegressionModel] with Serializable {
 
   val gradient = new LeastSquaresGradient()
   val updater = new SimpleUpdater()
@@ -69,7 +69,7 @@ class LinearRegressionWithSGD private (
    */
   def this() = this(1.0, 100, 1.0)
 
-  def createModel(weights: Array[Double], intercept: Double) = {
+  override def createModel(weights: Array[Double], intercept: Double) = {
     new LinearRegressionModel(weights, intercept)
   }
 }

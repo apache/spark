@@ -43,6 +43,7 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
+import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.partial.BoundedDouble;
 import org.apache.spark.partial.PartialResult;
 import org.apache.spark.storage.StorageLevel;
@@ -108,6 +109,37 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Integer, Integer> p2 = sc.parallelizePairs(pairs);
     JavaPairRDD<Integer, Integer> pUnion = sc.union(p1, p2);
     Assert.assertEquals(4, pUnion.count());
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void intersection() {
+    List<Integer> ints1 = Arrays.asList(1, 10, 2, 3, 4, 5);
+    List<Integer> ints2 = Arrays.asList(1, 6, 2, 3, 7, 8);
+    JavaRDD<Integer> s1 = sc.parallelize(ints1);
+    JavaRDD<Integer> s2 = sc.parallelize(ints2);
+
+    JavaRDD<Integer> intersections = s1.intersection(s2);
+    Assert.assertEquals(3, intersections.count());
+
+    ArrayList<Integer> list = new ArrayList<Integer>();
+    JavaRDD<Integer> empty = sc.parallelize(list);
+    JavaRDD<Integer> emptyIntersection = empty.intersection(s2);
+    Assert.assertEquals(0, emptyIntersection.count());
+
+    List<Double> doubles = Arrays.asList(1.0, 2.0);
+    JavaDoubleRDD d1 = sc.parallelizeDoubles(doubles);
+    JavaDoubleRDD d2 = sc.parallelizeDoubles(doubles);
+    JavaDoubleRDD dIntersection = d1.intersection(d2);
+    Assert.assertEquals(2, dIntersection.count());
+
+    List<Tuple2<Integer, Integer>> pairs = new ArrayList<Tuple2<Integer, Integer>>();
+    pairs.add(new Tuple2<Integer, Integer>(1, 2));
+    pairs.add(new Tuple2<Integer, Integer>(3, 4));
+    JavaPairRDD<Integer, Integer> p1 = sc.parallelizePairs(pairs);
+    JavaPairRDD<Integer, Integer> p2 = sc.parallelizePairs(pairs);
+    JavaPairRDD<Integer, Integer> pIntersection = p1.intersection(p2);
+    Assert.assertEquals(2, pIntersection.count());
   }
 
   @Test
@@ -371,16 +403,16 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void javaDoubleRDDHistoGram() {
-   JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
-   // Test using generated buckets
-   Tuple2<double[], long[]> results = rdd.histogram(2);
-   double[] expected_buckets = {1.0, 2.5, 4.0};
-   long[] expected_counts = {2, 2};
-   Assert.assertArrayEquals(expected_buckets, results._1, 0.1);
-   Assert.assertArrayEquals(expected_counts, results._2);
-   // Test with provided buckets
-   long[] histogram = rdd.histogram(expected_buckets);
-   Assert.assertArrayEquals(expected_counts, histogram);
+    JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
+    // Test using generated buckets
+    Tuple2<double[], long[]> results = rdd.histogram(2);
+    double[] expected_buckets = {1.0, 2.5, 4.0};
+    long[] expected_counts = {2, 2};
+    Assert.assertArrayEquals(expected_buckets, results._1, 0.1);
+    Assert.assertArrayEquals(expected_counts, results._2);
+    // Test with provided buckets
+    long[] histogram = rdd.histogram(expected_buckets);
+    Assert.assertArrayEquals(expected_counts, histogram);
   }
 
   @Test
@@ -539,7 +571,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void iterator() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
-    TaskContext context = new TaskContext(0, 0, 0, false, false, null);
+    TaskContext context = new TaskContext(0, 0, 0, false, false, new TaskMetrics());
     Assert.assertEquals(1, rdd.iterator(rdd.splits().get(0), context).next().intValue());
   }
 

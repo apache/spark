@@ -197,7 +197,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   override def mapReduceTriplets[A: ClassTag](
       mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       reduceFunc: (A, A) => A,
-      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None) = {
+      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None): VertexRDD[A] = {
 
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
@@ -391,6 +391,6 @@ object GraphImpl {
     // TODO: Consider doing map side distinct before shuffle.
     new ShuffledRDD[VertexId, Int, (VertexId, Int)](
       edges.collectVertexIds.map(vid => (vid, 0)), partitioner)
-      .setSerializer(classOf[VertexIdMsgSerializer].getName)
+      .setSerializer(new VertexIdMsgSerializer)
   }
 } // end of object GraphImpl

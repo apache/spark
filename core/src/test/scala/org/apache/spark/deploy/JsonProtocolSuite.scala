@@ -20,12 +20,9 @@ package org.apache.spark.deploy
 import java.io.File
 import java.util.Date
 
-import org.json4s._
-
-import org.json4s.JValue
-import org.json4s.jackson.JsonMethods
 import com.fasterxml.jackson.core.JsonParseException
-
+import org.json4s._
+import org.json4s.jackson.JsonMethods
 import org.scalatest.FunSuite
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
@@ -96,7 +93,7 @@ class JsonProtocolSuite extends FunSuite {
 
   def createAppInfo() : ApplicationInfo = {
     val appInfo = new ApplicationInfo(JsonConstants.appInfoStartTime,
-      "id", createAppDesc(), JsonConstants.submitDate, null, "appUriStr", Int.MaxValue)
+      "id", createAppDesc(), JsonConstants.submitDate, null, Int.MaxValue)
     appInfo.endTime = JsonConstants.currTimeInMillis
     appInfo
   }
@@ -148,12 +145,12 @@ object JsonConstants {
   val submitDate = new Date(123456789)
   val appInfoJsonStr =
     """
-      |{"starttime":3,"id":"id","name":"name","appuiurl":"appUriStr",
+      |{"starttime":3,"id":"id","name":"name",
       |"cores":4,"user":"%s",
       |"memoryperslave":1234,"submitdate":"%s",
       |"state":"WAITING","duration":%d}
     """.format(System.getProperty("user.name", "<unknown>"),
-        submitDate.toString, (currTimeInMillis - appInfoStartTime)).stripMargin
+        submitDate.toString, currTimeInMillis - appInfoStartTime).stripMargin
 
   val workerInfoJsonStr =
     """

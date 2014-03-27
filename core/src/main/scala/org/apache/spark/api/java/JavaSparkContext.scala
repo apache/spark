@@ -434,6 +434,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * Clear the job's list of JARs added by `addJar` so that they do not get downloaded to
    * any new nodes.
    */
+  @deprecated("adding jars no longer creates local copies that need to be deleted", "1.0.0")
   def clearJars() {
     sc.clearJars()
   }
@@ -442,6 +443,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * Clear the job's list of files added by `addFile` so that they do not get downloaded to
    * any new nodes.
    */
+  @deprecated("adding files no longer creates local copies that need to be deleted", "1.0.0")
   def clearFiles() {
     sc.clearFiles()
   }
@@ -461,7 +463,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     sc.setCheckpointDir(dir)
   }
 
-  def getCheckpointDir = JavaUtils.optionToOptional(sc.getCheckpointDir)
+  def getCheckpointDir: Optional[String] = JavaUtils.optionToOptional(sc.getCheckpointDir)
 
   protected def checkpointFile[T](path: String): JavaRDD[T] = {
     implicit val ctag: ClassTag[T] = fakeClassTag
