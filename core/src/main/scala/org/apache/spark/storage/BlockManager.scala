@@ -58,7 +58,7 @@ private[spark] class BlockManager(
   private[storage] val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
   private[storage] val diskStore = new DiskStore(this, diskBlockManager)
   var tachyonInitialized = false
-  private[storage] lazy val tachyonStore : TachyonStore = {
+  private[storage] lazy val tachyonStore: TachyonStore = {
     val storeDir = conf.get("spark.tachyonstore.dir", System.getProperty("java.io.tmpdir"))
     val appFolderName = conf.get("spark.tachyonstore.foldername")
     val tachyonStorePath = s"${storeDir}/${appFolderName}/${this.executorId}"
@@ -1000,7 +1000,7 @@ private[spark] class BlockManager(
     blockInfo.clear()
     memoryStore.clear()
     diskStore.clear()
-    if(tachyonInitialized) {
+    if (tachyonInitialized) {
       tachyonStore.clear() 
     }
     metadataCleaner.cancel()

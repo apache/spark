@@ -21,6 +21,6 @@ import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.TachyonFileSegment;
 
 public interface TachyonFilePathResolver {
-  /** Get the file segment in which the given block resides. */
+  /** Get the file segment in which the given block resides. This is not a user-facing API*/
   TachyonFileSegment getBlockLocation(BlockId blockId);
 }

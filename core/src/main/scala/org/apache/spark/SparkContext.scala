@@ -21,6 +21,7 @@ import java.io._
 import java.net.URI
 import java.util.{Properties, UUID}
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.UUID.randomUUID
 import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -42,7 +43,6 @@ import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage.{BlockManagerSource, RDDInfo, StorageStatus, StorageUtils}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
-import java.util.Random
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -128,7 +128,7 @@ class SparkContext(
   
   // Generate the random name for a temp folder in Tachyon
   // Add a timestamp as the suffix here to make it more safe
-  val tachyonFolderName = new Random().nextInt() + "_" + System.currentTimeMillis()
+  val tachyonFolderName = "spark-" + randomUUID.toString()
   conf.set("spark.tachyonstore.foldername", tachyonFolderName)
 
   val isLocal = (master == "local" || master.startsWith("local["))
