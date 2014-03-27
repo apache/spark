@@ -136,25 +136,28 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
     // Prepend an extra variable consisting of all 1.0's for the intercept.
     val data = if (addIntercept) {
-      input.map(labeledPoint => (labeledPoint.label, labeledPoint.features.+:(1.0)))
+      input.map(labeledPoint => (labeledPoint.label, 1.0 +: labeledPoint.features))
     } else {
       input.map(labeledPoint => (labeledPoint.label, labeledPoint.features))
     }
 
     val initialWeightsWithIntercept = if (addIntercept) {
-      initialWeights.+:(1.0)
+      0.0 +: initialWeights
     } else {
       initialWeights
     }
 
-    val weights = optimizer.optimize(data, initialWeightsWithIntercept)
-    val intercept = weights(0)
-    val weightsScaled = weights.tail
+    val weightsWithIntercept = optimizer.optimize(data, initialWeightsWithIntercept)
 
-    val model = createModel(weightsScaled, intercept)
+    val (intercept, weights) = if (addIntercept) {
+      (weightsWithIntercept(0), weightsWithIntercept.tail)
+    } else {
+      (0.0, weightsWithIntercept)
+    }
 
-    logInfo("Final model weights " + model.weights.mkString(","))
-    logInfo("Final model intercept " + model.intercept)
-    model
+    logInfo("Final weights " + weights.mkString(","))
+    logInfo("Final intercept " + intercept)
+
+    createModel(weights, intercept)
   }
 }

@@ -17,13 +17,10 @@
 
 package org.apache.spark.mllib.regression
 
-
 import org.jblas.DoubleMatrix
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.util.{LinearDataGenerator, LocalSparkContext}
-
 
 class RidgeRegressionSuite extends FunSuite with LocalSparkContext {
 
@@ -73,5 +70,11 @@ class RidgeRegressionSuite extends FunSuite with LocalSparkContext {
     // Ridge CV-error should be lower than linear regression
     assert(ridgeErr < linearErr,
       "ridgeError (" + ridgeErr + ") was not less than linearError(" + linearErr + ")")
+  }
+
+  test("do not support intercept") {
+    intercept[UnsupportedOperationException] {
+      new RidgeRegressionWithSGD().setIntercept(true)
+    }
   }
 }
