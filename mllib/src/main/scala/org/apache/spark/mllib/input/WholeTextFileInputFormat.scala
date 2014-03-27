@@ -40,8 +40,8 @@ private[mllib] class WholeTextFileInputFormat extends CombineFileInputFormat[Str
       context: TaskAttemptContext): RecordReader[String, String] = {
 
     new CombineFileRecordReader[String, String](
-    split.asInstanceOf[CombineFileSplit],
-    context,
-    classOf[WholeTextFileRecordReader])
+      split.asInstanceOf[CombineFileSplit],
+      context,
+      classOf[WholeTextFileRecordReader])
   }
 }
