@@ -28,18 +28,12 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.errors.`package`.TreeNodeException
 
 
-/**
- * Thrown when an invalid RegEx string is found.
- */
-class InvalidRegExException[TreeType <: TreeNode[_]](tree: TreeType, reason: String) extends
-  errors.TreeNodeException(tree, s"$reason", null)
-
 trait StringRegexExpression {
   self: BinaryExpression =>
 
   type EvaluatedType = Any
   
-  def escape(v: String): String
+  def escape(v: String): String = v
   def nullable: Boolean = true
   def dataType: DataType = BooleanType
   
@@ -49,28 +43,15 @@ trait StringRegexExpression {
     case _ => null
   }
   
-  protected def compile(str: Any): Pattern = str match {
-    // TODO or let it be null if couldn't compile the regex?
-    case x: String if(x != null) => Pattern.compile(escape(x))
-    case x: String => null
-    case _ => throw new InvalidRegExException(this, "$str can not be compiled to regex pattern")
-  }
-  
-  protected def pattern(str: String) = if(cache == null) compile(str) else cache
-  
-  protected def filter: PartialFunction[(Row, (String, String)), Any] = {
-    case (row, (null, r)) => { false }
-    case (row, (l, null)) => { false }
-    case (row, (l, r)) => { 
-      val regex = pattern(r)
-      if(regex == null) {
-        null
-      } else {
-        regex.matcher(l).matches
-      }
-    }
+  protected def compile(str: String): Pattern = if(str == null) {
+    null
+  } else {
+    // Let it raise exception if couldn't compile the regex string
+    Pattern.compile(escape(str))
   }
 
+  protected def pattern(str: String) = if(cache == null) compile(str) else cache
+  
   override def apply(input: Row): Any = {
     val l = left.apply(input)
     if(l == null) {
@@ -80,7 +61,12 @@ trait StringRegexExpression {
       if(r == null) {
         null
       } else {
-        filter.lift(input, (l.asInstanceOf[String], r.asInstanceOf[String])).get
+        val regex = pattern(r.asInstanceOf[String])
+        if(regex == null) {
+          null
+        } else {
+          regex.matcher(l.asInstanceOf[String]).matches
+        }
       }
     }
   }
@@ -126,6 +112,4 @@ case class RLike(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
   
   def symbol = "RLIKE"
-
-  override def escape(v: String) = v
 }

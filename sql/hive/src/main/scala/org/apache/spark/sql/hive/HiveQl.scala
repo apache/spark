@@ -850,8 +850,7 @@ object HiveQl {
     case Token("<=", left :: right:: Nil) => LessThanOrEqual(nodeToExpr(left), nodeToExpr(right))
     case Token("LIKE", left :: right:: Nil) => Like(nodeToExpr(left), nodeToExpr(right))
     case Token("RLIKE", left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
-    case Token("REGEXP", left :: right:: Nil) =>
-      UnresolvedFunction("REGEXP", Seq(nodeToExpr(left), nodeToExpr(right)))
+    case Token("REGEXP", left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
     case Token("TOK_FUNCTION", Token("TOK_ISNOTNULL", Nil) :: child :: Nil) =>
       IsNotNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token("TOK_ISNULL", Nil) :: child :: Nil) =>
