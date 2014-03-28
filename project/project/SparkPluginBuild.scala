@@ -18,6 +18,11 @@
 import sbt._
 import sbt.Keys._
 
+/**
+ * This plugin project is there to define new scala style rules for spark. This is
+ * a plugin project so that this gets compiled first and is put on the classpath and
+ * becomes available for scalastyle sbt plugin.
+ */
 object SparkPluginDef extends Build {
   lazy val root = Project("plugins", file(".")) dependsOn(sparkStyle)
   lazy val sparkStyle = Project("spark-style", file("spark-style"), settings = styleSettings)

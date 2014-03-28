@@ -19,14 +19,10 @@
 package org.apache.spark.scalastyle
 
 import java.util.regex.Pattern
-import org.scalastyle.PositionError
-import org.scalastyle.ScalariformChecker
-import org.scalastyle.ScalastyleError
-import scalariform.lexer.MultiLineComment
-import scalariform.lexer.ScalaDocComment
-import scalariform.lexer.SingleLineComment
+
+import org.scalastyle.{PositionError, ScalariformChecker, ScalastyleError}
+import scalariform.lexer.{MultiLineComment, ScalaDocComment, SingleLineComment, Token}
 import scalariform.parser.CompilationUnit
-import scalariform.lexer.Token
 
 class SparkSpaceAfterCommentStartChecker extends ScalariformChecker {
   val errorKey: String = "insert.a.single.space.after.comment.start"
