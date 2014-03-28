@@ -189,7 +189,8 @@ private[spark] class Executor(
       try {
         SparkEnv.set(env)
         Accumulators.clear()
-        val (userName, taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
+        val (userName, taskFiles, taskJars, taskBytes) =
+          Task.deserializeWithDependencies(serializedTask)
         updateDependencies(taskFiles, taskJars)
         task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
 
