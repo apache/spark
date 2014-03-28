@@ -288,7 +288,7 @@ private[spark] class Executor(
    * created by the interpreter to the search path
    */
   private def createClassLoader(): ExecutorURLClassLoader = {
-    val loader = this.getClass.getClassLoader
+    val loader = Thread.currentThread().getContextClassLoader
 
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.
