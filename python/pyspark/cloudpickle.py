@@ -204,15 +204,6 @@ class CloudPickler(pickle.Pickler):
         self.save_reduce(types.CodeType, args, obj=obj)
     dispatch[types.CodeType] = save_codeobject    #new type
 
-    def save_listiterator(self, obj, pack=struct.pack):
-        """
-        Save a list iterator. Note: this reads the iterator... Sorry!
-        """
-        pickle.PicklingError("mini sad panda")
-        contents = list(obj)
-        self.save_reduce(load_listr_itr, contents, obj=obj)
-    dispatch[type(iter(list()))] = save_listiterator
-
     def save_function(self, obj, name=None, pack=struct.pack):
         """ Registered with the dispatch to handle all function types.
 
@@ -844,10 +835,6 @@ def _restore_attr(obj, attr):
     for key, val in attr.items():
         setattr(obj, key, val)
     return obj
-
-#hack to load the list iterator
-def load_list_tr(args):
-    itr(args)
 
 def _get_module_builtins():
     return pickle.__builtins__
