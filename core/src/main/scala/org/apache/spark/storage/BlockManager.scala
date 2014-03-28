@@ -827,9 +827,8 @@ private[spark] class BlockManager(
    */
   def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean) {
     logInfo("Removing broadcast " + broadcastId)
-    val blocksToRemove = blockInfo.keys.filter(_.isBroadcast).collect {
+    val blocksToRemove = blockInfo.keys.collect {
       case bid: BroadcastBlockId if bid.broadcastId == broadcastId => bid
-      case bid: BroadcastHelperBlockId if bid.broadcastId.broadcastId == broadcastId => bid
     }
     blocksToRemove.foreach { blockId => removeBlock(blockId, removeFromDriver) }
   }

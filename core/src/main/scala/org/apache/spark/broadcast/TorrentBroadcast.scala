@@ -23,7 +23,7 @@ import scala.math
 import scala.util.Random
 
 import org.apache.spark.{Logging, SparkConf, SparkEnv, SparkException}
-import org.apache.spark.storage.{BroadcastBlockId, BroadcastHelperBlockId, StorageLevel}
+import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util.Utils
 
 private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
@@ -54,7 +54,7 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
     hasBlocks = tInfo.totalBlocks
 
     // Store meta-info
-    val metaId = BroadcastHelperBlockId(broadcastId, "meta")
+    val metaId = BroadcastBlockId(id, "meta")
     val metaInfo = TorrentInfo(null, totalBlocks, totalBytes)
     TorrentBroadcast.synchronized {
       SparkEnv.get.blockManager.putSingle(
@@ -63,7 +63,7 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
 
     // Store individual pieces
     for (i <- 0 until totalBlocks) {
-      val pieceId = BroadcastHelperBlockId(broadcastId, "piece" + i)
+      val pieceId = BroadcastBlockId(id, "piece" + i)
       TorrentBroadcast.synchronized {
         SparkEnv.get.blockManager.putSingle(
           pieceId, tInfo.arrayOfBlocks(i), StorageLevel.MEMORY_AND_DISK, tellMaster = true)
@@ -131,7 +131,7 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
 
   def receiveBroadcast(): Boolean = {
     // Receive meta-info
-    val metaId = BroadcastHelperBlockId(broadcastId, "meta")
+    val metaId = BroadcastBlockId(id, "meta")
     var attemptId = 10
     while (attemptId > 0 && totalBlocks == -1) {
       TorrentBroadcast.synchronized {
@@ -156,7 +156,7 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
     // Receive actual blocks
     val recvOrder = new Random().shuffle(Array.iterate(0, totalBlocks)(_ + 1).toList)
     for (pid <- recvOrder) {
-      val pieceId = BroadcastHelperBlockId(broadcastId, "piece" + pid)
+      val pieceId = BroadcastBlockId(id, "piece" + pid)
       TorrentBroadcast.synchronized {
         SparkEnv.get.blockManager.getSingle(pieceId) match {
           case Some(x) =>
