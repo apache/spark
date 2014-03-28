@@ -30,12 +30,11 @@ import scala.collection.mutable.ArrayBuffer
  * @param updater Updater to be used to update weights after every iteration.
  */
 class GradientDescent(var gradient: Gradient, var updater: Updater)
-  extends Optimizer with Logging
-{
-  private var stepSize: Double = 1.0
-  private var numIterations: Int = 100
-  private var regParam: Double = 0.0
-  private var miniBatchFraction: Double = 1.0
+  extends Optimizer with Logging {
+  protected var stepSize: Double = 1.0
+  protected var numIterations: Int = 100
+  protected var regParam: Double = 0.0
+  protected var miniBatchFraction: Double = 1.0
 
   /**
    * Set the initial step size of SGD for the first step. Default 1.0.
