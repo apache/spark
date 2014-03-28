@@ -20,7 +20,12 @@ realpath () {
 )
 }
 
-. $(dirname $(realpath $0))/sbt-launch-lib.bash
+DIR=$(dirname $(realpath $0))
+if [ ! -d $DIR ] || [ -z $DIR ]; then
+  DIR="./sbt/"
+fi
+echo $DIR
+. $DIR/sbt-launch-lib.bash
 
 
 declare -r noshare_opts="-Dsbt.global.base=project/.sbtboot -Dsbt.boot.directory=project/.boot -Dsbt.ivy.home=project/.ivy"
