@@ -23,13 +23,16 @@ import org.jblas.DoubleMatrix
 
 /**
  * Efficient matrix operations.
- * For example square a given matrix efficiently
  */
 object MatrixAlgebra {
-
- def columnMagnitudes(matrix: RDD[Array[Double]]):
+  /**
+   * Given matrix, compute squares of column magnitudes
+   * @param matrix given row-by-row, each row an array
+   * @return an array of squared column magnitudes
+   */
+  def columnMagnitudes(matrix: RDD[Array[Double]]):
   Array[Double] = {
-   val n = matrix.first.size
+    val n = matrix.first.size
     matrix.map {
       x =>
         val a = new DoubleMatrix(x)
@@ -43,9 +46,14 @@ object MatrixAlgebra {
     }
   }
 
-
   /**
-   * TODO: javadoc Square a given matrix efficienty
+   * Given a matrix A, compute A^T A using the sampling procedure
+   * described in http://arxiv.org/abs/1304.1467
+   * @param matrix given row-by-row, each row an array
+   * @param colMags Euclidean column magnitudes squared
+   * @param gamma The oversampling parameter, should be set to greater than 1,
+   *              guideline is 2 log(n)
+   * @return Computed A^T A
    */
   def squareWithDIMSUM(matrix: RDD[Array[Double]], colMags: Array[Double], gamma: Double):
   Array[Array[Double]] = {
@@ -56,14 +64,14 @@ object MatrixAlgebra {
     }
 
     // Compute A^T A
-    val fullata = matrix.mapPartitions {
+    val fullATA = matrix.mapPartitions {
       iter =>
         val localATA = Array.ofDim[Double](n, n)
         while (iter.hasNext) {
           val row = iter.next()
           var i = 0
           while (i < n) {
-            if(Math.random < gamma / colMags(i)) {
+            if (Math.random < gamma / colMags(i)) {
               var j = i + 1
               while (j < n) {
                 val mult = row(i) * row(j)
@@ -91,25 +99,26 @@ object MatrixAlgebra {
     }
 
     // undo normalization
-    for(i <- 0 until n) for(j <- i until n) {
-      fullata(i)(j) = if (i == j) colMags(i)
-                      else if (gamma / colMags(i) > 1) fullata(i)(j)
-                      else fullata(i)(j) * colMags(i) / gamma
-      fullata(j)(i) = fullata(i)(j)
+    for (i <- 0 until n) for (j <- i until n) {
+      fullATA(i)(j) = if (i == j) colMags(i)
+      else if (gamma / colMags(i) > 1) fullATA(i)(j)
+      else fullATA(i)(j) * colMags(i) / gamma
+      fullATA(j)(i) = fullATA(i)(j)
     }
 
-    fullata
+    fullATA
   }
 
-
   /**
-   * TODO: javadoc Square a tall skinny A^TA given matrix efficienty
+   * Given a matrix A, compute A^T A
+   * @param matrix given row-by-row, each row an array
+   * @return Computed A^T A
    */
   def square(matrix: RDD[Array[Double]]): Array[Array[Double]] = {
     val n = matrix.first.size
 
     // Compute A^T A
-    val fullata = matrix.mapPartitions {
+    val fullATA = matrix.mapPartitions {
       iter =>
         val localATA = Array.ofDim[Double](n, n)
         while (iter.hasNext) {
@@ -138,7 +147,6 @@ object MatrixAlgebra {
         }
         a
     }
-    fullata
+    fullATA
   }
 }
-

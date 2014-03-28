@@ -29,7 +29,7 @@ import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
 class SVD {
   private var k = 1
   private var computeU = true
-  
+
   // All singular values smaller than rCond * sigma(0)
   // are treated as zero, where sigma(0) is the largest singular value.
   private var rCond = 1e-9
@@ -66,7 +66,7 @@ class SVD {
   }
 
   /**
-   * Should DIMSUM be used for computing A^TA?
+   * Use DIMSUM be used for computing A^TA with gamma
    * See http://arxiv.org/abs/1304.1467
    */
   def useDIMSUM(gamma: Double): SVD = {
@@ -200,11 +200,11 @@ class SVD {
 
     // Compute A^T A
     val fullata = if (useDIMS)
-                    MatrixAlgebra.squareWithDIMSUM(
-                      matrix, MatrixAlgebra.columnMagnitudes(matrix), gamma)
-                  else
-                    MatrixAlgebra.square(matrix)
-    
+      MatrixAlgebra.squareWithDIMSUM(
+        matrix, MatrixAlgebra.columnMagnitudes(matrix), gamma)
+    else
+      MatrixAlgebra.square(matrix)
+
     // Construct jblas A^T A locally
     val ata = new DoubleMatrix(fullata)
 
