@@ -432,7 +432,6 @@ object CheckpointSuite {
   // This is a custom cogroup function that does not use mapValues like
   // the PairRDDFunctions.cogroup()
   def cogroup[K, V](first: RDD[(K, V)], second: RDD[(K, V)], part: Partitioner) = {
-    //println("First = " + first + ", second = " + second)
     new CoGroupedRDD[K](
       Seq(first.asInstanceOf[RDD[(K, _)]], second.asInstanceOf[RDD[(K, _)]]),
       part

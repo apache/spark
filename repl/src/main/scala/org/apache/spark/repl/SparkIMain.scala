@@ -834,7 +834,7 @@ import org.apache.spark.util.Utils
                                     }
         ((pos, msg)) :: loop(filtered)
       }
-     //PRASHANT: This leads to a NoSuchMethodError for _.warnings. Yet to figure out its purpose.
+     // PRASHANT: This leads to a NoSuchMethodError for _.warnings. Yet to figure out its purpose.
       // val warnings = loop(run.allConditionalWarnings flatMap (_.warnings))
       // if (warnings.nonEmpty)
       //   mostRecentWarnings = warnings

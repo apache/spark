@@ -27,12 +27,12 @@ class EdgeTriplet[VD, ED] extends Edge[ED] {
   /**
    * The source vertex attribute
    */
-  var srcAttr: VD = _ //nullValue[VD]
+  var srcAttr: VD = _ // nullValue[VD]
 
   /**
    * The destination vertex attribute
    */
-  var dstAttr: VD = _ //nullValue[VD]
+  var dstAttr: VD = _ // nullValue[VD]
 
   /**
    * Set the edge properties of this triplet.

@@ -662,7 +662,7 @@ object HiveQl {
       // worth the number of hacks that will be required to implement it.  Namely, we need to add
       // some sort of mapped star expansion that would expand all child output row to be similarly
       // named output expressions where some aggregate expression has been applied (i.e. First).
-      ??? /// Aggregate(groups, Star(None, First(_)) :: Nil, joinedResult)
+      ??? // Aggregate(groups, Star(None, First(_)) :: Nil, joinedResult)
 
     case Token(allJoinTokens(joinToken),
            relation1 ::

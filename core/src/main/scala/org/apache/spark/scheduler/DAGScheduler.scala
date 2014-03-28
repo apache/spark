@@ -753,7 +753,7 @@ class DAGScheduler(
     val properties = if (stageIdToActiveJob.contains(jobId)) {
       stageIdToActiveJob(stage.jobId).properties
     } else {
-      //this stage will be assigned to "default" pool
+      // this stage will be assigned to "default" pool
       null
     }
 

@@ -112,7 +112,7 @@ private[spark] object ClosureCleaner extends Logging {
       accessedFields(cls) = Set[String]()
     for (cls <- func.getClass :: innerClasses)
       getClassReader(cls).accept(new FieldAccessFinder(accessedFields), 0)
-    //logInfo("accessedFields: " + accessedFields)
+    // logInfo("accessedFields: " + accessedFields)
 
     val inInterpreter = {
       try {
@@ -139,13 +139,13 @@ private[spark] object ClosureCleaner extends Logging {
         val field = cls.getDeclaredField(fieldName)
         field.setAccessible(true)
         val value = field.get(obj)
-        //logInfo("1: Setting " + fieldName + " on " + cls + " to " + value);
+        // logInfo("1: Setting " + fieldName + " on " + cls + " to " + value);
         field.set(outer, value)
       }
     }
     
     if (outer != null) {
-      //logInfo("2: Setting $outer on " + func.getClass + " to " + outer);
+      // logInfo("2: Setting $outer on " + func.getClass + " to " + outer);
       val field = func.getClass.getDeclaredField("$outer")
       field.setAccessible(true)
       field.set(func, outer)
@@ -153,7 +153,7 @@ private[spark] object ClosureCleaner extends Logging {
   }
   
   private def instantiateClass(cls: Class[_], outer: AnyRef, inInterpreter: Boolean): AnyRef = {
-    //logInfo("Creating a " + cls + " with outer = " + outer)
+    // logInfo("Creating a " + cls + " with outer = " + outer)
     if (!inInterpreter) {
       // This is a bona fide closure class, whose constructor has no effects
       // other than to set its fields, so use its constructor
@@ -170,7 +170,7 @@ private[spark] object ClosureCleaner extends Logging {
       val newCtor = rf.newConstructorForSerialization(cls, parentCtor)
       val obj = newCtor.newInstance().asInstanceOf[AnyRef]
       if (outer != null) {
-        //logInfo("3: Setting $outer on " + cls + " to " + outer);
+        // logInfo("3: Setting $outer on " + cls + " to " + outer);
         val field = cls.getDeclaredField("$outer")
         field.setAccessible(true)
         field.set(obj, outer)

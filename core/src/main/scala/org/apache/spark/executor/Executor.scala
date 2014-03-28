@@ -275,7 +275,6 @@ private[spark] class Executor(
           // have left some weird state around depending on when the exception was thrown, but on
           // the other hand, maybe we could detect that when future tasks fail and exit then.
           logError("Exception in task ID " + taskId, t)
-          //System.exit(1)
         }
       } finally {
         // TODO: Unregister shuffle memory only for ResultTask

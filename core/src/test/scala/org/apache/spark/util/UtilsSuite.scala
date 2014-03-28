@@ -39,7 +39,7 @@ class UtilsSuite extends FunSuite {
   }
 
   test("copyStream") {
-    //input array initialization
+    // input array initialization
     val bytes = Array.ofDim[Byte](9000)
     Random.nextBytes(bytes)
 
