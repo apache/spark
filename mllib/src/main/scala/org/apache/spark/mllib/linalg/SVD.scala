@@ -29,10 +29,15 @@ import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
 class SVD {
   private var k = 1
   private var computeU = true
-
+  
   // All singular values smaller than rCond * sigma(0)
   // are treated as zero, where sigma(0) is the largest singular value.
   private var rCond = 1e-9
+
+  // Flag for using DIMSUM in A^TA computation
+  // See http://arxiv.org/abs/1304.1467
+  private var useDIMS = false
+  private var gamma = 10.0
 
   /**
    * Set the number of top-k singular vectors to return
@@ -59,6 +64,17 @@ class SVD {
     this.computeU = compU
     this
   }
+
+  /**
+   * Should DIMSUM be used for computing A^TA?
+   * See http://arxiv.org/abs/1304.1467
+   */
+  def useDIMSUM(gamma: Double): SVD = {
+    this.useDIMS = true
+    this.gamma = gamma
+    this
+  }
+
 
   /**
    * Compute SVD using the current set parameters
@@ -183,36 +199,12 @@ class SVD {
     }
 
     // Compute A^T A
-    val fullata = matrix.mapPartitions {
-      iter =>
-        val localATA = Array.ofDim[Double](n, n)
-        while (iter.hasNext) {
-          val row = iter.next()
-          var i = 0
-          while (i < n) {
-            var j = 0
-            while (j < n) {
-              localATA(i)(j) += row(i) * row(j)
-              j += 1
-            }
-            i += 1
-          }
-        }
-        Iterator(localATA)
-    }.fold(Array.ofDim[Double](n, n)) {
-      (a, b) =>
-        var i = 0
-        while (i < n) {
-          var j = 0
-          while (j < n) {
-            a(i)(j) += b(i)(j)
-            j += 1
-          }
-          i += 1
-        }
-        a
-    }
-
+    val fullata = if (useDIMS)
+                    MatrixAlgebra.squareWithDIMSUM(
+                      matrix, MatrixAlgebra.columnMagnitudes(matrix), gamma)
+                  else
+                    MatrixAlgebra.square(matrix)
+    
     // Construct jblas A^T A locally
     val ata = new DoubleMatrix(fullata)
 

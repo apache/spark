@@ -17,27 +17,42 @@
 
 package org.apache.spark.mllib.linalg
 
-import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 
-import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
+import org.jblas.DoubleMatrix
 
 /**
- * Square a given matrix efficienty
+ * Efficient matrix operations.
+ * For example square a given matrix efficiently
  */
-object MatrixSquare {
-/**
- * TODO: javadoc Square a given matrix efficienty
- */
-  def squareWithDIMSUM(matrix: RDD[Array[Double]],
-                       colMags: Array[Double], double: gamma):
-   Array[Array[Double]] = {
+object MatrixAlgebra {
+
+ def columnMagnitudes(matrix: RDD[Array[Double]]):
+  Array[Double] = {
+   val n = matrix.first.size
+    matrix.map {
+      x =>
+        val a = new DoubleMatrix(x)
+        a.mul(a).data
+    }.fold(Array.ofDim[Double](n)) {
+      (a, b) =>
+        val am = new DoubleMatrix(a)
+        val bm = new DoubleMatrix(b)
+        am.addi(bm)
+        a
+    }
+  }
+
+
+  /**
+   * TODO: javadoc Square a given matrix efficienty
+   */
+  def squareWithDIMSUM(matrix: RDD[Array[Double]], colMags: Array[Double], gamma: Double):
+  Array[Array[Double]] = {
     val n = matrix.first.size
 
-    if (k < 1 || k > n) {
-      throw new IllegalArgumentException(
-        "Request up to n singular values k=$k n=$n")
+    if (gamma < 1) {
+      throw new IllegalArgumentException("Oversampling should be greater than 1: $gamma")
     }
 
     // Compute A^T A
@@ -48,10 +63,14 @@ object MatrixSquare {
           val row = iter.next()
           var i = 0
           while (i < n) {
-            var j = 0
-            while (j < n) {
-              localATA(i)(j) += row(i) * row(j)
-              j += 1
+            if(Math.random < gamma / colMags(i)) {
+              var j = i + 1
+              while (j < n) {
+                val mult = row(i) * row(j)
+                localATA(i)(j) += mult
+                localATA(j)(i) += mult
+                j += 1
+              }
             }
             i += 1
           }
@@ -70,20 +89,24 @@ object MatrixSquare {
         }
         a
     }
+
+    // undo normalization
+    for(i <- 0 until n) for(j <- i until n) {
+      fullata(i)(j) = if (i == j) colMags(i)
+                      else if (gamma / colMags(i) > 1) fullata(i)(j)
+                      else fullata(i)(j) * colMags(i) / gamma
+      fullata(j)(i) = fullata(i)(j)
+    }
+
     fullata
   }
 
 
-/**
- * TODO: javadoc Square a tall skinny A^TA given matrix efficienty
- */
-  def square(matrix: RDD[Array[Double]]) : Array[Array[Double]] = {
+  /**
+   * TODO: javadoc Square a tall skinny A^TA given matrix efficienty
+   */
+  def square(matrix: RDD[Array[Double]]): Array[Array[Double]] = {
     val n = matrix.first.size
-
-    if (k < 1 || k > n) {
-      throw new IllegalArgumentException(
-        "Request up to n singular values k=$k n=$n")
-    }
 
     // Compute A^T A
     val fullata = matrix.mapPartitions {
