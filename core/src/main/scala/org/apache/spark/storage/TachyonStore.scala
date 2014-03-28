@@ -38,7 +38,7 @@ private class TachyonStore(
     blockManager: BlockManager,
     tachyonManager: TachyonBlockManager)
   extends BlockStore(blockManager: BlockManager) with Logging {
-  
+
   logInfo("TachyonStore started")
 
   override def getSize(blockId: BlockId): Long = {
@@ -49,7 +49,7 @@ private class TachyonStore(
   override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult =  {
     putToTachyonStore(blockId, _bytes, true)
   }
-  
+
   override def putValues(
     blockId: BlockId,
     values: ArrayBuffer[Any],
@@ -79,13 +79,13 @@ private class TachyonStore(
     logDebug("Attempting to put block " + blockId + " into Tachyon")
     val startTime = System.currentTimeMillis
     val file = tachyonManager.getFile(blockId)
-    val os = file.getOutStream(WriteType.MUST_CACHE)
+    val os = file.getOutStream(WriteType.TRY_CACHE)
     os.write(bytes.array())
     os.close()
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file in Tachyon in %d ms".format(
       blockId, Utils.bytesToString(bytes.limit), (finishTime - startTime)))
-    
+
     if (returnValues) {
       PutResult(_bytes.limit(), Right(_bytes.duplicate()))
     } else {
@@ -105,7 +105,7 @@ private class TachyonStore(
   override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
     getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
   }
-  
+
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     val file = tachyonManager.getFile(blockId)
@@ -115,8 +115,8 @@ private class TachyonStore(
       val size = file.length
       val bs = new Array[Byte](size.asInstanceOf[Int])
       is.read(bs, 0, size.asInstanceOf[Int])
-      buffer = ByteBuffer.wrap(bs) 
-    } 
+      buffer = ByteBuffer.wrap(bs)
+    }
     Some(buffer)
   }
 
