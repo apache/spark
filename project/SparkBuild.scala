@@ -309,7 +309,7 @@ object SparkBuild extends Build {
         "org.spark-project.akka"    %% "akka-slf4j"       % "2.2.3-shaded-protobuf"  excludeAll(excludeNetty),
         "org.spark-project.akka"    %% "akka-testkit"     % "2.2.3-shaded-protobuf" % "test",
         "org.json4s"                %% "json4s-jackson"   % "3.2.6" excludeAll(excludeScalap),
-        "it.unimi.dsi"               % "fastutil"         % "6.4.4",
+        "it.unimi.dsi"               % "fastutil"         % "6.5.11",
         "colt"                       % "colt"             % "1.2.0",
         "org.apache.mesos"           % "mesos"            % "0.13.0",
         "commons-net"                % "commons-net"      % "2.2",
