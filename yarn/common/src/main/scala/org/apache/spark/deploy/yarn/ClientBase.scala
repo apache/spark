@@ -69,7 +69,7 @@ trait ClientBase extends Logging {
   // TODO(harvey): This could just go in ClientArguments.
   def validateArgs() = {
     Map(
-      (System.getenv("SPARK_JAR") == null) -> "Error: You must set SPARK_JAR environment variable!",
+      ((System.getenv("SPARK_JAR") == null) && (System.getProperty("SPARK_JAR") == null)) -> "Error: You must set SPARK_JAR environment variable!",
       ((args.userJar == null && args.amClass == classOf[ApplicationMaster].getName) ->
           "Error: You must specify a user jar when running in standalone mode!"),
       (args.userClass == null) -> "Error: You must specify a user class!",
@@ -207,8 +207,12 @@ trait ClientBase extends Logging {
 
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
 
+    val sparkJar = System.getenv("SPARK_JAR") match {
+      case null => System.getProperty("SPARK_JAR")
+      case s: String => s
+    }
     Map(
-      ClientBase.SPARK_JAR -> System.getenv("SPARK_JAR"), ClientBase.APP_JAR -> args.userJar,
+      ClientBase.SPARK_JAR -> sparkJar, ClientBase.APP_JAR -> args.userJar,
       ClientBase.LOG4J_PROP -> System.getenv("SPARK_LOG4J_CONF")
     ).foreach { case(destName, _localPath) =>
       val localPath: String = if (_localPath != null) _localPath.trim() else ""
