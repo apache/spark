@@ -24,7 +24,6 @@ DIR=$(dirname $(realpath $0))
 if [ ! -d $DIR ] || [ -z $DIR ]; then
   DIR="./sbt/"
 fi
-echo $DIR
 . $DIR/sbt-launch-lib.bash
 
 
