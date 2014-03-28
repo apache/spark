@@ -39,18 +39,17 @@ JAVA_VERSION=$($java_cmd -version 2>&1 | sed 's/java version "\(.*\)\.\(.*\)\..*
 echo "========================================================================="
 echo "Running Apache RAT checks"
 echo "========================================================================="
-
 dev/check-license
 
 echo "========================================================================="
 echo "Running Scala style checks"
 echo "========================================================================="
-sbt/sbt clean scalastyle
+dev/scalastyle
 
 echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
-sbt/sbt assembly test
+sbt/sbt assembly test | grep -v "info.*Resolving"
 
 echo "========================================================================="
 echo "Running PySpark tests"
