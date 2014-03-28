@@ -78,15 +78,16 @@ private[spark] object MetadataCleaner {
     conf.getInt("spark.cleaner.ttl", -1)
   }
 
-  def getDelaySeconds(conf: SparkConf, cleanerType: MetadataCleanerType.MetadataCleanerType): Int =
-  {
-    conf.get(MetadataCleanerType.systemProperty(cleanerType), getDelaySeconds(conf).toString)
-      .toInt
+  def getDelaySeconds(
+      conf: SparkConf,
+      cleanerType: MetadataCleanerType.MetadataCleanerType): Int = {
+    conf.get(MetadataCleanerType.systemProperty(cleanerType), getDelaySeconds(conf).toString).toInt
   }
 
-  def setDelaySeconds(conf: SparkConf, cleanerType: MetadataCleanerType.MetadataCleanerType,
-      delay: Int)
-  {
+  def setDelaySeconds(
+      conf: SparkConf,
+      cleanerType: MetadataCleanerType.MetadataCleanerType,
+      delay: Int) {
     conf.set(MetadataCleanerType.systemProperty(cleanerType),  delay.toString)
   }
 

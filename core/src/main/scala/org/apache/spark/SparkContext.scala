@@ -230,6 +230,7 @@ class SparkContext(
 
   private[spark] val cleaner = new ContextCleaner(this)
   cleaner.start()
+
   postEnvironmentUpdate()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
@@ -773,7 +774,7 @@ class SparkContext(
    * filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
    */
   def addJar(path: String) {
-    if (path  == null) {
+    if (path == null) {
       logWarning("null specified as parameter to addJar")
     } else {
       var key = ""

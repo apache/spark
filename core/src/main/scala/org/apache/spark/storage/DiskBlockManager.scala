@@ -90,7 +90,7 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
 
   def getFile(blockId: BlockId): File = getFile(blockId.name)
 
-  /** Check if disk block manager has a block */
+  /** Check if disk block manager has a block. */
   def containsBlock(blockId: BlockId): Boolean = {
     getBlockLocation(blockId).file.exists()
   }

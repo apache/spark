@@ -17,14 +17,14 @@
 
 package org.apache.spark.util
 
-import scala.collection.{JavaConversions, immutable}
-
-import java.util
 import java.lang.ref.WeakReference
+import java.util
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+
+import scala.collection.JavaConversions
 
 import org.apache.spark.Logging
-import java.util.concurrent.atomic.AtomicInteger
 
 private[util] case class TimeStampedWeakValue[T](timestamp: Long, weakValue: WeakReference[T]) {
   def this(timestamp: Long, value: T) = this(timestamp, new WeakReference[T](value))

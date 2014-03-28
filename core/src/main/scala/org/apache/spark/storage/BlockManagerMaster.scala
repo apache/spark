@@ -82,7 +82,7 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
 
   /**
    * Check if block manager master has a block. Note that this can be used to check for only
-   * those blocks that are expected to be reported to block manager master.
+   * those blocks that are reported to block manager master.
    */
   def contains(blockId: BlockId) = {
     !getLocations(blockId).isEmpty

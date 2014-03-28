@@ -167,7 +167,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
    * from the executors, but not from the driver.
    */
   private def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean) {
-    // TODO(aor): Consolidate usages of <driver>
+    // TODO: Consolidate usages of <driver>
     val removeMsg = RemoveBroadcast(broadcastId)
     blockManagerInfo.values
       .filter { info => removeFromDriver || info.blockManagerId.executorId != "<driver>" }
@@ -350,7 +350,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     // Note that this logic will select the same node multiple times if there aren't enough peers
     Array.tabulate[BlockManagerId](size) { i => peers((selfIndex + i + 1) % peers.length) }.toSeq
   }
-
 }
 
 

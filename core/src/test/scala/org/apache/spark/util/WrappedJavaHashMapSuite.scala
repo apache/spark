@@ -17,8 +17,8 @@
 
 package org.apache.spark.util
 
-import java.util
 import java.lang.ref.WeakReference
+import java.util
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.Random

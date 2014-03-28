@@ -185,6 +185,7 @@ object SparkEnv extends Logging {
     } else {
       new MapOutputTrackerWorker(conf)
     }
+
     // Have to assign trackerActor after initialization as MapOutputTrackerActor
     // requires the MapOutputTracker itself
     mapOutputTracker.trackerActor = registerOrLookup(

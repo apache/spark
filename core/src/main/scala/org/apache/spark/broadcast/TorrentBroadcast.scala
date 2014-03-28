@@ -72,7 +72,7 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
   }
 
   /**
-   * Remove all persisted state associated with this HTTP broadcast.
+   * Remove all persisted state associated with this Torrent broadcast.
    * @param removeFromDriver Whether to remove state from the driver.
    */
   override def unpersist(removeFromDriver: Boolean) {
@@ -177,13 +177,12 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
 }
 
 private[spark] object TorrentBroadcast extends Logging {
+  private lazy val BLOCK_SIZE = conf.getInt("spark.broadcast.blockSize", 4096) * 1024
   private var initialized = false
   private var conf: SparkConf = null
 
-  lazy val BLOCK_SIZE = conf.getInt("spark.broadcast.blockSize", 4096) * 1024
-
   def initialize(_isDriver: Boolean, conf: SparkConf) {
-    TorrentBroadcast.conf = conf //TODO: we might have to fix it in tests
+    TorrentBroadcast.conf = conf // TODO: we might have to fix it in tests
     synchronized {
       if (!initialized) {
         initialized = true

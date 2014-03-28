@@ -90,7 +90,7 @@ private[spark] object HttpBroadcast extends Logging {
   private var securityManager: SecurityManager = null
 
   // TODO: This shouldn't be a global variable so that multiple SparkContexts can coexist
-  val files = new TimeStampedHashSet[String]
+  private val files = new TimeStampedHashSet[String]
   private var cleaner: MetadataCleaner = null
 
   private val httpReadTimeout = TimeUnit.MILLISECONDS.convert(5, TimeUnit.MINUTES).toInt
@@ -195,7 +195,7 @@ private[spark] object HttpBroadcast extends Logging {
   def unpersist(id: Long, removeFromDriver: Boolean) = synchronized {
     SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver)
     if (removeFromDriver) {
-      val file = new File(broadcastDir, BroadcastBlockId(id).name)
+      val file = getFile(id)
       files.remove(file.toString)
       deleteBroadcastFile(file)
     }
@@ -217,10 +217,9 @@ private[spark] object HttpBroadcast extends Logging {
     }
   }
 
-  /** Delete the given broadcast file. */
   private def deleteBroadcastFile(file: File) {
     try {
-      if (!file.exists()) {
+      if (!file.exists) {
         logWarning("Broadcast file to be deleted does not exist: %s".format(file))
       } else if (file.delete()) {
         logInfo("Deleted broadcast file: %s".format(file))
@@ -229,7 +228,7 @@ private[spark] object HttpBroadcast extends Logging {
       }
     } catch {
       case e: Exception =>
-        logWarning("Exception while deleting broadcast file: %s".format(file), e)
+        logError("Exception while deleting broadcast file: %s".format(file), e)
     }
   }
 

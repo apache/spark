@@ -1090,7 +1090,6 @@ class DAGScheduler(
       eventProcessActor ! StopDAGScheduler
     }
     taskScheduler.stop()
-    listenerBus.stop()
   }
 }
 

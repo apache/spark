@@ -22,11 +22,9 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import akka.actor.ActorRef
 
 private[storage] object BlockManagerMessages {
-
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from the master to slaves.
   //////////////////////////////////////////////////////////////////////////////////
-
   sealed trait ToBlockManagerSlave
 
   // Remove a block from the slaves that have it. This can only be used to remove
@@ -50,7 +48,6 @@ private[storage] object BlockManagerMessages {
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from slaves to the master.
   //////////////////////////////////////////////////////////////////////////////////
-
   sealed trait ToBlockManagerMaster
 
   case class RegisterBlockManager(
@@ -122,5 +119,4 @@ private[storage] object BlockManagerMessages {
 
   // For testing. Have the master ask all slaves for the given block's storage level.
   case class AskForStorageLevels(blockId: BlockId) extends ToBlockManagerMaster
-
 }
