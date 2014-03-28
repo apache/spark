@@ -30,7 +30,7 @@ import org.apache.spark.annotation.DeveloperApi
  * Under the hood, it uses our OpenHashSet implementation.
  */
 @DeveloperApi
-class OpenHashMap[K >: Null : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
+class OpenHashMap[K : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
     initialCapacity: Int)
   extends Iterable[(K, V)]
   with Serializable {

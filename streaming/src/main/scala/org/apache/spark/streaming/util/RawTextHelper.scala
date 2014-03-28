@@ -19,40 +19,22 @@ package org.apache.spark.streaming.util
 
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
-import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
+import org.apache.spark.util.collection.OpenHashMap
 import scala.collection.JavaConversions.mapAsScalaMap
 
 private[streaming]
 object RawTextHelper {
 
-  /**
-   * Splits lines and counts the words in them using specialized object-to-long hashmap
-   * (to avoid boxing-unboxing overhead of Long in java/scala HashMap)
+  /** 
+   * Splits lines and counts the words.
    */
   def splitAndCountPartitions(iter: Iterator[String]): Iterator[(String, Long)] = {
-    val map = new OLMap[String]
-    var i = 0
-    var j = 0
-    while (iter.hasNext) {
-      val s = iter.next()
-      i = 0
-      while (i < s.length) {
-        j = i
-        while (j < s.length && s.charAt(j) != ' ') {
-          j += 1
-        }
-        if (j > i) {
-          val w = s.substring(i, j)
-          val c = map.getLong(w)
-          map.put(w, c + 1)
-        }
-        i = j
-        while (i < s.length && s.charAt(i) == ' ') {
-          i += 1
-        }
-      }
+    val map = new OpenHashMap[String,Long]
+    val tokenized = iter.flatMap(_.split(" ").filterNot(_.isEmpty))
+    tokenized.foreach{ s =>
+      map.changeValue(s, 1L, _ + 1L)
     }
-    map.toIterator.map{case (k, v) => (k, v)}
+    map.iterator
   }
 
   /**
