@@ -22,29 +22,22 @@ import org.apache.spark.rdd.RDD
 /**
  * DiscretizerModel provides a template with the basic methods for future discretizers.
  */
-trait DiscretizerModel extends Serializable {
+trait DiscretizerModel[T] extends Serializable {
+
   /**
-   * Return the thresholds used to discretized the given feature
+   * Discretizes values for the given data set using the model trained.
    *
-   * @param feature The number of the feature to discretize
+   * @param data RDD representing data points to discretize.
+   * @return RDD with values discretized
    */
-  def getThresholdsForFeature(feature: Int): Seq[Double]
+  def discretize(data: RDD[T]): RDD[T]
 
   /**
-   * Return the thresholds used to discretized the given features
+   * Discretizes values for the given data set using the model trained.
    *
-   * @param features The number of the feature to discretize
+   * @param data Data point to discretize.
+   * @return Data point with values discretized
    */
-  def getThresholdsForFeature(features: Seq[Int]): Map[Int, Seq[Double]]
-
-  /**
-   * Return the thresholds used to discretized the continuous features
-   */
-  def getThresholdsForContinuousFeatures: Map[Int, Seq[Double]]
-
-  /**
-   * Discretizes an RDD
-   */
-  def discretize: RDD[_]
+  def discretize(data: T): T
 
 }

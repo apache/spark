@@ -27,16 +27,16 @@ object EntropyMinimizationDiscretizerSuite {
   val nDatapoints = 50
   val nLabels = 3
   val nPartitions = 3
-	    
-	def generateLabeledData : Array[LabeledPoint] = {
-	    val rnd = new Random(42)
-	    val labels = Array.fill[Double](nLabels)(rnd.nextDouble)
-	    	    
-	    Array.fill[LabeledPoint](nDatapoints) {
-	        LabeledPoint(labels(rnd.nextInt(nLabels)),
-	                     Array.fill[Double](nFeatures)(rnd.nextDouble))
-	    } 
-	}
+
+  def generateLabeledData: Array[LabeledPoint] = {
+    val rnd = new Random(42)
+    val labels = Array.fill[Double](nLabels)(rnd.nextDouble)
+
+    Array.fill[LabeledPoint](nDatapoints) {
+      LabeledPoint(labels(rnd.nextInt(nLabels)),
+        Array.fill[Double](nFeatures)(rnd.nextDouble))
+    }
+  }
 }
 
 class EntropyMinimizationDiscretizerSuite extends FunSuite with LocalSparkContext {
@@ -56,10 +56,10 @@ class EntropyMinimizationDiscretizerSuite extends FunSuite with LocalSparkContex
 		val shuffledData = data.sortWith((lp1, lp2) => rnd.nextDouble < 0.5)
 		
 		val rdd = sc.parallelize(shuffledData, 3)
-		
-		val thresholds = EntropyMinimizationDiscretizer(rdd, Seq(0)).getThresholdsForFeature(0)
+
+		val discretizer = EntropyMinimizationDiscretizer.train(rdd, Seq(0))
 				
-		val thresholdsArray = thresholds.toArray
+		val thresholdsArray = discretizer.thresholds(0).toArray
 		if (math.abs(thresholdsArray(1) - 33.5) > 1.55) {
 		    fail("Selected thresholds aren't what they should be.")
 		}

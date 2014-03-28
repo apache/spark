@@ -17,143 +17,82 @@
 
 package org.apache.spark.mllib.discretization
 
-import scala.collection.mutable.Stack
+import scala.collection.mutable
 import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.util.InfoTheory
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.mllib.regression.LabeledPoint
-import scala.collection.mutable
-
 
 /**
- * This class contains methods to discretize continuous values with the method proposed in
- * [Fayyad and Irani, Multi-Interval Discretization of Continuous-Valued Attributes, 1993]
+ * This class contains methods to calculate thresholds to discretize continuous values with the
+ * method proposed by Fayyad and Irani in Multi-Interval Discretization of Continuous-Valued
+ * Attributes (1993).
+ *
+ * @param continuousFeaturesIndexes Indexes of features to be discretized.
+ * @param elementsPerPartition Maximum number of thresholds to treat in each RDD partition.
+ * @param maxBins Maximum number of bins for each discretized feature.
  */
 class EntropyMinimizationDiscretizer private (
-    @transient var data: RDD[LabeledPoint],
-    @transient var continousFeatures: Seq[Int],
-    var elementsPerPartition: Int = 18000,
-    var maxBins: Int = Int.MaxValue)
-  extends DiscretizerModel {
+    val continuousFeaturesIndexes: Seq[Int],
+    val elementsPerPartition: Int,
+    val maxBins: Int)
+  extends Serializable {
 
-  private var thresholds = Map.empty[Int, Seq[Double]]
-  private val partitions = { x : Long => math.ceil(x.toDouble / elementsPerPartition).toInt }
-
-  def this() = this(null, null)
+  private val partitions = { x: Long => math.ceil(x.toDouble / elementsPerPartition).toInt }
+  private val log2 = { x: Double => math.log(x) / math.log(2) }
 
   /**
-   * Sets the RDD[LabeledPoint] to be discretized
-   *
-   * @param data RDD[LabeledPoint] to be discretized
+   * Run the algorithm with the configured parameters on an input.
+   * @param data RDD of LabeledPoint's.
+   * @return A EntropyMinimizationDiscretizerModel with the thresholds to discretize.
    */
-  def setData(data: RDD[LabeledPoint]): EntropyMinimizationDiscretizer = {
-    this.data = data
-    this
-  }
+  def run(data: RDD[LabeledPoint]) = {
+    val labels2Int = data.context.broadcast(data.map(_.label).distinct.collect.zipWithIndex.toMap)
+    val nLabels = labels2Int.value.size
 
-  /**
-   * Sets the indexes of the features to be discretized
-   *
-   * @param continuousFeatures Indexes of features to be discretized
-   */
-  def setContinuousFeatures(continuousFeatures: Seq[Int]): EntropyMinimizationDiscretizer = {
-    this.continousFeatures = continuousFeatures
-    this
-  }
-
-  /**
-   * Sets the maximum number of elements that a partition should have
-   *
-   * @param ratio Maximum number of elements for a partition
-   * @return The Discretizer with the parameter changed
-   */
-  def setElementsPerPartition(ratio: Int): EntropyMinimizationDiscretizer = {
-    this.elementsPerPartition = ratio
-    this
-  }
-
-  /**
-   * Sets the maximum number of discrete values
-   *
-   * @param maxBins Maximum number of discrete values
-   * @return The Discretizer with the parameter changed
-   */
-  def setMaxBins(maxBins: Int): EntropyMinimizationDiscretizer = {
-    this.maxBins = maxBins
-    this
-  }
-  
-  /**
-   * Returns the thresholds used to discretized the given feature
-   *
-   * @param feature The number of the feature to discretize
-   */
-  def getThresholdsForFeature(feature: Int): Seq[Double] = {
-    thresholds.get(feature) match {
-      case Some(a) => a
-      case None =>
-        val featureValues = data.map({
-          case LabeledPoint(label, values) => (values(feature), label.toString.trim)
-        })
-        val sortedValues = featureValues.sortByKey()
-        val initial_candidates = initialThresholds(sortedValues)
-        val thresholdsForFeature = this.getThresholds(initial_candidates)
-        this.thresholds += ((feature, thresholdsForFeature))
-        thresholdsForFeature
-    }
-  }
-
-  /**
-   * Returns the thresholds used to discretized the given features
-   *
-   * @param features The number of the feature to discretize
-   */
-  def getThresholdsForFeature(features: Seq[Int]): Map[Int, Seq[Double]] = {
-    for (feature <- features diff this.thresholds.keys.toSeq) {
-      getThresholdsForFeature(feature)
+    var thresholds = Map.empty[Int, Seq[Double]]
+    for (i <- continuousFeaturesIndexes) {
+      val featureValues = data.map({
+        case LabeledPoint(label, values) => (values(i), labels2Int.value(label))
+      })
+      val sortedValues = featureValues.sortByKey()
+      val initialCandidates = initialThresholds(sortedValues, nLabels)
+      val thresholdsForFeature = this.getThresholds(initialCandidates, nLabels)
+      thresholds += ((i, thresholdsForFeature))
     }
 
-    this.thresholds.filter({ features.contains(_) })
-  }
+    new EntropyMinimizationDiscretizerModel(thresholds)
 
-  /**
-   * Returns the thresholds used to discretized the continuous features
-   */
-  def getThresholdsForContinuousFeatures: Map[Int, Seq[Double]] = {
-    for (feature <- continousFeatures diff this.thresholds.keys.toSeq) {
-      getThresholdsForFeature(feature)
-    }
-
-    this.thresholds
   }
 
   /**
    * Calculates the initial candidate treholds for a feature
-   * @param data RDD of (value, label) pairs
-   * @return RDD of (candidate, class frequencies between last and current candidate) pairs
+   * @param data RDD of (value, label) pairs.
+   * @param nLabels Number of distinct labels in the dataset.
+   * @return RDD of (candidate, class frequencies between last and current candidate) pairs.
    */
-  private def initialThresholds(data: RDD[(Double, String)]): RDD[(Double, Map[String,Int])] = {
+  private def initialThresholds(data: RDD[(Double, Int)], nLabels: Int) = {
     data.mapPartitions({ it =>
       var lastX = Double.NegativeInfinity
-      var lastY = ""
-      var result = Seq.empty[(Double, Map[String, Int])]
-      var freqs = Map.empty[String, Int]
+      var lastY = Int.MinValue
+      var result = Seq.empty[(Double, Array[Long])]
+      var freqs = Array.fill[Long](nLabels)(0L)
 
       for ((x, y) <- it) {
         if (x != lastX && y != lastY && lastX != Double.NegativeInfinity) {
           // new candidate and interval
           result = ((x + lastX) / 2, freqs) +: result
-          freqs = freqs.empty + ((y, 1))
+          freqs = Array.fill[Long](nLabels)(0L)
+          freqs(y) = 1L
         } else {
           // we continue on the same interval
-          freqs = freqs.updated(y, freqs.getOrElse(y, 0) + 1)
+          freqs(y) += 1
         }
         lastX = x
         lastY = y
       }
 
-      // we add last element as a candidate threshold for convenience 
+      // we add last element as a candidate threshold for convenience
       result = (lastX, freqs) +: result
 
       result.reverse.toIterator
@@ -165,7 +104,7 @@ class EntropyMinimizationDiscretizer private (
    *
    * @param candidates RDD of (value, label) pairs
    */
-  private def getThresholds(candidates: RDD[(Double, Map[String,Int])]): Seq[Double] = {
+  private def getThresholds(candidates: RDD[(Double, Array[Long])], nLabels: Int): Seq[Double] = {
 
     //Create queue
     val stack = new mutable.Queue[((Double, Double), Option[Double])]
@@ -184,7 +123,7 @@ class EntropyMinimizationDiscretizer private (
       if (nCands > 0) {
         cands = cands.coalesce(partitions(nCands))
 
-        evalThresholds(cands, lastThresh) match {
+        evalThresholds(cands, lastThresh, nLabels) match {
           case Some(th) =>
             result = th +: result
             stack.enqueue(((bounds._1, th), Some(th)))
@@ -203,89 +142,89 @@ class EntropyMinimizationDiscretizer private (
    * @param lastSelected last selected threshold to avoid selecting it again
    */
   private def evalThresholds(
-      candidates: RDD[(Double, Map[String, Int])],
-      lastSelected : Option[Double]) = {
+      candidates: RDD[(Double, Array[Long])],
+      lastSelected : Option[Double],
+      nLabels: Int) = {
 
     var result = candidates.map({
       case (cand, freqs) =>
-        (cand, freqs, Seq.empty[Int], Seq.empty[Int])
+        (cand, freqs, Array.empty[Long], Array.empty[Long])
     }).cache
 
     val numPartitions = candidates.partitions.size
-    val bc_numPartitions = candidates.context.broadcast(numPartitions)
+    val bcNumPartitions = candidates.context.broadcast(numPartitions)
 
     // stores accumulated freqs from left to right
-    val l_total = candidates.context.accumulator(Map.empty[String, Int])(MapAccumulator)
+    val bcLeftTotal = candidates.context.accumulator(Array.fill(nLabels)(0L))(ArrayAccumulator)
     // stores accumulated freqs from right to left
-    val r_total = candidates.context.accumulator(Map.empty[String, Int])(MapAccumulator)
+    val bcRightTotal = candidates.context.accumulator(Array.fill(nLabels)(0L))(ArrayAccumulator)
 
     // calculates accumulated frequencies for each candidate
-    (0 until numPartitions) foreach { l2r_i =>
+    (0 until numPartitions) foreach { l2rIndex =>
 
-      val bc_l_total = l_total.value
-      val bc_r_total = r_total.value
+      val leftTotal = bcLeftTotal.value
+      val rightTotal = bcRightTotal.value
 
       result =
         result.mapPartitionsWithIndex({ (slice, it) =>
 
-          val l2r = slice == l2r_i
-          val r2l = slice == bc_numPartitions.value - 1 - l2r_i
+          val l2r = slice == l2rIndex
+          val r2l = slice == bcNumPartitions.value - 1 - l2rIndex
 
           if (l2r && r2l) {
 
             // accumulate both from left to right and right to left
-            var partialResult = Seq.empty[(Double, Map[String, Int], Seq[Int], Seq[Int])]
-            var accum = Map.empty[String, Int]
+            var partialResult = Seq.empty[(Double, Array[Long], Array[Long], Array[Long])]
+            var accum = leftTotal
 
-            for ((cand, freqs, _, r_freqs) <- it) {
-              accum = Utils.sumFreqMaps(accum, freqs)
-              val l_freqs = Utils.sumFreqMaps(accum, bc_l_total).values.toList
-              partialResult = (cand, freqs, l_freqs, r_freqs) +: partialResult
+            for ((cand, freqs, _, rightFreqs) <- it) {
+              for (i <- 0 until nLabels) accum(i) += freqs(i)
+              partialResult = (cand, freqs, accum.clone, rightFreqs) +: partialResult
             }
 
-            l_total += accum
+            bcLeftTotal += accum
 
             val r2lIt = partialResult.iterator
-            partialResult = Seq.empty[(Double, Map[String, Int], Seq[Int], Seq[Int])]
-            accum = Map.empty[String, Int]
-            for ((cand, freqs, l_freqs, _) <- r2lIt) {
-              val r_freqs = Utils.sumFreqMaps(accum, bc_r_total).values.toList
-              accum = Utils.sumFreqMaps(accum, freqs)
-              partialResult = (cand, freqs, l_freqs, r_freqs) +: partialResult
+            partialResult = Seq.empty[(Double, Array[Long], Array[Long], Array[Long])]
+            accum = Array.fill[Long](nLabels)(0L)
+
+            for ((cand, freqs, leftFreqs, _) <- r2lIt) {
+              partialResult = (cand, freqs, leftFreqs, accum.clone) +: partialResult
+              for (i <- 0 until nLabels) accum(i) += freqs(i)
             }
-            r_total += accum
+
+            bcRightTotal += accum
 
             partialResult.iterator
 
           } else if (l2r) {
 
             // accumulate freqs from left to right
-            var partialResult = Seq.empty[(Double, Map[String, Int], Seq[Int], Seq[Int])]
-            var accum = Map.empty[String, Int]
+            var partialResult = Seq.empty[(Double, Array[Long], Array[Long], Array[Long])]
+            val accum = leftTotal
 
-            for ((cand, freqs, _, r_freqs) <- it) {
-              accum = Utils.sumFreqMaps(accum, freqs)
-              val l_freqs = Utils.sumFreqMaps(accum, bc_l_total).values.toList
-              partialResult = (cand, freqs, l_freqs, r_freqs) +: partialResult
+            for ((cand, freqs, _, rightFreqs) <- it) {
+              for (i <- 0 until nLabels) accum(i) += freqs(i)
+              partialResult = (cand, freqs, accum.clone, rightFreqs) +: partialResult
             }
 
-            l_total += accum
+            bcLeftTotal += accum
             partialResult.reverseIterator
 
           } else if (r2l) {
 
             // accumulate freqs from right to left
-            var partialResult = Seq.empty[(Double, Map[String, Int], Seq[Int], Seq[Int])]
-            var accum = Map.empty[String, Int]
             val r2lIt = it.toSeq.reverseIterator
 
-            for ((cand, freqs, l_freqs, _) <- r2lIt) {
-              val r_freqs = Utils.sumFreqMaps(accum, bc_r_total).values.toList
-              accum = Utils.sumFreqMaps(accum, freqs)
-              partialResult = (cand, freqs, l_freqs, r_freqs) +: partialResult
+            var partialResult = Seq.empty[(Double, Array[Long], Array[Long], Array[Long])]
+            val accum = rightTotal
+
+            for ((cand, freqs, leftFreqs, _) <- r2lIt) {
+              partialResult = (cand, freqs, leftFreqs, accum.clone) +: partialResult
+              for (i <- 0 until nLabels) accum(i) += freqs(i)
             }
 
-            r_total += accum
+            bcRightTotal += accum
 
             partialResult.iterator
 
@@ -297,6 +236,7 @@ class EntropyMinimizationDiscretizer private (
         .persist(StorageLevel.MEMORY_AND_DISK) // needed, otherwise spark repeats calculations
 
       result.foreachPartition({ _ => }) // Forces the iteration to be calculated
+
     }
 
     // calculate h(S)
@@ -304,27 +244,27 @@ class EntropyMinimizationDiscretizer private (
     // k: number of distinct classes
     // hs: entropy
 
-    val s  = l_total.value.values.reduce(_ + _)
-    val hs = InfoTheory.entropy(l_total.value.values.toSeq, s)
-    val k  = l_total.value.values.size
+    val s  = bcLeftTotal.value.reduce(_ + _)
+    val hs = InfoTheory.entropy(bcLeftTotal.value.toSeq, s)
+    val k  = bcLeftTotal.value.filter(_ != 0).size
 
     // select best threshold according to the criteria
-    val final_candidates =
+    val finalCandidates =
       result.flatMap({
-        case (cand, _, l_freqs, r_freqs) =>
+        case (cand, _, leftFreqs, rightFreqs) =>
 
-          val k1  = l_freqs.size
-          val s1  = if (k1 > 0) l_freqs.reduce(_ + _) else 0
-          val hs1 = InfoTheory.entropy(l_freqs, s1)
+          val k1  = leftFreqs.filter(_ != 0).size
+          val s1  = if (k1 > 0) leftFreqs.reduce(_ + _) else 0
+          val hs1 = InfoTheory.entropy(leftFreqs, s1)
 
-          val k2  = r_freqs.size
-          val s2  = if (k2 > 0) r_freqs.reduce(_ + _) else 0
-          val hs2 = InfoTheory.entropy(r_freqs, s2)
+          val k2  = rightFreqs.filter(_ != 0).size
+          val s2  = if (k2 > 0) rightFreqs.reduce(_ + _) else 0
+          val hs2 = InfoTheory.entropy(rightFreqs, s2)
 
-          val weighted_hs = (s1 * hs1 + s2 * hs2) / s
-          val gain        = hs - weighted_hs
-          val delta       = Utils.log2(3 ^ k - 2) - (k * hs - k1 * hs1 - k2 * hs2)
-          var criterion   = (gain - (Utils.log2(s - 1) + delta) / s) > -1e-5
+          val weightedHs = (s1 * hs1 + s2 * hs2) / s
+          val gain        = hs - weightedHs
+          val delta       = log2(3 ^ k - 2) - (k * hs - k1 * hs1 - k2 * hs2)
+          var criterion   = (gain - (log2(s - 1) + delta) / s) > -1e-5
 
           lastSelected match {
               case None =>
@@ -332,71 +272,46 @@ class EntropyMinimizationDiscretizer private (
           }
 
           if (criterion) {
-            Seq((weighted_hs, cand))
+            Seq((weightedHs, cand))
           } else {
             Seq.empty[(Double, Double)]
           }
       })
 
     // choose best candidates and partition data to make recursive calls
-    if (final_candidates.count > 0) {
-      val selected_threshold = final_candidates.reduce({ case ((whs1, cand1), (whs2, cand2)) =>
+    if (finalCandidates.count > 0) {
+      val selectedThreshold = finalCandidates.reduce({ case ((whs1, cand1), (whs2, cand2)) =>
         if (whs1 < whs2) (whs1, cand1) else (whs2, cand2)
-      })._2;
-      Some(selected_threshold)
+      })._2
+      Some(selectedThreshold)
     } else {
       None
     }
 
   }
 
-  /**
-   * Discretizes a value with a set of intervals.
-   *
-   * @param value The value to be discretized
-   * @param thresholds Thresholds used to asign a discrete value
-   */
-  private def assignDiscreteValue(value: Double, thresholds: Seq[Double]) = {
-    var aux = thresholds.zipWithIndex
-    while (value > aux.head._1) aux = aux.tail
-    aux.head._2
-  }
-
-  /**
-   * Discretizes an RDD of (label, array of values) pairs.
-   */
-  def discretize: RDD[LabeledPoint] = {
-    // calculate thresholds that aren't already calculated
-    getThresholdsForContinuousFeatures
-
-    val bc_thresholds = this.data.context.broadcast(this.thresholds)
-
-    // applies thresholds to discretize every continuous feature
-    data.map {
-      case LabeledPoint(label, values) =>
-        LabeledPoint(label,
-          values.zipWithIndex map {
-            case (value, i) =>
-              if (bc_thresholds.value.keySet contains i) {
-                assignDiscreteValue(value, bc_thresholds.value(i))
-              } else {
-                value
-              }
-          })
-    }
-  }
-
 }
 
 object EntropyMinimizationDiscretizer {
 
-  def apply(
-      data: RDD[LabeledPoint],
-      continuousFeatures: Seq[Int])
-    : EntropyMinimizationDiscretizer = {
-    new EntropyMinimizationDiscretizer(data, continuousFeatures)
-  }
+  /**
+   * Train a EntropyMinimizationDiscretizerModel given an RDD of LabeledPoint's.
+   * @param input RDD of LabeledPoint's.
+   * @param continuousFeaturesIndexes Indexes of features to be discretized.
+   * @param maxBins Maximum number of bins for each discretized feature.
+   * @param elementsPerPartition Maximum number of thresholds to treat in each RDD partition.
+   * @return A EntropyMinimizationDiscretizerModel which has the thresholds to discretize.
+   */
+  def train(
+      input: RDD[LabeledPoint],
+      continuousFeaturesIndexes: Seq[Int],
+      maxBins: Int = Int.MaxValue,
+      elementsPerPartition: Int = 20000)
+    : EntropyMinimizationDiscretizerModel = {
 
-  def apply: EntropyMinimizationDiscretizer = new EntropyMinimizationDiscretizer()
+    new EntropyMinimizationDiscretizer(continuousFeaturesIndexes, elementsPerPartition, maxBins)
+      .run(input)
+
+  }
 
 }

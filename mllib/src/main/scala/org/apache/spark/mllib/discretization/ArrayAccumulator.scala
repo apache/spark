@@ -19,22 +19,14 @@ package org.apache.spark.mllib.discretization
 
 import org.apache.spark.AccumulatorParam
 
-private[discretization] object MapAccumulator extends AccumulatorParam[Map[String, Int]] {
+private[discretization] object ArrayAccumulator extends AccumulatorParam[Array[Long]] {
 
-  def addInPlace(map1: Map[String, Int], map2: Map[String, Int]): Map[String, Int] = {
-
-    if (map1 isEmpty) {
-      map2
-    } else if (map2 isEmpty) {
-      map1
-    } else {
-      map2.foldLeft(map1)({ case (acc, (k,v)) => acc.updated(k, acc.getOrElse(k, 0) + 1) })
-    }
-
+  def addInPlace(array1: Array[Long], array2: Array[Long]): Array[Long] = {
+    array2.clone
   }
 
-  def zero(initialValue: Map[String, Int]): Map[String, Int] = {
-    Map.empty[String, Int]
-  }
+  def zero(initialValue: Array[Long]): Array[Long] = {
+    initialValue
+}
 
 }

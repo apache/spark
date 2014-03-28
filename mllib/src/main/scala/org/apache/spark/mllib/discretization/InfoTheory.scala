@@ -17,38 +17,30 @@
 
 package org.apache.spark.mllib.discretization
 
-object Utils {
+/**
+ * Object with some Information Theory methods.
+ */
+private[discretization] object InfoTheory {
 
-  implicit class MyRichSeq[T](val seq: Seq[T]) extends AnyVal {
-
-    def apply(indexes: Seq[Int]): Option[Seq[T]] = {
-      if (indexes.length == 0) {
-        None
-      } else {
-        Some(indexes.map(i => seq(i)))
-      }
-    }
+  /**
+   * Calculate entropy for the given frequencies.
+   *
+   * @param freqs Frequencies of each different class
+   * @param n Number of elements
+   */
+  def entropy(freqs: Seq[Long], n: Long): Double = {
+    freqs.aggregate(0.0)({ case (h, q) =>
+      h + (if (q == 0) 0  else (q.toDouble / n) * (math.log(q.toDouble / n) / math.log(2)))
+    }, { case (h1, h2) => h1 + h2 }) * -1
   }
 
-  def sumFreqMaps[A](map1: Map[A, Int],
-      map2: Map[A, Int]) = {
-    if (map1 isEmpty) {
-      map2
-    } else if (map2 isEmpty) {
-      map1
-    } else {
-      Map.empty[A, Int] ++
-        (for ((y1, x1) <- map1; (y2, x2) <- map2 if (y1 == y2))
-          yield ((y1, x1 + x2))) ++
-        (for (y <- (map1.keySet diff map2.keySet))
-          yield ((y, map1(y)))) ++
-        (for (y <- (map2.keySet diff map1.keySet))
-          yield ((y, map2(y))))
-    }
-  }
-
-  @inline def log2(x: Double) = {
-    math.log(x) / math.log(2)
+  /**
+   * Calculate entropy for the given frequencies.
+   *
+   * @param freqs Frequencies of each different class
+   */
+  def entropy(freqs: Seq[Long]): Double = {
+    entropy(freqs, freqs.reduce(_ + _))
   }
 
 }
