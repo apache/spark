@@ -33,7 +33,9 @@ trait StringRegexExpression {
 
   type EvaluatedType = Any
   
-  def escape(v: String): String = v
+  def escape(v: String): String
+  def matches(regex: Pattern, str: String): Boolean
+  
   def nullable: Boolean = true
   def dataType: DataType = BooleanType
   
@@ -65,7 +67,7 @@ trait StringRegexExpression {
         if(regex == null) {
           null
         } else {
-          regex.matcher(l.asInstanceOf[String]).matches
+          matches(regex, l.asInstanceOf[String])
         }
       }
     }
@@ -106,10 +108,14 @@ case class Like(left: Expression, right: Expression)
     
     sb.toString()
   }
+  
+  override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 }
 
 case class RLike(left: Expression, right: Expression) 
   extends BinaryExpression with StringRegexExpression {
   
   def symbol = "RLIKE"
+  override def escape(v: String): String = v
+  override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
 }

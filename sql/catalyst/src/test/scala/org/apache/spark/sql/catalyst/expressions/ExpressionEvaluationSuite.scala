@@ -111,91 +111,87 @@ class ExpressionEvaluationSuite extends FunSuite {
       }
     }
   }
-  
-  val c1 = BoundReference(0, AttributeReference("a", StringType)())  // null
-  val c2 = BoundReference(1, AttributeReference("b", StringType)())  // "addb"
-  val c3 = BoundReference(2, AttributeReference("c", StringType)())  // "a"
-  val c4 = BoundReference(3, AttributeReference("d", StringType)())  // "abdef"
-  val c5 = BoundReference(4, AttributeReference("e", StringType)())  // "a_%b"
-  val c6 = BoundReference(5, AttributeReference("f", StringType)())  // "a\\__b"
-  val c7 = BoundReference(6, AttributeReference("g", StringType)())  // "a%\\%b"
-  val c8 = BoundReference(7, AttributeReference("h", StringType)())  // "a%"
-  val c9 = BoundReference(8, AttributeReference("i", StringType)())  // "**"
 
-  val cs1: String = null
-  val cs2 = "addb"
-  val cs3 = "a"
-  val cs4 = "abdef"
-  val cs5 = "a_%b"
-  val cs6 = "a\\__b"
-  val cs7 = "a%\\%b"
-  val cs8 = "a%"
-  val cs9 = "**"
-  val regexData: Row = new GenericRow(Array[Any](cs1, cs2, cs3, cs4, cs5, cs6, cs7, cs8, cs9))
+  def evaluate(expression: Expression, inputRow: Row = EmptyRow): Any = {
+    expression.apply(inputRow)
+  }
+
+  def checkEvaluation(expression: Expression, expected: Any, inputRow: Row = EmptyRow): Unit = {
+    val actual = try evaluate(expression, inputRow) catch {
+      case e: Exception => fail(s"Exception evaluating $expression", e)
+    }
+    if(actual != expected) {
+      val input = if(inputRow == EmptyRow) "" else s", input: $inputRow"
+      fail(s"Incorrect Evaluation: $expression, actual: $actual, expected: $expected$input")
+    }
+  }
+
+  test("LIKE literal Regular Expression") {
+    checkEvaluation(Literal(null, StringType).like("a"), null)
+    checkEvaluation(Literal(null, StringType).like(Literal(null, StringType)), null)
+    checkEvaluation("abdef" like "abdef", true)
+    checkEvaluation("a_%b" like "a\\__b", true)
+    checkEvaluation("addb" like "a_%b", true)
+    checkEvaluation("addb" like "a\\__b", false)
+    checkEvaluation("addb" like "a%\\%b", false)
+    checkEvaluation("a_%b" like "a%\\%b", true)
+    checkEvaluation("addb" like "a%", true)
+    checkEvaluation("addb" like "**", false)
+    checkEvaluation("abc" like "a%", true)
+    checkEvaluation("abc"  like "b%", false)
+    checkEvaluation("abc"  like "bc%", false)
+  }
+  
+  test("LIKE Non-literal Regular Expression") {
+    val regEx = 'a.string.at(0)
+    checkEvaluation("abcd" like regEx, null, new GenericRow(Array[Any](null)))
+    checkEvaluation("abdef" like regEx, true, new GenericRow(Array[Any]("abdef")))
+    checkEvaluation("a_%b" like regEx, true, new GenericRow(Array[Any]("a\\__b")))
+    checkEvaluation("addb" like regEx, true, new GenericRow(Array[Any]("a_%b")))
+    checkEvaluation("addb" like regEx, false, new GenericRow(Array[Any]("a\\__b")))
+    checkEvaluation("addb" like regEx, false, new GenericRow(Array[Any]("a%\\%b")))
+    checkEvaluation("a_%b" like regEx, true, new GenericRow(Array[Any]("a%\\%b")))
+    checkEvaluation("addb" like regEx, true, new GenericRow(Array[Any]("a%")))
+    checkEvaluation("addb" like regEx, false, new GenericRow(Array[Any]("**")))
+    checkEvaluation("abc" like regEx, true, new GenericRow(Array[Any]("a%")))
+    checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("b%")))
+    checkEvaluation("abc" like regEx, false, new GenericRow(Array[Any]("bc%")))
+  }
+
+  test("RLIKE literal Regular Expression") {
+    checkEvaluation("abdef" rlike "abdef", true)
+    checkEvaluation("abbbbc" rlike "a.*c", true)
     
-  regexTest(regexData, "Like - pattern with Dynamic regex string", Like(_, _), 
-    (c1, c3, null) :: // null, "a"
-    (c1, c1, null) :: // null, null
-    (c4, c4, true) ::  // "abdef", "abdef"
-    (c5, c6, true) ::  // "a_%b", "a\\__b"
-    (c2, c5, true) ::  // "addb", "a_%b"
-    (c2, c6, false) :: // "addb", "a\\__b"
-    (c2, c7, false) :: // "addb", "a%\\%b"
-    (c5, c7, true) ::  // "a_%b", "a%\\%b"
-    (c2, c8, true) ::  // "addb", "a%"
-    (c2, c9, false) ::  // "addb", "**"
-    Nil
-  )
-  
-  regexTest(regexData, "Like - pattern with Literal regex string", Like(_, _), 
-    (Literal(cs1), Literal(cs3), null) :: // null, "a"
-    (Literal(cs1), Literal(cs1), null) :: // null, null
-    (Literal(cs4), Literal(cs4), true) ::  // "abdef", "abdef"
-    (Literal(cs5), Literal(cs6), true) ::  // "a_%b", "a\\__b"
-    (Literal(cs2), Literal(cs5), true) ::  // "addb", "a_%b"
-    (Literal(cs2), Literal(cs6), false) :: // "addb", "a\\__b"
-    (Literal(cs2), Literal(cs7), false) :: // "addb", "a%\\%b"
-    (Literal(cs5), Literal(cs7), true) ::  // "a_%b", "a%\\%b"
-    (Literal(cs2), Literal(cs8), true) ::  // "addb", "a%"
-    (Literal(cs2), Literal(cs9), false) ::  // "addb", "**"
-    Nil
-  )
-  
-  regexTest(regexData, "RLike - pattern with Literal regex string", RLike(_, _), 
-    (Literal(cs4), Literal(cs4), true) ::  // "abdef", "abdef"
-    (Literal("abbbbc"), Literal("a.*c"), true) ::
-    (Literal("abbbbc"), Literal("**"), classOf[java.util.regex.PatternSyntaxException]) ::
-    Nil
-  )
-  
-  def regexTest(row: Row, name: String, op: (Expression, Expression) => Expression,  
-    truthTable: Seq[(Expression, Expression, Any)]) {
+    checkEvaluation("fofo" rlike "^fo", true)
+    checkEvaluation("fo\no" rlike "^fo\no$", true)
+    checkEvaluation("Bn" rlike "^Ba*n", true)
+    checkEvaluation("afofo" rlike "fo", true)
+    checkEvaluation("afofo" rlike "^fo", false)
+    checkEvaluation("Baan" rlike "^Ba?n", false)
+    checkEvaluation("axe" rlike "pi|apa", false)
+    checkEvaluation("pip" rlike "^(pi)*$", false)
 
-    test(s"regex: $name") {
-      truthTable.foreach {
-        case (l, r, null) =>
-          val expr = op(l, r)
-          val result = expr.apply(row)
-          if (result != null) fail(s"$expr should not evaluate to $result, expected: null")
-        case (l, r, answer: Class[_]) =>
-          val expr = op(l, r)
-          try{
-            expr.apply(row)
-            // will fail if no exception thrown
-            fail(s"$expr should throw exception ${answer.getCanonicalName()}, but it didn't")
-          } catch {
-            // raise by fail() method
-            case x if (x.isInstanceOf[org.scalatest.exceptions.TestFailedException]) => throw x
-            // the same exception as expected it, do nothing
-            case x if answer.getCanonicalName() == x.getClass().getCanonicalName() =>
-            case x => fail(s"$expr should not throw exception $x, expected: $answer")
-          }
-        case (l, r, answer) =>
-          val expr = op(l, r)
-          val result = expr.apply(row)
-          if (result != answer)
-            fail(s"$expr should not evaluate to $result, expected: $answer")
-      }
+    checkEvaluation("abc"  rlike "^ab", true)
+    checkEvaluation("abc"  rlike "^bc", false)
+    checkEvaluation("abc"  rlike "^ab", true)
+    checkEvaluation("abc"  rlike "^bc", false)
+
+    intercept[java.util.regex.PatternSyntaxException] {
+      evaluate("abbbbc" rlike "**")
+    }
+  }
+
+  test("RLIKE Non-literal Regular Expression") {
+    val regEx = 'a.string.at(0)
+    checkEvaluation("abdef" rlike regEx, true, new GenericRow(Array[Any]("abdef")))
+    checkEvaluation("abbbbc" rlike regEx, true, new GenericRow(Array[Any]("a.*c")))
+    checkEvaluation("fofo" rlike regEx, true, new GenericRow(Array[Any]("^fo")))
+    checkEvaluation("fo\no" rlike regEx, true, new GenericRow(Array[Any]("^fo\no$")))
+    checkEvaluation("Bn" rlike regEx, true, new GenericRow(Array[Any]("^Ba*n")))
+
+    intercept[java.util.regex.PatternSyntaxException] {
+      evaluate("abbbbc" rlike regEx, new GenericRow(Array[Any]("**")))
     }
   }
 }
+

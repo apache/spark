@@ -71,6 +71,9 @@ package object dsl {
     def === (other: Expression) = Equals(expr, other)
     def != (other: Expression) = Not(Equals(expr, other))
 
+    def like(other: Expression) = Like(expr, other)
+    def rlike(other: Expression) = RLike(expr, other)
+
     def asc = SortOrder(expr, Ascending)
     def desc = SortOrder(expr, Descending)
 
@@ -91,7 +94,10 @@ package object dsl {
     implicit def symbolToUnresolvedAttribute(s: Symbol) = analysis.UnresolvedAttribute(s.name)
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s = sym.name }
-    implicit class DslString(val s: String) extends ImplicitAttribute
+    implicit class DslString(val s: String) extends ImplicitOperators {
+      def expr: Expression = Literal(s)
+      def attr = analysis.UnresolvedAttribute(s)
+    }
 
     abstract class ImplicitAttribute extends ImplicitOperators {
       def s: String
@@ -111,6 +117,8 @@ package object dsl {
 
       // Protobuf terminology
       def required = a.withNullability(false)
+
+      def at(ordinal: Int) = BoundReference(ordinal, a)
     }
   }
 
