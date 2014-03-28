@@ -278,7 +278,8 @@ that originally created it.
 
 In addition, each RDD can be stored using a different *storage level*, allowing you, for example, to
 persist the dataset on disk, or persist it in memory but as serialized Java objects (to save space),
-or even replicate it across nodes. These levels are chosen by passing a
+or replicate it across nodes, or store the data in off-heap memory in [Tachyon](http://tachyon-project.org/).
+These levels are chosen by passing a
 [`org.apache.spark.storage.StorageLevel`](api/core/index.html#org.apache.spark.storage.StorageLevel)
 object to `persist()`. The `cache()` method is a shorthand for using the default storage level,
 which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The complete set of
@@ -309,6 +310,14 @@ available storage levels is:
     recomputing them on the fly each time they're needed. </td>
 </tr>
 <tr>
+  <td> OFF_HEAP  </td>
+  <td> Store RDD in a <i>serialized</i> format in Tachyon.
+    This is generally more space-efficient than deserialized objects, especially when using a
+    <a href="tuning.html">fast serializer</a>, but more CPU-intensive to read.
+    This also significantly reduces the overheads of GC.
+  </td>
+</tr>
+<tr>
   <td> DISK_ONLY </td>
   <td> Store the RDD partitions only on disk. </td>
 </tr>
@@ -324,23 +333,28 @@ Spark's storage levels are meant to provide different trade-offs between memory 
 efficiency. It allows uses to choose memory, disk, or Tachyon for storing data. We recommend going
 through the following process to select one:
 
-* If your RDDs fit comfortably with the default storage level (`MEMORY_ONLY`), leave them that way. This is the most
-  CPU-efficient option, allowing operations on the RDDs to run as fast as possible.
-* If not, try using `MEMORY_ONLY_SER` and [selecting a fast serialization library](tuning.html) to make the objects
-  much more space-efficient, but still reasonably fast to access. You can also use `Tachyon` mode
-  to store the data off the heap in [Tachyon](http://tachyon-project.org/). This will significantly
-  reduce JVM GC overhead.
-* Don't spill to disk unless the functions that computed your datasets are expensive, or they filter a large
-  amount of the data. Otherwise, recomputing a partition is about as fast as reading it from disk.
-* Use the replicated storage levels if you want fast fault recovery (e.g. if using Spark to serve requests from a web
-  application). *All* the storage levels provide full fault tolerance by recomputing lost data, but the replicated ones
-  let you continue running tasks on the RDD without waiting to recompute a lost partition.
+* If your RDDs fit comfortably with the default storage level (`MEMORY_ONLY`), leave them that way.
+  This is the most CPU-efficient option, allowing operations on the RDDs to run as fast as possible.
+
+* If not, try using `MEMORY_ONLY_SER` and [selecting a fast serialization library](tuning.html) to
+make the objects much more space-efficient, but still reasonably fast to access. You can also use
+`OFF_HEAP` mode to store the data off the heap in [Tachyon](http://tachyon-project.org/). This will
+significantly reduce JVM GC overhead.
+
+* Don't spill to disk unless the functions that computed your datasets are expensive, or they filter
+a large amount of the data. Otherwise, recomputing a partition is about as fast as reading it from
+disk.
+
+* Use the replicated storage levels if you want fast fault recovery (e.g. if using Spark to serve
+requests from a web application). *All* the storage levels provide full fault tolerance by
+recomputing lost data, but the replicated ones let you continue running tasks on the RDD without
+waiting to recompute a lost partition.
 
 If you want to define your own storage level (say, with replication factor of 3 instead of 2), then
 use the function factor method `apply()` of the
 [`StorageLevel`](api/core/index.html#org.apache.spark.storage.StorageLevel$) singleton object.
 
-Spark has a block manager inside the Executors that let you chose memory, disk, or Tachyon. The
+Spark has a block manager inside the Executors that let you chose memory, disk, or off-heap. The
 latter is for storing RDDs off-heap outside the Executor JVM on top of the memory management system
 [Tachyon](http://tachyon-project.org/). This mode has the following advantages:
 
