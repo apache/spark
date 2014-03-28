@@ -213,7 +213,6 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val rets = DoubleMatrix.diag(new DoubleMatrix(s))
     val retv = new DoubleMatrix(v)
 
-
     // check individual decomposition  
     assertMatrixApproximatelyEquals(retu, svd(0))
     assertMatrixApproximatelyEquals(rets, DoubleMatrix.diag(svd(1)))
