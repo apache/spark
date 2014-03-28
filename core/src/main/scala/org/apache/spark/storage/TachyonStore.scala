@@ -17,6 +17,7 @@
 
 package org.apache.spark.storage
 
+import java.io.IOException
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
@@ -109,13 +110,28 @@ private class TachyonStore(
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     val file = tachyonManager.getFile(blockId)
+    if (file == null || file.getLocationHosts().size == 0) {
+      return None
+    }
     val is = file.getInStream(ReadType.CACHE)
     var buffer: ByteBuffer = null
-    if (is != null){
-      val size = file.length
-      val bs = new Array[Byte](size.asInstanceOf[Int])
-      is.read(bs, 0, size.asInstanceOf[Int])
-      buffer = ByteBuffer.wrap(bs)
+    try {
+      if (is != null) {
+        val size = file.length
+        val bs = new Array[Byte](size.asInstanceOf[Int])
+        val fetchSize = is.read(bs, 0, size.asInstanceOf[Int])
+        buffer = ByteBuffer.wrap(bs)
+        if (fetchSize != size) {
+          logWarning("Failed to fetch the block " + blockId + " from Tachyon : Size " + size +
+            " is not equal to fetched size " + fetchSize)
+          return None
+        }
+      }
+    } catch {
+        case ioe: IOException => {
+          logWarning("Failed to fetch the block " + blockId + " from Tachyon", ioe)
+          return None
+        }
     }
     Some(buffer)
   }
