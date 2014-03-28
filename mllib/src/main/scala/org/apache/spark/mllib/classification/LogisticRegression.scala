@@ -20,6 +20,8 @@ package org.apache.spark.mllib.classification
 import scala.math.round
 
 import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
@@ -38,12 +40,60 @@ class LogisticRegressionModel(
     override val weights: Array[Double],
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept)
-  with ClassificationModel with Serializable {
+  with BinaryClassificationModel with Serializable {
+
+  /**
+   * Predict probabilties for a single data point using the model trained.
+   *
+   * @param testData array representing a single data point
+   * @return Double prediction from the trained model
+   */
 
   override def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
       intercept: Double) = {
-    val margin = dataMatrix.mmul(weightMatrix).get(0) + intercept
-    round(1.0/ (1.0 + math.exp(margin * -1)))
+    if (predictScore(dataMatrix, weightMatrix, intercept) < 0) 0.0 else 1.0
+  }
+
+  /**
+   * Returns true label and predicted score using the model trained.
+   *
+   * @param labeledData array representing an array of labelled data
+   * @return Double with score of linear model. One can obtain probabilities by
+   *         applying the logistic (or sigmoid) function
+   */
+  def predictScore(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
+      intercept: Double) = {
+    // margin
+    dataMatrix.mmul(weightMatrix).get(0) + intercept
+  }
+
+  /**
+   * Score values for the given data set using the model trained.
+   *
+   * @param testData RDD representing data points to be predicted
+   * @return RDD[Double] where each entry contains the corresponding prediction
+   */
+  def score(testData: RDD[Array[Double]]): RDD[Double] = {
+    // A small optimization to avoid serializing the entire model. Only the weightsMatrix
+    // and intercept is needed.
+    val localWeights = weightsMatrix
+    val localIntercept = intercept
+
+    testData.map { x =>
+      val dataMatrix = new DoubleMatrix(1, x.length, x:_*)
+      predictScore(dataMatrix, localWeights, localIntercept)
+    }
+  }
+
+  /**
+   * Predict values for a single data point using the model trained.
+   *
+   * @param testData array representing a single data point
+   * @return Double prediction from the trained model
+   */
+  def score(testData: Array[Double]): Double = {
+    val dataMat = new DoubleMatrix(1, testData.length, testData:_*)
+    predictScore(dataMat, weightsMatrix, intercept)
   }
 }
 

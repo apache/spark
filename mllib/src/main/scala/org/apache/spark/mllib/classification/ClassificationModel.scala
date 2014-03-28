@@ -35,4 +35,20 @@ trait ClassificationModel extends Serializable {
    * @return Int prediction from the trained model
    */
   def predict(testData: Array[Double]): Double
+
+  /**
+   * Score values for the given data set using the model trained.
+   *
+   * @param testData RDD representing data points to be predicted
+   * @return RDD[Double] where each entry contains the corresponding prediction
+   */
+  def score(testData: RDD[Array[Double]]): RDD[Double]
+
+  /**
+   * Score values for a single data point using the model trained.
+   *
+   * @param testData array representing a single data point
+   * @return Double prediction from the trained model
+   */
+  def score(testData: Array[Double]): Double
 }

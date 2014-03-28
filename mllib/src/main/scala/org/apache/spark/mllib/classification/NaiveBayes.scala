@@ -46,6 +46,11 @@ class NaiveBayesModel(val pi: Array[Double], val theta: Array[Array[Double]])
     val result = _pi.add(_theta.mmul(dataMatrix))
     result.argmax()
   }
+
+  /// same as predict in this case
+  def score(testData: RDD[Array[Double]]): RDD[Double] = testData.map(score)
+
+  def score(testData: Array[Double]): Double = predict(testData)
 }
 
 /**
