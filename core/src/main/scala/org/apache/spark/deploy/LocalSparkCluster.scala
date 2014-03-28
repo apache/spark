@@ -66,9 +66,9 @@ class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: I
     // TODO: In Akka 2.1.x, ActorSystem.awaitTermination hangs when you have remote actors!
     //       This is unfortunate, but for now we just comment it out.
     workerActorSystems.foreach(_.shutdown())
-    //workerActorSystems.foreach(_.awaitTermination())
+    // workerActorSystems.foreach(_.awaitTermination())
     masterActorSystems.foreach(_.shutdown())
-    //masterActorSystems.foreach(_.awaitTermination())
+    // masterActorSystems.foreach(_.awaitTermination())
     masterActorSystems.clear()
     workerActorSystems.clear()
   }

@@ -17,7 +17,7 @@
 
 import sbt._
 import sbt.Classpaths.publishTask
-import Keys._
+import sbt.Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
 import scala.util.Properties
@@ -27,7 +27,7 @@ import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
 import scala.collection.JavaConversions._
 
 // For Sonatype publishing
-//import com.jsuereth.pgp.sbtplugin.PgpKeys._
+// import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
 object SparkBuild extends Build {
   val SPARK_VERSION = "1.0.0-SNAPSHOT" 
@@ -200,7 +200,7 @@ object SparkBuild extends Build {
 
     publishMavenStyle := true,
 
-    //useGpg in Global := true,
+    // useGpg in Global := true,
 
     pomExtra := (
       <parent>
