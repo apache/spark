@@ -242,4 +242,15 @@ class ReplSuite extends FunSuite {
       assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
     }
   }
+
+  test("collecting objects of class defined in repl") {
+    val output = runInterpreter("local[2]",
+      """
+        |case class Foo(i: Int)
+        |val ret = sc.parallelize((1 to 100).map(Foo), 10).collect
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+    assertContains("ret: Array[Foo] = Array(Foo(1),", output)
+  }
 }
