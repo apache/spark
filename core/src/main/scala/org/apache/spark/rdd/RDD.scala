@@ -121,7 +121,7 @@ abstract class RDD[T: ClassTag](
   @transient var name: String = null
 
   /** Assign a name to this RDD */
-  def setName(_name: String) = {
+  def setName(_name: String): RDD[T] = {
     name = _name
     this
   }
@@ -927,32 +927,49 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Returns the top K elements from this RDD as defined by
-   * the specified implicit Ordering[T].
+   * Returns the top K (largest) elements from this RDD as defined by the specified
+   * implicit Ordering[T]. This does the opposite of [[takeOrdered]]. For example:
+   * {{{
+   *   sc.parallelize([10, 4, 2, 12, 3]).top(1)
+   *   // returns [12]
+   *
+   *   sc.parallelize([2, 3, 4, 5, 6]).top(2)
+   *   // returns [6, 5]
+   * }}}
+   *
    * @param num the number of top elements to return
    * @param ord the implicit ordering for T
    * @return an array of top elements
    */
-  def top(num: Int)(implicit ord: Ordering[T]): Array[T] = {
+  def top(num: Int)(implicit ord: Ordering[T]): Array[T] = takeOrdered(num)(ord.reverse)
+
+  /**
+   * Returns the first K (smallest) elements from this RDD as defined by the specified
+   * implicit Ordering[T] and maintains the ordering. This does the opposite of [[top]].
+   * For example:
+   * {{{
+   *   sc.parallelize([10, 4, 2, 12, 3]).takeOrdered(1)
+   *   // returns [12]
+   *
+   *   sc.parallelize([2, 3, 4, 5, 6]).takeOrdered(2)
+   *   // returns [2, 3]
+   * }}}
+   *
+   * @param num the number of top elements to return
+   * @param ord the implicit ordering for T
+   * @return an array of top elements
+   */
+  def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = {
     mapPartitions { items =>
-      val queue = new BoundedPriorityQueue[T](num)
-      queue ++= items
+      // Priority keeps the largest elements, so let's reverse the ordering.
+      val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
+      queue ++= util.collection.Utils.takeOrdered(items, num)(ord)
       Iterator.single(queue)
     }.reduce { (queue1, queue2) =>
       queue1 ++= queue2
       queue1
-    }.toArray.sorted(ord.reverse)
+    }.toArray.sorted(ord)
   }
-
-  /**
-   * Returns the first K elements from this RDD as defined by
-   * the specified implicit Ordering[T] and maintains the
-   * ordering.
-   * @param num the number of top elements to return
-   * @param ord the implicit ordering for T
-   * @return an array of top elements
-   */
-  def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = top(num)(ord.reverse)
 
   /**
    * Returns the max of this RDD as defined by the implicit Ordering[T].

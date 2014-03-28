@@ -15,9 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark.util.collection
+
+import scala.collection.JavaConversions.{collectionAsScalaIterable, asJavaIterator}
+
+import com.google.common.collect.{Ordering => GuavaOrdering}
 
 /**
- * Contains classes for enumerating possible physical plans for a given logical query plan.
+ * Utility functions for collections.
  */
-package object planning
+private[spark] object Utils {
+
+  /**
+   * Returns the first K elements from the input as defined by the specified implicit Ordering[T]
+   * and maintains the ordering.
+   */
+  def takeOrdered[T](input: Iterator[T], num: Int)(implicit ord: Ordering[T]): Iterator[T] = {
+    val ordering = new GuavaOrdering[T] {
+      override def compare(l: T, r: T) = ord.compare(l, r)
+    }
+    collectionAsScalaIterable(ordering.leastOf(asJavaIterator(input), num)).iterator
+  }
+}

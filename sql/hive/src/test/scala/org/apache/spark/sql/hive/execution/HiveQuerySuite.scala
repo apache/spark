@@ -15,16 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
-package execution
+package org.apache.spark.sql.hive.execution
+
+import org.apache.spark.sql.hive.TestHive._
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
 class HiveQuerySuite extends HiveComparisonTest {
-  import TestHive._
-
   createQueryTest("Simple Average",
     "SELECT AVG(key) FROM src")
 
@@ -55,10 +53,8 @@ class HiveQuerySuite extends HiveComparisonTest {
   createQueryTest("length.udf",
     "SELECT length(\"test\") FROM src LIMIT 1")
 
-  ignore("partitioned table scan") {
-    createQueryTest("partitioned table scan",
-      "SELECT ds, hr, key, value FROM srcpart")
-  }
+  createQueryTest("partitioned table scan",
+    "SELECT ds, hr, key, value FROM srcpart")
 
   createQueryTest("hash",
     "SELECT hash('test') FROM src LIMIT 1")
