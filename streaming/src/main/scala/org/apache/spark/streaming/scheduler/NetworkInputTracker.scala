@@ -126,7 +126,7 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
         receiverInfo -= streamId
         logError("De-registered receiver for network stream " + streamId
           + " with message " + msg)
-        //TODO: Do something about the corresponding NetworkInputDStream
+        // TODO: Do something about the corresponding NetworkInputDStream
       }
     }
   }
