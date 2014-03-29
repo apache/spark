@@ -61,32 +61,38 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
 
   test("rowMeans") {
     val data = sc.parallelize(localData, 2)
-    assert(equivVector(Vectors.dense(data.rowMeans().collect()), Vectors.dense(rowMeans)), "Row means do not match.")
+    assert(equivVector(Vectors.dense(data.rowMeans().collect()), Vectors.dense(rowMeans)),
+      "Row means do not match.")
   }
 
   test("rowNorm2") {
     val data = sc.parallelize(localData, 2)
-    assert(equivVector(Vectors.dense(data.rowNorm2().collect()), Vectors.dense(rowNorm2)), "Row norm2s do not match.")
+    assert(equivVector(Vectors.dense(data.rowNorm2().collect()), Vectors.dense(rowNorm2)),
+      "Row norm2s do not match.")
   }
 
   test("rowSDs") {
     val data = sc.parallelize(localData, 2)
-    assert(equivVector(Vectors.dense(data.rowSDs().collect()), Vectors.dense(rowSDs)), "Row SDs do not match.")
+    assert(equivVector(Vectors.dense(data.rowSDs().collect()), Vectors.dense(rowSDs)),
+      "Row SDs do not match.")
   }
 
   test("colMeans") {
     val data = sc.parallelize(localData, 2)
-    assert(equivVector(data.colMeans(), Vectors.dense(colMeans)), "Column means do not match.")
+    assert(equivVector(data.colMeans(), Vectors.dense(colMeans)),
+      "Column means do not match.")
   }
 
   test("colNorm2") {
     val data = sc.parallelize(localData, 2)
-    assert(equivVector(data.colNorm2(), Vectors.dense(colNorm2)), "Column norm2s do not match.")
+    assert(equivVector(data.colNorm2(), Vectors.dense(colNorm2)),
+      "Column norm2s do not match.")
   }
 
   test("colSDs") {
     val data = sc.parallelize(localData, 2)
-    assert(equivVector(data.colSDs(), Vectors.dense(colSDs)), "Column SDs do not match.")
+    assert(equivVector(data.colSDs(), Vectors.dense(colSDs)),
+      "Column SDs do not match.")
   }
 
   test("maxOption") {

@@ -23,8 +23,9 @@ import org.apache.spark.mllib.util.MLUtils._
 import org.apache.spark.rdd.RDD
 
 /**
- * Extra functions available on RDDs of [[org.apache.spark.mllib.linalg.Vector Vector]] through an implicit conversion.
- * Import `org.apache.spark.MLContext._` at the top of your program to use these functions.
+ * Extra functions available on RDDs of [[org.apache.spark.mllib.linalg.Vector Vector]] through an
+ * implicit conversion. Import `org.apache.spark.MLContext._` at the top of your program to use
+ * these functions.
  */
 class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
 
@@ -81,10 +82,12 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
   /**
    * Compute the norm-2 of each column in the RDD with `size` as the dimension of each `Vector`.
    */
-  def colNorm2(size: Int): Vector = Vectors.fromBreeze(self.map(_.toBreeze).aggregate(BV.zeros[Double](size))(
-    seqOp = (c, v) => c + (v :* v),
-    combOp = (lhs, rhs) => lhs + rhs
-  ).map(math.sqrt))
+  def colNorm2(size: Int): Vector = Vectors.fromBreeze(self.map(_.toBreeze)
+    .aggregate(BV.zeros[Double](size))(
+      seqOp = (c, v) => c + (v :* v),
+      combOp = (lhs, rhs) => lhs + rhs
+    ).map(math.sqrt)
+  )
 
   /**
    * Compute the standard deviation of each column in the RDD.
@@ -92,20 +95,23 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
   def colSDs(): Vector = colSDs(self.take(1).head.size)
 
   /**
-   * Compute the standard deviation of each column in the RDD with `size` as the dimension of each `Vector`.
+   * Compute the standard deviation of each column in the RDD with `size` as the dimension of each
+   * `Vector`.
    */
   def colSDs(size: Int): Vector = {
     val means = self.colMeans()
-    Vectors.fromBreeze(self.map(x => x.toBreeze - means.toBreeze).aggregate((BV.zeros[Double](size), 0.0))(
-      seqOp = (c, v) => (c, v) match {
-        case ((prev, cnt), current) =>
-          (((prev :* cnt) + (current :* current)) :/ (cnt + 1.0), cnt + 1.0)
-      },
-      combOp = (lhs, rhs) => (lhs, rhs) match {
-        case ((lhsVec, lhsCnt), (rhsVec, rhsCnt)) =>
-          ((lhsVec :* lhsCnt) + (rhsVec :* rhsCnt) :/ (lhsCnt + rhsCnt), lhsCnt + rhsCnt)
-      }
-    )._1.map(math.sqrt))
+    Vectors.fromBreeze(self.map(x => x.toBreeze - means.toBreeze)
+      .aggregate((BV.zeros[Double](size), 0.0))(
+        seqOp = (c, v) => (c, v) match {
+          case ((prev, cnt), current) =>
+            (((prev :* cnt) + (current :* current)) :/ (cnt + 1.0), cnt + 1.0)
+        },
+        combOp = (lhs, rhs) => (lhs, rhs) match {
+          case ((lhsVec, lhsCnt), (rhsVec, rhsCnt)) =>
+            ((lhsVec :* lhsCnt) + (rhsVec :* rhsCnt) :/ (lhsCnt + rhsCnt), lhsCnt + rhsCnt)
+        }
+      )._1.map(math.sqrt)
+    )
   }
 
   /**
@@ -119,12 +125,14 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
   }
 
   /**
-   * Find the optional max vector in the RDD, `None` will be returned if there is no elements at all.
+   * Find the optional max vector in the RDD, `None` will be returned if there is no elements at
+   * all.
    */
   def maxOption(cmp: (Vector, Vector) => Boolean) = maxMinOption(cmp)
 
   /**
-   * Find the optional min vector in the RDD, `None` will be returned if there is no elements at all.
+   * Find the optional min vector in the RDD, `None` will be returned if there is no elements at
+   * all.
    */
   def minOption(cmp: (Vector, Vector) => Boolean) = maxMinOption(!cmp(_, _))
 
