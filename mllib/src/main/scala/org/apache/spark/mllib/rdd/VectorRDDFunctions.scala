@@ -43,43 +43,42 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
       .map{ x => math.sqrt(x.toArray.map(x => x*x).sum / x.size) }
   }
 
-  def colMeansOption(): Vector = {
-    ???
+  def colMeans(): Vector = colMeans(self.take(1).head.size)
+
+  def colMeans(size: Int): Vector = {
+    Vectors.fromBreeze(self.map(_.toBreeze).aggregate((BV.zeros[Double](size), 0.0))(
+      seqOp = (c, v) => (c, v) match {
+        case ((prev, cnt), current) =>
+          (((prev :* cnt) + current) :/ (cnt + 1.0), cnt + 1.0)
+      },
+      combOp = (lhs, rhs) => (lhs, rhs) match {
+        case ((lhsVec, lhsCnt), (rhsVec, rhsCnt)) =>
+          ((lhsVec :* lhsCnt) + (rhsVec :* rhsCnt) :/ (lhsCnt + rhsCnt), lhsCnt + rhsCnt)
+      }
+    )._1)
   }
 
-  def colNorm2Option(): Vector = {
-    ???
-  }
+  def colNorm2(): Vector = colNorm2(self.take(1).head.size)
 
-  def colSDsOption(): Vector = {
-    ???
-  }
-
-  def colMeans(): Vector = {
-    Vectors.fromBreeze(self.map(_.toBreeze).zipWithIndex().fold((BV.zeros(1), 0L)) {
-      case ((lhsVec, lhsCnt), (rhsVec, rhsCnt)) =>
-        val totalNow: BV[Double] = lhsVec :* lhsCnt.asInstanceOf[Double]
-        val totalNew: BV[Double] = (totalNow + rhsVec) :/ rhsCnt.asInstanceOf[Double]
-        (totalNew, rhsCnt)
-    }._1)
-  }
-
-  def colNorm2(): Vector = Vectors.fromBreeze(
-    breezeVector = self.map(_.toBreeze).fold(BV.zeros(1)) {
-      case (lhs, rhs) => lhs + rhs :* rhs
+  def colNorm2(size: Int): Vector = Vectors.fromBreeze(self.map(_.toBreeze).fold(BV.zeros[Double](size)) {
+      case (lhs, rhs) =>
+        lhs + (rhs :* rhs)
   }.map(math.sqrt))
 
-  def colSDs(): Vector = {
+  def colSDs(): Vector = colSDs(self.take(1).head.size)
+
+  def colSDs(size: Int): Vector = {
     val means = this.colMeans()
-    Vectors.fromBreeze(
-      breezeVector = self.map(x => x.toBreeze - means.toBreeze)
-        .zipWithIndex()
-        .fold((BV.zeros(1), 0L)) {
-          case ((lhsVec, lhsCnt), (rhsVec, rhsCnt)) =>
-            val totalNow: BV[Double] = lhsVec :* lhsCnt.asInstanceOf[Double]
-            val totalNew: BV[Double] = (totalNow + rhsVec :* rhsVec) :/ rhsCnt.asInstanceOf[Double]
-            (totalNew, rhsCnt)
-    }._1.map(math.sqrt))
+    Vectors.fromBreeze(self.map(x => x.toBreeze - means.toBreeze).aggregate((BV.zeros[Double](size), 0.0))(
+      seqOp = (c, v) => (c, v) match {
+        case ((prev, cnt), current) =>
+          (((prev :* cnt) + current) :/ (cnt + 1.0), cnt + 1.0)
+      },
+      combOp = (lhs, rhs) => (lhs, rhs) match {
+        case ((lhsVec, lhsCnt), (rhsVec, rhsCnt)) =>
+          ((lhsVec :* lhsCnt) + (rhsVec :* rhsCnt) :/ (lhsCnt + rhsCnt), lhsCnt + rhsCnt)
+      }
+    )._1.map(math.sqrt))
   }
 
   private def maxMinOption(cmp: (Vector, Vector) => Boolean): Option[Vector] = {
@@ -98,13 +97,5 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
   def colShrink(): RDD[Vector] = {
     val means = self.colMeans()
     self.map( v => Vectors.dense(v.toArray.zip(means.toArray).filter{ case (x, m) => m != 0.0 }.map(_._1)))
-  }
-
-  def colShrinkWithFilter(): (RDD[Vector], RDD[Boolean]) = {
-    ???
-  }
-
-  def rowShrinkWithFilter(): (RDD[Vector], RDD[Boolean]) = {
-    ???
   }
 }

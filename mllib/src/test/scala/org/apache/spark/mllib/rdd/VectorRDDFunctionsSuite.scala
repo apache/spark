@@ -71,6 +71,7 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
 
   test("colSDs") {
     val data = sc.parallelize(localData)
+    val test = data.colSDs()
     assert(equivVector(data.colSDs(), Vectors.dense(colSDs)), "Column SDs do not match.")
   }
 
