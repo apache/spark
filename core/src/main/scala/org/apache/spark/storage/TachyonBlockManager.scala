@@ -50,7 +50,7 @@ private[spark] class TachyonBlockManager(
 
   private val MAX_DIR_CREATION_ATTEMPTS = 10
   private val subDirsPerTachyonDir = 
-    shuffleManager.conf.get("spark.tachyonStore.subDirectories", "4").toInt
+    shuffleManager.conf.get("spark.tachyonStore.subDirectories", "64").toInt
 
   // Create one Tachyon directory for each path mentioned in spark.tachyonStore.folderName.dir; 
   // then, inside this directory, create multiple subdirectories that we will hash files into, 
@@ -100,6 +100,7 @@ private[spark] class TachyonBlockManager(
 
   def getFile(blockId: BlockId): TachyonFile = getFile(blockId.name)
 
+  // TODO: Some of the logic here could be consolidated/de-duplicated with that in the DiskStore.
   private def createTachyonDirs(): Array[TachyonFile] = {
     logDebug("Creating tachyon directories at root dirs '" + rootDirs + "'")
     val dateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
