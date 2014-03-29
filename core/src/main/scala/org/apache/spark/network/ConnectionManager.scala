@@ -504,7 +504,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
       }
     }
     handleMessageExecutor.execute(runnable)
-    /*handleMessage(connection, message)*/
+    /* handleMessage(connection, message)*/
   }
 
   private def handleClientAuthentication(
@@ -732,7 +732,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
     logTrace("Sending Security [" + message + "] to [" + connManagerId + "]")
     val connection = connectionsById.getOrElseUpdate(connManagerId, startNewConnection())
 
-    //send security message until going connection has been authenticated
+    // send security message until going connection has been authenticated
     connection.send(message)
 
     wakeupSelector()
@@ -858,14 +858,14 @@ private[spark] object ConnectionManager {
       None
     })
 
-    /*testSequentialSending(manager)*/
-    /*System.gc()*/
+    /* testSequentialSending(manager)*/
+    /* System.gc()*/
 
-    /*testParallelSending(manager)*/
-    /*System.gc()*/
+    /* testParallelSending(manager)*/
+    /* System.gc()*/
 
-    /*testParallelDecreasingSending(manager)*/
-    /*System.gc()*/
+    /* testParallelDecreasingSending(manager)*/
+    /* System.gc()*/
 
     testContinuousSending(manager)
     System.gc()
@@ -947,7 +947,7 @@ private[spark] object ConnectionManager {
     val ms = finishTime - startTime
     val tput = mb * 1000.0 / ms
     println("--------------------------")
-    /*println("Started at " + startTime + ", finished at " + finishTime) */
+    /* println("Started at " + startTime + ", finished at " + finishTime) */
     println("Sent " + mb + " MB in " + ms + " ms (" + tput + " MB/s)")
     println("--------------------------")
     println()
