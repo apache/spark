@@ -267,7 +267,7 @@ class CleanerTester(
       "One or more shuffles' blocks cannot be found in disk manager, cannot start cleaner test")
 
     // Verify that the broadcast is in the driver's block manager
-    assert(broadcastIds.forall(bid => blockManager.getLevel(broadcastBlockId(bid)).isDefined),
+    assert(broadcastIds.forall(bid => blockManager.getStatus(broadcastBlockId(bid)).isDefined),
       "One ore more broadcasts have not been persisted in the driver's block manager")
   }
 
@@ -291,7 +291,7 @@ class CleanerTester(
 
         // Verify all broadcasts have been unpersisted
         assert(broadcastIds.forall { bid =>
-          blockManager.master.askForStorageLevels(broadcastBlockId(bid)).isEmpty
+          blockManager.master.getBlockStatus(broadcastBlockId(bid)).isEmpty
         })
 
         return

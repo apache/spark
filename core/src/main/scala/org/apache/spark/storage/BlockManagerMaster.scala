@@ -148,21 +148,30 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
   }
 
   /**
-   * Mainly for testing. Ask the driver to query all executors for their storage levels
-   * regarding this block. This provides an avenue for the driver to learn the storage
-   * levels of blocks it has not been informed of.
+   * Return the block's local status on all block managers, if any.
    *
-   * WARNING: This could lead to deadlocks if there are any outstanding messages the
-   * executors are already expecting from the driver. In this case, while the driver is
-   * waiting for the executors to respond to its GetStorageLevel query, the executors
-   * are also waiting for a response from the driver to a prior message.
+   * If askSlaves is true, this invokes the master to query each block manager for the most
+   * updated block statuses. This is useful when the master is not informed of the given block
+   * by all block managers.
    *
-   * The interim solution is to wait for a brief window of time to pass before asking.
-   * This should suffice, since this mechanism is largely introduced for testing only.
+   * To avoid potential deadlocks, the use of Futures is necessary, because the master actor
+   * should not block on waiting for a block manager, which can in turn be waiting for the
+   * master actor for a response to a prior message.
    */
-  def askForStorageLevels(blockId: BlockId, waitTimeMs: Long = 1000) = {
-    Thread.sleep(waitTimeMs)
-    askDriverWithReply[Map[BlockManagerId, StorageLevel]](AskForStorageLevels(blockId))
+  def getBlockStatus(
+      blockId: BlockId,
+      askSlaves: Boolean = true): Map[BlockManagerId, BlockStatus] = {
+    val msg = GetBlockStatus(blockId, askSlaves)
+    val response = askDriverWithReply[Map[BlockManagerId, Future[Option[BlockStatus]]]](msg)
+    val (blockManagerIds, futures) = response.unzip
+    val result = Await.result(Future.sequence(futures), timeout)
+    if (result == null) {
+      throw new SparkException("BlockManager returned null for BlockStatus query: " + blockId)
+    }
+    val blockStatus = result.asInstanceOf[Iterable[Option[BlockStatus]]]
+    blockManagerIds.zip(blockStatus).flatMap { case (blockManagerId, status) =>
+      status.map { s => (blockManagerId, s) }
+    }.toMap
   }
 
   /** Stop the driver actor, called only on the Spark driver node */

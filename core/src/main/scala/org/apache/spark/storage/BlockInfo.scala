@@ -79,3 +79,5 @@ private object BlockInfo {
   private val BLOCK_PENDING: Long = -1L
   private val BLOCK_FAILED: Long = -2L
 }
+
+private[spark] case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long)

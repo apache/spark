@@ -107,22 +107,26 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     // Verify that the broadcast file is created, and blocks are persisted only on the driver
     def afterCreation(blockIds: Seq[BroadcastBlockId], bmm: BlockManagerMaster) {
       assert(blockIds.size === 1)
-      val levels = bmm.askForStorageLevels(blockIds.head, waitTimeMs = 0)
-      assert(levels.size === 1)
-      levels.head match { case (bm, level) =>
-        assert(bm.executorId === "<driver>")
-        assert(level === StorageLevel.MEMORY_AND_DISK)
+      val statuses = bmm.getBlockStatus(blockIds.head)
+      assert(statuses.size === 1)
+      statuses.head match { case (bm, status) =>
+        assert(bm.executorId === "<driver>", "Block should only be on the driver")
+        assert(status.storageLevel === StorageLevel.MEMORY_AND_DISK)
+        assert(status.memSize > 0, "Block should be in memory store on the driver")
+        assert(status.diskSize === 0, "Block should not be in disk store on the driver")
       }
-      assert(HttpBroadcast.getFile(blockIds.head.broadcastId).exists)
+      assert(HttpBroadcast.getFile(blockIds.head.broadcastId).exists, "Broadcast file not found!")
     }
 
     // Verify that blocks are persisted in both the executors and the driver
     def afterUsingBroadcast(blockIds: Seq[BroadcastBlockId], bmm: BlockManagerMaster) {
       assert(blockIds.size === 1)
-      val levels = bmm.askForStorageLevels(blockIds.head, waitTimeMs = 0)
-      assert(levels.size === numSlaves + 1)
-      levels.foreach { case (_, level) =>
-        assert(level === StorageLevel.MEMORY_AND_DISK)
+      val statuses = bmm.getBlockStatus(blockIds.head)
+      assert(statuses.size === numSlaves + 1)
+      statuses.foreach { case (_, status) =>
+        assert(status.storageLevel === StorageLevel.MEMORY_AND_DISK)
+        assert(status.memSize > 0, "Block should be in memory store")
+        assert(status.diskSize === 0, "Block should not be in disk store")
       }
     }
 
@@ -130,9 +134,13 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     // is true. In the latter case, also verify that the broadcast file is deleted on the driver.
     def afterUnpersist(blockIds: Seq[BroadcastBlockId], bmm: BlockManagerMaster) {
       assert(blockIds.size === 1)
-      val levels = bmm.askForStorageLevels(blockIds.head, waitTimeMs = 0)
-      assert(levels.size === (if (removeFromDriver) 0 else 1))
-      assert(removeFromDriver === !HttpBroadcast.getFile(blockIds.head.broadcastId).exists)
+      val statuses = bmm.getBlockStatus(blockIds.head)
+      val expectedNumBlocks = if (removeFromDriver) 0 else 1
+      val possiblyNot = if (removeFromDriver) "" else " not"
+      assert(statuses.size === expectedNumBlocks,
+      "Block should%s be unpersisted on the driver".format(possiblyNot))
+      assert(removeFromDriver === !HttpBroadcast.getFile(blockIds.head.broadcastId).exists,
+        "Broadcast file should%s be deleted".format(possiblyNot))
     }
 
     testUnpersistBroadcast(numSlaves, httpConf, getBlockIds, afterCreation,
@@ -158,11 +166,13 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     // Verify that blocks are persisted only on the driver
     def afterCreation(blockIds: Seq[BroadcastBlockId], bmm: BlockManagerMaster) {
       blockIds.foreach { blockId =>
-        val levels = bmm.askForStorageLevels(blockId, waitTimeMs = 0)
-        assert(levels.size === 1)
-        levels.head match { case (bm, level) =>
-          assert(bm.executorId === "<driver>")
-          assert(level === StorageLevel.MEMORY_AND_DISK)
+        val statuses = bmm.getBlockStatus(blockIds.head)
+        assert(statuses.size === 1)
+        statuses.head match { case (bm, status) =>
+          assert(bm.executorId === "<driver>", "Block should only be on the driver")
+          assert(status.storageLevel === StorageLevel.MEMORY_AND_DISK)
+          assert(status.memSize > 0, "Block should be in memory store on the driver")
+          assert(status.diskSize === 0, "Block should not be in disk store on the driver")
         }
       }
     }
@@ -170,16 +180,18 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     // Verify that blocks are persisted in both the executors and the driver
     def afterUsingBroadcast(blockIds: Seq[BroadcastBlockId], bmm: BlockManagerMaster) {
       blockIds.foreach { blockId =>
-        val levels = bmm.askForStorageLevels(blockId, waitTimeMs = 0)
+        val statuses = bmm.getBlockStatus(blockId)
         if (blockId.field == "meta") {
           // Meta data is only on the driver
-          assert(levels.size === 1)
-          levels.head match { case (bm, _) => assert(bm.executorId === "<driver>") }
+          assert(statuses.size === 1)
+          statuses.head match { case (bm, _) => assert(bm.executorId === "<driver>") }
         } else {
           // Other blocks are on both the executors and the driver
-          assert(levels.size === numSlaves + 1)
-          levels.foreach { case (_, level) =>
-            assert(level === StorageLevel.MEMORY_AND_DISK)
+          assert(statuses.size === numSlaves + 1)
+          statuses.foreach { case (_, status) =>
+            assert(status.storageLevel === StorageLevel.MEMORY_AND_DISK)
+            assert(status.memSize > 0, "Block should be in memory store")
+            assert(status.diskSize === 0, "Block should not be in disk store")
           }
         }
       }
@@ -189,12 +201,11 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     // is true.
     def afterUnpersist(blockIds: Seq[BroadcastBlockId], bmm: BlockManagerMaster) {
       val expectedNumBlocks = if (removeFromDriver) 0 else 1
-      var waitTimeMs = 1000L
+      val possiblyNot = if (removeFromDriver) "" else " not"
       blockIds.foreach { blockId =>
-      // Allow a second for the messages triggered by unpersist to propagate to prevent deadlocks
-        val levels = bmm.askForStorageLevels(blockId, waitTimeMs)
-        assert(levels.size === expectedNumBlocks)
-        waitTimeMs = 0L
+        val statuses = bmm.getBlockStatus(blockId)
+        assert(statuses.size === expectedNumBlocks,
+          "Block should%s be unpersisted on the driver".format(possiblyNot))
       }
     }
 

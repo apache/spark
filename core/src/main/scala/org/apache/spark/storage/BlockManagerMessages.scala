@@ -41,9 +41,6 @@ private[storage] object BlockManagerMessages {
   case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
     extends ToBlockManagerSlave
 
-  // For testing. Ask the slave for the block's storage level.
-  case class GetStorageLevel(blockId: BlockId) extends ToBlockManagerSlave
-
 
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from slaves to the master.
@@ -113,10 +110,10 @@ private[storage] object BlockManagerMessages {
 
   case object GetMemoryStatus extends ToBlockManagerMaster
 
-  case object ExpireDeadHosts extends ToBlockManagerMaster
-
   case object GetStorageStatus extends ToBlockManagerMaster
 
-  // For testing. Have the master ask all slaves for the given block's storage level.
-  case class AskForStorageLevels(blockId: BlockId) extends ToBlockManagerMaster
+  case class GetBlockStatus(blockId: BlockId, askSlaves: Boolean = true)
+    extends ToBlockManagerMaster
+
+  case object ExpireDeadHosts extends ToBlockManagerMaster
 }

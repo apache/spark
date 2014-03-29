@@ -21,7 +21,7 @@ import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
 import scala.collection.JavaConversions._
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 import akka.actor.{Actor, ActorRef, Cancellable}
@@ -93,6 +93,9 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     case GetStorageStatus =>
       sender ! storageStatus
 
+    case GetBlockStatus(blockId, askSlaves) =>
+      sender ! blockStatus(blockId, askSlaves)
+
     case RemoveRdd(rddId) =>
       sender ! removeRdd(rddId)
 
@@ -125,9 +128,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
     case HeartBeat(blockManagerId) =>
       sender ! heartBeat(blockManagerId)
-
-    case AskForStorageLevels(blockId) =>
-      sender ! askForStorageLevels(blockId)
 
     case other =>
       logWarning("Got unknown message: " + other)
@@ -254,16 +254,30 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     }.toArray
   }
 
-  // For testing. Ask all block managers for the given block's local storage level, if any.
-  private def askForStorageLevels(blockId: BlockId): Map[BlockManagerId, StorageLevel] = {
-    val getStorageLevel = GetStorageLevel(blockId)
-    blockManagerInfo.values.flatMap { info =>
-      val future = info.slaveActor.ask(getStorageLevel)(akkaTimeout)
-      val result = Await.result(future, akkaTimeout)
-      if (result != null) {
-        // If the block does not exist on the slave, the slave replies None
-        result.asInstanceOf[Option[StorageLevel]].map { reply => (info.blockManagerId, reply) }
-      } else None
+  /**
+   * Return the block's local status for all block managers, if any.
+   *
+   * If askSlaves is true, the master queries each block manager for the most updated block
+   * statuses. This is useful when the master is not informed of the given block by all block
+   * managers.
+   *
+   * Rather than blocking on the block status query, master actor should simply return a
+   * Future to avoid potential deadlocks. This can arise if there exists a block manager
+   * that is also waiting for this master actor's response to a previous message.
+   */
+  private def blockStatus(
+      blockId: BlockId,
+      askSlaves: Boolean): Map[BlockManagerId, Future[Option[BlockStatus]]] = {
+    import context.dispatcher
+    val getBlockStatus = GetBlockStatus(blockId)
+    blockManagerInfo.values.map { info =>
+      val blockStatusFuture =
+        if (askSlaves) {
+          info.slaveActor.ask(getBlockStatus)(akkaTimeout).mapTo[Option[BlockStatus]]
+        } else {
+          Future { info.getStatus(blockId) }
+        }
+      (info.blockManagerId, blockStatusFuture)
     }.toMap
   }
 
@@ -352,9 +366,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   }
 }
 
-
-private[spark] case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long)
-
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,
     timeMs: Long,
@@ -370,6 +381,8 @@ private[spark] class BlockManagerInfo(
 
   logInfo("Registering block manager %s with %s RAM".format(
     blockManagerId.hostPort, Utils.bytesToString(maxMem)))
+
+  def getStatus(blockId: BlockId) = Option(_blocks.get(blockId))
 
   def updateLastSeenMs() {
     _lastSeenMs = System.currentTimeMillis()

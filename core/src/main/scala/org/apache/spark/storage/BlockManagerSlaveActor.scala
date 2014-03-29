@@ -50,7 +50,7 @@ class BlockManagerSlaveActor(
     case RemoveBroadcast(broadcastId, removeFromDriver) =>
       blockManager.removeBroadcast(broadcastId, removeFromDriver)
 
-    case GetStorageLevel(blockId) =>
-      sender ! blockManager.getLevel(blockId)
+    case GetBlockStatus(blockId, _) =>
+      sender ! blockManager.getStatus(blockId)
   }
 }

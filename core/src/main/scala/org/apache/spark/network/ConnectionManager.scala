@@ -17,7 +17,6 @@
 
 package org.apache.spark.network
 
-import java.net._
 import java.nio._
 import java.nio.channels._
 import java.nio.channels.spi._

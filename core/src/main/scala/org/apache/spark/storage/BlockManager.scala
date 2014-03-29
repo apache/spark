@@ -209,10 +209,14 @@ private[spark] class BlockManager(
     }
   }
 
-  /**
-   * Get storage level of local block. If no info exists for the block, return None.
-   */
-  def getLevel(blockId: BlockId): Option[StorageLevel] = blockInfo.get(blockId).map(_.level)
+  /** Return the status of the block identified by the given ID, if it exists. */
+  def getStatus(blockId: BlockId): Option[BlockStatus] = {
+    blockInfo.get(blockId).map { info =>
+      val memSize = if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
+      val diskSize = if (diskStore.contains(blockId)) diskStore.getSize(blockId) else 0L
+      BlockStatus(info.level, memSize, diskSize)
+    }
+  }
 
   /**
    * Tell the master about the current storage status of a block. This will send a block update
@@ -631,10 +635,9 @@ private[spark] class BlockManager(
               diskStore.putValues(blockId, iterator, level, askForBytes)
             case ArrayBufferValues(array) =>
               diskStore.putValues(blockId, array, level, askForBytes)
-            case ByteBufferValues(bytes) => {
+            case ByteBufferValues(bytes) =>
               bytes.rewind()
               diskStore.putBytes(blockId, bytes, level)
-            }
           }
           size = res.size
           res.data match {
