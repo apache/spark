@@ -1036,6 +1036,8 @@ class DAGScheduler(
       val job = resultStageToJob(resultStage)
       val error = new SparkException("Job aborted: " + reason)
       job.listener.jobFailed(error)
+      // remove stageIdToAccumulators(id) ensuring that the aborted stage
+      // accumulator is not calculated in jobIdToStageIdsRemove
       stageIdToAccumulators -= resultStage.id
       jobIdToStageIdsRemove(job.jobId)
       jobIdToActiveJob -= resultStage.jobId
