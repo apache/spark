@@ -169,7 +169,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     assert(taskSet.tasks.size >= results.size)
     for ((result, i) <- results.zipWithIndex) {
       if (i < taskSet.tasks.size) {
-        runEvent(CompletionEvent(taskSet.tasks(i), result._1, result._2, Map[Long, Any](), null, null))
+        runEvent(CompletionEvent(taskSet.tasks(i), result._1, result._2, null, null, null))
       }
     }
   }
@@ -314,17 +314,16 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     runEvent(ExecutorLost("exec-hostA"))
     val newEpoch = mapOutputTracker.getEpoch
     assert(newEpoch > oldEpoch)
-    val noAccum = Map[Long, Any]()
     val taskSet = taskSets(0)
     // should be ignored for being too old
-    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA", 1), noAccum, null, null))
+    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA", 1), null, null, null))
     // should work because it's a non-failed host
-    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostB", 1), noAccum, null, null))
+    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostB", 1), null, null, null))
     // should be ignored for being too old
-    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA", 1), noAccum, null, null))
+    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA", 1), null, null, null))
     // should work because it's a new epoch
     taskSet.tasks(1).epoch = newEpoch
-    runEvent(CompletionEvent(taskSet.tasks(1), Success, makeMapStatus("hostA", 1), noAccum, null, null))
+    runEvent(CompletionEvent(taskSet.tasks(1), Success, makeMapStatus("hostA", 1), null, null, null))
     assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
            Array(makeBlockManagerId("hostB"), makeBlockManagerId("hostA")))
     complete(taskSets(1), Seq((Success, 42), (Success, 43)))
@@ -444,6 +443,16 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     assert(Accumulators.originals(0).value === 5)
     assertDataStructuresEmpty
   }
+
+  test("accumulator is cleared for aborted stages") {
+    //just for register
+    new Accumulator[Int](0, SparkContext.IntAccumulatorParam)
+    val rdd = makeRdd(2, Nil)
+    submit(rdd, Array(0))
+    failed(taskSets(0), "tastset failed")
+    assertDataStructuresEmpty
+  }
+
 
   /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
