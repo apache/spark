@@ -21,8 +21,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 
-import tachyon.client.WriteType
-import tachyon.client.ReadType
+import tachyon.client.{WriteType, ReadType}
 
 import org.apache.spark.Logging
 import org.apache.spark.util.Utils
@@ -43,7 +42,8 @@ private class TachyonStore(
   logInfo("TachyonStore started")
 
   override def getSize(blockId: BlockId): Long = {
-    tachyonManager.getBlockLocation(blockId).length
+    tachyonManager.getFile(blockId.name).length
+//    tachyonManager.getBlockLocation(blockId).length
   }
 
   override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult =  {
@@ -94,15 +94,11 @@ private class TachyonStore(
   }
 
   override def remove(blockId: BlockId): Boolean = {
-    val fileSegment = tachyonManager.getBlockLocation(blockId)
-    val file = fileSegment.file
-    if (tachyonManager.fileExists(file) && file.length() == fileSegment.length) {
+    val file = tachyonManager.getFile(blockId)
+    if (tachyonManager.fileExists(file)) {
       tachyonManager.removeFile(file)
     } else {
-      if (fileSegment.length < file.length()) {
-        logWarning("Could not delete block associated with only a part of a file: " + blockId)
-      }
-      false
+      true
     }
   }
 
@@ -110,31 +106,22 @@ private class TachyonStore(
     getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
   }
   
-  /**
-   * A version of getValues that allows a custom serializer. This is used as part of the
-   * shuffle short-circuit code.
-   */
-  def getValues(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
-    getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes, serializer))
-  }
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
-    val segment = tachyonManager.getBlockLocation(blockId)
     val file = tachyonManager.getFile(blockId)
     val is = file.getInStream(ReadType.CACHE)
     var buffer: ByteBuffer = null
     if (is != null){
-      val size = segment.length - segment.offset
+      val size = file.length
       val bs = new Array[Byte](size.asInstanceOf[Int])
-      is.read(bs, segment.offset.asInstanceOf[Int] , size.asInstanceOf[Int])
+      is.read(bs, 0, size.asInstanceOf[Int])
       buffer = ByteBuffer.wrap(bs) 
     } 
     Some(buffer)
   }
 
   override def contains(blockId: BlockId): Boolean = {
-    val fileSegment = tachyonManager.getBlockLocation(blockId)
-    val file = fileSegment.file
+    val file = tachyonManager.getFile(blockId)
     tachyonManager.fileExists(file)
   }
 }

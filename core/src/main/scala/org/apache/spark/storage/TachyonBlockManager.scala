@@ -25,7 +25,7 @@ import tachyon.client.TachyonFile
 
 import org.apache.spark.Logging
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.network.netty.{TachyonFilePathResolver, ShuffleSender}
+import org.apache.spark.network.netty.ShuffleSender
 import org.apache.spark.util.Utils
 
 
@@ -39,7 +39,7 @@ private[spark] class TachyonBlockManager(
     shuffleManager: ShuffleBlockManager, 
     rootDirs: String, 
     val master: String)
-  extends TachyonFilePathResolver with Logging {
+  extends Logging {
 
   val client = if (master != null && master != "") TachyonFS.get(master) else null
 
@@ -50,7 +50,7 @@ private[spark] class TachyonBlockManager(
 
   private val MAX_DIR_CREATION_ATTEMPTS = 10
   private val subDirsPerTachyonDir = 
-    shuffleManager.conf.get("spark.tachyonStore.subDirectories", "64").toInt
+    shuffleManager.conf.get("spark.tachyonStore.subDirectories", "4").toInt
 
   // Create one Tachyon directory for each path mentioned in spark.tachyonStore.folderName.dir; 
   // then, inside this directory, create multiple subdirectories that we will hash files into, 
@@ -59,16 +59,6 @@ private[spark] class TachyonBlockManager(
   private val subDirs = Array.fill(tachyonDirs.length)(new Array[TachyonFile](subDirsPerTachyonDir))
 
   addShutdownHook()
-
-  /**
-   * Returns the physical tachyon file segment in which the given BlockId is located.
-   * If the BlockId has been mapped to a specific FileSegment, that will be returned.
-   * Otherwise, we assume the Block is mapped to a whole file identified by the BlockId directly.
-   */
-  def getBlockLocation(blockId: BlockId): TachyonFileSegment = {
-    val file = getFile(blockId.name)
-    new TachyonFileSegment(file, 0, file.length())
-  }
   
   def removeFile(file: TachyonFile): Boolean = {
     client.delete(file.getPath(), false)
