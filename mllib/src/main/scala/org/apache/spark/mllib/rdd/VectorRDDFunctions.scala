@@ -60,19 +60,19 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
 
   def colNorm2(): Vector = colNorm2(self.take(1).head.size)
 
-  def colNorm2(size: Int): Vector = Vectors.fromBreeze(self.map(_.toBreeze).fold(BV.zeros[Double](size)) {
-      case (lhs, rhs) =>
-        lhs + (rhs :* rhs)
-  }.map(math.sqrt))
+  def colNorm2(size: Int): Vector = Vectors.fromBreeze(self.map(_.toBreeze).aggregate(BV.zeros[Double](size))(
+    seqOp = (c, v) => c + (v :* v),
+    combOp = (lhs, rhs) => lhs + rhs
+  ).map(math.sqrt))
 
   def colSDs(): Vector = colSDs(self.take(1).head.size)
 
   def colSDs(size: Int): Vector = {
-    val means = this.colMeans()
+    val means = self.colMeans()
     Vectors.fromBreeze(self.map(x => x.toBreeze - means.toBreeze).aggregate((BV.zeros[Double](size), 0.0))(
       seqOp = (c, v) => (c, v) match {
         case ((prev, cnt), current) =>
-          (((prev :* cnt) + current) :/ (cnt + 1.0), cnt + 1.0)
+          (((prev :* cnt) + (current :* current)) :/ (cnt + 1.0), cnt + 1.0)
       },
       combOp = (lhs, rhs) => (lhs, rhs) match {
         case ((lhsVec, lhsCnt), (rhsVec, rhsCnt)) =>
