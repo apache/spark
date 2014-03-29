@@ -16,9 +16,11 @@
 #
 
 import os
+import re
+import sys
 import signal
 import socket
-import sys
+import resource
 import traceback
 import multiprocessing
 from ctypes import c_bool
@@ -48,6 +50,21 @@ def compute_real_exit_code(exit_code):
     return exit_code
   else:
     return 1
+
+
+UNITS = {
+    'm': 1024 * 1024,
+    'g': 1024 * 1024 * 1024,
+}
+
+
+def calculate_worker_mem(max, num_workers):
+    match = re.match("(\d+)([mg])", max)
+    if match is None:
+        return -1
+    amount, units = match.groups()
+    multiplier = UNITS.get(units)
+    return int(amount) * multiplier / num_workers
 
 
 def worker(listen_sock):
@@ -124,6 +141,9 @@ def worker(listen_sock):
                 infile = os.fdopen(os.dup(sock.fileno()), "a+", 65536)
                 outfile = os.fdopen(os.dup(sock.fileno()), "a+", 65536)
                 exit_code = 0
+                # Shopify added memory limit
+                soft_limit = calculate_worker_mem(os.getenv('PYSPARK_MAX_HEAP', '1g'), POOLSIZE)
+                resource.setrlimit(resource.RLIMIT_DATA, (soft_limit, -1))
                 try:
                     worker_main(infile, outfile)
                 except SystemExit as exc:
