@@ -30,6 +30,17 @@
     <packaging>jar</packaging>
     <name>Spark Project SQL</name>
     <url>http://spark.apache.org/</url>
+    <profiles>
+      <profile>
+        <id>yarn-alpha</id>
+        <dependencies>
+          <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
+          </dependency>
+        </dependencies>
+      </profile>
+    </profiles>
 
     <dependencies>
         <dependency>

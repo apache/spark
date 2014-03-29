@@ -31,6 +31,18 @@
     <name>Spark Project Catalyst</name>
     <url>http://spark.apache.org/</url>
 
+    <profiles>
+      <profile>
+        <id>yarn-alpha</id>
+        <dependencies>
+          <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
+          </dependency>
+        </dependencies>
+      </profile>
+    </profiles>
+
     <dependencies>
         <dependency>
             <groupId>org.apache.spark</groupId>
