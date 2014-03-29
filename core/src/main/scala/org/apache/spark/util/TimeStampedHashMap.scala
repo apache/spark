@@ -17,64 +17,108 @@
 
 package org.apache.spark.util
 
+import java.util.Set
+import java.util.Map.Entry
 import java.util.concurrent.ConcurrentHashMap
+
+import scala.collection.{immutable, JavaConversions, mutable}
 
 import org.apache.spark.Logging
 
-private[util] case class TimeStampedValue[T](timestamp: Long, value: T)
+private[spark] case class TimeStampedValue[V](value: V, timestamp: Long)
 
 /**
- * A map that stores the timestamp of when a key was inserted along with the value. If specified,
- * the timestamp of each pair can be updated every time it is accessed.
- * Key-value pairs whose timestamps are older than a particular
- * threshold time can then be removed using the clearOldValues method. It exposes a
- * scala.collection.mutable.Map interface to allow it to be a drop-in replacement for Scala
- * HashMaps.
+ * This is a custom implementation of scala.collection.mutable.Map which stores the insertion
+ * timestamp along with each key-value pair. If specified, the timestamp of each pair can be
+ * updated every time it is accessed. Key-value pairs whose timestamp are older than a particular
+ * threshold time can then be removed using the clearOldValues method. This is intended to
+ * be a drop-in replacement of scala.collection.mutable.HashMap.
  *
- * Internally, it uses a Java ConcurrentHashMap, so all operations on this HashMap are thread-safe.
- *
- * @param updateTimeStampOnGet When enabled, the timestamp of a pair will be
- *                             updated when it is accessed
+ * @param updateTimeStampOnGet Whether timestamp of a pair will be updated when it is accessed
  */
 private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = false)
-  extends WrappedJavaHashMap[A, B, A, TimeStampedValue[B]] with Logging {
+  extends mutable.Map[A, B]() with Logging {
 
-  private[util] val internalJavaMap = new ConcurrentHashMap[A, TimeStampedValue[B]]()
+  private val internalMap = new ConcurrentHashMap[A, TimeStampedValue[B]]()
 
-  private[util] def newInstance[K1, V1](): WrappedJavaHashMap[K1, V1, _, _] = {
-    new TimeStampedHashMap[K1, V1]()
-  }
-
-  def internalMap = internalJavaMap
-
-  override def get(key: A): Option[B] = {
-    val timeStampedValue = internalMap.get(key)
-    if (updateTimeStampOnGet && timeStampedValue != null) {
-      internalJavaMap.replace(key, timeStampedValue,
-        TimeStampedValue(currentTime, timeStampedValue.value))
+  def get(key: A): Option[B] = {
+    val value = internalMap.get(key)
+    if (value != null && updateTimeStampOnGet) {
+      internalMap.replace(key, value, TimeStampedValue(value.value, currentTime))
     }
-    Option(timeStampedValue).map(_.value)
-  }
-  @inline override protected def externalValueToInternalValue(v: B): TimeStampedValue[B] = {
-    new TimeStampedValue(currentTime, v)
+    Option(value).map(_.value)
   }
 
-  @inline override protected def internalValueToExternalValue(iv: TimeStampedValue[B]): B = {
-    iv.value
+  def iterator: Iterator[(A, B)] = {
+    val jIterator = getEntrySet.iterator()
+    JavaConversions.asScalaIterator(jIterator).map(kv => (kv.getKey, kv.getValue.value))
   }
 
-  /** Atomically put if a key is absent. This exposes the existing API of ConcurrentHashMap. */
+  def getEntrySet: Set[Entry[A, TimeStampedValue[B]]] = internalMap.entrySet()
+
+  override def + [B1 >: B](kv: (A, B1)): mutable.Map[A, B1] = {
+    val newMap = new TimeStampedHashMap[A, B1]
+    val oldInternalMap = this.internalMap.asInstanceOf[ConcurrentHashMap[A, TimeStampedValue[B1]]]
+    newMap.internalMap.putAll(oldInternalMap)
+    kv match { case (a, b) => newMap.internalMap.put(a, TimeStampedValue(b, currentTime)) }
+    newMap
+  }
+
+  override def - (key: A): mutable.Map[A, B] = {
+    val newMap = new TimeStampedHashMap[A, B]
+    newMap.internalMap.putAll(this.internalMap)
+    newMap.internalMap.remove(key)
+    newMap
+  }
+
+  override def += (kv: (A, B)): this.type = {
+    kv match { case (a, b) => internalMap.put(a, TimeStampedValue(b, currentTime)) }
+    this
+  }
+
+  override def -= (key: A): this.type = {
+    internalMap.remove(key)
+    this
+  }
+
+  override def update(key: A, value: B) {
+    this += ((key, value))
+  }
+
+  override def apply(key: A): B = {
+    val value = internalMap.get(key)
+    Option(value).map(_.value).getOrElse { throw new NoSuchElementException() }
+  }
+
+  override def filter(p: ((A, B)) => Boolean): mutable.Map[A, B] = {
+    JavaConversions.mapAsScalaConcurrentMap(internalMap)
+      .map { case (k, TimeStampedValue(v, t)) => (k, v) }
+      .filter(p)
+  }
+
+  override def empty: mutable.Map[A, B] = new TimeStampedHashMap[A, B]()
+
+  override def size: Int = internalMap.size
+
+  override def foreach[U](f: ((A, B)) => U) {
+    val iterator = getEntrySet.iterator()
+    while(iterator.hasNext) {
+      val entry = iterator.next()
+      val kv = (entry.getKey, entry.getValue.value)
+      f(kv)
+    }
+  }
+
+  // Should we return previous value directly or as Option?
   def putIfAbsent(key: A, value: B): Option[B] = {
-    val prev = internalJavaMap.putIfAbsent(key, TimeStampedValue(currentTime, value))
+    val prev = internalMap.putIfAbsent(key, TimeStampedValue(value, currentTime))
     Option(prev).map(_.value)
   }
 
-  /**
-   * Removes old key-value pairs that have timestamp earlier than `threshTime`,
-   * calling the supplied function on each such entry before removing.
-   */
+  def toMap: immutable.Map[A, B] = iterator.toMap
+
   def clearOldValues(threshTime: Long, f: (A, B) => Unit) {
-    val iterator = internalJavaMap.entrySet().iterator()
+    val iterator = getEntrySet.iterator()
     while (iterator.hasNext) {
       val entry = iterator.next()
       if (entry.getValue.timestamp < threshTime) {
@@ -86,11 +130,12 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
   }
 
   /**
-   * Removes old key-value pairs that have timestamp earlier than `threshTime`
+   * Removes old key-value pairs that have timestamp earlier than `threshTime`.
    */
   def clearOldValues(threshTime: Long) {
     clearOldValues(threshTime, (_, _) => ())
   }
 
-  private def currentTime: Long = System.currentTimeMillis()
+  private def currentTime: Long = System.currentTimeMillis
+
 }

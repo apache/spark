@@ -209,7 +209,7 @@ private[spark] class BlockManager(
     }
   }
 
-  /** Return the status of the block identified by the given ID, if it exists. */
+  /** Get the BlockStatus for the block identified by the given ID, if it exists.*/
   def getStatus(blockId: BlockId): Option[BlockStatus] = {
     blockInfo.get(blockId).map { info =>
       val memSize = if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
@@ -635,9 +635,10 @@ private[spark] class BlockManager(
               diskStore.putValues(blockId, iterator, level, askForBytes)
             case ArrayBufferValues(array) =>
               diskStore.putValues(blockId, array, level, askForBytes)
-            case ByteBufferValues(bytes) =>
+            case ByteBufferValues(bytes) => {
               bytes.rewind()
               diskStore.putBytes(blockId, bytes, level)
+            }
           }
           size = res.size
           res.data match {
@@ -872,7 +873,7 @@ private[spark] class BlockManager(
   }
 
   private def dropOldBlocks(cleanupTime: Long, shouldDrop: (BlockId => Boolean)) {
-    val iterator = blockInfo.internalMap.entrySet().iterator()
+    val iterator = blockInfo.getEntrySet.iterator
     while (iterator.hasNext) {
       val entry = iterator.next()
       val (id, info, time) = (entry.getKey, entry.getValue.value, entry.getValue.timestamp)
