@@ -269,7 +269,7 @@ private object Accumulators {
   // Add values to the original accumulators with some given IDs
   def add(value: (Long, Any)): Unit = synchronized {
     if (originals.contains(value._1)) {
-      originals(value._1).asInstanceOf[Accumulable[Any, Any]] += value._2
+      originals(value._1).asInstanceOf[Accumulable[Any, Any]] ++= value._2
     }
   }
 }

@@ -375,7 +375,7 @@ class DAGScheduler(
     stageIdToStage -= stageId
     stageIdToJobIds -= stageId
     // accumulate acc values, if the stage is aborted, its accumulators
-    // will not be calculated, since we have removed it in aborteStage()
+    // will not be calculated, since we have removed it in abortStage()
     for (partitionIdToAccum <- stageIdToAccumulators.get(stageId);
          accumulators <- partitionIdToAccum.values;
          accum <- accumulators) {
