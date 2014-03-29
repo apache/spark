@@ -1127,17 +1127,6 @@ class DAGScheduler(
       }
   }
 
-  private def cleanup(keys: Set[Any]) {
-    keys.asInstanceOf[Set[Int]].foreach(sid => {
-      for (partitionIdToAccum <- stageIdToAccumulators.get(sid);
-           accumulators <- partitionIdToAccum.values;
-           accum <- accumulators) {
-        Accumulators.add(accum)
-      }
-      stageIdToAccumulators -= sid
-    })
-  }
-
   def stop() {
     if (eventProcessActor != null) {
       eventProcessActor ! StopDAGScheduler
