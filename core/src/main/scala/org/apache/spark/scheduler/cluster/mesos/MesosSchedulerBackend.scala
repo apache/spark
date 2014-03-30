@@ -29,16 +29,10 @@ import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
 
-import org.apache.spark._
-import org.apache.spark.scheduler._
+import org.apache.spark.{SparkEnv, Logging, SparkContext, SparkException, TaskState}
+import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SchedulerBackend, SlaveLost}
+import org.apache.spark.scheduler.{TaskDescWithoutSerializedTask, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.util.Utils
-import akka.actor.ActorRef
-import org.apache.spark.scheduler.WorkerOffer
-import org.apache.spark.scheduler.SlaveLost
-import org.apache.spark.scheduler.ExecutorExited
-import org.apache.spark.scheduler.WorkerOffer
-import org.apache.spark.scheduler.SlaveLost
-import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.serializer.SerializerInstance
 
 

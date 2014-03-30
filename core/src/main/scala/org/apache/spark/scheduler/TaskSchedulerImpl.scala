@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 import java.util.{TimerTask, Timer}
-import java.util.concurrent.{LinkedBlockingDeque, TimeUnit, ThreadPoolExecutor}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.concurrent.duration._
