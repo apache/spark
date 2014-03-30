@@ -100,6 +100,12 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
   }
 
   /**
+   * Return true if the event queue has been drained, i.e. the listener bus thread has processed
+   * the SparkListenerShutdown message and has exited. Used for testing only.
+   */
+  def isDrained = drainedLock.synchronized { drained }
+
+  /**
    * Stop the listener bus; wait until all listener events are processed by the listener bus
    * thread. The user has to make sure the listeners finish in a reasonable amount of time.
    */
