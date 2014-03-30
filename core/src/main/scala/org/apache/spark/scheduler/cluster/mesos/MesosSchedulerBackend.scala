@@ -332,6 +332,9 @@ private[spark] class MesosSchedulerBackend(
   }
 
   override def stop() {
+    if (serializeWorkerPool != null) {
+      serializeWorkerPool.shutdownNow()
+    }
     if (driver != null) {
       driver.stop()
     }
