@@ -223,7 +223,7 @@ def launch_cluster(conn, opts, cluster_name):
     sys.exit(1)
   if opts.key_pair is None:
     print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
-    sys.exit(1)    
+    sys.exit(1)
   print "Setting up security groups..."
   master_group = get_or_make_group(conn, cluster_name + "-master")
   slave_group = get_or_make_group(conn, cluster_name + "-slaves")
@@ -691,12 +691,18 @@ def real_main():
     setup_cluster(conn, master_nodes, slave_nodes, opts, True)
 
   elif action == "destroy":
-    response = raw_input("Are you sure you want to destroy the cluster " +
-        cluster_name + "?\nALL DATA ON ALL NODES WILL BE LOST!!\n" +
+    (master_nodes, slave_nodes) = get_existing_cluster(
+        conn, opts, cluster_name, die_on_error=False)
+
+    print "Are you sure you want to destroy the cluster " + \
+      cluster_name + "?\nThe following instances will be terminated:"
+    for inst in master_nodes + slave_nodes:
+      print inst
+
+    response = raw_input("ALL DATA ON ALL NODES WILL BE LOST!!\n" +
         "Destroy cluster " + cluster_name + " (y/N): ")
+
     if response == "y":
-      (master_nodes, slave_nodes) = get_existing_cluster(
-          conn, opts, cluster_name, die_on_error=False)
       print "Terminating master..."
       for inst in master_nodes:
         inst.terminate()
