@@ -216,4 +216,31 @@ class SQLQuerySuite extends QueryTest {
       (null, null, 5, "E") ::
       (null, null, 6, "F") :: Nil)
   }
+
+  test("select with table name as qualifier") {
+    checkAnswer(
+      sql("SELECT testData.value FROM testData WHERE testData.key = 1"),
+      Seq(Seq("1")))
+  }
+
+  test("inner join ON with table name as qualifier") {
+    checkAnswer(
+      sql("SELECT * FROM upperCaseData JOIN lowerCaseData ON lowerCaseData.n = upperCaseData.N"),
+      Seq(
+        (1, "A", 1, "a"),
+        (2, "B", 2, "b"),
+        (3, "C", 3, "c"),
+        (4, "D", 4, "d")))
+  }
+
+  test("qualified select with inner join ON with table name as qualifier") {
+    checkAnswer(
+      sql("SELECT upperCaseData.N, upperCaseData.L FROM upperCaseData JOIN lowerCaseData " +
+        "ON lowerCaseData.n = upperCaseData.N"),
+      Seq(
+        (1, "A"),
+        (2, "B"),
+        (3, "C"),
+        (4, "D")))
+  }
 }
