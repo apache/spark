@@ -504,7 +504,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
       }
     }
     handleMessageExecutor.execute(runnable)
-    /* handleMessage(connection, message)*/
+    /* handleMessage(connection, message) */
   }
 
   private def handleClientAuthentication(
@@ -858,14 +858,14 @@ private[spark] object ConnectionManager {
       None
     })
 
-    /* testSequentialSending(manager)*/
-    /* System.gc()*/
+    /* testSequentialSending(manager) */
+    /* System.gc() */
 
-    /* testParallelSending(manager)*/
-    /* System.gc()*/
+    /* testParallelSending(manager) */
+    /* System.gc() */
 
-    /* testParallelDecreasingSending(manager)*/
-    /* System.gc()*/
+    /* testParallelDecreasingSending(manager) */
+    /* System.gc() */
 
     testContinuousSending(manager)
     System.gc()
