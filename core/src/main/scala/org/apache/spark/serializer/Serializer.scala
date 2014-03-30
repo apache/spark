@@ -26,7 +26,7 @@ import org.apache.spark.util.{ByteBufferInputStream, NextIterator}
 import org.apache.spark.SparkEnv
 
 /**
- * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ * <span class="badge badge-red" style="float: right;">UNSTABLE DEVELOPER API</span>
  *
  * A serializer. Because some serialization libraries are not thread safe, this class is used to
  * create [[org.apache.spark.serializer.SerializerInstance]] objects that do the actual
@@ -55,7 +55,7 @@ object Serializer {
 
 
 /**
- * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ * <span class="badge badge-red" style="float: right;">UNSTABLE DEVELOPER API</span>
  *
  * An instance of a serializer, for use by one thread at a time.
  */
@@ -89,7 +89,7 @@ trait SerializerInstance {
 
 
 /**
- * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ * <span class="badge badge-red" style="float: right;">UNSTABLE DEVELOPER API</span>
  *
  * A stream for writing serialized objects.
  */
@@ -108,7 +108,7 @@ trait SerializationStream {
 
 
 /**
- * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ * <span class="badge badge-red" style="float: right;">UNSTABLE DEVELOPER API</span>
  *
  * A stream for reading serialized objects.
  */

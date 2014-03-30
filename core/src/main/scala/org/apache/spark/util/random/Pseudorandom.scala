@@ -18,7 +18,7 @@
 package org.apache.spark.util.random
 
 /**
- * <span class="badge badge-red" style="float: right;">SEMI-PRIVATE</span>
+ * <span class="badge badge-red" style="float: right;">UNSTABLE DEVELOPER API</span>
  *
  * A class with pseudorandom behavior.
  */

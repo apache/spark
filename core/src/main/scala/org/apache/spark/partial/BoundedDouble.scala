@@ -18,7 +18,7 @@
 package org.apache.spark.partial
 
 /**
- * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+ * <span class="badge badge-red" style="float: right;">EXPERIMENTAL API</span>
  *
  * A Double value with error bars and associated confidence.
  */
