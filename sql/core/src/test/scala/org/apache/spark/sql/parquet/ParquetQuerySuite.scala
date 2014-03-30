@@ -30,6 +30,9 @@ import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 import org.apache.spark.sql.test.TestSQLContext
 
+// Implicits
+import org.apache.spark.sql.test.TestSQLContext._
+
 class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
   override def beforeAll() {
     ParquetTestData.writeFile()
@@ -37,6 +40,22 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
 
   override def afterAll() {
     ParquetTestData.testFile.delete()
+  }
+
+  test("self-join parquet files") {
+    val x = ParquetTestData.testData.subquery('x)
+    val y = ParquetTestData.testData.subquery('y)
+    val query = x.join(y).where("x.myint".attr === "y.myint".attr)
+
+    // Check to make sure that the attributes from either side of the join have unique expression
+    // ids.
+    query.queryExecution.analyzed.output.filter(_.name == "myint") match {
+      case Seq(i1, i2) if(i1.exprId == i2.exprId) =>
+        fail(s"Duplicate expression IDs found in query plan: $query")
+      case Seq(_, _) => // All good
+    }
+
+    // TODO: We can't run this query as it NPEs
   }
 
   test("Import of simple Parquet file") {
