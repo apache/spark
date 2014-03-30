@@ -21,7 +21,6 @@ import breeze.linalg.{Vector => BV, DenseVector => BDV}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils._
 import org.apache.spark.rdd.RDD
-import breeze.linalg._
 
 /**
  * Extra functions available on RDDs of [[org.apache.spark.mllib.linalg.Vector Vector]] through an
@@ -29,30 +28,6 @@ import breeze.linalg._
  * these functions.
  */
 class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
-
-  /**
-   * Compute the mean of each `Vector` in the RDD.
-   */
-  def rowMeans(): RDD[Double] = {
-    self.map(x => x.toArray.sum / x.size)
-  }
-
-  /**
-   * Compute the norm-2 of each `Vector` in the RDD.
-   */
-  def rowNorm2(): RDD[Double] = {
-    self.map(x => math.sqrt(x.toArray.map(x => x*x).sum))
-  }
-
-  /**
-   * Compute the standard deviation of each `Vector` in the RDD.
-   */
-  def rowSDs(): RDD[Double] = {
-    val means = self.rowMeans()
-    self.zip(means)
-      .map{ case(x, m) => x.toBreeze - m }
-      .map{ x => math.sqrt(x.toArray.map(x => x*x).sum / x.size) }
-  }
 
   /**
    * Compute the mean of each column in the RDD.
@@ -138,11 +113,6 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
   def minOption(cmp: (Vector, Vector) => Boolean) = maxMinOption(!cmp(_, _))
 
   /**
-   * Filter the vectors whose standard deviation is not zero.
-   */
-  def rowShrink(): RDD[Vector] = self.zip(self.rowSDs()).filter(_._2 != 0.0).map(_._1)
-
-  /**
    * Filter each column of the RDD whose standard deviation is not zero.
    */
   def colShrink(): RDD[Vector] = {
@@ -163,34 +133,66 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
     }
   }
 
-  def parallelMeanAndVar(size: Int): (Vector, Vector, Double, Vector, Vector, Vector) = {
-    val statistics = self.map(_.toBreeze).aggregate((BV.zeros[Double](size), BV.zeros[Double](size), 0.0, BV.zeros[Double](size), BV.fill(size){Double.MinValue}, BV.fill(size){Double.MaxValue}))(
+  /**
+   * Compute full column-wise statistics for the RDD, including
+   * {{{
+   *   Mean:              Vector,
+   *   Variance:          Vector,
+   *   Count:             Double,
+   *   Non-zero count:    Vector,
+   *   Maximum elements:  Vector,
+   *   Minimum elements:  Vector.
+   * }}},
+   * with the size of Vector as input parameter.
+   */
+  def statistics(size: Int): (Vector, Vector, Double, Vector, Vector, Vector) = {
+    val results = self.map(_.toBreeze).aggregate((
+      BV.zeros[Double](size),
+      BV.zeros[Double](size),
+      0.0,
+      BV.zeros[Double](size),
+      BV.fill(size){Double.MinValue},
+      BV.fill(size){Double.MaxValue}))(
       seqOp = (c, v) => (c, v) match {
-        case ((prevMean, prevM2n, cnt, nnz, maxVec, minVec), currData) =>
+        case ((prevMean, prevM2n, cnt, nnzVec, maxVec, minVec), currData) =>
           val currMean = ((prevMean :* cnt) + currData) :/ (cnt + 1.0)
-          val nonZeroCnt = Vectors.sparse(size, currData.activeKeysIterator.toSeq.map(x => (x, 1.0))).toBreeze
+          val nonZeroCnt = Vectors
+            .sparse(size, currData.activeKeysIterator.toSeq.map(x => (x, 1.0))).toBreeze
           currData.activeIterator.foreach { case (id, value) =>
             if (maxVec(id) < value) maxVec(id) = value
             if (minVec(id) > value) minVec(id) = value
           }
-          (currMean, prevM2n + ((currData - prevMean) :* (currData - currMean)), cnt + 1.0, nnz + nonZeroCnt, maxVec, minVec)
+          (currMean,
+            prevM2n + ((currData - prevMean) :* (currData - currMean)),
+            cnt + 1.0,
+            nnzVec + nonZeroCnt,
+            maxVec,
+            minVec)
       },
       combOp = (lhs, rhs) => (lhs, rhs) match {
-        case ((lhsMean, lhsM2n, lhsCnt, lhsNNZ, lhsMax, lhsMin), (rhsMean, rhsM2n, rhsCnt, rhsNNZ, rhsMax, rhsMin)) =>
-          val totalCnt = lhsCnt + rhsCnt
-          val totalMean = (lhsMean :* lhsCnt) + (rhsMean :* rhsCnt) :/ totalCnt
-          val deltaMean = rhsMean - lhsMean
-          val totalM2n = lhsM2n + rhsM2n + (((deltaMean :* deltaMean) :* (lhsCnt * rhsCnt)) :/ totalCnt)
-          rhsMax.activeIterator.foreach { case (id, value) =>
-            if (lhsMax(id) < value) lhsMax(id) = value
-          }
-          rhsMin.activeIterator.foreach { case (id, value) =>
-            if (lhsMin(id) > value) lhsMin(id) = value
-          }
-          (totalMean, totalM2n, totalCnt, lhsNNZ + rhsNNZ, lhsMax, lhsMin)
+        case (
+          (lhsMean, lhsM2n, lhsCnt, lhsNNZ, lhsMax, lhsMin),
+          (rhsMean, rhsM2n, rhsCnt, rhsNNZ, rhsMax, rhsMin)) =>
+            val totalCnt = lhsCnt + rhsCnt
+            val totalMean = (lhsMean :* lhsCnt) + (rhsMean :* rhsCnt) :/ totalCnt
+            val deltaMean = rhsMean - lhsMean
+            val totalM2n =
+              lhsM2n + rhsM2n + (((deltaMean :* deltaMean) :* (lhsCnt * rhsCnt)) :/ totalCnt)
+            rhsMax.activeIterator.foreach { case (id, value) =>
+              if (lhsMax(id) < value) lhsMax(id) = value
+            }
+            rhsMin.activeIterator.foreach { case (id, value) =>
+              if (lhsMin(id) > value) lhsMin(id) = value
+            }
+            (totalMean, totalM2n, totalCnt, lhsNNZ + rhsNNZ, lhsMax, lhsMin)
       }
     )
 
-    (Vectors.fromBreeze(statistics._1), Vectors.fromBreeze(statistics._2 :/ statistics._3), statistics._3, Vectors.fromBreeze(statistics._4), Vectors.fromBreeze(statistics._5), Vectors.fromBreeze(statistics._6))
+    (Vectors.fromBreeze(results._1),
+      Vectors.fromBreeze(results._2 :/ results._3),
+      results._3,
+      Vectors.fromBreeze(results._4),
+      Vectors.fromBreeze(results._5),
+      Vectors.fromBreeze(results._6))
   }
 }

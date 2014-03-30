@@ -31,10 +31,6 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
     Vectors.dense(7.0, 8.0, 9.0)
   )
 
-  val rowMeans = Array(2.0, 5.0, 8.0)
-  val rowNorm2 = Array(math.sqrt(14.0), math.sqrt(77.0), math.sqrt(194.0))
-  val rowSDs = Array(math.sqrt(2.0 / 3.0), math.sqrt(2.0 / 3.0), math.sqrt(2.0 / 3.0))
-
   val colMeans = Array(4.0, 5.0, 6.0)
   val colNorm2 = Array(math.sqrt(66.0), math.sqrt(93.0), math.sqrt(126.0))
   val colSDs = Array(math.sqrt(6.0), math.sqrt(6.0), math.sqrt(6.0))
@@ -49,34 +45,11 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
     Vectors.dense(7.0, 8.0, 0.0)
   )
 
-  val rowShrinkData = Array(
-    Vectors.dense(1.0, 2.0, 0.0),
-    Vectors.dense(7.0, 8.0, 0.0)
-  )
-
   val colShrinkData = Array(
     Vectors.dense(1.0, 2.0),
     Vectors.dense(0.0, 0.0),
     Vectors.dense(7.0, 8.0)
   )
-
-  test("rowMeans") {
-    val data = sc.parallelize(localData, 2)
-    assert(equivVector(Vectors.dense(data.rowMeans().collect()), Vectors.dense(rowMeans)),
-      "Row means do not match.")
-  }
-
-  test("rowNorm2") {
-    val data = sc.parallelize(localData, 2)
-    assert(equivVector(Vectors.dense(data.rowNorm2().collect()), Vectors.dense(rowNorm2)),
-      "Row norm2s do not match.")
-  }
-
-  test("rowSDs") {
-    val data = sc.parallelize(localData, 2)
-    assert(equivVector(Vectors.dense(data.rowSDs().collect()), Vectors.dense(rowSDs)),
-      "Row SDs do not match.")
-  }
 
   test("colMeans") {
     val data = sc.parallelize(localData, 2)
@@ -114,14 +87,6 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
     )
   }
 
-  test("rowShrink") {
-    val data = sc.parallelize(shrinkingData, 2)
-    val res = data.rowShrink().collect()
-    rowShrinkData.zip(res).foreach { case (lhs, rhs) =>
-      assert(equivVector(lhs, rhs), "Row shrink error.")
-    }
-  }
-
   test("columnShrink") {
     val data = sc.parallelize(shrinkingData, 2)
     val res = data.colShrink().collect()
@@ -130,9 +95,9 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("meanAndVar") {
+  test("full-statistics") {
     val data = sc.parallelize(localData, 2)
-    val (mean, sd, cnt, nnz, max, min) = data.parallelMeanAndVar(3)
+    val (mean, sd, cnt, nnz, max, min) = data.statistics(3)
     assert(equivVector(mean, Vectors.dense(colMeans)), "Column means do not match.")
     assert(equivVector(sd, Vectors.dense(colVar)), "Column SD do not match.")
     assert(cnt === 3, "Column cnt do not match.")
