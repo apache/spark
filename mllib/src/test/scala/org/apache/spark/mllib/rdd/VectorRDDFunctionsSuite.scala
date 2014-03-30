@@ -132,9 +132,13 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
 
   test("meanAndVar") {
     val data = sc.parallelize(localData, 2)
-    val (mean, sd) = data.parallelMeanAndVar(3)
+    val (mean, sd, cnt, nnz, max, min) = data.parallelMeanAndVar(3)
     assert(equivVector(mean, Vectors.dense(colMeans)), "Column means do not match.")
     assert(equivVector(sd, Vectors.dense(colVar)), "Column SD do not match.")
+    assert(cnt === 3, "Column cnt do not match.")
+    assert(equivVector(nnz, Vectors.dense(3.0, 3.0, 3.0)), "Column nnz do not match.")
+    assert(equivVector(max, Vectors.dense(7.0, 8.0, 9.0)), "Column max do not match.")
+    assert(equivVector(min, Vectors.dense(1.0, 2.0, 3.0)), "Column min do not match.")
   }
 }
 
