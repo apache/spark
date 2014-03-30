@@ -25,6 +25,7 @@ import org.apache.spark.{Logging, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
+import org.apache.spark.util.Utils
 
 private case class ReviveOffers()
 
@@ -46,6 +47,7 @@ private[spark] class LocalActor(
 
   private val localExecutorId = "localhost"
   private val localExecutorHostname = "localhost"
+  val ser = scheduler.sc.env.closureSerializer.newInstance()
 
   val executor = new Executor(
     localExecutorId, localExecutorHostname, scheduler.conf.getAll, isLocal = true)
@@ -67,8 +69,9 @@ private[spark] class LocalActor(
 
   def reviveOffers() {
     val offers = Seq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
-    for (task <- scheduler.resourceOffers(offers).flatten) {
+    for (taskNoSer <- scheduler.resourceOffers(offers).flatten) {
       freeCores -= 1
+      val task = Utils.serializeTask(taskNoSer, scheduler.sc, ser)
       executor.launchTask(executorBackend, task.taskId, task.serializedTask)
     }
   }

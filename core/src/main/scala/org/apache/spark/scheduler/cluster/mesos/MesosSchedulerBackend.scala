@@ -29,9 +29,18 @@ import org.apache.mesos.{Scheduler => MScheduler}
 import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
 
-import org.apache.spark.{Logging, SparkContext, SparkException, TaskState}
-import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
+import org.apache.spark._
+import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
+import akka.actor.ActorRef
+import org.apache.spark.scheduler.WorkerOffer
+import org.apache.spark.scheduler.SlaveLost
+import org.apache.spark.scheduler.ExecutorExited
+import org.apache.spark.scheduler.WorkerOffer
+import org.apache.spark.scheduler.SlaveLost
+import org.apache.spark.scheduler.ExecutorExited
+import org.apache.spark.serializer.SerializerInstance
+
 
 /**
  * A SchedulerBackend for running fine-grained tasks on Mesos. Each Spark task is mapped to a
@@ -61,6 +70,30 @@ private[spark] class MesosSchedulerBackend(
   var execArgs: Array[Byte] = null
 
   var classLoader: ClassLoader = null
+
+  val serializeWorkerPool = Utils.newDaemonFixedThreadPool(
+    scheduler.sc.conf.getInt("spark.scheduler.task.serialize.threads", 4), "task-serialization")
+
+  val env = SparkEnv.get
+  protected val serializer = new ThreadLocal[SerializerInstance] {
+    override def initialValue(): SerializerInstance = {
+      env.closureSerializer.newInstance()
+    }
+  }
+
+  class TaskMesosSerializedRunner(taskNoSer: TaskDescWithoutSerializedTask,
+                                  taskList: JList[MesosTaskInfo],
+                                  slaveId: String,
+                                  scheduler: TaskSchedulerImpl)
+    extends Runnable {
+    override def run() {
+      // Serialize and return the task
+      val task = Utils.serializeTask(taskNoSer, scheduler.sc, serializer.get())
+      taskList.synchronized {
+        taskList.add(createMesosTask(task, slaveId))
+      }
+    }
+  }
 
   override def start() {
     synchronized {
@@ -213,9 +246,11 @@ private[spark] class MesosSchedulerBackend(
             val slaveId = offers(offerNum).getSlaveId.getValue
             slaveIdsWithExecutors += slaveId
             mesosTasks(offerNum) = new JArrayList[MesosTaskInfo](taskList.size)
-            for (taskDesc <- taskList) {
-              taskIdToSlaveId(taskDesc.taskId) = slaveId
-              mesosTasks(offerNum).add(createMesosTask(taskDesc, slaveId))
+            for (taskNoSer <- taskList) {
+              taskIdToSlaveId(taskNoSer.taskId) = slaveId
+              val taskList = mesosTasks(offerNum)
+              serializeWorkerPool.execute(
+                new TaskMesosSerializedRunner(taskNoSer, taskList, slaveId, scheduler))
             }
           }
         }

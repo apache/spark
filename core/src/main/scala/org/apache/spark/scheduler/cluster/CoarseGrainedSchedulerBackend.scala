@@ -27,10 +27,12 @@ import akka.actor._
 import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
-import org.apache.spark.{Logging, SparkException, TaskState}
+import org.apache.spark.{Logging, SparkException, TaskState, SparkEnv}
 import org.apache.spark.scheduler.{SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
+import org.apache.spark.scheduler.{TaskDescWithoutSerializedTask,Task}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.serializer.SerializerInstance
 
 /**
  * A scheduler backend that waits for coarse grained executors to connect to it through Akka.
@@ -48,6 +50,26 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   var totalCoreCount = new AtomicInteger(0)
   val conf = scheduler.sc.conf
   private val timeout = AkkaUtils.askTimeout(conf)
+  val serializeWorkerPool = Utils.newDaemonFixedThreadPool(
+    conf.getInt("spark.scheduler.task.serialize.threads", 4), "task-serialization")
+
+  val env = SparkEnv.get
+  protected val serializer = new ThreadLocal[SerializerInstance] {
+    override def initialValue(): SerializerInstance = {
+      env.closureSerializer.newInstance()
+    }
+  }
+
+  class TaskCGSerializedRunner(execActor: ActorRef,
+                             taskNoSer: TaskDescWithoutSerializedTask,
+                             scheduler: TaskSchedulerImpl)
+    extends Runnable {
+    override def run() {
+      // Serialize and return the task
+      val task = Utils.serializeTask(taskNoSer, scheduler.sc, serializer.get())
+      execActor ! LaunchTask(task)
+    }
+  }
 
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor {
     private val executorActor = new HashMap[String, ActorRef]
@@ -56,6 +78,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     private val freeCores = new HashMap[String, Int]
     private val totalCores = new HashMap[String, Int]
     private val addressToExecutorId = new HashMap[Address, String]
+
 
     override def preStart() {
       // Listen for remote client disconnection events, since they don't go through Akka's watch()
@@ -138,10 +161,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     }
 
     // Launch tasks returned by a set of resource offers
-    def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
-      for (task <- tasks.flatten) {
-        freeCores(task.executorId) -= 1
-        executorActor(task.executorId) ! LaunchTask(task)
+    def launchTasks(tasks: Seq[Seq[TaskDescWithoutSerializedTask]]) {
+      for (taskNoSer <- tasks.flatten) {
+        freeCores(taskNoSer.executorId) -= 1
+        serializeWorkerPool.execute(
+          new TaskCGSerializedRunner(executorActor(taskNoSer.executorId), taskNoSer, scheduler)
+        )
       }
     }
 
@@ -191,6 +216,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   }
 
   override def stop() {
+    if (serializeWorkerPool != null) {
+      serializeWorkerPool.shutdownNow()
+    }
     stopExecutors()
     try {
       if (driverActor != null) {

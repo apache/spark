@@ -34,9 +34,11 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.json4s._
 
+import org.apache.spark.SparkContext
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
+import org.apache.spark.scheduler.{TaskDescWithoutSerializedTask, TaskDescription, Task}
 
 /**
  * Various utility methods used by Spark.
@@ -147,6 +149,21 @@ private[spark] object Utils extends Logging {
       }
     }
     buf
+  }
+
+  def serializeTask(taskNoSer: TaskDescWithoutSerializedTask, sc: SparkContext,
+                    serializer: SerializerInstance) : TaskDescription = {
+    val startTime = System.currentTimeMillis()
+    // We rely on the DAGScheduler to catch non-serializable closures and RDDs, so in here
+    // we assume the task can be serialized without exceptions.
+    val serializedTask = Task.serializeWithDependencies(
+      taskNoSer.taskObject, sc.addedFiles, sc.addedJars, serializer)
+    val timeTaken = System.currentTimeMillis() - startTime
+    logInfo("Serialized task %s as %d bytes in %d ms".format(
+      taskNoSer.taskName, serializedTask.limit, timeTaken))
+    val task = new TaskDescription(taskNoSer.taskId, taskNoSer.executorId,
+      taskNoSer.taskName, taskNoSer.index, serializedTask)
+    task
   }
 
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
