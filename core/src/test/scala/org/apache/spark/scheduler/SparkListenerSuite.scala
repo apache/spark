@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import java.util.concurrent.Semaphore
+
 import scala.collection.mutable
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
@@ -70,6 +72,44 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
       val bus = new LiveListenerBus
       bus.stop()
     }
+  }
+
+  test("bus.stop() waits for the event queue to completely drain") {
+    val bus = new LiveListenerBus
+    val blockingListener = new BlockingListener(bus)
+    val sem = new Semaphore(0)
+
+    bus.addListener(blockingListener)
+    bus.post(SparkListenerJobEnd(0, JobSucceeded))
+    bus.start()
+    // the queue should not drain immediately
+    assert(!bus.isDrained)
+
+    new Thread("ListenerBusStopper") {
+      override def run() {
+        // stop() would block until notify() is called below
+        bus.stop()
+        sem.release()
+      }
+    }.start()
+
+    val startTime = System.currentTimeMillis()
+    val waitTime = 200
+    var done = false
+    while (!done) {
+      if (System.currentTimeMillis() > startTime + waitTime) {
+        bus.synchronized {
+          bus.notify()
+        }
+        done = true
+      } else {
+        // bus.stop() should wait until the event queue is drained
+        // ensuring no events are lost
+        assert(!bus.isDrained)
+      }
+    }
+    sem.acquire()
+    assert(bus.isDrained)
   }
 
   test("basic creation of StageInfo") {
@@ -282,4 +322,11 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
       startedGettingResultTasks += taskGettingResult.taskInfo.index
     }
   }
+
+  class BlockingListener(cond: AnyRef) extends SparkListener {
+    override def onJobEnd(jobEnd: SparkListenerJobEnd) = {
+      cond.synchronized { cond.wait() }
+    }
+  }
+
 }

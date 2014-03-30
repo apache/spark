@@ -37,6 +37,9 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
   private var queueFullErrorMessageLogged = false
   private var started = false
 
+  private var drained = false
+  private val drainedLock = new Object()
+
   /**
    * Start sending events to attached listeners.
    *
@@ -55,6 +58,10 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
         while (true) {
           val event = eventQueue.take
           if (event == SparkListenerShutdown) {
+            drainedLock.synchronized {
+              drained = true
+              drainedLock.notify()
+            }
             // Get out of the while loop and shutdown the daemon thread
             return
           }
@@ -92,10 +99,27 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
     true
   }
 
+  /**
+   * Return true if the event queue has been drained, i.e. the listener bus thread has processed
+   * the SparkListenerShutdown message and has exited. Used for testing only.
+   */
+  def isDrained = drainedLock.synchronized { drained }
+
+  /**
+   * Stop the listener bus; wait until all listener events are processed by the listener bus
+   * thread. The user has to make sure the listeners finish in a reasonable amount of time.
+   */
   def stop() {
     if (!started) {
       throw new IllegalStateException("Attempted to stop a listener bus that has not yet started!")
     }
-    post(SparkListenerShutdown)
+    drainedLock.synchronized {
+      // put post() and wait() in the same synchronized block to ensure wait() happens before
+      // notify()
+      post(SparkListenerShutdown)
+      while (!drained) {
+        drainedLock.wait()
+      }
+    }
   }
 }
