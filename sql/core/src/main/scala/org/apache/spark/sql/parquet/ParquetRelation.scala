@@ -57,19 +57,19 @@ import org.apache.spark.sql.catalyst.types._
 case class ParquetRelation(tableName: String, path: String)
   extends BaseRelation with MultiInstanceRelation {
 
-  /** Schema derived from ParquetFile **/
+  /** Schema derived from ParquetFile */
   def parquetSchema: MessageType =
     ParquetTypesConverter
       .readMetaData(new Path(path))
       .getFileMetaData
       .getSchema
 
-  /** Attributes **/
+  /** Attributes */
   val attributes =
     ParquetTypesConverter
     .convertToAttributes(parquetSchema)
 
-  /** Output **/
+  /** Output */
   override val output = attributes
 
   // Parquet files have no concepts of keys, therefore no Partitioner
