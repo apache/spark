@@ -38,6 +38,7 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
   val colMeans = Array(4.0, 5.0, 6.0)
   val colNorm2 = Array(math.sqrt(66.0), math.sqrt(93.0), math.sqrt(126.0))
   val colSDs = Array(math.sqrt(6.0), math.sqrt(6.0), math.sqrt(6.0))
+  val colVar = Array(6.0, 6.0, 6.0)
 
   val maxVec = Array(7.0, 8.0, 9.0)
   val minVec = Array(1.0, 2.0, 3.0)
@@ -127,6 +128,13 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
     colShrinkData.zip(res).foreach { case (lhs, rhs) =>
       assert(equivVector(lhs, rhs), "Column shrink error.")
     }
+  }
+
+  test("meanAndVar") {
+    val data = sc.parallelize(localData, 2)
+    val (mean, sd) = data.parallelMeanAndVar(3)
+    assert(equivVector(mean, Vectors.dense(colMeans)), "Column means do not match.")
+    assert(equivVector(sd, Vectors.dense(colVar)), "Column SD do not match.")
   }
 }
 

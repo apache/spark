@@ -21,6 +21,7 @@ import breeze.linalg.{Vector => BV, DenseVector => BDV}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils._
 import org.apache.spark.rdd.RDD
+import breeze.numerics._
 
 /**
  * Extra functions available on RDDs of [[org.apache.spark.mllib.linalg.Vector Vector]] through an
@@ -160,5 +161,25 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
           Vectors.sparse(size, iterElement)
         }
     }
+  }
+
+  def parallelMeanAndVar(size: Int): (Vector, Vector) = {
+    val statistics = self.map(_.toBreeze).aggregate((BV.zeros[Double](size), BV.zeros[Double](size), 0.0))(
+      seqOp = (c, v) => (c, v) match {
+        case ((prevMean, prevM2n, cnt), currData) =>
+          val currMean = ((prevMean :* cnt) + currData) :/ (cnt + 1.0)
+          (currMean, prevM2n + ((currData - prevMean) :* (currData - currMean)), cnt + 1.0)
+      },
+      combOp = (lhs, rhs) => (lhs, rhs) match {
+        case ((lhsMean, lhsM2n, lhsCnt), (rhsMean, rhsM2n, rhsCnt)) =>
+          val totalCnt = lhsCnt + rhsCnt
+          val totalMean = (lhsMean :* lhsCnt) + (rhsMean :* rhsCnt) :/ totalCnt
+          val deltaMean = rhsMean - lhsMean
+          val totalM2n = lhsM2n + rhsM2n + (((deltaMean :* deltaMean) :* (lhsCnt * rhsCnt)) :/ totalCnt)
+          (totalMean, totalM2n, totalCnt)
+      }
+    )
+
+    (Vectors.fromBreeze(statistics._1), Vectors.fromBreeze(statistics._2 :/ statistics._3))
   }
 }
