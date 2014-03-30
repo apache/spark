@@ -87,7 +87,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
 
     new Thread("ListenerBusStopper") {
       override def run() {
-        // stop() would block until cond.notify() is called in the below
+        // stop() would block until notify() is called below
         bus.stop()
         sem.release()
       }
