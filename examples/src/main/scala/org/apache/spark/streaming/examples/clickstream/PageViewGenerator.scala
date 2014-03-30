@@ -21,7 +21,7 @@ import java.net.ServerSocket
 import java.io.PrintWriter
 import util.Random
 
-/** Represents a page view on a website with associated dimension data.*/
+/** Represents a page view on a website with associated dimension data. */
 class PageView(val url : String, val status : Int, val zipCode : Int, val userID : Int)
     extends Serializable {
   override def toString() : String = {
