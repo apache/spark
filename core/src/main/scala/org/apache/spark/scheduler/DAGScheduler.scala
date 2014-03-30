@@ -75,6 +75,7 @@ class DAGScheduler(
   def this(sc: SparkContext) = this(sc, sc.taskScheduler)
 
   private var eventProcessActor: ActorRef = _
+  private var eventProcessActorInitialized = false
 
   private[scheduler] val nextJobId = new AtomicInteger(0)
   private[scheduler] def numTotalJobs: Int = nextJobId.get()
@@ -150,6 +151,7 @@ class DAGScheduler(
           }
       }
     }))
+    eventProcessActorInitialized = true
   }
 
   // Called by TaskScheduler to report task's starting.
@@ -180,6 +182,10 @@ class DAGScheduler(
 
   // Called by TaskScheduler when a host is added
   def executorAdded(execId: String, host: String) {
+    while(!eventProcessActorInitialized){
+      Thread.sleep(500)
+      logInfo("eventProcessActor has not initialized!")
+    }
     eventProcessActor ! ExecutorAdded(execId, host)
   }
 
