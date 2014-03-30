@@ -69,7 +69,7 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
   }
 }
 
-object Distribution {
+private[spark] object Distribution {
 
   def apply(data: Traversable[Double]): Option[Distribution] = {
     if (data.size > 0) {
