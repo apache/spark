@@ -92,11 +92,8 @@ case class HashJoin(
         private[this] val joinKeys = streamSideKeyGenerator()
 
         override final def hasNext: Boolean =
-          if (currentMatchPosition != -1) {
-            currentMatchPosition < currentHashMatches.size
-          } else {
-            fetchNext()
-          }
+          (currentMatchPosition != -1 && currentMatchPosition < currentHashMatches.size) ||
+          (streamIter.hasNext && fetchNext())
 
         override final def next() = {
           val ret = joinRow(currentStreamedRow, currentHashMatches(currentMatchPosition))
