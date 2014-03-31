@@ -73,6 +73,9 @@ there are at least five properties that you will commonly want to control:
     Directory to use for "scratch" space in Spark, including map output files and RDDs that get stored
     on disk. This should be on a fast, local disk in your system. It can also be a comma-separated
     list of multiple directories on different disks.
+
+    NOTE: In Spark 1.0 and later this will be overriden by SPARK_LOCAL_DIRS (Standalone, Mesos) or
+    LOCAL_DIRS (YARN) envrionment variables set by the cluster manager.
   </td>
 </tr>
 <tr>
@@ -671,8 +674,7 @@ The following variables can be set in `spark-env.sh`:
    Note that applications can also add dependencies for themselves through `SparkContext.addJar` -- we recommend
    doing that when possible.
 * `SPARK_JAVA_OPTS`, to add JVM options. This includes Java options like garbage collector settings and any system
-   properties that you'd like to pass with `-D`. One use case is to set some Spark properties differently on this
-   machine, e.g., `-Dspark.local.dir=/disk1,/disk2`.
+   properties that you'd like to pass with `-D`.
 * Options for the Spark [standalone cluster scripts](spark-standalone.html#cluster-launch-scripts), such as number of cores
   to use on each machine and maximum memory.
 
