@@ -71,7 +71,7 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
 }
 
 /**
- * GeneralizedLinearAlgorithm implements methods to train a Genearalized Linear Model (GLM).
+ * GeneralizedLinearAlgorithm implements methods to train a Generalized Linear Model (GLM).
  * This class should be extended with an Optimizer to create a new GLM.
  */
 abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
@@ -81,7 +81,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   val optimizer: Optimizer
 
-  protected var addIntercept: Boolean = true
+  /** Whether to add intercept (default: false). */
+  protected var addIntercept: Boolean = false
 
   protected var validateData: Boolean = true
 
