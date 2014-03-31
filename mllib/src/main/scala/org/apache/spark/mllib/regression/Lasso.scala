@@ -17,13 +17,11 @@
 
 package org.apache.spark.mllib.regression
 
-import breeze.linalg.{Vector => BV}
-
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.rdd.RDD
 
 /**
  * Regression model trained using Lasso.
@@ -58,8 +56,7 @@ class LassoWithSGD private (
     var numIterations: Int,
     var regParam: Double,
     var miniBatchFraction: Double)
-  extends GeneralizedLinearAlgorithm[LassoModel]
-  with Serializable {
+  extends GeneralizedLinearAlgorithm[LassoModel] with Serializable {
 
   val gradient = new LeastSquaresGradient()
   val updater = new L1Updater()
@@ -70,10 +67,6 @@ class LassoWithSGD private (
 
   // We don't want to penalize the intercept, so set this to false.
   super.setIntercept(false)
-
-  private var yMean = 0.0
-  private var xColMean: BV[Double] = _
-  private var xColSd: BV[Double] = _
 
   /**
    * Construct a Lasso object with default parameters
@@ -87,31 +80,7 @@ class LassoWithSGD private (
   }
 
   override protected def createModel(weights: Vector, intercept: Double) = {
-    val weightsMat = weights.toBreeze
-    val weightsScaled = weightsMat :/ xColSd
-    val interceptScaled = yMean - weightsMat.dot(xColMean :/ xColSd)
-
-    new LassoModel(Vectors.fromBreeze(weightsScaled), interceptScaled)
-  }
-
-  override def run(input: RDD[LabeledPoint], initialWeights: Vector): LassoModel = {
-    val nfeatures: Int = input.first.features.size
-    val nexamples: Long = input.count()
-
-    // To avoid penalizing the intercept, we center and scale the data.
-    val stats = MLUtils.computeStats(input, nfeatures, nexamples)
-    yMean = stats._1
-    xColMean = stats._2.toBreeze
-    xColSd = stats._3.toBreeze
-
-    val normalizedData = input.map { point =>
-      val yNormalized = point.label - yMean
-      val featuresMat = point.features.toBreeze
-      val featuresNormalized = (featuresMat - xColMean) :/ xColSd
-      LabeledPoint(yNormalized, Vectors.fromBreeze(featuresNormalized))
-    }
-
-    super.run(normalizedData, initialWeights)
+    new LassoModel(weights, intercept)
   }
 }
 
