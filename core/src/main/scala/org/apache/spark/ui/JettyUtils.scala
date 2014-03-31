@@ -18,13 +18,14 @@
 package org.apache.spark.ui
 
 import java.net.{InetSocketAddress, URL}
+import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 import scala.xml.Node
 
-import org.eclipse.jetty.server.{DispatcherType, Server}
+import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.handler._
 import org.eclipse.jetty.servlet._
 import org.eclipse.jetty.util.thread.QueuedThreadPool
