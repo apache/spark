@@ -17,15 +17,12 @@
 
 package org.apache.spark.mllib.classification
 
-import scala.math.round
-
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.mllib.util.DataValidators
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.util.{DataValidators, MLUtils}
+import org.apache.spark.rdd.RDD
 
 /**
  * Classification model trained using Logistic Regression.
@@ -36,13 +33,36 @@ import org.apache.spark.mllib.linalg.Vector
 class LogisticRegressionModel(
     override val weights: Vector,
     override val intercept: Double)
-  extends GeneralizedLinearModel(weights, intercept)
-  with ClassificationModel with Serializable {
+  extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {
+
+  private var threshold: Option[Double] = Some(0.5)
+
+  /**
+   * Sets the threshold that separates positive predictions from negative predictions. An example
+   * with prediction score greater than or equal to this threshold is identified as an positive,
+   * and negative otherwise. The default value is 0.5.
+   */
+  def setThreshold(threshold: Double): this.type = {
+    this.threshold = Some(threshold)
+    this
+  }
+
+  /**
+   * Clears the threshold so that `predict` will output raw prediction scores.
+   */
+  def clearThreshold(): this.type = {
+    threshold = None
+    this
+  }
 
   override def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
       intercept: Double) = {
     val margin = weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
-    round(1.0/ (1.0 + math.exp(margin * -1)))
+    val score = 1.0/ (1.0 + math.exp(-margin))
+    threshold match {
+      case Some(t) => if (score < t) 0.0 else 1.0
+      case None => score
+    }
   }
 }
 
@@ -55,16 +75,15 @@ class LogisticRegressionWithSGD private (
     var numIterations: Int,
     var regParam: Double,
     var miniBatchFraction: Double)
-  extends GeneralizedLinearAlgorithm[LogisticRegressionModel]
-  with Serializable {
+  extends GeneralizedLinearAlgorithm[LogisticRegressionModel] with Serializable {
 
   val gradient = new LogisticGradient()
   val updater = new SimpleUpdater()
   override val optimizer = new GradientDescent(gradient, updater)
-      .setStepSize(stepSize)
-      .setNumIterations(numIterations)
-      .setRegParam(regParam)
-      .setMiniBatchFraction(miniBatchFraction)
+    .setStepSize(stepSize)
+    .setNumIterations(numIterations)
+    .setRegParam(regParam)
+    .setMiniBatchFraction(miniBatchFraction)
   override val validators = List(DataValidators.classificationLabels)
 
   /**

@@ -18,12 +18,11 @@
 package org.apache.spark.mllib.classification
 
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.mllib.util.DataValidators
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.util.{DataValidators, MLUtils}
+import org.apache.spark.rdd.RDD
 
 /**
  * Model for Support Vector Machines (SVMs).
@@ -34,13 +33,35 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 class SVMModel(
     override val weights: Vector,
     override val intercept: Double)
-  extends GeneralizedLinearModel(weights, intercept)
-  with ClassificationModel with Serializable {
+  extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {
+
+  private var threshold: Option[Double] = Some(0.0)
+
+  /**
+   * Sets the threshold that separates positive predictions from negative predictions. An example
+   * with prediction score greater than or equal to this threshold is identified as an positive,
+   * and negative otherwise. The default value is 0.0.
+   */
+  def setThreshold(threshold: Double): this.type = {
+    this.threshold = Some(threshold)
+    this
+  }
+
+  /**
+   * Clears the threshold so that `predict` will output raw prediction scores.
+   */
+  def clearThreshold(): this.type = {
+    threshold = None
+    this
+  }
 
   override def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
       intercept: Double) = {
     val margin = weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
-    if (margin < 0) 0.0 else 1.0
+    threshold match {
+      case Some(t) => if (margin < 0) 0.0 else 1.0
+      case None => margin
+    }
   }
 }
 

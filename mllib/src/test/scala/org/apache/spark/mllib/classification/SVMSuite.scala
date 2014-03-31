@@ -150,10 +150,10 @@ class SVMSuite extends FunSuite with LocalSparkContext {
     }
 
     intercept[SparkException] {
-      val model = SVMWithSGD.train(testRDDInvalid, 100)
+      SVMWithSGD.train(testRDDInvalid, 100)
     }
 
     // Turning off data validation should not throw an exception
-    val noValidationModel = new SVMWithSGD().setValidateData(false).run(testRDDInvalid)
+    new SVMWithSGD().setValidateData(false).run(testRDDInvalid)
   }
 }
