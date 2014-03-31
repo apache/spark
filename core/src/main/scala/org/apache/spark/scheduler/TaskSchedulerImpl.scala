@@ -56,10 +56,6 @@ private[spark] class TaskSchedulerImpl(
 
   val conf = sc.conf
 
-  // taskSchedulerIsSetDAG used to make sure that eventProcessActor is initialized 
-  // and dagscheduler has set to taskScheduler
-  private var taskSchedulerIsSetDAG = false
-
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL = conf.getLong("spark.speculation.interval", 100)
 
@@ -110,7 +106,6 @@ private[spark] class TaskSchedulerImpl(
 
   override def setDAGScheduler(dagScheduler: DAGScheduler) {
     this.dagScheduler = dagScheduler
-    this.taskSchedulerIsSetDAG = true
   }
 
   def initialize(backend: SchedulerBackend) {
@@ -411,10 +406,6 @@ private[spark] class TaskSchedulerImpl(
   }
 
   def executorAdded(execId: String, host: String) {
-    while(!taskSchedulerIsSetDAG) {
-      Thread.sleep(500)
-      logInfo("DAGScheduler has not set!")
-    }
     dagScheduler.executorAdded(execId, host)
   }
 
