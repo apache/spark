@@ -38,8 +38,8 @@ import org.apache.spark.util._
 private[spark] sealed trait Values
 
 private[spark] case class ByteBufferValues(buffer: ByteBuffer) extends Values
-private[spark]case class IteratorValues(iterator: Iterator[Any]) extends Values
-private[spark]case class ArrayBufferValues(buffer: ArrayBuffer[Any]) extends Values
+private[spark] case class IteratorValues(iterator: Iterator[Any]) extends Values
+private[spark] case class ArrayBufferValues(buffer: ArrayBuffer[Any]) extends Values
 
 private[spark] class BlockManager(
     executorId: String,

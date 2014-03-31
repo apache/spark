@@ -70,7 +70,7 @@ class BernoulliSampler[T](lb: Double, ub: Double, complement: Boolean = false)
   override def clone = new BernoulliSampler[T](lb, ub)
 }
 
-/**               Ps
+/**
  * <span class="badge badge-red" style="float: right;">DEVELOPER API - UNSTABLE</span>
  *
  * A sampler based on values drawn from Poisson distribution.

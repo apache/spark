@@ -41,7 +41,7 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  * objects needs to have the right SparkEnv set. You can get the current environment with
  * SparkEnv.get (e.g. after creating a SparkContext) and set it with SparkEnv.set.
  */
-private[spark] class SparkEnv private[spark] (
+private[spark] class SparkEnv (
     val executorId: String,
     val actorSystem: ActorSystem,
     val serializer: Serializer,
