@@ -300,14 +300,17 @@ object HiveQl {
   }
 
   protected def nodeToDataType(node: Node): DataType = node match {
-    case Token("TOK_BIGINT", Nil) => IntegerType
+    case Token("TOK_DECIMAL", Nil) => DecimalType
+    case Token("TOK_BIGINT", Nil) => LongType
     case Token("TOK_INT", Nil) => IntegerType
-    case Token("TOK_TINYINT", Nil) => IntegerType
-    case Token("TOK_SMALLINT", Nil) => IntegerType
+    case Token("TOK_TINYINT", Nil) => ByteType
+    case Token("TOK_SMALLINT", Nil) => ShortType
     case Token("TOK_BOOLEAN", Nil) => BooleanType
     case Token("TOK_STRING", Nil) => StringType
     case Token("TOK_FLOAT", Nil) => FloatType
-    case Token("TOK_DOUBLE", Nil) => FloatType
+    case Token("TOK_DOUBLE", Nil) => DoubleType
+    case Token("TOK_TIMESTAMP", Nil) => TimestampType
+    case Token("TOK_BINARY", Nil) => BinaryType
     case Token("TOK_LIST", elementType :: Nil) => ArrayType(nodeToDataType(elementType))
     case Token("TOK_STRUCT",
            Token("TOK_TABCOLLIST", fields) :: Nil) =>

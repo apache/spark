@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.types.{DataType, FractionalType, IntegralType, NumericType}
+import org.apache.spark.sql.catalyst.types.{BooleanType, StringType, TimestampType, NativeType}
 
 abstract class Expression extends TreeNode[Expression] {
   self: Product =>
@@ -166,6 +167,34 @@ abstract class Expression extends TreeNode[Expression] {
             f.asInstanceOf[(Integral[i.JvmType], i.JvmType, i.JvmType) => i.JvmType](
               i.integral, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
           case other => sys.error(s"Type $other does not support numeric operations")
+        }
+      }
+    }
+  }
+  
+  @inline
+  protected final def c2(
+      i: Row,
+      e1: Expression,
+      e2: Expression,
+      f: ((Ordering[Any], Any, Any) => Any)): Any  = {
+    if (e1.dataType != e2.dataType) {
+      throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
+    }
+
+    val evalE1 = e1.apply(i)
+    if(evalE1 == null) {
+      null
+    } else {
+      val evalE2 = e2.apply(i)
+      if (evalE2 == null) {
+        null
+      } else {
+        e1.dataType match {
+          case i: NativeType => 
+            f.asInstanceOf[(Ordering[i.JvmType], i.JvmType, i.JvmType) => Boolean](
+              i.ordering, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
+          case other => sys.error(s"Type $other does not support ordered operations")
         }
       }
     }
