@@ -34,24 +34,37 @@ class MLContext(self: SparkContext) {
    * where the feature indices are converted to zero-based.
    *
    * @param path file or directory path in any Hadoop-supported file system URI
-   * @param numFeatures number of features
-   * @param labelParser parser for labels, default: _.toDouble
+   * @param numFeatures number of features, it will be determined from input
+   *                    if a non-positive value is given
+   *@param labelParser parser for labels, default: _.toDouble
    * @return labeled data stored as an RDD[LabeledPoint]
    */
   def libSVMFile(
       path: String,
       numFeatures: Int,
       labelParser: String => Double = _.toDouble): RDD[LabeledPoint] = {
-    self.textFile(path).map(_.trim).filter(!_.isEmpty).map { line =>
-      val items = line.split(' ')
+    val parsed = self.textFile(path).map(_.trim).filter(!_.isEmpty).map(_.split(' '))
+    // Determine number of features.
+    val d = if (numFeatures > 0) {
+      numFeatures
+    } else {
+      parsed.map { items =>
+        if (items.length > 1) {
+          items.last.split(':')(0).toInt
+        } else {
+          0
+        }
+      }.reduce(math.max)
+    }
+    parsed.map { items =>
       val label = labelParser(items.head)
-      val features = Vectors.sparse(numFeatures, items.tail.map { item =>
+      val (indices, values) = items.tail.map { item =>
         val indexAndValue = item.split(':')
         val index = indexAndValue(0).toInt - 1
         val value = indexAndValue(1).toDouble
         (index, value)
-      })
-      LabeledPoint(label, features)
+      }.unzip
+      LabeledPoint(label, Vectors.sparse(d, indices.toArray, values.toArray))
     }
   }
 }
