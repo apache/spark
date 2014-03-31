@@ -97,7 +97,7 @@ package object dsl {
     implicit def stringToLiteral(s: String) = Literal(s)
     implicit def decimalToLiteral(d: BigDecimal) = Literal(d)
     implicit def timestampToLiteral(t: Timestamp) = Literal(t)
-    implicit def bytesToLiteral(a: Array[Byte]) = Literal(a)
+    implicit def binaryToLiteral(a: Array[Byte]) = Literal(a)
 
     implicit def symbolToUnresolvedAttribute(s: Symbol) = analysis.UnresolvedAttribute(s.name)
 
