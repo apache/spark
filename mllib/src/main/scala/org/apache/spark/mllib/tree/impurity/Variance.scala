@@ -17,25 +17,21 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import java.lang.UnsupportedOperationException
-
 /**
  * Class for calculating variance during regression
  */
 object Variance extends Impurity {
-   def calculate(c0: Double, c1: Double): Double
-   = throw new UnsupportedOperationException("Variance.calculate")
+   override def calculate(c0: Double, c1: Double): Double =
+     throw new UnsupportedOperationException("Variance.calculate")
 
   /**
    * variance calculation
    * @param count number of instances
    * @param sum sum of labels
    * @param sumSquares summation of squares of the labels
-   * @return
    */
-  def calculate(count: Double, sum: Double, sumSquares: Double): Double = {
-    val squaredLoss = sumSquares - (sum*sum)/count
-    squaredLoss/count
+  override def calculate(count: Double, sum: Double, sumSquares: Double): Double = {
+    val squaredLoss = sumSquares - (sum * sum) / count
+    squaredLoss / count
   }
-
 }

@@ -36,6 +36,4 @@ class InformationGainStats(
     "gain = %f, impurity = %f, left impurity = %f, right impurity = %f, predict = %f"
       .format(gain, impurity, leftImpurity, rightImpurity, predict)
   }
-
-
 }
