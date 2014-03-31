@@ -23,7 +23,7 @@ import org.apache.spark.mllib.rdd.RDDFunctions._
 /**
  * Computes the area under the curve (AUC) using the trapezoidal rule.
  */
-object AreaUnderCurve {
+private[mllib] object AreaUnderCurve {
 
   /**
    * Uses the trapezoidal rule to compute the area under the line connecting the two input points.
@@ -53,8 +53,8 @@ object AreaUnderCurve {
    *
    * @param curve an iterator over ordered 2D points stored in pairs representing a curve
    */
-  def of(curve: Iterator[(Double, Double)]): Double = {
-    curve.sliding(2).withPartial(false).aggregate(0.0)(
+  def of(curve: Iterable[(Double, Double)]): Double = {
+    curve.toIterator.sliding(2).withPartial(false).aggregate(0.0)(
       seqop = (auc: Double, points: Seq[(Double, Double)]) => auc + trapezoid(points),
       combop = _ + _
     )
