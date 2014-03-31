@@ -37,7 +37,7 @@ class Node (
     val split: Option[Split],
     var leftNode: Option[Node],
     var rightNode: Option[Node],
-    val stats: Option[InformationGainStats]) extends Serializable with Logging{
+    val stats: Option[InformationGainStats]) extends Serializable with Logging {
 
   override def toString = "id = " + id + ", isLeaf = " + isLeaf + ", predict = " + predict + ", " +
     "split = " + split + ", stats = " + stats
@@ -46,7 +46,7 @@ class Node (
    * build the left node and right nodes if not leaf
    * @param nodes array of nodes
    */
-  def build(nodes : Array[Node]): Unit = {
+  def build(nodes: Array[Node]): Unit = {
 
     logDebug("building node " + id + " at level " +
       (scala.math.log(id + 1)/scala.math.log(2)).toInt )
@@ -68,7 +68,7 @@ class Node (
    * @param feature feature value
    * @return predicted value
    */
-  def predictIfLeaf(feature : Array[Double]) : Double = {
+  def predictIfLeaf(feature: Array[Double]) : Double = {
     if (isLeaf) {
       predict
     } else{
@@ -87,5 +87,4 @@ class Node (
       }
     }
   }
-
 }

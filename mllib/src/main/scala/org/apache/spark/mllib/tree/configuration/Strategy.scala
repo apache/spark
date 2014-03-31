@@ -34,14 +34,13 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                                1, 2, ... , k-1. It's important to note that features are
  *                                zero-indexed.
  */
-class Strategy  (
-                val algo: Algo,
-                val impurity: Impurity,
-                val maxDepth: Int,
-                val maxBins: Int = 100,
-                val quantileCalculationStrategy: QuantileStrategy = Sort,
-                val categoricalFeaturesInfo: Map[Int,Int] = Map[Int,Int]()) extends Serializable {
+class Strategy (
+    val algo: Algo,
+    val impurity: Impurity,
+    val maxDepth: Int,
+    val maxBins: Int = 100,
+    val quantileCalculationStrategy: QuantileStrategy = Sort,
+    val categoricalFeaturesInfo: Map[Int,Int] = Map[Int,Int]()) extends Serializable {
 
   var numBins: Int  = Int.MinValue
-
 }

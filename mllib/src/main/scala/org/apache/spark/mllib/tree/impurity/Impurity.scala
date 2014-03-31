@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.tree.impurity
 
 /**
- * Trail for calculating information gain
+ * Trait for calculating information gain.
  */
 trait Impurity extends Serializable {
 

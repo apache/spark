@@ -17,8 +17,6 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import java.lang.UnsupportedOperationException
-
 /**
  * Class for calculating [[http://en.wikipedia.org/wiki/Binary_entropy_function entropy]] during
  * binary classification.

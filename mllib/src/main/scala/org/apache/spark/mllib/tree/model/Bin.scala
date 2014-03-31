@@ -30,6 +30,4 @@ import org.apache.spark.mllib.tree.configuration.FeatureType._
  * @param featureType type of feature -- categorical or continuous
  * @param category categorical label value accepted in the bin
  */
-case class Bin(lowSplit: Split, highSplit: Split, featureType: FeatureType, category: Double) {
-
-}
+case class Bin(lowSplit: Split, highSplit: Split, featureType: FeatureType, category: Double)
