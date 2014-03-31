@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.executor.TaskMetrics
 
 /**
- * <span class="badge badge-red" style="float: right;">UNSTABLE DEVELOPER API</span>
+ * <span class="badge badge-red" style="float: right;">DEVELOPER API - UNSTABLE</span>
  *
  * Contextual information about a task which can be read or mutated during execution.
  */

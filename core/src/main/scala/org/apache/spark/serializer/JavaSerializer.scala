@@ -94,7 +94,7 @@ private[spark] class JavaSerializerInstance(counterReset: Int) extends Serialize
 }
 
 /**
- * <span class="badge badge-red" style="float: right;">UNSTABLE DEVELOPER API</span>
+ * <span class="badge badge-red" style="float: right;">DEVELOPER API - UNSTABLE</span>
  *
  * A Spark serializer that uses Java's built-in serialization.
  *

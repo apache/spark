@@ -20,7 +20,7 @@ package org.apache.spark
 import org.apache.spark.util.collection.{AppendOnlyMap, ExternalAppendOnlyMap}
 
 /**
- * <span class="badge badge-red" style="float: right;">UNSTABLE DEVELOPER API</span>
+ * <span class="badge badge-red" style="float: right;">DEVELOPER API - UNSTABLE</span>
  *
  * A set of functions used to aggregate data.
  *
