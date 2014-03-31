@@ -64,7 +64,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
       logInfo("Started Worker web UI at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>
-        logError("Failed to create Worker JettyUtils", e)
+        logError("Failed to create Worker web UI", e)
         System.exit(1)
     }
   }

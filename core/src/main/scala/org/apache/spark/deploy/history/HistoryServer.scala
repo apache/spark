@@ -77,7 +77,7 @@ class HistoryServer(val baseLogDir: String, requestedPort: Int)
       logInfo("Started HistoryServer at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>
-        logError("Failed to create HistoryServer", e)
+        logError("Failed to bind HistoryServer", e)
         System.exit(1)
     }
     checkForLogs()

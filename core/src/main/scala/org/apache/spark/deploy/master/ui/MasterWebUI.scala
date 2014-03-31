@@ -66,7 +66,7 @@ class MasterWebUI(val master: Master, requestedPort: Int)
       logInfo("Started Master web UI at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>
-        logError("Failed to create Master JettyUtils", e)
+        logError("Failed to create Master web UI", e)
         System.exit(1)
     }
   }

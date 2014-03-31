@@ -98,10 +98,10 @@ private[spark] class SparkUI(
   override def bind() {
     try {
       serverInfo = Some(startJettyServer(host, port, handlers, sc.conf))
-      logInfo("Started Spark Web UI at http://%s:%d".format(host, boundPort))
+      logInfo("Started Spark web UI at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>
-        logError("Failed to create Spark JettyUtils", e)
+        logError("Failed to create Spark web UI", e)
         System.exit(1)
     }
   }
