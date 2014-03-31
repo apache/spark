@@ -124,8 +124,8 @@ extends ClassVisitor(ASM4, cv) {
       mv.visitVarInsn(ALOAD, 0) // load this
       mv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V")
       mv.visitVarInsn(ALOAD, 0) // load this
-      //val classType = className.replace('.', '/')
-      //mv.visitFieldInsn(PUTSTATIC, classType, "MODULE$", "L" + classType + ";")
+      // val classType = className.replace('.', '/')
+      // mv.visitFieldInsn(PUTSTATIC, classType, "MODULE$", "L" + classType + ";")
       mv.visitInsn(RETURN)
       mv.visitMaxs(-1, -1) // stack size and local vars will be auto-computed
       mv.visitEnd()

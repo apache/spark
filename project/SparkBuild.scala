@@ -17,18 +17,21 @@
 
 import sbt._
 import sbt.Classpaths.publishTask
-import Keys._
+import sbt.Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
 import scala.util.Properties
 import org.scalastyle.sbt.ScalastylePlugin.{Settings => ScalaStyleSettings}
+import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
 
 import scala.collection.JavaConversions._
 
 // For Sonatype publishing
-//import com.jsuereth.pgp.sbtplugin.PgpKeys._
+// import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
 object SparkBuild extends Build {
+  val SPARK_VERSION = "1.0.0-SNAPSHOT" 
+
   // Hadoop version to build against. For example, "1.0.4" for Apache releases, or
   // "2.0.0-mr1-cdh4.2.0" for Cloudera Hadoop. Note that these variables can be set
   // through the environment variables SPARK_HADOOP_VERSION and SPARK_YARN.
@@ -146,9 +149,9 @@ object SparkBuild extends Build {
   lazy val allProjects = packageProjects ++ allExternalRefs ++
     Seq[ProjectReference](examples, tools, assemblyProj, hive) ++ maybeJava8Tests
 
-  def sharedSettings = Defaults.defaultSettings ++ Seq(
+  def sharedSettings = Defaults.defaultSettings ++ MimaBuild.mimaSettings(file(sparkHome)) ++ Seq(
     organization       := "org.apache.spark",
-    version            := "1.0.0-SNAPSHOT",
+    version            := SPARK_VERSION,
     scalaVersion       := "2.10.3",
     scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation",
       "-target:" + SCALAC_JVM_VERSION),
@@ -197,7 +200,7 @@ object SparkBuild extends Build {
 
     publishMavenStyle := true,
 
-    //useGpg in Global := true,
+    // useGpg in Global := true,
 
     pomExtra := (
       <parent>
@@ -256,8 +259,7 @@ object SparkBuild extends Build {
         "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
         "com.novocode"      % "junit-interface" % "0.10"   % "test",
         "org.easymock"      % "easymock"        % "3.1"    % "test",
-        "org.mockito"       % "mockito-all"     % "1.8.5"  % "test",
-        "commons-io"        % "commons-io"      % "2.4"    % "test"
+        "org.mockito"       % "mockito-all"     % "1.8.5"  % "test"
     ),
 
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
@@ -284,9 +286,14 @@ object SparkBuild extends Build {
   val excludeSLF4J = ExclusionRule(organization = "org.slf4j")
   val excludeScalap = ExclusionRule(organization = "org.scala-lang", artifact = "scalap")
 
+  def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark", 
+      version: String = "0.9.0-incubating", crossVersion: String = "2.10"): Option[sbt.ModuleID] = {
+    val fullId = if (crossVersion.isEmpty) id else id + "_" + crossVersion
+    Some(organization % fullId % version) // the artifact to compare binary compatibility with
+  }
+
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
-
     libraryDependencies ++= Seq(
         "com.google.guava"           % "guava"            % "14.0.1",
         "com.google.code.findbugs"   % "jsr305"           % "1.3.9",
@@ -325,7 +332,7 @@ object SparkBuild extends Build {
     publish := {}
   )
 
- def replSettings = sharedSettings ++ Seq(
+  def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v ),
    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "jline"          % v ),
@@ -349,22 +356,27 @@ object SparkBuild extends Build {
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def toolsSettings = sharedSettings ++ Seq(
-    name := "spark-tools"
+    name := "spark-tools",
+    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v ),
+    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-reflect"  % v )
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def graphxSettings = sharedSettings ++ Seq(
     name := "spark-graphx",
+    previousArtifact := sparkPreviousArtifact("spark-graphx"),
     libraryDependencies ++= Seq(
       "org.jblas" % "jblas" % "1.2.3"
     )
   )
 
   def bagelSettings = sharedSettings ++ Seq(
-    name := "spark-bagel"
+    name := "spark-bagel",
+    previousArtifact := sparkPreviousArtifact("spark-bagel")
   )
 
   def mllibSettings = sharedSettings ++ Seq(
     name := "spark-mllib",
+    previousArtifact := sparkPreviousArtifact("spark-mllib"),
     libraryDependencies ++= Seq(
       "org.jblas" % "jblas" % "1.2.3",
       "org.scalanlp" %% "breeze" % "0.7"
@@ -428,9 +440,7 @@ object SparkBuild extends Build {
 
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",
-    libraryDependencies ++= Seq(
-      "commons-io" % "commons-io" % "2.4"
-    )
+    previousArtifact := sparkPreviousArtifact("spark-streaming")
   )
 
   def yarnCommonSettings = sharedSettings ++ Seq(
@@ -503,6 +513,7 @@ object SparkBuild extends Build {
 
   def twitterSettings() = sharedSettings ++ Seq(
     name := "spark-streaming-twitter",
+    previousArtifact := sparkPreviousArtifact("spark-streaming-twitter"),
     libraryDependencies ++= Seq(
       "org.twitter4j" % "twitter4j-stream" % "3.0.3" excludeAll(excludeNetty)
     )
@@ -510,6 +521,7 @@ object SparkBuild extends Build {
 
   def kafkaSettings() = sharedSettings ++ Seq(
     name := "spark-streaming-kafka",
+    previousArtifact := sparkPreviousArtifact("spark-streaming-kafka"),
     libraryDependencies ++= Seq(
       "com.github.sgroschupf"    % "zkclient"   % "0.1"          excludeAll(excludeNetty),
       "org.apache.kafka"        %% "kafka"      % "0.8.0"
@@ -522,6 +534,7 @@ object SparkBuild extends Build {
 
   def flumeSettings() = sharedSettings ++ Seq(
     name := "spark-streaming-flume",
+    previousArtifact := sparkPreviousArtifact("spark-streaming-flume"),
     libraryDependencies ++= Seq(
       "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty)
     )
@@ -529,6 +542,7 @@ object SparkBuild extends Build {
 
   def zeromqSettings() = sharedSettings ++ Seq(
     name := "spark-streaming-zeromq",
+    previousArtifact := sparkPreviousArtifact("spark-streaming-zeromq"),
     libraryDependencies ++= Seq(
       "org.spark-project.akka" %% "akka-zeromq" % "2.2.3-shaded-protobuf" excludeAll(excludeNetty)
     )
@@ -536,6 +550,7 @@ object SparkBuild extends Build {
 
   def mqttSettings() = streamingSettings ++ Seq(
     name := "spark-streaming-mqtt",
+    previousArtifact := sparkPreviousArtifact("spark-streaming-mqtt"),
     libraryDependencies ++= Seq("org.eclipse.paho" % "mqtt-client" % "0.4.0")
   )
 }

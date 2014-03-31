@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package plans
-package logical
+package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.types._
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
@@ -86,7 +85,7 @@ case class Join(
 }
 
 case class InsertIntoTable(
-    table: BaseRelation,
+    table: LogicalPlan,
     partition: Map[String, Option[String]],
     child: LogicalPlan,
     overwrite: Boolean)
@@ -138,6 +137,33 @@ case class StopAfter(limit: Expression, child: LogicalPlan) extends UnaryNode {
 
 case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
   def output = child.output.map(_.withQualifiers(alias :: Nil))
+  def references = Set.empty
+}
+
+/**
+ * Converts the schema of `child` to all lowercase, together with LowercaseAttributeReferences
+ * this allows for optional case insensitive attribute resolution.  This node can be elided after
+ * analysis.
+ */
+case class LowerCaseSchema(child: LogicalPlan) extends UnaryNode {
+  protected def lowerCaseSchema(dataType: DataType): DataType = dataType match {
+    case StructType(fields) =>
+      StructType(fields.map(f =>
+        StructField(f.name.toLowerCase(), lowerCaseSchema(f.dataType), f.nullable)))
+    case ArrayType(elemType) => ArrayType(lowerCaseSchema(elemType))
+    case otherType => otherType
+  }
+
+  val output = child.output.map {
+    case a: AttributeReference =>
+      AttributeReference(
+        a.name.toLowerCase,
+        lowerCaseSchema(a.dataType),
+        a.nullable)(
+        a.exprId,
+        a.qualifiers)
+  }
+
   def references = Set.empty
 }
 

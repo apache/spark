@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
-package execution
+package org.apache.spark.sql.hive.execution
+
+import org.apache.spark.sql.hive.TestHive
 
 /**
  * Runs the test cases that are included in the hive distribution.
@@ -65,6 +65,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "describe_comment_nonascii",
     "udf5",
     "udf_java_method",
+    "create_merge_compressed",
 
     // Weird DDL differences result in failures on jenkins.
     "create_like2",
@@ -163,6 +164,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "add_partition_with_whitelist",
     "alias_casted_column",
     "alter2",
+    "alter3",
     "alter4",
     "alter5",
     "alter_index",
@@ -170,7 +172,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "alter_partition_format_loc",
     "alter_partition_protect_mode",
     "alter_partition_with_whitelist",
+    "alter_rename_partition",
     "alter_table_serde",
+    "alter_varchar1",
     "alter_varchar2",
     "alter_view_as_select",
     "ambiguous_col",
@@ -209,10 +213,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "auto_join_filters",
     "auto_join_nulls",
     "auto_join_reordering_values",
+    "auto_smb_mapjoin_14",
     "auto_sortmerge_join_1",
     "auto_sortmerge_join_10",
     "auto_sortmerge_join_11",
     "auto_sortmerge_join_12",
+    "auto_sortmerge_join_13",
+    "auto_sortmerge_join_14",
     "auto_sortmerge_join_15",
     "auto_sortmerge_join_2",
     "auto_sortmerge_join_3",
@@ -224,6 +231,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "auto_sortmerge_join_9",
     "binary_constant",
     "binarysortable_1",
+    "cast1",
+    "cluster",
     "combine1",
     "compute_stats_binary",
     "compute_stats_boolean",
@@ -241,6 +250,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "correlationoptimizer7",
     "correlationoptimizer8",
     "count",
+    "cp_mj_rc",
+    "create_insert_outputformat",
     "create_like_view",
     "create_nested_type",
     "create_skewed_table1",
@@ -248,6 +259,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "ct_case_insensitive",
     "database_location",
     "database_properties",
+    "decimal_4",
     "decimal_join",
     "default_partition_name",
     "delimiter",
@@ -298,16 +310,25 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "groupby7_map_multi_single_reducer",
     "groupby7_map_skew",
     "groupby7_noskew",
+    "groupby8",
     "groupby8_map",
     "groupby8_map_skew",
     "groupby8_noskew",
+    "groupby9",
     "groupby_distinct_samekey",
+    "groupby_multi_insert_common_distinct",
     "groupby_multi_single_reducer2",
     "groupby_mutli_insert_common_distinct",
     "groupby_neg_float",
     "groupby_sort_10",
+    "groupby_sort_2",
+    "groupby_sort_3",
+    "groupby_sort_4",
+    "groupby_sort_5",
     "groupby_sort_6",
+    "groupby_sort_7",
     "groupby_sort_8",
+    "groupby_sort_9",
     "groupby_sort_test_1",
     "implicit_cast1",
     "innerjoin",

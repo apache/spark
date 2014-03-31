@@ -421,6 +421,11 @@
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
+        <artifactId>scala-reflect</artifactId>
+        <version>${scala.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang</groupId>
         <artifactId>jline</artifactId>
         <version>${scala.version}</version>
       </dependency>
@@ -434,11 +439,6 @@
         <artifactId>scalatest_${scala.binary.version}</artifactId>
         <version>1.9.1</version>
         <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>commons-io</groupId>
-        <artifactId>commons-io</artifactId>
-        <version>2.4</version>
       </dependency>
       <dependency>
         <groupId>org.easymock</groupId>
@@ -646,7 +646,6 @@
               <arg>-deprecation</arg>
             </args>
             <jvmArgs>
-              <jvmArg>-Xms64m</jvmArg>
               <jvmArg>-Xms1024m</jvmArg>
               <jvmArg>-Xmx1024m</jvmArg>
               <jvmArg>-XX:PermSize=${PermGen}</jvmArg>
@@ -689,7 +688,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>${project.build.directory}/SparkTestSuite.txt</filereports>
-            <argLine>-Xms64m -Xmx3g</argLine>
+            <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
             <stderr />
           </configuration>
           <executions>

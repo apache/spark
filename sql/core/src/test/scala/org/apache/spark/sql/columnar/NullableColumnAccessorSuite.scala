@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package columnar
+package org.apache.spark.sql.columnar
 
 import org.scalatest.FunSuite
 import org.apache.spark.sql.catalyst.types.DataType

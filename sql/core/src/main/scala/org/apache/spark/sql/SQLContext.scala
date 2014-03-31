@@ -117,10 +117,48 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val strategies: Seq[Strategy] =
       TopK ::
       PartialAggregation ::
-      SparkEquiInnerJoin ::
+      HashJoin ::
+      ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::
       BroadcastNestedLoopJoin :: Nil
+
+    /**
+     * Used to build table scan operators where complex projection and filtering are done using
+     * separate physical operators.  This function returns the given scan operator with Project and
+     * Filter nodes added only when needed.  For example, a Project operator is only used when the
+     * final desired output requires complex expressions to be evaluated or when columns can be
+     * further eliminated out after filtering has been done.
+     *
+     * The required attributes for both filtering and expression evaluation are passed to the
+     * provided `scanBuilder` function so that it can avoid unnecessary column materialization.
+     */
+    def pruneFilterProject(
+        projectList: Seq[NamedExpression],
+        filterPredicates: Seq[Expression],
+        scanBuilder: Seq[Attribute] => SparkPlan): SparkPlan = {
+
+      val projectSet = projectList.flatMap(_.references).toSet
+      val filterSet = filterPredicates.flatMap(_.references).toSet
+      val filterCondition = filterPredicates.reduceLeftOption(And)
+
+      // Right now we still use a projection even if the only evaluation is applying an alias
+      // to a column.  Since this is a no-op, it could be avoided. However, using this
+      // optimization with the current implementation would change the output schema.
+      // TODO: Decouple final output schema from expression evaluation so this copy can be
+      // avoided safely.
+
+      if (projectList.toSet == projectSet && filterSet.subsetOf(projectSet)) {
+        // When it is possible to just use column pruning to get the right projection and
+        // when the columns of this projection are enough to evaluate all filter conditions,
+        // just do a scan followed by a filter, with no extra project.
+        val scan = scanBuilder(projectList.asInstanceOf[Seq[Attribute]])
+        filterCondition.map(Filter(_, scan)).getOrElse(scan)
+      } else {
+        val scan = scanBuilder((projectSet ++ filterSet).toSeq)
+        Project(projectList, filterCondition.map(Filter(_, scan)).getOrElse(scan))
+      }
+    }
   }
 
   @transient

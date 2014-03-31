@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
-package analysis
+package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan

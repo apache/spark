@@ -2,6 +2,7 @@ target
 .gitignore
 .project
 .classpath
+.mima-excludes
 .rat-excludes
 .*md
 derby.log
@@ -37,3 +38,4 @@ plugins.sbt
 work
 .*\.q
 golden
+test.out/*

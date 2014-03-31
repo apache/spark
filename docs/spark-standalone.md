@@ -146,10 +146,13 @@ automatically set MASTER from the `SPARK_MASTER_IP` and `SPARK_MASTER_PORT` vari
 
 You can also pass an option `-c <numCores>` to control the number of cores that spark-shell uses on the cluster.
 
-# Launching Applications Inside the Cluster
+# Launching Compiled Spark Applications
 
-You may also run your application entirely inside of the cluster by submitting your application driver using the submission client. The syntax for submitting applications is as follows:
+Spark supports two deploy modes. Spark applications may run with the driver inside the client process or entirely inside the cluster.
 
+The spark-submit script described in the [cluster mode overview](cluster-overview.html) provides the most straightforward way to submit a compiled Spark application to the cluster in either deploy mode. For info on the lower-level invocations used to launch an app inside the cluster, read ahead.
+
+## Launching Applications Inside the Cluster
 
     ./bin/spark-class org.apache.spark.deploy.Client launch
        [client-options] \

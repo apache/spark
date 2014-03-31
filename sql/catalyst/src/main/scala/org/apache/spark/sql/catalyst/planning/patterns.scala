@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package planning
+package org.apache.spark.sql.catalyst.planning
 
 import scala.annotation.tailrec
 
@@ -48,7 +46,9 @@ object FilteredOperation extends PredicateHelper {
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
  * operator.  All filter operators are collected and their conditions are broken up and returned
- * together with the top project operator.  [[Alias Aliases]] are in-lined/substituted if necessary.
+ * together with the top project operator.
+ * [[org.apache.spark.sql.catalyst.expressions.Alias Aliases]] are in-lined/substituted if
+ * necessary.
  */
 object PhysicalOperation extends PredicateHelper {
   type ReturnType = (Seq[NamedExpression], Seq[Expression], LogicalPlan)

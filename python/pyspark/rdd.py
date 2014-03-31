@@ -693,11 +693,11 @@ class RDD(object):
         """
         Get the top N elements from a RDD.
 
-        Note: It returns the list sorted in ascending order.
+        Note: It returns the list sorted in descending order.
         >>> sc.parallelize([10, 4, 2, 12, 3]).top(1)
         [12]
         >>> sc.parallelize([2, 3, 4, 5, 6]).cache().top(2)
-        [5, 6]
+        [6, 5]
         """
         def topIterator(iterator):
             q = []
@@ -711,7 +711,7 @@ class RDD(object):
         def merge(a, b):
             return next(topIterator(a + b))
 
-        return sorted(self.mapPartitions(topIterator).reduce(merge))
+        return sorted(self.mapPartitions(topIterator).reduce(merge), reverse=True)
 
     def take(self, num):
         """

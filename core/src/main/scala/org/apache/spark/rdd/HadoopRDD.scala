@@ -17,6 +17,8 @@
 
 package org.apache.spark.rdd
 
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.io.EOFException
 import scala.collection.immutable.Map
 
@@ -27,6 +29,9 @@ import org.apache.hadoop.mapred.InputSplit
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.RecordReader
 import org.apache.hadoop.mapred.Reporter
+import org.apache.hadoop.mapred.JobID
+import org.apache.hadoop.mapred.TaskAttemptID
+import org.apache.hadoop.mapred.TaskID
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark._
@@ -111,6 +116,9 @@ class HadoopRDD[K, V](
 
   protected val inputFormatCacheKey = "rdd_%d_input_format".format(id)
 
+  // used to build JobTracker ID
+  private val createTime = new Date()
+
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf(): JobConf = {
     val conf: Configuration = broadcastedConf.value.value
@@ -163,14 +171,16 @@ class HadoopRDD[K, V](
     array
   }
 
-  override def compute(theSplit: Partition, context: TaskContext) = {
+  override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
     val iter = new NextIterator[(K, V)] {
+
       val split = theSplit.asInstanceOf[HadoopPartition]
       logInfo("Input split: " + split.inputSplit)
       var reader: RecordReader[K, V] = null
-
       val jobConf = getJobConf()
       val inputFormat = getInputFormat(jobConf)
+      HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmm").format(createTime),
+        context.stageId, theSplit.index, context.attemptId.toInt, jobConf)
       reader = inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
 
       // Register an on-task-completion callback to close the input stream.
@@ -222,4 +232,17 @@ private[spark] object HadoopRDD {
 
   def putCachedMetadata(key: String, value: Any) =
     SparkEnv.get.hadoopJobMetadata.put(key, value)
+
+  /** Add Hadoop configuration specific to a single partition and attempt. */
+  def addLocalConfiguration(jobTrackerId: String, jobId: Int, splitId: Int, attemptId: Int,
+                            conf: JobConf) {
+    val jobID = new JobID(jobTrackerId, jobId)
+    val taId = new TaskAttemptID(new TaskID(jobID, true, splitId), attemptId)
+
+    conf.set("mapred.tip.id", taId.getTaskID.toString)
+    conf.set("mapred.task.id", taId.toString)
+    conf.setBoolean("mapred.task.is.map", true)
+    conf.setInt("mapred.task.partition", splitId)
+    conf.set("mapred.job.id", jobID.toString)
+  }
 }

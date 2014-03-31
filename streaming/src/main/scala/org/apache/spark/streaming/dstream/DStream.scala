@@ -503,14 +503,18 @@ abstract class DStream[T: ClassTag] (
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
   @deprecated("use foreachRDD", "0.9.0")
-  def foreach(foreachFunc: RDD[T] => Unit) = this.foreachRDD(foreachFunc)
+  def foreach(foreachFunc: RDD[T] => Unit): Unit = {
+    this.foreachRDD(foreachFunc)
+  }
 
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
   @deprecated("use foreachRDD", "0.9.0")
-  def foreach(foreachFunc: (RDD[T], Time) => Unit) = this.foreachRDD(foreachFunc)
+  def foreach(foreachFunc: (RDD[T], Time) => Unit): Unit = {
+    this.foreachRDD(foreachFunc)
+  }
 
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
