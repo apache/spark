@@ -112,4 +112,10 @@ class LassoSuite extends FunSuite with LocalSparkContext {
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
   }
+
+  test("do not support intercept") {
+    intercept[UnsupportedOperationException] {
+      new LassoWithSGD().setIntercept(true)
+    }
+  }
 }

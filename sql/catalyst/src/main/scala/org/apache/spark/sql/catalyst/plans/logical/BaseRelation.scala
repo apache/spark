@@ -15,10 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package plans
-package logical
+package org.apache.spark.sql.catalyst.plans.logical
 
 abstract class BaseRelation extends LeafNode {
   self: Product =>

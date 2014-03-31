@@ -111,7 +111,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     val listener = new SaveStageAndTaskInfo
     sc.addSparkListener(listener)
     sc.addSparkListener(new StatsReportListener)
-    //just to make sure some of the tasks take a noticeable amount of time
+    // just to make sure some of the tasks take a noticeable amount of time
     val w = {i:Int =>
       if (i == 0)
         Thread.sleep(100)

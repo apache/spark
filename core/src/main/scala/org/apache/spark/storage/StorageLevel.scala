@@ -126,15 +126,16 @@ object StorageLevel {
   val MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, 2)
 
   /** Create a new StorageLevel object */
-  def apply(useDisk: Boolean, useMemory: Boolean, deserialized: Boolean, replication: Int = 1) =
+  def apply(useDisk: Boolean, useMemory: Boolean, deserialized: Boolean,
+      replication: Int = 1): StorageLevel =
     getCachedStorageLevel(new StorageLevel(useDisk, useMemory, deserialized, replication))
 
   /** Create a new StorageLevel object from its integer representation */
-  def apply(flags: Int, replication: Int) =
+  def apply(flags: Int, replication: Int): StorageLevel =
     getCachedStorageLevel(new StorageLevel(flags, replication))
 
   /** Read StorageLevel object from ObjectInput stream */
-  def apply(in: ObjectInput) = {
+  def apply(in: ObjectInput): StorageLevel = {
     val obj = new StorageLevel()
     obj.readExternal(in)
     getCachedStorageLevel(obj)

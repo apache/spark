@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
+package org.apache.spark.sql.catalyst
 
 /**
  * Contains classes for enumerating possible physical plans for a given logical query plan.

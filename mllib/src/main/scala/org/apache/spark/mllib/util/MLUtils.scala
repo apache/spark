@@ -92,7 +92,7 @@ object MLUtils {
     val aggStats = brzData.aggregate(
       (0L, 0.0, BDV.zeros[Double](numFeatures), BDV.zeros[Double](numFeatures))
     )(
-      seqOp = (c , v) => (c, v) match {
+      seqOp = (c, v) => (c, v) match {
         case ((n, sumLabel, sum, sumSq), (label, features)) =>
           features.activeIterator.foreach { case (i, x) =>
             sumSq(i) += x * x
@@ -111,7 +111,7 @@ object MLUtils {
 
     val n = nl.toDouble
     val yMean = sumLabel / n
-    val mean: BDV[Double] = sum / n
+    val mean = sum / n
     val std = new Array[Double](sum.length)
     var i = 0
     while (i < numFeatures) {

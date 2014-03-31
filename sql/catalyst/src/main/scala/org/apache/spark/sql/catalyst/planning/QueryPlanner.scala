@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package planning
+package org.apache.spark.sql.catalyst.planning
 
+import org.apache.spark.sql.Logging
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 

@@ -168,7 +168,7 @@ object ActorWordCount {
       Props(new SampleActorReceiver[String]("akka.tcp://test@%s:%s/user/FeederActor".format(
         host, port.toInt))), "SampleReceiver")
 
-    //compute wordcount
+    // compute wordcount
     lines.flatMap(_.split("\\s+")).map(x => (x, 1)).reduceByKey(_ + _).print()
 
     ssc.start()

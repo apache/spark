@@ -151,6 +151,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
     }
 
     val weightsWithIntercept = optimizer.optimize(data, initialWeightsWithIntercept)
+
     val intercept = if (addIntercept) weightsWithIntercept(0) else 0.0
     val weights =
       if (addIntercept) {
