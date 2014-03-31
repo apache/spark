@@ -252,7 +252,7 @@ class CheckpointSuite extends TestSuiteBase {
     ssc.start()
 
     // Create files and advance manual clock to process them
-    //var clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    // var clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     Thread.sleep(1000)
     for (i <- Seq(1, 2, 3)) {
       Files.write(i + "\n", new File(testDir, i.toString), Charset.forName("UTF-8"))

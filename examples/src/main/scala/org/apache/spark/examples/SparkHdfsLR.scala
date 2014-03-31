@@ -34,8 +34,6 @@ object SparkHdfsLR {
   case class DataPoint(x: Vector, y: Double)
 
   def parsePoint(line: String): DataPoint = {
-    //val nums = line.split(' ').map(_.toDouble)
-    //return DataPoint(new Vector(nums.slice(1, D+1)), nums(0))
     val tok = new java.util.StringTokenizer(line, " ")
     var y = tok.nextToken.toDouble
     var x = new Array[Double](D)

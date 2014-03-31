@@ -99,7 +99,7 @@ class ClientDistributedCacheManagerSuite extends FunSuite with MockitoSugar {
     assert(env.get("SPARK_YARN_CACHE_ARCHIVES_FILE_SIZES") === None)
     assert(env.get("SPARK_YARN_CACHE_ARCHIVES_VISIBILITIES") === None)
 
-    //add another one and verify both there and order correct
+    // add another one and verify both there and order correct
     val realFileStatus = new FileStatus(20, false, 1, 1024, 10, 30, null, "testOwner", 
       null, new Path("/tmp/testing2"))
     val destPath2 = new Path("file:///foo.invalid.com:8080/tmp/testing2")
