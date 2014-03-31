@@ -153,7 +153,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   }
 
   def castToDouble: Any => Double = child.dataType match {
-    case StringType => nullOrCast[String, Double](_, s => try s.toInt catch {
+    case StringType => nullOrCast[String, Double](_, s => try s.toDouble catch {
       case _: NFE => null.asInstanceOf[Int]
     })
     case BooleanType => nullOrCast[Boolean, Double](_, b => if(b) 1 else 0)
@@ -163,7 +163,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   }
 
   def castToFloat: Any => Float = child.dataType match {
-    case StringType => nullOrCast[String, Float](_, s => try s.toInt catch {
+    case StringType => nullOrCast[String, Float](_, s => try s.toFloat catch {
       case _: NFE => null.asInstanceOf[Int]
     })
     case BooleanType => nullOrCast[Boolean, Float](_, b => if(b) 1 else 0)

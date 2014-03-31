@@ -226,6 +226,12 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Literal(false) cast IntegerType, 0)
     checkEvaluation(Cast(Literal(1) cast BooleanType, IntegerType), 1)
     checkEvaluation(Cast(Literal(0) cast BooleanType, IntegerType), 0)
+    checkEvaluation("23" cast DoubleType, 23)
+    checkEvaluation("23" cast IntegerType, 23)
+    checkEvaluation("23" cast FloatType, 23)
+    checkEvaluation("23" cast DecimalType, 23)
+    checkEvaluation("23" cast ByteType, 23)
+    checkEvaluation("23" cast ShortType, 23)
     
     intercept[Exception] {evaluate(Literal(1) cast BinaryType, null)}
   }
