@@ -106,10 +106,10 @@ class EntropyMinimizationDiscretizer private (
    */
   private def getThresholds(candidates: RDD[(Double, Array[Long])], nLabels: Int): Seq[Double] = {
 
-    //Create queue
+    // Create queue
     val stack = new mutable.Queue[((Double, Double), Option[Double])]
 
-    //Insert first in the stack
+    // Insert first in the stack
     stack.enqueue(((Double.NegativeInfinity, Double.PositiveInfinity), None))
     var result = Seq(Double.NegativeInfinity)
 
