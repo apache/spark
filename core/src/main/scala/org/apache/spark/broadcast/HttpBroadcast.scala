@@ -219,12 +219,12 @@ private[spark] object HttpBroadcast extends Logging {
 
   private def deleteBroadcastFile(file: File) {
     try {
-      if (!file.exists) {
-        logWarning("Broadcast file to be deleted does not exist: %s".format(file))
-      } else if (file.delete()) {
-        logInfo("Deleted broadcast file: %s".format(file))
-      } else {
-        logWarning("Could not delete broadcast file: %s".format(file))
+      if (file.exists) {
+        if (file.delete()) {
+          logInfo("Deleted broadcast file: %s".format(file))
+        } else {
+          logWarning("Could not delete broadcast file: %s".format(file))
+        }
       }
     } catch {
       case e: Exception =>

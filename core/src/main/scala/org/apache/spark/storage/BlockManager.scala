@@ -209,7 +209,7 @@ private[spark] class BlockManager(
     }
   }
 
-  /** Get the BlockStatus for the block identified by the given ID, if it exists.*/
+  /** Get the BlockStatus for the block identified by the given ID, if it exists. */
   def getStatus(blockId: BlockId): Option[BlockStatus] = {
     blockInfo.get(blockId).map { info =>
       val memSize = if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
