@@ -51,6 +51,20 @@ there are at least five properties that you will commonly want to control:
   </td>
 </tr>
 <tr>
+  <td>spark.eventLog.compress</td>
+  <td>false</td>
+  <td>
+    Whether to compress logged events, if <code>spark.eventLog.enabled</code> is true.
+  </td>
+</tr>
+<tr>
+  <td>spark.eventLog.enabled</td>
+  <td>false</td>
+  <td>
+    Whether to log spark events, useful for reconstructing the Web UI after the application has finished.
+  </td>
+</tr>
+<tr>
   <td>spark.executor.memory</td>
   <td>512m</td>
   <td>
@@ -478,7 +492,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.logConf</td>
   <td>false</td>
   <td>
-    Log the supplied SparkConf as INFO at start of spark context.
+    Whether to log the supplied SparkConf as INFO at start of spark context.
   </td>
 </tr>
 <tr>
@@ -726,7 +740,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.task.cpus</td>
   <td>1</td>
   <td>
-    CPUs to request per task
+    Number of cores to allocate for each task.
   </td>
 </tr>
 <tr>
