@@ -56,7 +56,8 @@ private[spark] class TaskSchedulerImpl(
 
   val conf = sc.conf
 
-  // taskSchedulerIsSetDAG used to make sure that eventProcessActor is initialized and dagscheduler has set to taskScheduler
+  // taskSchedulerIsSetDAG used to make sure that eventProcessActor is initialized 
+  // and dagscheduler has set to taskScheduler
   private var taskSchedulerIsSetDAG = false
 
   // How often to check for speculative tasks
