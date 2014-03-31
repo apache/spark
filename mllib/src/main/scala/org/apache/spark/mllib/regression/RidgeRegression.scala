@@ -17,13 +17,11 @@
 
 package org.apache.spark.mllib.regression
 
-import breeze.linalg.{Vector => BV}
-
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.linalg.Vector
 
 /**
  * Regression model trained using RidgeRegression.
@@ -58,8 +56,7 @@ class RidgeRegressionWithSGD private (
     var numIterations: Int,
     var regParam: Double,
     var miniBatchFraction: Double)
-    extends GeneralizedLinearAlgorithm[RidgeRegressionModel]
-  with Serializable {
+    extends GeneralizedLinearAlgorithm[RidgeRegressionModel] with Serializable {
 
   val gradient = new LeastSquaresGradient()
   val updater = new SquaredL2Updater()
@@ -71,10 +68,6 @@ class RidgeRegressionWithSGD private (
 
   // We don't want to penalize the intercept in RidgeRegression, so set this to false.
   super.setIntercept(false)
-
-  private var yMean = 0.0
-  private var xColMean: BV[Double] = _
-  private var xColSd: BV[Double] = _
 
   /**
    * Construct a RidgeRegression object with default parameters
@@ -88,35 +81,7 @@ class RidgeRegressionWithSGD private (
   }
 
   override protected def createModel(weights: Vector, intercept: Double) = {
-    val weightsMat = weights.toBreeze
-    val weightsScaled = weightsMat :/ xColSd
-    val interceptScaled = yMean - weightsMat.dot(xColMean :/ xColSd)
-
-    new RidgeRegressionModel(Vectors.fromBreeze(weightsScaled), interceptScaled)
-  }
-
-  override def run(
-      input: RDD[LabeledPoint],
-      initialWeights: Vector)
-    : RidgeRegressionModel =
-  {
-    val nfeatures: Int = input.first().features.size
-    val nexamples: Long = input.count()
-
-    // To avoid penalizing the intercept, we center and scale the data.
-    val stats = MLUtils.computeStats(input, nfeatures, nexamples)
-    yMean = stats._1
-    xColMean = stats._2.toBreeze
-    xColSd = stats._3.toBreeze
-
-    val normalizedData = input.map { point =>
-      val yNormalized = point.label - yMean
-      val featuresMat = point.features.toBreeze
-      val featuresNormalized = (featuresMat - xColMean) :/ xColSd
-      LabeledPoint(yNormalized, Vectors.fromBreeze(featuresNormalized))
-    }
-
-    super.run(normalizedData, initialWeights)
+    new RidgeRegressionModel(weights, intercept)
   }
 }
 
@@ -145,9 +110,7 @@ object RidgeRegressionWithSGD {
       stepSize: Double,
       regParam: Double,
       miniBatchFraction: Double,
-      initialWeights: Vector)
-    : RidgeRegressionModel =
-  {
+      initialWeights: Vector): RidgeRegressionModel = {
     new RidgeRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(
       input, initialWeights)
   }
@@ -168,9 +131,7 @@ object RidgeRegressionWithSGD {
       numIterations: Int,
       stepSize: Double,
       regParam: Double,
-      miniBatchFraction: Double)
-    : RidgeRegressionModel =
-  {
+      miniBatchFraction: Double): RidgeRegressionModel = {
     new RidgeRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction).run(input)
   }
 
@@ -189,9 +150,7 @@ object RidgeRegressionWithSGD {
       input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
-      regParam: Double)
-    : RidgeRegressionModel =
-  {
+      regParam: Double): RidgeRegressionModel = {
     train(input, numIterations, stepSize, regParam, 1.0)
   }
 
@@ -206,9 +165,7 @@ object RidgeRegressionWithSGD {
    */
   def train(
       input: RDD[LabeledPoint],
-      numIterations: Int)
-    : RidgeRegressionModel =
-  {
+      numIterations: Int): RidgeRegressionModel = {
     train(input, numIterations, 1.0, 1.0, 1.0)
   }
 
