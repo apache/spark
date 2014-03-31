@@ -410,8 +410,7 @@ private[spark] class TaskSchedulerImpl(
   }
 
   def executorAdded(execId: String, host: String) {
-    while(!taskSchedulerIsSetDAG)
-    {
+    while(!taskSchedulerIsSetDAG) {
       Thread.sleep(500)
       logInfo("DAGScheduler has not set!")
     }
