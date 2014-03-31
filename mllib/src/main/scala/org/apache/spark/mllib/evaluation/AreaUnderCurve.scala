@@ -18,15 +18,22 @@
 package org.apache.spark.mllib.evaluation
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.rdd.RDDFunctions._
 
 /**
  * Computes the area under the curve (AUC) using the trapezoidal rule.
  */
 object AreaUnderCurve {
 
-  private def trapezoid(points: Array[(Double, Double)]): Double = {
+  /**
+   * Uses the trapezoidal rule to compute the area under the line connecting the two input points.
+   * @param points two 2D points stored in Seq
+   */
+  private def trapezoid(points: Seq[(Double, Double)]): Double = {
     require(points.length == 2)
-    (points(1)._1 - points(0)._1) * (points(1)._2 + points(0)._2 ) / 2.0
+    val x = points.head
+    val y = points.last
+    (y._1 - x._1) * (y._2 + x._2) / 2.0
   }
 
   /**
@@ -36,20 +43,20 @@ object AreaUnderCurve {
    */
   def of(curve: RDD[(Double, Double)]): Double = {
     curve.sliding(2).aggregate(0.0)(
-      seqOp = (auc: Double, points: Array[(Double, Double)]) => auc + trapezoid(points),
-      combOp = (_ + _)
+      seqOp = (auc: Double, points: Seq[(Double, Double)]) => auc + trapezoid(points),
+      combOp = _ + _
     )
   }
 
   /**
    * Returns the area under the given curve.
    *
-   * @param curve an iterable of ordered 2D points stored in pairs representing a curve
+   * @param curve an iterator over ordered 2D points stored in pairs representing a curve
    */
-  def of(curve: Iterable[(Double, Double)]): Double = {
-    curve.sliding(2).map(_.toArray).filter(_.size == 2).aggregate(0.0)(
-      seqop = (auc: Double, points: Array[(Double, Double)]) => auc + trapezoid(points),
-      combop = (_ + _)
+  def of(curve: Iterator[(Double, Double)]): Double = {
+    curve.sliding(2).withPartial(false).aggregate(0.0)(
+      seqop = (auc: Double, points: Seq[(Double, Double)]) => auc + trapezoid(points),
+      combop = _ + _
     )
   }
 }

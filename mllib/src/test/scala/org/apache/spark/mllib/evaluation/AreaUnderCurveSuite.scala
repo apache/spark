@@ -26,21 +26,21 @@ class AreaUnderCurveSuite extends FunSuite with LocalSparkContext {
   test("auc computation") {
     val curve = Seq((0.0, 0.0), (1.0, 1.0), (2.0, 3.0), (3.0, 0.0))
     val auc = 4.0
-    assert(AreaUnderCurve.of(curve) === auc)
+    assert(AreaUnderCurve.of(curve.toIterator) === auc)
     val rddCurve = sc.parallelize(curve, 2)
     assert(AreaUnderCurve.of(rddCurve) == auc)
   }
 
   test("auc of an empty curve") {
     val curve = Seq.empty[(Double, Double)]
-    assert(AreaUnderCurve.of(curve) === 0.0)
+    assert(AreaUnderCurve.of(curve.toIterator) === 0.0)
     val rddCurve = sc.parallelize(curve, 2)
     assert(AreaUnderCurve.of(rddCurve) === 0.0)
   }
 
   test("auc of a curve with a single point") {
     val curve = Seq((1.0, 1.0))
-    assert(AreaUnderCurve.of(curve) === 0.0)
+    assert(AreaUnderCurve.of(curve.toIterator) === 0.0)
     val rddCurve = sc.parallelize(curve, 2)
     assert(AreaUnderCurve.of(rddCurve) === 0.0)
   }
