@@ -81,8 +81,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   val optimizer: Optimizer
 
-  /** Whether to add intercept (default: false). */
-  protected var addIntercept: Boolean = false
+  /** Whether to add intercept (default: true). */
+  protected var addIntercept: Boolean = true
 
   protected var validateData: Boolean = true
 
