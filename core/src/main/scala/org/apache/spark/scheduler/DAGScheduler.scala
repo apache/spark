@@ -54,11 +54,11 @@ import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedH
  */
 private[spark]
 class DAGScheduler(
-    taskScheduler: TaskScheduler,
-    listenerBus: LiveListenerBus,
-    mapOutputTracker: MapOutputTrackerMaster,
-    blockManagerMaster: BlockManagerMaster,
-    env: SparkEnv)
+                    taskScheduler: TaskScheduler,
+                    listenerBus: LiveListenerBus,
+                    mapOutputTracker: MapOutputTrackerMaster,
+                    blockManagerMaster: BlockManagerMaster,
+                    env: SparkEnv)
   extends Logging {
 
   import DAGScheduler._
@@ -75,7 +75,6 @@ class DAGScheduler(
   def this(sc: SparkContext) = this(sc, sc.taskScheduler)
 
   private var eventProcessActor: ActorRef = _
-  private var eventProcessActorInitialized = false
 
   private[scheduler] val nextJobId = new AtomicInteger(0)
   private[scheduler] def numTotalJobs: Int = nextJobId.get()
@@ -117,7 +116,6 @@ class DAGScheduler(
   private val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.DAG_SCHEDULER, this.cleanup, env.conf)
 
-  taskScheduler.setDAGScheduler(this)
 
   /**
    * Starts the event processing actor.  The actor has two responsibilities:
@@ -151,7 +149,7 @@ class DAGScheduler(
           }
       }
     }))
-    eventProcessActorInitialized = true
+    taskScheduler.setDAGScheduler(this)
   }
 
   // Called by TaskScheduler to report task's starting.
@@ -166,12 +164,12 @@ class DAGScheduler(
 
   // Called by TaskScheduler to report task completions or failures.
   def taskEnded(
-      task: Task[_],
-      reason: TaskEndReason,
-      result: Any,
-      accumUpdates: Map[Long, Any],
-      taskInfo: TaskInfo,
-      taskMetrics: TaskMetrics) {
+                 task: Task[_],
+                 reason: TaskEndReason,
+                 result: Any,
+                 accumUpdates: Map[Long, Any],
+                 taskInfo: TaskInfo,
+                 taskMetrics: TaskMetrics) {
     eventProcessActor ! CompletionEvent(task, reason, result, accumUpdates, taskInfo, taskMetrics)
   }
 
@@ -182,10 +180,6 @@ class DAGScheduler(
 
   // Called by TaskScheduler when a host is added
   def executorAdded(execId: String, host: String) {
-    while(!eventProcessActorInitialized){
-      Thread.sleep(500)
-      logInfo("eventProcessActor has not initialized!")
-    }
     eventProcessActor ! ExecutorAdded(execId, host)
   }
 
@@ -233,12 +227,12 @@ class DAGScheduler(
    * directly.
    */
   private def newStage(
-      rdd: RDD[_],
-      numTasks: Int,
-      shuffleDep: Option[ShuffleDependency[_,_]],
-      jobId: Int,
-      callSite: Option[String] = None)
-    : Stage =
+                        rdd: RDD[_],
+                        numTasks: Int,
+                        shuffleDep: Option[ShuffleDependency[_,_]],
+                        jobId: Int,
+                        callSite: Option[String] = None)
+  : Stage =
   {
     val id = nextStageId.getAndIncrement()
     val stage =
@@ -256,12 +250,12 @@ class DAGScheduler(
    * recovered from the MapOutputTracker
    */
   private def newOrUsedStage(
-      rdd: RDD[_],
-      numTasks: Int,
-      shuffleDep: ShuffleDependency[_,_],
-      jobId: Int,
-      callSite: Option[String] = None)
-    : Stage =
+                              rdd: RDD[_],
+                              numTasks: Int,
+                              shuffleDep: ShuffleDependency[_,_],
+                              jobId: Int,
+                              callSite: Option[String] = None)
+  : Stage =
   {
     val stage = newStage(rdd, numTasks, Some(shuffleDep), jobId, callSite)
     if (mapOutputTracker.has(shuffleDep.shuffleId)) {
@@ -366,7 +360,7 @@ class DAGScheduler(
           if (!jobSet.contains(jobId)) {
             logError(
               "Job %d not registered for stage %d even though that stage was registered for the job"
-              .format(jobId, stageId))
+                .format(jobId, stageId))
           } else {
             def removeStage(stageId: Int) {
               // data structures based on Stage
@@ -425,13 +419,13 @@ class DAGScheduler(
    * can be used to block until the the job finishes executing or can be used to cancel the job.
    */
   def submitJob[T, U](
-      rdd: RDD[T],
-      func: (TaskContext, Iterator[T]) => U,
-      partitions: Seq[Int],
-      callSite: String,
-      allowLocal: Boolean,
-      resultHandler: (Int, U) => Unit,
-      properties: Properties = null): JobWaiter[U] =
+                       rdd: RDD[T],
+                       func: (TaskContext, Iterator[T]) => U,
+                       partitions: Seq[Int],
+                       callSite: String,
+                       allowLocal: Boolean,
+                       resultHandler: (Int, U) => Unit,
+                       properties: Properties = null): JobWaiter[U] =
   {
     // Check to make sure we are not launching a task on a partition that does not exist.
     val maxPartitions = rdd.partitions.length
@@ -455,13 +449,13 @@ class DAGScheduler(
   }
 
   def runJob[T, U: ClassTag](
-      rdd: RDD[T],
-      func: (TaskContext, Iterator[T]) => U,
-      partitions: Seq[Int],
-      callSite: String,
-      allowLocal: Boolean,
-      resultHandler: (Int, U) => Unit,
-      properties: Properties = null)
+                              rdd: RDD[T],
+                              func: (TaskContext, Iterator[T]) => U,
+                              partitions: Seq[Int],
+                              callSite: String,
+                              allowLocal: Boolean,
+                              resultHandler: (Int, U) => Unit,
+                              properties: Properties = null)
   {
     val waiter = submitJob(rdd, func, partitions, callSite, allowLocal, resultHandler, properties)
     waiter.awaitResult() match {
@@ -473,13 +467,13 @@ class DAGScheduler(
   }
 
   def runApproximateJob[T, U, R](
-      rdd: RDD[T],
-      func: (TaskContext, Iterator[T]) => U,
-      evaluator: ApproximateEvaluator[U, R],
-      callSite: String,
-      timeout: Long,
-      properties: Properties = null)
-    : PartialResult[R] =
+                                  rdd: RDD[T],
+                                  func: (TaskContext, Iterator[T]) => U,
+                                  evaluator: ApproximateEvaluator[U, R],
+                                  callSite: String,
+                                  timeout: Long,
+                                  properties: Properties = null)
+  : PartialResult[R] =
   {
     val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
@@ -533,7 +527,7 @@ class DAGScheduler(
         val job = new ActiveJob(jobId, finalStage, func, partitions, callSite, listener, properties)
         clearCacheLocs()
         logInfo("Got job " + job.jobId + " (" + callSite + ") with " + partitions.length +
-                " output partitions (allowLocal=" + allowLocal + ")")
+          " output partitions (allowLocal=" + allowLocal + ")")
         logInfo("Final stage: " + finalStage + " (" + finalStage.name + ")")
         logInfo("Parents of final stage: " + finalStage.parents)
         logInfo("Missing parents: " + getMissingParentStages(finalStage))
@@ -580,11 +574,11 @@ class DAGScheduler(
           stageInfo <- stageToInfos.get(stage)
         ) {
           if (taskInfo.serializedSize > TASK_SIZE_TO_WARN * 1024 &&
-              !stageInfo.emittedTaskSizeWarning) {
+            !stageInfo.emittedTaskSizeWarning) {
             stageInfo.emittedTaskSizeWarning = true
             logWarning(("Stage %d (%s) contains a task of very large " +
               "size (%d KB). The maximum recommended task size is %d KB.").format(
-              task.stageId, stageInfo.name, taskInfo.serializedSize / 1024, TASK_SIZE_TO_WARN))
+                task.stageId, stageInfo.name, taskInfo.serializedSize / 1024, TASK_SIZE_TO_WARN))
           }
         }
         listenerBus.post(SparkListenerTaskStart(task.stageId, taskInfo))
@@ -759,7 +753,7 @@ class DAGScheduler(
     val properties = if (stageIdToActiveJob.contains(jobId)) {
       stageIdToActiveJob(stage.jobId).properties
     } else {
-      //this stage will be assigned to "default" pool
+      // this stage will be assigned to "default" pool
       null
     }
 
@@ -900,7 +894,7 @@ class DAGScheduler(
                 }
               }
             }
-          }
+        }
 
       case Resubmitted =>
         logInfo("Resubmitted " + task + ", so marking it as still running")
@@ -937,14 +931,14 @@ class DAGScheduler(
         }
 
       case ExceptionFailure(className, description, stackTrace, metrics) =>
-        // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
+      // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
 
       case TaskResultLost =>
-        // Do nothing here; the TaskScheduler handles these failures and resubmits the task.
+      // Do nothing here; the TaskScheduler handles these failures and resubmits the task.
 
       case other =>
-        // Unrecognized failure - also do nothing. If the task fails repeatedly, the TaskScheduler
-        // will abort the job.
+      // Unrecognized failure - also do nothing. If the task fails repeatedly, the TaskScheduler
+      // will abort the job.
     }
   }
 
@@ -973,7 +967,7 @@ class DAGScheduler(
       clearCacheLocs()
     } else {
       logDebug("Additional executor lost message for " + execId +
-               "(epoch " + currentEpoch + ")")
+        "(epoch " + currentEpoch + ")")
     }
   }
 
@@ -1100,10 +1094,10 @@ class DAGScheduler(
       "jobIdToStageIds" -> jobIdToStageIds,
       "stageIdToJobIds" -> stageIdToJobIds).
       foreach { case (s, t) =>
-        val sizeBefore = t.size
-        t.clearOldValues(cleanupTime)
-        logInfo("%s %d --> %d".format(s, sizeBefore, t.size))
-      }
+      val sizeBefore = t.size
+      t.clearOldValues(cleanupTime)
+      logInfo("%s %d --> %d".format(s, sizeBefore, t.size))
+    }
   }
 
   def stop() {
