@@ -22,6 +22,7 @@ import java.nio.{ByteBuffer, ByteOrder}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.ColumnBuilder._
+import org.apache.spark.sql.columnar.compression.{AllCompressionSchemes, CompressibleColumnBuilder}
 
 private[sql] trait ColumnBuilder {
   /**
@@ -30,14 +31,14 @@ private[sql] trait ColumnBuilder {
   def initialize(initialSize: Int, columnName: String = "")
 
   /**
-   * Gathers statistics information from `row(ordinal)`.
-   */
-  def gatherStats(row: Row, ordinal: Int) {}
-
-  /**
    * Appends `row(ordinal)` to the column builder.
    */
   def appendFrom(row: Row, ordinal: Int)
+
+  /**
+   * Column statistics information
+   */
+  def columnStats: ColumnStats[_, _]
 
   /**
    * Returns the final columnar byte buffer.
@@ -45,7 +46,8 @@ private[sql] trait ColumnBuilder {
   def build(): ByteBuffer
 }
 
-private[sql] abstract class BasicColumnBuilder[T <: DataType, JvmType](
+private[sql] class BasicColumnBuilder[T <: DataType, JvmType](
+    val columnStats: ColumnStats[T, JvmType],
     val columnType: ColumnType[T, JvmType])
   extends ColumnBuilder {
 
@@ -74,20 +76,20 @@ private[sql] abstract class BasicColumnBuilder[T <: DataType, JvmType](
   }
 }
 
-private[sql] abstract class NativeColumnBuilder[T <: NativeType](
-    protected val columnStats: ColumnStats[T],
-    columnType: NativeColumnType[T])
-  extends BasicColumnBuilder(columnType)
+private[sql] abstract class ComplexColumnBuilder[T <: DataType, JvmType](
+    columnType: ColumnType[T, JvmType])
+  extends BasicColumnBuilder[T, JvmType](new NoopColumnStats[T, JvmType], columnType)
   with NullableColumnBuilder
-  with CompressedColumnBuilder[T] {
 
-  override def gatherStats(row: Row, ordinal: Int) {
-    columnStats.gatherStats(row, ordinal)
-  }
-}
+private[sql] abstract class NativeColumnBuilder[T <: NativeType](
+    override val columnStats: NativeColumnStats[T],
+    override val columnType: NativeColumnType[T])
+  extends BasicColumnBuilder[T, T#JvmType](columnStats, columnType)
+  with NullableColumnBuilder
+  with AllCompressionSchemes
+  with CompressibleColumnBuilder[T]
 
-private[sql] class BooleanColumnBuilder
-  extends NativeColumnBuilder(new BooleanColumnStats, BOOLEAN)
+private[sql] class BooleanColumnBuilder extends NativeColumnBuilder(new BooleanColumnStats, BOOLEAN)
 
 private[sql] class IntColumnBuilder extends NativeColumnBuilder(new IntColumnStats, INT)
 
@@ -101,16 +103,12 @@ private[sql] class DoubleColumnBuilder extends NativeColumnBuilder(new DoubleCol
 
 private[sql] class FloatColumnBuilder extends NativeColumnBuilder(new FloatColumnStats, FLOAT)
 
-private[sql] class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStates, STRING)
+private[sql] class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStats, STRING)
 
-private[sql] class BinaryColumnBuilder
-  extends BasicColumnBuilder[BinaryType.type, Array[Byte]](BINARY)
-  with NullableColumnBuilder
+private[sql] class BinaryColumnBuilder extends ComplexColumnBuilder(BINARY)
 
 // TODO (lian) Add support for array, struct and map
-private[sql] class GenericColumnBuilder
-  extends BasicColumnBuilder[DataType, Array[Byte]](GENERIC)
-  with NullableColumnBuilder
+private[sql] class GenericColumnBuilder extends ComplexColumnBuilder(GENERIC)
 
 private[sql] object ColumnBuilder {
   val DEFAULT_INITIAL_BUFFER_SIZE = 10 * 1024 * 104

@@ -21,6 +21,7 @@ import java.nio.{ByteOrder, ByteBuffer}
 
 import org.apache.spark.sql.catalyst.types.{BinaryType, NativeType, DataType}
 import org.apache.spark.sql.catalyst.expressions.MutableRow
+import org.apache.spark.sql.columnar.compression.CompressibleColumnAccessor
 
 /**
  * An `Iterator` like trait used to extract values from columnar byte buffer. When a value is
@@ -53,17 +54,17 @@ private[sql] abstract class BasicColumnAccessor[T <: DataType, JvmType](
     columnType.setField(row, ordinal, extractSingle(buffer))
   }
 
-  def extractSingle(buffer: ByteBuffer) = columnType.extract(buffer)
+  def extractSingle(buffer: ByteBuffer): JvmType = columnType.extract(buffer)
 
   protected def underlyingBuffer = buffer
 }
 
 private[sql] abstract class NativeColumnAccessor[T <: NativeType](
-    buffer: ByteBuffer,
-    columnType: NativeColumnType[T])
+    override protected val buffer: ByteBuffer,
+    override protected val columnType: NativeColumnType[T])
   extends BasicColumnAccessor(buffer, columnType)
   with NullableColumnAccessor
-  with CompressedColumnAccessor[T]
+  with CompressibleColumnAccessor[T]
 
 private[sql] class BooleanColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, BOOLEAN)
@@ -98,9 +99,8 @@ private[sql] class GenericColumnAccessor(buffer: ByteBuffer)
   with NullableColumnAccessor
 
 private[sql] object ColumnAccessor {
-  def apply(b: ByteBuffer): ColumnAccessor = {
-    // The first 4 bytes in the buffer indicates the column type.
-    val buffer = b.duplicate().order(ByteOrder.nativeOrder())
+  def apply(buffer: ByteBuffer): ColumnAccessor = {
+    // The first 4 bytes in the buffer indicate the column type.
     val columnTypeId = buffer.getInt()
 
     columnTypeId match {

@@ -19,6 +19,8 @@ package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.catalyst.types._
@@ -80,7 +82,7 @@ private[sql] abstract class NativeColumnType[T <: NativeType](
   /**
    * Scala TypeTag. Can be used to create primitive arrays and hash tables.
    */
-  def scalaTag = dataType.tag
+  def scalaTag: TypeTag[dataType.JvmType] = dataType.tag
 }
 
 private[sql] object INT extends NativeColumnType(IntegerType, 0, 4) {

@@ -15,27 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar
+package org.apache.spark.sql.columnar.compression
 
 import java.nio.ByteBuffer
 
 import org.apache.spark.sql.catalyst.types.NativeType
-import org.apache.spark.sql.columnar.CompressionAlgorithm.NoopDecoder
-import org.apache.spark.sql.columnar.CompressionType._
+import org.apache.spark.sql.columnar.{ColumnAccessor, NativeColumnAccessor}
 
-private[sql] trait CompressedColumnAccessor[T <: NativeType] extends ColumnAccessor {
-  this: BasicColumnAccessor[T, T#JvmType] =>
+private[sql] trait CompressibleColumnAccessor[T <: NativeType] extends ColumnAccessor {
+  this: NativeColumnAccessor[T] =>
 
-  private var decoder: Iterator[T#JvmType] = _
+  private var decoder: Decoder[T] = _
 
   abstract override protected def initialize() = {
     super.initialize()
-
-    decoder = underlyingBuffer.getInt() match {
-      case id if id == Noop.id => new NoopDecoder[T](buffer, columnType)
-      case _ => throw new UnsupportedOperationException()
-    }
+    decoder = CompressionScheme(underlyingBuffer.getInt()).decoder(buffer, columnType)
   }
 
-  abstract override def extractSingle(buffer: ByteBuffer) = decoder.next()
+  abstract override def extractSingle(buffer: ByteBuffer): T#JvmType = decoder.next()
 }

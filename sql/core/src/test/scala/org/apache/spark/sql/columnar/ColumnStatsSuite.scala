@@ -17,22 +17,70 @@
 
 package org.apache.spark.sql.columnar
 
+import scala.reflect.ClassTag
+import scala.util.Random
+
 import org.scalatest.FunSuite
+
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.types._
 
 class ColumnStatsSuite extends FunSuite {
-  test("Boolean") {
-    val stats = new BooleanColumnStats
-    val row = new GenericMutableRow(1)
+  testColumnStats[BooleanType.type, BooleanColumnStats] {
+    Random.nextBoolean()
+  }
 
-    row(0) = false
-    stats.gatherStats(row, 0)
-    assert(stats.lowerBound === false)
-    assert(stats.upperBound === false)
+  testColumnStats[IntegerType.type, IntColumnStats] {
+    Random.nextInt()
+  }
 
-    row(0) = true
-    stats.gatherStats(row, 0)
-    assert(stats.lowerBound === false)
-    assert(stats.upperBound === true)
+  testColumnStats[LongType.type, LongColumnStats] {
+    Random.nextLong()
+  }
+
+  testColumnStats[ShortType.type, ShortColumnStats] {
+    (Random.nextInt(Short.MaxValue * 2) - Short.MaxValue).toShort
+  }
+
+  testColumnStats[ByteType.type, ByteColumnStats] {
+    (Random.nextInt(Byte.MaxValue * 2) - Byte.MaxValue).toByte
+  }
+
+  testColumnStats[DoubleType.type, DoubleColumnStats] {
+    Random.nextDouble()
+  }
+
+  testColumnStats[FloatType.type, FloatColumnStats] {
+    Random.nextFloat()
+  }
+
+  testColumnStats[StringType.type, StringColumnStats] {
+    Random.nextString(Random.nextInt(32))
+  }
+
+  def testColumnStats[T <: NativeType, U <: NativeColumnStats[T]: ClassTag](
+      mkRandomValue: => U#JvmType) {
+
+    val columnStatsClass = implicitly[ClassTag[U]].runtimeClass
+    val columnStatsName = columnStatsClass.getSimpleName
+
+    test(s"$columnStatsName: empty") {
+      val columnStats = columnStatsClass.newInstance().asInstanceOf[U]
+      assert((columnStats.lowerBound, columnStats.upperBound) === columnStats.initialBounds)
+    }
+
+    test(s"$columnStatsName: non-empty") {
+      val columnStats = columnStatsClass.newInstance().asInstanceOf[U]
+      val values = Seq.fill[U#JvmType](10)(mkRandomValue)
+      val row = new GenericMutableRow(1)
+
+      values.foreach { value =>
+        row(0) = value
+        columnStats.gatherStats(row, 0)
+      }
+
+      assert(columnStats.lowerBound === values.min(columnStats.ordering))
+      assert(columnStats.upperBound === values.max(columnStats.ordering))
+    }
   }
 }

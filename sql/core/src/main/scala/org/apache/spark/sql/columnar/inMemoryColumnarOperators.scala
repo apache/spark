@@ -32,8 +32,8 @@ private[sql] case class InMemoryColumnarTableScan(attributes: Seq[Attribute], ch
   lazy val cachedColumnBuffers = {
     val output = child.output
     val cached = child.execute().mapPartitions { iterator =>
-      val columnBuilders = output.map { a =>
-        ColumnBuilder(a.dataType.typeId, 0, a.name)
+      val columnBuilders = output.map { attribute =>
+        ColumnBuilder(attribute.dataType.typeId, 0, attribute.name)
       }.toArray
 
       var row: Row = null

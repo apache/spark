@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 
 class TestNullableColumnBuilder[T <: DataType, JvmType](columnType: ColumnType[T, JvmType])
-  extends BasicColumnBuilder(columnType)
+  extends BasicColumnBuilder[T, JvmType](new NoopColumnStats[T, JvmType], columnType)
   with NullableColumnBuilder
 
 object TestNullableColumnBuilder {
