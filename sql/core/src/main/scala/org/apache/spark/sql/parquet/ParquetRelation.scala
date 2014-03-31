@@ -36,7 +36,7 @@ import parquet.schema.{MessageType, MessageTypeParser}
 import parquet.schema.{PrimitiveType => ParquetPrimitiveType}
 import parquet.schema.{Type => ParquetType}
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
 import org.apache.spark.sql.catalyst.plans.logical.{BaseRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.types._
@@ -54,26 +54,37 @@ import org.apache.spark.sql.catalyst.types._
  * @param tableName The name of the relation that can be used in queries.
  * @param path The path to the Parquet file.
  */
-case class ParquetRelation(tableName: String, path: String) extends BaseRelation {
+case class ParquetRelation(tableName: String, path: String)
+  extends BaseRelation with MultiInstanceRelation {
 
-  /** Schema derived from ParquetFile **/
+  /** Schema derived from ParquetFile */
   def parquetSchema: MessageType =
     ParquetTypesConverter
       .readMetaData(new Path(path))
       .getFileMetaData
       .getSchema
 
-  /** Attributes **/
+  /** Attributes */
   val attributes =
     ParquetTypesConverter
     .convertToAttributes(parquetSchema)
 
-  /** Output **/
+  /** Output */
   override val output = attributes
 
   // Parquet files have no concepts of keys, therefore no Partitioner
   // Note: we could allow Block level access; needs to be thought through
   override def isPartitioned = false
+
+  override def newInstance = ParquetRelation(tableName, path).asInstanceOf[this.type]
+
+  // Equals must also take into account the output attributes so that we can distinguish between
+  // different instances of the same relation,
+  override def equals(other: Any) = other match {
+    case p: ParquetRelation =>
+      p.tableName == tableName && p.path == path && p.output == output
+    case _ => false
+  }
 }
 
 object ParquetRelation {
