@@ -247,6 +247,7 @@ class PythonMLLibAPI extends Serializable {
     })
     val model = NaiveBayes.train(data, lambda)
     val ret = new java.util.LinkedList[java.lang.Object]()
+    ret.add(serializeDoubleVector(model.labels))
     ret.add(serializeDoubleVector(model.pi))
     ret.add(serializeDoubleMatrix(model.theta))
     ret
