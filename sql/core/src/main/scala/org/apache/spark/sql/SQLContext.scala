@@ -117,7 +117,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val strategies: Seq[Strategy] =
       TopK ::
       PartialAggregation ::
-      SparkEquiInnerJoin ::
+      HashJoin ::
       ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::

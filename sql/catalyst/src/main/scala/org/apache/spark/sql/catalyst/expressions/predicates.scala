@@ -21,6 +21,12 @@ import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.types.{BooleanType, StringType}
 
+object InterpretedPredicate {
+  def apply(expression: Expression): (Row => Boolean) = {
+    (r: Row) => expression.apply(r).asInstanceOf[Boolean]
+  }
+}
+
 trait Predicate extends Expression {
   self: Product =>
 
