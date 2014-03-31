@@ -23,7 +23,12 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
-class MLContext(self: SparkContext) {
+/**
+ * Provides methods related to machine learning on top of [[org.apache.spark.SparkContext]].
+ *
+ * @param sparkContext a [[org.apache.spark.SparkContext]] instance
+ */
+class MLContext(val sparkContext: SparkContext) {
   /**
    * Reads labeled data in the LIBSVM format into an RDD[LabeledPoint].
    * The LIBSVM format is a text-based format used by LIBSVM and LIBLINEAR.
@@ -34,16 +39,16 @@ class MLContext(self: SparkContext) {
    * where the feature indices are converted to zero-based.
    *
    * @param path file or directory path in any Hadoop-supported file system URI
-   * @param numFeatures number of features, it will be determined from input
-   *                    if a non-positive value is given
-   *@param labelParser parser for labels, default: _.toDouble
+   * @param numFeatures number of features, which will be determined from the input data if a
+   *                    non-positive value is given. The default value is 0.
+   * @param labelParser parser for labels, default: _.toDouble
    * @return labeled data stored as an RDD[LabeledPoint]
    */
   def libSVMFile(
       path: String,
-      numFeatures: Int,
+      numFeatures: Int = 0,
       labelParser: String => Double = _.toDouble): RDD[LabeledPoint] = {
-    val parsed = self.textFile(path).map(_.trim).filter(!_.isEmpty).map(_.split(' '))
+    val parsed = sparkContext.textFile(path).map(_.trim).filter(!_.isEmpty).map(_.split(' '))
     // Determine number of features.
     val d = if (numFeatures > 0) {
       numFeatures
@@ -70,5 +75,9 @@ class MLContext(self: SparkContext) {
 }
 
 object MLContext {
-  implicit def sparkContextToMLContext(sc: SparkContext): MLContext = new MLContext(sc)
+  /**
+   * Creates an [[org.apache.spark.mllib.MLContext]] instance from
+   * an [[org.apache.spark.SparkContext]] instance.
+   */
+  def apply(sc: SparkContext): MLContext = new MLContext(sc)
 }

@@ -24,7 +24,6 @@ import org.scalatest.FunSuite
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 
-import org.apache.spark.mllib.MLContext._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.LocalSparkContext
 
@@ -40,8 +39,10 @@ class MLContextSuite extends FunSuite with LocalSparkContext {
     val file = new File(tempDir.getPath, "part-00000")
     Files.write(lines, file, Charsets.US_ASCII)
 
-    val pointsWithNumFeatures = sc.libSVMFile(tempDir.toURI.toString, 6).collect()
-    val pointsWithoutNumFeatures = sc.libSVMFile(tempDir.toURI.toString, 0).collect()
+    val mlc = MLContext(sc)
+
+    val pointsWithNumFeatures = mlc.libSVMFile(tempDir.toURI.toString, 6).collect()
+    val pointsWithoutNumFeatures = mlc.libSVMFile(tempDir.toURI.toString, 0).collect()
 
     for (points <- Seq(pointsWithNumFeatures, pointsWithoutNumFeatures)) {
       assert(points.length === 3)
