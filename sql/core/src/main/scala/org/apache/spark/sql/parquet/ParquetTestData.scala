@@ -130,9 +130,34 @@ private[sql] object ParquetTestData {
       |}
     """.stripMargin
 
+
+  val testNestedSchema2 =
+    """
+      |message TestNested2 {
+        |required int32 firstInt;
+        |optional int32 secondInt;
+        |optional group longs {
+          |repeated int64 values;
+        |}
+        |required group booleanNumberPairs {
+          |required double value;
+          |optional boolean truth;
+        |}
+        |required group outerouter {
+          |required group outer {
+            |required group inner {
+              |required int32 number;
+            |}
+          |}
+        |}
+      |}
+    """.stripMargin
+
   val testNestedDir1 = Utils.createTempDir()
+  val testNestedDir2 = Utils.createTempDir()
 
   lazy val testNestedData1 = new ParquetRelation(testNestedDir1.toURI.toString)
+  lazy val testNestedData2 = new ParquetRelation(testNestedDir2.toURI.toString)
 
   // Implicit
   // TODO: get rid of this since it is confusing!
@@ -216,40 +241,50 @@ private[sql] object ParquetTestData {
     val r2 = new SimpleGroup(schema)
     r2.add(0, "A. Nonymous")
 
-    // ParquetWriter initializes GroupWriteSupport with an empty configuration
-    // (it is after all not intended to be used in this way?)
-    // and members are private so we need to make our own
-    val writeSupport = new WriteSupport[Group] {
-      var groupWriter: GroupWriter = null
-      override def prepareForWrite(recordConsumer: RecordConsumer): Unit = {
-        groupWriter = new GroupWriter(recordConsumer, schema)
-      }
-      override def init(configuration: Configuration): WriteContext = {
-        new WriteContext(schema, new java.util.HashMap[String, String]())
-      }
-      override def write(record: Group) {
-        groupWriter.write(record)
-      }
-    }
+    val writeSupport = new TestGroupWriteSupport(schema)
     val writer = new ParquetWriter[Group](path, writeSupport)
     writer.write(r1)
     writer.write(r2)
     writer.close()
   }
 
-  def readNestedFile(): Unit = {
+  def writeNestedFile2() {
+    testNestedDir2.delete()
+    val path: Path = testNestedDir2
+    val schema: MessageType = MessageTypeParser.parseMessageType(testNestedSchema2)
+
+    val r1 = new SimpleGroup(schema)
+    r1.add(0, 1)
+    r1.add(1, 7)
+    val longs = r1.addGroup(2)
+    longs.add("values", 1.toLong << 32)
+    longs.add("values", 1.toLong << 33)
+    longs.add("values", 1.toLong << 34)
+    val booleanNumberPairs = r1.addGroup(3)
+    booleanNumberPairs.add("value", 2.5)
+    booleanNumberPairs.add("truth", false)
+    r1.addGroup(4).addGroup(0).addGroup(0).add("number", 7)
+    r1.addGroup(4).addGroup(0).addGroup(0).add("number", 8)
+    r1.addGroup(4).addGroup(0).addGroup(0).add("number", 9)
+
+    val writeSupport = new TestGroupWriteSupport(schema)
+    val writer = new ParquetWriter[Group](path, writeSupport)
+    writer.write(r1)
+    writer.close()
+  }
+
+
+  def readNestedFile(path: File, schemaString: String): Unit = {
     val configuration = new Configuration()
-    val fs: FileSystem = testNestedDir1.getFileSystem(configuration)
-    val schema: MessageType = MessageTypeParser.parseMessageType(testNestedSchema1)
-    val outputStatus: FileStatus = fs.getFileStatus(testNestedDir1)
+    val fs: FileSystem = path.getFileSystem(configuration)
+    val schema: MessageType = MessageTypeParser.parseMessageType(schemaString)
+    assert(schema != null)
+    val outputStatus: FileStatus = fs.getFileStatus(path)
     val footers = ParquetFileReader.readFooter(configuration, outputStatus)
-    val reader = new ParquetReader(testNestedDir1, new GroupReadSupport())
+    assert(footers != null)
+    val reader = new ParquetReader(path, new GroupReadSupport())
     val first = reader.read()
     assert(first != null)
-    val second = reader.read()
-    assert(second != null)
-    assert(schema != null)
-    assert(footers != null)
   }
 }
 

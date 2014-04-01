@@ -64,6 +64,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     ParquetTestData.writeFile()
     ParquetTestData.writeFilterFile()
     ParquetTestData.writeNestedFile1()
+    ParquetTestData.writeNestedFile2()
     testRDD = parquetFile(ParquetTestData.testDir.toString)
     testRDD.registerAsTable("testsource")
     parquetFile(ParquetTestData.testFilterDir.toString)
@@ -74,6 +75,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     Utils.deleteRecursively(ParquetTestData.testDir)
     Utils.deleteRecursively(ParquetTestData.testFilterDir)
     Utils.deleteRecursively(ParquetTestData.testNestedDir1)
+    Utils.deleteRecursively(ParquetTestData.testNestedDir2)
     // here we should also unregister the table??
   }
 
@@ -197,7 +199,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       assert(rdd_copy(i).apply(1) === rdd_orig(i).value, s"value in line $i")
     }
     Utils.deleteRecursively(file)
-    assert(true)
   }
 
   test("insert (appending) to same table via Scala API") {
@@ -365,7 +366,9 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Importing nested Parquet file (Addressbook)") {
-    ParquetTestData.readNestedFile()
+    ParquetTestData.readNestedFile(
+      ParquetTestData.testNestedFile1,
+      ParquetTestData.testNestedSchema1)
     val result = getRDD(ParquetTestData.testNestedData1).collect()
     assert(result != null)
     assert(result.size === 2)
@@ -384,6 +387,14 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(first_contacts.apply(0).apply(0) === "Dmitriy Ryaboy")
     assert(first_contacts.apply(0).apply(1) === "555 987 6543")
     assert(first_contacts.apply(1).apply(0) === "Chris Aniszczyk")
+  }
+
+  test("Importing nested Parquet file (nested numbers)") {
+    ParquetTestData.readNestedFile(
+      ParquetTestData.testNestedFile2,
+      ParquetTestData.testNestedSchema2)
+    val result = getRDD(ParquetTestData.testNestedData2).collect()
+    assert(result != null)
   }
 
   /**
