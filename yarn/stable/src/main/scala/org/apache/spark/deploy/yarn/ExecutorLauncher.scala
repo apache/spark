@@ -237,7 +237,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
   }
 
   def finishApplicationMaster(status: FinalApplicationStatus) {
-    logInfo("finish ApplicationEMaster with " + status)
+    logInfo("finish ApplicationMaster with " + status)
     amClient.unregisterApplicationMaster(status, "" /* appMessage */ , "" /* appTrackingUrl */)
   }
 

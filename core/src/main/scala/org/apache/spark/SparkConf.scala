@@ -52,6 +52,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     }
   }
 
+  validateSettings()
+
   /** Set a configuration variable. */
   def set(key: String, value: String): SparkConf = {
     if (key == null) {
@@ -209,7 +211,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   }
 
   /** Checks for illegal or deprecated config settings. Throws an exception for the former. */
-  private[spark] def validateSettings() {
+  private def validateSettings() {
     if (settings.contains("spark.local.dir")) {
       val msg = "In Spark 1.0 and later spark.local.dir will be overridden by the value set by " +
         "the cluster manager (via SPARK_LOCAL_DIRS in mesos/standalone and LOCAL_DIRS in YARN)."
