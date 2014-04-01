@@ -84,7 +84,7 @@ private[ui] class BlockManagerListener(storageStatusListener: StorageStatusListe
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = synchronized {
     val rddInfo = stageSubmitted.stageInfo.rddInfo
-    _rddInfoMap(rddInfo.id) = rddInfo
+    _rddInfoMap.getOrElseUpdate(rddInfo.id, rddInfo)
   }
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
