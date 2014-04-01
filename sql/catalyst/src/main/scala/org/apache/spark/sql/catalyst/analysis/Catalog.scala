@@ -31,6 +31,7 @@ trait Catalog {
     alias: Option[String] = None): LogicalPlan
 
   def registerTable(databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit
+  def unregisterTable(databaseName: Option[String], tableName: String): Unit
 }
 
 class SimpleCatalog extends Catalog {
@@ -40,7 +41,7 @@ class SimpleCatalog extends Catalog {
     tables += ((tableName, plan))
   }
 
-  def dropTable(tableName: String) = tables -= tableName
+  def unregisterTable(databaseName: Option[String], tableName: String) = { tables -= tableName }
 
   def lookupRelation(
       databaseName: Option[String],
@@ -87,6 +88,10 @@ trait OverrideCatalog extends Catalog {
       plan: LogicalPlan): Unit = {
     overrides.put((databaseName, tableName), plan)
   }
+
+  override def unregisterTable(databaseName: Option[String], tableName: String): Unit = {
+    overrides.remove((databaseName, tableName))
+  }
 }
 
 /**
@@ -102,6 +107,10 @@ object EmptyCatalog extends Catalog {
   }
 
   def registerTable(databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  def unregisterTable(databaseName: Option[String], tableName: String): Unit = {
     throw new UnsupportedOperationException
   }
 }
