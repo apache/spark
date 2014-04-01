@@ -117,7 +117,8 @@ class DAGScheduler(
     new MetadataCleaner(MetadataCleanerType.DAG_SCHEDULER, this.cleanup, env.conf)
 
   // stageId -> (splitId -> (acumulatorId, accumulatorValue))
-  val stageIdToAccumulators = new HashMap[Int, HashMap[Int, ListBuffer[(Long, Any)]]]
+  private[scheduler] val stageIdToAccumulators = new HashMap[Int,
+     HashMap[Int, ListBuffer[(Long, Any)]]]
 
   taskScheduler.setDAGScheduler(this)
 
@@ -807,11 +808,11 @@ class DAGScheduler(
     if (accumValue != null &&
       (!stageIdToAccumulators.contains(stage.id) ||
         !stageIdToAccumulators(stage.id).contains(task.partitionId))) {
-      stageIdToAccumulators.getOrElseUpdate(stage.id,
+      val accum = stageIdToAccumulators.getOrElseUpdate(stage.id,
         new HashMap[Int, ListBuffer[(Long, Any)]]).
         getOrElseUpdate(task.partitionId, new ListBuffer[(Long, Any)])
       for ((id, value) <- accumValue) {
-        stageIdToAccumulators(stage.id)(task.partitionId) += id -> value
+        accum += id -> value
       }
     }
   }
