@@ -29,7 +29,10 @@ import org.apache.spark.util.Utils
 private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
   extends Broadcast[T](id) with Logging with Serializable {
 
-  override def value = value_
+  def value = {
+    assertValid()
+    value_
+  }
 
   val broadcastId = BroadcastBlockId(id)
 
@@ -47,7 +50,23 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
     sendBroadcast()
   }
 
-  def sendBroadcast() {
+  /**
+   * Remove all persisted state associated with this Torrent broadcast on the executors.
+   */
+  def unpersist() {
+    TorrentBroadcast.unpersist(id, removeFromDriver = false)
+  }
+
+  /**
+   * Remove all persisted state associated with this Torrent broadcast on both the executors
+   * and the driver.
+   */
+  private[spark] def destroy() {
+    _isValid = false
+    TorrentBroadcast.unpersist(id, removeFromDriver = true)
+  }
+
+  private def sendBroadcast() {
     val tInfo = TorrentBroadcast.blockifyObject(value_)
     totalBlocks = tInfo.totalBlocks
     totalBytes = tInfo.totalBytes
@@ -71,18 +90,9 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
     }
   }
 
-  /**
-   * Remove all persisted state associated with this Torrent broadcast.
-   * @param removeFromDriver Whether to remove state from the driver.
-   */
-  override def unpersist(removeFromDriver: Boolean) {
-    isValid = !removeFromDriver
-    TorrentBroadcast.unpersist(id, removeFromDriver)
-  }
-
   // Used by the JVM when serializing this object
   private def writeObject(out: ObjectOutputStream) {
-    assert(isValid, "Attempted to serialize a broadcast variable that has been destroyed!")
+    assertValid()
     out.defaultWriteObject()
   }
 
@@ -240,7 +250,6 @@ private[spark] object TorrentBroadcast extends Logging {
   def unpersist(id: Long, removeFromDriver: Boolean) = synchronized {
     SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver)
   }
-
 }
 
 private[spark] case class TorrentBlock(

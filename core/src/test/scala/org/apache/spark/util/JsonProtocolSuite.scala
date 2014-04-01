@@ -104,6 +104,14 @@ class JsonProtocolSuite extends FunSuite {
     testTaskEndReason(TaskKilled)
     testTaskEndReason(ExecutorLostFailure)
     testTaskEndReason(UnknownReason)
+
+    // BlockId
+    testBlockId(RDDBlockId(1, 2))
+    testBlockId(ShuffleBlockId(1, 2, 3))
+    testBlockId(BroadcastBlockId(1L, "<Insert words of wisdom here>"))
+    testBlockId(TaskResultBlockId(1L))
+    testBlockId(StreamBlockId(1, 2L))
+    testBlockId(TempBlockId(UUID.randomUUID()))
   }
 
 
@@ -156,6 +164,11 @@ class JsonProtocolSuite extends FunSuite {
   private def testTaskEndReason(reason: TaskEndReason) {
     val newReason = JsonProtocol.taskEndReasonFromJson(JsonProtocol.taskEndReasonToJson(reason))
     assertEquals(reason, newReason)
+  }
+
+  private def testBlockId(blockId: BlockId) {
+    val newBlockId = JsonProtocol.blockIdFromJson(JsonProtocol.blockIdToJson(blockId))
+    blockId == newBlockId
   }
 
 
@@ -542,4 +555,4 @@ class JsonProtocolSuite extends FunSuite {
       {"Event":"SparkListenerUnpersistRDD","RDD ID":12345}
     """
 
- }
+}

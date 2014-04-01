@@ -106,9 +106,7 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
     askDriverWithReply(RemoveBlock(blockId))
   }
 
-  /**
-   * Remove all blocks belonging to the given RDD.
-   */
+  /** Remove all blocks belonging to the given RDD. */
   def removeRdd(rddId: Int, blocking: Boolean) {
     val future = askDriverWithReply[Future[Seq[Int]]](RemoveRdd(rddId))
     future onFailure {
@@ -119,16 +117,12 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
     }
   }
 
-  /**
-   * Remove all blocks belonging to the given shuffle.
-   */
+  /** Remove all blocks belonging to the given shuffle. */
   def removeShuffle(shuffleId: Int) {
     askDriverWithReply(RemoveShuffle(shuffleId))
   }
 
-  /**
-   * Remove all blocks belonging to the given broadcast.
-   */
+  /** Remove all blocks belonging to the given broadcast. */
   def removeBroadcast(broadcastId: Long, removeFromMaster: Boolean) {
     askDriverWithReply(RemoveBroadcast(broadcastId, removeFromMaster))
   }
@@ -148,20 +142,21 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
   }
 
   /**
-   * Return the block's local status on all block managers, if any.
+   * Return the block's status on all block managers, if any.
    *
    * If askSlaves is true, this invokes the master to query each block manager for the most
    * updated block statuses. This is useful when the master is not informed of the given block
    * by all block managers.
-   *
-   * To avoid potential deadlocks, the use of Futures is necessary, because the master actor
-   * should not block on waiting for a block manager, which can in turn be waiting for the
-   * master actor for a response to a prior message.
    */
   def getBlockStatus(
       blockId: BlockId,
       askSlaves: Boolean = true): Map[BlockManagerId, BlockStatus] = {
     val msg = GetBlockStatus(blockId, askSlaves)
+    /*
+     * To avoid potential deadlocks, the use of Futures is necessary, because the master actor
+     * should not block on waiting for a block manager, which can in turn be waiting for the
+     * master actor for a response to a prior message.
+     */
     val response = askDriverWithReply[Map[BlockManagerId, Future[Option[BlockStatus]]]](msg)
     val (blockManagerIds, futures) = response.unzip
     val result = Await.result(Future.sequence(futures), timeout)

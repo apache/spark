@@ -19,6 +19,8 @@ package org.apache.spark.broadcast
 
 import java.io.Serializable
 
+import org.apache.spark.SparkException
+
 /**
  * A broadcast variable. Broadcast variables allow the programmer to keep a read-only variable
  * cached on each machine rather than shipping a copy of it with tasks. They can be used, for
@@ -49,25 +51,36 @@ import java.io.Serializable
  */
 abstract class Broadcast[T](val id: Long) extends Serializable {
 
+  protected var _isValid: Boolean = true
+
   /**
    * Whether this Broadcast is actually usable. This should be false once persisted state is
    * removed from the driver.
    */
-  protected var isValid: Boolean = true
+  def isValid: Boolean = _isValid
 
   def value: T
 
   /**
-   * Remove all persisted state associated with this broadcast. Overriding implementations
-   * should set isValid to false if persisted state is also removed from the driver.
-   *
-   * @param removeFromDriver Whether to remove state from the driver.
-   *                         If true, the resulting broadcast should no longer be valid.
+   * Remove all persisted state associated with this broadcast on the executors. The next use
+   * of this broadcast on the executors will trigger a remote fetch.
    */
-  def unpersist(removeFromDriver: Boolean)
+  def unpersist()
 
-  // We cannot define abstract readObject and writeObject here due to some weird issues
-  // with these methods having to be 'private' in sub-classes.
+  /**
+   * Remove all persisted state associated with this broadcast on both the executors and the
+   * driver. Overriding implementations should set isValid to false.
+   */
+  private[spark] def destroy()
+
+  /**
+   * If this broadcast is no longer valid, throw an exception.
+   */
+  protected def assertValid() {
+    if (!_isValid) {
+      throw new SparkException("Attempted to use %s when is no longer valid!".format(toString))
+    }
+  }
 
   override def toString = "Broadcast(" + id + ")"
 }

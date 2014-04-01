@@ -773,7 +773,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
 
     // getLocations should return nothing because the master is not informed
     // getBlockStatus without asking slaves should have the same result
-    // getBlockStatus with asking slaves, however, should present the actual block statuses
+    // getBlockStatus with asking slaves, however, should return the actual block statuses
     assert(store.master.getLocations("list4").size === 0)
     assert(store.master.getLocations("list5").size === 0)
     assert(store.master.getLocations("list6").size === 0)

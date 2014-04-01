@@ -195,7 +195,7 @@ private[spark] object JsonProtocol {
       taskMetrics.shuffleWriteMetrics.map(shuffleWriteMetricsToJson).getOrElse(JNothing)
     val updatedBlocks = taskMetrics.updatedBlocks.map { blocks =>
         JArray(blocks.toList.map { case (id, status) =>
-          ("Block ID" -> id.toString) ~
+          ("Block ID" -> blockIdToJson(id)) ~
           ("Status" -> blockStatusToJson(status))
         })
       }.getOrElse(JNothing)
@@ -282,6 +282,33 @@ private[spark] object JsonProtocol {
     ("Use Memory" -> storageLevel.useMemory) ~
     ("Deserialized" -> storageLevel.deserialized) ~
     ("Replication" -> storageLevel.replication)
+  }
+
+  def blockIdToJson(blockId: BlockId): JValue = {
+    val blockType = Utils.getFormattedClassName(blockId)
+    val json: JObject = blockId match {
+      case rddBlockId: RDDBlockId =>
+        ("RDD ID" -> rddBlockId.rddId) ~
+        ("Split Index" -> rddBlockId.splitIndex)
+      case shuffleBlockId: ShuffleBlockId =>
+        ("Shuffle ID" -> shuffleBlockId.shuffleId) ~
+        ("Map ID" -> shuffleBlockId.mapId) ~
+        ("Reduce ID" -> shuffleBlockId.reduceId)
+      case broadcastBlockId: BroadcastBlockId =>
+        ("Broadcast ID" -> broadcastBlockId.broadcastId) ~
+        ("Field" -> broadcastBlockId.field)
+      case taskResultBlockId: TaskResultBlockId =>
+        "Task ID" -> taskResultBlockId.taskId
+      case streamBlockId: StreamBlockId =>
+        ("Stream ID" -> streamBlockId.streamId) ~
+        ("Unique ID" -> streamBlockId.uniqueId)
+      case tempBlockId: TempBlockId =>
+        val uuid = UUIDToJson(tempBlockId.id)
+        "Temp ID" -> uuid
+      case testBlockId: TestBlockId =>
+        "Test ID" -> testBlockId.id
+    }
+    ("Type" -> blockType) ~ json
   }
 
   def blockStatusToJson(blockStatus: BlockStatus): JValue = {
@@ -484,7 +511,7 @@ private[spark] object JsonProtocol {
       Utils.jsonOption(json \ "Shuffle Write Metrics").map(shuffleWriteMetricsFromJson)
     metrics.updatedBlocks = Utils.jsonOption(json \ "Updated Blocks").map { value =>
       value.extract[List[JValue]].map { block =>
-        val id = BlockId((block \ "Block ID").extract[String])
+        val id = blockIdFromJson(block \ "Block ID")
         val status = blockStatusFromJson(block \ "Status")
         (id, status)
       }
@@ -585,6 +612,45 @@ private[spark] object JsonProtocol {
     val deserialized = (json \ "Deserialized").extract[Boolean]
     val replication = (json \ "Replication").extract[Int]
     StorageLevel(useDisk, useMemory, deserialized, replication)
+  }
+
+  def blockIdFromJson(json: JValue): BlockId = {
+    val rddBlockId = Utils.getFormattedClassName(RDDBlockId)
+    val shuffleBlockId = Utils.getFormattedClassName(ShuffleBlockId)
+    val broadcastBlockId = Utils.getFormattedClassName(BroadcastBlockId)
+    val taskResultBlockId = Utils.getFormattedClassName(TaskResultBlockId)
+    val streamBlockId = Utils.getFormattedClassName(StreamBlockId)
+    val tempBlockId = Utils.getFormattedClassName(TempBlockId)
+    val testBlockId = Utils.getFormattedClassName(TestBlockId)
+
+    (json \ "Type").extract[String] match {
+      case `rddBlockId` =>
+        val rddId = (json \ "RDD ID").extract[Int]
+        val splitIndex = (json \ "Split Index").extract[Int]
+        new RDDBlockId(rddId, splitIndex)
+      case `shuffleBlockId` =>
+        val shuffleId = (json \ "Shuffle ID").extract[Int]
+        val mapId = (json \ "Map ID").extract[Int]
+        val reduceId = (json \ "Reduce ID").extract[Int]
+        new ShuffleBlockId(shuffleId, mapId, reduceId)
+      case `broadcastBlockId` =>
+        val broadcastId = (json \ "Broadcast ID").extract[Long]
+        val field = (json \ "Field").extract[String]
+        new BroadcastBlockId(broadcastId, field)
+      case `taskResultBlockId` =>
+        val taskId = (json \ "Task ID").extract[Long]
+        new TaskResultBlockId(taskId)
+      case `streamBlockId` =>
+        val streamId = (json \ "Stream ID").extract[Int]
+        val uniqueId = (json \ "Unique ID").extract[Long]
+        new StreamBlockId(streamId, uniqueId)
+      case `tempBlockId` =>
+        val tempId = UUIDFromJson(json \ "Temp ID")
+        new TempBlockId(tempId)
+      case `testBlockId` =>
+        val testId = (json \ "Test ID").extract[String]
+        new TestBlockId(testId)
+    }
   }
 
   def blockStatusFromJson(json: JValue): BlockStatus = {

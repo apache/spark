@@ -246,12 +246,20 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     afterUsingBroadcast(blocks, blockManagerMaster)
 
     // Unpersist broadcast
-    broadcast.unpersist(removeFromDriver)
+    if (removeFromDriver) {
+      broadcast.destroy()
+    } else {
+      broadcast.unpersist()
+    }
     afterUnpersist(blocks, blockManagerMaster)
 
-    if (!removeFromDriver) {
-      // The broadcast variable is not completely destroyed (i.e. state still exists on driver)
-      // Using the variable again should yield the same answer as before.
+    // If the broadcast is removed from driver, all subsequent uses of the broadcast variable
+    // should throw SparkExceptions. Otherwise, the result should be the same as before.
+    if (removeFromDriver) {
+      // Using this variable on the executors crashes them, which hangs the test.
+      // Instead, crash the driver by directly accessing the broadcast value.
+      intercept[SparkException] { broadcast.value }
+    } else {
       val results = sc.parallelize(1 to numSlaves, numSlaves).map(x => (x, broadcast.value.sum))
       assert(results.collect().toSet === (1 to numSlaves).map(x => (x, 10)).toSet)
     }
@@ -263,5 +271,4 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     conf.set("spark.broadcast.factory", "org.apache.spark.broadcast.%s".format(factoryName))
     conf
   }
-
 }

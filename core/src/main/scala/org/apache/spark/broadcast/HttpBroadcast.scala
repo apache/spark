@@ -31,7 +31,10 @@ import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedH
 private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
   extends Broadcast[T](id) with Logging with Serializable {
 
-  override def value = value_
+  def value: T = {
+    assertValid()
+    value_
+  }
 
   val blockId = BroadcastBlockId(id)
 
@@ -45,17 +48,24 @@ private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolea
   }
 
   /**
-   * Remove all persisted state associated with this HTTP broadcast.
-   * @param removeFromDriver Whether to remove state from the driver.
+   * Remove all persisted state associated with this HTTP broadcast on the executors.
    */
-  override def unpersist(removeFromDriver: Boolean) {
-    isValid = !removeFromDriver
-    HttpBroadcast.unpersist(id, removeFromDriver)
+  def unpersist() {
+    HttpBroadcast.unpersist(id, removeFromDriver = false)
+  }
+
+  /**
+   * Remove all persisted state associated with this HTTP Broadcast on both the executors
+   * and the driver.
+   */
+  private[spark] def destroy() {
+    _isValid = false
+    HttpBroadcast.unpersist(id, removeFromDriver = true)
   }
 
   // Used by the JVM when serializing this object
   private def writeObject(out: ObjectOutputStream) {
-    assert(isValid, "Attempted to serialize a broadcast variable that has been destroyed!")
+    assertValid()
     out.defaultWriteObject()
   }
 
@@ -231,5 +241,4 @@ private[spark] object HttpBroadcast extends Logging {
         logError("Exception while deleting broadcast file: %s".format(file), e)
     }
   }
-
 }

@@ -169,18 +169,17 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   // Used for testing
 
-  private[spark] def cleanupRDD(rdd: RDD[_]) {
+  def cleanupRDD(rdd: RDD[_]) {
     doCleanupRDD(rdd.id)
   }
 
-  private[spark] def cleanupShuffle(shuffleDependency: ShuffleDependency[_, _]) {
+  def cleanupShuffle(shuffleDependency: ShuffleDependency[_, _]) {
     doCleanupShuffle(shuffleDependency.shuffleId)
   }
 
-  private[spark] def cleanupBroadcast[T](broadcast: Broadcast[T]) {
+  def cleanupBroadcast[T](broadcast: Broadcast[T]) {
     doCleanupBroadcast(broadcast.id)
   }
-
 }
 
 private object ContextCleaner {

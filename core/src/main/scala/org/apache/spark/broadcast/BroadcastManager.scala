@@ -25,7 +25,7 @@ private[spark] class BroadcastManager(
     val isDriver: Boolean,
     conf: SparkConf,
     securityManager: SecurityManager)
-  extends Logging with Serializable {
+  extends Logging {
 
   private var initialized = false
   private var broadcastFactory: BroadcastFactory = null
@@ -63,5 +63,4 @@ private[spark] class BroadcastManager(
   def unbroadcast(id: Long, removeFromDriver: Boolean) {
     broadcastFactory.unbroadcast(id, removeFromDriver)
   }
-
 }

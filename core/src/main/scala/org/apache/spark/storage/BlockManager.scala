@@ -832,7 +832,7 @@ private[spark] class BlockManager(
   def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean) {
     logInfo("Removing broadcast " + broadcastId)
     val blocksToRemove = blockInfo.keys.collect {
-      case bid: BroadcastBlockId if bid.broadcastId == broadcastId => bid
+      case bid @ BroadcastBlockId(`broadcastId`, _) => bid
     }
     blocksToRemove.foreach { blockId => removeBlock(blockId, removeFromDriver) }
   }
@@ -897,7 +897,7 @@ private[spark] class BlockManager(
 
   def shouldCompress(blockId: BlockId): Boolean = blockId match {
     case ShuffleBlockId(_, _, _) => compressShuffle
-    case BroadcastBlockId(_) => compressBroadcast
+    case BroadcastBlockId(_, _) => compressBroadcast
     case RDDBlockId(_, _) => compressRdds
     case TempBlockId(_) => compressShuffleSpill
     case _ => false

@@ -255,21 +255,22 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   }
 
   /**
-   * Return the block's local status for all block managers, if any.
+   * Return the block's status for all block managers, if any.
    *
    * If askSlaves is true, the master queries each block manager for the most updated block
    * statuses. This is useful when the master is not informed of the given block by all block
    * managers.
-   *
-   * Rather than blocking on the block status query, master actor should simply return a
-   * Future to avoid potential deadlocks. This can arise if there exists a block manager
-   * that is also waiting for this master actor's response to a previous message.
    */
   private def blockStatus(
       blockId: BlockId,
       askSlaves: Boolean): Map[BlockManagerId, Future[Option[BlockStatus]]] = {
     import context.dispatcher
     val getBlockStatus = GetBlockStatus(blockId)
+    /*
+     * Rather than blocking on the block status query, master actor should simply return
+     * Futures to avoid potential deadlocks. This can arise if there exists a block manager
+     * that is also waiting for this master actor's response to a previous message.
+     */
     blockManagerInfo.values.map { info =>
       val blockStatusFuture =
         if (askSlaves) {

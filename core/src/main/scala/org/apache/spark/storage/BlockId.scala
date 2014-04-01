@@ -53,9 +53,7 @@ private[spark] case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: I
   def name = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
 }
 
-// Leave field as an instance variable to avoid matching on it
-private[spark] case class BroadcastBlockId(broadcastId: Long) extends BlockId {
-  var field = ""
+private[spark] case class BroadcastBlockId(broadcastId: Long, field: String = "") extends BlockId {
   def name = "broadcast_" + broadcastId + (if (field == "") "" else "_" + field)
 }
 
@@ -77,19 +75,10 @@ private[spark] case class TestBlockId(id: String) extends BlockId {
   def name = "test_" + id
 }
 
-private[spark] object BroadcastBlockId {
-  def apply(broadcastId: Long, field: String) = {
-    val blockId = new BroadcastBlockId(broadcastId)
-    blockId.field = field
-    blockId
-  }
-}
-
 private[spark] object BlockId {
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
-  val BROADCAST = "broadcast_([0-9]+)".r
-  val BROADCAST_FIELD = "broadcast_([0-9]+)_([A-Za-z0-9]+)".r
+  val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r
   val TEST = "test_(.*)".r
@@ -100,10 +89,8 @@ private[spark] object BlockId {
       RDDBlockId(rddId.toInt, splitIndex.toInt)
     case SHUFFLE(shuffleId, mapId, reduceId) =>
       ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
-    case BROADCAST(broadcastId) =>
-      BroadcastBlockId(broadcastId.toLong)
-    case BROADCAST_FIELD(broadcastId, field) =>
-      BroadcastBlockId(broadcastId.toLong, field)
+    case BROADCAST(broadcastId, field) =>
+      BroadcastBlockId(broadcastId.toLong, field.stripPrefix("_"))
     case TASKRESULT(taskId) =>
       TaskResultBlockId(taskId.toLong)
     case STREAM(streamId, uniqueId) =>
