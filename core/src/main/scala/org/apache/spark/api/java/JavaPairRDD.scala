@@ -641,6 +641,809 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   }
 
   /**
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
+   */
+  def mergeJoin[W](
+      other: JavaPairRDD[K, W],
+      partitioner: Partitioner): JavaPairRDD[K, (V, W)] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeJoin(comp, other, partitioner, false)
+  }
+
+  /**
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
+   */
+  def mergeJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      partitioner: Partitioner): JavaPairRDD[K, (V, W)] = {
+    mergeJoin(comp, other, partitioner, false)
+  }
+
+  /**
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
+   */
+  def mergeJoin[W](
+      other: JavaPairRDD[K, W],
+      partitioner: Partitioner,
+      ordered: Boolean): JavaPairRDD[K, (V, W)] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeJoin(comp, other, partitioner, ordered)
+  }
+
+  /**
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
+   */
+  def mergeJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      partitioner: Partitioner,
+      ordered: Boolean): JavaPairRDD[K, (V, W)] = {
+    implicit val c = comp
+    fromRDD(
+      new OrderedRDDFunctions[K, V, (K, V)](rdd).mergeJoin(other.rdd, partitioner, ordered))
+  }
+
+  /**
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Uses the given Partitioner to
+   * partition the output RDD.
+   */
+  def mergeLeftOuterJoin[W](
+      other: JavaPairRDD[K, W],
+      partitioner: Partitioner): JavaPairRDD[K, (V, Optional[W])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeLeftOuterJoin(comp, other, partitioner, false)
+  }
+
+  /**
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Uses the given Partitioner to
+   * partition the output RDD.
+   */
+  def mergeLeftOuterJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      partitioner: Partitioner): JavaPairRDD[K, (V, Optional[W])] = {
+    mergeLeftOuterJoin(comp, other, partitioner, false)
+  }
+
+  /**
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Uses the given Partitioner to
+   * partition the output RDD.
+   */
+  def mergeLeftOuterJoin[W](
+      other: JavaPairRDD[K, W],
+      partitioner: Partitioner,
+      ordered: Boolean): JavaPairRDD[K, (V, Optional[W])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeLeftOuterJoin(comp, other, partitioner, ordered)
+  }
+
+  /**
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Uses the given Partitioner to
+   * partition the output RDD.
+   */
+  def mergeLeftOuterJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      partitioner: Partitioner,
+      ordered: Boolean): JavaPairRDD[K, (V, Optional[W])] = {
+    implicit val c = comp
+    fromRDD(
+      new OrderedRDDFunctions[K, V, (K, V)](rdd).mergeLeftOuterJoin(
+        other.rdd,
+        partitioner,
+        ordered).mapValues{case (v, w) => (v, JavaUtils.optionToOptional(w))})
+  }
+
+  /**
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Uses the given Partitioner to
+   * partition the output RDD.
+   */
+  def mergeRightOuterJoin[W](
+      other: JavaPairRDD[K, W],
+      partitioner: Partitioner): JavaPairRDD[K, (Optional[V], W)] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeRightOuterJoin(comp, other, partitioner, false)
+  }
+
+  /**
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Uses the given Partitioner to
+   * partition the output RDD.
+   */
+  def mergeRightOuterJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      partitioner: Partitioner): JavaPairRDD[K, (Optional[V], W)] = {
+    mergeRightOuterJoin(comp, other, partitioner, false)
+  }
+
+  /**
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Uses the given Partitioner to
+   * partition the output RDD.
+   */
+  def mergeRightOuterJoin[W](
+      other: JavaPairRDD[K, W],
+      partitioner: Partitioner,
+      ordered: Boolean): JavaPairRDD[K, (Optional[V], W)] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeRightOuterJoin(comp, other, partitioner, ordered)
+  }
+
+  /**
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Uses the given Partitioner to
+   * partition the output RDD.
+   */
+  def mergeRightOuterJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      partitioner: Partitioner,
+      ordered: Boolean): JavaPairRDD[K, (Optional[V], W)] = {
+    implicit val c = comp
+    fromRDD(
+      new OrderedRDDFunctions[K, V, (K, V)](rdd).mergeRightOuterJoin(
+        other.rdd,
+        partitioner,
+        ordered).mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)})
+  }
+
+  /**
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Performs a merge join across the cluster.
+   */
+  def mergeJoin[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (V, W)] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeJoin(comp, other, false)
+  }
+
+  /**
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Performs a merge join across the cluster.
+   */
+  def mergeJoin[W](comp: Comparator[K], other: JavaPairRDD[K, W]): JavaPairRDD[K, (V, W)] = {
+    mergeJoin(comp, other, false)
+  }
+
+  /**
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Performs a merge join across the cluster.
+   */
+  def mergeJoin[W](
+      other: JavaPairRDD[K, W],
+      ordered: Boolean): JavaPairRDD[K, (V, W)] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeJoin(comp, other, ordered)
+  }
+
+  /**
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Performs a merge join across the cluster.
+   */
+  def mergeJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      ordered: Boolean): JavaPairRDD[K, (V, W)] = {
+    implicit val c = comp
+    fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).mergeJoin(other.rdd, ordered))
+  }
+
+  /**
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Performs a merge join across the cluster.
+   */
+  def mergeJoin[W](
+      other: JavaPairRDD[K, W],
+      numPartitions: Int): JavaPairRDD[K, (V, W)] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeJoin(comp, other, numPartitions, false)
+  }
+
+  /**
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Performs a merge join across the cluster.
+   */
+  def mergeJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      numPartitions: Int): JavaPairRDD[K, (V, W)] = {
+    mergeJoin(comp, other, numPartitions, false)
+  }
+
+  /**
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Performs a merge join across the cluster.
+   */
+  def mergeJoin[W](
+      other: JavaPairRDD[K, W],
+      numPartitions: Int,
+      ordered: Boolean): JavaPairRDD[K, (V, W)] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeJoin(comp, other, numPartitions, ordered)
+  }
+
+  /**
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Performs a merge join across the cluster.
+   */
+  def mergeJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      numPartitions: Int,
+      ordered: Boolean): JavaPairRDD[K, (V, W)] = {
+    implicit val c = comp
+    fromRDD(
+      new OrderedRDDFunctions[K, V, (K, V)](rdd).mergeJoin(
+        other.rdd,
+        numPartitions,
+        ordered))
+  }
+
+  /**
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
+   * using the existing partitioner/parallelism level.
+   */
+  def mergeLeftOuterJoin[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (V, Optional[W])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeLeftOuterJoin(comp, other, false)
+  }
+
+  /**
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
+   * using the existing partitioner/parallelism level.
+   */
+  def mergeLeftOuterJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W]): JavaPairRDD[K, (V, Optional[W])] = {
+    mergeLeftOuterJoin(comp, other, false)
+  }
+
+  /**
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
+   * using the existing partitioner/parallelism level.
+   */
+  def mergeLeftOuterJoin[W](
+      other: JavaPairRDD[K, W],
+      ordered: Boolean): JavaPairRDD[K, (V, Optional[W])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeLeftOuterJoin(comp, other, ordered)
+  }
+
+  /**
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
+   * using the existing partitioner/parallelism level.
+   */
+  def mergeLeftOuterJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      ordered: Boolean): JavaPairRDD[K, (V, Optional[W])] = {
+    implicit val c = comp
+    fromRDD(
+      new OrderedRDDFunctions[K, V, (K, V)](rdd).mergeLeftOuterJoin(
+        other.rdd,
+        ordered).mapValues{case (v, w) => (v, JavaUtils.optionToOptional(w))})
+  }
+
+  /**
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
+   * into `numPartitions` partitions.
+   */
+  def mergeLeftOuterJoin[W](
+      other: JavaPairRDD[K, W],
+      numPartitions: Int): JavaPairRDD[K, (V, Optional[W])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeLeftOuterJoin(comp, other, numPartitions, false)
+  }
+
+  /**
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
+   * into `numPartitions` partitions.
+   */
+  def mergeLeftOuterJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      numPartitions: Int): JavaPairRDD[K, (V, Optional[W])] = {
+    mergeLeftOuterJoin(comp, other, numPartitions, false)
+  }
+
+  /**
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
+   * into `numPartitions` partitions.
+   */
+  def mergeLeftOuterJoin[W](
+      other: JavaPairRDD[K, W],
+      numPartitions: Int,
+      ordered: Boolean): JavaPairRDD[K, (V, Optional[W])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeLeftOuterJoin(comp, other, numPartitions, ordered)
+  }
+
+  /**
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
+   * into `numPartitions` partitions.
+   */
+  def mergeLeftOuterJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      numPartitions: Int,
+      ordered: Boolean): JavaPairRDD[K, (V, Optional[W])] = {
+    implicit val c = comp
+    fromRDD(
+      new OrderedRDDFunctions[K, V, (K, V)](rdd).mergeLeftOuterJoin(
+        other.rdd,
+        numPartitions,
+        ordered).mapValues{case (v, w) => (v, JavaUtils.optionToOptional(w))})
+  }
+
+  /**
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
+   * RDD using the existing partitioner/parallelism level.
+   */
+  def mergeRightOuterJoin[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (Optional[V], W)] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeRightOuterJoin(comp, other, false)
+  }
+
+  /**
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
+   * RDD using the existing partitioner/parallelism level.
+   */
+  def mergeRightOuterJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W]): JavaPairRDD[K, (Optional[V], W)] = {
+    mergeRightOuterJoin(comp, other, false)
+  }
+
+  /**
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
+   * RDD using the existing partitioner/parallelism level.
+   */
+  def mergeRightOuterJoin[W](
+      other: JavaPairRDD[K, W],
+      ordered: Boolean): JavaPairRDD[K, (Optional[V], W)] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeRightOuterJoin(comp, other, ordered)
+  }
+
+  /**
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
+   * RDD using the existing partitioner/parallelism level.
+   */
+  def mergeRightOuterJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      ordered: Boolean): JavaPairRDD[K, (Optional[V], W)] = {
+    implicit val c = comp
+    fromRDD(
+      new OrderedRDDFunctions[K, V, (K, V)](rdd).mergeRightOuterJoin(
+        other.rdd,
+        ordered).mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)})
+  }
+
+  /**
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
+   * RDD into the given number of partitions.
+   */
+  def mergeRightOuterJoin[W](
+      other: JavaPairRDD[K, W],
+      numPartitions: Int): JavaPairRDD[K, (Optional[V], W)] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeRightOuterJoin(comp, other, numPartitions, false)
+  }
+
+  /**
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
+   * RDD into the given number of partitions.
+   */
+  def mergeRightOuterJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      numPartitions: Int): JavaPairRDD[K, (Optional[V], W)] = {
+    mergeRightOuterJoin(comp, other, numPartitions, false)
+  }
+
+  /**
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
+   * RDD into the given number of partitions.
+   */
+  def mergeRightOuterJoin[W](
+      other: JavaPairRDD[K, W],
+      numPartitions: Int,
+      ordered: Boolean): JavaPairRDD[K, (Optional[V], W)] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeRightOuterJoin(comp, other, numPartitions, ordered)
+  }
+
+  /**
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
+   * RDD into the given number of partitions.
+   */
+  def mergeRightOuterJoin[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      numPartitions: Int,
+      ordered: Boolean): JavaPairRDD[K, (Optional[V], W)] = {
+    implicit val c = comp
+    fromRDD(
+      new OrderedRDDFunctions[K, V, (K, V)](rdd).mergeRightOuterJoin(
+        other.rdd,
+        numPartitions,
+        ordered).mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)})
+  }
+
+  /**
+   * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
+   * list of values for that key in `this` as well as `other`.
+   */
+  def mergeCogroup[W](
+      other: JavaPairRDD[K, W],
+      partitioner: Partitioner): JavaPairRDD[K, (JList[V], JList[W])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeCogroup(comp, other, partitioner, false)
+  }
+
+  /**
+   * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
+   * list of values for that key in `this` as well as `other`.
+   */
+  def mergeCogroup[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      partitioner: Partitioner): JavaPairRDD[K, (JList[V], JList[W])] = {
+    mergeCogroup(comp, other, partitioner, false)
+  }
+
+  /**
+   * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
+   * list of values for that key in `this` as well as `other`.
+   */
+  def mergeCogroup[W](
+      other: JavaPairRDD[K, W],
+      partitioner: Partitioner,
+      ordered: Boolean): JavaPairRDD[K, (JList[V], JList[W])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeCogroup(comp, other, partitioner, ordered)
+  }
+
+  /**
+   * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
+   * list of values for that key in `this` as well as `other`.
+   */
+  def mergeCogroup[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      partitioner: Partitioner,
+      ordered: Boolean): JavaPairRDD[K, (JList[V], JList[W])] = {
+    implicit val c = comp
+    fromRDD(cogroupResultToJava(
+      new OrderedRDDFunctions[K, V, (K, V)](rdd).mergeCogroup(
+        other.rdd,
+        partitioner,
+        ordered)))
+  }
+
+  /**
+   * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
+   * tuple with the list of values for that key in `this`, `other1` and `other2`.
+   */
+  def mergeCogroup[W1, W2](
+      other1: JavaPairRDD[K, W1],
+      other2: JavaPairRDD[K, W2],
+      partitioner: Partitioner): JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeCogroup(comp, other1, other2, partitioner, false)
+  }
+
+  /**
+   * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
+   * tuple with the list of values for that key in `this`, `other1` and `other2`.
+   */
+  def mergeCogroup[W1, W2](
+      comp: Comparator[K],
+      other1: JavaPairRDD[K, W1],
+      other2: JavaPairRDD[K, W2],
+      partitioner: Partitioner): JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] = {
+    mergeCogroup(comp, other1, other2, partitioner, false)
+  }
+
+  /**
+   * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
+   * tuple with the list of values for that key in `this`, `other1` and `other2`.
+   */
+  def mergeCogroup[W1, W2](
+      other1: JavaPairRDD[K, W1],
+      other2: JavaPairRDD[K, W2],
+      partitioner: Partitioner,
+      ordered: Boolean): JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeCogroup(comp, other1, other2, partitioner, ordered)
+  }
+
+  /**
+   * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
+   * tuple with the list of values for that key in `this`, `other1` and `other2`.
+   */
+  def mergeCogroup[W1, W2](
+      comp: Comparator[K],
+      other1: JavaPairRDD[K, W1],
+      other2: JavaPairRDD[K, W2],
+      partitioner: Partitioner,
+      ordered: Boolean): JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] = {
+    implicit val c = comp
+    fromRDD(cogroupResult2ToJava(
+      new OrderedRDDFunctions[K, V, (K, V)](rdd).mergeCogroup(
+        other1.rdd,
+        other2.rdd,
+        partitioner,
+        ordered)))
+  }
+
+  /**
+   * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
+   * list of values for that key in `this` as well as `other`.
+   */
+  def mergeCogroup[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (JList[V], JList[W])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeCogroup(comp, other, false)
+  }
+
+  /**
+   * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
+   * list of values for that key in `this` as well as `other`.
+   */
+  def mergeCogroup[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W]): JavaPairRDD[K, (JList[V], JList[W])] = {
+    mergeCogroup(comp, other, false)
+  }
+
+  /**
+   * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
+   * list of values for that key in `this` as well as `other`.
+   */
+  def mergeCogroup[W](
+      other: JavaPairRDD[K, W],
+      ordered: Boolean): JavaPairRDD[K, (JList[V], JList[W])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeCogroup(comp, other, ordered)
+  }
+
+  /**
+   * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
+   * list of values for that key in `this` as well as `other`.
+   */
+  def mergeCogroup[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      ordered: Boolean): JavaPairRDD[K, (JList[V], JList[W])] = {
+    implicit val c = comp
+    fromRDD(cogroupResultToJava(
+      new OrderedRDDFunctions[K, V, (K, V)](rdd).mergeCogroup(
+        other.rdd,
+        ordered)))
+  }
+
+  /**
+   * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
+   * tuple with the list of values for that key in `this`, `other1` and `other2`.
+   */
+  def mergeCogroup[W1, W2](
+      other1: JavaPairRDD[K, W1],
+      other2: JavaPairRDD[K, W2]): JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeCogroup(comp, other1, other2, false)
+  }
+
+  /**
+   * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
+   * tuple with the list of values for that key in `this`, `other1` and `other2`.
+   */
+  def mergeCogroup[W1, W2](
+      comp: Comparator[K],
+      other1: JavaPairRDD[K, W1],
+      other2: JavaPairRDD[K, W2]): JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] = {
+    mergeCogroup(comp, other1, other2, false)
+  }
+
+  /**
+   * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
+   * tuple with the list of values for that key in `this`, `other1` and `other2`.
+   */
+  def mergeCogroup[W1, W2](
+      other1: JavaPairRDD[K, W1],
+      other2: JavaPairRDD[K, W2],
+      ordered: Boolean): JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeCogroup(comp, other1, other2, ordered)
+  }
+
+  /**
+   * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
+   * tuple with the list of values for that key in `this`, `other1` and `other2`.
+   */
+  def mergeCogroup[W1, W2](
+      comp: Comparator[K],
+      other1: JavaPairRDD[K, W1],
+      other2: JavaPairRDD[K, W2],
+      ordered: Boolean): JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] = {
+    implicit val c = comp
+    fromRDD(cogroupResult2ToJava(
+      new OrderedRDDFunctions[K, V, (K, V)](rdd).mergeCogroup(
+        other1.rdd,
+        other2.rdd,
+        ordered)))
+  }
+
+  /**
+   * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
+   * list of values for that key in `this` as well as `other`.
+   */
+  def mergeCogroup[W](
+      other: JavaPairRDD[K, W],
+      numPartitions: Int): JavaPairRDD[K, (JList[V], JList[W])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeCogroup(comp, other, numPartitions, false)
+  }
+
+  /**
+   * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
+   * list of values for that key in `this` as well as `other`.
+   */
+  def mergeCogroup[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      numPartitions: Int): JavaPairRDD[K, (JList[V], JList[W])] = {
+    mergeCogroup(comp, other, numPartitions, false)
+  }
+
+  /**
+   * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
+   * list of values for that key in `this` as well as `other`.
+   */
+  def mergeCogroup[W](
+      other: JavaPairRDD[K, W],
+      numPartitions: Int,
+      ordered: Boolean): JavaPairRDD[K, (JList[V], JList[W])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeCogroup(comp, other, numPartitions, ordered)
+  }
+
+  /**
+   * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
+   * list of values for that key in `this` as well as `other`.
+   */
+  def mergeCogroup[W](
+      comp: Comparator[K],
+      other: JavaPairRDD[K, W],
+      numPartitions: Int,
+      ordered: Boolean): JavaPairRDD[K, (JList[V], JList[W])] = {
+    implicit val c = comp
+    fromRDD(cogroupResultToJava(
+      new OrderedRDDFunctions[K, V, (K, V)](rdd).mergeCogroup(
+        other.rdd,
+        numPartitions,
+        ordered)))
+  }
+
+  /**
+   * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
+   * tuple with the list of values for that key in `this`, `other1` and `other2`.
+   */
+  def mergeCogroup[W1, W2](
+      other1: JavaPairRDD[K, W1],
+      other2: JavaPairRDD[K, W2],
+      numPartitions: Int): JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeCogroup(comp, other1, other2, numPartitions, false)
+  }
+
+  /**
+   * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
+   * tuple with the list of values for that key in `this`, `other1` and `other2`.
+   */
+  def mergeCogroup[W1, W2](
+      comp: Comparator[K],
+      other1: JavaPairRDD[K, W1],
+      other2: JavaPairRDD[K, W2],
+      numPartitions: Int): JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] = {
+    mergeCogroup(comp, other1, other2, numPartitions, false)
+  }
+
+  /**
+   * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
+   * tuple with the list of values for that key in `this`, `other1` and `other2`.
+   */
+  def mergeCogroup[W1, W2](
+      other1: JavaPairRDD[K, W1],
+      other2: JavaPairRDD[K, W2],
+      numPartitions: Int,
+      ordered: Boolean): JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    mergeCogroup(comp, other1, other2, numPartitions, ordered)
+  }
+
+  /**
+   * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
+   * tuple with the list of values for that key in `this`, `other1` and `other2`.
+   */
+  def mergeCogroup[W1, W2](
+      comp: Comparator[K],
+      other1: JavaPairRDD[K, W1],
+      other2: JavaPairRDD[K, W2],
+      numPartitions: Int,
+      ordered: Boolean): JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] = {
+    implicit val c = comp
+    fromRDD(cogroupResult2ToJava(
+      new OrderedRDDFunctions[K, V, (K, V)](rdd).mergeCogroup(
+        other1.rdd,
+        other2.rdd,
+        numPartitions,
+        ordered)))
+  }
+
+  /**
    * Return an RDD with the keys of each tuple.
    */
   def keys(): JavaRDD[K] = JavaRDD.fromRDD[K](rdd.map(_._1))

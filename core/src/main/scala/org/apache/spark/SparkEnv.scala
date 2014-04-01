@@ -49,6 +49,7 @@ class SparkEnv private[spark] (
     val cacheManager: CacheManager,
     val mapOutputTracker: MapOutputTracker,
     val shuffleFetcher: ShuffleFetcher,
+    val sortMergeShuffleFetcher: SortMergeShuffleFetcher,
     val broadcastManager: BroadcastManager,
     val blockManager: BlockManager,
     val connectionManager: ConnectionManager,
@@ -73,6 +74,7 @@ class SparkEnv private[spark] (
     httpFileServer.stop()
     mapOutputTracker.stop()
     shuffleFetcher.stop()
+    sortMergeShuffleFetcher.stop()
     broadcastManager.stop()
     blockManager.stop()
     blockManager.master.stop()
@@ -207,6 +209,9 @@ object SparkEnv extends Logging {
     val shuffleFetcher = instantiateClass[ShuffleFetcher](
       "spark.shuffle.fetcher", "org.apache.spark.BlockStoreShuffleFetcher")
 
+    val sortMergeShuffleFetcher = instantiateClass[SortMergeShuffleFetcher](
+      "spark.sortmerge.shuffle.fetcher", "org.apache.spark.BlockStoreSortMergeShuffleFetcher")
+
     val httpFileServer = new HttpFileServer(securityManager)
     httpFileServer.initialize()
     conf.set("spark.fileserver.uri",  httpFileServer.serverUri)
@@ -241,6 +246,7 @@ object SparkEnv extends Logging {
       cacheManager,
       mapOutputTracker,
       shuffleFetcher,
+      sortMergeShuffleFetcher,
       broadcastManager,
       blockManager,
       connectionManager,
