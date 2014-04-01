@@ -113,37 +113,37 @@ package object dsl {
       def expr = attr
       def attr = analysis.UnresolvedAttribute(s)
 
-      /** Creates a new typed attributes of type boolean */
+      /** Creates a new AttributeReference of type boolean */
       def boolean = AttributeReference(s, BooleanType, nullable = false)()
 
-      /** Creates a new typed attributes of type byte */
+      /** Creates a new AttributeReference of type byte */
       def byte = AttributeReference(s, ByteType, nullable = false)()
 
-      /** Creates a new typed attributes of type short */
+      /** Creates a new AttributeReference of type short */
       def short = AttributeReference(s, ShortType, nullable = false)()
 
-      /** Creates a new typed attributes of type int */
+      /** Creates a new AttributeReference of type int */
       def int = AttributeReference(s, IntegerType, nullable = false)()
 
-      /** Creates a new typed attributes of type long */
+      /** Creates a new AttributeReference of type long */
       def long = AttributeReference(s, LongType, nullable = false)()
 
-      /** Creates a new typed attributes of type float */
+      /** Creates a new AttributeReference of type float */
       def float = AttributeReference(s, FloatType, nullable = false)()
 
-      /** Creates a new typed attributes of type double */
+      /** Creates a new AttributeReference of type double */
       def double = AttributeReference(s, DoubleType, nullable = false)()
 
-      /** Creates a new typed attributes of type string */
+      /** Creates a new AttributeReference of type string */
       def string = AttributeReference(s, StringType, nullable = false)()
 
-      /** Creates a new typed attributes of type decimal */
+      /** Creates a new AttributeReference of type decimal */
       def decimal = AttributeReference(s, DecimalType, nullable = false)()
 
-      /** Creates a new typed attributes of type timestamp */
+      /** Creates a new AttributeReference of type timestamp */
       def timestamp = AttributeReference(s, TimestampType, nullable = false)()
 
-      /** Creates a new typed attributes of type binary */
+      /** Creates a new AttributeReference of type binary */
       def binary = AttributeReference(s, BinaryType, nullable = false)()
     }
 

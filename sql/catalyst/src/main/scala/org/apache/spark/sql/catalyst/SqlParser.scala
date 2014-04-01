@@ -122,16 +122,6 @@ class SqlParser extends StandardTokenParsers {
   protected val RIGHT = Keyword("RIGHT")
   protected val SELECT = Keyword("SELECT")
   protected val STRING = Keyword("STRING")
-  protected val FLOAT = Keyword("FLOAT")
-  protected val SMALLINT = Keyword("SMALLINT")
-  protected val TINYINT = Keyword("TINYINT")
-  protected val INT = Keyword("INT")
-  protected val BIGINT = Keyword("BIGINT")
-  protected val DECIMAL = Keyword("DECIMAL")
-  protected val DOUBLE = Keyword("DOUBLE")
-  protected val BOOLEAN = Keyword("BOOLEAN")
-  protected val BINARY = Keyword("BINARY")
-  protected val TIMESTAMP = Keyword("TIMESTAMP")
   protected val SUM = Keyword("SUM")
   protected val TRUE = Keyword("TRUE")
   protected val UNION = Keyword("UNION")
@@ -348,15 +338,5 @@ class SqlParser extends StandardTokenParsers {
     literal
 
   protected lazy val dataType: Parser[DataType] =
-    STRING ^^^ StringType |
-    FLOAT ^^^ FloatType |
-    TINYINT ^^^ ByteType |
-    SMALLINT ^^^ ShortType |
-    INT ^^^ IntegerType |
-    BIGINT ^^^ LongType |
-    DECIMAL ^^^ DecimalType |
-    DOUBLE ^^^ DoubleType |
-    BOOLEAN ^^^ BooleanType |
-    BINARY ^^^ BinaryType |
-    TIMESTAMP ^^^ TimestampType
+    STRING ^^^ StringType
 }

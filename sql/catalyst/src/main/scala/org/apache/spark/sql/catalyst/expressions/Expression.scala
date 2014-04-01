@@ -86,6 +86,11 @@ abstract class Expression extends TreeNode[Expression] {
     }
   }
 
+  /**
+   * Evaluation helper function for 2 Numeric children expressions. Those expressions are supposed 
+   * to be in the same data type, and also the return type.
+   * Either one of the expressions result is null, the evaluation result should be null.
+   */
   @inline
   protected final def n2(
       i: Row,
@@ -115,6 +120,11 @@ abstract class Expression extends TreeNode[Expression] {
     }
   }
 
+  /**
+   * Evaluation helper function for 2 Fractional children expressions. Those expressions are  
+   * supposed to be in the same data type, and also the return type.
+   * Either one of the expressions result is null, the evaluation result should be null.
+   */
   @inline
   protected final def f2(
       i: Row,
@@ -143,6 +153,11 @@ abstract class Expression extends TreeNode[Expression] {
     }
   }
 
+  /**
+   * Evaluation helper function for 2 Integral children expressions. Those expressions are  
+   * supposed to be in the same data type, and also the return type.
+   * Either one of the expressions result is null, the evaluation result should be null.
+   */
   @inline
   protected final def i2(
       i: Row,
@@ -170,7 +185,16 @@ abstract class Expression extends TreeNode[Expression] {
       }
     }
   }
-  
+
+  /**
+   * Evaluation helper function for 2 Comparable children expressions. Those expressions are  
+   * supposed to be in the same data type, and the return type should be Integer:
+   * Negative value: 1st argument less than 2nd argument
+   * Zero:  1st argument equals 2nd argument
+   * Positive value: 1st argument greater than 2nd argument
+   * 
+   * Either one of the expressions result is null, the evaluation result should be null.
+   */
   @inline
   protected final def c2(
       i: Row,
