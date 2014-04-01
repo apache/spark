@@ -34,6 +34,7 @@ import org.apache.spark.storage.{BlockId, StorageLevel, StreamBlockId}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.scheduler.{ReceivedBlockInfo, AddBlocks, DeregisterReceiver, RegisterReceiver}
 import org.apache.spark.streaming.util.{RecurringTimer, SystemClock}
+import org.apache.spark.util.Utils
 
 /**
  * Abstract class for defining any [[org.apache.spark.streaming.dstream.InputDStream]]
@@ -206,7 +207,9 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
     val timeout = 5.seconds
 
     override def preStart() {
-      val future = tracker.ask(RegisterReceiver(streamId, self))(timeout)
+      val msg = RegisterReceiver(
+        streamId, NetworkReceiver.this.getClass.getSimpleName, Utils.localHostName(), self)
+      val future = tracker.ask(msg)(timeout)
       Await.result(future, timeout)
     }
 

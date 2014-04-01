@@ -37,9 +37,16 @@ private[ui] class StreamingUIListener(ssc: StreamingContext) extends StreamingLi
   private val runningBatchInfos = new HashMap[Time, BatchInfo]
   private val completedaBatchInfos = new Queue[BatchInfo]
   private val batchInfoLimit = ssc.conf.getInt("spark.steaming.ui.maxBatches", 100)
-  private var totalBatchesCompleted = 0L
+  private var totalCompletedBatches = 0L
+  private val receiverInfos = new HashMap[Int, ReceiverInfo]
 
   val batchDuration = ssc.graph.batchDuration.milliseconds
+
+  override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) = {
+    synchronized {
+      receiverInfos.put(receiverStarted.receiverInfo.streamId, receiverStarted.receiverInfo)
+    }
+  }
 
   override def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted) = synchronized {
     runningBatchInfos(batchSubmitted.batchInfo.batchTime) = batchSubmitted.batchInfo
@@ -55,15 +62,19 @@ private[ui] class StreamingUIListener(ssc: StreamingContext) extends StreamingLi
     runningBatchInfos.remove(batchCompleted.batchInfo.batchTime)
     completedaBatchInfos.enqueue(batchCompleted.batchInfo)
     if (completedaBatchInfos.size > batchInfoLimit) completedaBatchInfos.dequeue()
-    totalBatchesCompleted += 1L
+    totalCompletedBatches += 1L
   }
 
-  def numTotalBatchesCompleted: Long = synchronized {
-    totalBatchesCompleted
+  def numNetworkReceivers = synchronized {
+    ssc.graph.getNetworkInputStreams().size
   }
 
-  def numNetworkReceivers: Int = synchronized {
-    completedaBatchInfos.headOption.map(_.receivedBlockInfo.size).getOrElse(0)
+  def numTotalCompletedBatches: Long = synchronized {
+    totalCompletedBatches
+  }
+  
+  def numUnprocessedBatches: Long = synchronized {
+    waitingBatchInfos.size + runningBatchInfos.size
   }
 
   def waitingBatches: Seq[BatchInfo] = synchronized {
@@ -91,9 +102,7 @@ private[ui] class StreamingUIListener(ssc: StreamingContext) extends StreamingLi
   }
 
   def receivedRecordsDistributions: Map[Int, Option[Distribution]] = synchronized {
-    val allBatcheInfos = waitingBatchInfos.values.toSeq ++
-      runningBatchInfos.values.toSeq ++ completedaBatchInfos
-    val latestBatchInfos = allBatcheInfos.sortBy(_.batchTime)(Time.ordering).reverse.take(batchInfoLimit)
+    val latestBatchInfos = allBatches.reverse.take(batchInfoLimit)
     val latestBlockInfos = latestBatchInfos.map(_.receivedBlockInfo)
     (0 until numNetworkReceivers).map { receiverId =>
       val blockInfoOfParticularReceiver = latestBlockInfos.map(_.get(receiverId).getOrElse(Array.empty))
@@ -101,6 +110,34 @@ private[ui] class StreamingUIListener(ssc: StreamingContext) extends StreamingLi
       val distributionOption = Distribution(recordsOfParticularReceiver)
       (receiverId, distributionOption)
     }.toMap
+  }
+
+  def lastReceivedBatchRecords: Map[Int, Long] = {
+    val lastReceivedBlockInfoOption = lastReceivedBatch.map(_.receivedBlockInfo)
+    lastReceivedBlockInfoOption.map { lastReceivedBlockInfo =>
+      (0 until numNetworkReceivers).map { receiverId =>
+        (receiverId, lastReceivedBlockInfo(receiverId).map(_.numRecords).sum)
+      }.toMap
+    }.getOrElse {
+      (0 until numNetworkReceivers).map(receiverId => (receiverId, 0L)).toMap
+    }
+  }
+
+  def receiverInfo(receiverId: Int): Option[ReceiverInfo] = {
+    receiverInfos.get(receiverId)
+  }
+
+  def lastCompletedBatch: Option[BatchInfo] = {
+    completedaBatchInfos.sortBy(_.batchTime)(Time.ordering).lastOption
+  }
+
+  def lastReceivedBatch: Option[BatchInfo] = {
+    allBatches.lastOption
+  }
+
+  private def allBatches: Seq[BatchInfo] = synchronized {
+    (waitingBatchInfos.values.toSeq ++
+      runningBatchInfos.values.toSeq ++ completedaBatchInfos).sortBy(_.batchTime)(Time.ordering)
   }
 
   private def extractDistribution(getMetric: BatchInfo => Option[Long]): Option[Distribution] = {
@@ -114,13 +151,13 @@ private[ui] class StreamingPage(parent: StreamingUI) extends Logging {
   private val listener = parent.listener
   private val calendar = Calendar.getInstance()
   private val startTime = calendar.getTime()
-
+  private val emptyCellTest = "-"
 
   def render(request: HttpServletRequest): Seq[Node] = {
 
     val content =
      generateBasicStats() ++
-     <h4>Statistics over last {listener.completedBatches.size} processed batches</h4> ++
+     <br></br><h4>Statistics over last {listener.completedBatches.size} processed batches</h4> ++
      generateNetworkStatsTable() ++
      generateBatchStatsTable()
     UIUtils.headerStreamingPage(content, "", parent.appName, "Spark Streaming Overview")
@@ -137,27 +174,75 @@ private[ui] class StreamingPage(parent: StreamingUI) extends Logging {
         <strong>Time since start: </strong>{msDurationToString(timeSinceStart)}
       </li>
       <li>
+        <strong>Network receivers: </strong>{listener.numNetworkReceivers}
+      </li>
+      <li>
         <strong>Batch interval: </strong>{msDurationToString(listener.batchDuration)}
       </li>
       <li>
-        <strong>Processed batches: </strong>{listener.numTotalBatchesCompleted}
+        <strong>Processed batches: </strong>{listener.numTotalCompletedBatches}
       </li>
-      <li></li>
+      <li>
+        <strong>Waiting batches: </strong>{listener.numUnprocessedBatches}
+      </li>
     </ul>
+  }
+
+  private def generateNetworkStatsTable(): Seq[Node] = {
+    val receivedRecordDistributions = listener.receivedRecordsDistributions
+    val lastBatchReceivedRecord = listener.lastReceivedBatchRecords
+    val table = if (receivedRecordDistributions.size > 0) {
+      val headerRow = Seq(
+        "Receiver",
+        "Location",
+        s"Records in last batch",
+        "Minimum rate [records/sec]",
+        "25th percentile rate [records/sec]",
+        "Median rate [records/sec]",
+        "75th percentile rate [records/sec]",
+        "Maximum rate [records/sec]"
+      )
+      val dataRows = (0 until listener.numNetworkReceivers).map { receiverId =>
+        val receiverInfo = listener.receiverInfo(receiverId)
+        val receiverName = receiverInfo.map(_.toString).getOrElse(s"Receiver-$receiverId")
+        val receiverLocation = receiverInfo.map(_.location).getOrElse(emptyCellTest)
+        val receiverLastBatchRecords = numberToString(lastBatchReceivedRecord(receiverId))
+        val receivedRecordStats = receivedRecordDistributions(receiverId).map { d =>
+          d.getQuantiles().map(r => numberToString(r.toLong))
+        }.getOrElse {
+          Seq(emptyCellTest, emptyCellTest, emptyCellTest, emptyCellTest, emptyCellTest)
+        }
+        Seq(receiverName, receiverLocation, receiverLastBatchRecords) ++
+          receivedRecordStats
+      }
+      Some(UIUtils.listingTable(headerRow, dataRows, fixedWidth = true))
+    } else {
+      None
+    }
+
+    val content =
+      <h5>Network Input Statistics</h5> ++
+      <div>{table.getOrElse("No network receivers")}</div>
+
+    content
   }
 
   private def generateBatchStatsTable(): Seq[Node] = {
     val numBatches = listener.completedBatches.size
+    val lastCompletedBatch = listener.lastCompletedBatch
     val table = if (numBatches > 0) {
       val processingDelayQuantilesRow =
-        "Processing Times" +: getQuantiles(listener.processingDelayDistribution)
+        Seq("Processing Time", msDurationToString(lastCompletedBatch.flatMap(_.processingDelay))) ++
+          getQuantiles(listener.processingDelayDistribution)
       val schedulingDelayQuantilesRow =
-        "Scheduling Delay:" +: getQuantiles(listener.schedulingDelayDistribution)
+        Seq("Scheduling Delay", msDurationToString(lastCompletedBatch.flatMap(_.schedulingDelay))) ++
+          getQuantiles(listener.schedulingDelayDistribution)
       val totalDelayQuantilesRow =
-        "End-to-end Delay:" +: getQuantiles(listener.totalDelayDistribution)
+        Seq("Total Delay", msDurationToString(lastCompletedBatch.flatMap(_.totalDelay))) ++
+          getQuantiles(listener.totalDelayDistribution)
 
-      val headerRow = Seq("Metric", "Min", "25th percentile",
-        "Median", "75th percentile", "Max")
+      val headerRow = Seq("Metric", "Last batch", "Minimum", "25th percentile",
+        "Median", "75th percentile", "Maximum")
       val dataRows: Seq[Seq[String]] = Seq(
         processingDelayQuantilesRow,
         schedulingDelayQuantilesRow,
@@ -168,57 +253,19 @@ private[ui] class StreamingPage(parent: StreamingUI) extends Logging {
       None
     }
 
-    val batchCounts =
-      <ul class="unstyled">
-        <li>
-          # batches being processed: {listener.runningBatches.size}
-        </li>
-        <li>
-          # scheduled batches: {listener.waitingBatches.size}
-        </li>
-      </ul>
-
-    val batchStats =
-      <ul class="unstyled">
-        {table.getOrElse("No statistics have been generated yet.")}
-      </ul>
-
     val content =
       <h5>Batch Processing Statistics</h5> ++
-        <div>{batchStats}</div>
-
-    content
-  }
-
-  private def generateNetworkStatsTable(): Seq[Node] = {
-    val receivedRecordDistributions = listener.receivedRecordsDistributions
-    val numNetworkReceivers = receivedRecordDistributions.size
-    val table = if (receivedRecordDistributions.size > 0) {
-      val headerRow = Seq("Receiver", "Min", "25th percentile",
-        "Median", "75th percentile", "Max")
-      val dataRows = (0 until numNetworkReceivers).map { receiverId =>
-        val receiverName = s"Receiver-$receiverId"
-        val receivedRecordStats = receivedRecordDistributions(receiverId).map { d =>
-          d.getQuantiles().map(r => numberToString(r.toLong) + " records/second")
-        }.getOrElse {
-          Seq("-", "-", "-", "-", "-")
-        }
-        receiverName +: receivedRecordStats
-      }
-      Some(UIUtils.listingTable(headerRow, dataRows, fixedWidth = true))
-    } else {
-      None
-    }
-
-    val content =
-      <h5>Network Input Statistics</h5> ++
-        <div>{table.getOrElse("No network receivers")}</div>
+      <div>
+        <ul class="unstyled">
+          {table.getOrElse("No statistics have been generated yet.")}
+        </ul>
+      </div>
 
     content
   }
 
   private def getQuantiles(timeDistributionOption: Option[Distribution]) = {
-    timeDistributionOption.get.getQuantiles().map { ms => Utils.msDurationToString(ms.toLong) }
+    timeDistributionOption.get.getQuantiles().map { ms => msDurationToString(ms.toLong) }
   }
 
   private def numberToString(records: Double): String = {
@@ -229,13 +276,13 @@ private[ui] class StreamingPage(parent: StreamingUI) extends Logging {
 
     val (value, unit) = {
       if (records >= 2*trillion) {
-        (records / trillion, "T")
+        (records / trillion, " T")
       } else if (records >= 2*billion) {
-        (records / billion, "B")
+        (records / billion, " B")
       } else if (records >= 2*million) {
-        (records / million, "M")
+        (records / million, " M")
       } else if (records >= 2*thousand) {
-        (records / thousand, "K")
+        (records / thousand, " K")
       } else {
         (records, "")
       }
@@ -265,7 +312,7 @@ private[ui] class StreamingPage(parent: StreamingUI) extends Logging {
         }
       }
 
-      val millisecondsString = if (ms % second == 0) "" else s"${ms % second} ms"
+      val millisecondsString = if (ms >= second && ms % second == 0) "" else s"${ms % second} ms"
       val secondString = toString((ms % minute) / second, "second")
       val minuteString = toString((ms % hour) / minute, "minute")
       val hourString = toString((ms % day) / hour, "hour")
@@ -291,6 +338,10 @@ private[ui] class StreamingPage(parent: StreamingUI) extends Logging {
         logError("Error converting time to string", e)
         return ""
     }
+  }
+
+  private def msDurationToString(msOption: Option[Long]): String = {
+    msOption.map(msDurationToString).getOrElse(emptyCellTest)
   }
 }
 

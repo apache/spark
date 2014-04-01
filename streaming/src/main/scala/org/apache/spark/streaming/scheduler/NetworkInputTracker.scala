@@ -28,7 +28,12 @@ import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream.{NetworkReceiver, StopReceiver}
 import org.apache.spark.util.AkkaUtils
 
-/** Information about block received by the network receiver */
+/** Information about receiver */
+case class ReceiverInfo(streamId: Int, typ: String, location: String) {
+  override def toString = s"$typ-$streamId"
+}
+
+/** Information about blocks received by the network receiver */
 case class ReceivedBlockInfo(
     streamId: Int,
     blockId: StreamBlockId,
@@ -41,8 +46,12 @@ case class ReceivedBlockInfo(
  * with each other.
  */
 private[streaming] sealed trait NetworkInputTrackerMessage
-private[streaming] case class RegisterReceiver(streamId: Int, receiverActor: ActorRef)
-  extends NetworkInputTrackerMessage
+private[streaming] case class RegisterReceiver(
+    streamId: Int,
+    typ: String,
+    host: String,
+    receiverActor: ActorRef
+  ) extends NetworkInputTrackerMessage
 private[streaming] case class AddBlocks(receivedBlockInfo: ReceivedBlockInfo)
   extends NetworkInputTrackerMessage
 private[streaming] case class DeregisterReceiver(streamId: Int, msg: String)
@@ -108,11 +117,14 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
   /** Actor to receive messages from the receivers. */
   private class NetworkInputTrackerActor extends Actor {
     def receive = {
-      case RegisterReceiver(streamId, receiverActor) => {
+      case RegisterReceiver(streamId, typ, host, receiverActor) => {
         if (!networkInputStreamMap.contains(streamId)) {
           throw new Exception("Register received for unexpected id " + streamId)
         }
         receiverInfo += ((streamId, receiverActor))
+        ssc.scheduler.listenerBus.post(StreamingListenerReceiverStarted(
+          ReceiverInfo(streamId, typ, host)
+        ))
         logInfo("Registered receiver for network stream " + streamId + " from "
           + sender.path.address)
         sender ! true
