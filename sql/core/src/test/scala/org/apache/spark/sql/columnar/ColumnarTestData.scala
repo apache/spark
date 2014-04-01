@@ -19,37 +19,57 @@ package org.apache.spark.sql.columnar
 
 import scala.util.Random
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.types.DataType
 
-// TODO Enrich test data
 object ColumnarTestData {
-  object GenericMutableRow {
-    def apply(values: Any*) = {
-      val row = new GenericMutableRow(values.length)
-      row.indices.foreach { i =>
-        row(i) = values(i)
-      }
-      row
+  def makeNullRow(length: Int) = {
+    val row = new GenericMutableRow(length)
+    (0 until length).foreach(row.setNullAt)
+    row
+  }
+
+  def makeRandomValue[T <: DataType, JvmType](columnType: ColumnType[T, JvmType]): JvmType = {
+    def randomBytes(length: Int) = {
+      val bytes = new Array[Byte](length)
+      Random.nextBytes(bytes)
+      bytes
     }
+
+    (columnType match {
+      case BYTE    => (Random.nextInt(Byte.MaxValue * 2) - Byte.MaxValue).toByte
+      case SHORT   => (Random.nextInt(Short.MaxValue * 2) - Short.MaxValue).toShort
+      case INT     => Random.nextInt()
+      case LONG    => Random.nextLong()
+      case FLOAT   => Random.nextFloat()
+      case DOUBLE  => Random.nextDouble()
+      case STRING  => Random.nextString(Random.nextInt(32))
+      case BOOLEAN => Random.nextBoolean()
+      case BINARY  => randomBytes(Random.nextInt(32))
+      case _ =>
+        // Using an random one-element map instead of an arbitrary object
+        Map(Random.nextInt() -> Random.nextString(Random.nextInt(32)))
+    }).asInstanceOf[JvmType]
   }
 
-  def randomBytes(length: Int) = {
-    val bytes = new Array[Byte](length)
-    Random.nextBytes(bytes)
-    bytes
+  def makeRandomValues(
+      head: ColumnType[_ <: DataType, _],
+      tail: ColumnType[_ <: DataType, _]*): Seq[Any] = makeRandomValues(Seq(head) ++ tail)
+
+  def makeRandomValues(columnTypes: Seq[ColumnType[_ <: DataType, _]]): Seq[Any] = {
+    columnTypes.map(makeRandomValue(_))
   }
 
-  val nonNullRandomRow = GenericMutableRow(
-    Random.nextInt(),
-    Random.nextLong(),
-    Random.nextFloat(),
-    Random.nextDouble(),
-    Random.nextBoolean(),
-    Random.nextInt(Byte.MaxValue).asInstanceOf[Byte],
-    Random.nextInt(Short.MaxValue).asInstanceOf[Short],
-    Random.nextString(Random.nextInt(64)),
-    randomBytes(Random.nextInt(64)),
-    Map(Random.nextInt() -> Random.nextString(4)))
+  def makeRandomRow(
+      head: ColumnType[_ <: DataType, _],
+      tail: ColumnType[_ <: DataType, _]*): Row = makeRandomRow(Seq(head) ++ tail)
 
-  val nullRow = GenericMutableRow(Seq.fill(10)(null): _*)
+  def makeRandomRow(columnTypes: Seq[ColumnType[_ <: DataType, _]]): Row = {
+    val row = new GenericMutableRow(columnTypes.length)
+    makeRandomValues(columnTypes).zipWithIndex.foreach { case (value, index) =>
+      row(index) = value
+    }
+    row
+  }
 }

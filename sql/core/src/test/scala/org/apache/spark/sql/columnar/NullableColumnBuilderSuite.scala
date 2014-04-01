@@ -57,9 +57,10 @@ class NullableColumnBuilderSuite extends FunSuite {
 
     test(s"$typeName column builder: buffer size auto growth") {
       val columnBuilder = TestNullableColumnBuilder(columnType)
+      val randomRow = makeRandomRow(columnType)
 
       (0 until 4) foreach { _ =>
-        columnBuilder.appendFrom(nonNullRandomRow, columnType.typeId)
+        columnBuilder.appendFrom(randomRow, 0)
       }
 
       val buffer = columnBuilder.build()
@@ -72,10 +73,12 @@ class NullableColumnBuilderSuite extends FunSuite {
 
     test(s"$typeName column builder: null values") {
       val columnBuilder = TestNullableColumnBuilder(columnType)
+      val randomRow = makeRandomRow(columnType)
+      val nullRow = makeNullRow(1)
 
       (0 until 4) foreach { _ =>
-        columnBuilder.appendFrom(nonNullRandomRow, columnType.typeId)
-        columnBuilder.appendFrom(nullRow, columnType.typeId)
+        columnBuilder.appendFrom(randomRow, 0)
+        columnBuilder.appendFrom(nullRow, 0)
       }
 
       val buffer = columnBuilder.build()
@@ -94,7 +97,7 @@ class NullableColumnBuilderSuite extends FunSuite {
         } else {
           columnType.extract(buffer)
         }
-        assert(actual === nonNullRandomRow(columnType.typeId))
+        assert(actual === randomRow.head)
       }
 
       assert(!buffer.hasRemaining)
