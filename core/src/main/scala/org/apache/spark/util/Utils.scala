@@ -542,11 +542,10 @@ private[spark] object Utils extends Logging {
    * @param cutoff filter for files is lastModified < (currentTimeMillis/1000 - cutoff)
    */
   def findOldestFiles(dir: File, cutoff: Long): Seq[File] = {
+    val currentTimeSecs = System.currentTimeMillis / 1000
     if (dir.isDirectory) {
       val files = listFilesSafely(dir)
-      files.filter { file =>
-        file.lastModified < ((System.currentTimeMillis / 1000) - cutoff)
-      }
+      files.filter { file => file.lastModified < (currentTimeSecs - cutoff) }
     } else {
       throw new IllegalArgumentException(dir + " is not a directory!")
     }
