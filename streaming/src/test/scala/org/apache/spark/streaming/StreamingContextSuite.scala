@@ -145,6 +145,9 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts {
     ssc = null
     assert(sc.makeRDD(1 to 100).collect().size === 100)
     ssc = new StreamingContext(sc, batchDuration)
+    addInputStream(ssc).register
+    ssc.start()
+    ssc.stop()
   }
 
   test("awaitTermination") {

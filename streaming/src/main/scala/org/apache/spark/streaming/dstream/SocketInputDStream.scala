@@ -25,6 +25,7 @@ import scala.reflect.ClassTag
 
 import java.io._
 import java.net.Socket
+import org.apache.spark.Logging
 
 private[streaming]
 class SocketInputDStream[T: ClassTag](
@@ -46,26 +47,22 @@ class SocketReceiver[T: ClassTag](
     port: Int,
     bytesToObjects: InputStream => Iterator[T],
     storageLevel: StorageLevel
-  ) extends NetworkReceiver[T] {
+  ) extends NetworkReceiver[T](storageLevel) with Logging {
 
-  lazy protected val blockGenerator = new BlockGenerator(storageLevel)
+  var socket: Socket = null
 
-  override def getLocationPreference = None
-
-  protected def onStart() {
+  def onStart() {
     logInfo("Connecting to " + host + ":" + port)
-    val socket = new Socket(host, port)
+    socket = new Socket(host, port)
     logInfo("Connected to " + host + ":" + port)
-    blockGenerator.start()
     val iterator = bytesToObjects(socket.getInputStream())
-    while(iterator.hasNext) {
-      val obj = iterator.next
-      blockGenerator += obj
+    while(!isStopped && iterator.hasNext) {
+      store(iterator.next)
     }
   }
 
-  protected def onStop() {
-    blockGenerator.stop()
+  def onStop() {
+    if (socket != null) socket.close()
   }
 
 }

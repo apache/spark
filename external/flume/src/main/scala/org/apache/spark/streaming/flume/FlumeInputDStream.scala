@@ -34,6 +34,7 @@ import org.apache.spark.util.Utils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
+import org.apache.spark.Logging
 
 private[streaming]
 class FlumeInputDStream[T: ClassTag](
@@ -115,13 +116,13 @@ private[streaming] object SparkFlumeEvent {
 private[streaming]
 class FlumeEventServer(receiver : FlumeReceiver) extends AvroSourceProtocol {
   override def append(event : AvroFlumeEvent) : Status = {
-    receiver.blockGenerator += SparkFlumeEvent.fromAvroFlumeEvent(event)
+    receiver.store(SparkFlumeEvent.fromAvroFlumeEvent(event))
     Status.OK
   }
 
   override def appendBatch(events : java.util.List[AvroFlumeEvent]) : Status = {
     events.foreach (event =>
-      receiver.blockGenerator += SparkFlumeEvent.fromAvroFlumeEvent(event))
+      receiver.store(SparkFlumeEvent.fromAvroFlumeEvent(event)))
     Status.OK
   }
 }
@@ -133,23 +134,21 @@ class FlumeReceiver(
     host: String,
     port: Int,
     storageLevel: StorageLevel
-  ) extends NetworkReceiver[SparkFlumeEvent] {
+  ) extends NetworkReceiver[SparkFlumeEvent](storageLevel) with Logging {
 
-  lazy val blockGenerator = new BlockGenerator(storageLevel)
+  lazy val responder = new SpecificResponder(
+    classOf[AvroSourceProtocol], new FlumeEventServer(this))
+  lazy val server = new NettyServer(responder, new InetSocketAddress(host, port))
 
-  protected override def onStart() {
-    val responder = new SpecificResponder(
-      classOf[AvroSourceProtocol], new FlumeEventServer(this))
-    val server = new NettyServer(responder, new InetSocketAddress(host, port))
-    blockGenerator.start()
+  def onStart() {
     server.start()
     logInfo("Flume receiver started")
   }
 
-  protected override def onStop() {
-    blockGenerator.stop()
+  def onStop() {
+    server.close()
     logInfo("Flume receiver stopped")
   }
 
-  override def getLocationPreference = Some(host)
+  override def preferredLocation = Some(host)
 }

@@ -70,20 +70,14 @@ class KafkaReceiver[
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
     storageLevel: StorageLevel
-  ) extends NetworkReceiver[Any] {
+  ) extends NetworkReceiver[Any](storageLevel) with Logging {
 
-  // Handles pushing data into the BlockManager
-  lazy protected val blockGenerator = new BlockGenerator(storageLevel)
   // Connection to Kafka
   var consumerConnector : ConsumerConnector = null
 
-  def onStop() {
-    blockGenerator.stop()
-  }
+  def onStop() { }
 
   def onStart() {
-
-    blockGenerator.start()
 
     // In case we are using multiple Threads to handle Kafka Messages
     val executorPool = Executors.newFixedThreadPool(topics.values.reduce(_ + _))
@@ -130,7 +124,7 @@ class KafkaReceiver[
     def run() {
       logInfo("Starting MessageHandler.")
       for (msgAndMetadata <- stream) {
-        blockGenerator += (msgAndMetadata.key, msgAndMetadata.message)
+        store((msgAndMetadata.key, msgAndMetadata.message))
       }
     }
   }

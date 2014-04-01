@@ -31,6 +31,7 @@ import org.apache.spark.streaming.dstream.NetworkReceiver
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
+import org.apache.spark.{SparkEnv, Logging}
 
 /** A helper with set of defaults for supervisor strategy */
 object ReceiverSupervisorStrategy {
@@ -120,13 +121,10 @@ private[streaming] class ActorReceiver[T: ClassTag](
   name: String,
   storageLevel: StorageLevel,
   receiverSupervisorStrategy: SupervisorStrategy)
-  extends NetworkReceiver[T] {
+  extends NetworkReceiver[T](storageLevel) with Logging {
 
-  protected lazy val blocksGenerator: BlockGenerator =
-    new BlockGenerator(storageLevel)
-
-  protected lazy val supervisor = env.actorSystem.actorOf(Props(new Supervisor),
-    "Supervisor" + streamId)
+  protected lazy val supervisor = SparkEnv.get.actorSystem.actorOf(Props(new Supervisor),
+    "Supervisor" + receiverId)
 
   class Supervisor extends Actor {
 
@@ -141,8 +139,8 @@ private[streaming] class ActorReceiver[T: ClassTag](
 
       case Data(iter: Iterator[_]) => pushBlock(iter.asInstanceOf[Iterator[T]])
 
-      case Data(msg) =>
-        blocksGenerator += msg.asInstanceOf[T]
+      case Data(msg) ⇒
+        store(msg.asInstanceOf[T])
         n.incrementAndGet
 
       case props: Props =>
@@ -165,18 +163,15 @@ private[streaming] class ActorReceiver[T: ClassTag](
   }
 
   protected def pushBlock(iter: Iterator[T]) {
-    val buffer = new ArrayBuffer[T]
-    buffer ++= iter
-    pushBlock(StreamBlockId(streamId, System.nanoTime()), buffer, null, storageLevel)
+    store(iter)
   }
 
-  protected def onStart() = {
-    blocksGenerator.start()
+  def onStart() = {
     supervisor
     logInfo("Supervision tree for receivers initialized at:" + supervisor.path)
   }
 
-  protected def onStop() = {
+  def onStop() = {
     supervisor ! PoisonPill
   }
 

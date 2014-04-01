@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.StreamingContext
 
@@ -51,11 +51,9 @@ class RawInputDStream[T: ClassTag](
 
 private[streaming]
 class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
-  extends NetworkReceiver[Any] {
+  extends NetworkReceiver[Any](storageLevel) with Logging {
 
   var blockPushingThread: Thread = null
-
-  override def getLocationPreference = None
 
   def onStart() {
     // Open a socket to the target address and keep reading from it
@@ -73,9 +71,8 @@ class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
         var nextBlockNumber = 0
         while (true) {
           val buffer = queue.take()
-          val blockId = StreamBlockId(streamId, nextBlockNumber)
           nextBlockNumber += 1
-          pushBlock(blockId, buffer, null, storageLevel)
+          store(buffer)
         }
       }
     }

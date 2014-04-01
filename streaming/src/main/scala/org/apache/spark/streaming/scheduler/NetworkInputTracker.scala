@@ -153,19 +153,17 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
     def startReceivers() {
       val receivers = networkInputStreams.map(nis => {
         val rcvr = nis.getReceiver()
-        rcvr.setStreamId(nis.id)
+        rcvr.setReceiverId(nis.id)
         rcvr
       })
 
       // Right now, we only honor preferences if all receivers have them
-      val hasLocationPreferences = receivers.map(_.getLocationPreference().isDefined)
-        .reduce(_ && _)
+      val hasLocationPreferences = receivers.map(_.preferredLocation.isDefined).reduce(_ && _)
 
       // Create the parallel collection of receivers to distributed them on the worker nodes
       val tempRDD =
         if (hasLocationPreferences) {
-          val receiversWithPreferences =
-            receivers.map(r => (r, Seq(r.getLocationPreference().toString)))
+          val receiversWithPreferences = receivers.map(r => (r, Seq(r.preferredLocation.get)))
           ssc.sc.makeRDD[NetworkReceiver[_]](receiversWithPreferences)
         }
         else {
@@ -177,7 +175,7 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
         if (!iterator.hasNext) {
           throw new Exception("Could not start receiver as details not found.")
         }
-        iterator.next().start()
+        iterator.next().handler.run()
       }
       // Run the dummy Spark job to ensure that all slaves have registered.
       // This avoids all the receivers to be scheduled on the same node.

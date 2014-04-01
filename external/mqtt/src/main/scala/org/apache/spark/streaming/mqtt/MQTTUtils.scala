@@ -37,7 +37,7 @@ object MQTTUtils {
       topic: String,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[String] = {
-    new MQTTInputDStream[String](ssc, brokerUrl, topic, storageLevel)
+    new MQTTInputDStream(ssc, brokerUrl, topic, storageLevel)
   }
 
   /**

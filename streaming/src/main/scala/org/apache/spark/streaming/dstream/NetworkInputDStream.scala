@@ -17,13 +17,13 @@
 
 package org.apache.spark.streaming.dstream
 
-import java.util.concurrent.ArrayBlockingQueue
-import java.nio.ByteBuffer
-
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.concurrent.Await
-import scala.concurrent.duration._
 import scala.reflect.ClassTag
+
+import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.{TimeUnit, ArrayBlockingQueue}
 
 import akka.actor.{Props, Actor}
 import akka.pattern.ask
@@ -34,6 +34,7 @@ import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.rdd.{RDD, BlockRDD}
 import org.apache.spark.storage.{BlockId, StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.scheduler.{DeregisterReceiver, AddBlocks, RegisterReceiver}
+import org.apache.spark.util.AkkaUtils
 
 /**
  * Abstract class for defining any [[org.apache.spark.streaming.dstream.InputDStream]]
@@ -85,188 +86,383 @@ private[streaming] case class ReportBlock(blockId: BlockId, metadata: Any)
 private[streaming] case class ReportError(msg: String) extends NetworkReceiverMessage
 
 /**
- * Abstract class of a receiver that can be run on worker nodes to receive external data. See
- * [[org.apache.spark.streaming.dstream.NetworkInputDStream]] for an explanation.
+ * Abstract class of a receiver that can be run on worker nodes to receive external data. A
+ * custom receiver can be defined by defining the functions onStart() and onStop(). onStart()
+ * should define the setup steps necessary to start receiving data,
+ * and onStop() should define the cleanup steps necessary to stop receiving data. A custom
+ * receiver would look something like this.
+ *
+ * class MyReceiver(storageLevel) extends NetworkReceiver[String](storageLevel) {
+ *   def onStart() {
+ *     // Setup stuff (start threads, open sockets, etc.) to start receiving data.
+ *     // Call store(...) to store received data into Spark's memory.
+ *     // Optionally, wait for other threads to complete or watch for exceptions.
+ *     // Call stopOnError(...) if there is an error that you cannot ignore and need
+ *     // the receiver to be terminated.
+ *   }
+ *
+ *   def onStop() {
+ *     // Cleanup stuff (stop threads, close sockets, etc.) to stop receiving data.
+ *   }
+ * }
  */
-abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging {
-
-  lazy protected val env = SparkEnv.get
-
-  lazy protected val actor = env.actorSystem.actorOf(
-    Props(new NetworkReceiverActor()), "NetworkReceiver-" + streamId)
-
-  lazy protected val receivingThread = Thread.currentThread()
-
-  protected var streamId: Int = -1
+abstract class NetworkReceiver[T: ClassTag](val storageLevel: StorageLevel)
+  extends Serializable {
 
   /**
-   * This method will be called to start receiving data. All your receiver
-   * starting code should be implemented by defining this function.
+   * This method is called by the system when the receiver is started to start receiving data.
+   * All threads and resources set up in this method must be cleaned up in onStop().
+   * If there are exceptions on other threads such that the receiver must be terminated,
+   * then you must call stopOnError(exception). However, the thread that called onStart() must
+   * never catch and ignore InterruptedException (it can catch and rethrow).
    */
-  protected def onStart()
+  def onStart()
 
-  /** This method will be called to stop receiving data. */
-  protected def onStop()
+  /**
+   * This method is called by the system when the receiver is stopped to stop receiving data.
+   * All threads and resources setup in onStart() must be cleaned up in this method.
+   */
+  def onStop()
 
-  /** Conveys a placement preference (hostname) for this receiver. */
-  def getLocationPreference() : Option[String] = None
+  /** Override this to specify a preferred location (hostname). */
+  def preferredLocation : Option[String] = None
+
+  /** Store a single item of received data to Spark's memory/ */
+  def store(dataItem: T) {
+    handler.pushSingle(dataItem)
+  }
+
+  /** Store a sequence of received data block into Spark's memory. */
+  def store(dataBuffer: ArrayBuffer[T]) {
+    handler.pushArrayBuffer(dataBuffer)
+  }
+
+  /** Store a sequence of received data block into Spark's memory. */
+  def store(dataIterator: Iterator[T]) {
+    handler.pushIterator(dataIterator)
+  }
+
+  /** Store the bytes of received data block into Spark's memory. */
+  def store(bytes: ByteBuffer) {
+    handler.pushBytes(bytes)
+  }
+
+  /** Stop the receiver. */
+  def stop() {
+    handler.stop()
+  }
+
+  /** Stop the receiver when an error occurred. */
+  def stopOnError(e: Exception) {
+    handler.stop(e)
+  }
+
+  /** Check if receiver has been marked for stopping */
+  def isStopped: Boolean = {
+    handler.isStopped
+  }
+
+  /** Get unique identifier of this receiver. */
+  def receiverId = id
+
+  /** Identifier of the stream this receiver is associated with. */
+  private var id: Int = -1
+
+  /** Handler object that runs the receiver. This is instantiated lazily in the worker. */
+  private[streaming] lazy val handler = new NetworkReceiverHandler(this)
+
+  /** Set the ID of the DStream that this receiver is associated with */
+  private[streaming] def setReceiverId(id_ : Int) {
+    id = id_
+  }
+}
+
+
+private[streaming] class NetworkReceiverHandler(receiver: NetworkReceiver[_]) extends Logging {
+
+  val env = SparkEnv.get
+  val receiverId = receiver.receiverId
+  val storageLevel = receiver.storageLevel
+
+  /** Remote Akka actor for the NetworkInputTracker */
+  private val trackerActor = {
+    val ip = env.conf.get("spark.driver.host", "localhost")
+    val port = env.conf.getInt("spark.driver.port", 7077)
+    val url = "akka.tcp://spark@%s:%s/user/NetworkInputTracker".format(ip, port)
+    env.actorSystem.actorSelection(url)
+  }
+
+  /** Timeout for Akka actor messages */
+  private val askTimeout = AkkaUtils.askTimeout(env.conf)
+
+  /** Akka actor for receiving messages from the NetworkInputTracker in the driver */
+  private val actor = env.actorSystem.actorOf(
+    Props(new Actor {
+      override def preStart() {
+        logInfo("Registered receiver " + receiverId)
+        val future = trackerActor.ask(RegisterReceiver(receiverId, self))(askTimeout)
+        Await.result(future, askTimeout)
+      }
+
+      override def receive() = {
+        case StopReceiver =>
+          logInfo("Received stop signal")
+          stop()
+      }
+    }), "NetworkReceiver-" + receiverId)
+
+  /** Divides received data records into data blocks for pushing in BlockManager */
+  private val blockGenerator = new BlockGenerator(this)
+
+  /** Exceptions that occurs while receiving data */
+  private val exceptions = new ArrayBuffer[Exception] with SynchronizedBuffer[Exception]
+
+  /** Unique block ids if one wants to add blocks directly */
+  private val newBlockId = new AtomicLong(System.currentTimeMillis())
+
+  /** Thread that starts the receiver and stays blocked while data is being received */
+  private var receivingThread: Option[Thread] = None
+
+  /** Has the receiver been marked for stop */
+  private var stopped = false
 
   /**
    * Starts the receiver. First is accesses all the lazy members to
    * materialize them. Then it calls the user-defined onStart() method to start
-   * other threads, etc required to receiver the data.
+   * other threads, etc. required to receive the data.
    */
-  def start() {
-    try {
-      // Access the lazy vals to materialize them
-      env
-      actor
-      receivingThread
+  def run() {
+    // Remember this thread as the receiving thread
+    receivingThread = Some(Thread.currentThread())
 
+    // Starting the block generator
+    blockGenerator.start()
+
+    try {
       // Call user-defined onStart()
-      onStart()
+      logInfo("Calling onStart")
+      receiver.onStart()
+
+      // Wait until interrupt is called on this thread
+      while(true) Thread.sleep(100000)
     } catch {
       case ie: InterruptedException =>
-        logInfo("Receiving thread interrupted")
+        logInfo("Receiving thread has been interrupted, receiver "  + receiverId + " stopped")
       case e: Exception =>
-        stopOnError(e)
+        logError("Error receiving data in receiver " + receiverId, e)
+        exceptions += e
     }
+
+    // Call user-defined onStop()
+    try {
+      logInfo("Calling onStop")
+      receiver.onStop()
+    } catch {
+      case  e: Exception =>
+        logError("Error stopping receiver " + receiverId, e)
+        exceptions += e
+    }
+
+    // Stopping BlockGenerator
+    blockGenerator.stop()
+
+    val message = if (exceptions.isEmpty) {
+      null
+    } else if (exceptions.size == 1) {
+      val e = exceptions.head
+      "Exception in receiver " + receiverId + ": " + e.getMessage + "\n" + e.getStackTraceString
+    } else {
+      "Multiple exceptions in receiver " + receiverId + "(" + exceptions.size + "):\n"
+      exceptions.zipWithIndex.map {
+        case (e, i) => "Exception " + i + ": " + e.getMessage + "\n" + e.getStackTraceString
+      }.mkString("\n")
+    }
+    logInfo("Deregistering receiver " + receiverId)
+    val future = trackerActor.ask(DeregisterReceiver(receiverId, message))(askTimeout)
+    Await.result(future, askTimeout)
+    logInfo("Deregistered receiver " + receiverId)
+    env.actorSystem.stop(actor)
+    logInfo("Stopped receiver " + receiverId)
+  }
+
+
+  /** Push a single record of received data into block generator. */
+  def pushSingle(data: Any) {
+    blockGenerator += data
+  }
+
+  /** Push a block of received data into block manager. */
+  def pushArrayBuffer(
+      arrayBuffer: ArrayBuffer[_],
+      blockId: StreamBlockId = nextBlockId,
+      metadata: Any = null
+    ) {
+    logDebug("Pushing block " + blockId)
+    val time = System.currentTimeMillis
+    env.blockManager.put(blockId, arrayBuffer.asInstanceOf[ArrayBuffer[Any]], storageLevel, true)
+    logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
+    trackerActor ! AddBlocks(receiverId, Array(blockId), null)
+    logDebug("Reported block " + blockId)
   }
 
   /**
-   * Stops the receiver. First it interrupts the main receiving thread,
-   * that is, the thread that called receiver.start(). Then it calls the user-defined
-   * onStop() method to stop other threads and/or do cleanup.
+   * Push a received data into Spark as . Call this method from the data receiving
+   * thread to submit
+   * a block of data.
    */
+  def pushIterator(
+      iterator: Iterator[_],
+      blockId: StreamBlockId = nextBlockId,
+      metadata: Any = null
+    ) {
+    env.blockManager.put(blockId, iterator, storageLevel, true)
+    trackerActor ! AddBlocks(receiverId, Array(blockId), null)
+    logInfo("Pushed block " + blockId)
+  }
+
+
+  /**
+   * Push a block (as bytes) into the block manager.
+   */
+  def pushBytes(
+      bytes: ByteBuffer,
+      blockId: StreamBlockId = nextBlockId,
+      metadata: Any = null
+    ) {
+    env.blockManager.putBytes(blockId, bytes, storageLevel, true)
+    trackerActor ! AddBlocks(receiverId, Array(blockId), null)
+    logInfo("Pushed block " + blockId)
+  }
+
+  /**
+   * Stop receiving data.
+   */
+  def stop(e: Exception = null) {
+    // Mark has stopped
+    stopped = true
+    logInfo("Marked as stop")
+
+    // Store the exception if any
+    if (e != null) {
+      logError("Error receiving data", e)
+      exceptions += e
+    }
+
+    if (receivingThread.isDefined) {
+      // Wait for the receiving thread to finish on its own
+      receivingThread.get.join(env.conf.getLong("spark.streaming.receiverStopTimeout", 2000))
+
+      // Stop receiving by interrupting the receiving thread
+      receivingThread.get.interrupt()
+      logInfo("Interrupted receiving thread of receiver " + receiverId + " for stopping")
+    }
+  }
+
+  /** Check if receiver has been marked for stopping. */
+  def isStopped = stopped
+
+  private def nextBlockId = StreamBlockId(receiverId, newBlockId.getAndIncrement)
+}
+
+/**
+ * Batches objects created by a [[org.apache.spark.streaming.dstream.NetworkReceiver]] and puts them into
+ * appropriately named blocks at regular intervals. This class starts two threads,
+ * one to periodically start a new batch and prepare the previous batch of as a block,
+ * the other to push the blocks into the block manager.
+ */
+private[streaming] class BlockGenerator(handler: NetworkReceiverHandler) extends Logging {
+
+  private case class Block(id: StreamBlockId, buffer: ArrayBuffer[Any], metadata: Any = null)
+
+  private val env = handler.env
+  private val blockInterval = env.conf.getLong("spark.streaming.blockInterval", 200)
+  private val blockIntervalTimer =
+    new RecurringTimer(new SystemClock(), blockInterval, updateCurrentBuffer)
+  private val blocksForPushing = new ArrayBlockingQueue[Block](10)
+  private val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } }
+
+  private var currentBuffer = new ArrayBuffer[Any]
+  private var stopped = false
+
+  def start() {
+    blockIntervalTimer.start()
+    blockPushingThread.start()
+    logInfo("Started BlockGenerator")
+  }
+
   def stop() {
-    receivingThread.interrupt()
-    onStop()
-    // TODO: terminate the actor
+    // Stop generating blocks
+    blockIntervalTimer.stop()
+
+    // Mark as stopped
+    synchronized { stopped = true }
+
+    // Wait for all blocks to be pushed
+    logDebug("Waiting for block pushing thread to terminate")
+    blockPushingThread.join()
+    logInfo("Stopped BlockGenerator")
   }
 
-  /**
-   * Stops the receiver and reports exception to the tracker.
-   * This should be called whenever an exception is to be handled on any thread
-   * of the receiver.
-   */
-  protected def stopOnError(e: Exception) {
-    logError("Error receiving data", e)
-    stop()
-    actor ! ReportError(e.toString)
+  def += (obj: Any): Unit = synchronized {
+    currentBuffer += obj
   }
 
+  private def isStopped = synchronized { stopped }
 
-  /**
-   * Pushes a block (as an ArrayBuffer filled with data) into the block manager.
-   */
-  def pushBlock(blockId: BlockId, arrayBuffer: ArrayBuffer[T], metadata: Any, level: StorageLevel) {
-    env.blockManager.put(blockId, arrayBuffer.asInstanceOf[ArrayBuffer[Any]], level)
-    actor ! ReportBlock(blockId, metadata)
-  }
-
-  /**
-   * Pushes a block (as bytes) into the block manager.
-   */
-  def pushBlock(blockId: BlockId, bytes: ByteBuffer, metadata: Any, level: StorageLevel) {
-    env.blockManager.putBytes(blockId, bytes, level)
-    actor ! ReportBlock(blockId, metadata)
-  }
-
-  /** A helper actor that communicates with the NetworkInputTracker */
-  private class NetworkReceiverActor extends Actor {
-    logInfo("Attempting to register with tracker")
-    val ip = env.conf.get("spark.driver.host", "localhost")
-    val port = env.conf.getInt("spark.driver.port", 7077)
-    val url = "akka.tcp://spark@%s:%s/user/NetworkInputTracker".format(ip, port)
-    val tracker = env.actorSystem.actorSelection(url)
-    val timeout = 5.seconds
-
-    override def preStart() {
-      val future = tracker.ask(RegisterReceiver(streamId, self))(timeout)
-      Await.result(future, timeout)
-    }
-
-    override def receive() = {
-      case ReportBlock(blockId, metadata) =>
-        tracker ! AddBlocks(streamId, Array(blockId), metadata)
-      case ReportError(msg) =>
-        tracker ! DeregisterReceiver(streamId, msg)
-      case StopReceiver(msg) =>
-        stop()
-        tracker ! DeregisterReceiver(streamId, msg)
+  private def updateCurrentBuffer(time: Long): Unit = synchronized {
+    try {
+      val newBlockBuffer = currentBuffer
+      currentBuffer = new ArrayBuffer[Any]
+      if (newBlockBuffer.size > 0) {
+        val blockId = StreamBlockId(handler.receiverId, time - blockInterval)
+        val newBlock = new Block(blockId, newBlockBuffer)
+        blocksForPushing.add(newBlock)
+        logDebug("Last element in " + blockId + " is " + newBlockBuffer.last)
+      }
+    } catch {
+      case ie: InterruptedException =>
+        logInfo("Block updating timer thread was interrupted")
+      case e: Exception =>
+        handler.stop(e)
     }
   }
 
-  protected[streaming] def setStreamId(id: Int) {
-    streamId = id
-  }
+  private def keepPushingBlocks() {
+    logInfo("Started block pushing thread")
 
-  /**
-   * Batches objects created by a [[org.apache.spark.streaming.dstream.NetworkReceiver]] and puts
-   * them into appropriately named blocks at regular intervals. This class starts two threads,
-   * one to periodically start a new batch and prepare the previous batch of as a block,
-   * the other to push the blocks into the block manager.
-   */
-  class BlockGenerator(storageLevel: StorageLevel)
-    extends Serializable with Logging {
-
-    case class Block(id: BlockId, buffer: ArrayBuffer[T], metadata: Any = null)
-
-    val clock = new SystemClock()
-    val blockInterval = env.conf.getLong("spark.streaming.blockInterval", 200)
-    val blockIntervalTimer = new RecurringTimer(clock, blockInterval, updateCurrentBuffer)
-    val blockStorageLevel = storageLevel
-    val blocksForPushing = new ArrayBlockingQueue[Block](1000)
-    val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } }
-
-    var currentBuffer = new ArrayBuffer[T]
-
-    def start() {
-      blockIntervalTimer.start()
-      blockPushingThread.start()
-      logInfo("Data handler started")
-    }
-
-    def stop() {
-      blockIntervalTimer.stop()
-      blockPushingThread.interrupt()
-      logInfo("Data handler stopped")
-    }
-
-    def += (obj: T): Unit = synchronized {
-      currentBuffer += obj
-    }
-
-    private def updateCurrentBuffer(time: Long): Unit = synchronized {
-      try {
-        val newBlockBuffer = currentBuffer
-        currentBuffer = new ArrayBuffer[T]
-        if (newBlockBuffer.size > 0) {
-          val blockId = StreamBlockId(NetworkReceiver.this.streamId, time - blockInterval)
-          val newBlock = new Block(blockId, newBlockBuffer)
-          blocksForPushing.add(newBlock)
-        }
-      } catch {
-        case ie: InterruptedException =>
-          logInfo("Block interval timer thread interrupted")
-        case e: Exception =>
-          NetworkReceiver.this.stop()
+    def pushNextBlock() {
+      Option(blocksForPushing.poll(100, TimeUnit.MILLISECONDS)) match {
+        case Some(block) =>
+          handler.pushArrayBuffer(block.buffer, block.id, block.metadata)
+          logInfo("Pushed block "+ block.id)
+        case None =>
       }
     }
 
-    private def keepPushingBlocks() {
-      logInfo("Block pushing thread started")
-      try {
-        while(true) {
-          val block = blocksForPushing.take()
-          NetworkReceiver.this.pushBlock(block.id, block.buffer, block.metadata, storageLevel)
+    try {
+      while(!isStopped) {
+        Option(blocksForPushing.poll(100, TimeUnit.MILLISECONDS)) match {
+          case Some(block) =>
+            handler.pushArrayBuffer(block.buffer, block.id, block.metadata)
+            logInfo("Pushed block "+ block.id)
+          case None =>
         }
-      } catch {
-        case ie: InterruptedException =>
-          logInfo("Block pushing thread interrupted")
-        case e: Exception =>
-          NetworkReceiver.this.stop()
       }
+      // Push out the blocks that are still left
+      logInfo("Pushing out the last " + blocksForPushing.size() + " blocks")
+      while (!blocksForPushing.isEmpty) {
+        logDebug("Getting block ")
+        val block = blocksForPushing.take()
+        logDebug("Got block")
+        handler.pushArrayBuffer(block.buffer, block.id, block.metadata)
+        logInfo("Blocks left to push " + blocksForPushing.size())
+      }
+      logInfo("Stopped block pushing thread")
+    } catch {
+      case ie: InterruptedException =>
+        logInfo("Block pushing thread was interrupted")
+      case e: Exception =>
+        handler.stop(e)
     }
   }
 }
