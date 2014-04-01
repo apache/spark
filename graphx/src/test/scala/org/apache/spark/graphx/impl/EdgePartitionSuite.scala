@@ -34,8 +34,8 @@ class EdgePartitionSuite extends FunSuite {
       builder.add(e.srcId, e.dstId, e.attr)
     }
     val edgePartition = builder.toEdgePartition
-    assert(edgePartition.reverse.iterator.toList === reversedEdges)
-    assert(edgePartition.reverse.reverse.iterator.toList === edges)
+    assert(edgePartition.reverse.iterator.map(_.copy()).toList === reversedEdges)
+    assert(edgePartition.reverse.reverse.iterator.map(_.copy()).toList === edges)
   }
 
   test("map") {
@@ -45,7 +45,7 @@ class EdgePartitionSuite extends FunSuite {
       builder.add(e.srcId, e.dstId, e.attr)
     }
     val edgePartition = builder.toEdgePartition
-    assert(edgePartition.map(e => e.srcId + e.dstId).iterator.toList ===
+    assert(edgePartition.map(e => e.srcId + e.dstId).iterator.map(_.copy()).toList ===
       edges.map(e => e.copy(attr = e.srcId + e.dstId)))
   }
 
@@ -58,7 +58,7 @@ class EdgePartitionSuite extends FunSuite {
       builder.add(e.srcId, e.dstId, e.attr)
     }
     val edgePartition = builder.toEdgePartition
-    assert(edgePartition.groupEdges(_ + _).iterator.toList === groupedEdges)
+    assert(edgePartition.groupEdges(_ + _).iterator.map(_.copy()).toList === groupedEdges)
   }
 
   test("indexIterator") {
@@ -72,8 +72,8 @@ class EdgePartitionSuite extends FunSuite {
 
     val edgePartition = builder.toEdgePartition
     assert(edgePartition.iterator.map(_.copy()).toList === sortedEdges)
-    assert(edgePartition.indexIterator(_ == 0).toList === edgesFrom0)
-    assert(edgePartition.indexIterator(_ == 1).toList === edgesFrom1)
+    assert(edgePartition.indexIterator(_ == 0).map(_.copy()).toList === edgesFrom0)
+    assert(edgePartition.indexIterator(_ == 1).map(_.copy()).toList === edgesFrom1)
   }
 
   test("innerJoin") {
@@ -87,7 +87,7 @@ class EdgePartitionSuite extends FunSuite {
     val a = makeEdgePartition(aList)
     val b = makeEdgePartition(bList)
 
-    assert(a.innerJoin(b) { (src, dst, a, b) => a }.iterator.toList ===
+    assert(a.innerJoin(b) { (src, dst, a, b) => a }.iterator.map(_.copy()).toList ===
       List(Edge(0, 1, 0), Edge(1, 0, 0), Edge(5, 5, 0)))
   }
 }
