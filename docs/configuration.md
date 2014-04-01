@@ -650,8 +650,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.executor.extraJavaOptions</td>
   <td>(none)</td>
   <td>
-    A string of extra JVM options to pass to executors. For instance, GC settings. Note that
-    it is illegal to set Spark properties or heap size settings with this flag.
+    A string of extra JVM options to pass to executors. For instance, GC settings or custom
+    paths for native code. Note that it is illegal to set Spark properties or heap size 
+    settings with this option.
   </td>
 </tr>
 
@@ -678,7 +679,6 @@ The following variables can be set in `spark-env.sh`:
 * `JAVA_HOME`, the location where Java is installed (if it's not on your default `PATH`)
 * `PYSPARK_PYTHON`, the Python binary to use for PySpark
 * `SPARK_LOCAL_IP`, to configure which IP address of the machine to bind to.
-* `SPARK_LIBRARY_PATH`, to add search directories for native libraries.
 * `SPARK_CLASSPATH`, to add elements to Spark's classpath that you want to be present for _all_ applications.
    Note that applications can also add dependencies for themselves through `SparkContext.addJar` -- we recommend
    doing that when possible.
