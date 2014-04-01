@@ -832,6 +832,8 @@ object HiveQl {
       Cast(nodeToExpr(arg), BooleanType)
     case Token("TOK_FUNCTION", Token("TOK_DECIMAL", Nil) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), DecimalType)
+    case Token("TOK_FUNCTION", Token("TOK_TIMESTAMP", Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), TimestampType)
 
     /* Arithmetic */
     case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
