@@ -18,6 +18,7 @@
 package org.apache.spark.deploy
 
 import scala.collection.mutable.ArrayBuffer
+import java.io.File
 
 /**
  * Parses and encapsulates arguments from the spark-submit script.
@@ -28,6 +29,7 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
   var executorMemory: String = null
   var executorCores: String = null
   var totalExecutorCores: String = null
+  var propertiesFile: String = null
   var driverMemory: String = null
   var driverCores: String = null
   var supervise: Boolean = false
@@ -49,6 +51,15 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
   if (args.length == 0) printUsageAndExit(-1)
   if (primaryResource == null) SparkSubmit.printErrorAndExit("Must specify a primary resource")
   if (mainClass == null) SparkSubmit.printErrorAndExit("Must specify a main class with --class")
+  if (propertiesFile == null) {
+    val sparkHome = sys.env("SPARK_HOME") // defined via `spark-class`
+    val sep = File.separator
+    val defaultPath = s"${sparkHome}${sep}conf${sep}spark-defaults.properties"
+    val file = new File(defaultPath)
+    if (file.exists()) {
+       propertiesFile = file.getAbsolutePath
+     }
+  }
 
   override def toString =  {
     s"""Parsed arguments:
@@ -57,8 +68,9 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
     |  executorMemory     $executorMemory
     |  executorCores      $executorCores
     |  totalExecutorCores $totalExecutorCores
+    |  propertiesFile     $propertiesFile
     |  driverMemory       $driverMemory
-    |  drivercores        $driverCores
+    |  driverCores        $driverCores
     |  supervise          $supervise
     |  queue              $queue
     |  numExecutors       $numExecutors
@@ -120,6 +132,10 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
 
     case ("--driver-cores") :: value :: tail =>
       driverCores = value
+      parseOpts(tail)
+
+    case ("--properties-file") :: value :: tail =>
+      propertiesFile = value
       parseOpts(tail)
 
     case ("--supervise") :: tail =>

@@ -17,11 +17,13 @@
 
 package org.apache.spark.deploy
 
-import java.io.{PrintStream, File}
+import java.io.{FileInputStream, PrintStream, File}
 import java.net.URL
+import java.util.Properties
 
 import org.apache.spark.executor.ExecutorURLClassLoader
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.Map
@@ -108,6 +110,21 @@ object SparkSubmit {
     val sysProps = new HashMap[String, String]()
     var childMainClass = ""
 
+    // Load system properties by default from the file, if present
+    if (appArgs.verbose) printStream.println(s"Using properties file: ${appArgs.propertiesFile}")
+    Option(appArgs.propertiesFile).map { filename =>
+      val file = new File(filename)
+      getDefaultProperties(file).foreach { case (k, v) =>
+        if (k.startsWith("spark")) {
+          sysProps(k) = v
+          if (appArgs.verbose) printStream.println(s"Adding default property: $k=$v")
+        }
+        else {
+          printWarning(s"Ignoring non-spark config property: $k=$v")
+        }
+      }
+    }
+
     if (clusterManager == MESOS && deployOnCluster) {
       printErrorAndExit("Mesos does not support running the driver on the cluster")
     }
@@ -191,11 +208,11 @@ object SparkSubmit {
       sysProps: Map[String, String], childMainClass: String, verbose: Boolean = false) {
 
     if (verbose) {
-      System.err.println(s"Main class:\n$childMainClass")
-      System.err.println(s"Arguments:\n${childArgs.mkString("\n")}")
-      System.err.println(s"System properties:\n${sysProps.mkString("\n")}")
-      System.err.println(s"Classpath elements:\n${childClasspath.mkString("\n")}")
-      System.err.println("\n")
+      printStream.println(s"Main class:\n$childMainClass")
+      printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
+      printStream.println(s"System properties:\n${sysProps.mkString("\n")}")
+      printStream.println(s"Classpath elements:\n${childClasspath.mkString("\n")}")
+      printStream.println("\n")
     }
 
     val loader = new ExecutorURLClassLoader(new Array[URL](0),
@@ -223,6 +240,13 @@ object SparkSubmit {
 
     val url = localJarFile.getAbsoluteFile.toURI.toURL
     loader.addURL(url)
+  }
+
+  private def getDefaultProperties(file: File): Seq[(String, String)] = {
+    val inputStream = new FileInputStream(file)
+    val properties = new Properties()
+    properties.load(inputStream)
+    properties.stringPropertyNames().toSeq.map(k => (k, properties(k)))
   }
 }
 

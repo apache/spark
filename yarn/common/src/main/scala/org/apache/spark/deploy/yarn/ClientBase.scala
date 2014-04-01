@@ -44,6 +44,7 @@ import org.apache.hadoop.yarn.util.{Records, Apps}
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.util.Utils
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.ExecutorLauncher
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 
 
@@ -340,8 +341,19 @@ trait ClientBase extends Logging {
       JAVA_OPTS += " -XX:CMSIncrementalDutyCycle=10 "
     }
 
-    if (env.isDefinedAt("SPARK_JAVA_OPTS")) {
-      JAVA_OPTS += " " + env("SPARK_JAVA_OPTS")
+
+    if (args.amClass == classOf[ExecutorLauncher].getName) {
+      // If we are being launched in client mode, forward the spark-conf options
+      // onto the executor launcher
+      for ((k, v) <- sparkConf.getAll) {
+        JAVA_OPTS += s"-D$k=$v"
+      }
+    } else {
+      // If we are being launched in standalone mode, capture and forward any spark
+      // system properties (e.g. set by spark-class).
+      for ((k, v) <- sys.props.filterKeys(_.startsWith("spark"))) {
+        JAVA_OPTS += s"-D$k=$v"
+      }
     }
 
     if (!localResources.contains(ClientBase.LOG4J_PROP)) {
