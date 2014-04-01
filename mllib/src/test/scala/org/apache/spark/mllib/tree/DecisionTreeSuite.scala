@@ -252,7 +252,6 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
-    strategy.numBins = 100
     val bestSplits = DecisionTree.findBestSplits(rdd, new Array(7), strategy, 0,
       Array[List[Filter]](), splits, bins)
 
@@ -280,7 +279,6 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
     val (splits, bins) = DecisionTree.findSplitsBins(rdd,strategy)
-    strategy.numBins = 100
     val bestSplits = DecisionTree.findBestSplits(rdd, new Array(7), strategy, 0,
       Array[List[Filter]](), splits, bins)
 
@@ -310,7 +308,6 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(splits(0).length === 99)
     assert(bins(0).length === 100)
 
-    strategy.numBins = 100
     val bestSplits = DecisionTree.findBestSplits(rdd, new Array(7), strategy, 0,
       Array[List[Filter]](), splits, bins)
     assert(bestSplits.length === 1)
@@ -334,7 +331,6 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(splits(0).length === 99)
     assert(bins(0).length === 100)
 
-    strategy.numBins = 100
     val bestSplits = DecisionTree.findBestSplits(rdd, Array(0.0), strategy, 0,
       Array[List[Filter]](), splits, bins)
     assert(bestSplits.length === 1)
@@ -359,7 +355,6 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(splits(0).length === 99)
     assert(bins(0).length === 100)
 
-    strategy.numBins = 100
     val bestSplits = DecisionTree.findBestSplits(rdd, Array(0.0), strategy, 0,
       Array[List[Filter]](), splits, bins)
     assert(bestSplits.length === 1)
@@ -384,7 +379,6 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(splits(0).length === 99)
     assert(bins(0).length === 100)
 
-    strategy.numBins = 100
     val bestSplits = DecisionTree.findBestSplits(rdd, Array(0.0), strategy, 0,
       Array[List[Filter]](), splits, bins)
     assert(bestSplits.length === 1)

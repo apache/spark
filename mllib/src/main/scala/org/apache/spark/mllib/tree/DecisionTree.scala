@@ -56,9 +56,6 @@ class DecisionTree private(val strategy: Strategy) extends Serializable with Log
     val (splits, bins) = DecisionTree.findSplitsBins(input, strategy)
     logDebug("numSplits = " + bins(0).length)
 
-    // Set number of bins for the input data.
-    strategy.numBins = bins(0).length
-
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
     // the max number of nodes possible given the depth of the tree
@@ -300,7 +297,7 @@ object DecisionTree extends Serializable with Logging {
     // Find the number of features by looking at the first sample.
     val numFeatures = input.first().features.length
     logDebug("numFeatures = " + numFeatures)
-    val numBins = strategy.numBins
+    val numBins = bins(0).length
     logDebug("numBins = " + numBins)
 
     /** Find the filters used before reaching the current code. */
