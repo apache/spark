@@ -537,6 +537,22 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Finds all the files in a directory whose last modified time is older than cutoff seconds.
+   * @param dir  must be the path to a directory, or IllegalArgumentException is thrown
+   * @param cutoff filter for files is lastModified < (currentTimeMillis/1000 - cutoff)
+   */
+  def findOldestFiles(dir: File, cutoff: Long): Seq[File] = {
+    if (dir.isDirectory) {
+      val files = listFilesSafely(dir)
+      files.filter { file =>
+        file.lastModified < ((System.currentTimeMillis / 1000) - cutoff)
+      }
+    } else {
+      throw new IllegalArgumentException(dir + " is not a directory!")
+    }
+  }
+
+  /**
    * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes.
    */
   def memoryStringToMb(str: String): Int = {
