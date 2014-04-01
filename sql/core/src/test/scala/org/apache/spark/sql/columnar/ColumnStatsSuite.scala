@@ -50,8 +50,10 @@ class ColumnStatsSuite extends FunSuite {
       rows.foreach(columnStats.gatherStats(_, 0))
 
       val values = rows.map(_.head.asInstanceOf[T#JvmType])
-      assert(columnStats.lowerBound === values.min(columnStats.ordering))
-      assert(columnStats.upperBound === values.max(columnStats.ordering))
+      val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#JvmType]]
+
+      assert(columnStats.lowerBound === values.min(ordering))
+      assert(columnStats.upperBound === values.max(ordering))
     }
   }
 }

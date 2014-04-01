@@ -77,7 +77,7 @@ private[sql] object RunLengthEncoding extends CompressionScheme {
     case _ => false
   }
 
-  class Encoder extends compression.Encoder{
+  class Encoder extends compression.Encoder {
     private var _uncompressedSize = 0
     private var _compressedSize = 0
 

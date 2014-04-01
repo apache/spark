@@ -69,36 +69,13 @@ private[sql] sealed abstract class NativeColumnStats[T <: NativeType]
 
   protected var (_lower, _upper) = initialBounds
 
-  val ordering: Ordering[JvmType]
-
   def initialBounds: (JvmType, JvmType)
 
   protected def columnType: NativeColumnType[T]
 
-  override def lowerBound = _lower
+  override def lowerBound: T#JvmType = _lower
 
-  override def upperBound = _upper
-
-  override def gatherStats(row: Row, ordinal: Int) {
-    val field = columnType.getField(row, ordinal)
-    if (upperBound == null || ordering.gt(field, upperBound)) _upper = field
-    if (lowerBound == null || ordering.lt(field, lowerBound)) _lower = field
-  }
-
-  override def contains(row: Row, ordinal: Int) = {
-    val field = columnType.getField(row, ordinal)
-    ordering.lteq(lowerBound, field) && ordering.lteq(field, upperBound)
-  }
-
-  override def isAbove(row: Row, ordinal: Int) = {
-    val field = columnType.getField(row, ordinal)
-    ordering.lt(field, upperBound)
-  }
-
-  override def isBelow(row: Row, ordinal: Int) = {
-    val field = columnType.getField(row, ordinal)
-    ordering.lt(lowerBound, field)
-  }
+  override def upperBound: T#JvmType = _upper
 
   override def isAtOrAbove(row: Row, ordinal: Int) = {
     contains(row, ordinal) || isAbove(row, ordinal)
@@ -132,33 +109,141 @@ private[sql] abstract class BasicColumnStats[T <: NativeType](
   extends NativeColumnStats[T]
 
 private[sql] class BooleanColumnStats extends BasicColumnStats(BOOLEAN) {
-  override val ordering = implicitly[Ordering[JvmType]]
   override def initialBounds = (true, false)
+
+  override def isBelow(row: Row, ordinal: Int) = {
+    lowerBound < columnType.getField(row, ordinal)
+  }
+
+  override def isAbove(row: Row, ordinal: Int) = {
+    columnType.getField(row, ordinal) < upperBound
+  }
+
+  override def contains(row: Row, ordinal: Int) = {
+    val field = columnType.getField(row, ordinal)
+    lowerBound <= field && field <= upperBound
+  }
+
+  override def gatherStats(row: Row, ordinal: Int) {
+    val field = columnType.getField(row, ordinal)
+    if (field > upperBound) _upper = field
+    if (field < lowerBound) _lower = field
+  }
 }
 
 private[sql] class ByteColumnStats extends BasicColumnStats(BYTE) {
-  override val ordering = implicitly[Ordering[JvmType]]
   override def initialBounds = (Byte.MaxValue, Byte.MinValue)
+
+  override def isBelow(row: Row, ordinal: Int) = {
+    lowerBound < columnType.getField(row, ordinal)
+  }
+
+  override def isAbove(row: Row, ordinal: Int) = {
+    columnType.getField(row, ordinal) < upperBound
+  }
+
+  override def contains(row: Row, ordinal: Int) = {
+    val field = columnType.getField(row, ordinal)
+    lowerBound <= field && field <= upperBound
+  }
+
+  override def gatherStats(row: Row, ordinal: Int) {
+    val field = columnType.getField(row, ordinal)
+    if (field > upperBound) _upper = field
+    if (field < lowerBound) _lower = field
+  }
 }
 
 private[sql] class ShortColumnStats extends BasicColumnStats(SHORT) {
-  override val ordering = implicitly[Ordering[JvmType]]
   override def initialBounds = (Short.MaxValue, Short.MinValue)
+
+  override def isBelow(row: Row, ordinal: Int) = {
+    lowerBound < columnType.getField(row, ordinal)
+  }
+
+  override def isAbove(row: Row, ordinal: Int) = {
+    columnType.getField(row, ordinal) < upperBound
+  }
+
+  override def contains(row: Row, ordinal: Int) = {
+    val field = columnType.getField(row, ordinal)
+    lowerBound <= field && field <= upperBound
+  }
+
+  override def gatherStats(row: Row, ordinal: Int) {
+    val field = columnType.getField(row, ordinal)
+    if (field > upperBound) _upper = field
+    if (field < lowerBound) _lower = field
+  }
 }
 
 private[sql] class LongColumnStats extends BasicColumnStats(LONG) {
-  override val ordering = implicitly[Ordering[JvmType]]
   override def initialBounds = (Long.MaxValue, Long.MinValue)
+
+  override def isBelow(row: Row, ordinal: Int) = {
+    lowerBound < columnType.getField(row, ordinal)
+  }
+
+  override def isAbove(row: Row, ordinal: Int) = {
+    columnType.getField(row, ordinal) < upperBound
+  }
+
+  override def contains(row: Row, ordinal: Int) = {
+    val field = columnType.getField(row, ordinal)
+    lowerBound <= field && field <= upperBound
+  }
+
+  override def gatherStats(row: Row, ordinal: Int) {
+    val field = columnType.getField(row, ordinal)
+    if (field > upperBound) _upper = field
+    if (field < lowerBound) _lower = field
+  }
 }
 
 private[sql] class DoubleColumnStats extends BasicColumnStats(DOUBLE) {
-  override val ordering = implicitly[Ordering[JvmType]]
   override def initialBounds = (Double.MaxValue, Double.MinValue)
+
+  override def isBelow(row: Row, ordinal: Int) = {
+    lowerBound < columnType.getField(row, ordinal)
+  }
+
+  override def isAbove(row: Row, ordinal: Int) = {
+    columnType.getField(row, ordinal) < upperBound
+  }
+
+  override def contains(row: Row, ordinal: Int) = {
+    val field = columnType.getField(row, ordinal)
+    lowerBound <= field && field <= upperBound
+  }
+
+  override def gatherStats(row: Row, ordinal: Int) {
+    val field = columnType.getField(row, ordinal)
+    if (field > upperBound) _upper = field
+    if (field < lowerBound) _lower = field
+  }
 }
 
 private[sql] class FloatColumnStats extends BasicColumnStats(FLOAT) {
-  override val ordering = implicitly[Ordering[JvmType]]
   override def initialBounds = (Float.MaxValue, Float.MinValue)
+
+  override def isBelow(row: Row, ordinal: Int) = {
+    lowerBound < columnType.getField(row, ordinal)
+  }
+
+  override def isAbove(row: Row, ordinal: Int) = {
+    columnType.getField(row, ordinal) < upperBound
+  }
+
+  override def contains(row: Row, ordinal: Int) = {
+    val field = columnType.getField(row, ordinal)
+    lowerBound <= field && field <= upperBound
+  }
+
+  override def gatherStats(row: Row, ordinal: Int) {
+    val field = columnType.getField(row, ordinal)
+    if (field > upperBound) _upper = field
+    if (field < lowerBound) _lower = field
+  }
 }
 
 object IntColumnStats {
@@ -181,10 +266,22 @@ private[sql] class IntColumnStats extends BasicColumnStats(INT) {
   def isOrdered = isAscending || isDescending
   def maxDelta = _maxDelta
 
-  override val ordering = implicitly[Ordering[JvmType]]
   override def initialBounds = (Int.MaxValue, Int.MinValue)
 
-  override def gatherStats(row: Row, ordinal: Int) = {
+  override def isBelow(row: Row, ordinal: Int) = {
+    lowerBound < columnType.getField(row, ordinal)
+  }
+
+  override def isAbove(row: Row, ordinal: Int) = {
+    columnType.getField(row, ordinal) < upperBound
+  }
+
+  override def contains(row: Row, ordinal: Int) = {
+    val field = columnType.getField(row, ordinal)
+    lowerBound <= field && field <= upperBound
+  }
+
+  override def gatherStats(row: Row, ordinal: Int) {
     val field = columnType.getField(row, ordinal)
 
     if (field > upperBound) _upper = field
@@ -221,18 +318,32 @@ private[sql] class IntColumnStats extends BasicColumnStats(INT) {
 }
 
 private[sql] class StringColumnStats extends BasicColumnStats(STRING) {
-  override val ordering = implicitly[Ordering[JvmType]]
   override def initialBounds = (null, null)
 
+  override def gatherStats(row: Row, ordinal: Int) {
+    val field = columnType.getField(row, ordinal)
+    if ((upperBound eq null) || field.compareTo(upperBound) > 0) _upper = field
+    if ((lowerBound eq null) || field.compareTo(lowerBound) < 0) _lower = field
+  }
+
   override def contains(row: Row, ordinal: Int) = {
-    !(upperBound eq null) && super.contains(row, ordinal)
+    !(upperBound eq null) && {
+      val field = columnType.getField(row, ordinal)
+      lowerBound.compareTo(field) <= 0 && field.compareTo(upperBound) <= 0
+    }
   }
 
   override def isAbove(row: Row, ordinal: Int) = {
-    !(upperBound eq null) && super.isAbove(row, ordinal)
+    !(upperBound eq null) && {
+      val field = columnType.getField(row, ordinal)
+      field.compareTo(upperBound) < 0
+    }
   }
 
   override def isBelow(row: Row, ordinal: Int) = {
-    !(lowerBound eq null) && super.isBelow(row, ordinal)
+    !(lowerBound eq null) && {
+      val field = columnType.getField(row, ordinal)
+      lowerBound.compareTo(field) < 0
+    }
   }
 }
