@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
  */
 class JavaSQLContext(sparkContext: JavaSparkContext) {
 
-  val sqlContext = new SQLContext(sparkContext)
+  val sqlContext = new SQLContext(sparkContext.sc)
 
   /**
    * Executes a query expressed in SQL, returning the result as a JavaSchemaRDD
