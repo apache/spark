@@ -27,6 +27,10 @@ import org.apache.spark.rdd.RDD
  * standard RDD operations, a JavaSchemaRDD can also be registered as a table in the JavaSQLContext
  * that was used to create. Registering a JavaSchemaRDD allows its contents to be queried in
  * future SQL statement.
+ *
+ * @groupname schema SchemaRDD Functions
+ * @groupprio schema -1
+ * @groupname Ungrouped Base RDD Functions
  */
 class JavaSchemaRDD(
      @transient val sqlContext: SQLContext,

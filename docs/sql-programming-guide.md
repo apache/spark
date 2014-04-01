@@ -8,15 +8,32 @@ title: Spark SQL Programming Guide
 {:toc}
 
 # Overview
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
 Spark SQL allows relational queries expressed in SQL, HiveQL, or Scala to be executed using
 Spark.  At the core of this component is a new type of RDD,
 [SchemaRDD](api/sql/core/index.html#org.apache.spark.sql.SchemaRDD).  SchemaRDDs are composed
-[Row](api/sql/catalyst/index.html#org.apache.spark.sql.catalyst.expressions.Row) objects along with
+[Row](api/sql/core/index.html#org.apache.spark.sql.api.java.Row) objects along with
 a schema that describes the data types of each column in the row.  A SchemaRDD is similar to a table
 in a traditional relational database.  A SchemaRDD can be created from an existing RDD, parquet
 file, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
 
 **All of the examples on this page use sample data included in the Spark distribution and can be run in the spark-shell.**
+
+</div>
+
+<div data-lang="java"  markdown="1">
+Spark SQL allows relational queries expressed in SQL, HiveQL, or Scala to be executed using
+Spark.  At the core of this component is a new type of RDD,
+[JavaSchemaRDD](api/sql/core/index.html#org.apache.spark.sql.api.java.JavaSchemaRDD).  JavaSchemaRDDs are composed
+[Row](api/sql/catalyst/index.html#org.apache.spark.sql.api.java.Row) objects along with
+a schema that describes the data types of each column in the row.  A JavaSchemaRDD is similar to a table
+in a traditional relational database.  A JavaSchemaRDD can be created from an existing RDD, parquet
+file, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
+</div>
+</div>
 
 ***************************************************************************************************
 
@@ -195,11 +212,6 @@ teenagers.collect().foreach(println)
 
 <div data-lang="java"  markdown="1">
 
-One type of table that is supported by Spark SQL is an RDD of JavaBeans.  The BeanInfo
-defines the schema of the table. Currently, Spark SQL does not support JavaBeans that contain
-nested or contain complex types such as Lists or Arrays.  You can create a JavaBean by creating a
-class that implements Serializable and has getters and setters for all of its fields.
-
 {% highlight java %}
 
 JavaSchemaRDD schemaPeople = ... // The JavaSchemaRDD from the previous example.
@@ -273,11 +285,11 @@ val hiveContext = new org.apache.spark.sql.hive.HiveContext(sc)
 // Importing the SQL context gives access to all the public SQL functions and implicit conversions.
 import hiveContext._
 
-sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 // Queries are expressed in HiveQL
-sql("SELECT key, value FROM src").collect().foreach(println)
+hql("FROM src SELECT key, value").collect().foreach(println)
 {% endhighlight %}
 
 </div>
