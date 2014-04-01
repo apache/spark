@@ -33,7 +33,7 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
 
   test("full-statistics") {
     val data = sc.parallelize(localData, 2)
-    val (mean, variance, cnt, nnz, max, min) = data.statistics(3)
+    val VectorRDDStatisticalSummary(mean, variance, cnt, nnz, max, min) = data.summarizeStatistics(3)
     assert(equivVector(mean, Vectors.dense(4.0, 5.0, 6.0)), "Column mean do not match.")
     assert(equivVector(variance, Vectors.dense(6.0, 6.0, 6.0)), "Column variance do not match.")
     assert(cnt === 3, "Column cnt do not match.")

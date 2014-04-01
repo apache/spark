@@ -21,6 +21,14 @@ import breeze.linalg.{Vector => BV}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 
+case class VectorRDDStatisticalSummary(
+    mean: Vector,
+    variance: Vector,
+    count: Long,
+    max: Vector,
+    min: Vector,
+    nonZeroCnt: Vector) extends Serializable
+
 /**
  * Extra functions available on RDDs of [[org.apache.spark.mllib.linalg.Vector Vector]] through an
  * implicit conversion. Import `org.apache.spark.MLContext._` at the top of your program to use
@@ -40,7 +48,7 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
    * }}},
    * with the size of Vector as input parameter.
    */
-  def statistics(size: Int): (Vector, Vector, Double, Vector, Vector, Vector) = {
+  def summarizeStatistics(size: Int): VectorRDDStatisticalSummary = {
     val results = self.map(_.toBreeze).aggregate((
       BV.zeros[Double](size),
       BV.zeros[Double](size),
@@ -83,9 +91,10 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
       }
     )
 
-    (Vectors.fromBreeze(results._1),
+    VectorRDDStatisticalSummary(
+      Vectors.fromBreeze(results._1),
       Vectors.fromBreeze(results._2 :/ results._3),
-      results._3,
+      results._3.toLong,
       Vectors.fromBreeze(results._4),
       Vectors.fromBreeze(results._5),
       Vectors.fromBreeze(results._6))
