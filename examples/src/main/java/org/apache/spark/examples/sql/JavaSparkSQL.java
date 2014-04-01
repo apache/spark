@@ -17,28 +17,84 @@
 
 package org.apache.spark.examples.sql;
 
+import java.io.Serializable;
+import java.util.List;
+
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.VoidFunction;
 
 import org.apache.spark.sql.api.java.JavaSQLContext;
 import org.apache.spark.sql.api.java.JavaSchemaRDD;
-import org.apache.spark.sql.api.java.JavaRow;
+import org.apache.spark.sql.api.java.Row;
 
-public final class JavaSparkSQL {
+public class JavaSparkSQL {
+  public static class Person implements Serializable {
+    private String _name;
+
+    String getName() {
+      return _name;
+    }
+
+    void setName(String name) {
+      _name = name;
+    }
+
+    private int _age;
+
+    int getAge() {
+      return _age;
+    }
+
+    void setAge(int age) {
+      _age = age;
+    }
+  }
+
   public static void main(String[] args) throws Exception {
     JavaSparkContext ctx = new JavaSparkContext("local", "JavaSparkSQL",
         System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaSparkSQL.class));
     JavaSQLContext sqlCtx = new JavaSQLContext(ctx);
 
-    JavaSchemaRDD parquetFile = sqlCtx.parquetFile("pair.parquet");
-    parquetFile.registerAsTable("parquet");
+    // Load a text file and convert each line to a Java Bean.
+    JavaRDD<Person> people = ctx.textFile("examples/src/main/resources/people.txt").map(
+      new Function<String, Person>() {
+        public Person call(String line) throws Exception {
+          String[] parts = line.split(",");
 
-    JavaSchemaRDD queryResult = sqlCtx.sql("SELECT * FROM parquet");
-    queryResult.foreach(new VoidFunction<JavaRow>() {
-        @Override
-        public void call(JavaRow row) throws Exception {
-            System.out.println(row.get(0) + " " + row.get(1));
+          Person person = new Person();
+          person.setName(parts[0]);
+          person.setAge(Integer.parseInt(parts[1].trim()));
+
+          return person;
         }
-    });
+      });
+
+    // Apply a schema to an RDD of Java Beans and register it as a table.
+    JavaSchemaRDD schemaPeople = sqlCtx.applySchema(people, Person.class);
+    schemaPeople.registerAsTable("people");
+
+    // SQL can be run over RDDs that have been registered as tables.
+    JavaSchemaRDD teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
+
+    // The results of SQL queries are SchemaRDDs and support all the normal RDD operations.
+    // The columns of a row in the result can be accessed by ordinal.
+    List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
+      public String call(Row row) {
+        return "Name: " + row.getString(0);
+      }
+    }).collect();
+
+    // JavaSchemaRDDs can be saved as parquet files, maintaining the schema information.
+    schemaPeople.saveAsParquetFile("people.parquet");
+
+    // Read in the parquet file created above.  Parquet files are self-describing so the schema is preserved.
+    // The result of loading a parquet file is also a JavaSchemaRDD.
+    JavaSchemaRDD parquetFile = sqlCtx.parquetFile("people.parquet");
+
+    //Parquet files can also be registered as tables and then used in SQL statements.
+    parquetFile.registerAsTable("parquetFile");
+    JavaSchemaRDD teenagers2 = sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
   }
 }

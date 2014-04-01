@@ -17,14 +17,25 @@
 
 package org.apache.spark.sql.api.java
 
-import org.apache.spark.api.java.JavaSparkContext
+import java.beans.{Introspector, PropertyDescriptor}
 
-import org.apache.spark.sql._
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
 
+/**
+ * The entry point for executing Spark SQL queries from a Java program.
+ */
 class JavaSQLContext(sparkContext: JavaSparkContext) {
 
   val sqlContext = new SQLContext(sparkContext)
 
+  /**
+   * Executes a query expressed in SQL, returning the result as a JavaSchemaRDD
+   */
   def sql(sqlQuery: String): JavaSchemaRDD = {
     val result = new JavaSchemaRDD(sqlContext, sqlContext.parseSql(sqlQuery))
     // We force query optimization to happen right away instead of letting it happen lazily like
@@ -35,10 +46,48 @@ class JavaSQLContext(sparkContext: JavaSparkContext) {
   }
 
   /**
-   * Loads a parquet file, returning the result as a [[SchemaRDD]].
+   * Applies a schema to an RDD of Java Beans.
+   */
+  def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): JavaSchemaRDD = {
+    // TODO: All of this could probably be moved to Catalyst as it is mostly not Spark specific.
+    val beanInfo = Introspector.getBeanInfo(beanClass)
+
+    val fields = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
+    val schema = fields.map { property =>
+      val dataType = property.getPropertyType match {
+        case c: Class[_] if c == classOf[java.lang.String] => StringType
+        case c: Class[_] if c == java.lang.Short.TYPE => ShortType
+        case c: Class[_] if c == java.lang.Integer.TYPE => IntegerType
+        case c: Class[_] if c == java.lang.Long.TYPE => LongType
+        case c: Class[_] if c == java.lang.Double.TYPE => DoubleType
+        case c: Class[_] if c == java.lang.Byte.TYPE => ByteType
+        case c: Class[_] if c == java.lang.Float.TYPE => FloatType
+        case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
+      }
+
+      AttributeReference(property.getName, dataType, true)()
+    }
+
+    val className = beanClass.getCanonicalName
+    val rowRdd = rdd.rdd.mapPartitions { iter =>
+      // BeanInfo is not serializable so we must rediscover it remotely for each partition.
+      val localBeanInfo = Introspector.getBeanInfo(Class.forName(className))
+      val extractors =
+        localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
+
+      iter.map { row =>
+        new GenericRow(extractors.map(e => e.invoke(row)).toArray[Any]): ScalaRow
+      }
+    }
+    new JavaSchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
+  }
+
+
+  /**
+   * Loads a parquet file, returning the result as a [[JavaSchemaRDD]].
    */
   def parquetFile(path: String): JavaSchemaRDD =
-    new JavaSchemaRDD(sqlContext, parquet.ParquetRelation("ParquetFile", path))
+    new JavaSchemaRDD(sqlContext, ParquetRelation("ParquetFile", path))
 
 
   /**

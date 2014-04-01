@@ -17,41 +17,76 @@
 
 package org.apache.spark.sql.api.java
 
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.expressions.{Row => ScalaRow}
 
 /**
  * A result row from a SparkSQL query.
  */
-class JavaRow(row: Row) {
+class Row(row: ScalaRow) extends Serializable {
 
+  /** Returns the number of columns present in this Row. */
   def length: Int = row.length
 
+  /** Returns the value of column `i`. */
   def get(i: Int): Any =
     row(i)
 
+  /** Returns true if value at column `i` is NULL. */
   def isNullAt(i: Int) = get(i) == null
 
+  /**
+   * Returns the value of column `i` as an int.  This function will throw an exception if the value
+   * is at `i` is not an integer, or if it is null.
+   */
   def getInt(i: Int): Int =
     row.getInt(i)
 
+  /**
+   * Returns the value of column `i` as a long.  This function will throw an exception if the value
+   * is at `i` is not an integer, or if it is null.
+   */
   def getLong(i: Int): Long =
     row.getLong(i)
 
+  /**
+   * Returns the value of column `i` as a double.  This function will throw an exception if the
+   * value is at `i` is not an integer, or if it is null.
+   */
   def getDouble(i: Int): Double =
     row.getDouble(i)
 
+  /**
+   * Returns the value of column `i` as a bool.  This function will throw an exception if the value
+   * is at `i` is not an integer, or if it is null.
+   */
   def getBoolean(i: Int): Boolean =
     row.getBoolean(i)
 
+  /**
+   * Returns the value of column `i` as a short.  This function will throw an exception if the value
+   * is at `i` is not an integer, or if it is null.
+   */
   def getShort(i: Int): Short =
     row.getShort(i)
 
+  /**
+   * Returns the value of column `i` as a byte.  This function will throw an exception if the value
+   * is at `i` is not an integer, or if it is null.
+   */
   def getByte(i: Int): Byte =
     row.getByte(i)
 
+  /**
+   * Returns the value of column `i` as a float.  This function will throw an exception if the value
+   * is at `i` is not an integer, or if it is null.
+   */
   def getFloat(i: Int): Float =
     row.getFloat(i)
 
+  /**
+   * Returns the value of column `i` as a String.  This function will throw an exception if the
+   * value is at `i` is not an integer, or if it is null.
+   */
   def getString(i: Int): String =
     row.getString(i)
 }

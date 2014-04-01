@@ -71,6 +71,18 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
 
+  /**
+   * Executes a query expressed in HiveQL using Spark, returning the result as a SchemaRDD.
+   */
+  def hql(hqlQuery: String): SchemaRDD = {
+    val result = new SchemaRDD(this, HiveQl.parseSql(hqlQuery))
+    // We force query optimization to happen right away instead of letting it happen lazily like
+    // when using the query DSL.  This is so DDL commands behave as expected.  This is only
+    // generates the RDD lineage for DML queries, but do not perform any execution.
+    result.queryExecution.toRdd
+    result
+  }
+
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   @transient
   protected val outputBuffer =  new java.io.OutputStream {

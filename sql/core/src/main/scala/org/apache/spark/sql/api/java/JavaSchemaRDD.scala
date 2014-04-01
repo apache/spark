@@ -18,21 +18,27 @@
 package org.apache.spark.sql.api.java
 
 import org.apache.spark.api.java.{JavaRDDLike, JavaRDD}
-import org.apache.spark.sql._
+import org.apache.spark.sql.{SQLContext, SchemaRDD, SchemaRDDLike}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.rdd.RDD
 
+/**
+ * An RDD of [[Row]] objects that is returned as the result of a Spark SQL query.  In addition to
+ * standard RDD operations, a JavaSchemaRDD can also be registered as a table in the JavaSQLContext
+ * that was used to create. Registering a JavaSchemaRDD allows its contents to be queried in
+ * future SQL statement.
+ */
 class JavaSchemaRDD(
      @transient val sqlContext: SQLContext,
      @transient protected[spark] val logicalPlan: LogicalPlan)
-  extends JavaRDDLike[JavaRow, JavaRDD[JavaRow]]
+  extends JavaRDDLike[Row, JavaRDD[Row]]
   with SchemaRDDLike {
 
-  private[sql] val baseSchemaRDD =   new SchemaRDD(sqlContext, logicalPlan)
+  private[sql] val baseSchemaRDD = new SchemaRDD(sqlContext, logicalPlan)
 
-  override val classTag = scala.reflect.classTag[JavaRow]
+  override val classTag = scala.reflect.classTag[Row]
 
-  override def wrapRDD(rdd: RDD[JavaRow]): JavaRDD[JavaRow] = JavaRDD.fromRDD(rdd)
+  override def wrapRDD(rdd: RDD[Row]): JavaRDD[Row] = JavaRDD.fromRDD(rdd)
 
-  val rdd = baseSchemaRDD.map(new JavaRow(_))
+  val rdd = baseSchemaRDD.map(new Row(_))
 }
