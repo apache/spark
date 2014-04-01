@@ -62,8 +62,18 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
    *         applied to each edge
    */
   def map[ED2: ClassTag](f: Edge[ED] => ED2): EdgePartition[ED2] = {
-    val newData = (0 until data.size).map(i => f(Edge(srcIds(i), dstIds(i), data(i))))
-    new EdgePartition(srcIds, dstIds, newData.toArray, index)
+    val newData = new Array[ED2](data.size)
+    val edge = new Edge[ED]()
+    val size = data.size
+    var i = 0
+    while (i < size) {
+      edge.srcId  = srcIds(i)
+      edge.dstId  = dstIds(i)
+      edge.attr = data(i)
+      newData(i) = f(edge)
+      i += 1
+    }
+    new EdgePartition(srcIds, dstIds, newData, index)
   }
 
   /**
@@ -175,12 +185,15 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
    * @return an iterator over edges in the partition
    */
   def iterator = new Iterator[Edge[ED]] {
+    private[this] val edge = new Edge[ED]
     private[this] var pos = 0
 
     override def hasNext: Boolean = pos < EdgePartition.this.size
 
     override def next(): Edge[ED] = {
-      val edge = Edge(srcIds(pos), dstIds(pos), data(pos))
+      edge.srcId = srcIds(pos)
+      edge.dstId = dstIds(pos)
+      edge.attr = data(pos)
       pos += 1
       edge
     }
@@ -199,6 +212,7 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
    * cluster must start at position `index`.
    */
   private def clusterIterator(srcId: VertexId, index: Int) = new Iterator[Edge[ED]] {
+    private[this] val edge = new Edge[ED]
     private[this] var pos = index
 
     override def hasNext: Boolean = {
@@ -207,7 +221,9 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
 
     override def next(): Edge[ED] = {
       assert(srcIds(pos) == srcId)
-      val edge = Edge(srcIds(pos), dstIds(pos), data(pos))
+      edge.srcId = srcIds(pos)
+      edge.dstId = dstIds(pos)
+      edge.attr = data(pos)
       pos += 1
       edge
     }
