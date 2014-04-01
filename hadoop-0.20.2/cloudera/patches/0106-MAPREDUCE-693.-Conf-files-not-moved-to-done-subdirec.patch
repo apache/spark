@@ -1,0 +1,112 @@
+From a8bf06eac5312ede0982118801e4495285a442fe Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:08:12 -0800
+Subject: [PATCH 0106/1179] MAPREDUCE-693. Conf files not moved to "done" subdirectory after JT restart
+
+Description: After <a href="http://issues.apache.org/jira/browse/MAPREDUCE-516" title="Fix the 'cluster drain' problem in the Capacity Scheduler wrt High RAM Jobs"><del>MAPREDUCE-516</del></a>, when a job is submitted and the JT is restarted (before job files have been written) and the job is killed after recovery, the conf files fail to be moved to the "done" subdirectory.<br/>
+The exact scenario to reproduce this issue is:
+<ul>
+	<li>Submit a job</li>
+	<li>Restart JT before anything is written to the job files</li>
+	<li>Kill the job</li>
+	<li>The old conf files remain in the history folder and fail to be moved to "done" subdirectory</li>
+</ul>
+
+Reason: bugfix
+Author: Amar Kamat
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/mapred/JobHistory.java       |   22 ++++++++++++++++++++
+ .../org/apache/hadoop/mapred/JobTracker.java       |    8 +++++++
+ .../hadoop/mapred/TestJobTrackerRestart.java       |    9 ++++++++
+ 3 files changed, 39 insertions(+), 0 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobHistory.java b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+index ac3cfdd..31383a5 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobHistory.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+@@ -104,6 +104,15 @@ public class JobHistory {
+   private static JobConf jtConf;
+   private static Path DONE = null; // folder for completed jobs
+   /**
++   * A filter for conf files
++   */  
++  private static final PathFilter CONF_FILTER = new PathFilter() {
++    public boolean accept(Path path) {
++      return path.getName().endsWith("_conf.xml");
++    }
++  };
++
++  /**
+    * A class that manages all the files related to a job. For now 
+    *   - writers : list of open files
+    *   - job history filename
+@@ -938,6 +947,19 @@ public class JobHistory {
+     }
+ 
+     /**
++     * Delete job conf from the history folder.
++     */
++    static void deleteConfFiles() throws IOException {
++      LOG.info("Cleaning up config files from the job history folder");
++      FileSystem fs = new Path(LOG_DIR).getFileSystem(jtConf);
++      FileStatus[] status = fs.listStatus(new Path(LOG_DIR), CONF_FILTER);
++      for (FileStatus s : status) {
++        LOG.info("Deleting conf file " + s.getPath());
++        fs.delete(s.getPath(), false);
++      }
++    }
++
++    /**
+      * Move the completed job into the completed folder.
+      * This assumes that the jobhistory file is closed and all operations on the
+      * jobhistory file is complete.
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 607be2c..1b57988 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -1254,6 +1254,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       // I. Init the jobs and cache the recovered job history filenames
+       Map<JobID, Path> jobHistoryFilenameMap = new HashMap<JobID, Path>();
+       Iterator<JobID> idIter = jobsToRecover.iterator();
++
++      // 0. Cleanup
++      try {
++        JobHistory.JobInfo.deleteConfFiles();
++      } catch (IOException ioe) {
++        LOG.info("Error in cleaning up job history folder", ioe);
++      }
++
+       while (idIter.hasNext()) {
+         JobID id = idIter.next();
+         LOG.info("Trying to recover details of job " + id);
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobTrackerRestart.java b/src/test/org/apache/hadoop/mapred/TestJobTrackerRestart.java
+index 8617553..6bcacfc 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobTrackerRestart.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobTrackerRestart.java
+@@ -487,6 +487,11 @@ public class TestJobTrackerRestart extends TestCase {
+     String history = 
+       JobHistory.JobInfo.getJobHistoryFileName(jip.getJobConf(), id);
+     Path historyPath = JobHistory.JobInfo.getJobHistoryLogLocation(history);
++    // get the conf file name
++    String parts[] = history.split("_");
++    // jobtracker-hostname_jobtracker-identifier_conf.xml
++    String jobUniqueString = parts[0] + "_" + parts[1] + "_" +  id;
++    Path confPath = new Path(historyPath.getParent(), jobUniqueString + "_conf.xml");
+     
+     //  make sure that setup is launched
+     while (jip.runningMaps() == 0) {
+@@ -521,6 +526,10 @@ public class TestJobTrackerRestart extends TestCase {
+     
+     job1.waitForCompletion();
+     job2.waitForCompletion();
++
++    // check if the old files are deleted
++    assertFalse("Old jobhistory file is not deleted", historyFS.exists(historyPath));
++    assertFalse("Old jobconf file is not deleted", historyFS.exists(confPath));
+   }
+   
+   public void testJobTrackerRestart() throws IOException {
+-- 
+1.7.0.4
+

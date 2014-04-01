@@ -1,0 +1,335 @@
+From 921d337cfa66dcc22207f3fb42e385aff4e229d0 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:52 -0800
+Subject: [PATCH 0848/1179] HDFS-1119. Introduce a GSet interface to BlocksMap.
+
+---
+ .../hadoop/hdfs/server/namenode/BlocksMap.java     |   50 ++++++-------
+ src/hdfs/org/apache/hadoop/hdfs/util/GSet.java     |   77 ++++++++++++++++++++
+ .../org/apache/hadoop/hdfs/util/GSetByHashMap.java |   65 +++++++++++++++++
+ 3 files changed, 166 insertions(+), 26 deletions(-)
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/util/GSet.java
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/util/GSetByHashMap.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/BlocksMap.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/BlocksMap.java
+index e6926b3..b46f05a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/BlocksMap.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/BlocksMap.java
+@@ -17,9 +17,11 @@
+  */
+ package org.apache.hadoop.hdfs.server.namenode;
+ 
+-import java.util.*;
++import java.util.Iterator;
+ 
+ import org.apache.hadoop.hdfs.protocol.Block;
++import org.apache.hadoop.hdfs.util.GSet;
++import org.apache.hadoop.hdfs.util.GSetByHashMap;
+ 
+ /**
+  * This class maintains the map from a block to its metadata.
+@@ -294,7 +296,7 @@ class BlocksMap {
+   private int capacity;
+   private final float loadFactor;
+   
+-  private Map<BlockInfo, BlockInfo> map;
++  private GSet<Block, BlockInfo> blocks;
+ 
+   BlocksMap(int initialCapacity, float loadFactor) {
+     this.capacity = 1;
+@@ -302,23 +304,24 @@ class BlocksMap {
+     while (this.capacity < initialCapacity)
+       this.capacity <<= 1;
+     this.loadFactor = loadFactor;
+-    this.map = new HashMap<BlockInfo, BlockInfo>(initialCapacity, loadFactor);
++    this.blocks = new GSetByHashMap<Block, BlockInfo>(
++        initialCapacity, loadFactor);
+   }
+ 
+   /**
+    * Add BlockInfo if mapping does not exist.
+    */
+   private BlockInfo checkBlockInfo(Block b, int replication) {
+-    BlockInfo info = map.get(b);
++    BlockInfo info = blocks.get(b);
+     if (info == null) {
+       info = new BlockInfo(b, replication);
+-      map.put(info, info);
++      blocks.put(info);
+     }
+     return info;
+   }
+ 
+   INodeFile getINode(Block b) {
+-    BlockInfo info = map.get(b);
++    BlockInfo info = blocks.get(b);
+     return (info != null) ? info.inode : null;
+   }
+ 
+@@ -337,11 +340,11 @@ class BlocksMap {
+    * then remove the block from the block map.
+    */
+   void removeINode(Block b) {
+-    BlockInfo info = map.get(b);
++    BlockInfo info = blocks.get(b);
+     if (info != null) {
+       info.inode = null;
+       if (info.getDatanode(0) == null) {  // no datanodes left
+-        map.remove(b);  // remove block from the map
++        blocks.remove(b);  // remove block from the map
+       }
+     }
+   }
+@@ -359,27 +362,27 @@ class BlocksMap {
+       DatanodeDescriptor dn = blockInfo.getDatanode(idx);
+       dn.removeBlock(blockInfo); // remove from the list and wipe the location
+     }
+-    map.remove(blockInfo);  // remove block from the map
++    blocks.remove(blockInfo);  // remove block from the map
+   }
+ 
+   /** Returns the block object it it exists in the map. */
+   BlockInfo getStoredBlock(Block b) {
+-    return map.get(b);
++    return blocks.get(b);
+   }
+ 
+   /** Return the block object without matching against generation stamp. */
+   BlockInfo getStoredBlockWithoutMatchingGS(Block b) {
+-    return map.get(new Block(b.getBlockId()));
++    return blocks.get(new Block(b.getBlockId()));
+   }
+ 
+   /** Returned Iterator does not support. */
+   Iterator<DatanodeDescriptor> nodeIterator(Block b) {
+-    return new NodeIterator(map.get(b));
++    return new NodeIterator(blocks.get(b));
+   }
+ 
+   /** counts number of containing nodes. Better than using iterator. */
+   int numNodes(Block b) {
+-    BlockInfo info = map.get(b);
++    BlockInfo info = blocks.get(b);
+     return info == null ? 0 : info.numNodes();
+   }
+ 
+@@ -398,7 +401,7 @@ class BlocksMap {
+    * only if it does not belong to any file and data-nodes.
+    */
+   boolean removeNode(Block b, DatanodeDescriptor node) {
+-    BlockInfo info = map.get(b);
++    BlockInfo info = blocks.get(b);
+     if (info == null)
+       return false;
+ 
+@@ -407,30 +410,30 @@ class BlocksMap {
+ 
+     if (info.getDatanode(0) == null     // no datanodes left
+               && info.inode == null) {  // does not belong to a file
+-      map.remove(b);  // remove block from the map
++      blocks.remove(b);  // remove block from the map
+     }
+     return removed;
+   }
+ 
+   int size() {
+-    return map.size();
++    return blocks.size();
+   }
+ 
+-  Collection<BlockInfo> getBlocks() {
+-    return map.values();
++  Iterable<BlockInfo> getBlocks() {
++    return blocks;
+   }
+   /**
+    * Check if the block exists in map
+    */
+   boolean contains(Block block) {
+-    return map.containsKey(block);
++    return blocks.contains(block);
+   }
+   
+   /**
+    * Check if the replica at the given datanode exists in map
+    */
+   boolean contains(Block block, DatanodeDescriptor datanode) {
+-    BlockInfo info = map.get(block);
++    BlockInfo info = blocks.get(block);
+     if (info == null)
+       return false;
+     
+@@ -443,14 +446,9 @@ class BlocksMap {
+   /** Get the capacity of the HashMap that stores blocks */
+   public int getCapacity() {
+     // Capacity doubles every time the map size reaches the threshold
+-    while (map.size() > (int)(capacity * loadFactor)) {
++    while (blocks.size() > (int)(capacity * loadFactor)) {
+       capacity <<= 1;
+     }
+     return capacity;
+   }
+-  
+-  /** Get the load factor of the map */
+-  public float getLoadFactor() {
+-    return loadFactor;
+-  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/util/GSet.java b/src/hdfs/org/apache/hadoop/hdfs/util/GSet.java
+new file mode 100644
+index 0000000..97ad698
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/util/GSet.java
+@@ -0,0 +1,77 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.util;
++
++/**
++ * A {@link GSet} is set,
++ * which supports the {@link #get(Object)} operation.
++ * The {@link #get(Object)} operation uses a key to lookup an element.
++ * 
++ * Null element is not supported.
++ * 
++ * @param <K> The type of the keys.
++ * @param <E> The type of the elements, which must be a subclass of the keys.
++ */
++public interface GSet<K, E extends K> extends Iterable<E> {
++  /**
++   * @return The size of this set.
++   */
++  int size();
++
++  /**
++   * Does this set contain an element corresponding to the given key?
++   * @param key The given key.
++   * @return true if the given key equals to a stored element.
++   *         Otherwise, return false.
++   */
++  boolean contains(K key);
++
++  /**
++   * Return the stored element which is equal to the given key.
++   * This operation is similar to {@link java.util.Map#get(Object)}.
++   * @param key The given key.
++   * @return The stored element if it exists.
++   *         Otherwise, return null.
++   */
++  E get(K key);
++
++  /**
++   * Add/replace an element.
++   * If the element does not exist, add it to the set.
++   * Otherwise, replace the existing element.
++   *
++   * Note that this operation
++   * is similar to {@link java.util.Map#put(Object, Object)}
++   * but is different from {@link java.util.Set#add(Object)}
++   * which does not replace the existing element if there is any.
++   *
++   * @param element The element being put.
++   * @return the previous stored element if there is any.
++   *         Otherwise, return null.
++   */
++  E put(E element);
++
++  /**
++   * Remove the element corresponding to the given key. 
++   * This operation is similar to {@link java.util.Map#remove(Object)}.
++   * @param key The key of the element being removed.
++   * @return If such element exists, return it.
++   *         Otherwise, return null. 
++   */
++  E remove(K key);
++}
+\ No newline at end of file
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/util/GSetByHashMap.java b/src/hdfs/org/apache/hadoop/hdfs/util/GSetByHashMap.java
+new file mode 100644
+index 0000000..6582d5b
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/util/GSetByHashMap.java
+@@ -0,0 +1,65 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.util;
++
++import java.util.HashMap;
++import java.util.Iterator;
++
++/**
++ * A {@link GSet} implementation by {@link HashMap}.
++ */
++public class GSetByHashMap<K, E extends K> implements GSet<K, E> {
++  private final HashMap<K, E> m;
++
++  public GSetByHashMap(int initialCapacity, float loadFactor) {
++    m = new HashMap<K, E>(initialCapacity, loadFactor);
++  }
++
++  @Override
++  public int size() {
++    return m.size();
++  }
++
++  @Override
++  public boolean contains(K k) {
++    return m.containsKey(k);
++  }
++
++  @Override
++  public E get(K k) {
++    return m.get(k);
++  }
++
++  @Override
++  public E put(E element) {
++    if (element == null) {
++      throw new UnsupportedOperationException("Null element is not supported.");
++    }
++    return m.put(element, element);
++  }
++
++  @Override
++  public E remove(K k) {
++    return m.remove(k);
++  }
++
++  @Override
++  public Iterator<E> iterator() {
++    return m.values().iterator();
++  }
++}
+-- 
+1.7.0.4
+

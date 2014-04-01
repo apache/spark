@@ -1,0 +1,83 @@
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
+#This properties file lists the versions of the various artifacts used by hadoop and components.
+#It drives ivy and the generation of a maven POM
+
+# CDH: This is used by Hadoop ANT build as the Hadoop version (the hadoop.verison below actually is not)
+version=org.apache.hadoop:hadoop-core.version
+
+# This is the version of hadoop we are generating
+hadoop.version=org.apache.hadoop:hadoop-core.version
+
+#These are the versions of our dependencies (in alphabetical order)
+#??? apacheant.version=1.7.0
+#??? ant-task.version=2.0.10
+
+aspectj.version=org.aspectj:aspectjrt.version
+
+checkstyle.version=checkstyle:checkstyle.version
+
+commons-cli.version=commons-cli:commons-cli.version
+commons-codec.version=commons-codec:commons-codec.version
+commons-collections.version=commons-collections:commons-collections.version
+commons-daemon.version=commons-daemon:commons-daemon.version
+commons-httpclient.version=commons-httpclient:commons-httpclient.version
+commons-lang.version=commons-lang:commons-lang.version
+commons-logging.version=commons-logging:commons-logging.version
+commons-logging-api.version=commons-logging:commons-logging-api.version
+commons-el.version=commons-el:commons-el.version
+#??? commons-fileupload.version=1.2
+#??? commons-io.version=1.4
+commons-net.version=commons-net:commons-net.version
+core.version=org.eclipse.jdt:core.version
+#??? coreplugin.version=1.3.2
+
+#??? hsqldb.version=1.8.0.10
+
+#ivy.version=2.0.0-beta2
+ivy.version=org.apache.ivy:ivy.version
+
+jackson.version=org.codehaus.jackson:jackson-mapper-asl.version
+jasper.version=tomcat:jasper-compiler.version
+#not able to figureout the version of jsp & jsp-api version to get it resolved throught ivy
+# but still declared here as we are going to have a local copy from the lib folder
+jsp.version=javax.servlet.jsp:jsp-api.version
+#??? jsp-api.version=5.5.12
+jets3t.version=net.java.dev.jets3t:jets3t.version
+jetty.version=org.mortbay.jetty:jetty.version
+jetty-util.version=org.mortbay.jetty:jetty-util.version
+junit.version=junit:junit.version
+jdiff.version=jdiff:jdiff.version
+#??? json.version=1.0
+
+#??? kfs.version=0.1
+
+log4j.version=log4j:log4j.version
+lucene-core.version=org.apache.lucene:lucene-core.version
+
+mockito-all.version=org.mockito:mockito-all.version
+
+oro.version=oro:oro.version
+
+rats-lib.version=com.google.code.p.arat:rat-lib.version
+
+#??? servlet.version=4.0.6
+servlet-api-2.5.version=org.mortbay.jetty:servlet-api-2.5.version
+#??? servlet-api.version=2.5
+slf4j-api.version=org.slf4j:slf4j-api.version
+slf4j-log4j12.version=org.slf4j:slf4j-log4j12.version
+
+#??? wagon-http.version=1.0-beta-2
+xmlenc.version=xmlenc:xmlenc.version
+xerces.version=xerces:xerces.version
+

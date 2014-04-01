@@ -1,0 +1,1739 @@
+From cd043f04714cf1a9940fe4351d0919011f8e9f86 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 30 Jul 2009 17:40:15 -0700
+Subject: [PATCH 0330/1179] HADOOP-4490. Tasks should run as the user who submitted the jobe
+
+Reason: Security
+Author: Hemanth Yamijala
+Ref: CDH-648
+---
+ .../hadoop/mapred/TestCapacityScheduler.java       |    4 +-
+ .../apache/hadoop/mapred/TestFairScheduler.java    |    4 +-
+ .../apache/hadoop/filecache/DistributedCache.java  |    3 +-
+ src/core/org/apache/hadoop/fs/FileUtil.java        |   37 ++-
+ .../documentation/content/xdocs/cluster_setup.xml  |  127 ++++++-
+ src/mapred/mapred-default.xml                      |    7 +
+ .../hadoop/mapred/DefaultTaskController.java       |  107 +++++
+ .../org/apache/hadoop/mapred/IsolationRunner.java  |    4 +-
+ .../org/apache/hadoop/mapred/JobInProgress.java    |   37 ++-
+ .../org/apache/hadoop/mapred/JobTracker.java       |  134 ++++++-
+ .../org/apache/hadoop/mapred/JvmManager.java       |   57 ++-
+ .../apache/hadoop/mapred/LinuxTaskController.java  |  421 ++++++++++++++++++++
+ .../org/apache/hadoop/mapred/LocalJobRunner.java   |    4 +-
+ src/mapred/org/apache/hadoop/mapred/MapTask.java   |    6 +-
+ .../org/apache/hadoop/mapred/ReduceTask.java       |    4 +-
+ src/mapred/org/apache/hadoop/mapred/Task.java      |    9 +-
+ .../org/apache/hadoop/mapred/TaskController.java   |  111 +++++
+ .../org/apache/hadoop/mapred/TaskInProgress.java   |    5 +-
+ src/mapred/org/apache/hadoop/mapred/TaskLog.java   |   28 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   30 ++-
+ .../hadoop/mapred/TestJobQueueTaskScheduler.java   |    4 +-
+ .../apache/hadoop/mapred/TestRecoveryManager.java  |    6 +-
+ 22 files changed, 1077 insertions(+), 72 deletions(-)
+ create mode 100644 src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapred/TaskController.java
+
+diff --git a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
+index 5ee40ff..4df0b64 100644
+--- a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
++++ b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
+@@ -200,7 +200,7 @@ public class TestCapacityScheduler extends TestCase {
+         }
+       }
+       TaskAttemptID attemptId = getTaskAttemptID(true, areAllMapsRunning);
+-      Task task = new MapTask("", attemptId, 0, "", new BytesWritable()) {
++      Task task = new MapTask("", attemptId, 0, "", new BytesWritable(), getJobConf().getUser()) {
+         @Override
+         public String toString() {
+           return String.format("%s on %s", getTaskID(), tts.getTrackerName());
+@@ -242,7 +242,7 @@ public class TestCapacityScheduler extends TestCase {
+         }
+       }
+       TaskAttemptID attemptId = getTaskAttemptID(false, areAllReducesRunning);
+-      Task task = new ReduceTask("", attemptId, 0, 10) {
++      Task task = new ReduceTask("", attemptId, 0, 10, getJobConf().getUser()) {
+         @Override
+         public String toString() {
+           return String.format("%s on %s", getTaskID(), tts.getTrackerName());
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+index b396b1b..e9fd4d8 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+@@ -132,7 +132,7 @@ public class TestFairScheduler extends TestCase {
+         if (!tip.isRunning() && !tip.isComplete() &&
+             getLocalityLevel(tip, tts) < localityLevel) {
+           TaskAttemptID attemptId = getTaskAttemptID(tip);
+-          Task task = new MapTask("", attemptId, 0, "", new BytesWritable()) {
++          Task task = new MapTask("", attemptId, 0, "", new BytesWritable(), "user") {
+             @Override
+             public String toString() {
+               return String.format("%s on %s", getTaskID(), tts.getTrackerName());
+@@ -156,7 +156,7 @@ public class TestFairScheduler extends TestCase {
+           (FakeTaskInProgress) reduces[reduce];
+         if (!tip.isRunning() && !tip.isComplete()) {
+           TaskAttemptID attemptId = getTaskAttemptID(tip);
+-          Task task = new ReduceTask("", attemptId, 0, maps.length) {
++          Task task = new ReduceTask("", attemptId, 0, maps.length, "user") {
+             @Override
+             public String toString() {
+               return String.format("%s on %s", getTaskID(), tts.getTrackerName());
+diff --git a/src/core/org/apache/hadoop/filecache/DistributedCache.java b/src/core/org/apache/hadoop/filecache/DistributedCache.java
+index 74b55e7..99e792d 100644
+--- a/src/core/org/apache/hadoop/filecache/DistributedCache.java
++++ b/src/core/org/apache/hadoop/filecache/DistributedCache.java
+@@ -461,7 +461,8 @@ public class DistributedCache {
+       
+       // do chmod here 
+       try {
+-    	FileUtil.chmod(parchive.toString(), "+x");
++        //Setting recursive permission to grant everyone read and execute
++        FileUtil.chmod(cacheStatus.baseDir.toString(), "ugo+rx",true);
+       } catch(InterruptedException e) {
+     	LOG.warn("Exception in chmod" + e.toString());
+       }
+diff --git a/src/core/org/apache/hadoop/fs/FileUtil.java b/src/core/org/apache/hadoop/fs/FileUtil.java
+index 5867668..47f58d1 100644
+--- a/src/core/org/apache/hadoop/fs/FileUtil.java
++++ b/src/core/org/apache/hadoop/fs/FileUtil.java
+@@ -27,6 +27,7 @@ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.Shell;
+ import org.apache.hadoop.util.Shell.ShellCommandExecutor;
++import org.mortbay.log.Log;
+ 
+ /**
+  * A collection of file-processing util methods
+@@ -692,12 +693,42 @@ public class FileUtil {
+    */
+   public static int chmod(String filename, String perm
+                           ) throws IOException, InterruptedException {
+-    String cmd = "chmod " + perm + " " + filename;
+-    Process p = Runtime.getRuntime().exec(cmd, null);
+-    return p.waitFor();
++    return chmod(filename, perm, false);
+   }
+ 
+   /**
++   * Change the permissions on a file / directory, recursively, if
++   * needed.
++   * @param filename name of the file whose permissions are to change
++   * @param perm permission string
++   * @param recursive true, if permissions should be changed recursively
++   * @return the exit code from the command.
++   * @throws IOException
++   * @throws InterruptedException
++   */
++  public static int chmod(String filename, String perm, boolean recursive)
++                            throws IOException, InterruptedException {
++    StringBuffer cmdBuf = new StringBuffer();
++    cmdBuf.append("chmod ");
++    if (recursive) {
++      cmdBuf.append("-R ");
++    }
++    cmdBuf.append(perm).append(" ");
++    cmdBuf.append(filename);
++    String[] shellCmd = {"bash", "-c" ,cmdBuf.toString()};
++    ShellCommandExecutor shExec = new ShellCommandExecutor(shellCmd);
++    try {
++      shExec.execute();
++    }catch(IOException e) {
++      if(Log.isDebugEnabled()) {
++        Log.debug("Error while changing permission : " + filename 
++            +" Exception: " + StringUtils.stringifyException(e));
++      }
++    }
++    return shExec.getExitCode();
++  }
++  
++  /**
+    * Create a tmp file for a base file.
+    * @param basefile the base file of the tmp
+    * @param prefix file name prefix of tmp
+diff --git a/src/docs/src/documentation/content/xdocs/cluster_setup.xml b/src/docs/src/documentation/content/xdocs/cluster_setup.xml
+index 55b20c7..a8c033c 100644
+--- a/src/docs/src/documentation/content/xdocs/cluster_setup.xml
++++ b/src/docs/src/documentation/content/xdocs/cluster_setup.xml
+@@ -1,10 +1,11 @@
+ <?xml version="1.0"?>
+ <!--
+-  Copyright 2002-2004 The Apache Software Foundation
+-
+-  Licensed under the Apache License, Version 2.0 (the "License");
+-  you may not use this file except in compliance with the License.
+-  You may obtain a copy of the License at
++  Licensed to the Apache Software Foundation (ASF) under one or more
++  contributor license agreements.  See the NOTICE file distributed with
++  this work for additional information regarding copyright ownership.
++  The ASF licenses this file to You under the Apache License, Version 2.0
++  (the "License"); you may not use this file except in compliance with
++  the License.  You may obtain a copy of the License at
+ 
+       http://www.apache.org/licenses/LICENSE-2.0
+ 
+@@ -462,6 +463,122 @@
+             </ul>
+           </section>
+           
++          <section>
++            <title>Task Controllers</title>
++            <p>Task controllers are classes in the Hadoop Map/Reduce 
++            framework that define how user's map and reduce tasks 
++            are launched and controlled. They can 
++            be used in clusters that require some customization in 
++            the process of launching or controlling the user tasks.
++            For example, in some 
++            clusters, there may be a requirement to run tasks as 
++            the user who submitted the job, instead of as the task 
++            tracker user, which is how tasks are launched by default.
++            This section describes how to configure and use 
++            task controllers.</p>
++            <p>The following task controllers are the available in
++            Hadoop.
++            </p>
++            <table>
++            <tr><th>Name</th><th>Class Name</th><th>Description</th></tr>
++            <tr>
++            <td>DefaultTaskController</td>
++            <td>org.apache.hadoop.mapred.DefaultTaskController</td>
++            <td> The default task controller which Hadoop uses to manage task
++            execution. The tasks run as the task tracker user.</td>
++            </tr>
++            <tr>
++            <td>LinuxTaskController</td>
++            <td>org.apache.hadoop.mapred.LinuxTaskController</td>
++            <td>This task controller, which is supported only on Linux, 
++            runs the tasks as the user who submitted the job. It requires
++            these user accounts to be created on the cluster nodes 
++            where the tasks are launched. It 
++            uses a setuid executable that is included in the Hadoop
++            distribution. The task tracker uses this executable to 
++            launch and kill tasks. The setuid executable switches to
++            the user who has submitted the job and launches or kills
++            the tasks. Currently, this task controller 
++            opens up permissions to local files and directories used 
++            by the tasks such as the job jar files, distributed archive 
++            files, intermediate files and task log files. In future,
++            it is expected that stricter file permissions are used.
++            </td>
++            </tr>
++            </table>
++            <section>
++            <title>Configuring Task Controllers</title>
++            <p>The task controller to be used can be configured by setting the
++            value of the following key in mapred-site.xml</p>
++            <table>
++            <tr>
++            <th>Property</th><th>Value</th><th>Notes</th>
++            </tr>
++            <tr>
++            <td>mapred.task.tracker.task-controller</td>
++            <td>Fully qualified class name of the task controller class</td>
++            <td>Currently there are two implementations of task controller
++            in the Hadoop system, DefaultTaskController and LinuxTaskController.
++            Refer to the class names mentioned above to determine the value
++            to set for the class of choice.
++            </td>
++            </tr>
++            </table>
++            </section>
++            <section>
++            <title>Using the LinuxTaskController</title>
++            <p>This section of the document describes the steps required to
++            use the LinuxTaskController.</p>
++            
++            <p>In order to use the LinuxTaskController, a setuid executable
++            should be built and deployed on the compute nodes. The
++            executable is named task-controller. To build the executable, 
++            execute 
++            <em>ant task-controller -Dhadoop.conf.dir=/path/to/conf/dir.
++            </em>
++            The path passed in <em>-Dhadoop.conf.dir</em> should be the path
++            on the cluster nodes where a configuration file for the setuid
++            executable would be located. The executable would be built to
++            <em>build.dir/dist.dir/bin</em> and should be installed to 
++            <em>$HADOOP_HOME/bin</em>.
++            </p>
++            
++            <p>
++            The executable must be deployed as a setuid executable, by changing
++            the ownership to <em>root</em> and giving it permissions <em>4755</em>. 
++            </p>
++            
++            <p>The executable requires a configuration file called 
++            <em>taskcontroller.cfg</em> to be
++            present in the configuration directory passed to the ant target 
++            mentioned above. If the binary was not built with a specific 
++            conf directory, the path defaults to <em>/path-to-binary/../conf</em>.
++            </p>
++            
++            <p>The executable requires following configuration items to be 
++            present in the <em>taskcontroller.cfg</em> file. The items should
++            be mentioned as simple <em>key=value</em> pairs.
++            </p>
++            <table><tr><th>Name</th><th>Description</th></tr>
++            <tr>
++            <td>mapred.local.dir</td>
++            <td>Path to mapred local directories. Should be same as the value 
++            which was provided to key in mapred-site.xml. This is required to
++            validate paths passed to the setuid executable in order to prevent
++            arbitrary paths being passed to it.</td>
++            </tr>
++            </table>
++
++            <p>
++            The LinuxTaskController requires that paths leading up to
++            the directories specified in
++            <em>mapred.local.dir</em> and <em>hadoop.log.dir</em> to be 755
++            and directories themselves having 777 permissions.
++            </p>
++            </section>
++            
++          </section>
++          
+         </section>
+         <section>
+         <title> Memory monitoring</title>
+diff --git a/src/mapred/mapred-default.xml b/src/mapred/mapred-default.xml
+index a75a0a2..b21c547 100644
+--- a/src/mapred/mapred-default.xml
++++ b/src/mapred/mapred-default.xml
+@@ -944,4 +944,11 @@
+     of -1 signifies no limit.</description>
+ </property>
+ 
++<property>
++  <name>mapred.task.tracker.task-controller</name>
++  <value>org.apache.hadoop.mapred.DefaultTaskController</value>
++  <description>TaskController which is used to launch and manage task execution 
++  </description>
++</property>
++
+ </configuration>
+diff --git a/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java b/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
+new file mode 100644
+index 0000000..08eff15
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
+@@ -0,0 +1,107 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++*/
++
++package org.apache.hadoop.mapred;
++
++import java.io.IOException;
++import java.util.List;
++
++
++import org.apache.hadoop.mapred.JvmManager.JvmEnv;
++import org.apache.hadoop.util.Shell;
++import org.apache.hadoop.util.Shell.ShellCommandExecutor;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++/**
++ * The default implementation for controlling tasks.
++ * 
++ * This class provides an implementation for launching and killing 
++ * tasks that need to be run as the tasktracker itself. Hence,
++ * many of the initializing or cleanup methods are not required here.
++ */
++class DefaultTaskController extends TaskController {
++
++  private static final Log LOG = 
++      LogFactory.getLog(DefaultTaskController.class);
++  /**
++   * Launch a new JVM for the task.
++   * 
++   * This method launches the new JVM for the task by executing the
++   * the JVM command using the {@link Shell.ShellCommandExecutor}
++   */
++  void launchTaskJVM(TaskController.TaskControllerContext context) 
++                                      throws IOException {
++    JvmEnv env = context.env;
++    List<String> wrappedCommand = 
++      TaskLog.captureOutAndError(env.setup, env.vargs, env.stdout, env.stderr,
++          env.logSize, env.pidFile);
++    ShellCommandExecutor shexec = 
++        new ShellCommandExecutor(wrappedCommand.toArray(new String[0]), 
++                                  env.workDir, env.env);
++    // set the ShellCommandExecutor for later use.
++    context.shExec = shexec;
++    shexec.execute();
++  }
++  
++  /**
++   * Kills the JVM running the task stored in the context.
++   * 
++   * @param context the context storing the task running within the JVM
++   * that needs to be killed.
++   */
++  void killTaskJVM(TaskController.TaskControllerContext context) {
++    ShellCommandExecutor shexec = context.shExec;
++    if (shexec != null) {
++      Process process = shexec.getProcess();
++      if (process != null) {
++        process.destroy();
++      }
++    }
++  }
++  
++  /**
++   * Initialize the task environment.
++   * 
++   * Since tasks are launched as the tasktracker user itself, this
++   * method has no action to perform.
++   */
++  void initializeTask(TaskController.TaskControllerContext context) {
++    // The default task controller does not need to set up
++    // any permissions for proper execution.
++    // So this is a dummy method.
++    return;
++  }
++  
++
++  @Override
++  void setup() {
++    // nothing to setup
++    return;
++  }
++
++  /*
++   * No need to do anything as we don't need to do as we dont need anything
++   * extra from what TaskTracker has done.
++   */
++  @Override
++  void initializeJob(JobID jobId) {
++  }
++  
++}
+diff --git a/src/mapred/org/apache/hadoop/mapred/IsolationRunner.java b/src/mapred/org/apache/hadoop/mapred/IsolationRunner.java
+index 7c5d86c..3426234 100644
+--- a/src/mapred/org/apache/hadoop/mapred/IsolationRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/IsolationRunner.java
+@@ -206,11 +206,11 @@ public class IsolationRunner {
+       BytesWritable split = new BytesWritable();
+       split.readFields(splitFile);
+       splitFile.close();
+-      task = new MapTask(jobFilename.toString(), taskId, partition, splitClass, split);
++      task = new MapTask(jobFilename.toString(), taskId, partition, splitClass, split, conf.getUser());
+     } else {
+       int numMaps = conf.getNumMapTasks();
+       fillInMissingMapOutputs(local, taskId, numMaps, conf);
+-      task = new ReduceTask(jobFilename.toString(), taskId, partition, numMaps);
++      task = new ReduceTask(jobFilename.toString(), taskId, partition, numMaps, conf.getUser());
+     }
+     task.setConf(conf);
+     task.run(conf, new FakeUmbilical());
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 6a8a927..8e88f81 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -70,7 +70,6 @@ public class JobInProgress {
+   JobStatus status;
+   Path jobFile = null;
+   Path localJobFile = null;
+-  Path localJarFile = null;
+ 
+   TaskInProgress maps[] = new TaskInProgress[0];
+   TaskInProgress reduces[] = new TaskInProgress[0];
+@@ -191,6 +190,7 @@ public class JobInProgress {
+   private boolean hasSpeculativeMaps;
+   private boolean hasSpeculativeReduces;
+   private long inputLength = 0;
++  private String user;
+   
+   // Per-job counters
+   public static enum Counter { 
+@@ -242,6 +242,12 @@ public class JobInProgress {
+   
+   public JobInProgress(JobID jobid, JobTracker jobtracker, 
+                        JobConf default_conf, int rCount) throws IOException {
++    this(jobid, jobtracker, default_conf, null, rCount);
++  }
++
++  JobInProgress(JobID jobid, JobTracker jobtracker,
++                JobConf default_conf, String user, int rCount) 
++  throws IOException {
+     this.restartCount = rCount;
+     this.jobId = jobid;
+     String url = "http://" + jobtracker.getJobTrackerMachine() + ":" 
+@@ -255,8 +261,14 @@ public class JobInProgress {
+     JobConf default_job_conf = new JobConf(default_conf);
+     this.localJobFile = default_job_conf.getLocalPath(JobTracker.SUBDIR 
+                                                       +"/"+jobid + ".xml");
+-    this.localJarFile = default_job_conf.getLocalPath(JobTracker.SUBDIR
+-                                                      +"/"+ jobid + ".jar");
++
++    if (user == null) {
++      this.user = conf.getUser();
++    } else {
++      this.user = user;
++    }
++    LOG.info("User : " +  this.user);
++
+     Path jobDir = jobtracker.getSystemDirectoryForJob(jobId);
+     FileSystem fs = jobDir.getFileSystem(default_conf);
+     jobFile = new Path(jobDir, "job.xml");
+@@ -264,14 +276,9 @@ public class JobInProgress {
+     conf = new JobConf(localJobFile);
+     this.priority = conf.getJobPriority();
+     this.status.setJobPriority(this.priority);
+-    this.profile = new JobProfile(conf.getUser(), jobid, 
++    this.profile = new JobProfile(user, jobid, 
+                                   jobFile.toString(), url, conf.getJobName(),
+                                   conf.getQueueName());
+-    String jarFile = conf.getJar();
+-    if (jarFile != null) {
+-      fs.copyToLocalFile(new Path(jarFile), localJarFile);
+-      conf.setJar(localJarFile.toString());
+-    }
+ 
+     this.numMapTasks = conf.getNumMapTasks();
+     this.numReduceTasks = conf.getNumReduceTasks();
+@@ -688,6 +695,14 @@ public class JobInProgress {
+   }
+     
+   /**
++   * Get the job user/owner
++   * @return the job's user/owner
++   */ 
++  String getUser() {
++    return user;
++  }
++
++  /**
+    * Return a vector of completed TaskInProgress objects
+    */
+   public synchronized Vector<TaskInProgress> reportTasksInProgress(boolean shouldBeMap,
+@@ -2524,10 +2539,6 @@ public class JobInProgress {
+         localFs.delete(localJobFile, true);
+         localJobFile = null;
+       }
+-      if (localJarFile != null) {
+-        localFs.delete(localJarFile, true);
+-        localJarFile = null;
+-      }
+ 
+       // clean up splits
+       for (int i = 0; i < maps.length; i++) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 4db85cb..2e2218d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -18,9 +18,16 @@
+ package org.apache.hadoop.mapred;
+ 
+ 
++import java.io.BufferedReader;
++import java.io.BufferedWriter;
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.io.PrintWriter;
+ import java.io.Writer;
++import java.io.InputStreamReader;
++import java.io.OutputStreamWriter;
+ import java.net.BindException;
+ import java.net.InetSocketAddress;
+ import java.net.UnknownHostException;
+@@ -52,6 +59,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.LocalDirAllocator;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.http.HttpServer;
+@@ -134,6 +142,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   private final List<JobInProgressListener> jobInProgressListeners =
+     new CopyOnWriteArrayList<JobInProgressListener>();
+ 
++  private static final LocalDirAllocator lDirAlloc = 
++                              new LocalDirAllocator("mapred.local.dir");
+   // system directories are world-wide readable and owner readable
+   final static FsPermission SYSTEM_DIR_PERMISSION =
+     FsPermission.createImmutable((short) 0733); // rwx-wx-wx
+@@ -1275,13 +1285,39 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         LOG.info("Error in cleaning up job history folder", ioe);
+       }
+ 
++      JobInProgress job = null;
++      File jobIdFile = null;
+       while (idIter.hasNext()) {
+         JobID id = idIter.next();
+         LOG.info("Trying to recover details of job " + id);
+         try {
+-          // 1. Create the job object
+-          JobInProgress job = 
+-            new JobInProgress(id, JobTracker.this, conf, restartCount);
++          // 1. Recover job owner and create JIP
++          jobIdFile = 
++            new File(lDirAlloc.getLocalPathToRead(SUBDIR + "/" + id, conf).toString());
++
++          String user = null;
++          if (jobIdFile != null && jobIdFile.exists()) {
++            LOG.info("File " + jobIdFile + " exists for job " + id);
++            FileInputStream in = new FileInputStream(jobIdFile);
++            BufferedReader reader = null;
++            try {
++              reader = new BufferedReader(new InputStreamReader(in));
++              user = reader.readLine();
++              LOG.info("Recovered user " + user + " for job " + id);
++            } finally {
++              if (reader != null) {
++                reader.close();
++              }
++              in.close();
++            }
++          }
++          if (user == null) {
++            throw new RuntimeException("Incomplete job " + id);
++          }
++
++          // Create the job
++          job = new JobInProgress(id, JobTracker.this, conf, user, 
++                                  restartCount);
+ 
+           // 2. Check if the user has appropriate access
+           // Get the user group info for the job's owner
+@@ -1327,6 +1363,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         } catch (Throwable t) {
+           LOG.warn("Failed to recover job " + id + " Ignoring the job.", t);
+           idIter.remove();
++          if (jobIdFile != null) {
++            jobIdFile.delete();
++            jobIdFile = null;
++          }
++          if (job != null) {
++            job.fail();
++            job = null;
++          }
+           continue;
+         }
+       }
+@@ -1493,6 +1537,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   Map<String, Node> hostnameToNodeMap = 
+     Collections.synchronizedMap(new TreeMap<String, Node>());
+   
++  // job-id->username during staging
++  Map<JobID, String> jobToUserMap = 
++    Collections.synchronizedMap(new TreeMap<JobID, String>()); 
++
+   // Number of resolved entries
+   int numResolved;
+     
+@@ -1748,6 +1796,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     // Same with 'localDir' except it's always on the local disk.
+     asyncDiskService.moveAndDeleteFromEachVolume(SUBDIR);
+ 
++    if (!hasRestarted) {
++      jobConf.deleteLocalFiles(SUBDIR);
++    }
++
+     // Initialize history DONE folder
+     if (historyInitialized) {
+       JobHistory.initDone(conf, fs);
+@@ -2146,6 +2198,17 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     // mark the job for cleanup at all the trackers
+     addJobForCleanup(id);
+ 
++    try {
++      File userFileForJob =
++        new File(lDirAlloc.getLocalPathToRead(SUBDIR + "/" + id,
++                                              conf).toString());
++      if (userFileForJob != null) {
++        userFileForJob.delete();
++      }
++    } catch (IOException ioe) {
++      LOG.info("Failed to delete job id mapping for job " + id, ioe);
++    }
++
+     // add the blacklisted trackers to potentially faulty list
+     if (job.getStatus().getRunState() == JobStatus.SUCCEEDED) {
+       if (job.getNoOfBlackListedTrackers() > 0) {
+@@ -3039,7 +3102,17 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+    * Allocates a new JobId string.
+    */
+   public synchronized JobID getNewJobId() throws IOException {
+-    return new JobID(getTrackerIdentifier(), nextJobId++);
++    JobID id = new JobID(getTrackerIdentifier(), nextJobId++);
++
++    // get the user group info
++    UserGroupInformation ugi = UserGroupInformation.getCurrentUGI();
++
++    // mark the user for this id
++    jobToUserMap.put(id, ugi.getUserName());
++
++    LOG.info("Job id " + id + " assigned to user " + ugi.getUserName());
++
++    return id;
+   }
+ 
+   /**
+@@ -3055,12 +3128,59 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       //job already running, don't start twice
+       return jobs.get(jobId).getStatus();
+     }
++
++    // check if the owner is uploding the splits or not
++    // get the user group info
++    UserGroupInformation ugi = UserGroupInformation.getCurrentUGI();
++
++    // check if the user invoking this api is the owner of this job
++    if (!jobToUserMap.get(jobId).equals(ugi.getUserName())) {
++      throw new IOException("User " + ugi.getUserName() 
++                            + " is not the owner of the job " + jobId);
++    }
+     
+-    JobInProgress job = new JobInProgress(jobId, this, this.conf);
++    jobToUserMap.remove(jobId);
++
++    // persist
++    File userFileForJob =  
++      new File(lDirAlloc.getLocalPathForWrite(SUBDIR + "/" + jobId, 
++                                              conf).toString());
++    if (userFileForJob == null) {
++      LOG.info("Failed to create job-id file for job " + jobId + " at " + userFileForJob);
++    } else {
++      FileOutputStream fout = new FileOutputStream(userFileForJob);
++      BufferedWriter writer = null;
++
++      try {
++        writer = new BufferedWriter(new OutputStreamWriter(fout));
++        writer.write(ugi.getUserName() + "\n");
++      } finally {
++        if (writer != null) {
++          writer.close();
++        }
++        fout.close();
++      }
++
++      LOG.info("Job " + jobId + " user info persisted to file : " + userFileForJob);
++    }
++
++    JobInProgress job = null;
++    try {
++      job = new JobInProgress(jobId, this, this.conf, ugi.getUserName(), 0);
++    } catch (Exception e) {
++      if (userFileForJob != null) {
++        userFileForJob.delete();
++      }
++      throw new IOException(e);
++    }
+     
+     String queue = job.getProfile().getQueueName();
+     if(!(queueManager.getQueues().contains(queue))) {      
+       new CleanupQueue().addToQueue(conf,getSystemDirectoryForJob(jobId));
++      job.fail();
++      if (userFileForJob != null) {
++        userFileForJob.delete();
++      }
+       throw new IOException("Queue \"" + queue + "\" does not exist");        
+     }
+ 
+@@ -3070,6 +3190,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     } catch (IOException ioe) {
+        LOG.warn("Access denied for user " + job.getJobConf().getUser() 
+                 + ". Ignoring job " + jobId, ioe);
++      job.fail();
++      if (userFileForJob != null) {
++        userFileForJob.delete();
++      }
+       new CleanupQueue().addToQueue(conf, getSystemDirectoryForJob(jobId));
+       throw ioe;
+     }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JvmManager.java b/src/mapred/org/apache/hadoop/mapred/JvmManager.java
+index b1d9235..19b4f5d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JvmManager.java
++++ b/src/mapred/org/apache/hadoop/mapred/JvmManager.java
+@@ -31,6 +31,7 @@ import java.util.Vector;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.fs.FileUtil;
++import org.apache.hadoop.mapred.TaskController.TaskControllerContext;
+ import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
+ import org.apache.hadoop.util.Shell.ShellCommandExecutor;
+ 
+@@ -51,9 +52,9 @@ class JvmManager {
+   
+   public JvmManager(TaskTracker tracker) {
+     mapJvmManager = new JvmManagerForType(tracker.getMaxCurrentMapTasks(), 
+-        true);
++        true, tracker);
+     reduceJvmManager = new JvmManagerForType(tracker.getMaxCurrentReduceTasks(),
+-        false);
++        false, tracker);
+   }
+   
+   public void stop() {
+@@ -122,10 +123,13 @@ class JvmManager {
+     boolean isMap;
+     
+     Random rand = new Random(System.currentTimeMillis());
++    private TaskTracker tracker;
+ 
+-    public JvmManagerForType(int maxJvms, boolean isMap) {
++    public JvmManagerForType(int maxJvms, boolean isMap, 
++        TaskTracker tracker) {
+       this.maxJvms = maxJvms;
+       this.isMap = isMap;
++      this.tracker = tracker;
+     }
+ 
+     synchronized public void setRunningTaskForJvm(JVMId jvmId, 
+@@ -137,7 +141,24 @@ class JvmManager {
+     
+     synchronized public TaskInProgress getTaskForJvm(JVMId jvmId) {
+       if (jvmToRunningTask.containsKey(jvmId)) {
+-        return jvmToRunningTask.get(jvmId).getTaskInProgress();
++        //Incase of JVM reuse, tasks are returned to previously launched
++        //JVM via this method. However when a new task is launched
++        //the task being returned has to be initialized.
++        TaskRunner taskRunner = jvmToRunningTask.get(jvmId);
++        JvmRunner jvmRunner = jvmIdToRunner.get(jvmId);
++        Task task = taskRunner.getTaskInProgress().getTask();
++        TaskControllerContext context = 
++          new TaskController.TaskControllerContext();
++        context.env = jvmRunner.env;
++        context.task = task;
++        //If we are returning the same task as which the JVM was launched
++        //we don't initialize task once again.
++        if(!jvmRunner.env.conf.get("mapred.task.id").
++            equals(task.getTaskID().toString())) {
++          tracker.getTaskController().initializeTask(context);
++        }
++        return taskRunner.getTaskInProgress();
++
+       }
+       return null;
+     }
+@@ -314,6 +335,8 @@ class JvmManager {
+       JVMId jvmId;
+       volatile boolean busy = true;
+       private ShellCommandExecutor shexec; // shell terminal for running the task
++      //context used for starting JVM
++      private TaskControllerContext initalContext;
+       public JvmRunner(JvmEnv env, JobID jobId) {
+         this.env = env;
+         this.jvmId = new JVMId(jobId, isMap, rand.nextInt());
+@@ -325,18 +348,19 @@ class JvmManager {
+       }
+ 
+       public void runChild(JvmEnv env) {
++        initalContext = new TaskControllerContext();
+         try {
+           env.vargs.add(Integer.toString(jvmId.getId()));
+-          List<String> wrappedCommand = 
+-            TaskLog.captureOutAndError(env.setup, env.vargs, env.stdout, env.stderr,
+-                env.logSize, env.pidFile);
+-          shexec = new ShellCommandExecutor(wrappedCommand.toArray(new String[0]), 
+-              env.workDir, env.env);
+-          shexec.execute();
++          //Launch the task controller to run task JVM
++          initalContext.task = jvmToRunningTask.get(jvmId).getTask();
++          initalContext.env = env;
++          tracker.getTaskController().initializeTask(initalContext);
++          tracker.getTaskController().launchTaskJVM(initalContext);
+         } catch (IOException ioe) {
+           // do nothing
+           // error and output are appropriately redirected
+         } finally { // handle the exit code
++          shexec = initalContext.shExec;
+           if (shexec == null) {
+             return;
+           }
+@@ -357,11 +381,14 @@ class JvmManager {
+       }
+ 
+       public void kill() {
+-        if (shexec != null) {
+-          Process process = shexec.getProcess();
+-          if (process != null) {
+-            process.destroy();
+-          }
++        TaskController controller = tracker.getTaskController();
++        //Check inital context before issuing a kill to prevent situations
++        //where kill is issued before task is launched.
++        if(initalContext != null && initalContext.env != null) {
++          controller.killTaskJVM(initalContext);
++        } else {
++          LOG.info(String.format("JVM Not killed %s but just removed", 
++              jvmId.toString()));
+         }
+         removeJvm(jvmId);
+       }
+diff --git a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+new file mode 100644
+index 0000000..f74c70b
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+@@ -0,0 +1,421 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++*/
++package org.apache.hadoop.mapred;
++
++import java.io.BufferedWriter;
++import java.io.File;
++import java.io.FileWriter;
++import java.io.IOException;
++import java.io.PrintWriter;
++import java.util.ArrayList;
++import java.util.List;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileUtil;
++import org.apache.hadoop.mapred.JvmManager.JvmEnv;
++import org.apache.hadoop.util.Shell.ShellCommandExecutor;
++
++/**
++ * A {@link TaskController} that runs the task JVMs as the user 
++ * who submits the job.
++ * 
++ * This class executes a setuid executable to implement methods
++ * of the {@link TaskController}, including launching the task 
++ * JVM and killing it when needed, and also initializing and
++ * finalizing the task environment. 
++ * <p> The setuid executable is launched using the command line:</p>
++ * <p>task-controller user-name command command-args, where</p>
++ * <p>user-name is the name of the owner who submits the job</p>
++ * <p>command is one of the cardinal value of the 
++ * {@link LinuxTaskController.TaskCommands} enumeration</p>
++ * <p>command-args depends on the command being launched.</p>
++ * 
++ * In addition to running and killing tasks, the class also 
++ * sets up appropriate access for the directories and files 
++ * that will be used by the tasks. 
++ */
++class LinuxTaskController extends TaskController {
++
++  private static final Log LOG = 
++            LogFactory.getLog(LinuxTaskController.class);
++
++  // Name of the executable script that will contain the child
++  // JVM command line. See writeCommand for details.
++  private static final String COMMAND_FILE = "taskjvm.sh";
++  
++  // Path to the setuid executable.
++  private static String taskControllerExe;
++  
++  static {
++    // the task-controller is expected to be under the $HADOOP_HOME/bin
++    // directory.
++    File hadoopBin = new File(System.getenv("HADOOP_HOME"), "bin");
++    taskControllerExe = 
++        new File(hadoopBin, "task-controller").getAbsolutePath();
++  }
++  
++  // The list of directory paths specified in the
++  // variable mapred.local.dir. This is used to determine
++  // which among the list of directories is picked up
++  // for storing data for a particular task.
++  private String[] mapredLocalDirs;
++  
++  // permissions to set on files and directories created.
++  // When localized files are handled securely, this string
++  // will change to something more restrictive. Until then,
++  // it opens up the permissions for all, so that the tasktracker
++  // and job owners can access files together.
++  private static final String FILE_PERMISSIONS = "ugo+rwx";
++  
++  // permissions to set on components of the path leading to
++  // localized files and directories. Read and execute permissions
++  // are required for different users to be able to access the
++  // files.
++  private static final String PATH_PERMISSIONS = "go+rx";
++  
++  public LinuxTaskController() {
++    super();
++  }
++  
++  @Override
++  public void setConf(Configuration conf) {
++    super.setConf(conf);
++    mapredLocalDirs = conf.getStrings("mapred.local.dir");
++    //Setting of the permissions of the local directory is done in 
++    //setup()
++  }
++  
++  /**
++   * List of commands that the setuid script will execute.
++   */
++  enum TaskCommands {
++    LAUNCH_TASK_JVM,
++    KILL_TASK_JVM
++  }
++  
++  /**
++   * Launch a task JVM that will run as the owner of the job.
++   * 
++   * This method launches a task JVM by executing a setuid
++   * executable that will switch to the user and run the
++   * task.
++   */
++  @Override
++  void launchTaskJVM(TaskController.TaskControllerContext context) 
++                                        throws IOException {
++    JvmEnv env = context.env;
++    // get the JVM command line.
++    String cmdLine = 
++      TaskLog.buildCommandLine(env.setup, env.vargs, env.stdout, env.stderr,
++          env.logSize, env.pidFile);
++    // write the command to a file in the
++    // task specific cache directory
++    writeCommand(cmdLine, getTaskCacheDirectory(context));
++    
++    // Call the taskcontroller with the right parameters.
++    List<String> launchTaskJVMArgs = buildTaskCommandArgs(context);
++    ShellCommandExecutor shExec =  buildTaskControllerExecutor(
++                                    TaskCommands.LAUNCH_TASK_JVM, 
++                                    context.task.getUser(),
++                                    launchTaskJVMArgs, env);
++    context.shExec = shExec;
++    shExec.execute();
++    LOG.debug("output after executing task jvm = " + shExec.getOutput());
++  }
++
++  // convenience API for building command arguments for specific commands
++  private List<String> buildTaskCommandArgs(TaskControllerContext context) {
++    List<String> commandArgs = new ArrayList<String>(3);
++    String taskId = context.task.getTaskID().toString();
++    String jobId = getJobId(context);
++    commandArgs.add(jobId);
++    if(!context.task.isTaskCleanupTask()) {
++      commandArgs.add(taskId);
++    }else {
++      commandArgs.add(taskId + TaskTracker.TASK_CLEANUP_SUFFIX);
++    }
++    
++    LOG.debug("getting the task directory as: " 
++                + getTaskCacheDirectory(context));
++    commandArgs.add(getDirectoryChosenForTask(
++                              new File(getTaskCacheDirectory(context)), 
++                              context));
++    return commandArgs;
++  }
++  
++  // get the Job ID from the information in the TaskControllerContext
++  private String getJobId(TaskControllerContext context) {
++    String taskId = context.task.getTaskID().toString();
++    TaskAttemptID tId = TaskAttemptID.forName(taskId);
++    String jobId = tId.getJobID().toString();
++    return jobId;
++  }
++
++  // Get the directory from the list of directories configured
++  // in mapred.local.dir chosen for storing data pertaining to
++  // this task.
++  private String getDirectoryChosenForTask(File directory,
++                                            TaskControllerContext context) {
++    String jobId = getJobId(context);
++    String taskId = context.task.getTaskID().toString();
++    for (String dir : mapredLocalDirs) {
++      File mapredDir = new File(dir);
++      File taskDir = new File(mapredDir, TaskTracker.getLocalTaskDir(
++          jobId, taskId, context.task.isTaskCleanupTask()));
++      if (directory.equals(taskDir)) {
++        return dir;
++      }
++    }
++    
++    LOG.error("Couldn't parse task cache directory correctly");
++    throw new IllegalArgumentException("invalid task cache directory "
++                + directory.getAbsolutePath());
++  }
++  
++  /**
++   * Kill a launched task JVM running as the user of the job.
++   * 
++   * This method will launch the task controller setuid executable
++   * that in turn will kill the task JVM by sending a kill signal.
++   */
++  void killTaskJVM(TaskControllerContext context) {
++   
++    if(context.task == null) {
++      LOG.info("Context task null not killing the JVM");
++      return;
++    }
++    
++    JvmEnv env = context.env;
++    List<String> killTaskJVMArgs = buildTaskCommandArgs(context);
++    try {
++      ShellCommandExecutor shExec = buildTaskControllerExecutor(
++                                      TaskCommands.KILL_TASK_JVM,
++                                      context.task.getUser(),
++                                      killTaskJVMArgs, 
++                                      context.env);
++      shExec.execute();
++      LOG.debug("Command output :" +shExec.getOutput());
++    } catch (IOException ioe) {
++      LOG.warn("IOException in killing task: " + ioe.getMessage());
++    }
++  }
++
++  /**
++   * Setup appropriate permissions for directories and files that
++   * are used by the task.
++   * 
++   * As the LinuxTaskController launches tasks as a user, different
++   * from the daemon, all directories and files that are potentially 
++   * used by the tasks are setup with appropriate permissions that
++   * will allow access.
++   * 
++   * Until secure data handling is implemented (see HADOOP-4491 and
++   * HADOOP-4493, for e.g.), the permissions are set up to allow
++   * read, write and execute access for everyone. This will be 
++   * changed to restricted access as data is handled securely.
++   */
++  void initializeTask(TaskControllerContext context) {
++    // Setup permissions for the job and task cache directories.
++    setupTaskCacheFileAccess(context);
++    // setup permissions for task log directory
++    setupTaskLogFileAccess(context);    
++  }
++  
++  // Allows access for the task to create log files under 
++  // the task log directory
++  private void setupTaskLogFileAccess(TaskControllerContext context) {
++    TaskAttemptID taskId = context.task.getTaskID();
++    File f = TaskLog.getTaskLogFile(taskId, TaskLog.LogName.SYSLOG);
++    String taskAttemptLogDir = f.getParentFile().getAbsolutePath();
++    changeDirectoryPermissions(taskAttemptLogDir, FILE_PERMISSIONS, false);
++  }
++
++  // Allows access for the task to read, write and execute 
++  // the files under the job and task cache directories
++  private void setupTaskCacheFileAccess(TaskControllerContext context) {
++    String taskId = context.task.getTaskID().toString();
++    JobID jobId = JobID.forName(getJobId(context));
++    //Change permission for the task across all the disks
++    for(String localDir : mapredLocalDirs) {
++      File f = new File(localDir);
++      File taskCacheDir = new File(f,TaskTracker.getLocalTaskDir(
++          jobId.toString(), taskId, context.task.isTaskCleanupTask()));
++      if(taskCacheDir.exists()) {
++        changeDirectoryPermissions(taskCacheDir.getPath(), 
++            FILE_PERMISSIONS, true);
++      }          
++    }//end of local directory Iteration 
++  }
++
++  // convenience method to execute chmod.
++  private void changeDirectoryPermissions(String dir, String mode, 
++                                              boolean isRecursive) {
++    int ret = 0;
++    try {
++      ret = FileUtil.chmod(dir, mode, isRecursive);
++    } catch (Exception e) {
++      LOG.warn("Exception in changing permissions for directory " + dir + 
++                  ". Exception: " + e.getMessage());
++    }
++    if (ret != 0) {
++      LOG.warn("Could not change permissions for directory " + dir);
++    }
++  }
++  
++  // convenience API to create the executor for launching the
++  // setuid script.
++  private ShellCommandExecutor buildTaskControllerExecutor(TaskCommands command, 
++                                          String userName, 
++                                          List<String> cmdArgs, JvmEnv env) 
++                                    throws IOException {
++    String[] taskControllerCmd = new String[3 + cmdArgs.size()];
++    taskControllerCmd[0] = taskControllerExe;
++    taskControllerCmd[1] = userName;
++    taskControllerCmd[2] = String.valueOf(command.ordinal());
++    int i = 3;
++    for (String cmdArg : cmdArgs) {
++      taskControllerCmd[i++] = cmdArg;
++    }
++    if (LOG.isDebugEnabled()) {
++      for (String cmd : taskControllerCmd) {
++        LOG.debug("taskctrl command = " + cmd);
++      }
++    }
++    ShellCommandExecutor shExec = null;
++    if(env.workDir != null && env.workDir.exists()) {
++      shExec = new ShellCommandExecutor(taskControllerCmd,
++          env.workDir, env.env);
++    } else {
++      shExec = new ShellCommandExecutor(taskControllerCmd);
++    }
++    
++    return shExec;
++  }
++  
++  // Return the task specific directory under the cache.
++  private String getTaskCacheDirectory(TaskControllerContext context) {
++    // In the case of JVM reuse, the task specific directory
++    // is different from what is set with respect with
++    // env.workDir. Hence building this from the taskId everytime.
++    String taskId = context.task.getTaskID().toString();
++    File cacheDirForJob = context.env.workDir.getParentFile().getParentFile();
++    if(context.task.isTaskCleanupTask()) {
++      taskId = taskId + TaskTracker.TASK_CLEANUP_SUFFIX;
++    }
++    return new File(cacheDirForJob, taskId).getAbsolutePath(); 
++  }
++  
++  // Write the JVM command line to a file under the specified directory
++  // Note that the JVM will be launched using a setuid executable, and
++  // could potentially contain strings defined by a user. Hence, to
++  // prevent special character attacks, we write the command line to
++  // a file and execute it.
++  private void writeCommand(String cmdLine, 
++                                      String directory) throws IOException {
++    
++    PrintWriter pw = null;
++    String commandFile = directory + File.separator + COMMAND_FILE;
++    LOG.info("Writing commands to " + commandFile);
++    try {
++      FileWriter fw = new FileWriter(commandFile);
++      BufferedWriter bw = new BufferedWriter(fw);
++      pw = new PrintWriter(bw);
++      pw.write(cmdLine);
++    } catch (IOException ioe) {
++      LOG.error("Caught IOException while writing JVM command line to file. "
++                + ioe.getMessage());
++    } finally {
++      if (pw != null) {
++        pw.close();
++      }
++      // set execute permissions for all on the file.
++      File f = new File(commandFile);
++      if (f.exists()) {
++        f.setReadable(true, false);
++        f.setExecutable(true, false);
++      }
++    }
++  }
++  
++
++  /**
++   * Sets up the permissions of the following directories:
++   * 
++   * Job cache directory
++   * Archive directory
++   * Hadoop log directories
++   * 
++   */
++  @Override
++  void setup() {
++    //set up job cache directory and associated permissions
++    String localDirs[] = this.mapredLocalDirs;
++    for(String localDir : localDirs) {
++      //Cache root
++      File cacheDirectory = new File(localDir,TaskTracker.getCacheSubdir());
++      File jobCacheDirectory = new File(localDir,TaskTracker.getJobCacheSubdir());
++      if(!cacheDirectory.exists()) {
++        if(!cacheDirectory.mkdirs()) {
++          LOG.warn("Unable to create cache directory : " + 
++              cacheDirectory.getPath());
++        }
++      }
++      if(!jobCacheDirectory.exists()) {
++        if(!jobCacheDirectory.mkdirs()) {
++          LOG.warn("Unable to create job cache directory : " + 
++              jobCacheDirectory.getPath());
++        }
++      }
++      //Give world writable permission for every directory under
++      //mapred-local-dir.
++      //Child tries to write files under it when executing.
++      changeDirectoryPermissions(localDir, FILE_PERMISSIONS, true);
++    }//end of local directory manipulations
++    //setting up perms for user logs
++    File taskLog = TaskLog.getUserLogDir();
++    changeDirectoryPermissions(taskLog.getPath(), FILE_PERMISSIONS,false);
++  }
++
++  /*
++   * Create Job directories across disks and set their permissions to 777
++   * This way when tasks are run we just need to setup permissions for
++   * task folder.
++   */
++  @Override
++  void initializeJob(JobID jobid) {
++    for(String localDir : this.mapredLocalDirs) {
++      File jobDirectory = new File(localDir, 
++          TaskTracker.getLocalJobDir(jobid.toString()));
++      if(!jobDirectory.exists()) {
++        if(!jobDirectory.mkdir()) {
++          LOG.warn("Unable to create job cache directory : " 
++              + jobDirectory.getPath());
++          continue;
++        }
++      }
++      //Should be recursive because the jar and work folders might be 
++      //present under the job cache directory
++      changeDirectoryPermissions(
++          jobDirectory.getPath(), FILE_PERMISSIONS, true);
++    }
++  }
++  
++}
++
+diff --git a/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java b/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
+index cca8766..cc31fb4 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
+@@ -167,7 +167,7 @@ class LocalJobRunner implements JobSubmissionProtocol {
+             MapTask map = new MapTask(file.toString(),  
+                                       mapId, i,
+                                       rawSplits[i].getClassName(),
+-                                      rawSplits[i].getBytes());
++                                      rawSplits[i].getBytes(), job.getUser());
+             JobConf localConf = new JobConf(job);
+             map.setJobFile(localFile.toString());
+             map.localizeConfiguration(localConf);
+@@ -206,7 +206,7 @@ class LocalJobRunner implements JobSubmissionProtocol {
+             }
+             if (!this.isInterrupted()) {
+               ReduceTask reduce = new ReduceTask(file.toString(), 
+-                                                 reduceId, 0, mapIds.size());
++                                                 reduceId, 0, mapIds.size(), job.getUser());
+               JobConf localConf = new JobConf(job);
+               reduce.setJobFile(localFile.toString());
+               reduce.localizeConfiguration(localConf);
+diff --git a/src/mapred/org/apache/hadoop/mapred/MapTask.java b/src/mapred/org/apache/hadoop/mapred/MapTask.java
+index 8d227fc..a52d5a1 100644
+--- a/src/mapred/org/apache/hadoop/mapred/MapTask.java
++++ b/src/mapred/org/apache/hadoop/mapred/MapTask.java
+@@ -89,9 +89,9 @@ class MapTask extends Task {
+   }
+ 
+   public MapTask(String jobFile, TaskAttemptID taskId, 
+-                 int partition, String splitClass, BytesWritable split
+-                 ) {
+-    super(jobFile, taskId, partition);
++                 int partition, String splitClass, BytesWritable split,
++                 String username) {
++    super(jobFile, taskId, partition, username);
+     this.splitClass = splitClass;
+     this.split = split;
+   }
+diff --git a/src/mapred/org/apache/hadoop/mapred/ReduceTask.java b/src/mapred/org/apache/hadoop/mapred/ReduceTask.java
+index 35b663d..5dfea3b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/ReduceTask.java
++++ b/src/mapred/org/apache/hadoop/mapred/ReduceTask.java
+@@ -150,8 +150,8 @@ class ReduceTask extends Task {
+   }
+ 
+   public ReduceTask(String jobFile, TaskAttemptID taskId,
+-                    int partition, int numMaps) {
+-    super(jobFile, taskId, partition);
++                    int partition, int numMaps, String username) {
++    super(jobFile, taskId, partition, username);
+     this.numMaps = numMaps;
+   }
+   
+diff --git a/src/mapred/org/apache/hadoop/mapred/Task.java b/src/mapred/org/apache/hadoop/mapred/Task.java
+index ee071ac..a314f6d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/Task.java
++++ b/src/mapred/org/apache/hadoop/mapred/Task.java
+@@ -136,6 +136,7 @@ abstract class Task implements Writable, Configurable {
+   protected TaskAttemptContext taskContext;
+   protected org.apache.hadoop.mapreduce.OutputFormat<?,?> outputFormat;
+   protected org.apache.hadoop.mapreduce.OutputCommitter committer;
++  protected String username;
+   protected final Counters.Counter spilledRecordsCounter;
+   private String pidFile = "";
+   protected TaskUmbilicalProtocol umbilical;
+@@ -150,7 +151,8 @@ abstract class Task implements Writable, Configurable {
+     spilledRecordsCounter = counters.findCounter(Counter.SPILLED_RECORDS);
+   }
+ 
+-  public Task(String jobFile, TaskAttemptID taskId, int partition) {
++  public Task(String jobFile, TaskAttemptID taskId, int partition, String username) {
++    this.username = username;
+     this.jobFile = jobFile;
+     this.taskId = taskId;
+      
+@@ -318,6 +320,9 @@ abstract class Task implements Writable, Configurable {
+     return !jobSetup && !jobCleanup && !taskCleanup;
+   }
+   
++  String getUser() {
++    return username;
++  }
+   ////////////////////////////////////////////
+   // Writable methods
+   ////////////////////////////////////////////
+@@ -331,6 +336,7 @@ abstract class Task implements Writable, Configurable {
+     out.writeBoolean(skipping);
+     out.writeBoolean(jobCleanup);
+     out.writeBoolean(jobSetup);
++    Text.writeString(out, username);
+     out.writeBoolean(writeSkipRecs);
+     out.writeBoolean(taskCleanup);  
+     Text.writeString(out, pidFile);
+@@ -348,6 +354,7 @@ abstract class Task implements Writable, Configurable {
+     skipping = in.readBoolean();
+     jobCleanup = in.readBoolean();
+     jobSetup = in.readBoolean();
++    username = Text.readString(in);
+     writeSkipRecs = in.readBoolean();
+     taskCleanup = in.readBoolean();
+     if (taskCleanup) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskController.java b/src/mapred/org/apache/hadoop/mapred/TaskController.java
+new file mode 100644
+index 0000000..f382940
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapred/TaskController.java
+@@ -0,0 +1,111 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++*/
++package org.apache.hadoop.mapred;
++
++import java.io.IOException;
++
++import org.apache.hadoop.conf.Configurable;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.mapred.JvmManager.JvmEnv;
++import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
++import org.apache.hadoop.mapred.JobID;
++import org.apache.hadoop.util.Shell;
++import org.apache.hadoop.util.Shell.ShellCommandExecutor;
++
++/**
++ * Controls initialization, finalization and clean up of tasks, and
++ * also the launching and killing of task JVMs.
++ * 
++ * This class defines the API for initializing, finalizing and cleaning
++ * up of tasks, as also the launching and killing task JVMs.
++ * Subclasses of this class will implement the logic required for
++ * performing the actual actions. 
++ */
++abstract class TaskController implements Configurable {
++  
++  private Configuration conf;
++  
++  public Configuration getConf() {
++    return conf;
++  }
++  
++  public void setConf(Configuration conf) {
++    this.conf = conf;
++  }
++  
++  /**
++   * Setup task controller component.
++   * 
++   */
++  abstract void setup();
++  
++  
++  /**
++   * Launch a task JVM
++   * 
++   * This method defines how a JVM will be launched to run a task.
++   * @param context the context associated to the task
++   */
++  abstract void launchTaskJVM(TaskControllerContext context)
++                                      throws IOException;
++  
++  /**
++   * Kill a task JVM
++   * 
++   * This method defines how a JVM launched to execute one or more
++   * tasks will be killed.
++   * @param context
++   */
++  abstract void killTaskJVM(TaskControllerContext context);
++  
++  /**
++   * Perform initializing actions required before a task can run.
++   * 
++   * For instance, this method can be used to setup appropriate
++   * access permissions for files and directories that will be
++   * used by tasks. Tasks use the job cache, log, PID and distributed cache
++   * directories and files as part of their functioning. Typically,
++   * these files are shared between the daemon and the tasks
++   * themselves. So, a TaskController that is launching tasks
++   * as different users can implement this method to setup
++   * appropriate ownership and permissions for these directories
++   * and files.
++   */
++  abstract void initializeTask(TaskControllerContext context);
++  
++  
++  /**
++   * Contains task information required for the task controller.  
++   */
++  static class TaskControllerContext {
++    // task being executed
++    Task task; 
++    // the JVM environment for the task
++    JvmEnv env;
++    // the Shell executor executing the JVM for this task
++    ShellCommandExecutor shExec; 
++  }
++
++  /**
++   * Method which is called after the job is localized so that task controllers
++   * can implement their own job localization logic.
++   * 
++   * @param tip  Task of job for which localization happens.
++   */
++  abstract void initializeJob(JobID jobId);
++}
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+index d2e8e79..6df0ebe 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+@@ -927,9 +927,10 @@ public class TaskInProgress {
+       } else {
+         split = new BytesWritable();
+       }
+-      t = new MapTask(jobFile, taskid, partition, splitClass, split);
++      t = new MapTask(jobFile, taskid, partition, splitClass, split, 
++                      job.getUser());
+     } else {
+-      t = new ReduceTask(jobFile, taskid, partition, numMaps);
++      t = new ReduceTask(jobFile, taskid, partition, numMaps, job.getUser());
+     }
+     if (jobCleanup) {
+       t.setJobCleanupTask();
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskLog.java b/src/mapred/org/apache/hadoop/mapred/TaskLog.java
+index 2e0fad9..6518cf5 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskLog.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskLog.java
+@@ -448,13 +448,28 @@ public class TaskLog {
+                                                 long tailLength,
+                                                 String pidFileName
+                                                ) throws IOException {
+-    String stdout = FileUtil.makeShellPath(stdoutFilename);
+-    String stderr = FileUtil.makeShellPath(stderrFilename);
+     List<String> result = new ArrayList<String>(3);
+     result.add(bashCommand);
+     result.add("-c");
+-    StringBuffer mergedCmd = new StringBuffer();
++    String mergedCmd = buildCommandLine(setup, cmd,
++        stdoutFilename,
++        stderrFilename, tailLength,
++        pidFileName);
++    result.add(mergedCmd.toString());
++    return result;
++  }
++  
++  
++  static String buildCommandLine(List<String> setup,
++      List<String> cmd, 
++      File stdoutFilename,
++      File stderrFilename,
++      long tailLength, 
++      String pidFileName) throws IOException {
+     
++    String stdout = FileUtil.makeShellPath(stdoutFilename);
++    String stderr = FileUtil.makeShellPath(stderrFilename);
++    StringBuffer mergedCmd = new StringBuffer();
+     // Spit out the pid to pidFileName
+     if (pidFileName != null) {
+       mergedCmd.append("echo $$ > ");
+@@ -493,8 +508,7 @@ public class TaskLog {
+       mergedCmd.append(" 2>> ");
+       mergedCmd.append(stderr);
+     }
+-    result.add(mergedCmd.toString());
+-    return result;
++    return mergedCmd.toString();
+   }
+ 
+   /**
+@@ -563,4 +577,8 @@ public class TaskLog {
+     return result;
+   }
+   
++  public static File getUserLogDir() {  
++    return LOG_DIR;
++  }
++  
+ } // TaskLog
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index f2d6622..2f89373 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -104,7 +104,7 @@ public class TaskTracker
+   static final String MAPRED_TASKTRACKER_VMEM_RESERVED_PROPERTY =
+     "mapred.tasktracker.vmem.reserved";
+   /**
+-   * @deprecated
++   * @deprecated  TODO(todd) this and above are removed in YDist
+    */
+   @Deprecated
+   static final String MAPRED_TASKTRACKER_PMEM_RESERVED_PROPERTY =
+@@ -147,6 +147,8 @@ public class TaskTracker
+     
+   // last heartbeat response recieved
+   short heartbeatResponseId = -1;
++  
++  static final String TASK_CLEANUP_SUFFIX = ".cleanup";
+ 
+   /*
+    * This is the last 'status' report sent by this tracker to the JobTracker.
+@@ -232,7 +234,12 @@ public class TaskTracker
+   private int probe_sample_size = 500;
+ 
+   private IndexCache indexCache;
+-    
++
++  /**
++  * Handle to the specific instance of the {@link TaskController} class
++  */
++  private TaskController taskController;
++  
+   /*
+    * A list of commitTaskActions for whom commit response has been received 
+    */
+@@ -340,7 +347,11 @@ public class TaskTracker
+           }
+         }
+       }, "taskCleanup");
+-    
++
++  TaskController getTaskController() {
++    return taskController;
++  }
++  
+   private RunningJob addTaskToJob(JobID jobId, 
+                                   TaskInProgress tip) {
+     synchronized (runningJobs) {
+@@ -400,7 +411,7 @@ public class TaskTracker
+                                 boolean isCleanupAttempt) {
+ 	String taskDir = getLocalJobDir(jobid) + Path.SEPARATOR + taskid;
+ 	if (isCleanupAttempt) { 
+-      taskDir = taskDir + ".cleanup";
++      taskDir = taskDir + TASK_CLEANUP_SUFFIX;
+ 	}
+ 	return taskDir;
+   }
+@@ -536,6 +547,15 @@ public class TaskTracker
+     reduceLauncher = new TaskLauncher(maxCurrentReduceTasks);
+     mapLauncher.start();
+     reduceLauncher.start();
++    Class<? extends TaskController> taskControllerClass 
++                          = fConf.getClass("mapred.task.tracker.task-controller",
++                                            DefaultTaskController.class, 
++                                            TaskController.class); 
++    taskController = (TaskController)ReflectionUtils.newInstance(
++                                                      taskControllerClass, fConf);
++    
++    //setup and create jobcache directory with appropriate permissions
++    taskController.setup();
+   }
+ 
+   public static Class<? extends TaskTrackerInstrumentation> getInstrumentationClass(
+@@ -829,6 +849,7 @@ public class TaskTracker
+                              localJobConf.getKeepFailedTaskFiles());
+         rjob.localized = true;
+         rjob.jobConf = localJobConf;
++        taskController.initializeJob(jobId);
+       }
+     }
+     launchTaskForJob(tip, new JobConf(rjob.jobConf)); 
+@@ -1400,6 +1421,7 @@ public class TaskTracker
+     synchronized(runningJobs) {
+       runningJobs.remove(jobId);
+     }
++    
+   }      
+     
+     
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java b/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
+index 9a62503..7093862 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
+@@ -75,7 +75,7 @@ public class TestJobQueueTaskScheduler extends TestCase {
+     public Task obtainNewMapTask(final TaskTrackerStatus tts, int clusterSize,
+         int ignored) throws IOException {
+       TaskAttemptID attemptId = getTaskAttemptID(true);
+-      Task task = new MapTask("", attemptId, 0, "", new BytesWritable()) {
++      Task task = new MapTask("", attemptId, 0, "", new BytesWritable(), getJobConf().getUser()) {
+         @Override
+         public String toString() {
+           return String.format("%s on %s", getTaskID(), tts.getTrackerName());
+@@ -90,7 +90,7 @@ public class TestJobQueueTaskScheduler extends TestCase {
+     public Task obtainNewReduceTask(final TaskTrackerStatus tts,
+         int clusterSize, int ignored) throws IOException {
+       TaskAttemptID attemptId = getTaskAttemptID(false);
+-      Task task = new ReduceTask("", attemptId, 0, 10) {
++      Task task = new ReduceTask("", attemptId, 0, 10, getJobConf().getUser()) {
+         @Override
+         public String toString() {
+           return String.format("%s on %s", getTaskID(), tts.getTrackerName());
+diff --git a/src/test/org/apache/hadoop/mapred/TestRecoveryManager.java b/src/test/org/apache/hadoop/mapred/TestRecoveryManager.java
+index 36afaaa..5e854c6 100644
+--- a/src/test/org/apache/hadoop/mapred/TestRecoveryManager.java
++++ b/src/test/org/apache/hadoop/mapred/TestRecoveryManager.java
+@@ -337,6 +337,9 @@ public class TestRecoveryManager extends TestCase {
+     RunningJob rJob = jc.submitJob(job);
+     LOG.info("Submitted first job " + rJob.getID());
+ 
++    // wait for 1 min
++    UtilsForTests.waitFor(60000);
++
+     // kill the jobtracker multiple times and check if the count is correct
+     for (int i = 1; i <= 5; ++i) {
+       LOG.info("Stopping jobtracker for " + i + " time");
+@@ -369,9 +372,6 @@ public class TestRecoveryManager extends TestCase {
+     UtilsForTests.configureWaitingJobConf(job1, 
+         new Path(TEST_DIR, "input"), new Path(TEST_DIR, "output7"), 50, 0, 
+         "test-recovery-manager", signalFile, signalFile);
+-    
+-    // make sure that the job id's dont clash
+-    jobtracker.getNewJobId();
+ 
+     // submit a new job
+     rJob = jc.submitJob(job1);
+-- 
+1.7.0.4
+

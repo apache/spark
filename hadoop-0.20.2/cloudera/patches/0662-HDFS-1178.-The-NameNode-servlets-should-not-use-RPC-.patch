@@ -1,0 +1,381 @@
+From 221b3e83ec620bb4903946574fe0b250db58fc8a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 28 May 2010 15:14:24 -0700
+Subject: [PATCH 0662/1179] HDFS-1178. The NameNode servlets should not use RPC to connect to the NameNode.
+
+Author: Owen O'Malley
+Reason: Cleanup
+Ref: YDH
+---
+ .../org/apache/hadoop/ipc/RemoteException.java     |   15 ---
+ .../server/namenode/ContentSummaryServlet.java     |    7 +-
+ .../hadoop/hdfs/server/namenode/DfsServlet.java    |   29 +++++-
+ .../hdfs/server/namenode/FileChecksumServlets.java |    7 +-
+ .../hdfs/server/namenode/FileDataServlet.java      |   47 +++++----
+ .../hadoop/hdfs/server/namenode/JspHelper.java     |   16 ++--
+ .../hdfs/server/namenode/ListPathsServlet.java     |  103 ++++++++++----------
+ 7 files changed, 118 insertions(+), 106 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/RemoteException.java b/src/core/org/apache/hadoop/ipc/RemoteException.java
+index 214b2f6..9457a1f 100644
+--- a/src/core/org/apache/hadoop/ipc/RemoteException.java
++++ b/src/core/org/apache/hadoop/ipc/RemoteException.java
+@@ -22,7 +22,6 @@ import java.io.IOException;
+ import java.lang.reflect.Constructor;
+ 
+ import org.xml.sax.Attributes;
+-import org.znerd.xmlenc.XMLOutputter;
+ 
+ public class RemoteException extends IOException {
+   /** For java.io.Serializable */
+@@ -98,20 +97,6 @@ public class RemoteException extends IOException {
+     return ex;
+   }
+ 
+-  /** Write the object to XML format */
+-  public void writeXml(String path, XMLOutputter doc) throws IOException {
+-    doc.startTag(RemoteException.class.getSimpleName());
+-    doc.attribute("path", path);
+-    doc.attribute("class", getClassName());
+-    String msg = getLocalizedMessage();
+-    int i = msg.indexOf("\n");
+-    if (i >= 0) {
+-      msg = msg.substring(0, i);
+-    }
+-    doc.attribute("message", msg.substring(msg.indexOf(":") + 1).trim());
+-    doc.endTag();
+-  }
+-
+   /** Create RemoteException from attributes */
+   public static RemoteException valueOf(Attributes attrs) {
+     return new RemoteException(attrs.getValue("class"),
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
+index 7d0741a..6215371 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
+@@ -44,9 +44,9 @@ public class ContentSummaryServlet extends DfsServlet {
+       (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
+     final UserGroupInformation ugi = getUGI(request, conf);
+     try {
+-      ugi.doAs(new PrivilegedExceptionAction<Object>() {
++      ugi.doAs(new PrivilegedExceptionAction<Void>() {
+         @Override
+-        public Object run() throws Exception {
++        public Void run() throws Exception {
+           final String path = request.getPathInfo();
+ 
+           final PrintWriter out = response.getWriter();
+@@ -69,8 +69,7 @@ public class ContentSummaryServlet extends DfsServlet {
+             }
+             xml.endTag();
+           } catch(IOException ioe) {
+-            new RemoteException(ioe.getClass().getName(), ioe.getMessage()
+-                ).writeXml(path, xml);
++            writeXml(ioe, path, xml);
+           }
+           xml.endDocument();
+           return null;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
+index a1a09e8..050f739 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
+@@ -34,9 +34,9 @@ import org.apache.hadoop.hdfs.DFSClient;
+ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+ import org.apache.hadoop.hdfs.protocol.DatanodeID;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
++import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.security.UserGroupInformation;
+-import org.apache.hadoop.security.token.Token;
+-import org.apache.hadoop.security.token.TokenIdentifier;
++import org.znerd.xmlenc.XMLOutputter;
+ 
+ /**
+  * A base class for the servlets in DFS.
+@@ -47,6 +47,25 @@ abstract class DfsServlet extends HttpServlet {
+ 
+   static final Log LOG = LogFactory.getLog(DfsServlet.class.getCanonicalName());
+ 
++  /** Write the object to XML format */
++  protected void writeXml(Exception except,
++                          String path, XMLOutputter doc) throws IOException {
++    doc.startTag(RemoteException.class.getSimpleName());
++    doc.attribute("path", path);
++    if (except instanceof RemoteException) {
++      doc.attribute("class", ((RemoteException) except).getClassName());
++    } else {
++      doc.attribute("class", except.getClass().getName());      
++    }
++    String msg = except.getLocalizedMessage();
++    int i = msg.indexOf("\n");
++    if (i >= 0) {
++      msg = msg.substring(0, i);
++    }
++    doc.attribute("message", msg.substring(msg.indexOf(":") + 1).trim());
++    doc.endTag();
++  }
++
+   /** Get {@link UserGroupInformation} from request 
+    *    * @throws IOException */
+   protected UserGroupInformation getUGI(HttpServletRequest request,
+@@ -60,6 +79,12 @@ abstract class DfsServlet extends HttpServlet {
+    */
+   protected ClientProtocol createNameNodeProxy() throws IOException {
+     ServletContext context = getServletContext();
++    // if we are running in the Name Node, use it directly rather than via 
++    // rpc
++    NameNode nn = (NameNode) context.getAttribute("name.node");
++    if (nn != null) {
++      return nn;
++    }
+     InetSocketAddress nnAddr = (InetSocketAddress)context.getAttribute("name.node.address");
+     Configuration conf = new Configuration(
+         (Configuration)context.getAttribute(JspHelper.CURRENT_CONF));
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java
+index df94cca..4064603 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java
+@@ -101,12 +101,9 @@ public class FileChecksumServlets {
+             filename, nnproxy, socketFactory, socketTimeout);
+         MD5MD5CRC32FileChecksum.write(xml, checksum);
+       } catch(IOException ioe) {
+-        new RemoteException(ioe.getClass().getName(), ioe.getMessage()
+-            ).writeXml(filename, xml);
++        writeXml(ioe, filename, xml);
+       } catch (InterruptedException e) {
+-        new RemoteException(e.getClass().getName(), e.getMessage()
+-            ).writeXml(filename, xml);
+-
++        writeXml(e, filename, xml);
+       }
+       xml.endDocument();
+     }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+index 6e964d9..d7511c7 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+@@ -95,38 +95,41 @@ public class FileDataServlet extends DfsServlet {
+    * GET http://<nn>:<port>/data[/<path>] HTTP/1.1
+    * }
+    */
+-  public void doGet(HttpServletRequest request, HttpServletResponse response)
++  public void doGet(final HttpServletRequest request,
++                    final HttpServletResponse response)
+     throws IOException {
+     Configuration conf =
+ 	(Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
+     final UserGroupInformation ugi = getUGI(request, conf);
+ 
+     try {
+-      final ClientProtocol nnproxy = ugi
+-          .doAs(new PrivilegedExceptionAction<ClientProtocol>() {
++      ugi.doAs(new PrivilegedExceptionAction<Void>() {
+             @Override
+-            public ClientProtocol run() throws IOException {
+-              return createNameNodeProxy();
++            public Void run() throws IOException {
++              ClientProtocol nn = createNameNodeProxy();
++              final String path = 
++                request.getPathInfo() != null ? request.getPathInfo() : "/";
++              
++              String delegationToken = 
++                request.getParameter(JspHelper.DELEGATION_PARAMETER_NAME);
++              
++              HdfsFileStatus info = nn.getFileInfo(path);
++              if ((info != null) && !info.isDir()) {
++                try {
++                  response.sendRedirect(createUri(path, info, ugi, nn,
++                        request, delegationToken).toURL().toString());
++                } catch (URISyntaxException e) {
++                  response.getWriter().println(e.toString());
++                }
++              } else if (info == null){
++                response.sendError(400, "cat: File not found " + path);
++              } else {
++                response.sendError(400, "cat: " + path + ": is a directory");
++              }
++              return null;
+             }
+           });
+ 
+-      final String path = 
+-        request.getPathInfo() != null ? request.getPathInfo() : "/";
+-      
+-      String delegationToken = 
+-        request.getParameter(JspHelper.DELEGATION_PARAMETER_NAME);
+-      
+-      HdfsFileStatus info = nnproxy.getFileInfo(path);
+-      if ((info != null) && !info.isDir()) {
+-        response.sendRedirect(createUri(path, info, ugi, nnproxy,
+-              request, delegationToken).toURL().toString());
+-      } else if (info == null){
+-        response.sendError(400, "cat: File not found " + path);
+-      } else {
+-        response.sendError(400, "cat: " + path + ": is a directory");
+-      }
+-    } catch (URISyntaxException e) {
+-      response.getWriter().println(e.toString());
+     } catch (IOException e) {
+       response.sendError(400, e.getMessage());
+     } catch (InterruptedException e) {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+index 4bf21a6..c9114d0 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+@@ -18,6 +18,8 @@
+ 
+ package org.apache.hadoop.hdfs.server.namenode;
+ 
++import java.io.ByteArrayInputStream;
++import java.io.DataInputStream;
+ import java.io.IOException;
+ import java.io.UnsupportedEncodingException;
+ import java.net.InetSocketAddress;
+@@ -422,7 +424,6 @@ public class JspHelper {
+                                             Configuration conf
+                                            ) throws IOException {
+     UserGroupInformation ugi = null;
+-    final String RANDOM_USER = "webuser1234";
+     if(UserGroupInformation.isSecurityEnabled()) {
+       String user = request.getRemoteUser();
+       String tokenString = request.getParameter(DELEGATION_PARAMETER_NAME);
+@@ -436,13 +437,12 @@ public class JspHelper {
+                 + serviceAddr.getPort()));
+         token.setService(new Text(serviceAddr.getAddress().getHostAddress()
+             + ":" + serviceAddr.getPort()));
+-        if (user == null) {
+-          //this really doesn't break any security since we use the 
+-          //delegation token for authentication in
+-          //the back end.
+-          user = RANDOM_USER;
+-        }
+-        ugi = UserGroupInformation.createRemoteUser(user);
++        ByteArrayInputStream buf = 
++          new ByteArrayInputStream(token.getIdentifier());
++        DataInputStream in = new DataInputStream(buf);
++        DelegationTokenIdentifier id = new DelegationTokenIdentifier();
++        id.readFields(in);
++        ugi = id.getUser();
+         ugi.addToken(token);        
+         ugi.setAuthenticationMethod(AuthenticationMethod.TOKEN);
+       } else {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
+index 8b29309..128c418 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
+@@ -138,60 +138,63 @@ public class ListPathsServlet extends DfsServlet {
+       final Configuration conf = 
+         (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
+       
+-      ClientProtocol nnproxy = getUGI(request, conf).doAs
+-        (new PrivilegedExceptionAction<ClientProtocol>() {
++      getUGI(request, conf).doAs
++        (new PrivilegedExceptionAction<Void>() {
+         @Override
+-        public ClientProtocol run() throws IOException {
+-          return createNameNodeProxy();
+-        }
+-      });
+-      
+-      doc.declaration();
+-      doc.startTag("listing");
+-      for (Map.Entry<String,String> m : root.entrySet()) {
+-        doc.attribute(m.getKey(), m.getValue());
+-      }
++        public Void run() throws IOException {
++          ClientProtocol nn = createNameNodeProxy();
++          doc.declaration();
++          doc.startTag("listing");
++          for (Map.Entry<String,String> m : root.entrySet()) {
++            doc.attribute(m.getKey(), m.getValue());
++          }
+ 
+-      HdfsFileStatus base = nnproxy.getFileInfo(path);
+-      if ((base != null) && base.isDir()) {
+-        writeInfo(path, base, doc);
+-      }
++          HdfsFileStatus base = nn.getFileInfo(path);
++          if ((base != null) && base.isDir()) {
++            writeInfo(path, base, doc);
++          }
+ 
+-      Stack<String> pathstack = new Stack<String>();
+-      pathstack.push(path);
+-      while (!pathstack.empty()) {
+-        String p = pathstack.pop();
+-        try {
+-          byte[] lastReturnedName = HdfsFileStatus.EMPTY_NAME;         
+-          DirectoryListing thisListing;
+-          do {
+-            assert lastReturnedName != null;
+-            thisListing = nnproxy.getListing(p, lastReturnedName);
+-            if (thisListing == null) {
+-              if (lastReturnedName.length == 0) {
+-                LOG.warn("ListPathsServlet - Path " + p + " does not exist");
+-              }
+-              break;
+-            }
+-            HdfsFileStatus[] listing = thisListing.getPartialListing();
+-            for (HdfsFileStatus i : listing) {
+-              String localName = i.getLocalName();
+-              if (exclude.matcher(localName).matches()
+-                  || !filter.matcher(localName).matches()) {
+-                continue;
+-              }
+-              if (recur && i.isDir()) {
+-                pathstack.push(new Path(p, localName).toUri().getPath());
+-              }
+-              writeInfo(p, i, doc);
++          Stack<String> pathstack = new Stack<String>();
++          pathstack.push(path);
++          while (!pathstack.empty()) {
++            String p = pathstack.pop();
++            try {
++              byte[] lastReturnedName = HdfsFileStatus.EMPTY_NAME;         
++              DirectoryListing thisListing;
++              do {
++                assert lastReturnedName != null;
++                thisListing = nn.getListing(p, lastReturnedName);
++                if (thisListing == null) {
++                  if (lastReturnedName.length == 0) {
++                    LOG.warn("ListPathsServlet - Path " + p + " does not exist");
++                  }
++                  break;
++                }
++                HdfsFileStatus[] listing = thisListing.getPartialListing();
++                for (HdfsFileStatus i : listing) {
++                  String localName = i.getLocalName();
++                  if (exclude.matcher(localName).matches()
++                      || !filter.matcher(localName).matches()) {
++                    continue;
++                  }
++                  if (recur && i.isDir()) {
++                    pathstack.push(new Path(p, localName).toUri().getPath());
++                  }
++                  writeInfo(p, i, doc);
++                }
++                lastReturnedName = thisListing.getLastName();
++              } while (thisListing.hasMore());
++            } catch(IOException re) {
++              writeXml(re, p, doc);
+             }
+-            lastReturnedName = thisListing.getLastName();
+-          } while (thisListing.hasMore());
+-        } catch(RemoteException re) {re.writeXml(p, doc);}
+-      }
+-      if (doc != null) {
+-        doc.endDocument();
+-      }
++          }
++          if (doc != null) {
++            doc.endDocument();
++          }
++          return null;
++        }
++      });
++      
+     } catch (InterruptedException e) {
+       LOG.warn("ListPathServlet encountered InterruptedException", e);
+       response.sendError(400, e.getMessage());
+-- 
+1.7.0.4
+

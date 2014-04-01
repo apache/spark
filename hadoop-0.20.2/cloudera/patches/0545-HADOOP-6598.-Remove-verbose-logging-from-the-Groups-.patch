@@ -1,0 +1,46 @@
+From 7b32dc80001de8b93c52041e15ab29bc52d5a68d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 9 Mar 2010 17:07:36 -0800
+Subject: [PATCH 0545/1179] HADOOP-6598. Remove verbose logging from the Groups class
+
+Patch: https://issues.apache.org/jira/secure/attachment/12438059/HADOOP-6598-BP20.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12438562/HADOOP-6598-BP20-Fix.patch
+Author: Boris Shkolnik
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/security/Groups.java |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/Groups.java b/src/core/org/apache/hadoop/security/Groups.java
+index 11d0301..3860049 100644
+--- a/src/core/org/apache/hadoop/security/Groups.java
++++ b/src/core/org/apache/hadoop/security/Groups.java
+@@ -55,7 +55,8 @@ public class Groups {
+     cacheTimeout = 
+       conf.getLong("hadoop.security.groups.cache.secs", 5*60) * 1000;
+     
+-    LOG.info("Group mapping impl=" + impl.getClass().getName() + 
++    if(LOG.isDebugEnabled())
++      LOG.debug("Group mapping impl=" + impl.getClass().getName() + 
+         "; cacheTimeout=" + cacheTimeout);
+   }
+   
+@@ -71,13 +72,13 @@ public class Groups {
+     long now = System.currentTimeMillis();
+     // if cache has a value and it hasn't expired
+     if (groups != null && (groups.getTimestamp() + cacheTimeout > now)) {
+-      LOG.info("Returning cached groups for '" + user + "'");
++      LOG.debug("Returning cached groups for '" + user + "'");
+       return groups.getGroups();
+     }
+     // Create and cache user's groups
+     groups = new CachedGroups(impl.getGroups(user));
+     userToGroupsMap.put(user, groups);
+-    LOG.info("Returning fetched groups for '" + user + "'");
++    LOG.debug("Returning fetched groups for '" + user + "'");
+     return groups.getGroups();
+   }
+   
+-- 
+1.7.0.4
+

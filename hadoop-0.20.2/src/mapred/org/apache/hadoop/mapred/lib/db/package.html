@@ -1,0 +1,44 @@
+<html>
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<body>
+<h2>org.apache.hadoop.mapred.lib.db Package</h2>
+<p>
+This package contains a library to read records from a database as an 
+input to a mapreduce job, and write the output records to the database.   
+</p>
+<p>
+The Database to access can be configured using the static methods in the 
+DBConfiguration class. Jobs reading input from a database should use 
+DBInputFormat#setInput() to set the configuration. And jobs writing 
+its output to the database should use DBOutputFormat#setOutput().
+</p>
+<p> 
+Tuples from/to the database are converted to/from Java objects using 
+DBWritable methods. Typically, for each table in the db, a class extending
+DBWritable is defined, which holds the fields of the tuple. The fields 
+of a record are read from the database using DBWritable#readFields(ResultSet),
+and written to the database using DBWritable#write(PreparedStatament 
+statement). 
+</p>
+<p>
+An example program using both DBInputFormat and DBOutputFormat can be found 
+at src/examples/org/apache/hadoop/examples/DBCountPageview.java.
+</p>
+</body>
+</html>

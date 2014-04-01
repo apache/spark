@@ -1,0 +1,82 @@
+From ce7c3dc280b3d3ba0b176f0b7a9dc09d5ca163f5 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 1 Feb 2010 21:26:52 -0800
+Subject: [PATCH 0450/1179] HADOOP-6337. Update FilterInitializer class to be more visible and take a conf for further development
+
+Patch: https://issues.apache.org/jira/secure/attachment/12434503/HADOOP-6337-Y.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12434547/HADOOP-6337-Y.patch
+Author: Jakob Homan
+Ref: CDH-648
+---
+ .../org/apache/hadoop/http/FilterInitializer.java  |    7 +++++--
+ src/core/org/apache/hadoop/http/HttpServer.java    |    2 +-
+ .../org/apache/hadoop/http/TestGlobalFilter.java   |    2 +-
+ .../org/apache/hadoop/http/TestServletFilter.java  |    2 +-
+ 4 files changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/http/FilterInitializer.java b/src/core/org/apache/hadoop/http/FilterInitializer.java
+index 3f4765e..a781f84 100644
+--- a/src/core/org/apache/hadoop/http/FilterInitializer.java
++++ b/src/core/org/apache/hadoop/http/FilterInitializer.java
+@@ -17,6 +17,8 @@
+  */
+ package org.apache.hadoop.http;
+ 
++import org.apache.hadoop.conf.Configuration;
++
+ /**
+  * Initialize a javax.servlet.Filter. 
+  */
+@@ -24,6 +26,7 @@ public abstract class FilterInitializer {
+   /**
+    * Initialize a Filter to a FilterContainer.
+    * @param container The filter container
++   * @param conf Configuration for run-time parameters
+    */
+-  abstract void initFilter(FilterContainer container);
+-}
+\ No newline at end of file
++  public abstract void initFilter(FilterContainer container, Configuration conf);
++}
+diff --git a/src/core/org/apache/hadoop/http/HttpServer.java b/src/core/org/apache/hadoop/http/HttpServer.java
+index dd57ef7..9f06b9b 100644
+--- a/src/core/org/apache/hadoop/http/HttpServer.java
++++ b/src/core/org/apache/hadoop/http/HttpServer.java
+@@ -128,7 +128,7 @@ public class HttpServer implements FilterContainer {
+     final FilterInitializer[] initializers = getFilterInitializers(conf); 
+     if (initializers != null) {
+       for(FilterInitializer c : initializers) {
+-        c.initFilter(this);
++        c.initFilter(this, conf);
+       }
+     }
+     addDefaultServlets();
+diff --git a/src/test/org/apache/hadoop/http/TestGlobalFilter.java b/src/test/org/apache/hadoop/http/TestGlobalFilter.java
+index 51ab606..639a3ec 100644
+--- a/src/test/org/apache/hadoop/http/TestGlobalFilter.java
++++ b/src/test/org/apache/hadoop/http/TestGlobalFilter.java
+@@ -68,7 +68,7 @@ public class TestGlobalFilter extends junit.framework.TestCase {
+     static public class Initializer extends FilterInitializer {
+       public Initializer() {}
+ 
+-      void initFilter(FilterContainer container) {
++      public void initFilter(FilterContainer container, Configuration conf) {
+         container.addGlobalFilter("recording", RecordingFilter.class.getName(), null);
+       }
+     }
+diff --git a/src/test/org/apache/hadoop/http/TestServletFilter.java b/src/test/org/apache/hadoop/http/TestServletFilter.java
+index 8052f9a..6f46294 100644
+--- a/src/test/org/apache/hadoop/http/TestServletFilter.java
++++ b/src/test/org/apache/hadoop/http/TestServletFilter.java
+@@ -66,7 +66,7 @@ public class TestServletFilter extends junit.framework.TestCase {
+     static public class Initializer extends FilterInitializer {
+       public Initializer() {}
+ 
+-      void initFilter(FilterContainer container) {
++      public void initFilter(FilterContainer container, Configuration conf) {
+         container.addFilter("simple", SimpleFilter.class.getName(), null);
+       }
+     }
+-- 
+1.7.0.4
+

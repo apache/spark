@@ -1,0 +1,58 @@
+From f6b78b61fda941b83973de1dceebf0549c9eaca9 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 17 Nov 2009 23:22:41 +0000
+Subject: [PATCH 0389/1179] HADOOP-6203. Improve error message when moving to trash fails due to quota issue
+
+Patch: https://issues.apache.org/jira/secure/attachment/12425243/c6203_20091116_0.20.patch
+Author: Boris Shkolnik
+Ref: YDH
+---
+ src/core/org/apache/hadoop/fs/FsShell.java |   18 ++++++++++++++----
+ src/core/org/apache/hadoop/fs/Trash.java   |    2 +-
+ 2 files changed, 15 insertions(+), 5 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/FsShell.java b/src/core/org/apache/hadoop/fs/FsShell.java
+index 37fc6f6..ea4f2de 100644
+--- a/src/core/org/apache/hadoop/fs/FsShell.java
++++ b/src/core/org/apache/hadoop/fs/FsShell.java
+@@ -1092,10 +1092,20 @@ public class FsShell extends Configured implements Tool {
+     }
+     
+     if(!skipTrash) {
+-      Trash trashTmp = new Trash(srcFs, getConf());
+-      if (trashTmp.moveToTrash(src)) {
+-        System.out.println("Moved to trash: " + src);
+-        return;
++      try {
++	      Trash trashTmp = new Trash(srcFs, getConf());
++        if (trashTmp.moveToTrash(src)) {
++          System.out.println("Moved to trash: " + src);
++          return;
++        }
++      } catch (IOException e) {
++        Exception cause = (Exception) e.getCause();
++        String msg = "";
++        if(cause != null) {
++          msg = cause.getLocalizedMessage();
++        }
++        System.err.println("Problem with Trash." + msg +". Consider using -skipTrash option");        
++        throw e;
+       }
+     }
+     
+diff --git a/src/core/org/apache/hadoop/fs/Trash.java b/src/core/org/apache/hadoop/fs/Trash.java
+index f4f93f8..986cf43 100644
+--- a/src/core/org/apache/hadoop/fs/Trash.java
++++ b/src/core/org/apache/hadoop/fs/Trash.java
+@@ -118,7 +118,7 @@ public class Trash extends Configured {
+     for (int i = 0; i < 2; i++) {
+       try {
+         if (!fs.mkdirs(baseTrashPath, PERMISSION)) {      // create current
+-          LOG.warn("Can't create trash directory: "+baseTrashPath);
++          LOG.warn("Can't create(mkdir) trash directory: "+baseTrashPath);
+           return false;
+         }
+       } catch (IOException e) {
+-- 
+1.7.0.4
+

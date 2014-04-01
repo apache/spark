@@ -1,0 +1,114 @@
+From 34bb813a5884aeb05909c2ce2cc541882ca3eda1 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:27:53 -0800
+Subject: [PATCH 0153/1179] MAPREDUCE-764. TypedBytesInput's readRaw() does not preserve custom type codes
+
+Description: The typed bytes format supports byte sequences of the form <tt>&lt;custom type code&gt; &lt;length&gt; &lt;bytes&gt;</tt>. When reading such a sequence via <tt>TypedBytesInput</tt>'s <tt>readRaw()</tt> method, however, the returned sequence currently is <tt>0 &lt;length&gt; &lt;bytes&gt;</tt> (0 is the type code for a bytes array), which leads to bugs such as the one described <span class="nobr"><a href="http://dumbo.assembla.com/spaces/dumbo/tickets/54">here<sup><img class="rendericon" src="https://issues.apache.org/jira/images/icons/linkext7.gif" height="7" width="7" align="absmiddle" alt="" border="0"/></sup></a></span>.
+Reason: bugfix
+Author: Klaas Bosteels
+Ref: UNKNOWN
+---
+ .../apache/hadoop/typedbytes/TypedBytesInput.java  |   18 +++++++++++---
+ .../test/org/apache/hadoop/typedbytes/TestIO.java  |   24 ++++++++++++++++++-
+ 2 files changed, 36 insertions(+), 6 deletions(-)
+
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesInput.java b/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesInput.java
+index 2591f85..b964d73 100644
+--- a/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesInput.java
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesInput.java
+@@ -149,7 +149,7 @@ public class TypedBytesInput {
+     } else if (code == Type.MARKER.code) {
+       return null;
+     } else if (50 <= code && code <= 200) { // application-specific typecodes
+-      return readRawBytes();
++      return readRawBytes(code);
+     } else {
+       throw new RuntimeException("unknown type");
+     }
+@@ -202,14 +202,15 @@ public class TypedBytesInput {
+   }
+ 
+   /**
+-   * Reads the raw bytes following a <code>Type.BYTES</code> code.
++   * Reads the raw bytes following a custom code.
++   * @param code the custom type code
+    * @return the obtained bytes sequence
+    * @throws IOException
+    */
+-  public byte[] readRawBytes() throws IOException {
++  public byte[] readRawBytes(int code) throws IOException {
+     int length = in.readInt();
+     byte[] bytes = new byte[5 + length];
+-    bytes[0] = (byte) Type.BYTES.code;
++    bytes[0] = (byte) code;
+     bytes[1] = (byte) (0xff & (length >> 24));
+     bytes[2] = (byte) (0xff & (length >> 16));
+     bytes[3] = (byte) (0xff & (length >> 8));
+@@ -217,6 +218,15 @@ public class TypedBytesInput {
+     in.readFully(bytes, 5, length);
+     return bytes;
+   }
++  
++  /**
++   * Reads the raw bytes following a <code>Type.BYTES</code> code.
++   * @return the obtained bytes sequence
++   * @throws IOException
++   */
++  public byte[] readRawBytes() throws IOException {
++    return readRawBytes(Type.BYTES.code);
++  }
+ 
+   /**
+    * Reads the byte following a <code>Type.BYTE</code> code.
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/typedbytes/TestIO.java b/src/contrib/streaming/src/test/org/apache/hadoop/typedbytes/TestIO.java
+index 6f91122..786cafd 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/typedbytes/TestIO.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/typedbytes/TestIO.java
+@@ -27,6 +27,7 @@ import java.io.FileInputStream;
+ import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.util.ArrayList;
++import java.util.Arrays;
+ import java.util.HashMap;
+ import java.util.LinkedList;
+ import java.util.List;
+@@ -56,8 +57,9 @@ public class TestIO extends TestCase {
+   private File tmpfile;
+ 
+   protected void setUp() throws Exception {
+-    this.tmpfile = new File(System.getProperty("test.build.data", "/tmp"),
+-      "typedbytes.bin");
++    File testDir = new File(System.getProperty("test.build.data", "/tmp"));
++    testDir.mkdir();
++    this.tmpfile = new File(testDir, "typedbytes.bin");
+   }
+ 
+   protected void tearDown() throws Exception {
+@@ -125,6 +127,24 @@ public class TestIO extends TestCase {
+     istream.close();
+   }
+ 
++  public void testCustomTypesIO() throws IOException {
++    byte[] rawBytes = new byte[] { 100, 0, 0, 0, 3, 1, 2, 3 };
++    
++    FileOutputStream ostream = new FileOutputStream(tmpfile);
++    DataOutputStream dostream = new DataOutputStream(ostream);
++    TypedBytesOutput out = new TypedBytesOutput(dostream);
++    out.writeRaw(rawBytes);
++    dostream.close();
++    ostream.close();
++
++    FileInputStream istream = new FileInputStream(tmpfile);
++    DataInputStream distream = new DataInputStream(istream);
++    TypedBytesInput in = new TypedBytesInput(distream);
++    assertTrue(Arrays.equals(rawBytes, in.readRaw()));
++    distream.close();
++    istream.close();
++  }
++  
+   public void testRecordIO() throws IOException {
+     RecRecord1 r1 = new RecRecord1();
+     r1.setBoolVal(true);
+-- 
+1.7.0.4
+

@@ -1,0 +1,62 @@
+From ee255f3909b9938b1023be6a2c59a8429227c766 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:21:27 -0800
+Subject: [PATCH 0007/1179] CLOUDERA-BUILD. Change paths to point to hadoop-0.20 where necessary
+
+---
+ bin/hadoop-config.sh                    |    6 +++---
+ example-confs/conf.pseudo/core-site.xml |    2 +-
+ example-confs/conf.pseudo/hdfs-site.xml |    2 +-
+ 3 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/bin/hadoop-config.sh b/bin/hadoop-config.sh
+index 74cd808..8c4b8ad 100644
+--- a/bin/hadoop-config.sh
++++ b/bin/hadoop-config.sh
+@@ -38,7 +38,7 @@ MSG
+ fi
+ 
+ # the root of the Hadoop installation
+-export HADOOP_HOME="${HADOOP_HOME:-/usr/lib/hadoop}"
++export HADOOP_HOME="${HADOOP_HOME:-/usr/lib/hadoop-0.20}"
+ 
+ #check to see if the conf dir is given as an optional argument
+ if [ $# -gt 1 ]
+@@ -53,8 +53,8 @@ then
+ fi
+  
+ # Allow alternate conf dir location.
+-HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-/etc/hadoop/conf}"
+-HADOOP_LOG_DIR="${HADOOP_LOG_DIR:-/var/log/hadoop}"
++HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-/etc/hadoop-0.20/conf}"
++HADOOP_LOG_DIR="${HADOOP_LOG_DIR:-/var/log/hadoop-0.20}"
+ 
+ #check to see it is specified whether to use the slaves or the
+ # masters file
+diff --git a/example-confs/conf.pseudo/core-site.xml b/example-confs/conf.pseudo/core-site.xml
+index 60482de..431fa0b 100644
+--- a/example-confs/conf.pseudo/core-site.xml
++++ b/example-confs/conf.pseudo/core-site.xml
+@@ -9,6 +9,6 @@
+ 
+   <property>
+      <name>hadoop.tmp.dir</name>
+-     <value>/var/lib/hadoop/cache/${user.name}</value>
++     <value>/var/lib/hadoop-0.20/cache/${user.name}</value>
+   </property>
+ </configuration>
+diff --git a/example-confs/conf.pseudo/hdfs-site.xml b/example-confs/conf.pseudo/hdfs-site.xml
+index 934b87b..bf7a18b 100644
+--- a/example-confs/conf.pseudo/hdfs-site.xml
++++ b/example-confs/conf.pseudo/hdfs-site.xml
+@@ -13,6 +13,6 @@
+   <property>
+      <!-- specify this so that running 'hadoop namenode -format' formats the right dir -->
+      <name>dfs.name.dir</name>
+-     <value>/var/lib/hadoop/cache/hadoop/dfs/name</value>
++     <value>/var/lib/hadoop-0.20/cache/hadoop/dfs/name</value>
+   </property>
+ </configuration>
+-- 
+1.7.0.4
+

@@ -1,0 +1,81 @@
+From 4f2ec73b8231ee5c7f4b1423f5a5dd895386fd2c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 28 Sep 2011 03:51:39 -0700
+Subject: [PATCH 1062/1179] MAPREDUCE-2980. Use patched jetty to avoid fetch failures and other HTTP-related issues
+
+This changes the jetty build to the following tag:
+https://github.com/toddlipcon/jetty-hadoop-fix/tree/6.1.26.cloudera.1
+
+This tag was built by taking Jetty 6.1.26, then merging the NIO
+selector code from the Jetty "6.1.22z6" branch, provided by Greg Wilkins.
+In cluster testing, it resolves many HTTP-related issues.
+
+Reason: avoid high fetch failure rate, causing production issues
+Author: Todd Lipcon
+Ref: CDH-2785
+---
+ ivy/ivysettings.xml      |   13 ++++++++++++-
+ ivy/libraries.properties |    4 ++--
+ 2 files changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/ivy/ivysettings.xml b/ivy/ivysettings.xml
+index 7871d40..3d06c76 100644
+--- a/ivy/ivysettings.xml
++++ b/ivy/ivysettings.xml
+@@ -39,7 +39,10 @@
+     value="[organisation]/[module]/[revision]/[module]-[revision]"/>
+   <property name="maven2.pattern.ext"
+     value="${maven2.pattern}.[ext]"/>
+-
++  <property name="cdh.releases"
++            value="https://repository.cloudera.com/artifactory/cdh-releases-rcs/"
++            override="false" />
++  
+   <!-- pull in the local repository -->
+   <include url="${ivy.default.conf.dir}/ivyconf-local.xml"/>
+   <settings defaultResolver="default"/>
+@@ -58,18 +61,26 @@
+       pattern="${maven2.pattern.ext}"
+       m2compatible="true"
+       />
++    <ibiblio name="cdh-releases"
++      root="${cdh.releases}"
++      pattern="${maven2.pattern.ext}"
++      m2compatible="true"
++      />
+     <chain name="default" dual="true">
+       <resolver ref="local"/>
+       <resolver ref="maven2"/>
++      <resolver ref="cdh-releases"/>
+     </chain>
+     <chain name="internal">
+       <resolver ref="local"/>
+     </chain>
+     <chain name="external">
+       <resolver ref="maven2"/>
++      <resolver ref="cdh-releases"/>
+     </chain>
+     <chain name="external-and-snapshots">
+       <resolver ref="maven2"/>
++      <resolver ref="cdh-releases"/>
+       <resolver ref="apache-snapshot"/>
+     </chain>
+   </resolvers>
+diff --git a/ivy/libraries.properties b/ivy/libraries.properties
+index afe7a92..0b3c715 100644
+--- a/ivy/libraries.properties
++++ b/ivy/libraries.properties
+@@ -49,8 +49,8 @@ jasper.version=5.5.12
+ jsp.version=2.1
+ jsp-api.version=5.5.12
+ jets3t.version=0.6.1
+-jetty.version=6.1.26
+-jetty-util.version=6.1.26
++jetty.version=6.1.26.cloudera.1
++jetty-util.version=6.1.26.cloudera.1
+ junit.version=4.5
+ jdiff.version=1.0.9
+ json.version=1.0
+-- 
+1.7.0.4
+

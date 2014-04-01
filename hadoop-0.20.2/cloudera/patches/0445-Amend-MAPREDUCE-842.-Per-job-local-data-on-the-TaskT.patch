@@ -1,0 +1,100 @@
+From e1ab72fadf1fc48bb21a44c62edd39b3883a392a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 29 Jan 2010 00:00:30 +0530
+Subject: [PATCH 0445/1179] Amend MAPREDUCE-842. Per-job local data on the TaskTracker node should have right access-control
+
+Reason: follow-up patch to fix a backport bug
+Patch: https://issues.apache.org/jira/secure/attachment/12431690/MR-842-follow-up.patch
+Author: Vinod K V
+Ref: CDH-648
+---
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    6 +++-
+ .../hadoop/mapred/TestTaskTrackerLocalization.java |   26 ++++++++++++++++++++
+ 2 files changed, 30 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 4b9d57a..114e6a9 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -933,8 +933,7 @@ public class TaskTracker
+         rjob.jobConf = localJobConf;  
+         rjob.keepJobFiles = ((localJobConf.getKeepTaskFilesPattern() != null) ||
+                              localJobConf.getKeepFailedTaskFiles());
+-        // save local copy of JobToken file
+-        localizeJobTokenFile(t.getUser(), jobId, localJobConf);       
++
+         TokenStorage ts = TokenCache.loadTokens(rjob.jobConf);
+         Token<JobTokenIdentifier> jt = (Token<JobTokenIdentifier>)ts.getJobToken(); 
+         getJobTokenSecretManager().addTokenForJob(jobId.toString(), jt);
+@@ -996,6 +995,9 @@ public class TaskTracker
+     // Download the job.jar for this job from the system FS
+     localizeJobJarFile(userName, jobId, userFs, localJobConf);
+ 
++    // save local copy of JobToken file
++    localizeJobTokenFile(userName, jobId, localJobConf);
++
+     return localJobConf;
+   }
+ 
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java b/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
+index ff6a2db..e8fc6e3 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
++++ b/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
+@@ -33,7 +33,10 @@ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.LocalDirAllocator;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.mapreduce.server.tasktracker.Localizer;
++import org.apache.hadoop.mapreduce.security.SecureShuffleUtils;
++import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.util.Shell;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.mapred.JvmManager.JvmEnv;
+@@ -129,6 +132,7 @@ public class TestTaskTrackerLocalization extends TestCase {
+ 
+     // for test case system FS is the local FS
+     tracker.systemFS = FileSystem.getLocal(trackerFConf);
++    tracker.systemDirectory = new Path(TEST_ROOT_DIR.getAbsolutePath());
+     tracker.setLocalFileSystem(tracker.systemFS);
+     
+     taskTrackerUGI = UserGroupInformation.login(trackerFConf);
+@@ -142,6 +146,9 @@ public class TestTaskTrackerLocalization extends TestCase {
+         new MapTask(jobConfFile.toURI().toString(), taskId, 1, null, 1);
+     task.setConf(jobConf); // Set conf. Set user name in particular.
+ 
++    // create jobTokens file
++    uploadJobTokensFile();
++
+     taskController = new DefaultTaskController();
+     taskController.setConf(trackerFConf);
+     taskController.setup();
+@@ -189,6 +196,25 @@ public class TestTaskTrackerLocalization extends TestCase {
+     return jobConfFile;
+    }
+   
++  /**
++   * create fake JobTokens file
++   * @return
++   * @throws IOException
++   */
++  protected void uploadJobTokensFile() throws IOException {
++
++    File dir = new File(TEST_ROOT_DIR, jobId.toString());
++    if(!dir.exists())
++      assertTrue("faild to create dir="+dir.getAbsolutePath(), dir.mkdirs());
++
++    File jobTokenFile = new File(dir, SecureShuffleUtils.JOB_TOKEN_FILENAME);
++    FileOutputStream fos = new FileOutputStream(jobTokenFile);
++    java.io.DataOutputStream out = new java.io.DataOutputStream(fos);
++    Token<JobTokenIdentifier> jt = new Token<JobTokenIdentifier>();
++    jt.write(out); // writing empty file, we don't need the keys for this test
++    out.close();
++  }
++
+   @Override
+   protected void tearDown()
+       throws Exception {
+-- 
+1.7.0.4
+

@@ -1,0 +1,28 @@
+From 3df2f412897555d40bba7fcc21e9296f6aa079ce Mon Sep 17 00:00:00 2001
+From: Peter Linnell <plinnell@cloudera.com>
+Date: Tue, 10 Apr 2012 15:46:47 -0700
+Subject: [PATCH 1167/1179] DISTRO-53. bin/hadoop leaks pids when running a non-detached datanode via jsvc
+
+Author: Peter Linnell
+Reason: Bug
+Ref: CDH-4367
+---
+ bin/hadoop |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index aece254..6ecb628 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -435,7 +435,7 @@ case "$_HADOOP_RUN_MODE" in
+                    -outfile $HADOOP_LOG_DIR/jsvc.out"
+       echo Non-detached jsvc output piping to: $HADOOP_LOG_DIR/jsvc.out
+       touch $HADOOP_LOG_DIR/jsvc.out
+-      tail -f $HADOOP_LOG_DIR/jsvc.out &
++      tail -f --pid=$$ $HADOOP_LOG_DIR/jsvc.out &
+     fi
+     unset _HADOOP_DAEMON_DETACHED
+ 
+-- 
+1.7.0.4
+

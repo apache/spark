@@ -1,0 +1,34 @@
+From b919f0a99b2ac3b48a32b0906d19c2b306f7a554 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 6 Oct 2010 15:38:19 -0700
+Subject: [PATCH 0731/1179] CLOUDERA-BUILD. Don't use HADOOP_IDENT_STRING to set user
+
+This was a misuse of this variable - it should only determine the name of the log/pid files
+---
+ bin/hadoop |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index e495b6f..52f99b2 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -323,7 +323,6 @@ HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.policy.file=$HADOOP_POLICYFILE"
+ # The user itself is determined as one of the following, in descending
+ # precedence:
+ #  HADOOP_<node>NODE_USER variable
+-#  HADOOP_IDENT_STRING variable
+ #  the current userid, so long as that userid is not root
+ #
+ # After the above is determined, it is stored into the local variable
+@@ -342,7 +341,7 @@ if [[ "$COMMAND" == *node ]] || [[ "$COMMAND" == *tracker ]]; then
+   command_uc=$(echo $COMMAND| tr a-z A-Z)
+   user_var="HADOOP_${command_uc}_USER"
+   _HADOOP_DAEMON_USER=$(eval "echo \$$user_var")
+-  _HADOOP_DAEMON_USER=${_HADOOP_DAEMON_USER:-$HADOOP_IDENT_STRING}
++  _HADOOP_DAEMON_USER=${_HADOOP_DAEMON_USER:-$(id -un)}
+ 
+   if [ -z "$_HADOOP_DAEMON_USER" ]; then
+     echo Please specify a user to run the $COMMAND by setting $user_var
+-- 
+1.7.0.4
+

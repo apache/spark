@@ -1,0 +1,101 @@
+From 16fa5d016e9bbe79896adf0c24dd8510b31c0325 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Mar 2011 15:55:15 -0800
+Subject: [PATCH 0925/1179] MAPREDUCE-2379, HADOOP-7184. Distributed cache sizing configurations are missing from mapred-default.xml
+
+* Moves local.cache.size from core-default.xml into mapred-default.xml
+* Adds documentation for mapreduce.tasktracker.cache.local.numberdirectories
+* Fixes the configuration parameter mapreduce.tasktracker.cache.local.numberdirectories
+  to be named the same as it is in trunk -- previous betas had the incorrect name
+  mapreduce.tasktracker.local.cache.numberdirectories
+
+Reason: fix docs
+Author: Todd Lipcon
+Ref: CDH-2815
+---
+ src/core/core-default.xml                          |    8 -------
+ src/mapred/mapred-default.xml                      |   21 ++++++++++++++++++++
+ .../filecache/TrackerDistributedCacheManager.java  |    2 +-
+ .../TestTrackerDistributedCacheManager.java        |    2 +-
+ 4 files changed, 23 insertions(+), 10 deletions(-)
+
+diff --git a/src/core/core-default.xml b/src/core/core-default.xml
+index 6d25263..8cfce3f 100644
+--- a/src/core/core-default.xml
++++ b/src/core/core-default.xml
+@@ -300,14 +300,6 @@
+ </property>
+ 
+ <property>
+-  <name>local.cache.size</name>
+-  <value>10737418240</value>
+-  <description>The limit on the size of cache you want to keep, set by default
+-  to 10GB. This will act as a soft limit on the cache directory for out of band data.
+-  </description>
+-</property>
+-            
+-<property>
+   <name>io.seqfile.compress.blocksize</name>
+   <value>1000000</value>
+   <description>The minimum block size for compression in block compressed 
+diff --git a/src/mapred/mapred-default.xml b/src/mapred/mapred-default.xml
+index 57e6dcf..1b4b667 100644
+--- a/src/mapred/mapred-default.xml
++++ b/src/mapred/mapred-default.xml
+@@ -168,6 +168,27 @@
+   </description>
+ </property>
+ 
++<!-- TaskTracker DistributedCache configuration -->
++<property>
++  <name>local.cache.size</name>
++  <value>10737418240</value>
++  <description>The number of bytes to allocate in each local TaskTracker
++  directory for holding Distributed Cache data.</description>
++</property>
++
++<property>
++  <name>mapreduce.tasktracker.cache.local.numberdirectories</name>
++  <value>10000</value>
++  <description>
++  The maximum number of subdirectories that should be created in any particular
++  distributed cache store. After this many directories have been created,
++  cache items will be expunged regardless of whether the total size threshold
++  has been exceeded.
++  </description>
++</property>
++<!-- End of TaskTracker DistributedCache configuration -->
++
++
+ <property>
+   <name>mapred.tasktracker.expiry.interval</name>
+   <value>600000</value>
+diff --git a/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java b/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java
+index 581f400..ff7af8c 100644
+--- a/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java
++++ b/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java
+@@ -115,7 +115,7 @@ public class TrackerDistributedCacheManager {
+       ("local.cache.size", DEFAULT_CACHE_SIZE);
+     // setting the cache number of subdirectories limit to a default of 10000
+     this.allowedCacheSubdirs = conf.getLong
+-      ("mapreduce.tasktracker.local.cache.numberdirectories",
++      ("mapreduce.tasktracker.cache.local.numberdirectories",
+        DEFAULT_CACHE_SUBDIR_LIMIT);
+     this.taskController = controller;
+   }
+diff --git a/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java b/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
+index cfcbaaf..724a50e 100644
+--- a/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
++++ b/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
+@@ -594,7 +594,7 @@ public class TestTrackerDistributedCacheManager extends TestCase {
+        localfs.listStatus(cachesBase).length > 1);
+     
+     conf2.setLong("local.cache.size", LOCAL_CACHE_LIMIT * 10);
+-    conf2.setLong("mapreduce.tasktracker.local.cache.numberdirectories",
++    conf2.setLong("mapreduce.tasktracker.cache.local.numberdirectories",
+         LOCAL_CACHE_SUBDIR_LIMIT);
+     manager = 
+       new TrackerDistributedCacheManager(conf2, taskController);
+-- 
+1.7.0.4
+

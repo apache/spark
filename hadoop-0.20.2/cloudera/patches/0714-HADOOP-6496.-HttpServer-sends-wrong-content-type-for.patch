@@ -1,0 +1,108 @@
+From 91fa1dfdd74ebac1e88da1d3adb644cf5fe84e7a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 29 Sep 2010 00:44:57 -0700
+Subject: [PATCH 0714/1179] HADOOP-6496. HttpServer sends wrong content-type for CSS files (and others)
+
+Author: Todd Lipcon
+Reason: Fixes styling on web UIs
+---
+ src/core/org/apache/hadoop/http/HttpServer.java    |   27 ++++++++++++++++---
+ .../org/apache/hadoop/http/TestHttpServer.java     |   13 +++++++++
+ 2 files changed, 35 insertions(+), 5 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/http/HttpServer.java b/src/core/org/apache/hadoop/http/HttpServer.java
+index bf8191b..10e9b38 100644
+--- a/src/core/org/apache/hadoop/http/HttpServer.java
++++ b/src/core/org/apache/hadoop/http/HttpServer.java
+@@ -52,9 +52,12 @@ import org.apache.hadoop.security.authorize.AccessControlList;
+ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.fs.CommonConfigurationKeys;
+ 
++import org.mortbay.io.Buffer;
+ import org.mortbay.jetty.Connector;
+ import org.mortbay.jetty.Handler;
++import org.mortbay.jetty.MimeTypes;
+ import org.mortbay.jetty.Server;
++import org.mortbay.jetty.handler.ContextHandler;
+ import org.mortbay.jetty.handler.ContextHandlerCollection;
+ import org.mortbay.jetty.nio.SelectChannelConnector;
+ import org.mortbay.jetty.security.SslSocketConnector;
+@@ -700,6 +703,7 @@ public class HttpServer implements FilterContainer {
+    * all of the servlets resistant to cross-site scripting attacks.
+    */
+   public static class QuotingInputFilter implements Filter {
++    private FilterConfig config;
+ 
+     public static class RequestQuoter extends HttpServletRequestWrapper {
+       private final HttpServletRequest rawRequest;
+@@ -787,6 +791,7 @@ public class HttpServer implements FilterContainer {
+ 
+     @Override
+     public void init(FilterConfig config) throws ServletException {
++      this.config = config;
+     }
+ 
+     @Override
+@@ -801,11 +806,23 @@ public class HttpServer implements FilterContainer {
+       HttpServletRequestWrapper quoted = 
+         new RequestQuoter((HttpServletRequest) request);
+       final HttpServletResponse httpResponse = (HttpServletResponse) response;
+-      // set the default to UTF-8 so that we don't need to worry about IE7
+-      // choosing to interpret the special characters as UTF-7
+-      httpResponse.setContentType("text/html;charset=utf-8");
+-      chain.doFilter(quoted, response);
+-    }
+ 
++      // Infer the content type based on the path of the request.
++      String path = ((HttpServletRequest)request).getRequestURI();
++      ContextHandler.SContext sContext = (ContextHandler.SContext)config.getServletContext();
++      MimeTypes mimes = sContext.getContextHandler().getMimeTypes();
++      Buffer mimeBuffer = mimes.getMimeByExtension(path);
++      String mime = mimeBuffer != null ? mimeBuffer.toString() : "text/html";
++
++      // If it is HTML (default), force the character set to utf-8.
++      // This is to avoid the following security issue:
++      // http://openmya.hacker.jp/hasegawa/security/utf7cs.html
++      if (mime.startsWith("text/html")) {
++        httpResponse.setContentType(mime + "; charset=utf-8");
++      } else {
++        httpResponse.setContentType(mime);
++      }
++      chain.doFilter(quoted, httpResponse);
++    }
+   }
+ }
+diff --git a/src/test/org/apache/hadoop/http/TestHttpServer.java b/src/test/org/apache/hadoop/http/TestHttpServer.java
+index c98c86e..eb07e38 100644
+--- a/src/test/org/apache/hadoop/http/TestHttpServer.java
++++ b/src/test/org/apache/hadoop/http/TestHttpServer.java
+@@ -23,6 +23,7 @@ import java.io.File;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.io.PrintStream;
++import java.net.URLConnection;
+ import java.net.HttpURLConnection;
+ import java.net.URL;
+ import java.util.Arrays;
+@@ -151,6 +152,18 @@ public class TestHttpServer {
+                  readOutput(new URL(baseUrl, "/echomap?a=b&c<=d&a=>")));
+   }
+ 
++  @Test public void testContentTypes() throws Exception {
++    // Static CSS files should have text/css
++    URL cssUrl = new URL(baseUrl, "/static/hadoop.css");
++    URLConnection conn = cssUrl.openConnection();
++    assertEquals("text/css", conn.getContentType());
++
++    // Servlets should have text/html with proper encoding
++    URL servletUrl = new URL(baseUrl, "/echo?a=b");
++    conn = servletUrl.openConnection();
++    assertEquals("text/html; charset=utf-8", conn.getContentType());
++  }
++
+   /**
+    * Dummy filter that mimics as an authentication filter. Obtains user identity
+    * from the request parameter user.name. Wraps around the request so that
+-- 
+1.7.0.4
+

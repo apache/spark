@@ -1,0 +1,168 @@
+From 955fe9433b13f21079f92e4035393b683486ad07 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:05:59 -0800
+Subject: [PATCH 0102/1179] HADOOP-5738. Split waiting tasks field in JobTracker metrics to individual tasks
+
+Description: Currently, job tracker metrics reports waiting tasks as a single field in metrics. It would be better if we can split waiting tasks into maps and reduces.
+Reason: User experience improvement
+Author: Sreekanth Ramakrishnan
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/mapred/JobInProgress.java    |    9 +++--
+ .../hadoop/mapred/JobTrackerInstrumentation.java   |   12 +++++--
+ .../hadoop/mapred/JobTrackerMetricsInst.java       |   39 +++++++++++++-------
+ 3 files changed, 40 insertions(+), 20 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 0fbddec..f85d916 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -445,8 +445,9 @@ public class JobInProgress {
+                 (numMapTasks + numReduceTasks) +
+                 " exceeds the configured limit " + maxTasks);
+     }
+-    jobtracker.getInstrumentation().addWaiting(
+-        getJobID(), numMapTasks + numReduceTasks);
++
++    jobtracker.getInstrumentation().addWaitingMaps(getJobID(), numMapTasks);
++    jobtracker.getInstrumentation().addWaitingReduces(getJobID(), numReduceTasks);
+ 
+     maps = new TaskInProgress[numMapTasks];
+     for(int i=0; i < numMapTasks; ++i) {
+@@ -2530,8 +2531,8 @@ public class JobInProgress {
+    */
+   synchronized void garbageCollect() {
+     // Let the JobTracker know that a job is complete
+-    jobtracker.getInstrumentation(
+-        ).decWaiting(getJobID(), pendingMaps() + pendingReduces());
++    jobtracker.getInstrumentation().decWaitingMaps(getJobID(), pendingMaps());
++    jobtracker.getInstrumentation().decWaitingReduces(getJobID(), pendingReduces());
+     jobtracker.storeCompletedJob(this);
+     jobtracker.finalizeJob(this);
+       
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTrackerInstrumentation.java b/src/mapred/org/apache/hadoop/mapred/JobTrackerInstrumentation.java
+index e06572d..8ef7ff7 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTrackerInstrumentation.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTrackerInstrumentation.java
+@@ -55,9 +55,15 @@ class JobTrackerInstrumentation {
+   public void finalizeJob(JobConf conf, JobID id) 
+   { }
+   
+-  public void addWaiting(JobID id, int tasks)
++  public void addWaitingMaps(JobID id, int task)
+   { }
+-
+-  public void decWaiting(JobID id, int tasks)
++  
++  public void decWaitingMaps(JobID id, int task) 
++  { }
++  
++  public void addWaitingReduces(JobID id, int task)
++  { }
++  
++  public void decWaitingReduces(JobID id, int task)
+   { }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java b/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java
+index 94c9984..fbed7af 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java
+@@ -36,8 +36,9 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+   private int numReduceTasksFailed = 0;
+   private int numJobsSubmitted = 0;
+   private int numJobsCompleted = 0;
+-  private int numWaitingTasks = 0;
+-    
++  private int numWaitingMaps = 0;
++  private int numWaitingReduces = 0;
++  
+   public JobTrackerMetricsInst(JobTracker tracker, JobConf conf) {
+     super(tracker, conf);
+     String sessionId = conf.getSessionId();
+@@ -64,7 +65,8 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+       metricsRecord.incrMetric("reduces_failed", numReduceTasksFailed);
+       metricsRecord.incrMetric("jobs_submitted", numJobsSubmitted);
+       metricsRecord.incrMetric("jobs_completed", numJobsCompleted);
+-      metricsRecord.incrMetric("waiting_tasks", numWaitingTasks);
++      metricsRecord.incrMetric("waiting_maps", numWaitingMaps);
++      metricsRecord.incrMetric("waiting_reduces", numWaitingReduces);
+ 
+       numMapTasksLaunched = 0;
+       numMapTasksCompleted = 0;
+@@ -72,9 +74,10 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+       numReduceTasksLaunched = 0;
+       numReduceTasksCompleted = 0;
+       numReduceTasksFailed = 0;
+-      numWaitingTasks = 0;
+       numJobsSubmitted = 0;
+       numJobsCompleted = 0;
++      numWaitingMaps = 0;
++      numWaitingReduces = 0;
+     }
+     metricsRecord.update();
+ 
+@@ -88,7 +91,7 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+   @Override
+   public synchronized void launchMap(TaskAttemptID taskAttemptID) {
+     ++numMapTasksLaunched;
+-    decWaiting(taskAttemptID.getJobID(), 1);
++    decWaitingMaps(taskAttemptID.getJobID(), 1);
+   }
+ 
+   @Override
+@@ -99,13 +102,13 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+   @Override
+   public synchronized void failedMap(TaskAttemptID taskAttemptID) {
+     ++numMapTasksFailed;
+-    addWaiting(taskAttemptID.getJobID(), 1);
++    addWaitingMaps(taskAttemptID.getJobID(), 1);
+   }
+ 
+   @Override
+   public synchronized void launchReduce(TaskAttemptID taskAttemptID) {
+     ++numReduceTasksLaunched;
+-    decWaiting(taskAttemptID.getJobID(), 1);
++    decWaitingReduces(taskAttemptID.getJobID(), 1);
+   }
+ 
+   @Override
+@@ -116,7 +119,7 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+   @Override
+   public synchronized void failedReduce(TaskAttemptID taskAttemptID) {
+     ++numReduceTasksFailed;
+-    addWaiting(taskAttemptID.getJobID(), 1);
++    addWaitingReduces(taskAttemptID.getJobID(), 1);
+   }
+ 
+   @Override
+@@ -130,12 +133,22 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+   }
+ 
+   @Override
+-  public synchronized void addWaiting(JobID id, int tasks) {
+-    numWaitingTasks += tasks;
++  public synchronized void addWaitingMaps(JobID id, int task) {
++    numWaitingMaps  += task;
+   }
+-
++  
++  @Override
++  public synchronized void decWaitingMaps(JobID id, int task) {
++    numWaitingMaps -= task;
++  }
++  
++  @Override
++  public synchronized void addWaitingReduces(JobID id, int task) {
++    numWaitingReduces += task;
++  }
++  
+   @Override
+-  public synchronized void decWaiting(JobID id, int tasks) {
+-    numWaitingTasks -= tasks;
++  public synchronized void decWaitingReduces(JobID id, int task){
++    numWaitingReduces -= task;
+   }
+ }
+-- 
+1.7.0.4
+

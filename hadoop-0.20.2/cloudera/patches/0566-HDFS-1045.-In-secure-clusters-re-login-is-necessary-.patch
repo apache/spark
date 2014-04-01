@@ -1,0 +1,135 @@
+From c69f8f7977591ac297cf5501374c4f40acfea7ee Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 17 Mar 2010 20:32:34 -0700
+Subject: [PATCH 0566/1179] HDFS-1045. In secure clusters, re-login is necessary for https clients before opening connections
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439110/HDFS-1045-Y20.patch
+Author: Jakob Homan
+Ref: CDH-648
+---
+ .../hadoop/security/UserGroupInformation.java      |   39 ++++++++++++++++++++
+ .../hdfs/server/namenode/GetImageServlet.java      |   25 +++++++++++--
+ .../hdfs/server/namenode/SecondaryNameNode.java    |    3 ++
+ 3 files changed, 64 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 66b2a3a..46e8151 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -411,6 +411,45 @@ public class UserGroupInformation {
+                             path, le);
+     }
+   }
++  /**
++   * Log a user in from a keytab file. Loads a user identity from a keytab
++   * file and login them in. This new user does not affect the currently
++   * logged-in user.
++   * @param user the principal name to load from the keytab
++   * @param path the path to the keytab file
++   * @throws IOException if the keytab file can't be read
++   */
++  public synchronized
++  static UserGroupInformation loginUserFromKeytabAndReturnUGI(String user,
++                                  String path
++                                  ) throws IOException {
++    if (!isSecurityEnabled())
++      return UserGroupInformation.getCurrentUser();
++    String oldKeytabFile = null;
++    String oldKeytabPrincipal = null;
++
++    try {
++      oldKeytabFile = keytabFile;
++      oldKeytabPrincipal = keytabPrincipal;
++      keytabFile = path;
++      keytabPrincipal = user;
++      Subject subject = new Subject();
++      LoginContext login = 
++        new LoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, subject); 
++       
++      login.login();
++      UserGroupInformation newLoginUser = new UserGroupInformation(subject);
++      newLoginUser.login = login;
++      
++      return newLoginUser;
++    } catch (LoginException le) {
++      throw new IOException("Login failure for " + user + " from keytab " + 
++                            path, le);
++    } finally {
++      if(oldKeytabFile != null) keytabFile = oldKeytabFile;
++      if(oldKeytabPrincipal != null) keytabPrincipal = oldKeytabPrincipal;
++    }
++  }
+   
+   /**
+    * Re-Login a user in from a keytab file. Loads a user identity from a keytab
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
+index 777701b..ea2dda4 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
+@@ -35,6 +35,7 @@ import javax.servlet.http.HttpServletResponse;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.util.StringUtils;
+ 
+@@ -55,7 +56,7 @@ public class GetImageServlet extends HttpServlet {
+       ServletContext context = getServletContext();
+       final FSImage nnImage = (FSImage)context.getAttribute("name.system.image");
+       final TransferFsImage ff = new TransferFsImage(pmap, request, response);
+-      Configuration conf = (Configuration)getServletContext().getAttribute("name.conf");
++      final Configuration conf = (Configuration)getServletContext().getAttribute("name.conf");
+       if(UserGroupInformation.isSecurityEnabled() && 
+           !isValidRequestor(request.getRemoteUser(), conf)) {
+         response.sendError(HttpServletResponse.SC_FORBIDDEN, 
+@@ -84,12 +85,30 @@ public class GetImageServlet extends HttpServlet {
+           } else if (ff.putImage()) {
+             // issue a HTTP get request to download the new fsimage 
+             nnImage.validateCheckpointUpload(ff.getToken());
+-            TransferFsImage.getFileClient(ff.getInfoServer(), "getimage=1", 
+-                                          nnImage.getFsImageNameCheckpoint());
++            reloginIfNecessary().doAs(new PrivilegedExceptionAction<Void>() {
++              @Override
++              public Void run() throws Exception {
++                TransferFsImage.getFileClient(ff.getInfoServer(), "getimage=1", 
++                    nnImage.getFsImageNameCheckpoint());
++                return null;
++              }
++            });
++
+             nnImage.checkpointUploadDone();
+           }
+           return null;
+         }
++
++        // We may have lost our ticket since the last time we tried to open
++        // an http connection, so log in just in case.
++        private UserGroupInformation reloginIfNecessary() throws IOException {
++          // This method is only called on the NN, therefore it is safe to
++          // use these key values.
++          return UserGroupInformation
++          .loginUserFromKeytabAndReturnUGI(
++              conf.get(DFS_NAMENODE_KRB_HTTPS_USER_NAME_KEY), 
++              conf.get(DFSConfigKeys.DFS_NAMENODE_KEYTAB_FILE_KEY));
++        }
+       });
+ 
+     } catch (Exception ie) {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index 217d3e9..fa76477 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -385,6 +385,9 @@ public class SecondaryNameNode implements Runnable {
+                             "after creating edits.new");
+     }
+ 
++    // We may have lost our ticket since last checkpoint, log in again, just in case
++    if(UserGroupInformation.isSecurityEnabled())
++      UserGroupInformation.getCurrentUser().reloginFromKeytab();
+     downloadCheckpointFiles(sig);   // Fetch fsimage and edits
+     doMerge(sig);                   // Do the merge
+   
+-- 
+1.7.0.4
+

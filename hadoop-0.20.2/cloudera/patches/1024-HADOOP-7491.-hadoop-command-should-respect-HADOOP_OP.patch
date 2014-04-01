@@ -1,0 +1,27 @@
+From 8d1c5e03eb7440901fadb1fc85509dc1e61bff86 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 29 Jul 2011 15:15:28 -0700
+Subject: [PATCH 1024/1179] HADOOP-7491. hadoop command should respect HADOOP_OPTS when given a class name.
+
+Reason: Improvement
+Author: Eli Collins
+Ref: CDH-3392
+---
+ bin/hadoop |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index cb5d882..1c60602 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -284,6 +284,7 @@ elif [[ "$COMMAND" = -*  ]] ; then
+   exit 1
+ else
+   CLASS=$COMMAND
++  HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+ fi
+ 
+ # cygwin path translation
+-- 
+1.7.0.4
+

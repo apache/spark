@@ -1,0 +1,108 @@
+From 1864359f4ef32974ed41a1278e640e1ee246ef9b Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 25 May 2010 13:05:38 -0700
+Subject: [PATCH 0255/1179] HADOOP-6723. Unchecked exceptions thrown in IPC connection should not orphan clients.
+
+Description: If the server sends back some malformed data, for
+example, receiveResponse() can end up with an incorrect call ID. Then,
+when it tries to find it in the calls map, it will end up with null
+and throw NPE in receiveResponse. This isn't caught anywhere, so the
+original IPC client ends up hanging forever instead of catching an
+exception. Another example is if the writable implementation itself
+throws an unchecked exception or OOME.
+
+We should catch Throwable in Connection.run() and shut down the
+connection if we catch one.
+
+Reason: Bug fix
+Author: Eli Collins
+Ref: CDH-1131
+---
+ src/core/org/apache/hadoop/ipc/Client.java  |   12 +++++++-
+ src/test/org/apache/hadoop/ipc/TestIPC.java |   40 +++++++++++++++++++++++++++
+ 2 files changed, 50 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index fdfbc80..070278f 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -442,8 +442,16 @@ public class Client {
+         LOG.debug(getName() + ": starting, having connections " 
+             + connections.size());
+ 
+-      while (waitForWork()) {//wait here for work - read or close connection
+-        receiveResponse();
++      try {
++        while (waitForWork()) {//wait here for work - read or close connection
++          receiveResponse();
++        }
++      } catch (Throwable t) {
++        // This truly is unexpected, since we catch IOException in receiveResponse
++        // -- this is only to be really sure that we don't leave a client hanging
++        // forever.
++        LOG.warn("Unexpected error reading responses on connection " + this, t);
++        markClosed(new IOException("Error reading responses", t));
+       }
+       
+       close();
+diff --git a/src/test/org/apache/hadoop/ipc/TestIPC.java b/src/test/org/apache/hadoop/ipc/TestIPC.java
+index b672ad5..617a10f 100644
+--- a/src/test/org/apache/hadoop/ipc/TestIPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestIPC.java
+@@ -248,6 +248,22 @@ public class TestIPC extends TestCase {
+     }
+   }
+ 
++  private static class LongRTEWritable extends LongWritable {
++    private final static String ERR_MSG = 
++      "Come across an runtime exception while reading";
++    
++    LongRTEWritable() {}
++    
++    LongRTEWritable(long longValue) {
++      super(longValue);
++    }
++    
++    public void readFields(DataInput in) throws IOException {
++      super.readFields(in);
++      throw new RuntimeException(ERR_MSG);
++    }
++  }
++
+   public void testErrorClient() throws Exception {
+     // start server
+     Server server = new TestServer(1, false);
+@@ -267,6 +283,30 @@ public class TestIPC extends TestCase {
+       assertEquals(LongErrorWritable.ERR_MSG, cause.getMessage());
+     }
+   }
++  
++  public void testRuntimeExceptionWritable() throws Exception {
++    // start server
++    Server server = new TestServer(1, false);
++    InetSocketAddress addr = NetUtils.getConnectAddress(server);
++    server.start();
++
++    // start client
++    Client client = new Client(LongRTEWritable.class, conf);
++    try {
++      client.call(new LongRTEWritable(RANDOM.nextLong()),
++              addr, null, null);
++      fail("Expected an exception to have been thrown");
++    } catch (IOException e) {
++      // check error
++      Throwable cause = e.getCause();
++      assertTrue(cause instanceof IOException);
++      // it's double-wrapped
++      Throwable cause2 = cause.getCause();
++      assertTrue(cause2 instanceof RuntimeException);
++
++      assertEquals(LongRTEWritable.ERR_MSG, cause2.getMessage());
++    }
++  }
+ 
+   public static void main(String[] args) throws Exception {
+ 
+-- 
+1.7.0.4
+

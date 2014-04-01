@@ -1,0 +1,41 @@
+From 86211e3714dc5b1dbcb7a3c328336277f6657de7 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:38:44 -0800
+Subject: [PATCH 0033/1179] HADOOP-5967. Sqoop should only use a single map task
+
+Description: The current DBInputFormat implementation uses SELECT ... LIMIT ... OFFSET statements to
+read from a database table. This actually results in several queries all accessing the same table at
+the same time. Most database implementations will actually use a full table scan for each such
+query, starting at row 1 and scanning down until the OFFSET is reached before emitting data to the
+client. The upshot of this is that we see O(n^2) performance in the size of the table when using a
+large number of mappers, when a single mapper would read through the table in O(n) time in the number of rows.
+
+<p>This patch sets the number of map tasks to 1 in the MapReduce job sqoop launches.</p>
+Reason: Performance improvement
+Author: Aaron Kimball
+Ref: UNKNOWN
+
+commit 410db7130a8e85ceed46850f73e74f480d45994e
+Author: Aaron Kimball <aaron@cloudera.com>
+Date:   Thu Jul 23 16:10:21 2009 -0700
+
+    HADOOP-5967: Sqoop should only use a single map task
+---
+ .../org/apache/hadoop/sqoop/mapred/ImportJob.java  |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapred/ImportJob.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapred/ImportJob.java
+index 46bebb1..dfd44bb 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapred/ImportJob.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapred/ImportJob.java
+@@ -110,6 +110,7 @@ public class ImportJob {
+       }
+ 
+       job.setNumReduceTasks(0);
++      job.setNumMapTasks(1);
+       job.setInputFormat(DBInputFormat.class);
+ 
+       FileOutputFormat.setOutputPath(job, outputPath);
+-- 
+1.7.0.4
+

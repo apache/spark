@@ -1,0 +1,281 @@
+From 6b874f7d11e11f14450e882b670180daef48a76e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sat, 6 Feb 2010 12:45:49 -0800
+Subject: [PATCH 0461/1179] MAPREDUCE-1440. MapReduce should use the short form of the user names
+
+Patch: https://issues.apache.org/jira/secure/attachment/12435087/1440.y20.patch
+Author: Owen O'Malley
+Ref: CDH-648
+---
+ .../org/apache/hadoop/mapred/IsolationRunner.java  |    2 +-
+ .../org/apache/hadoop/mapred/JobHistory.java       |    6 +---
+ .../org/apache/hadoop/mapred/JobQueueClient.java   |    4 +-
+ .../org/apache/hadoop/mapred/JobTracker.java       |   24 ++++++++++----------
+ .../apache/hadoop/mapred/LinuxTaskController.java  |    2 +-
+ .../org/apache/hadoop/mapred/LocalJobRunner.java   |    2 +-
+ .../org/apache/hadoop/mapred/QueueManager.java     |    4 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   13 +----------
+ .../hadoop/mapreduce/JobSubmissionFiles.java       |    4 +-
+ 9 files changed, 24 insertions(+), 37 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/IsolationRunner.java b/src/mapred/org/apache/hadoop/mapred/IsolationRunner.java
+index 0cfa5db..140f207 100644
+--- a/src/mapred/org/apache/hadoop/mapred/IsolationRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/IsolationRunner.java
+@@ -157,7 +157,7 @@ public class IsolationRunner {
+     if (args.length > 1) {
+       user = args[1];
+     } else {
+-      user = UserGroupInformation.getCurrentUser().getUserName();
++      user = UserGroupInformation.getCurrentUser().getShortUserName();
+     }
+     JobConf conf = new JobConf(new Path(jobFilename.toString()));
+     conf.setUser(user);
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobHistory.java b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+index 1859756..ef89250 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobHistory.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+@@ -829,8 +829,7 @@ public class JobHistory {
+     private static String getNewJobHistoryFileName(JobConf jobConf, JobID id) {
+       return JOBTRACKER_UNIQUE_STRING
+              + id.toString() + "_" +  
+-             UserGroupInformation.createRemoteUser(getUserName(jobConf)).
+-             getShortUserName()
++             getUserName(jobConf)
+              + "_" 
+              + trimJobName(getJobName(jobConf));
+     }
+@@ -876,8 +875,7 @@ public class JobHistory {
+     private static synchronized String getJobHistoryFileName(JobConf jobConf, 
+                                           JobID id, Path dir, FileSystem fs) 
+     throws IOException {
+-      String user =  UserGroupInformation.createRemoteUser(getUserName(jobConf)).
+-                     getShortUserName();
++      String user =  getUserName(jobConf);
+       String jobName = trimJobName(getJobName(jobConf));
+       if (LOG_DIR == null) {
+         return null;
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobQueueClient.java b/src/mapred/org/apache/hadoop/mapred/JobQueueClient.java
+index a514fbf..eac4e9c 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobQueueClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobQueueClient.java
+@@ -151,7 +151,7 @@ class JobQueueClient extends Configured implements  Tool {
+     UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+     if (queueAclsInfoList.length > 0) {
+       System.out.println("Queue acls for user :  "
+-              + ugi.getUserName());
++              + ugi.getShortUserName());
+       System.out.println("\nQueue  Operations");
+       System.out.println("=====================");
+       for (QueueAclsInfo queueInfo : queueAclsInfoList) {
+@@ -168,7 +168,7 @@ class JobQueueClient extends Configured implements  Tool {
+       }
+     } else {
+       System.out.println("User " +
+-              ugi.getUserName() +
++              ugi.getShortUserName() +
+               " does not have access to any queue. \n");
+     }
+   }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index db0c84c..b891808 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -1655,14 +1655,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+           UserGroupInformation ugi =
+             UserGroupInformation.createRemoteUser(job.getJobConf().getUser());
+           LOG.info("Submitting job " + id + " on behalf of user "
+-                   + ugi.getUserName() + " in groups : "
++                   + ugi.getShortUserName() + " in groups : "
+                    + StringUtils.arrayToString(ugi.getGroupNames()));
+ 
+           // check the access
+           try {
+             checkAccess(job, QueueManager.QueueOperation.SUBMIT_JOB, ugi);
+           } catch (Throwable t) {
+-            LOG.warn("Access denied for user " + ugi.getUserName() 
++            LOG.warn("Access denied for user " + ugi.getShortUserName() 
+                      + " in groups : [" 
+                      + StringUtils.arrayToString(ugi.getGroupNames()) + "]");
+             throw t;
+@@ -1980,7 +1980,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     }
+   
+     supergroup = conf.get("mapred.permissions.supergroup", "supergroup");
+-    LOG.info("Starting jobtracker with owner as " + mrOwner.getUserName() 
++    LOG.info("Starting jobtracker with owner as " + mrOwner.getShortUserName() 
+              + " and supergroup as " + supergroup);
+ 
+     //
+@@ -2126,9 +2126,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         }
+         try {
+           FileStatus systemDirStatus = fs.getFileStatus(systemDir);
+-          if (!systemDirStatus.getOwner().equals(mrOwner.getUserName())) {
++          if (!systemDirStatus.getOwner().equals(mrOwner.getShortUserName())) {
+             throw new AccessControlException("The systemdir " + systemDir +
+-                " is not owned by " + mrOwner.getUserName());
++                " is not owned by " + mrOwner.getShortUserName());
+           }
+           if (!systemDirStatus.getPermission().equals(SYSTEM_DIR_PERMISSION)) {
+             LOG.warn("Incorrect permissions on " + systemDir +
+@@ -3598,7 +3598,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       return jobs.get(jobId).getStatus();
+     }
+     UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+-    JobInfo jobInfo = new JobInfo(jobId, new Text(ugi.getUserName()),
++    JobInfo jobInfo = new JobInfo(jobId, new Text(ugi.getShortUserName()),
+         new Path(jobSubmitDir));
+     JobInProgress job = null;
+     tokenStorage = ts;
+@@ -3655,7 +3655,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       new Path(conf.get("mapreduce.jobtracker.staging.root.dir",
+           "/tmp/hadoop/mapred/staging"));
+     FileSystem fs = stagingRootDir.getFileSystem(conf);
+-    String user = UserGroupInformation.getCurrentUser().getUserName();
++    String user = UserGroupInformation.getCurrentUser().getShortUserName();
+     return fs.makeQualified(new Path(stagingRootDir,
+                                 user+"/.staging")).toString();
+   }
+@@ -3705,7 +3705,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     String queue = job.getProfile().getQueueName();
+     if (!queueManager.hasAccess(queue, job, oper, ugi)) {
+       throw new AccessControlException("User " 
+-                            + ugi.getUserName() 
++                            + ugi.getShortUserName() 
+                             + " cannot perform "
+                             + "operation " + oper + " on queue " + queue +
+                             ".\n Please run \"hadoop queue -showacls\" " +
+@@ -4361,7 +4361,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+    */
+   private synchronized boolean isSuperUser() throws IOException {
+     UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+-    if (mrOwner.getUserName().equals(ugi.getUserName()) ) {
++    if (mrOwner.getShortUserName().equals(ugi.getShortUserName()) ) {
+       return true;
+     }
+     String[] groups = ugi.getGroupNames();
+@@ -4380,7 +4380,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   public synchronized void refreshNodes() throws IOException {
+     // check access
+     if (!isSuperUser()) {
+-      String user = UserGroupInformation.getCurrentUser().getUserName();
++      String user = UserGroupInformation.getCurrentUser().getShortUserName();
+       throw new AccessControlException(user + 
+                                        " is not authorized to refresh nodes.");
+     }
+@@ -4627,7 +4627,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   @Override
+   public void refreshUserToGroupsMappings(Configuration conf) throws IOException {
+     LOG.info("Refreshing all user-to-groups mappings. Requested by user: " + 
+-             UserGroupInformation.getCurrentUser().getUserName());
++             UserGroupInformation.getCurrentUser().getShortUserName());
+     
+     Groups.getUserToGroupsMappingService(conf).refresh();
+   }
+@@ -4687,7 +4687,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   @Override
+   public void refreshQueueAcls() throws IOException{
+     LOG.info("Refreshing queue acls. requested by : " + 
+-        UserGroupInformation.getCurrentUser().getUserName());
++        UserGroupInformation.getCurrentUser().getShortUserName());
+     this.queueManager.refreshAcls(new Configuration(this.conf));
+   }
+   
+diff --git a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+index d5decb1..5ebf9f2 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+@@ -393,7 +393,7 @@ class LinuxTaskController extends TaskController {
+       throws IOException {
+     String[] taskControllerCmd = new String[3 + cmdArgs.size()];
+     taskControllerCmd[0] = getTaskControllerExecutablePath();
+-    taskControllerCmd[1] = TaskTracker.getShortUserName(userName);
++    taskControllerCmd[1] = userName;
+     taskControllerCmd[2] = String.valueOf(command.ordinal());
+     int i = 3;
+     for (String cmdArg : cmdArgs) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java b/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
+index d434b28..9c3fee9 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
+@@ -509,7 +509,7 @@ class LocalJobRunner implements JobSubmissionProtocol {
+     UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+     String user;
+     if (ugi != null) {
+-      user = ugi.getUserName() + rand.nextInt();
++      user = ugi.getShortUserName() + rand.nextInt();
+     } else {
+       user = "dummy" + rand.nextInt();
+     }
+diff --git a/src/mapred/org/apache/hadoop/mapred/QueueManager.java b/src/mapred/org/apache/hadoop/mapred/QueueManager.java
+index 28cff68..2adc424 100644
+--- a/src/mapred/org/apache/hadoop/mapred/QueueManager.java
++++ b/src/mapred/org/apache/hadoop/mapred/QueueManager.java
+@@ -177,7 +177,7 @@ class QueueManager {
+     }
+     
+     if (oper.isJobOwnerAllowed()) {
+-      if (job != null && job.getJobConf().getUser().equals(ugi.getUserName())) {
++      if (job != null && job.getJobConf().getUser().equals(ugi.getShortUserName())) {
+         return true;
+       }
+     }
+@@ -325,7 +325,7 @@ class QueueManager {
+ 
+   /**
+    * Generates the array of QueueAclsInfo object. The array consists of only those queues
+-   * for which user <ugi.getUserName()> has acls
++   * for which user <ugi.getShortUserName()> has acls
+    *
+    * @return QueueAclsInfo[]
+    * @throws java.io.IOException
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 77ca212..534494a 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -457,7 +457,7 @@ public class TaskTracker
+   }
+ 
+   public static String getUserDir(String user) {
+-    return TaskTracker.SUBDIR + Path.SEPARATOR + getShortUserName(user);
++    return TaskTracker.SUBDIR + Path.SEPARATOR + user;
+   } 
+ 
+   Localizer getLocalizer() {
+@@ -468,17 +468,6 @@ public class TaskTracker
+     localizer = l;
+   }
+ 
+-  /**
+-   * This method must be called in all places where the short user name is
+-   * desired (e.g. TaskTracker.getUserDir and in the LinuxTaskController).
+-   * The short name is required in the path creation
+-   * (like TaskTracker.getUserDir) and while launching task processes as the
+-   * user.
+-   */
+-  static String getShortUserName(String name) {
+-    return UserGroupInformation.createRemoteUser(name).getShortUserName();
+-  }
+-  
+   public static String getPrivateDistributedCacheDir(String user) {
+     return getUserDir(user) + Path.SEPARATOR + TaskTracker.DISTCACHEDIR;
+   }
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/JobSubmissionFiles.java b/src/mapred/org/apache/hadoop/mapreduce/JobSubmissionFiles.java
+index 0879e3b..6ac15f2 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/JobSubmissionFiles.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/JobSubmissionFiles.java
+@@ -98,8 +98,8 @@ public class JobSubmissionFiles {
+     String realUser;
+     String currentUser;
+     UserGroupInformation ugi = UserGroupInformation.getLoginUser();
+-    realUser = ugi.getUserName();
+-    currentUser = UserGroupInformation.getCurrentUser().getUserName();
++    realUser = ugi.getShortUserName();
++    currentUser = UserGroupInformation.getCurrentUser().getShortUserName();
+     if (fs.exists(stagingArea)) {
+       FileStatus fsStatus = fs.getFileStatus(stagingArea);
+       String owner = fsStatus.getOwner();
+-- 
+1.7.0.4
+

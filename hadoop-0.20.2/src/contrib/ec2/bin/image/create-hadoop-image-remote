@@ -1,0 +1,80 @@
+#!/bin/sh
+
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# Create a Hadoop AMI. Runs on the EC2 instance.
+
+# Import variables
+bin=`dirname "$0"`
+bin=`cd "$bin"; pwd`
+. "$bin"/hadoop-ec2-env.sh
+
+# Remove environment script since it contains sensitive information
+rm -f "$bin"/hadoop-ec2-env.sh
+
+# Install Java
+echo "Downloading and installing java binary."
+cd /usr/local
+wget -nv -O java.bin $JAVA_BINARY_URL
+sh java.bin
+rm -f java.bin
+
+# Install tools
+echo "Installing rpms."
+yum -y install rsync lynx screen ganglia-gmetad ganglia-gmond ganglia-web httpd php
+yum -y clean all
+
+# Install Hadoop
+echo "Installing Hadoop $HADOOP_VERSION."
+cd /usr/local
+wget -nv http://archive.apache.org/dist/hadoop/core/hadoop-$HADOOP_VERSION/hadoop-$HADOOP_VERSION.tar.gz
+[ ! -f hadoop-$HADOOP_VERSION.tar.gz ] && wget -nv http://www.apache.org/dist/hadoop/core/hadoop-$HADOOP_VERSION/hadoop-$HADOOP_VERSION.tar.gz
+tar xzf hadoop-$HADOOP_VERSION.tar.gz
+rm -f hadoop-$HADOOP_VERSION.tar.gz
+
+# Configure Hadoop
+sed -i -e "s|# export JAVA_HOME=.*|export JAVA_HOME=/usr/local/jdk${JAVA_VERSION}|" \
+       -e 's|# export HADOOP_LOG_DIR=.*|export HADOOP_LOG_DIR=/mnt/hadoop/logs|' \
+       -e 's|# export HADOOP_SLAVE_SLEEP=.*|export HADOOP_SLAVE_SLEEP=1|' \
+       -e 's|# export HADOOP_OPTS=.*|export HADOOP_OPTS=-server|' \
+      /usr/local/hadoop-$HADOOP_VERSION/conf/hadoop-env.sh
+
+# Run user data as script on instance startup
+chmod +x /etc/init.d/ec2-run-user-data
+echo "/etc/init.d/ec2-run-user-data" >> /etc/rc.d/rc.local
+
+# Setup root user bash environment
+echo "export JAVA_HOME=/usr/local/jdk${JAVA_VERSION}" >> /root/.bash_profile
+echo "export HADOOP_HOME=/usr/local/hadoop-${HADOOP_VERSION}" >> /root/.bash_profile
+echo 'export PATH=$JAVA_HOME/bin:$HADOOP_HOME/bin:$PATH' >> /root/.bash_profile
+
+# Configure networking.
+# Delete SSH authorized_keys since it includes the key it was launched with. (Note that it is re-populated when an instance starts.)
+rm -f /root/.ssh/authorized_keys
+# Ensure logging in to new hosts is seamless.
+echo '    StrictHostKeyChecking no' >> /etc/ssh/ssh_config
+
+# Bundle and upload image
+cd ~root
+# Don't need to delete .bash_history since it isn't written until exit.
+df -h
+ec2-bundle-vol -d /mnt -k /mnt/pk*.pem -c /mnt/cert*.pem -u $AWS_ACCOUNT_ID -s 3072 -p hadoop-$HADOOP_VERSION-$ARCH -r $ARCH
+
+ec2-upload-bundle -b $S3_BUCKET -m /mnt/hadoop-$HADOOP_VERSION-$ARCH.manifest.xml -a $AWS_ACCESS_KEY_ID -s $AWS_SECRET_ACCESS_KEY
+
+# End
+echo Done

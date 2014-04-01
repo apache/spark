@@ -1,0 +1,11 @@
+Bash tab completion support for the hadoop script.
+
+On Debian-like distributions, the script can be placed in
+/etc/bash_completion.d/, and it will be sourced automatically by Bash. On
+other distributions, you may source the file manually (`. hadoop.sh') or
+source it from your bashrc (or equivalent) file.
+
+The script allows tab completion of all the command names, subcommands for the
+'fs', 'dfsadmin', 'job', 'namenode' and 'pipe' commands, arguments of the 'jar'
+command and most arguments to the 'fs' subcommands (completing local and 
+dfs paths as appropriate).

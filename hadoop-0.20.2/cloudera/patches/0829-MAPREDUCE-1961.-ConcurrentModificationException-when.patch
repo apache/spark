@@ -1,0 +1,45 @@
+From 6cceb85a5f8743aaef4a98957e31f6930a013cdd Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:51 -0800
+Subject: [PATCH 0829/1179] MAPREDUCE-1961. ConcurrentModificationException when shutting down Gridmix
+
+Author: Hong Tang
+Ref: CDH-2622
+---
+ .../apache/hadoop/mapred/gridmix/Statistics.java   |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/Statistics.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/Statistics.java
+index 7147796..cfbb08f 100644
+--- a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/Statistics.java
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/Statistics.java
+@@ -30,11 +30,11 @@ import org.apache.hadoop.tools.rumen.JobStory;
+ 
+ import java.io.IOException;
+ import java.security.PrivilegedExceptionAction;
+-import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.CopyOnWriteArrayList;
+ import java.util.concurrent.CountDownLatch;
+ import java.util.concurrent.TimeUnit;
+ import java.util.concurrent.locks.Condition;
+@@ -56,11 +56,11 @@ public class Statistics implements Component<Job> {
+ 
+   //List of cluster status listeners.
+   private final List<StatListener<ClusterStats>> clusterStatlisteners =
+-    new ArrayList<StatListener<ClusterStats>>();
++    new CopyOnWriteArrayList<StatListener<ClusterStats>>();
+ 
+   //List of job status listeners.
+   private final List<StatListener<JobStats>> jobStatListeners =
+-    new ArrayList<StatListener<JobStats>>();
++    new CopyOnWriteArrayList<StatListener<JobStats>>();
+ 
+   //List of jobids and noofMaps for each job
+   private static final Map<Integer, JobStats> jobMaps =
+-- 
+1.7.0.4
+

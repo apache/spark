@@ -1,0 +1,116 @@
+From 25ece8066682682f6fdd595845dbf71555aef5bb Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 1 Mar 2011 13:17:58 -0800
+Subject: [PATCH 0895/1179] Amend MAPREDUCE-2178. Update tests for fixed configuration checking code
+
+Author: Todd Lipcon
+Ref: CDH-2755
+---
+ src/c++/task-controller/impl/configuration.c       |    4 +-
+ src/c++/task-controller/impl/configuration.h       |    2 +-
+ src/c++/task-controller/impl/main.c                |    2 +-
+ .../task-controller/test/test-task-controller.c    |   21 +++++++++++++++++--
+ 4 files changed, 22 insertions(+), 7 deletions(-)
+
+diff --git a/src/c++/task-controller/impl/configuration.c b/src/c++/task-controller/impl/configuration.c
+index 8103000..75932d5 100644
+--- a/src/c++/task-controller/impl/configuration.c
++++ b/src/c++/task-controller/impl/configuration.c
+@@ -93,7 +93,7 @@ int check_configuration_permissions(FILE *conf_file) {
+ }
+ 
+ //function used to load the configurations present in the secure config
+-void read_config(const char* file_name) {
++void read_config(const char* file_name, int do_permissions_check) {
+   fprintf(LOGFILE, "Reading task controller config from %s\n" , file_name);
+   FILE *conf_file;
+   char *line;
+@@ -121,7 +121,7 @@ void read_config(const char* file_name) {
+     exit(INVALID_CONFIG_FILE);
+   }
+   // verify that the conf file is owned by root and has safe permissions
+-  if (!check_configuration_permissions(conf_file)) {
++  if (do_permissions_check && !check_configuration_permissions(conf_file)) {
+     fprintf(LOGFILE, "Invalid permissions or ownership on conf file %s\n", file_name);
+     fprintf(LOGFILE, "Must be owned by root and not writable by group or other\n");
+     exit(INVALID_CONFIG_FILE);
+diff --git a/src/c++/task-controller/impl/configuration.h b/src/c++/task-controller/impl/configuration.h
+index a216427..65702b8 100644
+--- a/src/c++/task-controller/impl/configuration.h
++++ b/src/c++/task-controller/impl/configuration.h
+@@ -17,7 +17,7 @@
+  */
+ 
+ // read the given configuration file
+-void read_config(const char* config_file);
++void read_config(const char* config_file, int do_permissions_check);
+ 
+ //method exposed to get the configurations
+ char *get_value(const char* key);
+diff --git a/src/c++/task-controller/impl/main.c b/src/c++/task-controller/impl/main.c
+index 12edfe0..27ffb73 100644
+--- a/src/c++/task-controller/impl/main.c
++++ b/src/c++/task-controller/impl/main.c
+@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
+   }
+   free(orig_conf_file);
+   free(conf_dir);
+-  read_config(conf_file);
++  read_config(conf_file, 1);
+   free(conf_file);
+ 
+   // look up the task tracker group in the config file
+diff --git a/src/c++/task-controller/test/test-task-controller.c b/src/c++/task-controller/test/test-task-controller.c
+index c7f4b46..656d0a8 100644
+--- a/src/c++/task-controller/test/test-task-controller.c
++++ b/src/c++/task-controller/test/test-task-controller.c
+@@ -31,6 +31,8 @@
+ #define TEST_ROOT "/tmp/test-task-controller"
+ #define DONT_TOUCH_FILE "dont-touch-me"
+ 
++extern int check_configuration_permissions(FILE *f);
++
+ static char* username = NULL;
+ 
+ /**
+@@ -207,13 +209,26 @@ void test_check_user() {
+   }
+ }
+ 
++static int do_test_configuration_permissions(const char *path) {
++  FILE *f = fopen(path, "r");
++  if (f == NULL) {
++    printf("FAIL: couldn't open path: %s\n", path);
++    return 0;
++  }
++
++  int ret = check_configuration_permissions(f);
++  fclose(f);
++
++  return ret;
++}
++
+ void test_check_configuration_permissions() {
+   printf("\nTesting check_configuration_permissions\n");
+-  if (check_configuration_permissions("/etc/passwd") != 0) {
++  if (! do_test_configuration_permissions("/etc/passwd")) {
+     printf("FAIL: failed permission check on /etc/passwd\n");
+     exit(1);
+   }
+-  if (check_configuration_permissions(TEST_ROOT) == 0) {
++  if (do_test_configuration_permissions(TEST_ROOT)) {
+     printf("FAIL: failed permission check on %s\n", TEST_ROOT);
+     exit(1);
+   }
+@@ -688,7 +703,7 @@ int main(int argc, char **argv) {
+   if (write_config_file(TEST_ROOT "/test.cfg") != 0) {
+     exit(1);
+   }
+-  read_config(TEST_ROOT "/test.cfg");
++  read_config(TEST_ROOT "/test.cfg", 0);
+ 
+   create_tt_roots();
+ 
+-- 
+1.7.0.4
+

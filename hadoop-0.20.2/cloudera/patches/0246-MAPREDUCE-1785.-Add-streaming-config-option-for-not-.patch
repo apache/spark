@@ -1,0 +1,130 @@
+From cc035175e1cf1ddef878cba6aa93725f832d0327 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sat, 15 May 2010 12:55:06 -0700
+Subject: [PATCH 0246/1179] MAPREDUCE-1785. Add streaming config option for not emitting the key.
+
+Description: PipeMapper currently does not emit the key when using TextInputFormat. If you switch to input formats (eg LzoTextInputFormat) the key will be emitted. We should add an option so users can explicitly make streaming not emit the key so they can change input formats without breaking or having to modify their existing programs.
+
+Reason: Improvement
+Author: Eli Collins
+Ref: CDH-856
+---
+ .../org/apache/hadoop/streaming/PipeMapper.java    |    3 +-
+ .../hadoop/streaming/TestStreamingKeyValue.java    |   39 ++++++++++++++++----
+ .../src/documentation/content/xdocs/streaming.xml  |    1 +
+ 3 files changed, 34 insertions(+), 9 deletions(-)
+
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/PipeMapper.java b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/PipeMapper.java
+index 640bed6..1767d24 100644
+--- a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/PipeMapper.java
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/PipeMapper.java
+@@ -71,7 +71,8 @@ public class PipeMapper extends PipeMapRed implements Mapper {
+     skipping = job.getBoolean("mapred.skip.on", false);
+     if (mapInputWriterClass_.getCanonicalName().equals(TextInputWriter.class.getCanonicalName())) {
+       String inputFormatClassName = job.getClass("mapred.input.format.class", TextInputFormat.class).getCanonicalName();
+-      ignoreKey = inputFormatClassName.equals(TextInputFormat.class.getCanonicalName());
++      ignoreKey = job.getBoolean("stream.map.input.ignoreKey", 
++        inputFormatClassName.equals(TextInputFormat.class.getCanonicalName()));
+     }
+     
+     try {
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingKeyValue.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingKeyValue.java
+index 4f5c490..b50dc4a 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingKeyValue.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingKeyValue.java
+@@ -38,11 +38,17 @@ public class TestStreamingKeyValue extends TestCase
+     "roses are \tred\t\n\tviolets are blue\nbunnies are pink\n" +
+     "this is for testing a big\tinput line\n" +
+     "small input\n";
+-  protected String outputExpect = 
++  private final static String outputWithoutKey = 
+     "\tviolets are blue\nbunnies are pink\t\n" + 
+     "roses are \tred\t\n" +
+     "small input\t\n" +
+     "this is for testing a big\tinput line\n";
++  private final static String outputWithKey = 
++    "0\troses are \tred\t\n" +  
++    "16\t\tviolets are blue\n" +
++    "34\tbunnies are pink\n" +
++    "51\tthis is for testing a big\tinput line\n" +
++    "88\tsmall input\n";
+ 
+   private StreamJob job;
+ 
+@@ -61,19 +67,20 @@ public class TestStreamingKeyValue extends TestCase
+     out.close();
+   }
+ 
+-  protected String[] genArgs() {
++  protected String[] genArgs(boolean ignoreKey) {
+     return new String[] {
+       "-input", INPUT_FILE.getAbsolutePath(),
+       "-output", OUTPUT_DIR.getAbsolutePath(),
+       "-mapper", "cat",
+       "-jobconf", "keep.failed.task.files=true",
+       "-jobconf", "stream.non.zero.exit.is.failure=true",
+-      "-jobconf", "stream.tmpdir="+System.getProperty("test.build.data","/tmp")
++      "-jobconf", "stream.tmpdir="+System.getProperty("test.build.data","/tmp"),
++      "-jobconf", "stream.map.input.ignoreKey="+ignoreKey,
+     };
+   }
+   
+-  public void testCommandLine() throws Exception
+-  {
++  public void runStreamJob(final String outputExpect, boolean ignoreKey)
++      throws Exception {
+     String outFileName = "part-00000";
+     File outFile = null;
+     try {
+@@ -87,7 +94,7 @@ public class TestStreamingKeyValue extends TestCase
+ 
+       // During tests, the default Configuration will use a local mapred
+       // So don't specify -config or -cluster
+-      job = new StreamJob(genArgs(), mayExit);      
++      job = new StreamJob(genArgs(ignoreKey), mayExit);      
+       job.go();
+       outFile = new File(OUTPUT_DIR, outFileName).getAbsoluteFile();
+       String output = StreamUtil.slurp(outFile);
+@@ -104,9 +111,25 @@ public class TestStreamingKeyValue extends TestCase
+     }
+   }
+ 
+-  public static void main(String[]args) throws Exception
++  /**
++   * Run the job with the indicating the input format key should be emitted. 
++   */
++  public void testCommandLineWithKey() throws Exception
+   {
+-    new TestStreamingKeyValue().testCommandLine();
++    runStreamJob(outputWithKey, false);
+   }
+ 
++  /**
++   * Run the job the default way (the input format key is not emitted).
++   */
++  public void testCommandLineWithoutKey() throws Exception
++  {
++      runStreamJob(outputWithoutKey, true);
++  }
++  
++  public static void main(String[]args) throws Exception
++  {    
++    new TestStreamingKeyValue().testCommandLineWithKey();
++    new TestStreamingKeyValue().testCommandLineWithoutKey();
++  }
+ }
+diff --git a/src/docs/src/documentation/content/xdocs/streaming.xml b/src/docs/src/documentation/content/xdocs/streaming.xml
+index d48acc1..0dfa218 100644
+--- a/src/docs/src/documentation/content/xdocs/streaming.xml
++++ b/src/docs/src/documentation/content/xdocs/streaming.xml
+@@ -315,6 +315,7 @@ Similarly, you can use "-D stream.reduce.output.field.separator=SEP" and "-D str
+ <p> Similarly, you can specify "stream.map.input.field.separator" and 
+ "stream.reduce.input.field.separator" as the input separator for map/reduce 
+ inputs. By default the separator is the tab character.</p>
++<p> You can specify "stream.map.input.ignoreKey" so the key is not emitted to the mapper when using text input. This is the default behavior when using TextInputFormat.</p>
+ </section>
+ 
+ 
+-- 
+1.7.0.4
+

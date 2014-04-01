@@ -1,0 +1,735 @@
+From 2d52a4c5814814bf0a95c71906d2b4efcc1aa755 Mon Sep 17 00:00:00 2001
+From: Jonathan Hsieh <jon@cloudera.com>
+Date: Mon, 28 Nov 2011 10:50:31 -0800
+Subject: [PATCH 1100/1179] HDFS-617 Support for non-recursive create() in HDFS
+
+This backport adds CDH-specific backwards-compatibility handling of non-recursive file create()
+
+Reason: Bug (hbase data loss)
+Author: Kan Zhang
+Ref: CDH-3815
+---
+ .../hadoop/fs/FileAlreadyExistsException.java      |   39 ++++++
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |   93 ++++++++++++-
+ .../apache/hadoop/hdfs/DistributedFileSystem.java  |   17 ++-
+ .../hadoop/hdfs/protocol/ClientProtocol.java       |   13 ++
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   36 +++++-
+ .../hadoop/hdfs/server/namenode/NameNode.java      |   14 ++-
+ .../apache/hadoop/hdfs/TestDFSClientRetries.java   |    3 +
+ .../TestDfsClientCreateParentCompatibility.java    |  144 ++++++++++++++++++++
+ .../org/apache/hadoop/hdfs/TestFileCreation.java   |   95 +++++++++++++
+ .../server/namenode/NNThroughputBenchmark.java     |    4 +-
+ 10 files changed, 443 insertions(+), 15 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/fs/FileAlreadyExistsException.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/TestDfsClientCreateParentCompatibility.java
+
+diff --git a/src/core/org/apache/hadoop/fs/FileAlreadyExistsException.java b/src/core/org/apache/hadoop/fs/FileAlreadyExistsException.java
+new file mode 100644
+index 0000000..def35d9
+--- /dev/null
++++ b/src/core/org/apache/hadoop/fs/FileAlreadyExistsException.java
+@@ -0,0 +1,39 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.fs;
++
++import java.io.IOException;
++
++/**
++ * Used when target file already exists for any operation and 
++ * is not configured to be overwritten.  
++ */
++public class FileAlreadyExistsException
++    extends IOException {
++
++  private static final long serialVersionUID = 1L;
++
++  public FileAlreadyExistsException() {
++    super();
++  }
++
++  public FileAlreadyExistsException(String msg) {
++    super(msg);
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 79db211..2625479 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -24,6 +24,7 @@ import org.apache.hadoop.io.retry.RetryProxy;
+ import org.apache.hadoop.fs.*;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.ipc.*;
++import org.apache.hadoop.fs.FileAlreadyExistsException;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.net.NodeBase;
+ import org.apache.hadoop.conf.*;
+@@ -96,6 +97,14 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+    * it doesn't, we'll set this false and stop trying.
+    */
+   private volatile boolean serverSupportsExcludedBlockApi = true;
++  
++  /**
++   * We assume we're talking to another CDH3u3+ server, which
++   * supports HDFS-617's non-recursive-create method.  If we get a
++   * RemoteException indicating it doesn't, we warn and set this flag falling 
++   * back to using a client-side checking version.
++   */
++  private volatile boolean serverSupportsNonRecursiveCreateApi = true;
+  
+   public static ClientProtocol createNamenode(Configuration conf) throws IOException {
+     return createNamenode(NameNode.getAddress(conf), conf);
+@@ -521,6 +530,23 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         overwrite, replication, blockSize, progress, buffersize);
+   }
+   /**
++   * Call
++   * {@link #create(String,FsPermission,boolean,boolean,short,long,Progressable,int)}
++   * with createParent set to true.
++   */
++  public OutputStream create(String src, 
++      FsPermission permission,
++      boolean overwrite,
++      short replication,
++      long blockSize,
++      Progressable progress,
++      int buffersize
++      ) throws IOException {
++    return create(src, permission, overwrite, true,
++        replication, blockSize, progress, buffersize);
++  }
++
++  /**
+    * Create a new dfs file with the specified block replication 
+    * with write-progress reporting and return an output stream for writing
+    * into the file.  
+@@ -529,6 +555,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+    * @param permission The permission of the directory being created.
+    * If permission == null, use {@link FsPermission#getDefault()}.
+    * @param overwrite do not check for file existence if true
++   * @param createParent create missing parent directory if true
+    * @param replication block replication
+    * @return output stream
+    * @throws IOException
+@@ -537,6 +564,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+   public OutputStream create(String src, 
+                              FsPermission permission,
+                              boolean overwrite, 
++                             boolean createParent,
+                              short replication,
+                              long blockSize,
+                              Progressable progress,
+@@ -549,7 +577,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     FsPermission masked = permission.applyUMask(FsPermission.getUMask(conf));
+     LOG.debug(src + ": masked=" + masked);
+     OutputStream result = new DFSOutputStream(src, masked,
+-        overwrite, replication, blockSize, progress, buffersize,
++        overwrite, createParent, replication, blockSize, progress, buffersize,
+         conf.getInt("io.bytes.per.checksum", 512));
+     leasechecker.put(src, result);
+     return result;
+@@ -3048,23 +3076,72 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+      * @see ClientProtocol#create(String, FsPermission, String, boolean, short, long)
+      */
+     DFSOutputStream(String src, FsPermission masked, boolean overwrite,
+-        short replication, long blockSize, Progressable progress,
++        boolean createParent, short replication, long blockSize, Progressable progress,
+         int buffersize, int bytesPerChecksum) throws IOException {
+       this(src, blockSize, progress, bytesPerChecksum, replication);
+ 
+       computePacketChunkSize(writePacketSize, bytesPerChecksum);
+ 
+       try {
+-        namenode.create(
+-            src, masked, clientName, overwrite, replication, blockSize);
++        if (!createParent && serverSupportsNonRecursiveCreateApi) {
++          // Compatibility case: createParent is false and we think we support 
++          // the call
++          namenode.create(src, masked, clientName, overwrite, createParent,
++              replication, blockSize);
++        } else {
++          // if createParent=true it doesn't matter if we support the alternate
++          // create method
++          namenode.create(src, masked, clientName, overwrite, replication,
++              blockSize);
++        }
+       } catch(RemoteException re) {
+-        throw re.unwrapRemoteException(AccessControlException.class,
+-                                       NSQuotaExceededException.class,
+-                                       DSQuotaExceededException.class);
++        IOException ioe = 
++          re.unwrapRemoteException(AccessControlException.class,
++                                   FileAlreadyExistsException.class,
++                                   FileNotFoundException.class,
++                                   NSQuotaExceededException.class,
++                                   DSQuotaExceededException.class);
++        if (!serverSupportsNonRecursiveCreateApi || 
++            !re.getMessage().startsWith(
++                "java.io.IOException: " +
++                "java.lang.NoSuchMethodException: org.apache.hadoop.hdfs." +
++                "protocol.ClientProtocol.create(java.lang.String, " +
++                "org.apache.hadoop.fs.permission.FsPermission, " +
++                "java.lang.String, boolean, boolean, short, long)")) {
++          throw ioe;
++        }
++        retryCreate(src, masked, overwrite, (short)replication, blockSize, 
++            progress, buffersize, bytesPerChecksum);
+       }
+       streamer.start();
+     }
+-  
++
++    /**
++     * This should only get executed once if the createParent version is called.  
++     */
++    private void retryCreate(String src, FsPermission masked, boolean overwrite,
++        short replication, long blockSize, Progressable progress,
++        int buffersize, int bytesPerChecksum) throws IOException {
++      // The call was invalid, warn and then try the version that will work 
++      // an older name node.
++      serverSupportsNonRecursiveCreateApi = false;
++      LOG.warn("Asked to create a file without automatically creating parent" +
++          "dirs, but the hdfs namenode you are connecting to does not " +
++          "support this.  From now on, calling the version that " +
++          "automatically creates dirs.");
++      try { 
++        namenode.create(src, masked, clientName, overwrite, replication,
++            blockSize);
++      } catch (RemoteException re) {
++        throw
++          re.unwrapRemoteException(AccessControlException.class,
++                                   FileAlreadyExistsException.class,
++                                   FileNotFoundException.class,
++                                   NSQuotaExceededException.class,
++                                   DSQuotaExceededException.class);
++      }
++    }
++
+     /**
+      * Create a new output stream to the given DataNode.
+      * @see ClientProtocol#create(String, FsPermission, String, boolean, short, long)
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
+index b85cd57..1d174b8 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
+@@ -218,10 +218,25 @@ public class DistributedFileSystem extends FileSystem {
+     statistics.incrementWriteOps(1);
+     return new FSDataOutputStream
+        (dfs.create(getPathName(f), permission,
+-                   overwrite, replication, blockSize, progress, bufferSize),
++                   overwrite, true, replication, blockSize, progress, bufferSize),
+         statistics);
+   }
+ 
++  /**
++   * Same as create(), except fails if parent directory doesn't already exist.
++   * @see #create(Path, FsPermission, boolean, int, short, long, Progressable)
++   */
++  public FSDataOutputStream createNonRecursive(Path f, FsPermission permission,
++      boolean overwrite,
++      int bufferSize, short replication, long blockSize, 
++      Progressable progress) throws IOException {
++
++    return new FSDataOutputStream
++        (dfs.create(getPathName(f), permission, 
++                    overwrite, false, replication, blockSize, progress, bufferSize), 
++         statistics);
++  }
++
+   public boolean setReplication(Path src, 
+                                 short replication
+                                ) throws IOException {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+index 2a66325..c0705d0 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+@@ -100,6 +100,7 @@ public interface ClientProtocol extends VersionedProtocol {
+    * @param clientName name of the current client.
+    * @param overwrite indicates whether the file should be 
+    * overwritten if it already exists.
++   * @param createParent create missing parent directory if true
+    * @param replication block replication factor.
+    * @param blockSize maximum block size.
+    * 
+@@ -114,11 +115,23 @@ public interface ClientProtocol extends VersionedProtocol {
+                      FsPermission masked,
+                              String clientName, 
+                              boolean overwrite, 
++                             boolean createParent,
+                              short replication,
+                              long blockSize
+                              ) throws IOException;
+ 
+   /**
++   * Create a new file entry in the namespace.
++   * 
++   */
++  public void create(String src, 
++                     FsPermission masked,
++                             String clientName, 
++                             boolean overwrite, 
++                             short replication,
++                             long blockSize
++                             ) throws IOException;
++  /**
+    * Append to the end of the file. 
+    * @param src path of the file being created.
+    * @param clientName name of the current client.
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 490c40f..a632eae 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -65,6 +65,12 @@ import org.apache.hadoop.fs.permission.*;
+ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.ipc.Server;
++import org.apache.hadoop.fs.FileAlreadyExistsException;
++import org.apache.hadoop.util.Daemon;
++import org.apache.hadoop.util.HostsFileReader;
++import org.apache.hadoop.util.ReflectionUtils;
++import org.apache.hadoop.util.StringUtils;
++import org.apache.hadoop.util.VersionInfo;
+ import org.mortbay.util.ajax.JSON;
+ 
+ import java.io.BufferedWriter;
+@@ -1111,6 +1117,24 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+                             text + " is less than the required minimum " + minReplication);
+   }
+ 
++  /*
++   * Verify that parent dir exists
++   */
++  private void verifyParentDir(String src) throws FileAlreadyExistsException,
++      FileNotFoundException {
++    Path parent = new Path(src).getParent();
++    if (parent != null) {
++      INode[] pathINodes = dir.getExistingPathINodes(parent.toString());
++      if (pathINodes[pathINodes.length - 1] == null) {
++        throw new FileNotFoundException("Parent directory doesn't exist: "
++            + parent.toString());
++      } else if (!pathINodes[pathINodes.length - 1].isDirectory()) {
++        throw new FileAlreadyExistsException("Parent path is not a directory: "
++            + parent.toString());
++      }
++    }
++  }
++
+   /**
+    * Create a new file entry in the namespace.
+    * 
+@@ -1121,10 +1145,10 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+    */
+   void startFile(String src, PermissionStatus permissions,
+                  String holder, String clientMachine,
+-                 boolean overwrite, short replication, long blockSize
++                 boolean overwrite, boolean createParent, short replication, long blockSize
+                 ) throws IOException {
+     startFileInternal(src, permissions, holder, clientMachine, overwrite, false,
+-                      replication, blockSize);
++                      createParent, replication, blockSize);
+     getEditLog().logSync();
+     if (auditLog.isInfoEnabled() && isExternalInvocation()) {
+       final HdfsFileStatus stat = dir.getFileInfo(src);
+@@ -1140,6 +1164,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+                                               String clientMachine, 
+                                               boolean overwrite,
+                                               boolean append,
++                                              boolean createParent,
+                                               short replication,
+                                               long blockSize
+                                               ) throws IOException {
+@@ -1147,6 +1172,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+       NameNode.stateChangeLog.debug("DIR* NameSystem.startFile: src=" + src
+           + ", holder=" + holder
+           + ", clientMachine=" + clientMachine
++          + ", createParent=" + createParent
+           + ", replication=" + replication
+           + ", overwrite=" + overwrite
+           + ", append=" + append);
+@@ -1173,6 +1199,10 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+       }
+     }
+ 
++    if (!createParent) {
++      verifyParentDir(src);
++    }
++
+     try {
+       INode myFile = dir.getFileINode(src);
+       recoverLeaseInternal(myFile, src, holder, clientMachine, false);
+@@ -1355,7 +1385,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+                             " Please refer to dfs.support.append configuration parameter.");
+     }
+     startFileInternal(src, null, holder, clientMachine, false, true, 
+-                      (short)maxReplication, (long)0);
++                      false, (short)maxReplication, (long)0);
+     getEditLog().logSync();
+ 
+     //
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 272d2d1..82c95db 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -565,11 +565,23 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     return clientMachine;
+   }
+ 
++  @Deprecated
++  public void create(String src, 
++                     FsPermission masked,
++                             String clientName, 
++                             boolean overwrite,
++                             short replication,
++                             long blockSize
++                             ) throws IOException {
++    create(src,masked,clientName,overwrite,true,replication,blockSize);
++  }
++
+   /** {@inheritDoc} */
+   public void create(String src, 
+                      FsPermission masked,
+                              String clientName, 
+                              boolean overwrite,
++                             boolean createParent,
+                              short replication,
+                              long blockSize
+                              ) throws IOException {
+@@ -585,7 +597,7 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     namesystem.startFile(src,
+         new PermissionStatus(UserGroupInformation.getCurrentUser().getShortUserName(),
+             null, masked),
+-        clientName, clientMachine, overwrite, replication, blockSize);
++        clientName, clientMachine, overwrite, createParent, replication, blockSize);
+     myMetrics.numFilesCreated.inc();
+     myMetrics.numCreateFileOps.inc();
+   }
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java b/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java
+index 9e0bdb3..e8251c6 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java
+@@ -170,8 +170,11 @@ public class TestDFSClientRetries extends TestCase {
+     // The following methods are stub methods that are not needed by this mock class
+     public LocatedBlocks  getBlockLocations(String src, long offset, long length) throws IOException { return null; }
+ 
++    @Deprecated
+     public void create(String src, FsPermission masked, String clientName, boolean overwrite, short replication, long blockSize) throws IOException {}
+ 
++    public void create(String src, FsPermission masked, String clientName, boolean overwrite, boolean createparent, short replication, long blockSize) throws IOException {}
++
+     public LocatedBlock append(String src, String clientName) throws IOException { return null; }
+ 
+     public boolean setReplication(String src, short replication) throws IOException { return false; }
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDfsClientCreateParentCompatibility.java b/src/test/org/apache/hadoop/hdfs/TestDfsClientCreateParentCompatibility.java
+new file mode 100644
+index 0000000..b60fafe
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/TestDfsClientCreateParentCompatibility.java
+@@ -0,0 +1,144 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *  
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.fail;
++import static org.mockito.Matchers.anyBoolean;
++import static org.mockito.Matchers.anyLong;
++import static org.mockito.Matchers.anyObject;
++import static org.mockito.Matchers.anyShort;
++import static org.mockito.Matchers.eq;
++import static org.mockito.Mockito.doAnswer;
++import static org.mockito.Mockito.doThrow;
++import static org.mockito.Mockito.mock;
++
++import java.io.IOException;
++import java.util.Arrays;
++import java.util.concurrent.atomic.AtomicInteger;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.hdfs.server.namenode.NameNode;
++import org.apache.hadoop.ipc.RemoteException;
++import org.junit.Test;
++import org.mockito.invocation.InvocationOnMock;
++import org.mockito.stubbing.Answer;
++
++/**
++ * This tests verifies that new DFSClients handle exceptions that would be 
++ * thrown by older NameNodes (pre cdh3u3, pre apache 0.21). 
++ * 
++ * This is a CDH3 specific backwards compatibility test.
++ */
++public class TestDfsClientCreateParentCompatibility {
++  public static final Log LOG = LogFactory
++    .getLog(TestDfsClientCreateParentCompatibility.class);
++
++  @Test
++  public void testCreateWithoutDirsCompatibility() throws IOException {
++    Configuration conf = new Configuration();
++    NameNode nn = mock(NameNode.class);
++
++    final String err = 
++      "java.io.IOException: " +
++      "java.lang.NoSuchMethodException: org.apache.hadoop.hdfs." +
++      "protocol.ClientProtocol.create(java.lang.String, " +
++      "org.apache.hadoop.fs.permission.FsPermission, " +
++      "java.lang.String, boolean, boolean, short, long)";
++    final AtomicInteger newCount = new AtomicInteger();
++    Answer<Void> newCallCounter = new Answer<Void>() {
++      @Override
++      public Void answer(InvocationOnMock invocation) throws Throwable {
++        LOG.info("New Call "+ Arrays.toString(invocation.getArguments()));
++        newCount.incrementAndGet();
++        throw new RemoteException(IOException.class.getName(), err);
++      }
++    };
++
++    final AtomicInteger oldCount = new AtomicInteger();
++    Answer<Void> oldCallCounter = new Answer<Void>() {
++      @Override
++      public Void answer(InvocationOnMock invocation) throws Throwable {
++        LOG.info("Old Call "+ Arrays.toString(invocation.getArguments()));
++        oldCount.incrementAndGet();
++        return null;
++      }
++    };
++    
++    
++    // new api client call
++    doAnswer(newCallCounter).when(nn)
++      .create((String)anyObject(), (FsPermission)anyObject(),
++          (String)anyObject(), anyBoolean(), eq(false), anyShort(), anyLong());
++    // old api client call
++    doAnswer(oldCallCounter).when(nn)
++      .create((String)anyObject(), (FsPermission)anyObject(),
++        (String)anyObject(), anyBoolean(), anyShort(), anyLong());
++
++    DFSClient client = new DFSClient(null, nn, conf, null);
++    
++    boolean createParent = false;
++    client.create("foo", null, false, createParent, (short) 1, 512, null, 512);
++    client.create("bar", null, false, createParent, (short) 1, 512, null, 512);
++    client.create("baz", null, false, createParent, (short) 1, 512, null, 512);
++    
++    // no exception was thrown, three calls to the old verison.
++    assertEquals(3, oldCount.get());
++    assertEquals(1, newCount.get());   
++  }
++  
++  @Test(expected=IOException.class)
++  public void testCreateWithException() throws IOException {
++    Configuration conf = new Configuration();
++    NameNode nn = mock(NameNode.class);
++
++    // new api client call
++    Exception e = new RemoteException(IOException.class.getName(),
++        "Other remote exception"); 
++    
++    doThrow(e).when(nn)
++      .create((String)anyObject(), (FsPermission)anyObject(),
++          (String)anyObject(), anyBoolean(), eq(false), anyShort(), anyLong());
++
++    DFSClient client = new DFSClient(null, nn, conf, null);
++
++    boolean createParent = false;
++    client.create("foo", null, false, createParent, (short) 1, 512, null, 512);
++    fail("Expected an IOException");
++  }
++  
++  /**
++   * Small testing program that attemps to call createNonRecursive.
++   */
++  public static void main(String argv[]) throws IOException {
++    Configuration conf = new Configuration();
++    FileSystem fs = FileSystem.get(conf);
++    Path p = new Path(argv[0]);
++    FSDataOutputStream out = fs.createNonRecursive(p, true, 512, (short) 1,
++        512, null);
++    out.close();
++    fs.close();
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileCreation.java b/src/test/org/apache/hadoop/hdfs/TestFileCreation.java
+index b53e4ba..86baa84 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileCreation.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileCreation.java
+@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs;
+ 
+ import java.io.BufferedReader;
+ import java.io.File;
++import java.io.FileNotFoundException;
+ import java.io.FileReader;
+ import java.io.IOException;
+ import java.net.InetSocketAddress;
+@@ -28,9 +29,11 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.BlockLocation;
+ import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.FileAlreadyExistsException;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.hdfs.protocol.FSConstants;
+@@ -310,6 +313,98 @@ public class TestFileCreation extends junit.framework.TestCase {
+   }
+ 
+   /**
++   * Test file creation using createNonRecursive().
++   */
++  public void testFileCreationNonRecursive() throws IOException {
++    Configuration conf = new Configuration();
++    if (simulatedStorage) {
++      conf.setBoolean(SimulatedFSDataset.CONFIG_PROPERTY_SIMULATED, true);
++    }
++    MiniDFSCluster cluster = new MiniDFSCluster(conf, 1, true, null);
++    FileSystem fs = cluster.getFileSystem();
++    final Path path = new Path("/" + System.currentTimeMillis()
++        + "-testFileCreationNonRecursive");
++    FSDataOutputStream out = null;
++
++    try {
++      IOException expectedException = null;
++      final String nonExistDir = "/non-exist-" + System.currentTimeMillis();
++
++      fs.delete(new Path(nonExistDir), true);
++      // Create a new file in root dir, should succeed
++      out = createNonRecursive(fs, path, 1, false);
++      out.close();
++      // Create a file when parent dir exists as file, should fail
++      expectedException = null;
++      try {
++        createNonRecursive(fs, new Path(path, "Create"), 1, false);
++      } catch (IOException e) {
++        expectedException = e;
++      }
++      assertTrue("Create a file when parent directory exists as a file"
++          + " should throw FileAlreadyExistsException ",
++          expectedException != null
++              && expectedException instanceof FileAlreadyExistsException);
++      fs.delete(path, true);
++      // Create a file in a non-exist directory, should fail
++      final Path path2 = new Path(nonExistDir + "/testCreateNonRecursive");
++      expectedException = null;
++      try {
++        createNonRecursive(fs, path2, 1, false);
++      } catch (IOException e) {
++        expectedException = e;
++      }
++      assertTrue("Create a file in a non-exist dir using"
++          + " createNonRecursive() should throw FileNotFoundException ",
++          expectedException != null
++              && expectedException instanceof FileNotFoundException);
++
++      // Overwrite a file in root dir, should succeed
++      out = createNonRecursive(fs, path, 1, true);
++      out.close();
++      // Overwrite a file when parent dir exists as file, should fail
++      expectedException = null;
++      try {
++        createNonRecursive(fs, new Path(path, "Overwrite"), 1, true);
++      } catch (IOException e) {
++        expectedException = e;
++      }
++      assertTrue("Overwrite a file when parent directory exists as a file"
++          + " should throw FileAlreadyExistsException ",
++          expectedException != null
++              && expectedException instanceof FileAlreadyExistsException);
++      fs.delete(path, true);
++      // Overwrite a file in a non-exist directory, should fail
++      final Path path3 = new Path(nonExistDir + "/testOverwriteNonRecursive");
++      expectedException = null;
++      try {
++        createNonRecursive(fs, path3, 1, true);
++      } catch (IOException e) {
++        expectedException = e;
++      }
++      assertTrue("Overwrite a file in a non-exist dir using"
++          + " createNonRecursive() should throw FileNotFoundException ",
++          expectedException != null
++              && expectedException instanceof FileNotFoundException);
++    } finally {
++      fs.close();
++      cluster.shutdown();
++    }
++  }
++
++  // creates a file using DistributedFileSystem.createNonRecursive()
++  static FSDataOutputStream createNonRecursive(FileSystem fs, Path name,
++      int repl, boolean overwrite) throws IOException {
++    System.out.println("createNonRecursive: Created " + name + " with " + repl
++        + " replica.");
++    FSDataOutputStream stm = ((DistributedFileSystem) fs).createNonRecursive(
++        name, FsPermission.getDefault(), overwrite, fs.getConf().getInt(
++            "io.file.buffer.size", 4096), (short) repl, (long) blockSize, null);
++
++    return stm;
++  }
++  
++  /**
+    * Test that file data does not become corrupted even in the face of errors.
+    */
+   public void testFileCreationError1() throws IOException {
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/NNThroughputBenchmark.java b/src/test/org/apache/hadoop/hdfs/server/namenode/NNThroughputBenchmark.java
+index 0453374..300329e 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/NNThroughputBenchmark.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/NNThroughputBenchmark.java
+@@ -546,7 +546,7 @@ public class NNThroughputBenchmark {
+       long start = System.currentTimeMillis();
+       // dummyActionNoSynch(fileIdx);
+       nameNode.create(fileNames[daemonId][inputIdx], FsPermission.getDefault(),
+-                      clientName, true, replication, BLOCK_SIZE);
++                      clientName, true, true, replication, BLOCK_SIZE);
+       long end = System.currentTimeMillis();
+       for(boolean written = !closeUponCreate; !written; 
+         written = nameNode.complete(fileNames[daemonId][inputIdx], clientName));
+@@ -917,7 +917,7 @@ public class NNThroughputBenchmark {
+       for(int idx=0; idx < nrFiles; idx++) {
+         String fileName = nameGenerator.getNextFileName("ThroughputBench");
+         nameNode.create(fileName, FsPermission.getDefault(),
+-                        clientName, true, replication, BLOCK_SIZE);
++                        clientName, true, true, replication, BLOCK_SIZE);
+         addBlocks(fileName, clientName);
+         nameNode.complete(fileName, clientName);
+       }
+-- 
+1.7.0.4
+

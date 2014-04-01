@@ -1,0 +1,416 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta content="Apache Forrest" name="Generator">
+<meta name="Forrest-version" content="0.8">
+<meta name="Forrest-skin-name" content="pelt">
+<title>Hadoop Archives Guide</title>
+<link type="text/css" href="skin/basic.css" rel="stylesheet">
+<link media="screen" type="text/css" href="skin/screen.css" rel="stylesheet">
+<link media="print" type="text/css" href="skin/print.css" rel="stylesheet">
+<link type="text/css" href="skin/profile.css" rel="stylesheet">
+<script src="skin/getBlank.js" language="javascript" type="text/javascript"></script><script src="skin/getMenu.js" language="javascript" type="text/javascript"></script><script src="skin/fontsize.js" language="javascript" type="text/javascript"></script>
+<link rel="shortcut icon" href="images/favicon.ico">
+</head>
+<body onload="init()">
+<script type="text/javascript">ndeSetTextSize();</script>
+<div id="top">
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+<a href="http://www.apache.org/">Apache</a> &gt; <a href="http://hadoop.apache.org/">Hadoop</a> &gt; <a href="http://hadoop.apache.org/core/">Core</a><script src="skin/breadcrumbs.js" language="JavaScript" type="text/javascript"></script>
+</div>
+<!--+
+    |header
+    +-->
+<div class="header">
+<!--+
+    |start group logo
+    +-->
+<div class="grouplogo">
+<a href="http://hadoop.apache.org/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo.jpg" title="Apache Hadoop"></a>
+</div>
+<!--+
+    |end group logo
+    +-->
+<!--+
+    |start Project Logo
+    +-->
+<div class="projectlogo">
+<a href="http://hadoop.apache.org/core/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo-2.gif" title="Scalable Computing Platform"></a>
+</div>
+<!--+
+    |end Project Logo
+    +-->
+<!--+
+    |start Search
+    +-->
+<div class="searchbox">
+<form action="http://www.google.com/search" method="get" class="roundtopsmall">
+<input value="archive.cloudera.com" name="sitesearch" type="hidden"><input onFocus="getBlank (this, 'Search the site with google');" size="25" name="q" id="query" type="text" value="Search the site with google">&nbsp; 
+                    <input name="Search" value="Search" type="submit">
+</form>
+</div>
+<!--+
+    |end search
+    +-->
+<!--+
+    |start Tabs
+    +-->
+<ul id="tabs">
+<li>
+<a class="unselected" href="http://hadoop.apache.org/core/">Project</a>
+</li>
+<li>
+<a class="unselected" href="http://wiki.apache.org/hadoop">Wiki</a>
+</li>
+<li class="current">
+<a class="selected" href="index.html">Hadoop 0.20 Documentation</a>
+</li>
+</ul>
+<!--+
+    |end Tabs
+    +-->
+</div>
+</div>
+<div id="main">
+<div id="publishedStrip">
+<!--+
+    |start Subtabs
+    +-->
+<div id="level2tabs"></div>
+<!--+
+    |end Endtabs
+    +-->
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+
+             &nbsp;
+           </div>
+<!--+
+    |start Menu, mainarea
+    +-->
+<!--+
+    |start Menu
+    +-->
+<div id="menu">
+<div onclick="SwitchMenu('menu_1.1', 'skin/')" id="menu_1.1Title" class="menutitle">Getting Started</div>
+<div id="menu_1.1" class="menuitemgroup">
+<div class="menuitem">
+<a href="index.html">Overview</a>
+</div>
+<div class="menuitem">
+<a href="single_node_setup.html">Single Node Setup</a>
+</div>
+<div class="menuitem">
+<a href="cluster_setup.html">Cluster Setup</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.2', 'skin/')" id="menu_1.2Title" class="menutitle">Guides</div>
+<div id="menu_1.2" class="menuitemgroup">
+<div class="menuitem">
+<a href="HttpAuthentication.html">Authentication for Hadoop HTTP web-consoles</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_selected_1.3', 'skin/')" id="menu_selected_1.3Title" class="menutitle" style="background-image: url('skin/images/chapter_open.gif');">MapReduce</div>
+<div id="menu_selected_1.3" class="selectedmenuitemgroup" style="display: block;">
+<div class="menuitem">
+<a href="mapred_tutorial.html">MapReduce Tutorial</a>
+</div>
+<div class="menuitem">
+<a href="streaming.html">Hadoop Streaming</a>
+</div>
+<div class="menuitem">
+<a href="commands_manual.html">Hadoop Commands</a>
+</div>
+<div class="menuitem">
+<a href="distcp.html">DistCp</a>
+</div>
+<div class="menuitem">
+<a href="vaidya.html">Vaidya</a>
+</div>
+<div class="menupage">
+<div class="menupagetitle">Hadoop Archives</div>
+</div>
+<div class="menuitem">
+<a href="gridmix.html">Gridmix</a>
+</div>
+<div class="menuitem">
+<a href="capacity_scheduler.html">Capacity Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="fair_scheduler.html">Fair Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="hod_scheduler.html">Hod Scheduler</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.4', 'skin/')" id="menu_1.4Title" class="menutitle">HDFS</div>
+<div id="menu_1.4" class="menuitemgroup">
+<div class="menuitem">
+<a href="hdfs_user_guide.html">HDFS Users </a>
+</div>
+<div class="menuitem">
+<a href="hdfs_design.html">HDFS Architecture</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_permissions_guide.html">Permissions</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_quota_admin_guide.html">Quotas</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_imageviewer.html">Offline Image Viewer Guide</a>
+</div>
+<div class="menuitem">
+<a href="SLG_user_guide.html">Synthetic Load Generator</a>
+</div>
+<div class="menuitem">
+<a href="libhdfs.html">C API libhdfs</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.5', 'skin/')" id="menu_1.5Title" class="menutitle">Common</div>
+<div id="menu_1.5" class="menuitemgroup">
+<div class="menuitem">
+<a href="file_system_shell.html">File System Shell</a>
+</div>
+<div class="menuitem">
+<a href="service_level_auth.html">Service Level Authorization</a>
+</div>
+<div class="menuitem">
+<a href="native_libraries.html">Native Libraries</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.6', 'skin/')" id="menu_1.6Title" class="menutitle">Miscellaneous</div>
+<div id="menu_1.6" class="menuitemgroup">
+<div class="menuitem">
+<a href="Secure_Impersonation.html">Secure Impersonation</a>
+</div>
+<div class="menuitem">
+<a href="api/index.html">API Docs</a>
+</div>
+<div class="menuitem">
+<a href="jdiff/changes.html">API Changes</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/">Wiki</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/FAQ">FAQ</a>
+</div>
+<div class="menuitem">
+<a href="releasenotes.html">Release Notes</a>
+</div>
+<div class="menuitem">
+<a href="changes.html">Change Log</a>
+</div>
+</div>
+<div id="credit"></div>
+<div id="roundbottom">
+<img style="display: none" class="corner" height="15" width="15" alt="" src="skin/images/rc-b-l-15-1body-2menu-3menu.png"></div>
+<!--+
+  |alternative credits
+  +-->
+<div id="credit2"></div>
+</div>
+<!--+
+    |end Menu
+    +-->
+<!--+
+    |start content
+    +-->
+<div id="content">
+<div title="Portable Document Format" class="pdflink">
+<a class="dida" href="hadoop_archives.pdf"><img alt="PDF -icon" src="skin/images/pdfdoc.gif" class="skin"><br>
+        PDF</a>
+</div>
+<h1>Hadoop Archives Guide</h1>
+<div id="minitoc-area">
+<ul class="minitoc">
+<li>
+<a href="#Overview">Overview</a>
+</li>
+<li>
+<a href="#How+to+Create+an+Archive">How to Create an Archive</a>
+</li>
+<li>
+<a href="#How+to+Look+Up+Files+in+Archives">How to Look Up Files in Archives</a>
+</li>
+<li>
+<a href="#Archives+Examples">Archives Examples</a>
+<ul class="minitoc">
+<li>
+<a href="#Creating+an+Archive">Creating an Archive</a>
+</li>
+<li>
+<a href="#Looking+Up+Files"> Looking Up Files</a>
+</li>
+</ul>
+</li>
+<li>
+<a href="#Hadoop+Archives+and+MapReduce">Hadoop Archives and MapReduce </a>
+</li>
+</ul>
+</div>
+        
+<a name="N1000D"></a><a name="Overview"></a>
+<h2 class="h3">Overview</h2>
+<div class="section">
+<p>
+        Hadoop archives are special format archives. A Hadoop archive
+        maps to a file system directory. A Hadoop archive always has a *.har
+        extension. A Hadoop archive directory contains metadata (in the form 
+        of _index and _masterindex) and data (part-*) files. The _index file contains
+        the name of the files that are part of the archive and the location
+        within the part files. 
+        </p>
+</div>
+        
+        
+<a name="N10017"></a><a name="How+to+Create+an+Archive"></a>
+<h2 class="h3">How to Create an Archive</h2>
+<div class="section">
+<p>
+        
+<span class="codefrag">Usage: hadoop archive -archiveName name -p &lt;parent&gt; &lt;src&gt;* &lt;dest&gt;</span>
+        
+</p>
+<p>
+        -archiveName is the name of the archive you would like to create. 
+        An example would be foo.har. The name should have a *.har extension. 
+       	The parent argument is to specify the relative path to which the files should be
+       	archived to. Example would be :
+        </p>
+<p>
+<span class="codefrag"> -p /foo/bar a/b/c e/f/g </span>
+</p>
+<p>
+        Here /foo/bar is the parent path and a/b/c, e/f/g are relative paths to parent. 
+        Note that this is a Map/Reduce job that creates the archives. You would
+        need a map reduce cluster to run this. For a detailed example the later sections. </p>
+<p> If you just want to archive a single directory /foo/bar then you can just use </p>
+<p>
+<span class="codefrag"> hadoop archive -archiveName zoo.har -p /foo/bar /outputdir </span>
+</p>
+</div>
+        
+        
+<a name="N10033"></a><a name="How+to+Look+Up+Files+in+Archives"></a>
+<h2 class="h3">How to Look Up Files in Archives</h2>
+<div class="section">
+<p>
+        The archive exposes itself as a file system layer. So all the fs shell
+        commands in the archives work but with a different URI. Also, note that
+        archives are immutable. So, rename's, deletes and creates return
+        an error. URI for Hadoop Archives is 
+        </p>
+<p>
+<span class="codefrag">har://scheme-hostname:port/archivepath/fileinarchive</span>
+</p>
+<p>
+        If no scheme is provided it assumes the underlying filesystem. 
+        In that case the URI would look like </p>
+<p>
+<span class="codefrag">har:///archivepath/fileinarchive</span>
+</p>
+</div>
+
+ 		
+<a name="N10046"></a><a name="Archives+Examples"></a>
+<h2 class="h3">Archives Examples</h2>
+<div class="section">
+<a name="N1004C"></a><a name="Creating+an+Archive"></a>
+<h3 class="h4">Creating an Archive</h3>
+<p>
+<span class="codefrag">hadoop archive -archiveName foo.har -p /user/hadoop dir1 dir2 /user/zoo </span>
+</p>
+<p>
+         The above example is creating an archive using /user/hadoop as the relative archive directory.
+         The directories /user/hadoop/dir1 and /user/hadoop/dir2 will be 
+        archived in the following file system directory -- /user/zoo/foo.har. Archiving does not delete the input
+        files. If you want to delete the input files after creating the archives (to reduce namespace), you
+        will have to do it on your own. 
+        </p>
+<a name="N1005A"></a><a name="Looking+Up+Files"></a>
+<h3 class="h4"> Looking Up Files</h3>
+<p> Looking up files in hadoop archives is as easy as doing an ls on the filesystem. After you have
+		 archived the directories /user/hadoop/dir1 and /user/hadoop/dir2 as in the example above, to see all
+		 the files in the archives you can just run: </p>
+<p>
+<span class="codefrag">hadoop dfs -lsr har:///user/zoo/foo.har/</span>
+</p>
+<p> To understand the significance of the -p argument, lets go through the above example again. If you just do
+		 an ls (not lsr) on the hadoop archive using </p>
+<p>
+<span class="codefrag">hadoop dfs -ls har:///user/zoo/foo.har</span>
+</p>
+<p>The output should be:</p>
+<pre class="code">
+har:///user/zoo/foo.har/dir1
+har:///user/zoo/foo.har/dir2
+</pre>
+<p> As you can recall the archives were created with the following command </p>
+<p>
+<span class="codefrag">hadoop archive -archiveName foo.har -p /user/hadoop dir1 dir2 /user/zoo </span>
+</p>
+<p> If we were to change the command to: </p>
+<p>
+<span class="codefrag">hadoop archive -archiveName foo.har -p /user/  hadoop/dir1 hadoop/dir2 /user/zoo </span>
+</p>
+<p> then a ls on the hadoop archive using </p>
+<p>
+<span class="codefrag">hadoop dfs -ls har:///user/zoo/foo.har</span>
+</p>
+<p>would give you</p>
+<pre class="code">
+har:///user/zoo/foo.har/hadoop/dir1
+har:///user/zoo/foo.har/hadoop/dir2
+</pre>
+<p>
+		Notice that the archived files have been archived relative to /user/ rather than /user/hadoop.
+		</p>
+</div>
+		
+		
+<a name="N10096"></a><a name="Hadoop+Archives+and+MapReduce"></a>
+<h2 class="h3">Hadoop Archives and MapReduce </h2>
+<div class="section">
+<p>Using Hadoop Archives in MapReduce is as easy as specifying a different input filesystem than the default file system.
+		If you have a hadoop archive stored in HDFS in /user/zoo/foo.har then for using this archive for MapReduce input, all
+		you need to specify the input directory as har:///user/zoo/foo.har. Since Hadoop Archives is exposed as a file system 
+		MapReduce will be able to use all the logical input files in Hadoop Archives as input.</p>
+</div>
+  
+</div>
+<!--+
+    |end content
+    +-->
+<div class="clearboth">&nbsp;</div>
+</div>
+<div id="footer">
+<!--+
+    |start bottomstrip
+    +-->
+<div class="lastmodified">
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<div class="copyright">
+        Copyright &copy;
+         2008 <a href="http://www.apache.org/licenses/">The Apache Software Foundation.</a>
+</div>
+<!--+
+    |end bottomstrip
+    +-->
+</div>
+</body>
+</html>

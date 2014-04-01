@@ -1,0 +1,5667 @@
+From a0380f3cae542769bd6861311d0fc709201e9dc3 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 19 Feb 2010 14:35:02 -0800
+Subject: [PATCH 0477/1179] HADOOP-6332, HDFS-1134, MAPREDUCE-1774. Herriot (system test framework)
+
+Author: Konstantin Boudnik
+Ref: YDH
+---
+ build.xml                                          |  216 ++++++++-----
+ src/saveVersion.sh                                 |    2 +-
+ src/test/aop/build/aop.xml                         |  150 ++++++++-
+ .../org/apache/hadoop/mapred/JTProtocolAspect.aj   |   82 +++++
+ .../org/apache/hadoop/mapred/JobClientAspect.aj    |   34 ++
+ .../apache/hadoop/mapred/JobInProgressAspect.aj    |   75 +++++
+ .../org/apache/hadoop/mapred/JobTrackerAspect.aj   |  221 +++++++++++++
+ .../aop/org/apache/hadoop/mapred/TaskAspect.aj     |  113 +++++++
+ .../org/apache/hadoop/mapred/TaskTrackerAspect.aj  |  119 +++++++
+ .../hadoop/test/system/DaemonProtocolAspect.aj     |  258 +++++++++++++++
+ .../java/org/apache/hadoop/mapred/JobInfoImpl.java |  215 +++++++++++++
+ .../java/org/apache/hadoop/mapred/TTInfoImpl.java  |   72 +++++
+ .../org/apache/hadoop/mapred/TTTaskInfoImpl.java   |  152 +++++++++
+ .../org/apache/hadoop/mapred/TaskInfoImpl.java     |  161 ++++++++++
+ .../java/org/apache/hadoop/mapred/TestCluster.java |  180 +++++++++++
+ .../apache/hadoop/mapred/TestControlledJob.java    |  108 +++++++
+ .../org/apache/hadoop/mapred/TestSortValidate.java |  181 +++++++++++
+ .../org/apache/hadoop/mapred/TestTaskOwner.java    |  147 +++++++++
+ .../test/system/FinishTaskControlAction.java       |   70 ++++
+ .../hadoop/mapreduce/test/system/JTClient.java     |  329 +++++++++++++++++++
+ .../hadoop/mapreduce/test/system/JTProtocol.java   |  109 +++++++
+ .../hadoop/mapreduce/test/system/JobInfo.java      |  139 ++++++++
+ .../hadoop/mapreduce/test/system/MRCluster.java    |  156 +++++++++
+ .../mapreduce/test/system/MRDaemonClient.java      |   46 +++
+ .../hadoop/mapreduce/test/system/TTClient.java     |   90 ++++++
+ .../hadoop/mapreduce/test/system/TTInfo.java       |   42 +++
+ .../hadoop/mapreduce/test/system/TTProtocol.java   |   61 ++++
+ .../hadoop/mapreduce/test/system/TTTaskInfo.java   |   71 ++++
+ .../hadoop/mapreduce/test/system/TaskInfo.java     |   91 ++++++
+ .../hadoop/test/system/AbstractDaemonClient.java   |  336 ++++++++++++++++++++
+ .../hadoop/test/system/AbstractDaemonCluster.java  |  269 ++++++++++++++++
+ .../apache/hadoop/test/system/ControlAction.java   |   86 +++++
+ .../apache/hadoop/test/system/DaemonProtocol.java  |  155 +++++++++
+ .../org/apache/hadoop/test/system/ProcessInfo.java |   77 +++++
+ .../apache/hadoop/test/system/ProcessInfoImpl.java |  159 +++++++++
+ .../test/system/process/ClusterProcessManager.java |   69 ++++
+ .../system/process/HadoopDaemonRemoteCluster.java  |  277 ++++++++++++++++
+ .../hadoop/test/system/process/RemoteProcess.java  |   54 ++++
+ src/test/testjar/UserNamePermission.java           |   83 +++++
+ 39 files changed, 5168 insertions(+), 87 deletions(-)
+ create mode 100644 src/test/system/aop/org/apache/hadoop/mapred/JTProtocolAspect.aj
+ create mode 100644 src/test/system/aop/org/apache/hadoop/mapred/JobClientAspect.aj
+ create mode 100644 src/test/system/aop/org/apache/hadoop/mapred/JobInProgressAspect.aj
+ create mode 100644 src/test/system/aop/org/apache/hadoop/mapred/JobTrackerAspect.aj
+ create mode 100644 src/test/system/aop/org/apache/hadoop/mapred/TaskAspect.aj
+ create mode 100644 src/test/system/aop/org/apache/hadoop/mapred/TaskTrackerAspect.aj
+ create mode 100644 src/test/system/aop/org/apache/hadoop/test/system/DaemonProtocolAspect.aj
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapred/JobInfoImpl.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapred/TTInfoImpl.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapred/TTTaskInfoImpl.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapred/TaskInfoImpl.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapred/TestCluster.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapred/TestControlledJob.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapred/TestSortValidate.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapred/TestTaskOwner.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapreduce/test/system/FinishTaskControlAction.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapreduce/test/system/JTClient.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapreduce/test/system/JTProtocol.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapreduce/test/system/JobInfo.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapreduce/test/system/MRCluster.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapreduce/test/system/MRDaemonClient.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapreduce/test/system/TTClient.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapreduce/test/system/TTInfo.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapreduce/test/system/TTProtocol.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapreduce/test/system/TTTaskInfo.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/mapreduce/test/system/TaskInfo.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/test/system/AbstractDaemonClient.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/test/system/AbstractDaemonCluster.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/test/system/ControlAction.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/test/system/DaemonProtocol.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/test/system/ProcessInfo.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/test/system/ProcessInfoImpl.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/test/system/process/ClusterProcessManager.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/test/system/process/HadoopDaemonRemoteCluster.java
+ create mode 100644 src/test/system/java/org/apache/hadoop/test/system/process/RemoteProcess.java
+ create mode 100644 src/test/testjar/UserNamePermission.java
+
+diff --git a/build.xml b/build.xml
+index 557e4d0..a6687e5 100644
+--- a/build.xml
++++ b/build.xml
+@@ -639,15 +639,26 @@
+   <!--                                                                    -->
+   <!-- ================================================================== -->
+   <target name="examples" depends="jar, compile-examples" description="Make the Hadoop examples jar.">
+-    <jar jarfile="${build.dir}/${examples.final.name}.jar"
+-         basedir="${build.examples}">
+-      <manifest>
+-        <attribute name="Main-Class" 
+-                   value="org/apache/hadoop/examples/ExampleDriver"/>
+-      </manifest>
+-    </jar>
++    <macro-jar-examples
++      build.dir="${build.dir}"
++      basedir="${build.examples}">
++    </macro-jar-examples>
+   </target>
+ 
++  <macrodef name="macro-jar-examples">
++    <attribute name="build.dir" />
++    <attribute name="basedir" />
++    <sequential>
++      <jar jarfile="@{build.dir}/${examples.final.name}.jar"
++           basedir="@{basedir}">
++        <manifest>
++          <attribute name="Main-Class"
++                    value="org/apache/hadoop/examples/ExampleDriver"/>
++        </manifest>
++      </jar>
++    </sequential>
++  </macrodef>
++
+   <target name="tools-jar" depends="jar, compile-tools" 
+           description="Make the Hadoop tools jar.">
+     <jar jarfile="${build.dir}/${tools.final.name}.jar"
+@@ -809,6 +820,7 @@
+     description="Make hadoop-fi.jar">
+     <macro-jar-fault-inject
+       target.name="jar"
++      build.dir="${build-fi.dir}"
+       jar.final.name="final.name"
+       jar.final.value="${final.name}-fi" />
+   </target>
+@@ -858,77 +870,103 @@
+   <!-- Run unit tests                                                     --> 
+   <!-- ================================================================== -->
+   <target name="test-core" depends="jar-test" description="Run core unit tests">
+-
+-    <delete file="${test.build.dir}/testsfailed"/>
+-    <delete dir="${test.build.data}"/>
+-    <mkdir dir="${test.build.data}"/>
+-    <delete dir="${test.log.dir}"/>
+-    <mkdir dir="${test.log.dir}"/>
+-  	<copy file="${test.src.dir}/hadoop-policy.xml" 
+-  	  todir="${test.build.extraconf}" />
+-    <copy file="${test.src.dir}/fi-site.xml"
+-      todir="${test.build.extraconf}" />
+-    <junit showoutput="${test.output}"
+-      printsummary="${test.junit.printsummary}"
+-      haltonfailure="${test.junit.haltonfailure}"
+-      fork="yes"
+-      forkmode="${test.junit.fork.mode}"
+-      maxmemory="${test.junit.maxmemory}"
+-      dir="${basedir}" timeout="${test.timeout}"
+-      errorProperty="tests.failed" failureProperty="tests.failed">
+-      <jvmarg value="-ea" />
+-      <sysproperty key="test.build.data" value="${test.build.data}"/>
+-      <sysproperty key="test.tools.input.dir" value="${test.tools.input.dir}"/>
+-      <sysproperty key="test.cache.data" value="${test.cache.data}"/>    	
+-      <sysproperty key="test.debug.data" value="${test.debug.data}"/>
+-      <sysproperty key="hadoop.log.dir" value="${test.log.dir}"/>
+-      <sysproperty key="test.src.dir" value="${test.src.dir}"/>
+-      <sysproperty key="taskcontroller-path" value="${taskcontroller-path}"/>
+-      <sysproperty key="taskcontroller-ugi" value="${taskcontroller-ugi}"/>
+-      <sysproperty key="test.build.extraconf" value="${test.build.extraconf}" />
+-      <sysproperty key="hadoop.policy.file" value="hadoop-policy.xml"/>
+-      <sysproperty key="java.library.path"
+-       value="${build.native}/lib:${lib.dir}/native/${build.platform}"/>
+-      <sysproperty key="install.c++.examples" value="${install.c++.examples}"/>
+-      <!-- set io.compression.codec.lzo.class in the child jvm only if it is set -->
+-	  <syspropertyset dynamic="no">
+-		  <propertyref name="io.compression.codec.lzo.class"/>
+-	  </syspropertyset>
+-      <!-- set compile.c++ in the child jvm only if it is set -->
+-      <syspropertyset dynamic="no">
+-         <propertyref name="compile.c++"/>
+-      </syspropertyset>
+-      <classpath refid="${test.classpath.id}"/>
+-      <syspropertyset id="FaultProbabilityProperties">
+-        <propertyref regex="fi.*"/>
+-      </syspropertyset>
+-      <formatter type="${test.junit.output.format}" />
+-      <batchtest todir="${test.build.dir}" if="tests.notestcase">
+-        <fileset dir="${test.src.dir}"
+-           includes="**/${test.include}.java"
+-           excludes="**/${test.exclude}.java aop/**" />
+-      </batchtest>
+-      <batchtest todir="${test.build.dir}" if="tests.notestcase.fi">
+-        <fileset dir="${test.src.dir}/aop"
+-          includes="**/${test.include}.java"
+-          excludes="**/${test.exclude}.java" />
+-      </batchtest>
+-      <batchtest todir="${test.build.dir}" if="tests.testcase">
+-        <fileset dir="${test.src.dir}"
+-          includes="**/${testcase}.java" excludes="aop/**"/>
+-      </batchtest>
+-      <batchtest todir="${test.build.dir}" if="tests.testcase.fi">
+-        <fileset dir="${test.src.dir}/aop" includes="**/${testcase}.java"/>
+-      </batchtest>
+-      <!--The following batch is for very special occasions only when
+-      a non-FI tests are needed to be executed against FI-environment -->
+-      <batchtest todir="${test.build.dir}" if="tests.testcaseonly">
+-        <fileset dir="${test.src.dir}" includes="**/${testcase}.java"/>
+-      </batchtest>
+-    </junit>
+-    <antcall target="checkfailure"/>
++    <macro-test-runner classpath="${test.classpath.id}"
++                       test.dir="${test.build.dir}"
++                       fileset.dir="${test.src.dir}"
++                       >
++    </macro-test-runner>
+   </target>   
+ 
++  <macrodef name="macro-test-runner">
++    <attribute name="classpath" />
++    <attribute name="test.dir" />
++    <attribute name="fileset.dir" />
++    <attribute name="hadoop.home" default="" />
++    <attribute name="hadoop.conf.dir" default="" />
++    <attribute name="hadoop.conf.dir.deployed" default="" />
++    <sequential>
++      <delete dir="@{test.dir}/data" />
++      <mkdir dir="@{test.dir}/data" />
++      <delete dir="@{test.dir}/logs" />
++      <mkdir dir="@{test.dir}/logs" />
++      <copy file="${test.src.dir}/hadoop-policy.xml"
++            todir="@{test.dir}/extraconf" />
++      <copy file="${test.src.dir}/fi-site.xml"
++            todir="@{test.dir}/extraconf" />
++      <junit showoutput="${test.output}"
++             printsummary="${test.junit.printsummary}"
++             haltonfailure="${test.junit.haltonfailure}"
++             fork="yes"
++             forkmode="${test.junit.fork.mode}"
++             maxmemory="${test.junit.maxmemory}"
++             dir="${basedir}"
++             timeout="${test.timeout}"
++             errorProperty="tests.failed"
++             failureProperty="tests.failed">
++        <sysproperty key="test.build.data" value="${test.build.data}" />
++        <sysproperty key="test.tools.input.dir"
++                     value="${test.tools.input.dir}" />
++        <sysproperty key="test.cache.data" value="${test.cache.data}" />
++        <sysproperty key="test.debug.data" value="${test.debug.data}" />
++        <sysproperty key="hadoop.log.dir" value="${test.log.dir}" />
++        <sysproperty key="test.src.dir" value="${test.src.dir}" />
++        <sysproperty key="taskcontroller-path" value="${taskcontroller-path}" />
++        <sysproperty key="taskcontroller-ugi" value="${taskcontroller-ugi}" />
++        <sysproperty key="test.build.extraconf"
++                     value="@{test.dir}/extraconf" />
++        <sysproperty key="hadoop.policy.file" value="hadoop-policy.xml" />
++        <sysproperty key="java.library.path"
++                     value="${build.native}/lib:${lib.dir}/native/${build.platform}" />
++        <sysproperty key="install.c++.examples"
++                     value="${install.c++.examples}" />
++        <sysproperty key="testjar"
++                     value="@{test.dir}/testjar" />
++        <!-- System properties that are specifically set for system tests -->
++        <sysproperty key="test.system.hdrc.hadoophome" value="@{hadoop.home}" />
++        <sysproperty key="test.system.hdrc.hadoopconfdir"
++                     value="@{hadoop.conf.dir}" />
++        <sysproperty key="test.system.hdrc.deployed.hadoopconfdir"
++                     value="@{hadoop.conf.dir.deployed}" />
++        <!-- set io.compression.codec.lzo.class in the child jvm only if it is set -->
++        <syspropertyset dynamic="no">
++          <propertyref name="io.compression.codec.lzo.class" />
++        </syspropertyset>
++        <!-- set compile.c++ in the child jvm only if it is set -->
++        <syspropertyset dynamic="no">
++          <propertyref name="compile.c++" />
++        </syspropertyset>
++        <classpath refid="@{classpath}" />
++        <syspropertyset id="FaultProbabilityProperties">
++          <propertyref regex="fi.*" />
++        </syspropertyset>
++        <formatter type="${test.junit.output.format}" />
++        <batchtest todir="@{test.dir}" if="tests.notestcase">
++          <fileset dir="@{fileset.dir}"
++                   includes="**/${test.include}.java"
++                   excludes="**/${test.exclude}.java aop/** system/**" />
++        </batchtest>
++        <batchtest todir="${test.build.dir}" if="tests.notestcase.fi">
++          <fileset dir="${test.src.dir}/aop"
++                   includes="**/${test.include}.java"
++                   excludes="**/${test.exclude}.java" />
++        </batchtest>
++        <batchtest todir="@{test.dir}" if="tests.testcase">
++          <fileset dir="@{fileset.dir}"
++            includes="**/${testcase}.java" excludes="aop/** system/**"/>
++        </batchtest>
++        <batchtest todir="${test.build.dir}" if="tests.testcase.fi">
++          <fileset dir="${test.src.dir}/aop" includes="**/${testcase}.java" />
++        </batchtest>
++        <!--The following batch is for very special occasions only when
++                a non-FI tests are needed to be executed against FI-environment -->
++        <batchtest todir="${test.build.dir}" if="tests.testcaseonly">
++          <fileset dir="${test.src.dir}" includes="**/${testcase}.java" />
++        </batchtest>
++      </junit>
++      <antcall target="checkfailure"/>
++    </sequential>
++  </macrodef>
++
+   <target name="checkfailure" if="tests.failed">
+     <touch file="${test.build.dir}/testsfailed"/>
+     <fail unless="continueOnFailure">Tests failed!</fail>
+@@ -1383,6 +1421,32 @@
+ 
+   </target>
+ 
++  <target name="binary-system" depends="bin-package, jar-system, jar-test-system"
++     description="make system test package for deployment">
++    <copy todir="${system-test-build-dir}/${final.name}">
++      <fileset dir="${dist.dir}">
++      </fileset>
++    </copy>
++    <copy todir="${system-test-build-dir}/${final.name}" 
++      file="${system-test-build-dir}/${core.final.name}.jar" overwrite="true"/>
++    <copy todir="${system-test-build-dir}/${final.name}"
++      file="${system-test-build-dir}/${test.final.name}.jar" overwrite="true"/>
++    <macro_tar 
++      param.destfile="${system-test-build-dir}/${final.name}-bin.tar.gz">
++        <param.listofitems>
++          <tarfileset dir="${system-test-build-dir}" mode="664">
++            <exclude name="${final.name}/bin/*" />
++            <exclude name="${final.name}/src/**" />
++            <exclude name="${final.name}/docs/**" />
++            <include name="${final.name}/**" />
++          </tarfileset>
++          <tarfileset dir="${build.dir}" mode="755">
++            <include name="${final.name}/bin/*" />
++          </tarfileset>
++        </param.listofitems>
++      </macro_tar>
++  </target>
++  
+   <target name="binary" depends="bin-package" description="Make tarball without source and documentation">
+     <macro_tar param.destfile="${build.dir}/${final.name}-bin.tar.gz">
+       <param.listofitems>
+diff --git a/src/saveVersion.sh b/src/saveVersion.sh
+index f2b97ba..72bee56 100755
+--- a/src/saveVersion.sh
++++ b/src/saveVersion.sh
+@@ -39,7 +39,7 @@ mkdir -p $build_dir/src/org/apache/hadoop
+ cat << EOF | \
+   sed -e "s/VERSION/$version/" -e "s/USER/$user/" -e "s/DATE/$date/" \
+       -e "s|URL|$url|" -e "s/REV/$revision/" -e "s/SRCCHECKSUM/$srcChecksum/" \
+-      > build/src/org/apache/hadoop/package-info.java
++      > $build_dir/src/org/apache/hadoop/package-info.java
+ /*
+  * Generated by src/saveVersion.sh
+  */
+diff --git a/src/test/aop/build/aop.xml b/src/test/aop/build/aop.xml
+index 6900dde..41b9ef8 100644
+--- a/src/test/aop/build/aop.xml
++++ b/src/test/aop/build/aop.xml
+@@ -15,12 +15,18 @@
+    limitations under the License.
+ -->
+ <project name="aspects">
++  <!-- Properties common for all fault injections -->
+   <property name="build-fi.dir" value="${basedir}/build-fi"/>
+   <property name="hadoop-fi.jar" location="${build.dir}/${final.name}-fi.jar" />
+   <property name="compile-inject.output" value="${build-fi.dir}/compile-fi.log"/>
+   <property name="aspectversion" value="1.6.5"/>
+   <property file="${basedir}/build.properties"/>
+ 
++  <!-- Properties related to system fault injection and tests -->
++  <property name="system-test-build-dir" value="${build-fi.dir}/system"/>
++
++  <!-- Properties specifically for system fault-injections and system tests -->
++ 
+   <!--All Fault Injection (FI) related targets are located in this session -->
+     
+   <target name="clean-fi">
+@@ -44,10 +50,11 @@
+     <echo message="Start weaving aspects in place"/>
+     <iajc
+       encoding="${build.encoding}" 
+-      srcdir="${core.src.dir};${mapred.src.dir};${hdfs.src.dir};${build.src};${test.src.dir}/aop" 
+-      includes="org/apache/hadoop/**/*.java, org/apache/hadoop/**/*.aj"
++      srcdir="${core.src.dir};${mapred.src.dir};${hdfs.src.dir};${build.src};
++              ${src.dir.path}"
++      includes="**/org/apache/hadoop/**/*.java, **/org/apache/hadoop/**/*.aj"
+       excludes="org/apache/hadoop/record/**/*"
+-      destDir="${build.classes}"
++      destDir="${dest.dir}"
+       debug="${javac.debug}"
+       target="${javac.version}"
+       source="${javac.version}"
+@@ -55,7 +62,15 @@
+       fork="true"
+       maxmem="256m"
+       >
+-      <classpath refid="test.classpath"/>
++
++      <classpath>
++       <path refid="test.classpath"/>
++       <fileset dir="${build-fi.dir}/test/testjar">
++          <include name="**/*.jar" />
++          <exclude name="**/excluded/" />
++       </fileset>
++     </classpath>
++
+     </iajc>
+     <loadfile property="injection.failure" srcfile="${compile-inject.output}">
+      <filterchain>
+@@ -70,16 +85,130 @@
+     <echo message="Weaving of aspects is finished"/>
+   </target>
+ 
+-  <target name="injectfaults" 
+-  	description="Instrument classes with faults and other AOP advices">
++  <!-- Classpath for running system tests -->
++  <path id="test.system.classpath">
++        <pathelement location="${hadoop.conf.dir.deployed}" />
++        <pathelement location="${hadoop.conf.dir}" />
++        <pathelement location="${system-test-build-dir}/test/extraconf" />
++        <pathelement location="${system-test-build-dir}/test/classes" />
++        <pathelement location="${system-test-build-dir}/classes" />
++        <pathelement location="${test.src.dir}" />
++        <pathelement location="${build-fi.dir}" />
++        <pathelement location="${build-fi.dir}/tools" />
++        <pathelement path="${clover.jar}" />
++        <fileset dir="${test.lib.dir}">
++          <include name="**/*.jar" />
++          <exclude name="**/excluded/" />
++        </fileset>
++        <fileset dir="${system-test-build-dir}">
++           <include name="**/*.jar" />
++           <exclude name="**/excluded/" />
++         </fileset>
++         <fileset dir="${build-fi.dir}/test/testjar">
++           <include name="**/*.jar" />
++           <exclude name="**/excluded/" />
++         </fileset>
++        <path refid="classpath" />
++  </path>
++
++  <!-- ================ -->
++  <!-- run system tests -->
++  <!-- ================ -->
++  <target name="test-system" depends="-test-system-deployed, -test-system-local"
++    description="Run system tests">
++  </target>
++
++  <target name="-test-system-local"
++    depends="ivy-retrieve-common, prepare-test-system" 
++    unless="hadoop.conf.dir.deployed">
++    <macro-jar-examples
++      build.dir="${system-test-build-dir}"
++      basedir="${system-test-build-dir}/examples">
++    </macro-jar-examples>
++    <macro-test-runner test.file="${test.all.tests.file}"
++                       classpath="test.system.classpath"
++                       test.dir="${system-test-build-dir}/test"
++                       fileset.dir="${test.src.dir}/system/java"
++                       hadoop.home="${hadoop.home}"
++                       hadoop.conf.dir="${hadoop.conf.dir}">
++    </macro-test-runner>
++  </target>
++  <target name="-test-system-deployed"
++    depends="ivy-retrieve-common, prepare-test-system" 
++    if="hadoop.conf.dir.deployed">
++    <macro-jar-examples
++      build.dir="${system-test-build-dir}"
++      basedir="${system-test-build-dir}/examples">
++    </macro-jar-examples>
++    <macro-test-runner classpath="test.system.classpath"
++                       test.dir="${system-test-build-dir}/test"
++                       fileset.dir="${test.src.dir}/system/java"
++                       hadoop.home="${hadoop.home}"
++                       hadoop.conf.dir="${hadoop.conf.dir}"
++                       hadoop.conf.dir.deployed="${hadoop.conf.dir.deployed}">
++    </macro-test-runner>
++  </target>
++
++  <target name="prepare-test-system" depends="jar-test-system">
++    <subant buildpath="build.xml" target="inject-system-faults">
++      <property name="build.dir" value="${system-test-build-dir}" />
++    </subant>
++  </target>
++
++  <target name="injectfaults"
++          description="Instrument classes with faults and other AOP advices">
+     <mkdir dir="${build-fi.dir}"/>
+     <delete file="${compile-inject.output}"/>
+-    <subant buildpath="${basedir}" target="compile-fault-inject"
+-      output="${compile-inject.output}">
+-      <property name="build.dir" value="${build-fi.dir}"/>
++    <weave-injectfault-aspects dest.dir="${build-fi.dir}/classes}"
++                               src.dir="${test.src.dir}/aop">
++    </weave-injectfault-aspects>
++  </target>
++
++  <!-- =============================================================== -->
++  <!-- Create hadoop-{version}-dev-core.jar required to be deployed on -->
++  <!-- cluster for system tests                                        -->
++  <!-- =============================================================== -->
++  <target name="jar-system"
++          depends="inject-system-faults"
++          description="make hadoop.jar">
++    <macro-jar-fault-inject target.name="jar"
++      build.dir="${system-test-build-dir}"
++      jar.final.name="final.name"
++      jar.final.value="${final.name}">
++    </macro-jar-fault-inject>
++  </target>
++
++  <target name="jar-test-system" depends="inject-system-faults"
++    description="Make hadoop-test.jar with system fault-injection">
++    <subant buildpath="build.xml" target="jar-test">
++      <property name="build.dir" value="${system-test-build-dir}"/>
++      <property name="test.build.classes"
++        value="${system-test-build-dir}/test/classes"/>
+     </subant>
+   </target>
+ 
++  <macrodef name="weave-injectfault-aspects">
++    <attribute name="dest.dir" />
++    <attribute name="src.dir" />
++    <sequential>
++      <subant buildpath="build.xml" target="compile-fault-inject"
++        output="${compile-inject.output}">
++        <property name="build.dir" value="${build-fi.dir}" />
++        <property name="src.dir.path" value="@{src.dir}" />
++        <property name="dest.dir" value="@{dest.dir}" />
++      </subant>
++    </sequential>
++  </macrodef>
++
++  <target name="inject-system-faults" description="Inject system faults">
++    <property name="build-fi.dir" value="${system-test-build-dir}" />
++    <mkdir dir="${build-fi.dir}"/>
++    <delete file="${compile-inject.output}"/>
++    <weave-injectfault-aspects dest.dir="${system-test-build-dir}/classes"
++                               src.dir="${test.src.dir}/system">
++    </weave-injectfault-aspects>
++    </target>
++
+   <macrodef name="macro-run-tests-fault-inject">
+     <attribute name="target.name" />
+     <attribute name="testcasesonly" />
+@@ -99,11 +228,12 @@
+   <!-- ================================================================== -->
+   <macrodef name="macro-jar-fault-inject">
+     <attribute name="target.name" />
++    <attribute name="build.dir" />
+     <attribute name="jar.final.name" />
+     <attribute name="jar.final.value" />
+     <sequential>
+       <subant buildpath="build.xml" target="@{target.name}">
+-        <property name="build.dir" value="${build-fi.dir}"/>
++        <property name="build.dir" value="@{build.dir}"/>
+         <property name="@{jar.final.name}" value="@{jar.final.value}"/>
+         <property name="jar.extra.properties.list" 
+         	  value="${test.src.dir}/fi-site.xml" />
+diff --git a/src/test/system/aop/org/apache/hadoop/mapred/JTProtocolAspect.aj b/src/test/system/aop/org/apache/hadoop/mapred/JTProtocolAspect.aj
+new file mode 100644
+index 0000000..52e5d0e
+--- /dev/null
++++ b/src/test/system/aop/org/apache/hadoop/mapred/JTProtocolAspect.aj
+@@ -0,0 +1,82 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.IOException;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.mapreduce.JobID;
++import org.apache.hadoop.mapreduce.TaskID;
++import org.apache.hadoop.mapreduce.test.system.JTProtocol;
++import org.apache.hadoop.mapreduce.test.system.JobInfo;
++import org.apache.hadoop.mapreduce.test.system.TTInfo;
++import org.apache.hadoop.mapreduce.test.system.TaskInfo;
++
++/**
++ * Aspect which injects the basic protocol functionality which is to be
++ * implemented by all the services which implement {@link ClientProtocol}
++ * 
++ * Aspect also injects default implementation for the {@link JTProtocol}
++ */
++
++public aspect JTProtocolAspect {
++
++  // Make the ClientProtocl extend the JTprotocol
++  declare parents : JobSubmissionProtocol extends JTProtocol;
++
++  /*
++   * Start of default implementation of the methods in JTProtocol
++   */
++
++  public Configuration JTProtocol.getDaemonConf() throws IOException {
++    return null;
++  }
++
++  public JobInfo JTProtocol.getJobInfo(JobID jobID) throws IOException {
++    return null;
++  }
++
++  public TaskInfo JTProtocol.getTaskInfo(TaskID taskID) throws IOException {
++    return null;
++  }
++
++  public TTInfo JTProtocol.getTTInfo(String trackerName) throws IOException {
++    return null;
++  }
++
++  public JobInfo[] JTProtocol.getAllJobInfo() throws IOException {
++    return null;
++  }
++
++  public TaskInfo[] JTProtocol.getTaskInfo(JobID jobID) throws IOException {
++    return null;
++  }
++
++  public TTInfo[] JTProtocol.getAllTTInfo() throws IOException {
++    return null;
++  }
++  
++  public boolean JTProtocol.isJobRetired(JobID jobID) throws IOException {
++    return false;
++  }
++  
++  public String JTProtocol.getJobHistoryLocationForRetiredJob(JobID jobID) throws IOException {
++    return "";
++  }
++}
+diff --git a/src/test/system/aop/org/apache/hadoop/mapred/JobClientAspect.aj b/src/test/system/aop/org/apache/hadoop/mapred/JobClientAspect.aj
+new file mode 100644
+index 0000000..d6a0b57
+--- /dev/null
++++ b/src/test/system/aop/org/apache/hadoop/mapred/JobClientAspect.aj
+@@ -0,0 +1,34 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.IOException;
++import org.apache.hadoop.mapreduce.JobID;
++
++public privileged aspect JobClientAspect {
++
++  public JobSubmissionProtocol JobClient.getProtocol() {
++    return jobSubmitClient;
++  }
++  
++  public void JobClient.killJob(JobID id) throws IOException {
++    jobSubmitClient.killJob(
++        org.apache.hadoop.mapred.JobID.downgrade(id));
++  }
++}
+diff --git a/src/test/system/aop/org/apache/hadoop/mapred/JobInProgressAspect.aj b/src/test/system/aop/org/apache/hadoop/mapred/JobInProgressAspect.aj
+new file mode 100644
+index 0000000..ac2373f
+--- /dev/null
++++ b/src/test/system/aop/org/apache/hadoop/mapred/JobInProgressAspect.aj
+@@ -0,0 +1,75 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.IOException;
++import org.apache.hadoop.mapreduce.test.system.JobInfo;
++
++/**
++ * Aspect to add a utility method in the JobInProgress for easing up the
++ * construction of the JobInfo object.
++ */
++privileged aspect JobInProgressAspect {
++
++  /**
++   * Returns a read only view of the JobInProgress object which is used by the
++   * client.
++   * 
++   * @return JobInfo of the current JobInProgress object
++   */
++  public JobInfo JobInProgress.getJobInfo() {
++    String historyLoc = getHistoryPath();
++    if (tasksInited.get()) {
++      return new JobInfoImpl(
++          this.getJobID(), this.isSetupLaunched(), this.isSetupFinished(), this
++              .isCleanupLaunched(), this.runningMaps(), this.runningReduces(),
++          this.pendingMaps(), this.pendingReduces(), this.finishedMaps(), this
++              .finishedReduces(), this.getStatus(), historyLoc, this
++              .getBlackListedTrackers(), false, this.numMapTasks,
++          this.numReduceTasks, this.isHistoryFileCopied());
++    } else {
++      return new JobInfoImpl(
++          this.getJobID(), false, false, false, 0, 0, this.pendingMaps(), this
++              .pendingReduces(), this.finishedMaps(), this.finishedReduces(),
++          this.getStatus(), historyLoc, this.getBlackListedTrackers(), this
++              .isComplete(), this.numMapTasks, this.numReduceTasks, 
++              this.isHistoryFileCopied());
++    }
++  }
++  
++  private String JobInProgress.getHistoryPath() {
++    String historyLoc = "";
++    if(this.isComplete()) {
++      historyLoc = this.getHistoryFile();
++    } else {
++      String historyFileName = null;
++      try {
++        historyFileName  = JobHistory.JobInfo.getJobHistoryFileName(conf, 
++            jobId);
++      } catch(IOException e) {
++      }
++      if(historyFileName != null) {
++        historyLoc = JobHistory.JobInfo.getJobHistoryLogLocation(
++            historyFileName).toString();
++      }
++    }
++    return historyLoc;
++  }
++
++}
+diff --git a/src/test/system/aop/org/apache/hadoop/mapred/JobTrackerAspect.aj b/src/test/system/aop/org/apache/hadoop/mapred/JobTrackerAspect.aj
+new file mode 100644
+index 0000000..18d8291
+--- /dev/null
++++ b/src/test/system/aop/org/apache/hadoop/mapred/JobTrackerAspect.aj
+@@ -0,0 +1,221 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.IOException;
++import java.util.List;
++import java.util.ArrayList;
++import java.util.Set;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.mapred.JobConf;
++import org.apache.hadoop.mapred.JobTracker.RetireJobInfo;
++import org.apache.hadoop.mapreduce.JobID;
++import org.apache.hadoop.mapreduce.TaskID;
++import org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker;
++import org.apache.hadoop.mapreduce.test.system.JTProtocol;
++import org.apache.hadoop.mapreduce.test.system.JobInfo;
++import org.apache.hadoop.mapreduce.test.system.TTInfo;
++import org.apache.hadoop.mapreduce.test.system.TaskInfo;
++import org.apache.hadoop.test.system.DaemonProtocol;
++
++/**
++ * Aspect class which injects the code for {@link JobTracker} class.
++ * 
++ */
++public privileged aspect JobTrackerAspect {
++
++
++  public Configuration JobTracker.getDaemonConf() throws IOException {
++    return conf;
++  }
++  /**
++   * Method to get the read only view of the job and its associated information.
++   * 
++   * @param jobID
++   *          id of the job for which information is required.
++   * @return JobInfo of the job requested
++   * @throws IOException
++   */
++  public JobInfo JobTracker.getJobInfo(JobID jobID) throws IOException {
++    JobInProgress jip = jobs.get(org.apache.hadoop.mapred.JobID
++        .downgrade(jobID));
++    if (jip == null) {
++      LOG.warn("No job present for : " + jobID);
++      return null;
++    }
++    JobInfo info;
++    synchronized (jip) {
++      info = jip.getJobInfo();
++    }
++    return info;
++  }
++
++  /**
++   * Method to get the read only view of the task and its associated
++   * information.
++   * 
++   * @param taskID
++   * @return
++   * @throws IOException
++   */
++  public TaskInfo JobTracker.getTaskInfo(TaskID taskID) throws IOException {
++    TaskInProgress tip = getTip(org.apache.hadoop.mapred.TaskID
++        .downgrade(taskID));
++
++    if (tip == null) {
++      LOG.warn("No task present for : " + taskID);
++      return null;
++    }
++    return getTaskInfo(tip);
++  }
++
++  public TTInfo JobTracker.getTTInfo(String trackerName) throws IOException {
++    org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker tt = taskTrackers
++        .get(trackerName);
++    if (tt == null) {
++      LOG.warn("No task tracker with name : " + trackerName + " found");
++      return null;
++    }
++    TaskTrackerStatus status = tt.getStatus();
++    TTInfo info = new TTInfoImpl(status.trackerName, status);
++    return info;
++  }
++
++  // XXX Below two method don't reuse getJobInfo and getTaskInfo as there is a
++  // possibility that retire job can run and remove the job from JT memory
++  // during
++  // processing of the RPC call.
++  public JobInfo[] JobTracker.getAllJobInfo() throws IOException {
++    List<JobInfo> infoList = new ArrayList<JobInfo>();
++    synchronized (jobs) {
++      for (JobInProgress jip : jobs.values()) {
++        JobInfo info = jip.getJobInfo();
++        infoList.add(info);
++      }
++    }
++    return (JobInfo[]) infoList.toArray(new JobInfo[infoList.size()]);
++  }
++
++  public TaskInfo[] JobTracker.getTaskInfo(JobID jobID) throws IOException {
++    JobInProgress jip = jobs.get(org.apache.hadoop.mapred.JobID
++        .downgrade(jobID));
++    if (jip == null) {
++      LOG.warn("Unable to find job : " + jobID);
++      return null;
++    }
++    List<TaskInfo> infoList = new ArrayList<TaskInfo>();
++    synchronized (jip) {
++      for (TaskInProgress tip : jip.setup) {
++        infoList.add(getTaskInfo(tip));
++      }
++      for (TaskInProgress tip : jip.maps) {
++        infoList.add(getTaskInfo(tip));
++      }
++      for (TaskInProgress tip : jip.reduces) {
++        infoList.add(getTaskInfo(tip));
++      }
++      for (TaskInProgress tip : jip.cleanup) {
++        infoList.add(getTaskInfo(tip));
++      }
++    }
++    return (TaskInfo[]) infoList.toArray(new TaskInfo[infoList.size()]);
++  }
++
++  public TTInfo[] JobTracker.getAllTTInfo() throws IOException {
++    List<TTInfo> infoList = new ArrayList<TTInfo>();
++    synchronized (taskTrackers) {
++      for (TaskTracker tt : taskTrackers.values()) {
++        TaskTrackerStatus status = tt.getStatus();
++        TTInfo info = new TTInfoImpl(status.trackerName, status);
++        infoList.add(info);
++      }
++    }
++    return (TTInfo[]) infoList.toArray(new TTInfo[infoList.size()]);
++  }
++  
++  public boolean JobTracker.isJobRetired(JobID id) throws IOException {
++    return retireJobs.get(
++        org.apache.hadoop.mapred.JobID.downgrade(id))!=null?true:false;
++  }
++
++  public String JobTracker.getJobHistoryLocationForRetiredJob(
++      JobID id) throws IOException {
++    RetireJobInfo retInfo = retireJobs.get(
++        org.apache.hadoop.mapred.JobID.downgrade(id));
++    if(retInfo == null) {
++      throw new IOException("The retired job information for the job : " 
++          + id +" is not found");
++    } else {
++      return retInfo.getHistoryFile();
++    }
++  }
++  pointcut getVersionAspect(String protocol, long clientVersion) : 
++    execution(public long JobTracker.getProtocolVersion(String , 
++      long) throws IOException) && args(protocol, clientVersion);
++
++  long around(String protocol, long clientVersion) :  
++    getVersionAspect(protocol, clientVersion) {
++    if (protocol.equals(DaemonProtocol.class.getName())) {
++      return DaemonProtocol.versionID;
++    } else if (protocol.equals(JTProtocol.class.getName())) {
++      return JTProtocol.versionID;
++    } else {
++      return proceed(protocol, clientVersion);
++    }
++  }
++
++  /**
++   * Point cut which monitors for the start of the jobtracker and sets the right
++   * value if the jobtracker is started.
++   * 
++   * @param conf
++   * @param jobtrackerIndentifier
++   */
++  pointcut jtConstructorPointCut(JobConf conf, String jobtrackerIndentifier) : 
++        call(JobTracker.new(JobConf,String)) 
++        && args(conf, jobtrackerIndentifier) ;
++
++  after(JobConf conf, String jobtrackerIndentifier) 
++    returning (JobTracker tracker): jtConstructorPointCut(conf, 
++        jobtrackerIndentifier) {
++    tracker.setReady(true);
++  }
++  
++  private TaskInfo JobTracker.getTaskInfo(TaskInProgress tip) {
++    TaskStatus[] status = tip.getTaskStatuses();
++    if (status == null) {
++      if (tip.isMapTask()) {
++        status = new MapTaskStatus[]{};
++      }
++      else {
++        status = new ReduceTaskStatus[]{};
++      }
++    }
++    String[] trackers =
++        (String[]) (tip.getActiveTasks().values()).toArray(new String[tip
++            .getActiveTasks().values().size()]);
++    TaskInfo info =
++        new TaskInfoImpl(tip.getTIPId(), tip.getProgress(), tip
++            .getActiveTasks().size(), tip.numKilledTasks(), tip
++            .numTaskFailures(), status, (tip.isJobSetupTask() || tip
++            .isJobCleanupTask()), trackers);
++    return info;
++  }
++}
+diff --git a/src/test/system/aop/org/apache/hadoop/mapred/TaskAspect.aj b/src/test/system/aop/org/apache/hadoop/mapred/TaskAspect.aj
+new file mode 100644
+index 0000000..9e832ad
+--- /dev/null
++++ b/src/test/system/aop/org/apache/hadoop/mapred/TaskAspect.aj
+@@ -0,0 +1,113 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++import java.io.IOException;
++import java.net.InetSocketAddress;
++import java.util.concurrent.atomic.AtomicBoolean;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.ipc.RPC;
++import org.apache.hadoop.mapred.Task.TaskReporter;
++import org.apache.hadoop.mapreduce.test.system.FinishTaskControlAction;
++import org.apache.hadoop.test.system.ControlAction;
++import org.apache.hadoop.test.system.DaemonProtocol;
++
++public privileged aspect TaskAspect {
++
++  private static final Log LOG = LogFactory.getLog(TaskAspect.class);
++  
++  private Object waitObject = new Object();
++  private AtomicBoolean isWaitingForSignal = new AtomicBoolean(false);
++  
++  private DaemonProtocol daemonProxy;
++
++  pointcut taskDoneIntercept(Task task) : execution(
++      public void Task.done(..)) && target(task);
++  
++  void around(Task task) : taskDoneIntercept(task) {
++    if(task.isJobCleanupTask() || task.isJobSetupTask() || task.isTaskCleanupTask()) {
++      proceed(task);
++      return;
++    }
++    Configuration conf = task.getConf();
++    boolean controlEnabled = FinishTaskControlAction.isControlActionEnabled(conf);
++    if(controlEnabled) {
++      LOG.info("Task control enabled, waiting till client sends signal to " +
++      "complete");
++      try {
++        synchronized (waitObject) {
++          isWaitingForSignal.set(true);
++          waitObject.wait();
++        }
++      } catch (InterruptedException e) {
++      }
++    }
++    proceed(task);
++    return;
++  }
++  
++  pointcut taskStatusUpdate(TaskReporter reporter, TaskAttemptID id) : 
++    call(public boolean TaskUmbilicalProtocol.ping(TaskAttemptID))
++          && this(reporter) && args(id);
++  
++  after(TaskReporter reporter, TaskAttemptID id) throws IOException : 
++    taskStatusUpdate(reporter, id)  {
++    synchronized (waitObject) {
++      if(isWaitingForSignal.get()) {
++        ControlAction[] actions = daemonProxy.getActions(
++            id.getTaskID());
++        if(actions.length == 0) {
++          return;
++        }
++        boolean shouldProceed = false;
++        for(ControlAction action : actions) {
++          if (action instanceof FinishTaskControlAction) {
++            LOG.info("Recv : Control task action to finish task id: " 
++                + action.getTarget());
++            shouldProceed = true;
++            daemonProxy.removeAction(action);
++            LOG.info("Removed the control action from TaskTracker");
++            break;
++          }
++        }
++        if(shouldProceed) {
++          LOG.info("Notifying the task to completion");
++          waitObject.notify();
++        }
++      }
++    }
++  }
++  
++  
++  pointcut rpcInterceptor(Class k, long version,InetSocketAddress addr, 
++      Configuration conf) : call(
++          public static * RPC.getProxy(Class, long ,InetSocketAddress,
++              Configuration)) && args(k, version,addr, conf) && 
++              within(org.apache.hadoop.mapred.Child) ;
++  
++  after(Class k, long version, InetSocketAddress addr, Configuration conf) 
++    throws IOException : rpcInterceptor(k, version, addr, conf) {
++    daemonProxy = 
++      (DaemonProtocol) RPC.getProxy(
++          DaemonProtocol.class, DaemonProtocol.versionID, addr, conf);
++  }
++  
++}
+diff --git a/src/test/system/aop/org/apache/hadoop/mapred/TaskTrackerAspect.aj b/src/test/system/aop/org/apache/hadoop/mapred/TaskTrackerAspect.aj
+new file mode 100644
+index 0000000..7ce32ac
+--- /dev/null
++++ b/src/test/system/aop/org/apache/hadoop/mapred/TaskTrackerAspect.aj
+@@ -0,0 +1,119 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.IOException;
++import java.util.List;
++import java.util.ArrayList;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.mapreduce.test.system.TTProtocol;
++import org.apache.hadoop.mapreduce.test.system.TTTaskInfo;
++import org.apache.hadoop.mapred.TTTaskInfoImpl.MapTTTaskInfo;
++import org.apache.hadoop.mapred.TTTaskInfoImpl.ReduceTTTaskInfo;
++import org.apache.hadoop.test.system.ControlAction;
++import org.apache.hadoop.test.system.DaemonProtocol;
++import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
++
++public privileged aspect TaskTrackerAspect {
++
++  declare parents : TaskTracker implements TTProtocol;
++
++  // Add a last sent status field to the Tasktracker class.
++  TaskTrackerStatus TaskTracker.lastSentStatus = null;
++
++  public synchronized TaskTrackerStatus TaskTracker.getStatus()
++      throws IOException {
++    return lastSentStatus;
++  }
++
++  public Configuration TaskTracker.getDaemonConf() throws IOException {
++    return fConf;
++  }
++
++  public TTTaskInfo[] TaskTracker.getTasks() throws IOException {
++    List<TTTaskInfo> infoList = new ArrayList<TTTaskInfo>();
++    synchronized (tasks) {
++      for (TaskInProgress tip : tasks.values()) {
++        TTTaskInfo info = getTTTaskInfo(tip);
++        infoList.add(info);
++      }
++    }
++    return (TTTaskInfo[]) infoList.toArray(new TTTaskInfo[infoList.size()]);
++  }
++
++  public TTTaskInfo TaskTracker.getTask(org.apache.hadoop.mapreduce.TaskID id) 
++      throws IOException {
++    TaskID old = org.apache.hadoop.mapred.TaskID.downgrade(id);
++    synchronized (tasks) {
++      for(TaskAttemptID ta : tasks.keySet()) {
++        if(old.equals(ta.getTaskID())) {
++          return getTTTaskInfo(tasks.get(ta));
++        }
++      }
++    }
++    return null;
++  }
++
++  private TTTaskInfo TaskTracker.getTTTaskInfo(TaskInProgress tip) {
++    TTTaskInfo info;
++    if (tip.task.isMapTask()) {
++      info = new MapTTTaskInfo(tip.slotTaken, tip.wasKilled,
++          (MapTaskStatus) tip.getStatus(), tip.getJobConf(), tip.getTask()
++              .getUser(), tip.getTask().isTaskCleanupTask());
++    } else {
++      info = new ReduceTTTaskInfo(tip.slotTaken, tip.wasKilled,
++          (ReduceTaskStatus) tip.getStatus(), tip.getJobConf(), tip.getTask()
++              .getUser(), tip.getTask().isTaskCleanupTask());
++    }
++    return info;
++  }
++
++  before(TaskTrackerStatus newStatus, TaskTracker tracker) : 
++    set(TaskTrackerStatus TaskTracker.status) 
++    && args(newStatus) && this(tracker) {
++    if (newStatus == null) {
++      tracker.lastSentStatus = tracker.status;
++    }
++  }
++
++  pointcut ttConstructorPointCut(JobConf conf) : 
++    call(TaskTracker.new(JobConf)) 
++    && args(conf);
++
++  after(JobConf conf) returning (TaskTracker tracker): 
++    ttConstructorPointCut(conf) {
++    tracker.setReady(true);
++  }
++  
++  pointcut getVersionAspect(String protocol, long clientVersion) : 
++    execution(public long TaskTracker.getProtocolVersion(String , 
++      long) throws IOException) && args(protocol, clientVersion);
++
++  long around(String protocol, long clientVersion) :  
++    getVersionAspect(protocol, clientVersion) {
++    if(protocol.equals(DaemonProtocol.class.getName())) {
++      return DaemonProtocol.versionID;
++    } else if(protocol.equals(TTProtocol.class.getName())) {
++      return TTProtocol.versionID;
++    } else {
++      return proceed(protocol, clientVersion);
++    }
++  }
++
++}
+diff --git a/src/test/system/aop/org/apache/hadoop/test/system/DaemonProtocolAspect.aj b/src/test/system/aop/org/apache/hadoop/test/system/DaemonProtocolAspect.aj
+new file mode 100644
+index 0000000..84cc9b3
+--- /dev/null
++++ b/src/test/system/aop/org/apache/hadoop/test/system/DaemonProtocolAspect.aj
+@@ -0,0 +1,258 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.test.system;
++
++import java.io.File;
++import java.io.IOException;
++import java.util.HashMap;
++import java.util.List;
++import java.util.ArrayList;
++import java.util.Map;
++import java.util.Properties;
++
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.util.Shell.ShellCommandExecutor;
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.conf.Configuration;
++
++/**
++ * Default DaemonProtocolAspect which is used to provide default implementation
++ * for all the common daemon methods. If a daemon requires more specialized
++ * version of method, it is responsibility of the DaemonClient to introduce the
++ * same in woven classes.
++ * 
++ */
++public aspect DaemonProtocolAspect {
++
++  private boolean DaemonProtocol.ready;
++  
++  @SuppressWarnings("unchecked")
++  private HashMap<Object, List<ControlAction>> DaemonProtocol.actions = 
++    new HashMap<Object, List<ControlAction>>();
++  
++  /**
++   * Set if the daemon process is ready or not, concrete daemon protocol should
++   * implement pointcuts to determine when the daemon is ready and use the
++   * setter to set the ready state.
++   * 
++   * @param ready
++   *          true if the Daemon is ready.
++   */
++  public void DaemonProtocol.setReady(boolean ready) {
++    this.ready = ready;
++  }
++
++  /**
++   * Checks if the daemon process is alive or not.
++   * 
++   * @throws IOException
++   *           if daemon is not alive.
++   */
++  public void DaemonProtocol.ping() throws IOException {
++  }
++
++  /**
++   * Checks if the daemon process is ready to accepting RPC connections after it
++   * finishes initialization. <br/>
++   * 
++   * @return true if ready to accept connection.
++   * 
++   * @throws IOException
++   */
++  public boolean DaemonProtocol.isReady() throws IOException {
++    return ready;
++  }
++
++  /**
++   * Returns the process related information regarding the daemon process. <br/>
++   * 
++   * @return process information.
++   * @throws IOException
++   */
++  public ProcessInfo DaemonProtocol.getProcessInfo() throws IOException {
++    int activeThreadCount = Thread.activeCount();
++    long currentTime = System.currentTimeMillis();
++    long maxmem = Runtime.getRuntime().maxMemory();
++    long freemem = Runtime.getRuntime().freeMemory();
++    long totalmem = Runtime.getRuntime().totalMemory();
++    Map<String, String> envMap = System.getenv();
++    Properties sysProps = System.getProperties();
++    Map<String, String> props = new HashMap<String, String>();
++    for (Map.Entry entry : sysProps.entrySet()) {
++      props.put((String) entry.getKey(), (String) entry.getValue());
++    }
++    ProcessInfo info = new ProcessInfoImpl(activeThreadCount, currentTime,
++        freemem, maxmem, totalmem, envMap, props);
++    return info;
++  }
++
++  public void DaemonProtocol.enable(List<Enum<?>> faults) throws IOException {
++  }
++
++  public void DaemonProtocol.disableAll() throws IOException {
++  }
++
++  public abstract Configuration DaemonProtocol.getDaemonConf()
++    throws IOException;
++
++  public FileStatus DaemonProtocol.getFileStatus(String path, boolean local) 
++    throws IOException {
++    Path p = new Path(path);
++    FileSystem fs = getFS(p, local);
++    p.makeQualified(fs);
++    FileStatus fileStatus = fs.getFileStatus(p);
++    return cloneFileStatus(fileStatus);
++  }
++
++  public FileStatus[] DaemonProtocol.listStatus(String path, boolean local) 
++    throws IOException {
++    Path p = new Path(path);
++    FileSystem fs = getFS(p, local);
++    FileStatus[] status = fs.listStatus(p);
++    if (status != null) {
++      FileStatus[] result = new FileStatus[status.length];
++      int i = 0;
++      for (FileStatus fileStatus : status) {
++        result[i++] = cloneFileStatus(fileStatus);
++      }
++      return result;
++    }
++    return status;
++  }
++
++  /**
++   * FileStatus object may not be serializable. Clone it into raw FileStatus 
++   * object.
++   */
++  private FileStatus DaemonProtocol.cloneFileStatus(FileStatus fileStatus) {
++    return new FileStatus(fileStatus.getLen(),
++        fileStatus.isDir(),
++        fileStatus.getReplication(),
++        fileStatus.getBlockSize(),
++        fileStatus.getModificationTime(),
++        fileStatus.getAccessTime(),
++        fileStatus.getPermission(),
++        fileStatus.getOwner(),
++        fileStatus.getGroup(),
++        fileStatus.getPath());
++  }
++
++  private FileSystem DaemonProtocol.getFS(Path path, boolean local) 
++    throws IOException {
++    FileSystem fs = null;
++    if (local) {
++      fs = FileSystem.getLocal(getDaemonConf());
++    } else {
++      fs = path.getFileSystem(getDaemonConf());
++    }
++    return fs;
++  }
++  
++  
++  @SuppressWarnings("unchecked")
++  public ControlAction[] DaemonProtocol.getActions(Writable key) 
++    throws IOException {
++    synchronized (actions) {
++      List<ControlAction> actionList = actions.get(key);
++      if(actionList == null) {
++        return new ControlAction[0];
++      } else {
++        return (ControlAction[]) actionList.toArray(new ControlAction[actionList
++                                                                      .size()]);
++      }
++    }
++  }
++
++
++  @SuppressWarnings("unchecked")
++  public void DaemonProtocol.sendAction(ControlAction action) 
++      throws IOException {
++    synchronized (actions) {
++      List<ControlAction> actionList = actions.get(action.getTarget());
++      if(actionList == null) {
++        actionList = new ArrayList<ControlAction>();
++        actions.put(action.getTarget(), actionList);
++      }
++      actionList.add(action);
++    } 
++  }
++ 
++  @SuppressWarnings("unchecked")
++  public boolean DaemonProtocol.isActionPending(ControlAction action) 
++    throws IOException{
++    synchronized (actions) {
++      List<ControlAction> actionList = actions.get(action.getTarget());
++      if(actionList == null) {
++        return false;
++      } else {
++        return actionList.contains(action);
++      }
++    }
++  }
++  
++  
++  @SuppressWarnings("unchecked")
++  public void DaemonProtocol.removeAction(ControlAction action) 
++    throws IOException {
++    synchronized (actions) {
++      List<ControlAction> actionList = actions.get(action.getTarget());
++      if(actionList == null) {
++        return;
++      } else {
++        actionList.remove(action);
++      }
++    }
++  }
++  
++  public void DaemonProtocol.clearActions() throws IOException {
++    synchronized (actions) {
++      actions.clear();
++    }
++  }
++
++  public String DaemonProtocol.getFilePattern() {
++    //We use the environment variable HADOOP_LOGFILE to get the
++    //pattern to use in the search.
++    String logDir = System.getenv("HADOOP_LOG_DIR");
++    String daemonLogPattern = System.getenv("HADOOP_LOGFILE");
++    if(daemonLogPattern == null && daemonLogPattern.isEmpty()) {
++      return "*";
++    }
++    return  logDir+File.separator+daemonLogPattern+"*";
++  }
++
++  public int DaemonProtocol.getNumberOfMatchesInLogFile(String pattern)
++      throws IOException {
++    String filePattern = getFilePattern();
++    String[] cmd =
++        new String[] {
++            "bash",
++            "-c",
++            "grep -c "
++                + pattern + " " + filePattern
++                + " | awk -F: '{s+=$2} END {print s}'" };
++    ShellCommandExecutor shexec = new ShellCommandExecutor(cmd);
++    shexec.execute();
++    String output = shexec.getOutput();
++    return Integer.parseInt(output.replaceAll("\n", "").trim());
++  }
++}
++
+diff --git a/src/test/system/java/org/apache/hadoop/mapred/JobInfoImpl.java b/src/test/system/java/org/apache/hadoop/mapred/JobInfoImpl.java
+new file mode 100644
+index 0000000..28b2e72
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapred/JobInfoImpl.java
+@@ -0,0 +1,215 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++import java.util.LinkedList;
++import java.util.List;
++
++import org.apache.hadoop.mapred.JobStatus;
++import org.apache.hadoop.mapreduce.JobID;
++import org.apache.hadoop.mapreduce.test.system.JobInfo;
++
++/**
++ * Concrete implementation of the JobInfo interface which is exposed to the
++ * clients.
++ * Look at {@link JobInfo} for further details.
++ */
++class JobInfoImpl implements JobInfo {
++
++  private List<String> blackListedTracker;
++  private String historyUrl;
++  private JobID id;
++  private boolean setupLaunched;
++  private boolean setupFinished;
++  private boolean cleanupLaunched;
++  private JobStatus status;
++  private int runningMaps;
++  private int runningReduces;
++  private int waitingMaps;
++  private int waitingReduces;
++  private int finishedMaps;
++  private int finishedReduces;
++  private int numMaps;
++  private int numReduces;
++  private boolean historyCopied;
++
++  public JobInfoImpl() {
++    id = new JobID();
++    status = new JobStatus();
++    blackListedTracker = new LinkedList<String>();
++    historyUrl = "";
++  }
++  
++  public JobInfoImpl(
++      JobID id, boolean setupLaunched, boolean setupFinished,
++      boolean cleanupLaunched, int runningMaps, int runningReduces,
++      int waitingMaps, int waitingReduces, int finishedMaps,
++      int finishedReduces, JobStatus status, String historyUrl,
++      List<String> blackListedTracker, boolean isComplete, int numMaps,
++      int numReduces, boolean historyCopied) {
++    super();
++    this.blackListedTracker = blackListedTracker;
++    this.historyUrl = historyUrl;
++    this.id = id;
++    this.setupLaunched = setupLaunched;
++    this.setupFinished = setupFinished;
++    this.cleanupLaunched = cleanupLaunched;
++    this.status = status;
++    this.runningMaps = runningMaps;
++    this.runningReduces = runningReduces;
++    this.waitingMaps = waitingMaps;
++    this.waitingReduces = waitingReduces;
++    this.finishedMaps = finishedMaps;
++    this.finishedReduces = finishedReduces;
++    this.numMaps = numMaps;
++    this.numReduces = numReduces;
++    this.historyCopied = historyCopied;
++  }
++
++  @Override
++  public List<String> getBlackListedTrackers() {
++    return blackListedTracker;
++  }
++
++  @Override
++  public String getHistoryUrl() {
++    return historyUrl;
++  }
++
++  @Override
++  public JobID getID() {
++    return id;
++  }
++
++  @Override
++  public JobStatus getStatus() {
++    return status;
++  }
++
++  @Override
++  public boolean isCleanupLaunched() {
++    return cleanupLaunched;
++  }
++
++  @Override
++  public boolean isSetupLaunched() {
++    return setupLaunched;
++  }
++
++  @Override
++  public boolean isSetupFinished() {
++    return setupFinished;
++  }
++
++  @Override
++  public int runningMaps() {
++    return runningMaps;
++  }
++
++  @Override
++  public int runningReduces() {
++    return runningReduces;
++  }
++
++  @Override
++  public int waitingMaps() {
++    return waitingMaps;
++  }
++
++  @Override
++  public int waitingReduces() {
++    return waitingReduces;
++  }
++ 
++  @Override
++  public int finishedMaps() {
++    return finishedMaps;
++  }
++
++  @Override
++  public int finishedReduces() {
++    return finishedReduces;
++  }
++  
++  @Override
++  public int numMaps() {
++    return numMaps;
++  }
++  
++  @Override
++  public int numReduces() {
++    return numReduces;
++  }
++  
++  @Override
++  public boolean isHistoryFileCopied() {
++    return historyCopied;
++  }
++  
++  @Override
++  public void readFields(DataInput in) throws IOException {
++    id.readFields(in);
++    setupLaunched = in.readBoolean();
++    setupFinished = in.readBoolean();
++    cleanupLaunched = in.readBoolean();
++    status.readFields(in);
++    runningMaps = in.readInt();
++    runningReduces = in.readInt();
++    waitingMaps = in.readInt();
++    waitingReduces = in.readInt();
++    historyUrl = in.readUTF();
++    int size = in.readInt();
++    for (int i = 0; i < size; i++) {
++      blackListedTracker.add(in.readUTF());
++    }
++    finishedMaps = in.readInt();
++    finishedReduces = in.readInt();
++    numMaps = in.readInt();
++    numReduces = in.readInt();
++    historyCopied = in.readBoolean();
++  }
++
++  @Override
++  public void write(DataOutput out) throws IOException {
++    id.write(out);
++    out.writeBoolean(setupLaunched);
++    out.writeBoolean(setupFinished);
++    out.writeBoolean(cleanupLaunched);
++    status.write(out);
++    out.writeInt(runningMaps);
++    out.writeInt(runningReduces);
++    out.writeInt(waitingMaps);
++    out.writeInt(waitingReduces);
++    out.writeUTF(historyUrl);
++    out.writeInt(blackListedTracker.size());
++    for (String str : blackListedTracker) {
++      out.writeUTF(str);
++    }
++    out.writeInt(finishedMaps);
++    out.writeInt(finishedReduces);
++    out.writeInt(numMaps);
++    out.writeInt(numReduces);
++    out.writeBoolean(historyCopied);
++  }
++
++
++}
+diff --git a/src/test/system/java/org/apache/hadoop/mapred/TTInfoImpl.java b/src/test/system/java/org/apache/hadoop/mapred/TTInfoImpl.java
+new file mode 100644
+index 0000000..d17e171
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapred/TTInfoImpl.java
+@@ -0,0 +1,72 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++
++import org.apache.hadoop.mapred.TaskTrackerStatus;
++import org.apache.hadoop.mapreduce.test.system.TTInfo;
++
++/**
++ * Concrete implementation of the TaskTracker information which is passed to 
++ * the client from JobTracker.
++ * Look at {@link TTInfo}
++ */
++
++class TTInfoImpl implements TTInfo {
++
++  private String taskTrackerName;
++  private TaskTrackerStatus status;
++
++  public TTInfoImpl() {
++    taskTrackerName = "";
++    status = new TaskTrackerStatus();
++  }
++  
++  public TTInfoImpl(String taskTrackerName, TaskTrackerStatus status) {
++    super();
++    this.taskTrackerName = taskTrackerName;
++    this.status = status;
++  }
++
++  @Override
++  public String getName() {
++    return taskTrackerName;
++  }
++
++  @Override
++  public TaskTrackerStatus getStatus() {
++    return status;
++  }
++
++  @Override
++  public void readFields(DataInput in) throws IOException {
++    taskTrackerName = in.readUTF();
++    status.readFields(in);
++  }
++
++  @Override
++  public void write(DataOutput out) throws IOException {
++    out.writeUTF(taskTrackerName);
++    status.write(out);
++  }
++
++}
+diff --git a/src/test/system/java/org/apache/hadoop/mapred/TTTaskInfoImpl.java b/src/test/system/java/org/apache/hadoop/mapred/TTTaskInfoImpl.java
+new file mode 100644
+index 0000000..51613de
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapred/TTTaskInfoImpl.java
+@@ -0,0 +1,152 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.mapreduce.test.system.TTTaskInfo;
++/**
++ * Abstract class which passes the Task view of the TaskTracker to the client.
++ * See {@link TTInfoImpl} for further details.
++ *
++ */
++abstract class TTTaskInfoImpl implements TTTaskInfo {
++
++  private boolean slotTaken;
++  private boolean wasKilled;
++  TaskStatus status;
++  Configuration conf;
++  String user;
++  boolean isTaskCleanupTask;
++
++  public TTTaskInfoImpl() {
++  }
++
++  public TTTaskInfoImpl(boolean slotTaken, boolean wasKilled,
++      TaskStatus status, Configuration conf, String user,
++      boolean isTaskCleanupTask) {
++    super();
++    this.slotTaken = slotTaken;
++    this.wasKilled = wasKilled;
++    this.status = status;
++    this.conf = conf;
++    this.user = user;
++    this.isTaskCleanupTask = isTaskCleanupTask;
++  }
++
++  @Override
++  public boolean slotTaken() {
++    return slotTaken;
++  }
++
++  @Override
++  public boolean wasKilled() {
++    return wasKilled;
++  }
++
++  @Override
++  public abstract TaskStatus getTaskStatus();
++
++  @Override
++  public Configuration getConf() {
++    return conf;
++  }
++  
++  @Override
++  public String getUser() {
++    return user;
++  }
++  
++  @Override
++  public boolean isTaskCleanupTask() {
++    return isTaskCleanupTask;
++  }
++  
++  @Override
++  public void readFields(DataInput in) throws IOException {
++    slotTaken = in.readBoolean();
++    wasKilled = in.readBoolean();
++    conf = new Configuration();
++    conf.readFields(in);
++    user = in.readUTF();
++    isTaskCleanupTask = in.readBoolean();
++  }
++
++  @Override
++  public void write(DataOutput out) throws IOException {
++    out.writeBoolean(slotTaken);
++    out.writeBoolean(wasKilled);
++    conf.write(out);
++    out.writeUTF(user);
++    out.writeBoolean(isTaskCleanupTask);
++    status.write(out);
++  }
++
++  static class MapTTTaskInfo extends TTTaskInfoImpl {
++
++    public MapTTTaskInfo() {
++      super();
++    }
++
++    public MapTTTaskInfo(boolean slotTaken, boolean wasKilled,
++        MapTaskStatus status, Configuration conf, String user,
++        boolean isTaskCleanup) {
++      super(slotTaken, wasKilled, status, conf, user, isTaskCleanup);
++    }
++
++    @Override
++    public TaskStatus getTaskStatus() {
++      return status;
++    }
++    
++    public void readFields(DataInput in) throws IOException {
++      super.readFields(in);
++      status = new MapTaskStatus();
++      status.readFields(in);
++    }
++  }
++
++  static class ReduceTTTaskInfo extends TTTaskInfoImpl {
++
++    public ReduceTTTaskInfo() {
++      super();
++    }
++
++    public ReduceTTTaskInfo(boolean slotTaken, boolean wasKilled,
++        ReduceTaskStatus status, Configuration conf, String user,
++        boolean isTaskCleanup) {
++      super(slotTaken, wasKilled, status, conf, user, isTaskCleanup);
++    }
++
++    @Override
++    public TaskStatus getTaskStatus() {
++      return status;
++    }
++    
++    public void readFields(DataInput in) throws IOException {
++      super.readFields(in);
++      status = new ReduceTaskStatus();
++      status.readFields(in);
++    }
++  }
++
++}
+diff --git a/src/test/system/java/org/apache/hadoop/mapred/TaskInfoImpl.java b/src/test/system/java/org/apache/hadoop/mapred/TaskInfoImpl.java
+new file mode 100644
+index 0000000..1e5cf36
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapred/TaskInfoImpl.java
+@@ -0,0 +1,161 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++
++import org.apache.hadoop.mapred.TaskStatus;
++import org.apache.hadoop.mapreduce.TaskID;
++import org.apache.hadoop.mapreduce.test.system.TaskInfo;
++
++/**
++ * Concrete class to expose out the task related information to the Clients from
++ * the JobTracker.
++ * Look at {@link TaskInfo} for further details.
++ */
++class TaskInfoImpl implements TaskInfo {
++
++  private double progress;
++  private TaskID taskID;
++  private int killedAttempts;
++  private int failedAttempts;
++  private int runningAttempts;
++  private TaskStatus[] taskStatus;
++  private boolean setupOrCleanup;
++  private String[] taskTrackers;
++
++  public TaskInfoImpl() {
++    taskID = new TaskID();
++  }
++
++  public TaskInfoImpl(
++      TaskID taskID, double progress, int runningAttempts, int killedAttempts,
++      int failedAttempts, TaskStatus[] taskStatus,
++      boolean setupOrCleanup, String[] taskTrackers) {
++    this.progress = progress;
++    this.taskID = taskID;
++    this.killedAttempts = killedAttempts;
++    this.failedAttempts = failedAttempts;
++    this.runningAttempts = runningAttempts;
++    if (taskStatus != null) {
++      this.taskStatus = taskStatus;
++    } else {
++      if (taskID.isMap()) {
++        this.taskStatus = new MapTaskStatus[] {};
++      } else {
++        this.taskStatus = new ReduceTaskStatus[] {};
++      }
++    }
++    this.setupOrCleanup = setupOrCleanup;
++    this.taskTrackers = taskTrackers;
++  }
++
++  @Override
++  public double getProgress() {
++    return progress;
++  }
++
++  @Override
++  public TaskID getTaskID() {
++    return taskID;
++  }
++
++  @Override
++  public int numKilledAttempts() {
++    return killedAttempts;
++  }
++
++  @Override
++  public int numFailedAttempts() {
++    return failedAttempts;
++  }
++
++  @Override
++  public int numRunningAttempts() {
++    return runningAttempts;
++  }
++
++  @Override
++  public void readFields(DataInput in) throws IOException {
++    taskID.readFields(in);
++    progress = in.readDouble();
++    runningAttempts = in.readInt();
++    killedAttempts = in.readInt();
++    failedAttempts = in.readInt();
++    int size = in.readInt();
++    if (taskID.isMap()) {
++      taskStatus = new MapTaskStatus[size];
++    }
++    else {
++      taskStatus = new ReduceTaskStatus[size];
++    }
++    for (int i = 0; i < size; i++) {
++      if (taskID.isMap()) {
++        taskStatus[i] = new MapTaskStatus();
++      }
++      else {
++        taskStatus[i] = new ReduceTaskStatus();
++      }
++      taskStatus[i].readFields(in);
++      taskStatus[i].setTaskTracker(in.readUTF());
++    }
++    setupOrCleanup = in.readBoolean();
++    size = in.readInt();
++    taskTrackers = new String[size];
++    for(int i=0; i < size ; i++) {
++      taskTrackers[i] = in.readUTF();
++    }
++  }
++
++  @Override
++  public void write(DataOutput out) throws IOException {
++    taskID.write(out);
++    out.writeDouble(progress);
++    out.writeInt(runningAttempts);
++    out.writeInt(killedAttempts);
++    out.writeInt(failedAttempts);
++    out.writeInt(taskStatus.length);
++    for (TaskStatus t : taskStatus) {
++      t.write(out);
++      out.writeUTF(t.getTaskTracker());
++    }
++    out.writeBoolean(setupOrCleanup);
++    out.writeInt(taskTrackers.length);
++    for(String tt : taskTrackers) {
++      out.writeUTF(tt);
++    }
++  }
++
++  @Override
++  public TaskStatus[] getTaskStatus() {
++    return taskStatus;
++  }
++
++  @Override
++  public boolean isSetupOrCleanup() {
++    return setupOrCleanup;
++  }
++
++  @Override
++  public String[] getTaskTrackers() {
++    return taskTrackers;
++  }
++}
+diff --git a/src/test/system/java/org/apache/hadoop/mapred/TestCluster.java b/src/test/system/java/org/apache/hadoop/mapred/TestCluster.java
+new file mode 100644
+index 0000000..1e8e5de
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapred/TestCluster.java
+@@ -0,0 +1,180 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.util.Collection;
++
++import junit.framework.Assert;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.examples.SleepJob;
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.mapred.TaskStatus.State;
++import org.apache.hadoop.mapreduce.JobID;
++import org.apache.hadoop.mapreduce.TaskID;
++import org.apache.hadoop.mapreduce.test.system.FinishTaskControlAction;
++import org.apache.hadoop.mapreduce.test.system.JTClient;
++import org.apache.hadoop.mapreduce.test.system.JTProtocol;
++import org.apache.hadoop.mapreduce.test.system.JobInfo;
++import org.apache.hadoop.mapreduce.test.system.MRCluster;
++import org.apache.hadoop.mapreduce.test.system.TTClient;
++import org.apache.hadoop.mapreduce.test.system.TTInfo;
++import org.apache.hadoop.mapreduce.test.system.TTTaskInfo;
++import org.apache.hadoop.mapreduce.test.system.TaskInfo;
++import org.junit.AfterClass;
++import org.junit.BeforeClass;
++import org.junit.Test;
++
++public class TestCluster {
++
++  private static final Log LOG = LogFactory.getLog(TestCluster.class);
++
++  private static MRCluster cluster;
++
++  public TestCluster() throws Exception {
++    
++  }
++
++  @BeforeClass
++  public static void before() throws Exception {
++    cluster = MRCluster.createCluster(new Configuration());
++    cluster.setUp();
++  }
++
++  @AfterClass
++  public static void after() throws Exception {
++    cluster.tearDown();
++  }
++
++  @Test
++  public void testProcessInfo() throws Exception {
++    LOG.info("Process info of JobTracker is : "
++        + cluster.getJTClient().getProcessInfo());
++    Assert.assertNotNull(cluster.getJTClient().getProcessInfo());
++    Collection<TTClient> tts = cluster.getTTClients();
++    for (TTClient tt : tts) {
++      LOG.info("Process info of TaskTracker is : " + tt.getProcessInfo());
++      Assert.assertNotNull(tt.getProcessInfo());
++    }
++  }
++  
++  @Test
++  public void testJobSubmission() throws Exception {
++    Configuration conf = new Configuration(cluster.getConf());
++    SleepJob job = new SleepJob();
++    job.setConf(conf);
++    conf = job.setupJobConf(1, 1, 100, 100, 100, 100);
++    RunningJob rJob = cluster.getJTClient().submitAndVerifyJob(conf);
++    cluster.getJTClient().verifyJobHistory(rJob.getID());
++  }
++
++  @Test
++  public void testFileStatus() throws Exception {
++    JTClient jt = cluster.getJTClient();
++    String dir = ".";
++    checkFileStatus(jt.getFileStatus(dir, true));
++    checkFileStatus(jt.listStatus(dir, false, true), dir);
++    for (TTClient tt : cluster.getTTClients()) {
++      String[] localDirs = tt.getMapredLocalDirs();
++      for (String localDir : localDirs) {
++        checkFileStatus(tt.listStatus(localDir, true, false), localDir);
++        checkFileStatus(tt.listStatus(localDir, true, true), localDir);
++      }
++    }
++    String systemDir = jt.getClient().getSystemDir().toString();
++    checkFileStatus(jt.listStatus(systemDir, false, true), systemDir);
++    checkFileStatus(jt.listStatus(jt.getLogDir(), true, true), jt.getLogDir());
++  }
++
++  private void checkFileStatus(FileStatus[] fs, String path) {
++    Assert.assertNotNull(fs);
++    LOG.info("-----Listing for " + path + "  " + fs.length);
++    for (FileStatus fz : fs) {
++      checkFileStatus(fz);
++    }
++  }
++
++  private void checkFileStatus(FileStatus fz) {
++    Assert.assertNotNull(fz);
++    LOG.info("FileStatus is " + fz.getPath() 
++        + "  " + fz.getPermission()
++        +"  " + fz.getOwner()
++        +"  " + fz.getGroup()
++        +"  " + fz.getClass());
++  }
++
++  /**
++   * Test to verify the common properties of tasks.
++   * @throws Exception
++   */
++  @Test
++  public void testTaskDetails() throws Exception {
++    Configuration conf = new Configuration(cluster.getConf());
++    JTProtocol wovenClient = cluster.getJTClient().getProxy();
++    FinishTaskControlAction.configureControlActionForJob(conf);
++    SleepJob job = new SleepJob();
++    job.setConf(conf);
++
++    conf = job.setupJobConf(1, 1, 100, 100, 100, 100);
++    JobClient client = cluster.getJTClient().getClient();
++
++    RunningJob rJob = client.submitJob(new JobConf(conf));
++    JobID id = rJob.getID();
++
++    JobInfo jInfo = wovenClient.getJobInfo(id);
++
++    while (jInfo.getStatus().getRunState() != JobStatus.RUNNING) {
++      Thread.sleep(1000);
++      jInfo = wovenClient.getJobInfo(id);
++    }
++
++    LOG.info("Waiting till job starts running one map");
++
++    TaskInfo[] myTaskInfos = wovenClient.getTaskInfo(id);
++    for(TaskInfo info : myTaskInfos) {
++      if(!info.isSetupOrCleanup()) {
++        String[] taskTrackers = info.getTaskTrackers();
++        for(String taskTracker : taskTrackers) {
++          TTInfo ttInfo = wovenClient.getTTInfo(taskTracker);
++          TTClient ttCli =  cluster.getTTClient(ttInfo.getStatus().getHost());
++          TaskID taskId = info.getTaskID();
++          TTTaskInfo ttTaskInfo = ttCli.getProxy().getTask(taskId);
++          Assert.assertNotNull(ttTaskInfo);
++          Assert.assertNotNull(ttTaskInfo.getConf());
++          Assert.assertNotNull(ttTaskInfo.getUser());
++          Assert.assertTrue(ttTaskInfo.getTaskStatus().getProgress() >= 0.0);
++          Assert.assertTrue(ttTaskInfo.getTaskStatus().getProgress() <= 1.0);
++          LOG.info("verified task progress to be between 0 and 1");
++          State state = ttTaskInfo.getTaskStatus().getRunState();
++          if (ttTaskInfo.getTaskStatus().getProgress() < 1.0 &&
++              ttTaskInfo.getTaskStatus().getProgress() >0.0) {
++            Assert.assertEquals(TaskStatus.State.RUNNING, state);
++            LOG.info("verified run state as " + state);
++          }
++          FinishTaskControlAction action = new FinishTaskControlAction(
++              org.apache.hadoop.mapred.TaskID.downgrade(info.getTaskID()));
++          ttCli.getProxy().sendAction(action);
++        }
++      }
++    }
++    rJob.killJob();
++  }
++}
+diff --git a/src/test/system/java/org/apache/hadoop/mapred/TestControlledJob.java b/src/test/system/java/org/apache/hadoop/mapred/TestControlledJob.java
+new file mode 100644
+index 0000000..84bb892
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapred/TestControlledJob.java
+@@ -0,0 +1,108 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++
++import junit.framework.Assert;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.examples.SleepJob;
++import org.apache.hadoop.mapreduce.JobID;
++import org.apache.hadoop.mapreduce.test.system.FinishTaskControlAction;
++import org.apache.hadoop.mapreduce.test.system.JTProtocol;
++import org.apache.hadoop.mapreduce.test.system.JobInfo;
++import org.apache.hadoop.mapreduce.test.system.MRCluster;
++import org.apache.hadoop.mapreduce.test.system.TTClient;
++import org.apache.hadoop.mapreduce.test.system.TaskInfo;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Test;
++
++public class TestControlledJob {
++  private MRCluster cluster;
++
++  private static final Log LOG = LogFactory.getLog(TestControlledJob.class);
++
++  public TestControlledJob() throws Exception {
++    cluster = MRCluster.createCluster(new Configuration());
++  }
++
++  @Before
++  public void before() throws Exception {
++    cluster.setUp();
++  }
++
++  @After
++  public void after() throws Exception {
++    cluster.tearDown();
++  }
++  
++  @Test
++  public void testControlledJob() throws Exception {
++    Configuration conf = new Configuration(cluster.getConf());
++    JTProtocol wovenClient = cluster.getJTClient().getProxy();
++    FinishTaskControlAction.configureControlActionForJob(conf);
++    SleepJob job = new SleepJob();
++    job.setConf(conf);
++    
++    conf = job.setupJobConf(1, 0, 100, 100, 100, 100);
++    JobClient client = cluster.getJTClient().getClient();
++    
++    RunningJob rJob = client.submitJob(new JobConf(conf));
++    JobID id = rJob.getID();
++    
++    JobInfo jInfo = wovenClient.getJobInfo(id);
++    
++    while (jInfo.getStatus().getRunState() != JobStatus.RUNNING) {
++      Thread.sleep(1000);
++      jInfo = wovenClient.getJobInfo(id);
++    }
++    
++    LOG.info("Waiting till job starts running one map");
++    jInfo = wovenClient.getJobInfo(id);
++    Assert.assertEquals(jInfo.runningMaps(), 1);
++    
++    LOG.info("waiting for another cycle to " +
++    		"check if the maps dont finish off");
++    Thread.sleep(1000);
++    jInfo = wovenClient.getJobInfo(id);
++    Assert.assertEquals(jInfo.runningMaps(), 1);
++    
++    TaskInfo[] taskInfos = wovenClient.getTaskInfo(id);
++    
++    for(TaskInfo info : taskInfos) {
++      LOG.info("constructing control action to signal task to finish");
++      FinishTaskControlAction action = new FinishTaskControlAction(
++          TaskID.downgrade(info.getTaskID()));
++      for(TTClient cli : cluster.getTTClients()) {
++        cli.getProxy().sendAction(action);
++      }
++    }
++    
++    jInfo = wovenClient.getJobInfo(id);
++    while(!jInfo.getStatus().isJobComplete()) {
++      Thread.sleep(1000);
++      jInfo = wovenClient.getJobInfo(id);
++    }
++    
++    LOG.info("Job sucessfully completed after signalling!!!!");
++  }
++}
+diff --git a/src/test/system/java/org/apache/hadoop/mapred/TestSortValidate.java b/src/test/system/java/org/apache/hadoop/mapred/TestSortValidate.java
+new file mode 100644
+index 0000000..aa0e1c2
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapred/TestSortValidate.java
+@@ -0,0 +1,181 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import junit.framework.Assert;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.util.ToolRunner;
++import org.apache.hadoop.util.Tool;
++import org.apache.hadoop.examples.RandomWriter;
++import org.apache.hadoop.examples.Sort;
++
++import org.apache.hadoop.mapreduce.test.system.JTProtocol;
++import org.apache.hadoop.mapreduce.test.system.JobInfo;
++import org.apache.hadoop.mapreduce.test.system.MRCluster;
++
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Test;
++
++/**
++ * A System test to test the Map-Reduce framework's sort 
++ * with a real Map-Reduce Cluster.
++ */
++public class TestSortValidate {
++  // Input/Output paths for sort
++  private static final Path SORT_INPUT_PATH = new Path("inputDirectory");
++  private static final Path SORT_OUTPUT_PATH = new Path("outputDirectory");
++
++  // make it big enough to cause a spill in the map
++  private static final int RW_BYTES_PER_MAP = 3 * 1024 * 1024;
++  private static final int RW_MAPS_PER_HOST = 2;
++
++  private MRCluster cluster = null;
++  private FileSystem dfs = null;
++  private JobClient client = null;
++
++  private static final Log LOG = LogFactory.getLog(TestSortValidate.class);
++
++  public TestSortValidate()
++  throws Exception {
++    cluster = MRCluster.createCluster(new Configuration());
++  }
++
++  @Before
++  public void setUp() throws java.lang.Exception {
++    cluster.setUp();
++    client = cluster.getJTClient().getClient();
++
++    dfs = client.getFs();
++    dfs.delete(SORT_INPUT_PATH, true);
++    dfs.delete(SORT_OUTPUT_PATH, true);
++  }
++
++  @After
++  public void after() throws Exception {
++    cluster.tearDown();
++    dfs.delete(SORT_INPUT_PATH, true);
++    dfs.delete(SORT_OUTPUT_PATH, true);
++  }
++
++  public void runRandomWriter(Configuration job, Path sortInput) 
++  throws Exception {
++    // Scale down the default settings for RandomWriter for the test-case
++    // Generates NUM_HADOOP_SLAVES * RW_MAPS_PER_HOST * RW_BYTES_PER_MAP
++    job.setInt("test.randomwrite.bytes_per_map", RW_BYTES_PER_MAP);
++    job.setInt("test.randomwriter.maps_per_host", RW_MAPS_PER_HOST);
++    String[] rwArgs = {sortInput.toString()};
++ 
++    runAndVerify(job,new RandomWriter(), rwArgs);
++  }
++
++  private void runAndVerify(Configuration job, Tool tool, String[] args)
++    throws Exception {
++
++    // This calculates the previous number fo jobs submitted before a new
++    // job gets submitted.
++    int prevJobsNum = 0;
++
++    // JTProtocol wovenClient
++    JTProtocol wovenClient = cluster.getJTClient().getProxy();
++
++    // JobStatus
++    JobStatus[] jobStatus = null;
++
++    // JobID
++    JobID id = null;
++
++    // RunningJob rJob;
++    RunningJob rJob = null;
++
++    // JobInfo jInfo;
++    JobInfo jInfo = null;
++
++    //Getting the previous job numbers that are submitted.
++    jobStatus = client.getAllJobs();
++    prevJobsNum = jobStatus.length;
++
++    // Run RandomWriter
++    Assert.assertEquals(ToolRunner.run(job, tool, args), 0);
++
++    //Waiting for the job to appear in the jobstatus
++    jobStatus = client.getAllJobs();
++
++    while (jobStatus.length - prevJobsNum == 0) {
++      LOG.info("Waiting for the job to appear in the jobStatus");
++      Thread.sleep(1000);
++      jobStatus = client.getAllJobs();
++    }
++
++    //Getting the jobId of the just submitted job
++    //The just submitted job is always added in the first slot of jobstatus
++    id = jobStatus[0].getJobID();
++
++    rJob = client.getJob(id);
++
++    jInfo = wovenClient.getJobInfo(id);
++
++    //Making sure that the job is complete.
++    while (jInfo != null && !jInfo.getStatus().isJobComplete()) {
++      Thread.sleep(10000);
++      jInfo = wovenClient.getJobInfo(id);
++    }
++
++    cluster.getJTClient().verifyCompletedJob(id);
++  }
++  
++  private void runSort(Configuration job, Path sortInput, Path sortOutput) 
++  throws Exception {
++
++    job.setInt("io.sort.mb", 1);
++
++    // Setup command-line arguments to 'sort'
++    String[] sortArgs = {sortInput.toString(), sortOutput.toString()};
++    
++    runAndVerify(job,new Sort(), sortArgs);
++
++  }
++  
++  private void runSortValidator(Configuration job, 
++                                       Path sortInput, Path sortOutput) 
++  throws Exception {
++    String[] svArgs = {"-sortInput", sortInput.toString(), 
++                       "-sortOutput", sortOutput.toString()};
++
++    runAndVerify(job,new SortValidator(), svArgs);
++
++  }
++ 
++  @Test 
++  public void testMapReduceSort() throws Exception {
++    // Run randomwriter to generate input for 'sort'
++    runRandomWriter(cluster.getConf(), SORT_INPUT_PATH);
++
++    // Run sort
++    runSort(cluster.getConf(), SORT_INPUT_PATH, SORT_OUTPUT_PATH);
++
++    // Run sort-validator to check if sort worked correctly
++    runSortValidator(cluster.getConf(), SORT_INPUT_PATH, 
++                     SORT_OUTPUT_PATH);
++  }
++}
+diff --git a/src/test/system/java/org/apache/hadoop/mapred/TestTaskOwner.java b/src/test/system/java/org/apache/hadoop/mapred/TestTaskOwner.java
+new file mode 100644
+index 0000000..4d7ead2
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapred/TestTaskOwner.java
+@@ -0,0 +1,147 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.BufferedReader;
++import java.io.IOException;
++import java.io.InputStreamReader;
++import java.util.Collection;
++import java.util.Iterator;
++import java.util.StringTokenizer;
++
++import junit.framework.Assert;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.conf.Configured;
++
++import org.apache.hadoop.examples.SleepJob;
++import org.apache.hadoop.examples.WordCount.IntSumReducer;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.FileUtil;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.IntWritable;
++import org.apache.hadoop.io.NullWritable;
++import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
++import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.Mapper;
++import org.apache.hadoop.mapreduce.OutputFormat;
++import org.apache.hadoop.mapreduce.Reducer;
++import org.apache.hadoop.mapred.TextOutputFormat;
++
++import org.apache.hadoop.mapreduce.test.system.JTClient;
++import org.apache.hadoop.mapreduce.test.system.MRCluster;
++import org.apache.hadoop.mapreduce.test.system.TTClient;
++import org.apache.hadoop.util.Tool;
++import org.apache.hadoop.io.Text;
++import org.junit.AfterClass;
++import org.junit.BeforeClass;
++import org.junit.Test;
++
++import testjar.UserNamePermission;
++
++public class TestTaskOwner {
++  private static final Log LOG = LogFactory.getLog(TestTaskOwner.class);
++  private static Path outDir = new Path("output");
++  private static Path inDir = new Path("input");
++  public static MRCluster cluster;
++
++  // The role of this job is to write the user name to the output file
++  // which will be parsed
++
++  @BeforeClass
++  public static void setUp() throws java.lang.Exception {
++
++    cluster = MRCluster.createCluster(new Configuration());
++    cluster.setUp();
++    FileSystem fs = inDir.getFileSystem(cluster.getJTClient().getConf());
++    fs.create(inDir);
++  }
++
++  @Test
++  public void testProcessPermission() throws Exception {
++  // The user will submit a job which a plain old map reduce job
++  // this job will output the username of the task that is running
++  // in the cluster and we will authenticate whether matches
++  // with the job that is submitted by the same user.
++
++    Configuration conf = cluster.getJTClient().getConf();
++    Job job = new Job(conf, "user name check");
++
++    job.setJarByClass(UserNamePermission.class);
++    job.setMapperClass(UserNamePermission.UserNameMapper.class);
++    job.setCombinerClass(UserNamePermission.UserNameReducer.class);
++    job.setMapOutputKeyClass(Text.class);
++    job.setMapOutputValueClass(Text.class);
++
++    job.setReducerClass(UserNamePermission.UserNameReducer.class);
++    job.setNumReduceTasks(1);
++
++    FileInputFormat.addInputPath(job, inDir);
++    FileOutputFormat.setOutputPath(job, outDir);
++
++    job.waitForCompletion(true);
++
++    // now verify the user name that is written by the task tracker is same
++    // as the
++    // user name that was used to launch the task in the first place
++    FileSystem fs = outDir.getFileSystem(conf);
++    StringBuffer result = new StringBuffer();
++
++    Path[] fileList = FileUtil.stat2Paths(fs.listStatus(outDir,
++     new Utils.OutputFileUtils.OutputFilesFilter()));
++
++    for (int i = 0; i < fileList.length; ++i) {
++	  LOG.info("File list[" + i + "]" + ": " + fileList[i]);
++	  BufferedReader file = new BufferedReader(new InputStreamReader(fs
++      .open(fileList[i])));
++       String line = file.readLine();
++       while (line != null) {
++         StringTokenizer token = new StringTokenizer(line);
++         if (token.hasMoreTokens()) {
++           LOG.info("First token " + token.nextToken());
++           String userName = token.nextToken();
++
++           LOG.info("Next token " + userName);
++           Assert
++             .assertEquals(
++              "The user name did not match permission violation ",
++               userName, System.getProperty("user.name")
++              .toString());
++           break;
++         }
++
++        }
++        file.close();
++     }
++
++  }
++
++  @AfterClass
++  public static void tearDown() throws java.lang.Exception {
++    FileSystem fs = outDir.getFileSystem(cluster.getJTClient().getConf());
++    fs.delete(outDir, true);
++    cluster.tearDown();
++   }
++
++}
++
++
+diff --git a/src/test/system/java/org/apache/hadoop/mapreduce/test/system/FinishTaskControlAction.java b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/FinishTaskControlAction.java
+new file mode 100644
+index 0000000..64677b8
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/FinishTaskControlAction.java
+@@ -0,0 +1,70 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.test.system;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.mapred.TaskID;
++import org.apache.hadoop.test.system.ControlAction;
++
++/**
++ * Control Action which signals a controlled task to proceed to completion. <br/>
++ */
++public class FinishTaskControlAction extends ControlAction<TaskID> {
++
++  private static final String ENABLE_CONTROLLED_TASK_COMPLETION =
++      "test.system.enabled.task.completion.control";
++
++  /**
++   * Create a default control action. <br/>
++   * 
++   */
++  public FinishTaskControlAction() {
++    super(new TaskID());
++  }
++
++  /**
++   * Create a control action specific to a particular task. <br/>
++   * 
++   * @param id
++   *          of the task.
++   */
++  public FinishTaskControlAction(TaskID id) {
++    super(id);
++  }
++
++  /**
++   * Sets up the job to be controlled using the finish task control action. 
++   * <br/>
++   * 
++   * @param conf
++   *          configuration to be used submit the job.
++   */
++  public static void configureControlActionForJob(Configuration conf) {
++    conf.setBoolean(ENABLE_CONTROLLED_TASK_COMPLETION, true);
++  }
++  
++  /**
++   * Checks if the control action is enabled in the passed configuration. <br/>
++   * @param conf configuration
++   * @return true if action is enabled.
++   */
++  public static boolean isControlActionEnabled(Configuration conf) {
++    return conf.getBoolean(ENABLE_CONTROLLED_TASK_COMPLETION, false);
++  }
++}
+diff --git a/src/test/system/java/org/apache/hadoop/mapreduce/test/system/JTClient.java b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/JTClient.java
+new file mode 100644
+index 0000000..d263d37
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/JTClient.java
+@@ -0,0 +1,329 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.test.system;
++
++import java.io.IOException;
++
++import junit.framework.Assert;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.mapred.JobClient;
++import org.apache.hadoop.mapred.JobConf;
++import org.apache.hadoop.mapred.JobStatus;
++import org.apache.hadoop.mapred.JobTracker;
++import org.apache.hadoop.mapred.RunningJob;
++import org.apache.hadoop.mapreduce.JobID;
++import org.apache.hadoop.test.system.process.RemoteProcess;
++import org.apache.hadoop.mapred.TaskStatus;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.mapreduce.test.system.TaskInfo;
++import static org.junit.Assert.*;
++
++/**
++ * JobTracker client for system tests.
++ */
++public class JTClient extends MRDaemonClient<JTProtocol> {
++  static final Log LOG = LogFactory.getLog(JTClient.class);
++  private JobClient client;
++
++  /**
++   * Create JobTracker client to talk to {@link JobTracker} specified in the
++   * configuration. <br/>
++   * 
++   * @param conf
++   *          configuration used to create a client.
++   * @param daemon
++   *          the process management instance for the {@link JobTracker}
++   * @throws IOException
++   */
++  public JTClient(Configuration conf, RemoteProcess daemon) throws 
++    IOException {
++    super(conf, daemon);
++  }
++
++  @Override
++  public synchronized void connect() throws IOException {
++    if (isConnected()) {
++      return;
++    }
++    client = new JobClient(new JobConf(getConf()));
++    setConnected(true);
++  }
++
++  @Override
++  public synchronized void disconnect() throws IOException {
++    client.close();
++  }
++
++  @Override
++  public synchronized JTProtocol getProxy() {
++    return (JTProtocol) client.getProtocol();
++  }
++
++  /**
++   * Gets the {@link JobClient} which can be used for job submission. JobClient
++   * which is returned would not contain the decorated API's. To be used for
++   * submitting of the job.
++   * 
++   * @return client handle to the JobTracker
++   */
++  public JobClient getClient() {
++    return client;
++  }
++
++  /**
++   * Gets the configuration which the JobTracker is currently running.<br/>
++   * 
++   * @return configuration of JobTracker.
++   * 
++   * @throws IOException
++   */
++  public Configuration getJobTrackerConfig() throws IOException {
++    return getProxy().getDaemonConf();
++  }
++  
++  /**
++   * Kills the job. <br/>
++   * @param id of the job to be killed.
++   * @throws IOException
++   */
++  public void killJob(JobID id) throws IOException {
++    getClient().killJob(id);
++  }
++
++  /**
++   * Verification API to check running jobs and running job states.
++   * users have to ensure that their jobs remain running state while
++   * verification is called. <br/>
++   * 
++   * @param id
++   *          of the job to be verified.
++   * 
++   * @throws Exception
++   */
++  public void verifyRunningJob(JobID jobId) throws Exception {
++  }
++
++  private JobInfo getJobInfo(JobID jobId) throws IOException {
++    JobInfo info = getProxy().getJobInfo(jobId);
++    if (info == null && !getProxy().isJobRetired(jobId)) {
++      Assert.fail("Job id : " + jobId + " has never been submitted to JT");
++    }
++    return info;
++  }
++  
++  /**
++   * Verification API to wait till job retires and verify all the retired state
++   * is correct. 
++   * <br/>
++   * @param conf of the job used for completion
++   * @return job handle
++   * @throws Exception
++   */
++  public RunningJob submitAndVerifyJob(Configuration conf) throws Exception {
++    JobConf jconf = new JobConf(conf);
++    RunningJob rJob = getClient().submitJob(jconf);
++    JobID jobId = rJob.getID();
++    verifyRunningJob(jobId);
++    verifyCompletedJob(jobId);
++    return rJob;
++  }
++  
++  /**
++   * Verification API to check if the job completion state is correct. <br/>
++   * 
++   * @param id id of the job to be verified.
++   */
++  
++  public void verifyCompletedJob(JobID id) throws Exception{
++    RunningJob rJob = getClient().getJob(
++        org.apache.hadoop.mapred.JobID.downgrade(id));
++    while(!rJob.isComplete()) {
++      LOG.info("waiting for job :" + id + " to retire");
++      Thread.sleep(1000);
++      rJob = getClient().getJob(
++          org.apache.hadoop.mapred.JobID.downgrade(id));
++    }
++    verifyJobDetails(id);
++    JobInfo jobInfo = getJobInfo(id);
++    if(jobInfo != null) {
++      while(!jobInfo.isHistoryFileCopied()) {
++        Thread.sleep(1000);
++        LOG.info(id+" waiting for history file to copied");
++        jobInfo = getJobInfo(id);
++        if(jobInfo == null) {
++          break;
++        }
++      }
++    }
++    verifyJobHistory(id);
++  }
++
++  /**
++   * Verification API to check if the job details are semantically correct.<br/>
++   * 
++   *  @param jobId
++   *          jobID of the job
++   * @param jconf
++   *          configuration object of the job
++   * @return true if all the job verifications are verified to be true
++   * @throws Exception
++   */
++  public void verifyJobDetails(JobID jobId) throws Exception {
++    // wait till the setup is launched and finished.
++    JobInfo jobInfo = getJobInfo(jobId);
++    if(jobInfo == null){
++      return;
++    }
++    LOG.info("waiting for the setup to be finished");
++    while (!jobInfo.isSetupFinished()) {
++      Thread.sleep(2000);
++      jobInfo = getJobInfo(jobId);
++      if(jobInfo == null) {
++        break;
++      }
++    }
++    // verify job id.
++    assertTrue(jobId.toString().startsWith("job_"));
++    LOG.info("verified job id and is : " + jobId.toString());
++    // verify the number of map/reduce tasks.
++    verifyNumTasks(jobId);
++    // should verify job progress.
++    verifyJobProgress(jobId);
++    jobInfo = getJobInfo(jobId);
++    if(jobInfo == null) {
++      return;
++    }
++    if (jobInfo.getStatus().getRunState() == JobStatus.SUCCEEDED) {
++      // verify if map/reduce progress reached 1.
++      jobInfo = getJobInfo(jobId);
++      if (jobInfo == null) {
++        return;
++      }
++      assertEquals(1.0, jobInfo.getStatus().mapProgress(), 0.001);
++      assertEquals(1.0, jobInfo.getStatus().reduceProgress(), 0.001);
++      // verify successful finish of tasks.
++      verifyAllTasksSuccess(jobId);
++    }
++    if (jobInfo.getStatus().isJobComplete()) {
++      // verify if the cleanup is launched.
++      jobInfo = getJobInfo(jobId);
++      if (jobInfo == null) {
++        return;
++      }
++      assertTrue(jobInfo.isCleanupLaunched());
++      LOG.info("Verified launching of cleanup");
++    }
++  }
++
++  
++  public void verifyAllTasksSuccess(JobID jobId) throws IOException {
++    JobInfo jobInfo = getJobInfo(jobId);
++    if (jobInfo == null) {
++      return;
++    }
++    
++    TaskInfo[] taskInfos = getProxy().getTaskInfo(jobId);
++    
++    if(taskInfos.length == 0 && getProxy().isJobRetired(jobId)) {
++      LOG.info("Job has been retired from JT memory : " + jobId);
++      return;
++    }
++    
++    for (TaskInfo taskInfo : taskInfos) {
++      TaskStatus[] taskStatus = taskInfo.getTaskStatus();
++      if (taskStatus != null && taskStatus.length > 0) {
++        int i;
++        for (i = 0; i < taskStatus.length; i++) {
++          if (TaskStatus.State.SUCCEEDED.equals(taskStatus[i].getRunState())) {
++            break;
++          }
++        }
++        assertFalse(i == taskStatus.length);
++      }
++    }
++    LOG.info("verified that none of the tasks failed.");
++  }
++  
++  public void verifyJobProgress(JobID jobId) throws IOException {
++    JobInfo jobInfo;
++    jobInfo = getJobInfo(jobId);
++    if (jobInfo == null) {
++      return;
++    }
++    assertTrue(jobInfo.getStatus().mapProgress() >= 0 && jobInfo.getStatus()
++        .mapProgress() <= 1);
++    LOG.info("verified map progress and is "
++        + jobInfo.getStatus().mapProgress());    
++    assertTrue(jobInfo.getStatus().reduceProgress() >= 0 && jobInfo.getStatus()
++        .reduceProgress() <= 1);
++    LOG.info("verified reduce progress and is "
++        + jobInfo.getStatus().reduceProgress());
++  }
++  
++  public void verifyNumTasks(JobID jobId) throws IOException {
++    JobInfo jobInfo;
++    jobInfo = getJobInfo(jobId);
++    if (jobInfo == null) {
++      return;
++    }
++    assertEquals(jobInfo.numMaps(), (jobInfo.runningMaps()
++        + jobInfo.waitingMaps() + jobInfo.finishedMaps()));
++    LOG.info("verified number of map tasks and is " + jobInfo.numMaps());
++    
++    assertEquals(jobInfo.numReduces(),  (jobInfo.runningReduces()
++        + jobInfo.waitingReduces() + jobInfo.finishedReduces()));
++    LOG.info("verified number of reduce tasks and is "
++        + jobInfo.numReduces());
++  }
++
++  /**
++   * Verification API to check if the job history file is semantically correct.
++   * <br/>
++   * 
++   * 
++   * @param id
++   *          of the job to be verified.
++   * @throws IOException
++   */
++  public void verifyJobHistory(JobID jobId) throws IOException {
++    JobInfo info = getJobInfo(jobId);
++    String url ="";
++    if(info == null) {
++      LOG.info("Job has been retired from JT memory : " + jobId);
++      url = getProxy().getJobHistoryLocationForRetiredJob(jobId);
++    } else {
++      url = info.getHistoryUrl();
++    }
++    Path p = new Path(url);
++    if (p.toUri().getScheme().equals("file:/")) {
++      FileStatus st = getFileStatus(url, true);
++      Assert.assertNotNull("Job History file for " + jobId + " not present " +
++          "when job is completed" , st);
++    } else {
++      FileStatus st = getFileStatus(url, false);
++      Assert.assertNotNull("Job History file for " + jobId + " not present " +
++          "when job is completed" , st);
++    }
++    LOG.info("Verified the job history for the jobId : " + jobId);
++  }
++}
+diff --git a/src/test/system/java/org/apache/hadoop/mapreduce/test/system/JTProtocol.java b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/JTProtocol.java
+new file mode 100644
+index 0000000..5674833
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/JTProtocol.java
+@@ -0,0 +1,109 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.test.system;
++
++import java.io.IOException;
++
++import org.apache.hadoop.mapreduce.JobID;
++import org.apache.hadoop.mapreduce.TaskID;
++import org.apache.hadoop.test.system.DaemonProtocol;
++
++/**
++ * Client side API's exposed from JobTracker.
++ */
++public interface JTProtocol extends DaemonProtocol {
++  long versionID = 1L;
++
++  /**
++   * Get the information pertaining to given job.<br/>
++   * 
++   * @param id
++   *          of the job for which information is required.
++   * @return information of regarding job.
++   * @throws IOException
++   */
++  public JobInfo getJobInfo(JobID jobID) throws IOException;
++
++  /**
++   * Gets the information pertaining to a task. <br/>
++   * 
++   * @param id
++   *          of the task for which information is required.
++   * @return information of regarding the task.
++   * @throws IOException
++   */
++  public TaskInfo getTaskInfo(TaskID taskID) throws IOException;
++
++  /**
++   * Gets the information pertaining to a given TaskTracker. <br/>
++   * 
++   * @param name
++   *          of the tracker.
++   * @return information regarding the tracker.
++   * @throws IOException
++   */
++  public TTInfo getTTInfo(String trackerName) throws IOException;
++
++  /**
++   * Gets a list of all available jobs with JobTracker.<br/>
++   * 
++   * @return list of all jobs.
++   * @throws IOException
++   */
++  public JobInfo[] getAllJobInfo() throws IOException;
++
++  /**
++   * Gets a list of tasks pertaining to a job. <br/>
++   * 
++   * @param id
++   *          of the job.
++   * 
++   * @return list of all tasks for the job.
++   * @throws IOException
++   */
++  public TaskInfo[] getTaskInfo(JobID jobID) throws IOException;
++
++  /**
++   * Gets a list of TaskTrackers which have reported to the JobTracker. <br/>
++   * 
++   * @return list of all TaskTracker.
++   * @throws IOException
++   */
++  public TTInfo[] getAllTTInfo() throws IOException;
++
++  /**
++   * Checks if a given job is retired from the JobTrackers Memory. <br/>
++   * 
++   * @param id
++   *          of the job
++   * @return true if job is retired.
++   * @throws IOException
++   */
++  boolean isJobRetired(JobID jobID) throws IOException;
++
++  /**
++   * Gets the location of the history file for a retired job. <br/>
++   * 
++   * @param id
++   *          of the job
++   * @return location of history file
++   * @throws IOException
++   */
++  String getJobHistoryLocationForRetiredJob(JobID jobID) throws IOException;
++}
+diff --git a/src/test/system/java/org/apache/hadoop/mapreduce/test/system/JobInfo.java b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/JobInfo.java
+new file mode 100644
+index 0000000..b5f2f92
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/JobInfo.java
+@@ -0,0 +1,139 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.test.system;
++
++import java.util.List;
++
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.mapred.JobStatus;
++import org.apache.hadoop.mapreduce.JobID;
++
++/**
++ * Job state information as seen by the JobTracker.
++ */
++public interface JobInfo extends Writable {
++  /**
++   * Gets the JobId of the job.<br/>
++   * 
++   * @return id of the job.
++   */
++  JobID getID();
++
++  /**
++   * Gets the current status of the job.<br/>
++   * 
++   * @return status.
++   */
++  JobStatus getStatus();
++
++  /**
++   * Gets the history location of the job.<br/>
++   * 
++   * @return the path to the history file.
++   */
++  String getHistoryUrl();
++
++  /**
++   * Gets the number of maps which are currently running for the job. <br/>
++   * 
++   * @return number of running for the job.
++   */
++  int runningMaps();
++
++  /**
++   * Gets the number of reduces currently running for the job. <br/>
++   * 
++   * @return number of reduces running for the job.
++   */
++  int runningReduces();
++
++  /**
++   * Gets the number of maps to be scheduled for the job. <br/>
++   * 
++   * @return number of waiting maps.
++   */
++  int waitingMaps();
++
++  /**
++   * Gets the number of reduces to be scheduled for the job. <br/>
++   * 
++   * @return number of waiting reduces.
++   */
++  int waitingReduces();
++  
++  /**
++   * Gets the number of maps that are finished. <br/>
++   * @return the number of finished maps.
++   */
++  int finishedMaps();
++  
++  /**
++   * Gets the number of map tasks that are to be spawned for the job <br/>
++   * @return
++   */
++  int numMaps();
++  
++  /**
++   * Gets the number of reduce tasks that are to be spawned for the job <br/>
++   * @return
++   */
++  int numReduces();
++  
++  /**
++   * Gets the number of reduces that are finished. <br/>
++   * @return the number of finished reduces.
++   */
++  int finishedReduces();
++
++  /**
++   * Gets if cleanup for the job has been launched.<br/>
++   * 
++   * @return true if cleanup task has been launched.
++   */
++  boolean isCleanupLaunched();
++
++  /**
++   * Gets if the setup for the job has been launched.<br/>
++   * 
++   * @return true if setup task has been launched.
++   */
++  boolean isSetupLaunched();
++
++  /**
++   * Gets if the setup for the job has been completed.<br/>
++   * 
++   * @return true if the setup task for the job has completed.
++   */
++  boolean isSetupFinished();
++
++  /**
++   * Gets list of blacklisted trackers for the particular job. <br/>
++   * 
++   * @return list of blacklisted tracker name.
++   */
++  List<String> getBlackListedTrackers();
++  
++  /**
++   * Gets if the history file of the job is copied to the done 
++   * location <br/>
++   * 
++   * @return true if history file copied.
++   */
++  boolean isHistoryFileCopied();
++}
+\ No newline at end of file
+diff --git a/src/test/system/java/org/apache/hadoop/mapreduce/test/system/MRCluster.java b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/MRCluster.java
+new file mode 100644
+index 0000000..07c6487
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/MRCluster.java
+@@ -0,0 +1,156 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.test.system;
++
++import java.io.IOException;
++import java.util.Arrays;
++import java.util.Iterator;
++import java.util.List;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.test.system.AbstractDaemonClient;
++import org.apache.hadoop.test.system.AbstractDaemonCluster;
++import org.apache.hadoop.test.system.process.ClusterProcessManager;
++import org.apache.hadoop.test.system.process.HadoopDaemonRemoteCluster;
++import org.apache.hadoop.test.system.process.RemoteProcess;
++
++/**
++ * Concrete AbstractDaemonCluster representing a Map-Reduce cluster.
++ * 
++ */
++@SuppressWarnings("unchecked")
++public class MRCluster extends AbstractDaemonCluster {
++
++  private static final Log LOG = LogFactory.getLog(MRCluster.class);
++  public static final String CLUSTER_PROCESS_MGR_IMPL = 
++    "test.system.mr.clusterprocess.impl.class";
++
++  /**
++   * Key is used to to point to the file containing hostname of the jobtracker
++   */
++  public static final String CONF_HADOOP_JT_HOSTFILE_NAME =
++    "test.system.hdrc.jt.hostfile";
++  /**
++   * Key is used to to point to the file containing hostnames of tasktrackers
++   */
++  public static final String CONF_HADOOP_TT_HOSTFILE_NAME =
++    "test.system.hdrc.tt.hostfile";
++
++  private static String JT_hostFileName;
++  private static String TT_hostFileName;
++
++  protected enum Role {JT, TT};
++  
++  private MRCluster(Configuration conf, ClusterProcessManager rCluster)
++      throws IOException {
++    super(conf, rCluster);
++  }
++
++  /**
++   * Factory method to create an instance of the Map-Reduce cluster.<br/>
++   * 
++   * @param conf
++   *          contains all required parameter to create cluster.
++   * @return a cluster instance to be managed.
++   * @throws Exception
++   */
++  public static MRCluster createCluster(Configuration conf) 
++      throws Exception {
++    JT_hostFileName = conf.get(CONF_HADOOP_JT_HOSTFILE_NAME,
++      System.getProperty(CONF_HADOOP_JT_HOSTFILE_NAME,
++        "clusterControl.masters.jt"));
++    TT_hostFileName = conf.get(CONF_HADOOP_TT_HOSTFILE_NAME,
++      System.getProperty(CONF_HADOOP_TT_HOSTFILE_NAME, "slaves"));
++
++    String implKlass = conf.get(CLUSTER_PROCESS_MGR_IMPL, System
++        .getProperty(CLUSTER_PROCESS_MGR_IMPL));
++    if (implKlass == null || implKlass.isEmpty()) {
++      implKlass = MRProcessManager.class.getName();
++    }
++    Class<ClusterProcessManager> klass = (Class<ClusterProcessManager>) Class
++      .forName(implKlass);
++    ClusterProcessManager clusterProcessMgr = klass.newInstance();
++    LOG.info("Created ClusterProcessManager as " + implKlass);
++    clusterProcessMgr.init(conf);
++    return new MRCluster(conf, clusterProcessMgr);
++  }
++
++  protected JTClient createJTClient(RemoteProcess jtDaemon)
++      throws IOException {
++    return new JTClient(getConf(), jtDaemon);
++  }
++
++  protected TTClient createTTClient(RemoteProcess ttDaemon) 
++      throws IOException {
++    return new TTClient(getConf(), ttDaemon);
++  }
++
++  public JTClient getJTClient() {
++    Iterator<AbstractDaemonClient> it = getDaemons().get(Role.JT).iterator();
++    return (JTClient) it.next();
++  }
++
++  public List<TTClient> getTTClients() {
++    return (List) getDaemons().get(Role.TT);
++  }
++
++  public TTClient getTTClient(String hostname) {
++    for (TTClient c : getTTClients()) {
++      if (c.getHostName().equals(hostname)) {
++        return c;
++      }
++    }
++    return null;
++  }
++
++  @Override
++  public void ensureClean() throws IOException {
++    //TODO: ensure that no jobs/tasks are running
++    //restart the cluster if cleanup fails
++    JTClient jtClient = getJTClient();
++    JobInfo[] jobs = jtClient.getProxy().getAllJobInfo();
++    for(JobInfo job : jobs) {
++      jtClient.getClient().killJob(
++          org.apache.hadoop.mapred.JobID.downgrade(job.getID()));
++    }
++  }
++
++  @Override
++  protected AbstractDaemonClient createClient(
++      RemoteProcess process) throws IOException {
++    if (Role.JT.equals(process.getRole())) {
++      return createJTClient(process);
++    } else if (Role.TT.equals(process.getRole())) {
++      return createTTClient(process);
++    } else throw new IOException("Role: "+ process.getRole() + "  is not " +
++      "applicable to MRCluster");
++  }
++
++  public static class MRProcessManager extends HadoopDaemonRemoteCluster{
++    private static final List<HadoopDaemonInfo> mrDaemonInfos = 
++      Arrays.asList(new HadoopDaemonInfo[]{
++          new HadoopDaemonInfo("jobtracker", Role.JT, JT_hostFileName),
++          new HadoopDaemonInfo("tasktracker", Role.TT, TT_hostFileName)});
++    public MRProcessManager() {
++      super(mrDaemonInfos);
++    }
++  }
++}
+diff --git a/src/test/system/java/org/apache/hadoop/mapreduce/test/system/MRDaemonClient.java b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/MRDaemonClient.java
+new file mode 100644
+index 0000000..e7eed4e
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/MRDaemonClient.java
+@@ -0,0 +1,46 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.test.system;
++
++import java.io.IOException;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.test.system.AbstractDaemonClient;
++import org.apache.hadoop.test.system.DaemonProtocol;
++import org.apache.hadoop.test.system.process.RemoteProcess;
++
++/**
++ * Base class for JobTracker and TaskTracker clients.
++ */
++public abstract class MRDaemonClient<PROXY extends DaemonProtocol> 
++    extends AbstractDaemonClient<PROXY>{
++
++  public MRDaemonClient(Configuration conf, RemoteProcess process)
++      throws IOException {
++    super(conf, process);
++  }
++
++  public String[] getMapredLocalDirs() throws IOException {
++    return getProxy().getDaemonConf().getStrings("mapred.local.dir");
++  }
++
++  public String getLogDir() throws IOException {
++    return getProcessInfo().getSystemProperties().get("hadoop.log.dir");
++  }
++}
+diff --git a/src/test/system/java/org/apache/hadoop/mapreduce/test/system/TTClient.java b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/TTClient.java
+new file mode 100644
+index 0000000..aa71363
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/TTClient.java
+@@ -0,0 +1,90 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.test.system;
++
++import java.io.IOException;
++import java.net.InetSocketAddress;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.ipc.RPC;
++import org.apache.hadoop.mapred.JobTracker;
++import org.apache.hadoop.mapred.TaskTrackerStatus;
++import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.test.system.process.RemoteProcess;
++
++/**
++ * TaskTracker client for system tests. Assumption of the class is that the
++ * configuration key is set for the configuration key : {@code
++ * mapred.task.tracker.report.address}is set, only the port portion of the
++ * address is used.
++ */
++public class TTClient extends MRDaemonClient<TTProtocol> {
++
++  TTProtocol proxy;
++
++  public TTClient(Configuration conf, RemoteProcess daemon) 
++      throws IOException {
++    super(conf, daemon);
++  }
++
++  @Override
++  public synchronized void connect() throws IOException {
++    if (isConnected()) {
++      return;
++    }
++    String sockAddrStr = getConf()
++        .get("mapred.task.tracker.report.address");
++    if (sockAddrStr == null) {
++      throw new IllegalArgumentException(
++          "TaskTracker report address is not set");
++    }
++    String[] splits = sockAddrStr.split(":");
++    if (splits.length != 2) {
++      throw new IllegalArgumentException(
++          "TaskTracker report address not correctly configured");
++    }
++    String port = splits[1];
++    String sockAddr = getHostName() + ":" + port;
++    InetSocketAddress bindAddr = NetUtils.createSocketAddr(sockAddr);
++    proxy = (TTProtocol) RPC.getProxy(TTProtocol.class, TTProtocol.versionID,
++        bindAddr, getConf());
++    setConnected(true);
++  }
++
++  @Override
++  public synchronized void disconnect() throws IOException {
++    RPC.stopProxy(proxy);
++  }
++
++  @Override
++  public synchronized TTProtocol getProxy() {
++    return proxy;
++  }
++
++  /**
++   * Gets the last sent status to the {@link JobTracker}. <br/>
++   * 
++   * @return the task tracker status.
++   * @throws IOException
++   */
++  public TaskTrackerStatus getStatus() throws IOException {
++    return getProxy().getStatus();
++  }
++
++}
+diff --git a/src/test/system/java/org/apache/hadoop/mapreduce/test/system/TTInfo.java b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/TTInfo.java
+new file mode 100644
+index 0000000..23c9459
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/TTInfo.java
+@@ -0,0 +1,42 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.test.system;
++
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.mapred.TaskTracker;
++import org.apache.hadoop.mapred.TaskTrackerStatus;
++
++/**
++ * TaskTracker state information as seen by the JobTracker.
++ */
++public interface TTInfo extends Writable {
++  /**
++   * Gets the {@link TaskTracker} name.<br/>
++   * 
++   * @return name of the tracker.
++   */
++  String getName();
++
++  /**
++   * Gets the current status of the {@link TaskTracker} <br/>
++   * 
++   * @return status of the {@link TaskTracker}
++   */
++  TaskTrackerStatus getStatus();
++}
+\ No newline at end of file
+diff --git a/src/test/system/java/org/apache/hadoop/mapreduce/test/system/TTProtocol.java b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/TTProtocol.java
+new file mode 100644
+index 0000000..391e1c3
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/TTProtocol.java
+@@ -0,0 +1,61 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.test.system;
++
++import java.io.IOException;
++
++import org.apache.hadoop.mapred.JobTracker;
++import org.apache.hadoop.mapred.TaskTracker;
++import org.apache.hadoop.mapred.TaskTrackerStatus;
++import org.apache.hadoop.mapreduce.TaskID;
++import org.apache.hadoop.test.system.DaemonProtocol;
++
++/**
++ * TaskTracker RPC interface to be used for cluster tests.
++ */
++public interface TTProtocol extends DaemonProtocol {
++
++  public static final long versionID = 1L;
++  /**
++   * Gets latest status which was sent in heartbeat to the {@link JobTracker}. 
++   * <br/>
++   * 
++   * @return status
++   * @throws IOException
++   */
++  TaskTrackerStatus getStatus() throws IOException;
++
++  /**
++   * Gets list of all the tasks in the {@link TaskTracker}.<br/>
++   * 
++   * @return list of all the tasks
++   * @throws IOException
++   */
++  TTTaskInfo[] getTasks() throws IOException;
++
++  /**
++   * Gets the task associated with the id.<br/>
++   * 
++   * @param id of the task.
++   * 
++   * @return
++   * @throws IOException
++   */
++  TTTaskInfo getTask(TaskID taskID) throws IOException;
++}
+diff --git a/src/test/system/java/org/apache/hadoop/mapreduce/test/system/TTTaskInfo.java b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/TTTaskInfo.java
+new file mode 100644
+index 0000000..225951b
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/TTTaskInfo.java
+@@ -0,0 +1,71 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.test.system;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.mapred.TaskStatus;
++import org.apache.hadoop.mapred.TaskTracker;
++
++/**
++ * Task state information as seen by the TT.
++ */
++public interface TTTaskInfo extends Writable {
++
++  /**
++   * Has task occupied a slot? A task occupies a slot once it starts localizing
++   * on the {@link TaskTracker} <br/>
++   * 
++   * @return true if task has started occupying a slot.
++   */
++  boolean slotTaken();
++
++  /**
++   * Has the task been killed? <br/>
++   * 
++   * @return true, if task has been killed.
++   */
++  boolean wasKilled();
++
++  /**
++   * Gets the task status associated with the particular task trackers task 
++   * view.<br/>
++   * 
++   * @return status of the particular task
++   */
++  TaskStatus getTaskStatus();
++  
++  /**
++   * Gets the configuration object of the task.
++   * @return
++   */
++  Configuration getConf();
++  
++  /**
++   * Gets the user of the task.
++   * @return
++   */
++  String getUser();
++  
++  /**
++   * Provides information as to whether the task is a cleanup of task.
++   * @return true if it is a clean up of task.
++   */
++  boolean isTaskCleanupTask();
++}
+\ No newline at end of file
+diff --git a/src/test/system/java/org/apache/hadoop/mapreduce/test/system/TaskInfo.java b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/TaskInfo.java
+new file mode 100644
+index 0000000..738b596
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/mapreduce/test/system/TaskInfo.java
+@@ -0,0 +1,91 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.test.system;
++
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.mapred.JobTracker;
++import org.apache.hadoop.mapred.TaskStatus;
++import org.apache.hadoop.mapreduce.TaskID;
++
++/**
++ * Task state information of a TaskInProgress as seen by the {@link JobTracker}
++ */
++public interface TaskInfo extends Writable {
++  /**
++   * Gets the task id of the TaskInProgress.
++   * 
++   * @return id of the task.
++   */
++  TaskID getTaskID();
++
++  /**
++   * Number of times task attempts have failed for the given TaskInProgress.
++   * <br/>
++   * 
++   * @return number of failed task attempts.
++   */
++  int numFailedAttempts();
++
++  /**
++   * Number of times task attempts have been killed for the given TaskInProgress 
++   * <br/>
++   * 
++   * @return number of killed task attempts.
++   */
++  int numKilledAttempts();
++
++  /**
++   * Gets the progress of the Task in percentage will be in range of 0.0-1.0 
++   * <br/>
++   * 
++   * @return progress of task in percentage.
++   */
++  double getProgress();
++
++  /**
++   * Number of attempts currently running for the given TaskInProgress.<br/>
++   * 
++   * @return number of running attempts.
++   */
++  int numRunningAttempts();
++
++  /**
++   * Array of TaskStatus objects that are related to the corresponding
++   * TaskInProgress object.The task status of the tip is only populated
++   * once a tracker reports back the task status.<br/>
++   * 
++   * @return list of task statuses.
++   */
++  TaskStatus[] getTaskStatus();
++
++  /**
++   * Gets a list of tracker on which the task attempts are scheduled/running.
++   * Can be empty if the task attempt has succeeded <br/>
++   * 
++   * @return list of trackers
++   */
++  String[] getTaskTrackers();
++
++  /**
++   * Gets if the current TaskInProgress is a setup or cleanup tip. <br/>
++   * 
++   * @return true if setup/cleanup
++   */
++  boolean isSetupOrCleanup();
++}
+diff --git a/src/test/system/java/org/apache/hadoop/test/system/AbstractDaemonClient.java b/src/test/system/java/org/apache/hadoop/test/system/AbstractDaemonClient.java
+new file mode 100644
+index 0000000..aefb950
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/test/system/AbstractDaemonClient.java
+@@ -0,0 +1,336 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.test.system;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.ConcurrentModificationException;
++import java.util.List;
++
++import junit.framework.Assert;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.test.system.process.RemoteProcess;
++/**
++ * Abstract class which encapsulates the DaemonClient which is used in the 
++ * system tests.<br/>
++ * 
++ * @param PROXY the proxy implementation of a specific Daemon 
++ */
++public abstract class AbstractDaemonClient<PROXY extends DaemonProtocol> {
++  private Configuration conf;
++  private RemoteProcess process;
++  private boolean connected;
++
++  private static final Log LOG = LogFactory.getLog(AbstractDaemonClient.class);
++  
++  /**
++   * Create a Daemon client.<br/>
++   * 
++   * @param conf client to be used by proxy to connect to Daemon.
++   * @param process the Daemon process to manage the particular daemon.
++   * 
++   * @throws IOException
++   */
++  public AbstractDaemonClient(Configuration conf, RemoteProcess process) 
++      throws IOException {
++    this.conf = conf;
++    this.process = process;
++  }
++
++  /**
++   * Gets if the client is connected to the Daemon <br/>
++   * 
++   * @return true if connected.
++   */
++  public boolean isConnected() {
++    return connected;
++  }
++
++  protected void setConnected(boolean connected) {
++    this.connected = connected;
++  }
++
++  /**
++   * Create an RPC proxy to the daemon <br/>
++   * 
++   * @throws IOException
++   */
++  public abstract void connect() throws IOException;
++
++  /**
++   * Disconnect the underlying RPC proxy to the daemon.<br/>
++   * @throws IOException
++   */
++  public abstract void disconnect() throws IOException;
++
++  /**
++   * Get the proxy to connect to a particular service Daemon.<br/>
++   * 
++   * @return proxy to connect to a particular service Daemon.
++   */
++  protected abstract PROXY getProxy();
++
++  /**
++   * Gets the daemon level configuration.<br/>
++   * 
++   * @return configuration using which daemon is running
++   */
++  public Configuration getConf() {
++    return conf;
++  }
++
++  /**
++   * Gets the host on which Daemon is currently running. <br/>
++   * 
++   * @return hostname
++   */
++  public String getHostName() {
++    return process.getHostName();
++  }
++
++  /**
++   * Gets if the Daemon is ready to accept RPC connections. <br/>
++   * 
++   * @return true if daemon is ready.
++   * @throws IOException
++   */
++  public boolean isReady() throws IOException {
++    return getProxy().isReady();
++  }
++
++  /**
++   * Kills the Daemon process <br/>
++   * @throws IOException
++   */
++  public void kill() throws IOException {
++    process.kill();
++  }
++
++  /**
++   * Checks if the Daemon process is alive or not <br/>
++   * 
++   * @throws IOException
++   */
++  public void ping() throws IOException {
++    getProxy().ping();
++  }
++
++  /**
++   * Start up the Daemon process. <br/>
++   * @throws IOException
++   */
++  public void start() throws IOException {
++    process.start();
++  }
++
++  /**
++   * Get system level view of the Daemon process.
++   * 
++   * @return returns system level view of the Daemon process.
++   * 
++   * @throws IOException
++   */
++  public ProcessInfo getProcessInfo() throws IOException {
++    return getProxy().getProcessInfo();
++  }
++
++  /**
++   * Return a file status object that represents the path.
++   * @param path
++   *          given path
++   * @param local
++   *          whether the path is local or not
++   * @return a FileStatus object
++   * @throws FileNotFoundException when the path does not exist;
++   *         IOException see specific implementation
++   */
++  public FileStatus getFileStatus(String path, boolean local) throws IOException {
++    return getProxy().getFileStatus(path, local);
++  }
++
++  /**
++   * List the statuses of the files/directories in the given path if the path is
++   * a directory.
++   * 
++   * @param path
++   *          given path
++   * @param local
++   *          whether the path is local or not
++   * @return the statuses of the files/directories in the given patch
++   * @throws IOException
++   */
++  public FileStatus[] listStatus(String path, boolean local) 
++    throws IOException {
++    return getProxy().listStatus(path, local);
++  }
++
++  /**
++   * List the statuses of the files/directories in the given path if the path is
++   * a directory recursive/nonrecursively depending on parameters
++   * 
++   * @param path
++   *          given path
++   * @param local
++   *          whether the path is local or not
++   * @param recursive 
++   *          whether to recursively get the status
++   * @return the statuses of the files/directories in the given patch
++   * @throws IOException
++   */
++  public FileStatus[] listStatus(String f, boolean local, boolean recursive) 
++    throws IOException {
++    List<FileStatus> status = new ArrayList<FileStatus>();
++    addStatus(status, f, local, recursive);
++    return status.toArray(new FileStatus[0]);
++  }
++
++  private void addStatus(List<FileStatus> status, String f, 
++      boolean local, boolean recursive) 
++    throws IOException {
++    FileStatus[] fs = listStatus(f, local);
++    if (fs != null) {
++      for (FileStatus fileStatus : fs) {
++        if (!f.equals(fileStatus.getPath().toString())) {
++          status.add(fileStatus);
++          if (recursive) {
++            addStatus(status, fileStatus.getPath().toString(), local, recursive);
++          }
++        }
++      }
++    }
++  }
++
++  /**
++   * Gets number of times FATAL log messages where logged in Daemon logs. 
++   * <br/>
++   * Pattern used for searching is FATAL. <br/>
++   * 
++   * @return number of occurrence of fatal message.
++   * @throws IOException
++   */
++  public int getNumberOfFatalStatementsInLog() throws IOException {
++    DaemonProtocol proxy = getProxy();
++    String pattern = "FATAL";
++    return proxy.getNumberOfMatchesInLogFile(pattern);
++  }
++
++  /**
++   * Gets number of times ERROR log messages where logged in Daemon logs. 
++   * <br/>
++   * Pattern used for searching is ERROR. <br/>
++   * 
++   * @return number of occurrence of error message.
++   * @throws IOException
++   */
++  public int getNumberOfErrorStatementsInLog() throws IOException {
++    DaemonProtocol proxy = getProxy();
++    String pattern = "ERROR";
++    return proxy.getNumberOfMatchesInLogFile(pattern);
++  }
++
++  /**
++   * Gets number of times Warning log messages where logged in Daemon logs. 
++   * <br/>
++   * Pattern used for searching is WARN. <br/>
++   * 
++   * @return number of occurrence of warning message.
++   * @throws IOException
++   */
++  public int getNumberOfWarnStatementsInLog() throws IOException {
++    DaemonProtocol proxy = getProxy();
++    String pattern = "WARN";
++    return proxy.getNumberOfMatchesInLogFile(pattern);
++  }
++
++  /**
++   * Gets number of time given Exception were present in log file. <br/>
++   * 
++   * @param e exception class.
++   * @return number of exceptions in log
++   * @throws IOException
++   */
++  public int getNumberOfExceptionsInLog(Exception e)
++      throws IOException {
++    DaemonProtocol proxy = getProxy();
++    String pattern = e.getClass().getSimpleName();
++    return proxy.getNumberOfMatchesInLogFile(pattern);
++  }
++
++  /**
++   * Number of times ConcurrentModificationException present in log file. 
++   * <br/>
++   * @return number of times exception in log file.
++   * @throws IOException
++   */
++  public int getNumberOfConcurrentModificationExceptionsInLog()
++      throws IOException {
++    return getNumberOfExceptionsInLog(new ConcurrentModificationException());
++  }
++
++  private int errorCount;
++  private int fatalCount;
++  private int concurrentExceptionCount;
++
++  /**
++   * Populate the initial exception counts to be used to assert once a testcase
++   * is done there was no exception in the daemon when testcase was run.
++   * 
++   * @throws IOException
++   */
++  protected void populateExceptionCount() throws IOException {
++    errorCount = getNumberOfErrorStatementsInLog();
++    LOG.info("Number of error messages in logs : " + errorCount);
++    fatalCount = getNumberOfFatalStatementsInLog();
++    LOG.info("Number of fatal statement in logs : " + fatalCount);
++    concurrentExceptionCount =
++        getNumberOfConcurrentModificationExceptionsInLog();
++    LOG.info("Number of concurrent modification in logs : "
++        + concurrentExceptionCount);
++  }
++
++  /**
++   * Assert if the new exceptions were logged into the log file.
++   * <br/>
++   * <b><i>
++   * Pre-req for the method is that populateExceptionCount() has 
++   * to be called before calling this method.</b></i>
++   * @throws IOException
++   */
++  protected void assertNoExceptionsOccurred() throws IOException {
++    int newerrorCount = getNumberOfErrorStatementsInLog();
++    LOG.info("Number of error messages while asserting : " + newerrorCount);
++    int newfatalCount = getNumberOfFatalStatementsInLog();
++    LOG.info("Number of fatal messages while asserting : " + newfatalCount);
++    int newconcurrentExceptionCount =
++        getNumberOfConcurrentModificationExceptionsInLog();
++    LOG.info("Number of concurrentmodification execption while asserting :"
++        + newconcurrentExceptionCount);
++    Assert.assertEquals(
++        "New Error Messages logged in the log file", errorCount, newerrorCount);
++    Assert.assertEquals(
++        "New Fatal messages logged in the log file", fatalCount, newfatalCount);
++    Assert.assertEquals(
++        "New ConcurrentModificationException in log file",
++        concurrentExceptionCount, newconcurrentExceptionCount);
++  }
++}
+diff --git a/src/test/system/java/org/apache/hadoop/test/system/AbstractDaemonCluster.java b/src/test/system/java/org/apache/hadoop/test/system/AbstractDaemonCluster.java
+new file mode 100644
+index 0000000..bbbf220
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/test/system/AbstractDaemonCluster.java
+@@ -0,0 +1,269 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.test.system;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.test.system.process.ClusterProcessManager;
++import org.apache.hadoop.test.system.process.RemoteProcess;
++
++/**
++ * Abstract class which represent the cluster having multiple daemons.
++ */
++@SuppressWarnings("unchecked")
++public abstract class AbstractDaemonCluster {
++
++  private static final Log LOG = LogFactory.getLog(AbstractDaemonCluster.class);
++
++  private Configuration conf;
++  protected ClusterProcessManager clusterManager;
++  private Map<Enum<?>, List<AbstractDaemonClient>> daemons = 
++    new LinkedHashMap<Enum<?>, List<AbstractDaemonClient>>();
++  
++  /**
++   * Constructor to create a cluster client.<br/>
++   * 
++   * @param conf
++   *          Configuration to be used while constructing the cluster.
++   * @param rcluster
++   *          process manger instance to be used for managing the daemons.
++   * 
++   * @throws IOException
++   */
++  public AbstractDaemonCluster(Configuration conf,
++      ClusterProcessManager rcluster) throws IOException {
++    this.conf = conf;
++    this.clusterManager = rcluster;
++    createAllClients();
++  }
++
++  protected void createAllClients() throws IOException {
++    for (RemoteProcess p : clusterManager.getAllProcesses()) {
++      List<AbstractDaemonClient> dms = daemons.get(p.getRole());
++      if (dms == null) {
++        dms = new ArrayList<AbstractDaemonClient>();
++        daemons.put(p.getRole(), dms);
++      }
++      dms.add(createClient(p));
++    }
++  }
++  
++  /**
++   * Method to create the daemon client.<br/>
++   * 
++   * @param remoteprocess
++   *          to manage the daemon.
++   * @return instance of the daemon client
++   * 
++   * @throws IOException
++   */
++  protected abstract AbstractDaemonClient<DaemonProtocol> 
++    createClient(RemoteProcess process) throws IOException;
++
++  /**
++   * Get the global cluster configuration which was used to create the 
++   * cluster. <br/>
++   * 
++   * @return global configuration of the cluster.
++   */
++  public Configuration getConf() {
++    return conf;
++  }
++
++  /**
++   *
++
++  /**
++   * Return the client handle of all the Daemons.<br/>
++   * 
++   * @return map of role to daemon clients' list.
++   */
++  public Map<Enum<?>, List<AbstractDaemonClient>> getDaemons() {
++    return daemons;
++  }
++
++  /**
++   * Checks if the cluster is ready for testing. <br/>
++   * Algorithm for checking is as follows : <br/>
++   * <ul>
++   * <li> Wait for Daemon to come up </li>
++   * <li> Check if daemon is ready </li>
++   * <li> If one of the daemon is not ready, return false </li>
++   * </ul> 
++   * 
++   * @return true if whole cluster is ready.
++   * 
++   * @throws IOException
++   */
++  public boolean isReady() throws IOException {
++    for (List<AbstractDaemonClient> set : daemons.values()) {
++      for (AbstractDaemonClient daemon : set) {
++        waitForDaemon(daemon);
++        if (!daemon.isReady()) {
++          return false;
++        }
++      }
++    }
++    return true;
++  }
++
++  protected void waitForDaemon(AbstractDaemonClient d) {
++    while(true) {
++      try {
++        LOG.info("Waiting for daemon in host to come up : " + d.getHostName());
++        d.connect();
++        break;
++      } catch (IOException e) {
++        try {
++          Thread.sleep(10000);
++        } catch (InterruptedException ie) {
++        }
++      }
++    }
++  }
++
++  /**
++   * Starts the cluster daemons.
++   * @throws IOException
++   */
++  public void start() throws IOException {
++    clusterManager.start();
++  }
++
++  /**
++   * Stops the cluster daemons.
++   * @throws IOException
++   */
++  public void stop() throws IOException {
++    clusterManager.stop();
++  }
++
++  /**
++   * Connect to daemon RPC ports.
++   * @throws IOException
++   */
++  public void connect() throws IOException {
++    for (List<AbstractDaemonClient> set : daemons.values()) {
++      for (AbstractDaemonClient daemon : set) {
++        daemon.connect();
++      }
++    }
++  }
++
++  /**
++   * Disconnect to daemon RPC ports.
++   * @throws IOException
++   */
++  public void disconnect() throws IOException {
++    for (List<AbstractDaemonClient> set : daemons.values()) {
++      for (AbstractDaemonClient daemon : set) {
++        daemon.disconnect();
++      }
++    }
++  }
++
++  /**
++   * Ping all the daemons of the cluster.
++   * @throws IOException
++   */
++  public void ping() throws IOException {
++    for (List<AbstractDaemonClient> set : daemons.values()) {
++      for (AbstractDaemonClient daemon : set) {
++        LOG.info("Daemon is : " + daemon.getHostName() + " pinging....");
++        daemon.ping();
++      }
++    }
++  }
++
++  /**
++   * Connect to the cluster and ensure that it is clean to run tests.
++   * @throws Exception
++   */
++  public void setUp() throws Exception {
++    while (!isReady()) {
++      Thread.sleep(1000);
++    }
++    connect();
++    ping();
++    clearAllControlActions();
++    ensureClean();
++    populateExceptionCounts();
++  }
++
++  public void clearAllControlActions() throws IOException {
++    for (List<AbstractDaemonClient> set : daemons.values()) {
++      for (AbstractDaemonClient daemon : set) {
++        LOG.info("Daemon is : " + daemon.getHostName() + " pinging....");
++        daemon.getProxy().clearActions();
++      }
++    }
++  }
++
++  /**
++   * Ensure that the cluster is clean to run tests.
++   * @throws IOException
++   */
++  public void ensureClean() throws IOException {
++  }
++
++  /**
++   * Ensure that cluster is clean. Disconnect from the RPC ports of the daemons.
++   * @throws IOException
++   */
++  public void tearDown() throws IOException {
++    ensureClean();
++    clearAllControlActions();
++    assertNoExceptionMessages();
++    disconnect();
++  }
++
++  /**
++   * Populate the exception counts in all the daemons so that it can be checked when 
++   * the testcase has finished running.<br/>
++   * @throws IOException
++   */
++  protected void populateExceptionCounts() throws IOException {
++    for(List<AbstractDaemonClient> lst : daemons.values()) {
++      for(AbstractDaemonClient d : lst) {
++        d.populateExceptionCount();
++      }
++    }
++  }
++
++  /**
++   * Assert no exception has been thrown during the sequence of the actions.
++   * <br/>
++   * @throws IOException
++   */
++  protected void assertNoExceptionMessages() throws IOException {
++    for(List<AbstractDaemonClient> lst : daemons.values()) {
++      for(AbstractDaemonClient d : lst) {
++        d.assertNoExceptionsOccurred();
++      }
++    }
++  }
++}
++
+diff --git a/src/test/system/java/org/apache/hadoop/test/system/ControlAction.java b/src/test/system/java/org/apache/hadoop/test/system/ControlAction.java
+new file mode 100644
+index 0000000..cb397ad
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/test/system/ControlAction.java
+@@ -0,0 +1,86 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.test.system;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++
++import org.apache.hadoop.io.Writable;
++
++/**
++ * Class to represent a control action which can be performed on Daemon.<br/>
++ * 
++ */
++
++public abstract class ControlAction<T extends Writable> implements Writable {
++
++  private T target;
++
++  /**
++   * Default constructor of the Control Action, sets the Action type to zero. <br/>
++   */
++  public ControlAction() {
++  }
++
++  /**
++   * Constructor which sets the type of the Control action to a specific type. <br/>
++   * 
++   * @param type
++   *          of the control action.
++   */
++  public ControlAction(T target) {
++    this.target = target;
++  }
++
++  /**
++   * Gets the id of the control action <br/>
++   * 
++   * @return target of action
++   */
++  public T getTarget() {
++    return target;
++  }
++
++  @Override
++  public void readFields(DataInput in) throws IOException {
++    target.readFields(in);
++  }
++
++  @Override
++  public void write(DataOutput out) throws IOException {
++    target.write(out);
++  }
++
++  @Override
++  public boolean equals(Object obj) {
++    if (obj instanceof ControlAction) {
++      ControlAction<T> other = (ControlAction<T>) obj;
++      return (this.target.equals(other.getTarget()));
++    } else {
++      return false;
++    }
++  }
++  
++  
++  @Override
++  public String toString() {
++    return "Action Target : " + this.target;
++  }
++}
+diff --git a/src/test/system/java/org/apache/hadoop/test/system/DaemonProtocol.java b/src/test/system/java/org/apache/hadoop/test/system/DaemonProtocol.java
+new file mode 100644
+index 0000000..1ac1b7b
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/test/system/DaemonProtocol.java
+@@ -0,0 +1,155 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.test.system;
++
++import java.io.FileNotFoundException;
++import java.io.IOException;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.ipc.VersionedProtocol;
++
++/**
++ * RPC interface of a given Daemon.
++ */
++public interface DaemonProtocol extends VersionedProtocol{
++  long versionID = 1L;
++
++  /**
++   * Returns the Daemon configuration.
++   * @return Configuration
++   * @throws IOException
++   */
++  Configuration getDaemonConf() throws IOException;
++
++  /**
++   * Check if the Daemon is alive.
++   * 
++   * @throws IOException
++   *           if Daemon is unreachable.
++   */
++  void ping() throws IOException;
++
++  /**
++   * Check if the Daemon is ready to accept RPC connections.
++   * 
++   * @return true if Daemon is ready to accept RPC connection.
++   * @throws IOException
++   */
++  boolean isReady() throws IOException;
++
++  /**
++   * Get system level view of the Daemon process.
++   * 
++   * @return returns system level view of the Daemon process.
++   * 
++   * @throws IOException
++   */
++  ProcessInfo getProcessInfo() throws IOException;
++  
++  /**
++   * Return a file status object that represents the path.
++   * @param path
++   *          given path
++   * @param local
++   *          whether the path is local or not
++   * @return a FileStatus object
++   * @throws FileNotFoundException when the path does not exist;
++   *         IOException see specific implementation
++   */
++  FileStatus getFileStatus(String path, boolean local) throws IOException;
++
++  /**
++   * List the statuses of the files/directories in the given path if the path is
++   * a directory.
++   * 
++   * @param path
++   *          given path
++   * @param local
++   *          whether the path is local or not
++   * @return the statuses of the files/directories in the given patch
++   * @throws IOException
++   */
++  FileStatus[] listStatus(String path, boolean local) throws IOException;
++  
++  /**
++   * Enables a particular control action to be performed on the Daemon <br/>
++   * 
++   * @param control action to be enabled.
++   * 
++   * @throws IOException
++   */
++  @SuppressWarnings("unchecked")
++  void sendAction(ControlAction action) throws IOException;
++  
++  /**
++   * Checks if the particular control action has be delivered to the Daemon 
++   * component <br/>
++   * 
++   * @param action to be checked.
++   * 
++   * @return true if action is still in waiting queue of 
++   *          actions to be delivered.
++   * @throws IOException
++   */
++  @SuppressWarnings("unchecked")
++  boolean isActionPending(ControlAction action) throws IOException;
++  
++  /**
++   * Removes a particular control action from the list of the actions which the
++   * daemon maintains. <br/>
++   * <i><b>Not to be directly called by Test Case or clients.</b></i>
++   * @param action to be removed
++   * @throws IOException
++   */
++  
++  @SuppressWarnings("unchecked")
++  void removeAction(ControlAction action) throws IOException;
++  
++  /**
++   * Clears out the list of control actions on the particular daemon.
++   * <br/>
++   * @throws IOException
++   */
++  void clearActions() throws IOException;
++  
++  /**
++   * Gets a list of pending actions which are targeted on the specified key. 
++   * <br/>
++   * <i><b>Not to be directly used by clients</b></i>
++   * @param key target
++   * @return list of actions.
++   * @throws IOException
++   */
++  @SuppressWarnings("unchecked")
++  ControlAction[] getActions(Writable key) throws IOException;
++
++  /**
++   * Gets the number of times a particular pattern has been found in the 
++   * daemons log file.<br/>
++   * <b><i>Please note that search spans across all previous messages of
++   * Daemon, so better practise is to get previous counts before an operation
++   * and then recheck if the sequence of action has caused any problems</i></b>
++   * @param pattern
++   * @return number of times the pattern if found in log file.
++   * @throws IOException
++   */
++  int getNumberOfMatchesInLogFile(String pattern) throws IOException;
++}
+diff --git a/src/test/system/java/org/apache/hadoop/test/system/ProcessInfo.java b/src/test/system/java/org/apache/hadoop/test/system/ProcessInfo.java
+new file mode 100644
+index 0000000..22b3855
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/test/system/ProcessInfo.java
+@@ -0,0 +1,77 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.test.system;
++
++import java.util.Map;
++
++import org.apache.hadoop.io.Writable;
++
++/**
++ * Daemon system level process information.
++ */
++public interface ProcessInfo extends Writable {
++  /**
++   * Get the current time in the millisecond.<br/>
++   * 
++   * @return current time on daemon clock in millisecond.
++   */
++  public long currentTimeMillis();
++
++  /**
++   * Get the environment that was used to start the Daemon process.<br/>
++   * 
++   * @return the environment variable list.
++   */
++  public Map<String,String> getEnv();
++
++  /**
++   * Get the System properties of the Daemon process.<br/>
++   * 
++   * @return the properties list.
++   */
++  public Map<String,String> getSystemProperties();
++
++  /**
++   * Get the number of active threads in Daemon VM.<br/>
++   * 
++   * @return number of active threads in Daemon VM.
++   */
++  public int activeThreadCount();
++
++  /**
++   * Get the maximum heap size that is configured for the Daemon VM. <br/>
++   * 
++   * @return maximum heap size.
++   */
++  public long maxMemory();
++
++  /**
++   * Get the free memory in Daemon VM.<br/>
++   * 
++   * @return free memory.
++   */
++  public long freeMemory();
++
++  /**
++   * Get the total used memory in Demon VM. <br/>
++   * 
++   * @return total used memory.
++   */
++  public long totalMemory();
++}
+\ No newline at end of file
+diff --git a/src/test/system/java/org/apache/hadoop/test/system/ProcessInfoImpl.java b/src/test/system/java/org/apache/hadoop/test/system/ProcessInfoImpl.java
+new file mode 100644
+index 0000000..b8544b4
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/test/system/ProcessInfoImpl.java
+@@ -0,0 +1,159 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.test.system;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++import java.util.HashMap;
++import java.util.Map;
++
++
++public class ProcessInfoImpl implements ProcessInfo {
++
++  private int threadCount;
++  private long currentTime;
++  private long freemem;
++  private long maxmem;
++  private long totmem;
++  private Map<String, String> env;
++  private Map<String, String> props;
++
++  public ProcessInfoImpl() {
++    env = new HashMap<String, String>();
++    props = new HashMap<String, String>();
++  }
++
++  /**
++   * Construct a concrete process information object. <br/>
++   * 
++   * @param threadCount
++   *          count of threads.
++   * @param currentTime
++   * @param freememory
++   * @param maximummemory
++   * @param totalmemory
++   * @param env
++   *          environment list.
++   */
++  public ProcessInfoImpl(int threadCount, long currentTime, long freemem,
++      long maxmem, long totmem, Map<String, String> env, 
++      Map<String, String> props) {
++    this.threadCount = threadCount;
++    this.currentTime = currentTime;
++    this.freemem = freemem;
++    this.maxmem = maxmem;
++    this.totmem = totmem;
++    this.env = env;
++    this.props = props;
++  }
++
++  @Override
++  public int activeThreadCount() {
++    return threadCount;
++  }
++
++  @Override
++  public long currentTimeMillis() {
++    return currentTime;
++  }
++
++  @Override
++  public long freeMemory() {
++    return freemem;
++  }
++
++  @Override
++  public Map<String, String> getEnv() {
++    return env;
++  }
++
++  @Override
++  public Map<String,String> getSystemProperties() {
++    return props;
++  }
++
++  @Override
++  public long maxMemory() {
++    return maxmem;
++  }
++
++  @Override
++  public long totalMemory() {
++    return totmem;
++  }
++
++  @Override
++  public void readFields(DataInput in) throws IOException {
++    this.threadCount = in.readInt();
++    this.currentTime = in.readLong();
++    this.freemem = in.readLong();
++    this.maxmem = in.readLong();
++    this.totmem = in.readLong();
++    read(in, env);
++    read(in, props);
++  }
++
++  @Override
++  public void write(DataOutput out) throws IOException {
++    out.writeInt(threadCount);
++    out.writeLong(currentTime);
++    out.writeLong(freemem);
++    out.writeLong(maxmem);
++    out.writeLong(totmem);
++    write(out, env);
++    write(out, props);
++  }
++
++  private void read(DataInput in, Map<String, String> map) throws IOException {
++    int size = in.readInt();
++    for (int i = 0; i < size; i = i + 2) {
++      String key = in.readUTF();
++      String value = in.readUTF();
++      map.put(key, value);
++    }
++  }
++
++  private void write(DataOutput out, Map<String, String> map) 
++  throws IOException {
++    int size = (map.size() * 2);
++    out.writeInt(size);
++    for (Map.Entry<String, String> entry : map.entrySet()) {
++      out.writeUTF(entry.getKey());
++      out.writeUTF(entry.getValue());
++    }
++  }
++
++  @Override
++  public String toString() {
++    StringBuffer strBuf = new StringBuffer();
++    strBuf.append(String.format("active threads : %d\n", threadCount));
++    strBuf.append(String.format("current time  : %d\n", currentTime));
++    strBuf.append(String.format("free memory  : %d\n", freemem));
++    strBuf.append(String.format("total memory  : %d\n", totmem));
++    strBuf.append(String.format("max memory  : %d\n", maxmem));
++    strBuf.append("Environment Variables : \n");
++    for (Map.Entry<String, String> entry : env.entrySet()) {
++      strBuf.append(String.format("key : %s value : %s \n", entry.getKey(),
++          entry.getValue()));
++    }
++    return strBuf.toString();
++  }
++
++}
+diff --git a/src/test/system/java/org/apache/hadoop/test/system/process/ClusterProcessManager.java b/src/test/system/java/org/apache/hadoop/test/system/process/ClusterProcessManager.java
+new file mode 100644
+index 0000000..03715c2
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/test/system/process/ClusterProcessManager.java
+@@ -0,0 +1,69 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.test.system.process;
++
++import java.io.IOException;
++import java.util.List;
++import java.util.Set;
++
++import org.apache.hadoop.conf.Configuration;
++
++/**
++ * Interface to manage the remote processes in the cluster.
++ */
++public interface ClusterProcessManager {
++
++  /**
++   * Initialization method to pass the configuration object which is required 
++   * by the ClusterProcessManager to manage the cluster.<br/>
++   * Configuration object should typically contain all the parameters which are 
++   * required by the implementations.<br/>
++   *  
++   * @param conf configuration containing values of the specific keys which 
++   * are required by the implementation of the cluster process manger.
++   * 
++   * @throws IOException when initialization fails.
++   */
++  void init(Configuration conf) throws IOException;
++
++  /**
++   * Get the list of RemoteProcess handles of all the remote processes.
++   */
++  List<RemoteProcess> getAllProcesses();
++
++  /**
++   * Get all the roles this cluster's daemon processes have.
++   */
++  Set<Enum<?>> getRoles();
++
++  /**
++   * Method to start all the remote daemons.<br/>
++   * 
++   * @throws IOException if startup procedure fails.
++   */
++  void start() throws IOException;
++
++  /**
++   * Method to shutdown all the remote daemons.<br/>
++   * 
++   * @throws IOException if shutdown procedure fails.
++   */
++  void stop() throws IOException;
++
++}
+diff --git a/src/test/system/java/org/apache/hadoop/test/system/process/HadoopDaemonRemoteCluster.java b/src/test/system/java/org/apache/hadoop/test/system/process/HadoopDaemonRemoteCluster.java
+new file mode 100644
+index 0000000..6db8be3
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/test/system/process/HadoopDaemonRemoteCluster.java
+@@ -0,0 +1,277 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.test.system.process;
++
++import java.io.BufferedReader;
++import java.io.File;
++import java.io.FileReader;
++import java.io.IOException;
++import java.net.InetAddress;
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.HashSet;
++import java.util.List;
++import java.util.Set;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.util.Shell.ShellCommandExecutor;
++
++/**
++ * The concrete class which implements the start up and shut down based routines
++ * based on the hadoop-daemon.sh. <br/>
++ * 
++ * Class requires two keys to be present in the Configuration objects passed to
++ * it. Look at <code>CONF_HADOOPHOME</code> and
++ * <code>CONF_HADOOPCONFDIR</code> for the names of the
++ * configuration keys.
++ * 
++ * Following will be the format which the final command execution would look : 
++ * <br/>
++ * <code>
++ *  ssh host 'hadoop-home/bin/hadoop-daemon.sh --script scriptName 
++ *  --config HADOOP_CONF_DIR (start|stop) command'
++ * </code>
++ */
++public abstract class HadoopDaemonRemoteCluster 
++    implements ClusterProcessManager {
++
++  private static final Log LOG = LogFactory
++      .getLog(HadoopDaemonRemoteCluster.class.getName());
++
++  /**
++   * Key used to configure the HADOOP_HOME to be used by the
++   * HadoopDaemonRemoteCluster.
++   */
++  public final static String CONF_HADOOPHOME = "test.system.hdrc.hadoophome";
++  /**
++   * Key used to configure the HADOOP_CONF_DIR to be used by the
++   * HadoopDaemonRemoteCluster.
++   */
++  public final static String CONF_HADOOPCONFDIR = 
++    "test.system.hdrc.hadoopconfdir";
++
++  public final static String CONF_DEPLOYED_HADOOPCONFDIR =
++    "test.system.hdrc.deployed.hadoopconfdir";
++
++  private String hadoopHome;
++  private String hadoopConfDir;
++  private String deployed_hadoopConfDir;
++  private final Set<Enum<?>> roles;
++
++  private final List<HadoopDaemonInfo> daemonInfos;
++  private List<RemoteProcess> processes;
++
++  public static class HadoopDaemonInfo {
++    public final String cmd;
++    public final Enum<?> role;
++    public final String hostFile;
++    public HadoopDaemonInfo(String cmd, Enum<?> role, String hostFile) {
++      super();
++      this.cmd = cmd;
++      this.role = role;
++      this.hostFile = hostFile;
++      LOG.info("Created HadoopDaemonInfo for " + cmd + " " + role + " from " + hostFile);
++    }
++  }
++
++  public HadoopDaemonRemoteCluster(List<HadoopDaemonInfo> daemonInfos) {
++    this.daemonInfos = daemonInfos;
++    this.roles = new HashSet<Enum<?>>();
++    for (HadoopDaemonInfo info : daemonInfos) {
++      this.roles.add(info.role);
++    }
++  }
++
++  @Override
++  public void init(Configuration conf) throws IOException {
++    populateDirectories(conf);
++    this.processes = new ArrayList<RemoteProcess>();
++    populateDaemons(deployed_hadoopConfDir);
++  }
++
++  @Override
++  public List<RemoteProcess> getAllProcesses() {
++    return processes;
++  }
++
++  @Override
++  public Set<Enum<?>> getRoles() {
++    return roles;
++  }
++
++  /**
++   * Method to populate the hadoop home and hadoop configuration directories.
++   * 
++   * @param conf
++   *          Configuration object containing values for
++   *          CONF_HADOOPHOME and
++   *          CONF_HADOOPCONFDIR
++   * 
++   * @throws IllegalArgumentException
++   *           if the configuration or system property set does not contain
++   *           values for the required keys.
++   */
++  protected void populateDirectories(Configuration conf) {
++    hadoopHome = conf.get(CONF_HADOOPHOME, System
++        .getProperty(CONF_HADOOPHOME));
++    hadoopConfDir = conf.get(CONF_HADOOPCONFDIR, System
++        .getProperty(CONF_HADOOPCONFDIR));
++
++    deployed_hadoopConfDir = conf.get(CONF_DEPLOYED_HADOOPCONFDIR,
++      System.getProperty(CONF_DEPLOYED_HADOOPCONFDIR));
++    if (deployed_hadoopConfDir == null || deployed_hadoopConfDir.isEmpty()) {
++      deployed_hadoopConfDir = hadoopConfDir;
++    }
++
++    if (hadoopHome == null || hadoopConfDir == null || hadoopHome.isEmpty()
++        || hadoopConfDir.isEmpty()) {
++      LOG.error("No configuration "
++          + "for the HADOOP_HOME and HADOOP_CONF_DIR passed");
++      throw new IllegalArgumentException(
++          "No Configuration passed for hadoop home " +
++          "and hadoop conf directories");
++    }
++
++  }
++
++  @Override
++  public void start() throws IOException {
++    for (RemoteProcess process : processes) {
++      process.start();
++    }
++  }
++
++  @Override
++  public void stop() throws IOException {
++    for (RemoteProcess process : processes) {
++      process.kill();
++    }
++  }
++
++  protected void populateDaemon(String confLocation, 
++      HadoopDaemonInfo info) throws IOException {
++    File hostFile = new File(confLocation, info.hostFile);
++    BufferedReader reader = null;
++    reader = new BufferedReader(new FileReader(hostFile));
++    String host = null;
++    try {
++      boolean foundAtLeastOne = false;
++      while ((host = reader.readLine()) != null) {
++        if (host.trim().isEmpty()) {
++          throw new IllegalArgumentException(
++          "Hostname could not be found in file " + info.hostFile);
++        }
++        InetAddress addr = InetAddress.getByName(host);
++        RemoteProcess process = new ScriptDaemon(info.cmd, 
++            addr.getCanonicalHostName(), info.role);
++        processes.add(process);
++        foundAtLeastOne = true;
++      }
++      if (!foundAtLeastOne) {
++        throw new IllegalArgumentException("Alteast one hostname " +
++          "is required to be present in file - " + info.hostFile);
++      }
++    } finally {
++      try {
++        reader.close();
++      } catch (Exception e) {
++        LOG.warn("Could not close reader");
++      }
++    }
++  }
++
++  protected void populateDaemons(String confLocation) throws IOException {
++   for (HadoopDaemonInfo info : daemonInfos) {
++     populateDaemon(confLocation, info);
++   }
++  }
++
++  /**
++   * The core daemon class which actually implements the remote process
++   * management of actual daemon processes in the cluster.
++   * 
++   */
++  class ScriptDaemon implements RemoteProcess {
++
++    private static final String STOP_COMMAND = "stop";
++    private static final String START_COMMAND = "start";
++    private static final String SCRIPT_NAME = "hadoop-daemon.sh";
++    private final String daemonName;
++    private final String hostName;
++    private final Enum<?> role;
++
++    public ScriptDaemon(String daemonName, String hostName, Enum<?> role) {
++      this.daemonName = daemonName;
++      this.hostName = hostName;
++      this.role = role;
++    }
++
++    @Override
++    public String getHostName() {
++      return hostName;
++    }
++
++    private ShellCommandExecutor buildCommandExecutor(String command) {
++      String[] commandArgs = getCommand(command);
++      File binDir = getBinDir();
++      HashMap<String, String> env = new HashMap<String, String>();
++      env.put("HADOOP_CONF_DIR", hadoopConfDir);
++      ShellCommandExecutor executor = new ShellCommandExecutor(commandArgs,
++          binDir, env);
++      LOG.info(executor.toString());
++      return executor;
++    }
++
++    private File getBinDir() {
++      File binDir = new File(hadoopHome, "bin");
++      return binDir;
++    }
++
++    private String[] getCommand(String command) {
++      ArrayList<String> cmdArgs = new ArrayList<String>();
++      File binDir = getBinDir();
++      cmdArgs.add("ssh");
++      cmdArgs.add(hostName);
++      cmdArgs.add(binDir.getAbsolutePath() + File.separator + SCRIPT_NAME);
++      cmdArgs.add("--config");
++      cmdArgs.add(hadoopConfDir);
++      // XXX Twenty internal version does not support --script option.
++      cmdArgs.add(command);
++      cmdArgs.add(daemonName);
++      return (String[]) cmdArgs.toArray(new String[cmdArgs.size()]);
++    }
++
++    @Override
++    public void kill() throws IOException {
++      buildCommandExecutor(STOP_COMMAND).execute();
++    }
++
++    @Override
++    public void start() throws IOException {
++      buildCommandExecutor(START_COMMAND).execute();
++    }
++
++    @Override
++    public Enum<?> getRole() {
++      return role;
++    }
++  }
++}
+diff --git a/src/test/system/java/org/apache/hadoop/test/system/process/RemoteProcess.java b/src/test/system/java/org/apache/hadoop/test/system/process/RemoteProcess.java
+new file mode 100644
+index 0000000..c8371a5
+--- /dev/null
++++ b/src/test/system/java/org/apache/hadoop/test/system/process/RemoteProcess.java
+@@ -0,0 +1,54 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.test.system.process;
++
++import java.io.IOException;
++
++/**
++ * Interface to manage the remote process.
++ */
++public interface RemoteProcess {
++  /**
++   * Get the host on which the daemon process is running/stopped.<br/>
++   * 
++   * @return hostname on which process is running/stopped.
++   */
++  String getHostName();
++
++  /**
++   * Start a given daemon process.<br/>
++   * 
++   * @throws IOException if startup fails.
++   */
++  void start() throws IOException;
++
++  /**
++   * Stop a given daemon process.<br/>
++   * 
++   * @throws IOException if shutdown fails.
++   */
++  void kill() throws IOException;
++
++  /**
++   * Get the role of the Daemon in the cluster.
++   * 
++   * @return Enum
++   */
++  Enum<?> getRole();
++}
+\ No newline at end of file
+diff --git a/src/test/testjar/UserNamePermission.java b/src/test/testjar/UserNamePermission.java
+new file mode 100644
+index 0000000..0431f21
+--- /dev/null
++++ b/src/test/testjar/UserNamePermission.java
+@@ -0,0 +1,83 @@
++package testjar;
++
++import java.io.IOException;
++import java.util.Iterator;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.LongWritable;
++import org.apache.hadoop.io.NullWritable;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapred.JobConf;
++import org.apache.hadoop.mapred.OutputCollector;
++import org.apache.hadoop.mapred.Reporter;
++
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.Mapper;
++import org.apache.hadoop.mapreduce.Reducer;
++import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
++import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
++import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
++
++public  class UserNamePermission      
++{
++
++  private static final Log LOG = LogFactory.getLog(UserNamePermission.class);
++  //This mapper will read the user name and pass in to the reducer
++  public static class UserNameMapper extends Mapper<LongWritable,Text,Text,Text>
++  {
++    Text key1 = new Text("UserName");
++    public void map(LongWritable key, Text value, Context context)
++      throws IOException,InterruptedException {
++      Text val = new Text(System.getProperty("user.name").toString());
++      context.write(key1, val);
++    }
++  }
++
++  //The reducer is responsible for writing the user name to the file
++  //which will be validated by the testcase
++  public static class UserNameReducer extends Reducer<Text,Text,Text,Text>
++  {
++    public void reduce(Text key, Iterator<Text> values,
++      Context context) throws IOException,InterruptedException {
++	  			
++      LOG.info("The key "+key);
++      if(values.hasNext())
++      {
++        Text val = values.next();
++        LOG.info("The value  "+val);
++	  				 
++        context.write(key,new Text(System.getProperty("user.name")));
++	  }
++	  				  			 
++	}
++  }
++		
++  public static void main(String [] args) throws Exception
++  {
++    Path outDir = new Path("output");
++    Configuration conf = new Configuration();
++    Job job = new Job(conf, "user name check"); 
++			
++			
++    job.setJarByClass(UserNamePermission.class);
++    job.setMapperClass(UserNamePermission.UserNameMapper.class);
++    job.setCombinerClass(UserNamePermission.UserNameReducer.class);
++    job.setMapOutputKeyClass(Text.class);
++    job.setMapOutputValueClass(Text.class);
++    job.setReducerClass(UserNamePermission.UserNameReducer.class);
++    job.setNumReduceTasks(1);
++		    
++    job.setInputFormatClass(TextInputFormat.class);
++    TextInputFormat.addInputPath(job, new Path("input"));
++    FileOutputFormat.setOutputPath(job, outDir);
++		    
++    System.exit(job.waitForCompletion(true) ? 0 : 1);
++  }
++
++}
++
++
++    
+\ No newline at end of file
+-- 
+1.7.0.4
+

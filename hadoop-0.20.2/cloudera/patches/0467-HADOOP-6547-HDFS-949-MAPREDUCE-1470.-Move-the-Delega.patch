@@ -1,0 +1,2337 @@
+From 29b6749dfdd9038d9f54ef9f0669c5b1fc553463 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 9 Feb 2010 01:34:27 -0800
+Subject: [PATCH 0467/1179] HADOOP-6547, HDFS-949, MAPREDUCE-1470. Move the Delegation Token feature to common since both HDFS and MapReduce needs it
+
+Patch: https://issues.apache.org/jira/secure/attachment/12435271/6547-949-1470-0_20.1.patch
+Author: Devaraj Das
+Ref: CDH-648
+---
+ .../AbstractDelegationTokenIdentifier.java         |  166 +++++++++
+ .../AbstractDelegationTokenSecretManager.java      |  354 +++++++++++++++++++
+ .../AbstractDelegationTokenSelector.java           |   61 ++++
+ .../security/token/delegation/DelegationKey.java   |   88 +++++
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |    2 +-
+ .../apache/hadoop/hdfs/DistributedFileSystem.java  |    3 +-
+ .../hadoop/hdfs/protocol/ClientProtocol.java       |    4 +-
+ .../hadoop/hdfs/security/token/DelegationKey.java  |   84 -----
+ .../security/token/DelegationTokenIdentifier.java  |  163 ---------
+ .../token/DelegationTokenSecretManager.java        |  359 --------------------
+ .../security/token/DelegationTokenSelector.java    |   50 ---
+ .../delegation/DelegationTokenIdentifier.java      |   54 +++
+ .../delegation/DelegationTokenSecretManager.java   |   56 +++
+ .../token/delegation/DelegationTokenSelector.java  |   33 ++
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |    4 +-
+ .../hadoop/hdfs/server/namenode/NameNode.java      |    2 +-
+ .../hadoop/mapreduce/security/TokenCache.java      |    2 +-
+ .../apache/hadoop/hdfs/TestDFSClientRetries.java   |    2 +-
+ .../TestClientProtocolWithDelegationToken.java     |    4 +-
+ .../hadoop/hdfs/security/TestDelegationToken.java  |  164 +++++++++
+ .../hadoop/mapreduce/security/TestTokenCache.java  |    2 +-
+ .../hadoop/security/TestDelegationToken.java       |  164 ---------
+ .../token/delegation/TestDelegationToken.java      |  262 ++++++++++++++
+ 23 files changed, 1250 insertions(+), 833 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenIdentifier.java
+ create mode 100644 src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java
+ create mode 100644 src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSelector.java
+ create mode 100644 src/core/org/apache/hadoop/security/token/delegation/DelegationKey.java
+ delete mode 100644 src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationKey.java
+ delete mode 100644 src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenIdentifier.java
+ delete mode 100644 src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSecretManager.java
+ delete mode 100644 src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSelector.java
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/security/token/delegation/DelegationTokenIdentifier.java
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/security/token/delegation/DelegationTokenSecretManager.java
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/security/token/delegation/DelegationTokenSelector.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/security/TestDelegationToken.java
+ delete mode 100644 src/test/org/apache/hadoop/security/TestDelegationToken.java
+ create mode 100644 src/test/org/apache/hadoop/security/token/delegation/TestDelegationToken.java
+
+diff --git a/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenIdentifier.java b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenIdentifier.java
+new file mode 100644
+index 0000000..ad3e6a7
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenIdentifier.java
+@@ -0,0 +1,166 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security.token.delegation;
++
++//import org.apache.hadoop.classification.InterfaceAudience;
++//import static org.apache.hadoop.classification.InterfaceAudience.LimitedPrivate.Project.HDFS;
++//import static org.apache.hadoop.classification.InterfaceAudience.LimitedPrivate.Project.MAPREDUCE;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.WritableUtils;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.token.TokenIdentifier;
++
++//@InterfaceAudience.LimitedPrivate({HDFS, MAPREDUCE})
++public abstract class AbstractDelegationTokenIdentifier 
++extends TokenIdentifier {
++
++  private Text owner;
++  private Text renewer;
++  private Text realUser;
++  private long issueDate;
++  private long maxDate;
++  private int sequenceNumber;
++  private int masterKeyId = 0;
++  
++  public AbstractDelegationTokenIdentifier() {
++    this(new Text(), new Text(), new Text());
++  }
++  
++  public AbstractDelegationTokenIdentifier(Text owner, Text renewer, Text realUser) {
++    this.owner = owner;
++    this.renewer = renewer;
++    if (realUser == null) {
++      this.realUser = new Text();
++    } else {
++      this.realUser = realUser;
++    }
++    issueDate = 0;
++    maxDate = 0;
++  }
++
++  @Override
++  public abstract Text getKind();
++  
++  /**
++   * Get the username encoded in the token identifier
++   * 
++   * @return the username or owner
++   */
++  public UserGroupInformation getUser() {
++    if ( (owner == null) || ("".equals(owner.toString()))) {
++      return null;
++    }
++    if ((realUser == null) || ("".equals(realUser.toString()))
++        || realUser.equals(owner)) {
++      return UserGroupInformation.createRemoteUser(owner.toString());
++    } else {
++      UserGroupInformation realUgi = UserGroupInformation
++          .createRemoteUser(realUser.toString());
++      return UserGroupInformation.createProxyUser(owner.toString(), realUgi);
++    }
++  }
++
++  public Text getRenewer() {
++    return renewer;
++  }
++  
++  public void setIssueDate(long issueDate) {
++    this.issueDate = issueDate;
++  }
++  
++  public long getIssueDate() {
++    return issueDate;
++  }
++  
++  public void setMaxDate(long maxDate) {
++    this.maxDate = maxDate;
++  }
++  
++  public long getMaxDate() {
++    return maxDate;
++  }
++
++  public void setSequenceNumber(int seqNum) {
++    this.sequenceNumber = seqNum;
++  }
++  
++  public int getSequenceNumber() {
++    return sequenceNumber;
++  }
++
++  public void setMasterKeyId(int newId) {
++    masterKeyId = newId;
++  }
++
++  public int getMasterKeyId() {
++    return masterKeyId;
++  }
++
++  static boolean isEqual(Object a, Object b) {
++    return a == null ? b == null : a.equals(b);
++  }
++  
++  /** {@inheritDoc} */
++  public boolean equals(Object obj) {
++    if (obj == this) {
++      return true;
++    }
++    if (obj instanceof AbstractDelegationTokenIdentifier) {
++      AbstractDelegationTokenIdentifier that = (AbstractDelegationTokenIdentifier) obj;
++      return this.sequenceNumber == that.sequenceNumber 
++          && this.issueDate == that.issueDate 
++          && this.maxDate == that.maxDate
++          && this.masterKeyId == that.masterKeyId
++          && isEqual(this.owner, that.owner) 
++          && isEqual(this.renewer, that.renewer)
++          && isEqual(this.realUser, that.realUser);
++    }
++    return false;
++  }
++
++  /** {@inheritDoc} */
++  public int hashCode() {
++    return this.sequenceNumber;
++  }
++  
++  public void readFields(DataInput in) throws IOException {
++    owner.readFields(in);
++    renewer.readFields(in);
++    realUser.readFields(in);
++    issueDate = WritableUtils.readVLong(in);
++    maxDate = WritableUtils.readVLong(in);
++    sequenceNumber = WritableUtils.readVInt(in);
++    masterKeyId = WritableUtils.readVInt(in);
++  }
++
++  public void write(DataOutput out) throws IOException {
++    owner.write(out);
++    renewer.write(out);
++    realUser.write(out);
++    WritableUtils.writeVLong(out, issueDate);
++    WritableUtils.writeVLong(out, maxDate);
++    WritableUtils.writeVInt(out, sequenceNumber);
++    WritableUtils.writeVInt(out, masterKeyId);
++  }
++}
+diff --git a/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java
+new file mode 100644
+index 0000000..52e2e1e
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java
+@@ -0,0 +1,354 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security.token.delegation;
++
++//import org.apache.hadoop.classification.InterfaceAudience;
++//import static org.apache.hadoop.classification.InterfaceAudience.LimitedPrivate.Project.HDFS;
++//import static org.apache.hadoop.classification.InterfaceAudience.LimitedPrivate.Project.MAPREDUCE;
++
++import java.io.ByteArrayInputStream;
++import java.io.DataInputStream;
++import java.io.IOException;
++import java.util.Arrays;
++import java.util.HashMap;
++import java.util.Iterator;
++import java.util.Map;
++
++import javax.crypto.SecretKey;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.SecretManager;
++import org.apache.hadoop.util.Daemon;
++import org.apache.hadoop.util.StringUtils;
++
++//@InterfaceAudience.LimitedPrivate({HDFS, MAPREDUCE})
++public abstract 
++class AbstractDelegationTokenSecretManager<TokenIdent 
++extends AbstractDelegationTokenIdentifier> 
++   extends SecretManager<TokenIdent> {
++  private static final Log LOG = LogFactory
++      .getLog(AbstractDelegationTokenSecretManager.class);
++
++  /** 
++   * Cache of currently valid tokens, mapping from DelegationTokenIdentifier 
++   * to DelegationTokenInformation. Protected by its own lock.
++   */
++  private final Map<TokenIdent, DelegationTokenInformation> currentTokens 
++      = new HashMap<TokenIdent, DelegationTokenInformation>();
++  
++  /**
++   * Sequence number to create DelegationTokenIdentifier
++   */
++  private int delegationTokenSequenceNumber = 0;
++  
++  private final Map<Integer, DelegationKey> allKeys 
++      = new HashMap<Integer, DelegationKey>();
++  
++  /**
++   * Access to currentId and currentKey is protected by this object lock.
++   */
++  private int currentId = 0;
++  private DelegationKey currentKey;
++  
++  private long keyUpdateInterval;
++  private long tokenMaxLifetime;
++  private long tokenRemoverScanInterval;
++  private long tokenRenewInterval;
++  private Thread tokenRemoverThread;
++  private volatile boolean running;
++
++  public AbstractDelegationTokenSecretManager(long delegationKeyUpdateInterval,
++      long delegationTokenMaxLifetime, long delegationTokenRenewInterval,
++      long delegationTokenRemoverScanInterval) {
++    this.keyUpdateInterval = delegationKeyUpdateInterval;
++    this.tokenMaxLifetime = delegationTokenMaxLifetime;
++    this.tokenRenewInterval = delegationTokenRenewInterval;
++    this.tokenRemoverScanInterval = delegationTokenRemoverScanInterval;
++  }
++
++  /** should be called before this object is used */
++  public synchronized void startThreads() throws IOException {
++    updateCurrentKey();
++    running = true;
++    tokenRemoverThread = new Daemon(new ExpiredTokenRemover());
++    tokenRemoverThread.start();
++  }
++  
++  /** 
++   * Add a previously used master key to cache (when NN restarts), 
++   * should be called before activate().
++   * */
++  public synchronized void addKey(DelegationKey key) throws IOException {
++    if (running) // a safety check
++      throw new IOException("Can't add delegation key to a running SecretManager.");
++    if (key.getKeyId() > currentId) {
++      currentId = key.getKeyId();
++    }
++    allKeys.put(key.getKeyId(), key);
++  }
++
++  public synchronized DelegationKey[] getAllKeys() {
++    return allKeys.values().toArray(new DelegationKey[0]);
++  }
++  
++  /** Update the current master key */
++  private synchronized void updateCurrentKey() throws IOException {
++    LOG.info("Updating the current master key for generating delegation tokens");
++    /* Create a new currentKey with an estimated expiry date. */
++    currentId++;
++    currentKey = new DelegationKey(currentId, System.currentTimeMillis()
++        + keyUpdateInterval + tokenMaxLifetime, generateSecret());
++    allKeys.put(currentKey.getKeyId(), currentKey);
++  }
++  
++  /** Update the current master key for generating delegation tokens */
++  public synchronized void rollMasterKey() throws IOException {
++    removeExpiredKeys();
++    /* set final expiry date for retiring currentKey */
++    currentKey.setExpiryDate(System.currentTimeMillis() + tokenMaxLifetime);
++    /*
++     * currentKey might have been removed by removeExpiredKeys(), if
++     * updateMasterKey() isn't called at expected interval. Add it back to
++     * allKeys just in case.
++     */
++    allKeys.put(currentKey.getKeyId(), currentKey);
++    updateCurrentKey();
++  }
++
++  private synchronized void removeExpiredKeys() {
++    long now = System.currentTimeMillis();
++    for (Iterator<Map.Entry<Integer, DelegationKey>> it = allKeys.entrySet()
++        .iterator(); it.hasNext();) {
++      Map.Entry<Integer, DelegationKey> e = it.next();
++      if (e.getValue().getExpiryDate() < now) {
++        it.remove();
++      }
++    }
++  }
++  
++  @Override
++  protected byte[] createPassword(TokenIdent identifier) {
++    int sequenceNum;
++    int id;
++    DelegationKey key;
++    long now = System.currentTimeMillis();    
++    synchronized (this) {
++      id = currentId;
++      key = currentKey;
++      sequenceNum = ++delegationTokenSequenceNumber;
++    }
++    identifier.setIssueDate(now);
++    identifier.setMaxDate(now + tokenMaxLifetime);
++    identifier.setMasterKeyId(id);
++    identifier.setSequenceNumber(sequenceNum);
++    byte[] password = createPassword(identifier.getBytes(), key.getKey());
++    synchronized (currentTokens) {
++      currentTokens.put(identifier, new DelegationTokenInformation(now
++          + tokenRenewInterval, password));
++    }
++    return password;
++  }
++
++  @Override
++  public byte[] retrievePassword(TokenIdent identifier
++                                 ) throws InvalidToken {
++    DelegationTokenInformation info = null;
++    synchronized (currentTokens) {
++      info = currentTokens.get(identifier);
++    }
++    if (info == null) {
++      throw new InvalidToken("token is expired or doesn't exist");
++    }
++    long now = System.currentTimeMillis();
++    if (info.getRenewDate() < now) {
++      throw new InvalidToken("token is expired");
++    }
++    return info.getPassword();
++  }
++
++  /**
++   * Renew a delegation token. Canceled tokens are not renewed. Return true if
++   * the token is successfully renewed; false otherwise.
++   */
++  public Boolean renewToken(Token<TokenIdent> token,
++      String renewer) throws InvalidToken, IOException {
++    long now = System.currentTimeMillis();
++    ByteArrayInputStream buf = new ByteArrayInputStream(token.getIdentifier());
++    DataInputStream in = new DataInputStream(buf);
++    TokenIdent id = createIdentifier();
++    id.readFields(in);
++    synchronized (currentTokens) {
++      if (currentTokens.get(id) == null) {
++        LOG.warn("Renewal request for unknown token");
++        return false;
++      }
++    }
++    if (id.getMaxDate() < now) {
++      LOG.warn("Client " + renewer + " tries to renew an expired token");
++      return false;
++    }
++    if (id.getRenewer() == null || !id.getRenewer().toString().equals(renewer)) {
++      LOG.warn("Client " + renewer + " tries to renew a token with "
++          + "renewer specified as " + id.getRenewer());
++      return false;
++    }
++    DelegationKey key = null;
++    synchronized (this) {
++      key = allKeys.get(id.getMasterKeyId());
++    }
++    if (key == null) {
++      LOG.warn("Unable to find master key for keyId=" + id.getMasterKeyId() 
++          + " from cache. Failed to renew an unexpired token with sequenceNumber=" 
++          + id.getSequenceNumber() + ", issued by this key");
++      return false;
++    }
++    byte[] password = createPassword(token.getIdentifier(), key.getKey());
++    if (!Arrays.equals(password, token.getPassword())) {
++      LOG.warn("Client " + renewer + " is trying to renew a token with wrong password");
++      return false;
++    }
++    DelegationTokenInformation info = new DelegationTokenInformation(
++        Math.min(id.getMaxDate(), now + tokenRenewInterval), password);
++    synchronized (currentTokens) {
++      currentTokens.put(id, info);
++    }
++    return true;
++  }
++  
++  /**
++   * Cancel a token by removing it from cache. Return true if 
++   * token exists in cache; false otherwise.
++   */
++  public Boolean cancelToken(Token<TokenIdent> token,
++      String canceller) throws IOException {
++    ByteArrayInputStream buf = new ByteArrayInputStream(token.getIdentifier());
++    DataInputStream in = new DataInputStream(buf);
++    TokenIdent id = createIdentifier();
++    id.readFields(in);
++    if (id.getRenewer() == null) {
++      LOG.warn("Renewer is null: Invalid Identifier");
++      return false;
++    }
++    if (id.getUser() == null) {
++      LOG.warn("owner is null: Invalid Identifier");
++      return false;
++    }
++    String owner = id.getUser().getUserName();
++    String renewer = id.getRenewer().toString();
++    if (!canceller.equals(owner) && !canceller.equals(renewer)) {
++      LOG.warn(canceller + " is not authorized to cancel the token");
++      return false;
++    }
++    DelegationTokenInformation info = null;
++    synchronized (currentTokens) {
++      info = currentTokens.remove(id);
++    }
++    return info != null;
++  }
++  
++  /**
++   * Convert the byte[] to a secret key
++   * @param key the byte[] to create the secret key from
++   * @return the secret key
++   */
++  public static SecretKey createSecretKey(byte[] key) {
++    return SecretManager.createSecretKey(key);
++  }
++
++  /** Utility class to encapsulate a token's renew date and password. */
++  private static class DelegationTokenInformation {
++    long renewDate;
++    byte[] password;
++    DelegationTokenInformation(long renewDate, byte[] password) {
++      this.renewDate = renewDate;
++      this.password = password;
++    }
++    /** returns renew date */
++    long getRenewDate() {
++      return renewDate;
++    }
++    /** returns password */
++    byte[] getPassword() {
++      return password;
++    }
++  }
++  
++  /** Remove expired delegation tokens from cache */
++  private void removeExpiredToken() {
++    long now = System.currentTimeMillis();
++    synchronized (currentTokens) {
++      Iterator<DelegationTokenInformation> i = currentTokens.values().iterator();
++      while (i.hasNext()) {
++        long renewDate = i.next().getRenewDate();
++        if (now > renewDate) {
++          i.remove();
++        }
++      }
++    }
++  }
++
++  public synchronized void stopThreads() {
++    if (LOG.isDebugEnabled())
++      LOG.debug("Stopping expired delegation token remover thread");
++    running = false;
++    tokenRemoverThread.interrupt();
++  }
++  
++  private class ExpiredTokenRemover extends Thread {
++    private long lastMasterKeyUpdate;
++    private long lastTokenCacheCleanup;
++
++    public void run() {
++      LOG.info("Starting expired delegation token remover thread, "
++          + "tokenRemoverScanInterval=" + tokenRemoverScanInterval
++          / (60 * 1000) + " min(s)");
++      try {
++        while (running) {
++          long now = System.currentTimeMillis();
++          if (lastMasterKeyUpdate + keyUpdateInterval < now) {
++            try {
++              rollMasterKey();
++              lastMasterKeyUpdate = now;
++            } catch (IOException e) {
++              LOG.error("Master key updating failed. "
++                  + StringUtils.stringifyException(e));
++            }
++          }
++          if (lastTokenCacheCleanup + tokenRemoverScanInterval < now) {
++            removeExpiredToken();
++            lastTokenCacheCleanup = now;
++          }
++          try {
++            Thread.sleep(5000); // 5 seconds
++          } catch (InterruptedException ie) {
++            LOG
++            .error("InterruptedExcpetion recieved for ExpiredTokenRemover thread "
++                + ie);
++          }
++        }
++      } catch (Throwable t) {
++        LOG.error("ExpiredTokenRemover thread received unexpected exception. "
++            + t);
++        Runtime.getRuntime().exit(-1);
++      }
++    }
++  }
++}
+diff --git a/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSelector.java b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSelector.java
+new file mode 100644
+index 0000000..ceb962e
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSelector.java
+@@ -0,0 +1,61 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security.token.delegation;
++
++import java.util.Collection;
++
++//import org.apache.hadoop.classification.InterfaceAudience;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenIdentifier;
++import org.apache.hadoop.security.token.TokenSelector;
++//import static org.apache.hadoop.classification.InterfaceAudience.LimitedPrivate.Project.HDFS;
++//import static org.apache.hadoop.classification.InterfaceAudience.LimitedPrivate.Project.MAPREDUCE;
++
++/**
++ * Look through tokens to find the first delegation token that matches the
++ * service and return it.
++ */
++//@InterfaceAudience.LimitedPrivate({HDFS, MAPREDUCE})
++public 
++class AbstractDelegationTokenSelector<TokenIdent 
++extends AbstractDelegationTokenIdentifier> 
++    implements TokenSelector<TokenIdent> {
++  private Text kindName;
++  
++  protected AbstractDelegationTokenSelector(Text kindName) {
++    this.kindName = kindName;
++  }
++
++  @SuppressWarnings("unchecked")
++  @Override
++  public Token<TokenIdent> selectToken(Text service,
++      Collection<Token<? extends TokenIdentifier>> tokens) {
++    if (service == null) {
++      return null;
++    }
++    for (Token<? extends TokenIdentifier> token : tokens) {
++      if (kindName.equals(token.getKind())
++          && service.equals(token.getService())) {
++        return (Token<TokenIdent>) token;
++      }
++    }
++    return null;
++  }
++}
+diff --git a/src/core/org/apache/hadoop/security/token/delegation/DelegationKey.java b/src/core/org/apache/hadoop/security/token/delegation/DelegationKey.java
+new file mode 100644
+index 0000000..08be51c
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/token/delegation/DelegationKey.java
+@@ -0,0 +1,88 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security.token.delegation;
++
++//import org.apache.hadoop.classification.InterfaceAudience;
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++
++import javax.crypto.SecretKey;
++
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.io.WritableUtils;
++//import static org.apache.hadoop.classification.InterfaceAudience.LimitedPrivate.Project.HDFS;
++//import static org.apache.hadoop.classification.InterfaceAudience.LimitedPrivate.Project.MAPREDUCE;
++
++/**
++ * Key used for generating and verifying delegation tokens
++ */
++//@InterfaceAudience.LimitedPrivate({HDFS, MAPREDUCE})
++public class DelegationKey implements Writable {
++  private int keyId;
++  private long expiryDate;
++  private SecretKey key;
++
++  public DelegationKey() {
++    this(0, 0L, null);
++  }
++
++  public DelegationKey(int keyId, long expiryDate, SecretKey key) {
++    this.keyId = keyId;
++    this.expiryDate = expiryDate;
++    this.key = key;
++  }
++
++  public int getKeyId() {
++    return keyId;
++  }
++
++  public long getExpiryDate() {
++    return expiryDate;
++  }
++
++  public SecretKey getKey() {
++    return key;
++  }
++
++  public void setExpiryDate(long expiryDate) {
++    this.expiryDate = expiryDate;
++  }
++
++  /**
++   */
++  public void write(DataOutput out) throws IOException {
++    WritableUtils.writeVInt(out, keyId);
++    WritableUtils.writeVLong(out, expiryDate);
++    byte[] keyBytes = key.getEncoded();
++    WritableUtils.writeVInt(out, keyBytes.length);
++    out.write(keyBytes);
++  }
++
++  /**
++   */
++  public void readFields(DataInput in) throws IOException {
++    keyId = WritableUtils.readVInt(in);
++    expiryDate = WritableUtils.readVLong(in);
++    int len = WritableUtils.readVInt(in);
++    byte[] keyBytes = new byte[len];
++    in.readFully(keyBytes);
++    key = AbstractDelegationTokenSecretManager.createSecretKey(keyBytes);
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 6fa0ff9..b0cce27 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -31,7 +31,7 @@ import org.apache.hadoop.hdfs.protocol.*;
+ import org.apache.hadoop.hdfs.protocol.DataTransferProtocol.PipelineAck;
+ import org.apache.hadoop.hdfs.security.BlockAccessToken;
+ import org.apache.hadoop.hdfs.security.InvalidAccessTokenException;
+-import org.apache.hadoop.hdfs.security.token.DelegationTokenIdentifier;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants;
+ import org.apache.hadoop.hdfs.server.common.UpgradeStatusReport;
+ import org.apache.hadoop.hdfs.server.datanode.DataNode;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
+index 993e310..0b43ccd 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
+@@ -30,12 +30,11 @@ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+ import org.apache.hadoop.hdfs.protocol.FSConstants.DatanodeReportType;
+ import org.apache.hadoop.hdfs.protocol.FSConstants.UpgradeAction;
+-import org.apache.hadoop.hdfs.security.token.DelegationTokenIdentifier;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+ import org.apache.hadoop.hdfs.server.common.UpgradeStatusReport;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+ import org.apache.hadoop.hdfs.DFSClient.DFSOutputStream;
+ import org.apache.hadoop.io.Text;
+-import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+index de2347a..9e55a16 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+@@ -22,8 +22,6 @@ import java.io.*;
+ import org.apache.hadoop.ipc.VersionedProtocol;
+ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.hdfs.protocol.FSConstants.UpgradeAction;
+-import org.apache.hadoop.hdfs.security.token.DelegationTokenIdentifier;
+-import org.apache.hadoop.hdfs.security.token.DelegationTokenSelector;
+ import org.apache.hadoop.hdfs.server.common.UpgradeStatusReport;
+ import org.apache.hadoop.fs.permission.*;
+ import org.apache.hadoop.hdfs.DFSConfigKeys;
+@@ -33,6 +31,8 @@ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.security.KerberosInfo;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenInfo;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenSelector;
+ 
+ /**********************************************************************
+  * ClientProtocol is used by user code via 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationKey.java b/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationKey.java
+deleted file mode 100644
+index 0ecbb97..0000000
+--- a/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationKey.java
++++ /dev/null
+@@ -1,84 +0,0 @@
+-/**
+- * Licensed to the Apache Software Foundation (ASF) under one
+- * or more contributor license agreements.  See the NOTICE file
+- * distributed with this work for additional information
+- * regarding copyright ownership.  The ASF licenses this file
+- * to you under the Apache License, Version 2.0 (the
+- * "License"); you may not use this file except in compliance
+- * with the License.  You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-
+-package org.apache.hadoop.hdfs.security.token;
+-
+-import java.io.DataInput;
+-import java.io.DataOutput;
+-import java.io.IOException;
+-
+-import javax.crypto.SecretKey;
+-
+-import org.apache.hadoop.io.Writable;
+-import org.apache.hadoop.io.WritableUtils;
+-
+-/**
+- * Key used for generating and verifying delegation tokens
+- */
+-public class DelegationKey implements Writable {
+-  private int keyId;
+-  private long expiryDate;
+-  private SecretKey key;
+-
+-  public DelegationKey() {
+-    this(0, 0L, null);
+-  }
+-
+-  public DelegationKey(int keyId, long expiryDate, SecretKey key) {
+-    this.keyId = keyId;
+-    this.expiryDate = expiryDate;
+-    this.key = key;
+-  }
+-
+-  public int getKeyId() {
+-    return keyId;
+-  }
+-
+-  public long getExpiryDate() {
+-    return expiryDate;
+-  }
+-
+-  public SecretKey getKey() {
+-    return key;
+-  }
+-
+-  public void setExpiryDate(long expiryDate) {
+-    this.expiryDate = expiryDate;
+-  }
+-
+-  /**
+-   */
+-  public void write(DataOutput out) throws IOException {
+-    WritableUtils.writeVInt(out, keyId);
+-    WritableUtils.writeVLong(out, expiryDate);
+-    byte[] keyBytes = key.getEncoded();
+-    WritableUtils.writeVInt(out, keyBytes.length);
+-    out.write(keyBytes);
+-  }
+-
+-  /**
+-   */
+-  public void readFields(DataInput in) throws IOException {
+-    keyId = WritableUtils.readVInt(in);
+-    expiryDate = WritableUtils.readVLong(in);
+-    int len = WritableUtils.readVInt(in);
+-    byte[] keyBytes = new byte[len];
+-    in.readFully(keyBytes);
+-    key = DelegationTokenSecretManager.createSecretKey(keyBytes);
+-  }
+-}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenIdentifier.java b/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenIdentifier.java
+deleted file mode 100644
+index fe0415d..0000000
+--- a/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenIdentifier.java
++++ /dev/null
+@@ -1,163 +0,0 @@
+-/**
+- * Licensed to the Apache Software Foundation (ASF) under one
+- * or more contributor license agreements.  See the NOTICE file
+- * distributed with this work for additional information
+- * regarding copyright ownership.  The ASF licenses this file
+- * to you under the Apache License, Version 2.0 (the
+- * "License"); you may not use this file except in compliance
+- * with the License.  You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-
+-package org.apache.hadoop.hdfs.security.token;
+-
+-import java.io.DataInput;
+-import java.io.DataOutput;
+-import java.io.IOException;
+-
+-import org.apache.hadoop.io.Text;
+-import org.apache.hadoop.io.WritableUtils;
+-import org.apache.hadoop.security.UserGroupInformation;
+-import org.apache.hadoop.security.token.TokenIdentifier;
+-
+-public class DelegationTokenIdentifier extends TokenIdentifier {
+-  static final Text KIND_NAME = new Text("HDFS_DELEGATION_TOKEN");
+-
+-  private Text owner;
+-  private Text renewer;
+-  private Text realUser;
+-  private long issueDate;
+-  private long maxDate;
+-  private int sequenceNumber;
+-  private int masterKeyId = 0;
+-  
+-  public DelegationTokenIdentifier() {
+-    this(new Text(), new Text(), new Text());
+-  }
+-  
+-  public DelegationTokenIdentifier(Text owner, Text renewer, Text realUser) {
+-    this.owner = owner;
+-    this.renewer = renewer;
+-    if (realUser == null) {
+-      this.realUser = new Text();
+-    } else {
+-      this.realUser = realUser;
+-    }
+-    issueDate = 0;
+-    maxDate = 0;
+-  }
+-
+-  @Override
+-  public Text getKind() {
+-    return KIND_NAME;
+-  }
+-  
+-  /**
+-   * Get the username encoded in the token identifier
+-   * 
+-   * @return the username or owner
+-   */
+-  public UserGroupInformation getUser() {
+-    if ( (owner == null) || ("".equals(owner.toString()))) {
+-      return null;
+-    }
+-    if ((realUser == null) || ("".equals(realUser.toString()))
+-        || realUser.equals(owner)) {
+-      return UserGroupInformation.createRemoteUser(owner.toString());
+-    } else {
+-      UserGroupInformation realUgi = UserGroupInformation
+-          .createRemoteUser(realUser.toString());
+-      return UserGroupInformation.createProxyUser(owner.toString(), realUgi);
+-    }
+-  }
+-
+-  public Text getRenewer() {
+-    return renewer;
+-  }
+-  
+-  public void setIssueDate(long issueDate) {
+-    this.issueDate = issueDate;
+-  }
+-  
+-  public long getIssueDate() {
+-    return issueDate;
+-  }
+-  
+-  public void setMaxDate(long maxDate) {
+-    this.maxDate = maxDate;
+-  }
+-  
+-  public long getMaxDate() {
+-    return maxDate;
+-  }
+-
+-  public void setSequenceNumber(int seqNum) {
+-    this.sequenceNumber = seqNum;
+-  }
+-  
+-  public int getSequenceNumber() {
+-    return sequenceNumber;
+-  }
+-
+-  public void setMasterKeyId(int newId) {
+-    masterKeyId = newId;
+-  }
+-
+-  public int getMasterKeyId() {
+-    return masterKeyId;
+-  }
+-
+-  static boolean isEqual(Object a, Object b) {
+-    return a == null ? b == null : a.equals(b);
+-  }
+-  
+-  /** {@inheritDoc} */
+-  public boolean equals(Object obj) {
+-    if (obj == this) {
+-      return true;
+-    }
+-    if (obj instanceof DelegationTokenIdentifier) {
+-      DelegationTokenIdentifier that = (DelegationTokenIdentifier) obj;
+-      return this.sequenceNumber == that.sequenceNumber 
+-          && this.issueDate == that.issueDate 
+-          && this.maxDate == that.maxDate
+-          && this.masterKeyId == that.masterKeyId
+-          && isEqual(this.owner, that.owner) 
+-          && isEqual(this.renewer, that.renewer)
+-          && isEqual(this.realUser, that.realUser);
+-    }
+-    return false;
+-  }
+-
+-  /** {@inheritDoc} */
+-  public int hashCode() {
+-    return this.sequenceNumber;
+-  }
+-  
+-  public void readFields(DataInput in) throws IOException {
+-    owner.readFields(in);
+-    renewer.readFields(in);
+-    realUser.readFields(in);
+-    issueDate = WritableUtils.readVLong(in);
+-    maxDate = WritableUtils.readVLong(in);
+-    sequenceNumber = WritableUtils.readVInt(in);
+-    masterKeyId = WritableUtils.readVInt(in);
+-  }
+-
+-  public void write(DataOutput out) throws IOException {
+-    owner.write(out);
+-    renewer.write(out);
+-    realUser.write(out);
+-    WritableUtils.writeVLong(out, issueDate);
+-    WritableUtils.writeVLong(out, maxDate);
+-    WritableUtils.writeVInt(out, sequenceNumber);
+-    WritableUtils.writeVInt(out, masterKeyId);
+-  }
+-}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSecretManager.java b/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSecretManager.java
+deleted file mode 100644
+index 277c6c3..0000000
+--- a/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSecretManager.java
++++ /dev/null
+@@ -1,359 +0,0 @@
+-/**
+- * Licensed to the Apache Software Foundation (ASF) under one
+- * or more contributor license agreements.  See the NOTICE file
+- * distributed with this work for additional information
+- * regarding copyright ownership.  The ASF licenses this file
+- * to you under the Apache License, Version 2.0 (the
+- * "License"); you may not use this file except in compliance
+- * with the License.  You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-
+-package org.apache.hadoop.hdfs.security.token;
+-
+-import java.io.ByteArrayInputStream;
+-import java.io.DataInputStream;
+-import java.io.IOException;
+-import java.util.Arrays;
+-import java.util.HashMap;
+-import java.util.Iterator;
+-import java.util.Map;
+-
+-import javax.crypto.SecretKey;
+-
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
+-import org.apache.hadoop.io.Text;
+-import org.apache.hadoop.security.token.Token;
+-import org.apache.hadoop.security.token.SecretManager;
+-import org.apache.hadoop.util.Daemon;
+-import org.apache.hadoop.util.StringUtils;
+-
+-public class DelegationTokenSecretManager 
+-   extends SecretManager<DelegationTokenIdentifier> {
+-  private static final Log LOG = LogFactory
+-      .getLog(DelegationTokenSecretManager.class);
+-
+-  /** 
+-   * Cache of currently valid tokens, mapping from DelegationTokenIdentifier 
+-   * to DelegationTokenInformation. Protected by its own lock.
+-   */
+-  private final Map<DelegationTokenIdentifier, DelegationTokenInformation> currentTokens 
+-      = new HashMap<DelegationTokenIdentifier, DelegationTokenInformation>();
+-  
+-  /**
+-   * Sequence number to create DelegationTokenIdentifier
+-   */
+-  private int delegationTokenSequenceNumber = 0;
+-  
+-  private final Map<Integer, DelegationKey> allKeys 
+-      = new HashMap<Integer, DelegationKey>();
+-  
+-  /**
+-   * Access to currentId and currentKey is protected by this object lock.
+-   */
+-  private int currentId = 0;
+-  private DelegationKey currentKey;
+-  
+-  private long keyUpdateInterval;
+-  private long tokenMaxLifetime;
+-  private long tokenRemoverScanInterval;
+-  private long tokenRenewInterval;
+-  private Thread tokenRemoverThread;
+-  private volatile boolean running;
+-  
+-
+-  public DelegationTokenSecretManager(long delegationKeyUpdateInterval,
+-      long delegationTokenMaxLifetime, long delegationTokenRenewInterval,
+-      long delegationTokenRemoverScanInterval) {
+-    this.keyUpdateInterval = delegationKeyUpdateInterval;
+-    this.tokenMaxLifetime = delegationTokenMaxLifetime;
+-    this.tokenRenewInterval = delegationTokenRenewInterval;
+-    this.tokenRemoverScanInterval = delegationTokenRemoverScanInterval;
+-  }
+-  
+-  /** should be called before this object is used */
+-  public synchronized void startThreads() throws IOException {
+-    updateCurrentKey();
+-    running = true;
+-    tokenRemoverThread = new Daemon(new ExpiredTokenRemover());
+-    tokenRemoverThread.start();
+-  }
+-  
+-  /** 
+-   * Add a previously used master key to cache (when NN restarts), 
+-   * should be called before activate().
+-   * */
+-  public synchronized void addKey(DelegationKey key) throws IOException {
+-    if (running) // a safety check
+-      throw new IOException("Can't add delegation key to a running SecretManager.");
+-    if (key.getKeyId() > currentId) {
+-      currentId = key.getKeyId();
+-    }
+-    allKeys.put(key.getKeyId(), key);
+-  }
+-
+-  public synchronized DelegationKey[] getAllKeys() {
+-    return allKeys.values().toArray(new DelegationKey[0]);
+-  }
+-  
+-  /** Update the current master key */
+-  private synchronized void updateCurrentKey() throws IOException {
+-    LOG.info("Updating the current master key for generating delegation tokens");
+-    /* Create a new currentKey with an estimated expiry date. */
+-    currentId++;
+-    currentKey = new DelegationKey(currentId, System.currentTimeMillis()
+-        + keyUpdateInterval + tokenMaxLifetime, generateSecret());
+-    allKeys.put(currentKey.getKeyId(), currentKey);
+-  }
+-  
+-  /** Update the current master key for generating delegation tokens */
+-  public synchronized void rollMasterKey() throws IOException {
+-    removeExpiredKeys();
+-    /* set final expiry date for retiring currentKey */
+-    currentKey.setExpiryDate(System.currentTimeMillis() + tokenMaxLifetime);
+-    /*
+-     * currentKey might have been removed by removeExpiredKeys(), if
+-     * updateMasterKey() isn't called at expected interval. Add it back to
+-     * allKeys just in case.
+-     */
+-    allKeys.put(currentKey.getKeyId(), currentKey);
+-    updateCurrentKey();
+-  }
+-
+-  private synchronized void removeExpiredKeys() {
+-    long now = System.currentTimeMillis();
+-    for (Iterator<Map.Entry<Integer, DelegationKey>> it = allKeys.entrySet()
+-        .iterator(); it.hasNext();) {
+-      Map.Entry<Integer, DelegationKey> e = it.next();
+-      if (e.getValue().getExpiryDate() < now) {
+-        it.remove();
+-      }
+-    }
+-  }
+-  
+-  @Override
+-  protected byte[] createPassword(DelegationTokenIdentifier identifier) {
+-    int sequenceNum;
+-    int id;
+-    DelegationKey key;
+-    long now = System.currentTimeMillis();    
+-    synchronized (this) {
+-      id = currentId;
+-      key = currentKey;
+-      sequenceNum = ++delegationTokenSequenceNumber;
+-    }
+-    identifier.setIssueDate(now);
+-    identifier.setMaxDate(now + tokenMaxLifetime);
+-    identifier.setMasterKeyId(id);
+-    identifier.setSequenceNumber(sequenceNum);
+-    byte[] password = createPassword(identifier.getBytes(), key.getKey());
+-    synchronized (currentTokens) {
+-      currentTokens.put(identifier, new DelegationTokenInformation(now
+-          + tokenRenewInterval, password));
+-    }
+-    return password;
+-  }
+-
+-  @Override
+-  public byte[] retrievePassword(DelegationTokenIdentifier identifier
+-                                 ) throws InvalidToken {
+-    DelegationTokenInformation info = null;
+-    synchronized (currentTokens) {
+-      info = currentTokens.get(identifier);
+-    }
+-    if (info == null) {
+-      throw new InvalidToken("token is expired or doesn't exist");
+-    }
+-    long now = System.currentTimeMillis();
+-    if (info.getRenewDate() < now) {
+-      throw new InvalidToken("token is expired");
+-    }
+-    return info.getPassword();
+-  }
+-
+-  /**
+-   * Renew a delegation token. Canceled tokens are not renewed. Return true if
+-   * the token is successfully renewed; false otherwise.
+-   */
+-  public Boolean renewToken(Token<DelegationTokenIdentifier> token,
+-      String renewer) throws InvalidToken, IOException {
+-    long now = System.currentTimeMillis();
+-    ByteArrayInputStream buf = new ByteArrayInputStream(token.getIdentifier());
+-    DataInputStream in = new DataInputStream(buf);
+-    DelegationTokenIdentifier id = new DelegationTokenIdentifier();
+-    id.readFields(in);
+-    synchronized (currentTokens) {
+-      if (currentTokens.get(id) == null) {
+-        LOG.warn("Renewal request for unknown token");
+-        return false;
+-      }
+-    }
+-    if (id.getMaxDate() < now) {
+-      LOG.warn("Client " + renewer + " tries to renew an expired token");
+-      return false;
+-    }
+-    if (id.getRenewer() == null || !id.getRenewer().toString().equals(renewer)) {
+-      LOG.warn("Client " + renewer + " tries to renew a token with "
+-          + "renewer specified as " + id.getRenewer());
+-      return false;
+-    }
+-    DelegationKey key = null;
+-    synchronized (this) {
+-      key = allKeys.get(id.getMasterKeyId());
+-    }
+-    if (key == null) {
+-      LOG.warn("Unable to find master key for keyId=" + id.getMasterKeyId() 
+-          + " from cache. Failed to renew an unexpired token with sequenceNumber=" 
+-          + id.getSequenceNumber() + ", issued by this key");
+-      return false;
+-    }
+-    byte[] password = createPassword(token.getIdentifier(), key.getKey());
+-    if (!Arrays.equals(password, token.getPassword())) {
+-      LOG.warn("Client " + renewer + " is trying to renew a token with wrong password");
+-      return false;
+-    }
+-    DelegationTokenInformation info = new DelegationTokenInformation(
+-        Math.min(id.getMaxDate(), now + tokenRenewInterval), password);
+-    synchronized (currentTokens) {
+-      currentTokens.put(id, info);
+-    }
+-    return true;
+-  }
+-  
+-  /**
+-   * Cancel a token by removing it from cache. Return true if 
+-   * token exists in cache; false otherwise.
+-   */
+-  public Boolean cancelToken(Token<DelegationTokenIdentifier> token,
+-      String canceller) throws IOException {
+-    ByteArrayInputStream buf = new ByteArrayInputStream(token.getIdentifier());
+-    DataInputStream in = new DataInputStream(buf);
+-    DelegationTokenIdentifier id = new DelegationTokenIdentifier();
+-    id.readFields(in);
+-    if (id.getRenewer() == null) {
+-      LOG.warn("Renewer is null: Invalid Identifier");
+-      return false;
+-    }
+-    if (id.getUser() == null) {
+-      LOG.warn("owner is null: Invalid Identifier");
+-      return false;
+-    }
+-    String owner = id.getUser().getUserName();
+-    String renewer = id.getRenewer().toString();
+-    if (!canceller.equals(owner) && !canceller.equals(renewer)) {
+-      LOG.warn(canceller + " is not authorized to cancel the token");
+-      return false;
+-    }
+-    DelegationTokenInformation info = null;
+-    synchronized (currentTokens) {
+-      info = currentTokens.remove(id);
+-    }
+-    return info != null;
+-  }
+-  
+-  /**
+-   * Convert the byte[] to a secret key
+-   * @param key the byte[] to create the secret key from
+-   * @return the secret key
+-   */
+-  public static SecretKey createSecretKey(byte[] key) {
+-    return SecretManager.createSecretKey(key);
+-  }
+-  
+-  /**
+-   * Create an empty delegation token identifier
+-   * @return a newly created empty delegation token identifier
+-   */
+-  @Override
+-  public DelegationTokenIdentifier createIdentifier() {
+-    return new DelegationTokenIdentifier();
+-  }
+-
+-
+-  /** Utility class to encapsulate a token's renew date and password. */
+-  private static class DelegationTokenInformation {
+-    long renewDate;
+-    byte[] password;
+-    DelegationTokenInformation(long renewDate, byte[] password) {
+-      this.renewDate = renewDate;
+-      this.password = password;
+-    }
+-    /** returns renew date */
+-    long getRenewDate() {
+-      return renewDate;
+-    }
+-    /** returns password */
+-    byte[] getPassword() {
+-      return password;
+-    }
+-  }
+-  
+-  /** Remove expired delegation tokens from cache */
+-  private void removeExpiredToken() {
+-    long now = System.currentTimeMillis();
+-    synchronized (currentTokens) {
+-      Iterator<DelegationTokenInformation> i = currentTokens.values().iterator();
+-      while (i.hasNext()) {
+-        long renewDate = i.next().getRenewDate();
+-        if (now > renewDate) {
+-          i.remove();
+-        }
+-      }
+-    }
+-  }
+-
+-  public synchronized void stopThreads() {
+-    if (LOG.isDebugEnabled())
+-      LOG.debug("Stopping expired delegation token remover thread");
+-    running = false;
+-    tokenRemoverThread.interrupt();
+-  }
+-  
+-  private class ExpiredTokenRemover extends Thread {
+-    private long lastMasterKeyUpdate;
+-    private long lastTokenCacheCleanup;
+-
+-    public void run() {
+-      LOG.info("Starting expired delegation token remover thread, "
+-          + "tokenRemoverScanInterval=" + tokenRemoverScanInterval
+-          / (60 * 1000) + " min(s)");
+-      try {
+-        while (running) {
+-          long now = System.currentTimeMillis();
+-          if (lastMasterKeyUpdate + keyUpdateInterval < now) {
+-            try {
+-              rollMasterKey();
+-              lastMasterKeyUpdate = now;
+-            } catch (IOException e) {
+-              LOG.error("Master key updating failed. "
+-                  + StringUtils.stringifyException(e));
+-            }
+-          }
+-          if (lastTokenCacheCleanup + tokenRemoverScanInterval < now) {
+-            removeExpiredToken();
+-            lastTokenCacheCleanup = now;
+-          }
+-          try {
+-            Thread.sleep(5000); // 5 seconds
+-          } catch (InterruptedException ie) {
+-            LOG
+-            .error("InterruptedExcpetion recieved for ExpiredTokenRemover thread "
+-                + ie);
+-          }
+-        }
+-      } catch (Throwable t) {
+-        LOG.error("ExpiredTokenRemover thread received unexpected exception. "
+-            + t);
+-        Runtime.getRuntime().exit(-1);
+-      }
+-    }
+-  }
+-}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSelector.java b/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSelector.java
+deleted file mode 100644
+index faf53c4..0000000
+--- a/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSelector.java
++++ /dev/null
+@@ -1,50 +0,0 @@
+-/**
+- * Licensed to the Apache Software Foundation (ASF) under one
+- * or more contributor license agreements.  See the NOTICE file
+- * distributed with this work for additional information
+- * regarding copyright ownership.  The ASF licenses this file
+- * to you under the Apache License, Version 2.0 (the
+- * "License"); you may not use this file except in compliance
+- * with the License.  You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-
+-package org.apache.hadoop.hdfs.security.token;
+-
+-import java.util.Collection;
+-
+-import org.apache.hadoop.io.Text;
+-import org.apache.hadoop.security.token.Token;
+-import org.apache.hadoop.security.token.TokenIdentifier;
+-import org.apache.hadoop.security.token.TokenSelector;
+-
+-/**
+- * Look through tokens to find the first delegation token that matches the
+- * service and return it.
+- */
+-public class DelegationTokenSelector implements
+-    TokenSelector<DelegationTokenIdentifier> {
+-
+-  @SuppressWarnings("unchecked")
+-  @Override
+-  public Token<DelegationTokenIdentifier> selectToken(Text service,
+-      Collection<Token<? extends TokenIdentifier>> tokens) {
+-    if (service == null) {
+-      return null;
+-    }
+-    for (Token<? extends TokenIdentifier> token : tokens) {
+-      if (DelegationTokenIdentifier.KIND_NAME.equals(token.getKind())
+-          && service.equals(token.getService())) {
+-        return (Token<DelegationTokenIdentifier>) token;
+-      }
+-    }
+-    return null;
+-  }
+-}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/security/token/delegation/DelegationTokenIdentifier.java b/src/hdfs/org/apache/hadoop/hdfs/security/token/delegation/DelegationTokenIdentifier.java
+new file mode 100644
+index 0000000..ae5aa8b
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/security/token/delegation/DelegationTokenIdentifier.java
+@@ -0,0 +1,54 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs.security.token.delegation;
++
++//import org.apache.hadoop.classification.InterfaceAudience;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier;
++
++/**
++ * A delegation token identifier that is specific to HDFS.
++ */
++//@InterfaceAudience.Private
++public class DelegationTokenIdentifier 
++    extends AbstractDelegationTokenIdentifier {
++  static final Text HDFS_DELEGATION_KIND = new Text("HDFS_DELEGATION_TOKEN");
++
++  /**
++   * Create an empty delegation token identifier for reading into.
++   */
++  public DelegationTokenIdentifier() {
++  }
++
++  /**
++   * Create a new delegation token identifier
++   * @param owner the effective username of the token owner
++   * @param renewer the username of the renewer
++   * @param realUser the real username of the token owner
++   */
++  public DelegationTokenIdentifier(Text owner, Text renewer, Text realUser) {
++    super(owner, renewer, realUser);
++  }
++
++  @Override
++  public Text getKind() {
++    return HDFS_DELEGATION_KIND;
++  }
++
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/security/token/delegation/DelegationTokenSecretManager.java b/src/hdfs/org/apache/hadoop/hdfs/security/token/delegation/DelegationTokenSecretManager.java
+new file mode 100644
+index 0000000..b594a3c
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/security/token/delegation/DelegationTokenSecretManager.java
+@@ -0,0 +1,56 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs.security.token.delegation;
++
++//import org.apache.hadoop.classification.InterfaceAudience;
++import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenSecretManager;
++
++/**
++ * A HDFS specific delegation token secret manager.
++ * The secret manager is responsible for generating and accepting the password
++ * for each token.
++ */
++//@InterfaceAudience.Private
++public class DelegationTokenSecretManager
++    extends AbstractDelegationTokenSecretManager<DelegationTokenIdentifier> {
++
++  /**
++   * Create a secret manager
++   * @param delegationKeyUpdateInterval the number of seconds for rolling new
++   *        secret keys.
++   * @param delegationTokenMaxLifetime the maximum lifetime of the delegation
++   *        tokens
++   * @param delegationTokenRenewInterval how often the tokens must be renewed
++   * @param delegationTokenRemoverScanInterval how often the tokens are scanned
++   *        for expired tokens
++   */
++  public DelegationTokenSecretManager(long delegationKeyUpdateInterval,
++                                      long delegationTokenMaxLifetime, 
++                                      long delegationTokenRenewInterval,
++                                      long delegationTokenRemoverScanInterval) {
++    super(delegationKeyUpdateInterval, delegationTokenMaxLifetime,
++          delegationTokenRenewInterval, delegationTokenRemoverScanInterval);
++  }
++
++  @Override
++  public DelegationTokenIdentifier createIdentifier() {
++    return new DelegationTokenIdentifier();
++  }
++
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/security/token/delegation/DelegationTokenSelector.java b/src/hdfs/org/apache/hadoop/hdfs/security/token/delegation/DelegationTokenSelector.java
+new file mode 100644
+index 0000000..028cdcd
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/security/token/delegation/DelegationTokenSelector.java
+@@ -0,0 +1,33 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.security.token.delegation;
++
++//import org.apache.hadoop.classification.InterfaceAudience;
++import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenSelector;
++
++/**
++ * A delegation token that is specialized for HDFS
++ */
++//@InterfaceAudience.Private
++public class DelegationTokenSelector
++    extends AbstractDelegationTokenSelector<DelegationTokenIdentifier>{
++
++  public DelegationTokenSelector() {
++    super(DelegationTokenIdentifier.HDFS_DELEGATION_KIND);
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 61ad3d5..d4e3d04 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -36,8 +36,8 @@ import org.apache.hadoop.hdfs.security.ExportedAccessKeys;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+-import org.apache.hadoop.hdfs.security.token.DelegationTokenIdentifier;
+-import org.apache.hadoop.hdfs.security.token.DelegationTokenSecretManager;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenSecretManager;
+ import org.apache.hadoop.util.*;
+ import org.apache.hadoop.metrics.util.MBeanUtil;
+ import org.apache.hadoop.net.CachedDNSToSwitchMapping;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index efc010a..d2a9c0b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -62,7 +62,7 @@ import org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol;
+ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+-import org.apache.hadoop.hdfs.security.token.DelegationTokenIdentifier;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+ import org.apache.hadoop.security.Groups;
+ import org.apache.hadoop.security.RefreshUserToGroupMappingsProtocol;
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+index 1d5fde2..fc46f30 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.DistributedFileSystem;
+-import org.apache.hadoop.hdfs.security.token.DelegationTokenIdentifier;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapred.JobConf;
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java b/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java
+index e848746..b018578 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java
+@@ -31,7 +31,6 @@ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.DFSClient.DFSInputStream;
+ import org.apache.hadoop.hdfs.protocol.*;
+ import org.apache.hadoop.hdfs.protocol.FSConstants.UpgradeAction;
+-import org.apache.hadoop.hdfs.security.token.DelegationTokenIdentifier;
+ import org.apache.hadoop.hdfs.server.common.*;
+ import org.apache.hadoop.hdfs.server.namenode.NotReplicatedYetException;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+@@ -41,6 +40,7 @@ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.SecretManager.InvalidToken;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+ 
+ import junit.framework.TestCase;
+ import static org.mockito.Mockito.*;
+diff --git a/src/test/org/apache/hadoop/hdfs/security/TestClientProtocolWithDelegationToken.java b/src/test/org/apache/hadoop/hdfs/security/TestClientProtocolWithDelegationToken.java
+index 4370aed..0495d62 100644
+--- a/src/test/org/apache/hadoop/hdfs/security/TestClientProtocolWithDelegationToken.java
++++ b/src/test/org/apache/hadoop/hdfs/security/TestClientProtocolWithDelegationToken.java
+@@ -38,10 +38,10 @@ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.ipc.Server;
+ import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+-import org.apache.hadoop.hdfs.security.token.DelegationTokenIdentifier;
+-import org.apache.hadoop.hdfs.security.token.DelegationTokenSecretManager;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenSecretManager;
+ import org.apache.hadoop.security.SaslInputStream;
+ import org.apache.hadoop.security.SaslRpcClient;
+ import org.apache.hadoop.security.SaslRpcServer;
+diff --git a/src/test/org/apache/hadoop/hdfs/security/TestDelegationToken.java b/src/test/org/apache/hadoop/hdfs/security/TestDelegationToken.java
+new file mode 100644
+index 0000000..7197b39
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/security/TestDelegationToken.java
+@@ -0,0 +1,164 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs.security;
++
++
++
++import java.io.ByteArrayInputStream;
++import java.io.DataInputStream;
++import java.io.IOException;
++import java.security.PrivilegedExceptionAction;
++
++import junit.framework.Assert;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
++import org.apache.hadoop.hdfs.DistributedFileSystem;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.SecretManager.InvalidToken;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenSecretManager;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Test;
++import org.mortbay.log.Log;
++
++public class TestDelegationToken {
++  private MiniDFSCluster cluster;
++  Configuration config;
++  final private static String GROUP1_NAME = "group1";
++  final private static String GROUP2_NAME = "group2";
++  final private static String[] GROUP_NAMES = new String[] { GROUP1_NAME,
++      GROUP2_NAME };
++  
++  @Before
++  public void setUp() throws Exception {
++    config = new Configuration();
++    config.setLong(DFSConfigKeys.DFS_NAMENODE_DELEGATION_TOKEN_MAX_LIFETIME_KEY, 10000);
++    config.setLong(DFSConfigKeys.DFS_NAMENODE_DELEGATION_TOKEN_RENEW_INTERVAL_KEY, 5000);
++    FileSystem.setDefaultUri(config, "hdfs://localhost:" + "0");
++    cluster = new MiniDFSCluster(0, config, 1, true, true, true,  null, null, null, null);
++    cluster.waitActive();
++  }
++
++  @After
++  public void tearDown() throws Exception {
++    if(cluster!=null) {
++      cluster.shutdown();
++    }
++  }
++
++  private Token<DelegationTokenIdentifier> generateDelegationToken(
++      String owner, String renewer) {
++    DelegationTokenSecretManager dtSecretManager = cluster.getNameNode()
++        .getNamesystem().getDelegationTokenSecretManager();
++    DelegationTokenIdentifier dtId = new DelegationTokenIdentifier(new Text(
++        owner), new Text(renewer), null);
++    return new Token<DelegationTokenIdentifier>(dtId, dtSecretManager);
++  }
++  
++  @Test
++  public void testDelegationTokenSecretManager() throws Exception {
++    DelegationTokenSecretManager dtSecretManager = cluster.getNameNode()
++        .getNamesystem().getDelegationTokenSecretManager();
++    Token<DelegationTokenIdentifier> token = generateDelegationToken(
++        "SomeUser", "JobTracker");
++    // Fake renewer should not be able to renew
++	  Assert.assertFalse(dtSecretManager.renewToken(token, "FakeRenewer"));
++	  Assert.assertTrue(dtSecretManager.renewToken(token, "JobTracker"));
++    DelegationTokenIdentifier identifier = new DelegationTokenIdentifier();
++    byte[] tokenId = token.getIdentifier();
++    identifier.readFields(new DataInputStream(
++             new ByteArrayInputStream(tokenId)));
++    Assert.assertTrue(null != dtSecretManager.retrievePassword(identifier));
++    Log.info("Sleep to expire the token");
++	  Thread.sleep(6000);
++	  //Token should be expired
++	  try {
++	    dtSecretManager.retrievePassword(identifier);
++	    //Should not come here
++	    Assert.fail("Token should have expired");
++	  } catch (InvalidToken e) {
++	    //Success
++	  }
++	  Assert.assertTrue(dtSecretManager.renewToken(token, "JobTracker"));
++	  Log.info("Sleep beyond the max lifetime");
++	  Thread.sleep(5000);
++	  Assert.assertFalse(dtSecretManager.renewToken(token, "JobTracker"));
++  }
++  
++  @Test 
++  public void testCancelDelegationToken() throws Exception {
++    DelegationTokenSecretManager dtSecretManager = cluster.getNameNode()
++        .getNamesystem().getDelegationTokenSecretManager();
++    Token<DelegationTokenIdentifier> token = generateDelegationToken(
++        "SomeUser", "JobTracker");
++    //Fake renewer should not be able to renew
++    Assert.assertFalse(dtSecretManager.cancelToken(token, "FakeCanceller"));
++    Assert.assertTrue(dtSecretManager.cancelToken(token, "JobTracker"));
++    Assert.assertFalse(dtSecretManager.renewToken(token, "JobTracker"));
++  }
++  
++  @Test
++  public void testDelegationTokenDFSApi() throws Exception {
++    DelegationTokenSecretManager dtSecretManager = cluster.getNameNode()
++        .getNamesystem().getDelegationTokenSecretManager();
++    DistributedFileSystem dfs = (DistributedFileSystem) cluster.getFileSystem();
++    Token<DelegationTokenIdentifier> token = dfs.getDelegationToken(new Text("JobTracker"));
++    DelegationTokenIdentifier identifier = new DelegationTokenIdentifier();
++    byte[] tokenId = token.getIdentifier();
++    identifier.readFields(new DataInputStream(
++             new ByteArrayInputStream(tokenId)));
++    Log.info("A valid token should have non-null password, and should be renewed successfully");
++    Assert.assertTrue(null != dtSecretManager.retrievePassword(identifier));
++    Assert.assertTrue(dtSecretManager.renewToken(token, "JobTracker"));
++  }
++ 
++  @Test
++  public void testDelegationTokenWithRealUser() throws IOException {
++    UserGroupInformation ugi = UserGroupInformation.createUserForTesting(
++        "RealUser", GROUP_NAMES);
++    final UserGroupInformation proxyUgi = UserGroupInformation.createProxyUser(
++        "proxyUser", ugi);
++    try {
++      Token<DelegationTokenIdentifier> token = proxyUgi
++          .doAs(new PrivilegedExceptionAction<Token<DelegationTokenIdentifier>>() {
++            public Token<DelegationTokenIdentifier> run() throws IOException {
++              DistributedFileSystem dfs = (DistributedFileSystem) cluster
++                  .getFileSystem();
++              return dfs.getDelegationToken(new Text("RenewerUser"));
++            }
++          });
++      DelegationTokenIdentifier identifier = new DelegationTokenIdentifier();
++      byte[] tokenId = token.getIdentifier();
++      identifier.readFields(new DataInputStream(new ByteArrayInputStream(
++          tokenId)));
++      Assert.assertEquals(identifier.getUser().getUserName(), "proxyUser");
++      Assert.assertEquals(identifier.getUser().getRealUser().getUserName(),
++          "RealUser");
++    } catch (InterruptedException e) {
++      //Do Nothing
++    }
++  }
++  
++}
+diff --git a/src/test/org/apache/hadoop/mapreduce/security/TestTokenCache.java b/src/test/org/apache/hadoop/mapreduce/security/TestTokenCache.java
+index c27fa62..81421d7 100644
+--- a/src/test/org/apache/hadoop/mapreduce/security/TestTokenCache.java
++++ b/src/test/org/apache/hadoop/mapreduce/security/TestTokenCache.java
+@@ -38,7 +38,7 @@ import org.apache.hadoop.examples.SleepJob;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+-import org.apache.hadoop.hdfs.security.token.DelegationTokenIdentifier;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+ import org.apache.hadoop.io.IntWritable;
+ import org.apache.hadoop.io.NullWritable;
+diff --git a/src/test/org/apache/hadoop/security/TestDelegationToken.java b/src/test/org/apache/hadoop/security/TestDelegationToken.java
+deleted file mode 100644
+index b4e9cd9..0000000
+--- a/src/test/org/apache/hadoop/security/TestDelegationToken.java
++++ /dev/null
+@@ -1,164 +0,0 @@
+-/**
+- * Licensed to the Apache Software Foundation (ASF) under one
+- * or more contributor license agreements.  See the NOTICE file
+- * distributed with this work for additional information
+- * regarding copyright ownership.  The ASF licenses this file
+- * to you under the Apache License, Version 2.0 (the
+- * "License"); you may not use this file except in compliance
+- * with the License.  You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-
+-package org.apache.hadoop.security;
+-
+-
+-
+-import java.io.ByteArrayInputStream;
+-import java.io.DataInputStream;
+-import java.io.IOException;
+-import java.security.PrivilegedExceptionAction;
+-
+-import junit.framework.Assert;
+-
+-import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.fs.FileSystem;
+-import org.apache.hadoop.hdfs.DistributedFileSystem;
+-import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+-import org.apache.hadoop.hdfs.MiniDFSCluster;
+-import org.apache.hadoop.io.Text;
+-import org.apache.hadoop.security.token.Token;
+-import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+-import org.apache.hadoop.hdfs.security.token.DelegationTokenIdentifier;
+-import org.apache.hadoop.hdfs.security.token.DelegationTokenSecretManager;
+-import org.junit.After;
+-import org.junit.Before;
+-import org.junit.Test;
+-import org.mortbay.log.Log;
+-
+-public class TestDelegationToken {
+-  private MiniDFSCluster cluster;
+-  FSNamesystem nameSystem;
+-  Configuration config;
+-  final private static String GROUP1_NAME = "group1";
+-  final private static String GROUP2_NAME = "group2";
+-  final private static String[] GROUP_NAMES = new String[] { GROUP1_NAME,
+-      GROUP2_NAME };
+-  
+-  @Before
+-  public void setUp() throws Exception {
+-    config = new Configuration();
+-    config.setLong("dfs.namenode.delegation.token.max-lifetime", 10000);
+-    config.setLong("dfs.namenode.delegation.token.renew-interval", 5000);
+-    FileSystem.setDefaultUri(config, "hdfs://localhost:" + "0");
+-    cluster = new MiniDFSCluster(0, config, 1, true, true, true,  null, null, null, null);
+-    cluster.waitActive();
+-    nameSystem = cluster.getNameNode().namesystem;
+-  }
+-
+-  @After
+-  public void tearDown() throws Exception {
+-    if(cluster!=null) {
+-      cluster.shutdown();
+-    }
+-  }
+-
+-  private Token<DelegationTokenIdentifier> generateDelegationToken(
+-      String owner, String renewer) {
+-    DelegationTokenSecretManager dtSecretManager = 
+-        nameSystem.getDelegationTokenSecretManager();
+-    DelegationTokenIdentifier dtId = new DelegationTokenIdentifier(new Text(
+-        owner), new Text(renewer), null);
+-    return new Token<DelegationTokenIdentifier>(dtId, dtSecretManager);
+-  }
+-  
+-  @Test
+-  public void testDelegationTokenSecretManager() throws Exception {
+-    DelegationTokenSecretManager dtSecretManager = 
+-        nameSystem.getDelegationTokenSecretManager();
+-    Token<DelegationTokenIdentifier> token = generateDelegationToken(
+-        "SomeUser", "JobTracker");
+-    // Fake renewer should not be able to renew
+-	  Assert.assertFalse(dtSecretManager.renewToken(token, "FakeRenewer"));
+-	  Assert.assertTrue(dtSecretManager.renewToken(token, "JobTracker"));
+-    DelegationTokenIdentifier identifier = new DelegationTokenIdentifier();
+-    byte[] tokenId = token.getIdentifier();
+-    identifier.readFields(new DataInputStream(
+-             new ByteArrayInputStream(tokenId)));
+-    Assert.assertTrue(null != dtSecretManager.retrievePassword(identifier));
+-    Log.info("Sleep to expire the token");
+-	  Thread.sleep(6000);
+-	  //Token should be expired
+-	  try {
+-	    dtSecretManager.retrievePassword(identifier);
+-	    //Should not come here
+-	    Assert.fail("Token should have expired");
+-	  } catch (InvalidToken e) {
+-	    //Success
+-	  }
+-	  Assert.assertTrue(dtSecretManager.renewToken(token, "JobTracker"));
+-	  Log.info("Sleep beyond the max lifetime");
+-	  Thread.sleep(5000);
+-	  Assert.assertFalse(dtSecretManager.renewToken(token, "JobTracker"));
+-  }
+-  
+-  @Test 
+-  public void testCancelDelegationToken() throws Exception {
+-    DelegationTokenSecretManager dtSecretManager = 
+-        nameSystem.getDelegationTokenSecretManager();
+-    Token<DelegationTokenIdentifier> token = generateDelegationToken(
+-        "SomeUser", "JobTracker");
+-    //Fake renewer should not be able to renew
+-    Assert.assertFalse(dtSecretManager.cancelToken(token, "FakeCanceller"));
+-    Assert.assertTrue(dtSecretManager.cancelToken(token, "JobTracker"));
+-    Assert.assertFalse(dtSecretManager.renewToken(token, "JobTracker"));
+-  }
+-  
+-  @Test
+-  public void testDelegationTokenDFSApi() throws Exception {
+-    DelegationTokenSecretManager dtSecretManager = nameSystem.getDelegationTokenSecretManager();
+-    DistributedFileSystem dfs = (DistributedFileSystem) cluster.getFileSystem();
+-    Token<DelegationTokenIdentifier> token = dfs.getDelegationToken(new Text("JobTracker"));
+-    DelegationTokenIdentifier identifier = new DelegationTokenIdentifier();
+-    byte[] tokenId = token.getIdentifier();
+-    identifier.readFields(new DataInputStream(
+-             new ByteArrayInputStream(tokenId)));
+-    Log.info("A valid token should have non-null password, and should be renewed successfully");
+-    Assert.assertTrue(null != dtSecretManager.retrievePassword(identifier));
+-    Assert.assertTrue(dtSecretManager.renewToken(token, "JobTracker"));
+-  }
+- 
+-  @Test
+-  public void testDelegationTokenWithRealUser() throws IOException {
+-    UserGroupInformation ugi = UserGroupInformation.createUserForTesting(
+-        "RealUser", GROUP_NAMES);
+-    final UserGroupInformation proxyUgi = UserGroupInformation.createProxyUser(
+-        "proxyUser", ugi);
+-    try {
+-      Token<DelegationTokenIdentifier> token = proxyUgi
+-          .doAs(new PrivilegedExceptionAction<Token<DelegationTokenIdentifier>>() {
+-            public Token<DelegationTokenIdentifier> run() throws IOException {
+-              DistributedFileSystem dfs = (DistributedFileSystem) cluster
+-                  .getFileSystem();
+-              return dfs.getDelegationToken(new Text("RenewerUser"));
+-            }
+-          });
+-      DelegationTokenIdentifier identifier = new DelegationTokenIdentifier();
+-      byte[] tokenId = token.getIdentifier();
+-      identifier.readFields(new DataInputStream(new ByteArrayInputStream(
+-          tokenId)));
+-      Assert.assertEquals(identifier.getUser().getUserName(), "proxyUser");
+-      Assert.assertEquals(identifier.getUser().getRealUser().getUserName(),
+-          "RealUser");
+-    } catch (InterruptedException e) {
+-      //Do Nothing
+-    }
+-  }
+-  
+-}
+diff --git a/src/test/org/apache/hadoop/security/token/delegation/TestDelegationToken.java b/src/test/org/apache/hadoop/security/token/delegation/TestDelegationToken.java
+new file mode 100644
+index 0000000..244ff5a
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/token/delegation/TestDelegationToken.java
+@@ -0,0 +1,262 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security.token.delegation;
++
++import java.io.ByteArrayInputStream;
++import java.io.DataInput;
++import java.io.DataInputStream;
++import java.io.DataOutput;
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.Collection;
++import java.util.List;
++
++import junit.framework.Assert;
++
++import org.apache.hadoop.io.DataInputBuffer;
++import org.apache.hadoop.io.DataOutputBuffer;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenIdentifier;
++import org.apache.hadoop.security.token.SecretManager.InvalidToken;
++import org.junit.Test;
++import org.mortbay.log.Log;
++
++import static org.junit.Assert.*;
++
++public class TestDelegationToken {
++  private static final Text KIND = new Text("MY KIND");
++
++  public static class TestDelegationTokenIdentifier 
++  extends AbstractDelegationTokenIdentifier
++  implements Writable {
++
++    public TestDelegationTokenIdentifier() {
++    }
++
++    public TestDelegationTokenIdentifier(Text owner, Text renewer, Text realUser) {
++      super(owner, renewer, realUser);
++    }
++
++    @Override
++    public Text getKind() {
++      return KIND;
++    }
++    
++    public void write(DataOutput out) throws IOException {
++      super.write(out); 
++    }
++    public void readFields(DataInput in) throws IOException {
++      super.readFields(in);
++    }
++  }
++  
++  public static class TestDelegationTokenSecretManager 
++  extends AbstractDelegationTokenSecretManager<TestDelegationTokenIdentifier> {
++
++    public TestDelegationTokenSecretManager(long delegationKeyUpdateInterval,
++                         long delegationTokenMaxLifetime,
++                         long delegationTokenRenewInterval,
++                         long delegationTokenRemoverScanInterval) {
++      super(delegationKeyUpdateInterval, delegationTokenMaxLifetime,
++            delegationTokenRenewInterval, delegationTokenRemoverScanInterval);
++    }
++
++    @Override
++    public TestDelegationTokenIdentifier createIdentifier() {
++      return new TestDelegationTokenIdentifier();
++    }
++    
++    @Override
++    protected byte[] createPassword(TestDelegationTokenIdentifier t) {
++      return super.createPassword(t);
++    }
++  }
++  
++  public static class TokenSelector extends 
++  AbstractDelegationTokenSelector<TestDelegationTokenIdentifier>{
++
++    protected TokenSelector() {
++      super(KIND);
++    }    
++  }
++  
++  @Test
++  public void testSerialization() throws Exception {
++    TestDelegationTokenIdentifier origToken = new 
++                        TestDelegationTokenIdentifier(new Text("alice"), 
++                                          new Text("bob"), 
++                                          new Text("colin"));
++    TestDelegationTokenIdentifier newToken = new TestDelegationTokenIdentifier();
++    origToken.setIssueDate(123);
++    origToken.setMasterKeyId(321);
++    origToken.setMaxDate(314);
++    origToken.setSequenceNumber(12345);
++    
++    // clone origToken into newToken
++    DataInputBuffer inBuf = new DataInputBuffer();
++    DataOutputBuffer outBuf = new DataOutputBuffer();
++    origToken.write(outBuf);
++    inBuf.reset(outBuf.getData(), 0, outBuf.getLength());
++    newToken.readFields(inBuf);
++    
++    // now test the fields
++    assertEquals("alice", newToken.getUser().getUserName());
++    assertEquals(new Text("bob"), newToken.getRenewer());
++    assertEquals("colin", newToken.getUser().getRealUser().getUserName());
++    assertEquals(123, newToken.getIssueDate());
++    assertEquals(321, newToken.getMasterKeyId());
++    assertEquals(314, newToken.getMaxDate());
++    assertEquals(12345, newToken.getSequenceNumber());
++    assertEquals(origToken, newToken);
++  }
++  
++  private Token<TestDelegationTokenIdentifier> generateDelegationToken(
++      TestDelegationTokenSecretManager dtSecretManager,
++      String owner, String renewer) {
++    TestDelegationTokenIdentifier dtId = 
++      new TestDelegationTokenIdentifier(new Text(
++        owner), new Text(renewer), null);
++    return new Token<TestDelegationTokenIdentifier>(dtId, dtSecretManager);
++  }
++  @Test
++  public void testDelegationTokenSecretManager() throws Exception {
++    TestDelegationTokenSecretManager dtSecretManager = 
++      new TestDelegationTokenSecretManager(24*60*60*1000,
++          3*1000,1*1000,3600000);
++    try {
++      dtSecretManager.startThreads();
++      Token<TestDelegationTokenIdentifier> token = generateDelegationToken(
++          dtSecretManager, "SomeUser", "JobTracker");
++      // Fake renewer should not be able to renew
++      Assert.assertFalse(dtSecretManager.renewToken(token, "FakeRenewer"));
++      Assert.assertTrue(dtSecretManager.renewToken(token, "JobTracker"));
++      TestDelegationTokenIdentifier identifier = 
++        new TestDelegationTokenIdentifier();
++      byte[] tokenId = token.getIdentifier();
++      identifier.readFields(new DataInputStream(
++          new ByteArrayInputStream(tokenId)));
++      Assert.assertTrue(null != dtSecretManager.retrievePassword(identifier));
++      Log.info("Sleep to expire the token");
++      Thread.sleep(2000);
++      //Token should be expired
++      try {
++        dtSecretManager.retrievePassword(identifier);
++        //Should not come here
++        Assert.fail("Token should have expired");
++      } catch (InvalidToken e) {
++        //Success
++      }
++      Assert.assertTrue(dtSecretManager.renewToken(token, "JobTracker"));
++      Log.info("Sleep beyond the max lifetime");
++      Thread.sleep(2000);
++      Assert.assertFalse(dtSecretManager.renewToken(token, "JobTracker"));
++    } finally {
++      dtSecretManager.stopThreads();
++    }
++  }
++  @Test 
++  public void testCancelDelegationToken() throws Exception {
++    TestDelegationTokenSecretManager dtSecretManager = 
++      new TestDelegationTokenSecretManager(24*60*60*1000,
++        10*1000,1*1000,3600000);
++    try {
++      dtSecretManager.startThreads();
++      Token<TestDelegationTokenIdentifier> token = generateDelegationToken(
++          dtSecretManager, "SomeUser", "JobTracker");
++      //Fake renewer should not be able to renew
++      Assert.assertFalse(dtSecretManager.cancelToken(token, "FakeCanceller"));
++      Assert.assertTrue(dtSecretManager.cancelToken(token, "JobTracker"));
++      Assert.assertFalse(dtSecretManager.renewToken(token, "JobTracker"));
++    } finally {
++      dtSecretManager.stopThreads();
++    }
++  }
++  @Test
++  public void testRollMasterKey() throws Exception {
++    TestDelegationTokenSecretManager dtSecretManager = 
++      new TestDelegationTokenSecretManager(24*60*60*1000,
++        10*1000,1*1000,3600000);
++    try {
++      dtSecretManager.startThreads();
++      //generate a token and store the password
++      Token<TestDelegationTokenIdentifier> token = generateDelegationToken(
++          dtSecretManager, "SomeUser", "JobTracker");
++      byte[] oldPasswd = token.getPassword();
++      //store the length of the keys list
++      int prevNumKeys = dtSecretManager.getAllKeys().length;
++      
++      dtSecretManager.rollMasterKey();
++      
++      //after rolling, the length of the keys list must increase
++      int currNumKeys = dtSecretManager.getAllKeys().length;
++      Assert.assertEquals((currNumKeys - prevNumKeys) >= 1, true);
++      
++      //after rolling, the token that was generated earlier must
++      //still be valid (retrievePassword will fail if the token
++      //is not valid)
++      ByteArrayInputStream bi = 
++        new ByteArrayInputStream(token.getIdentifier());
++      TestDelegationTokenIdentifier identifier = 
++        dtSecretManager.createIdentifier();
++      identifier.readFields(new DataInputStream(bi));
++      byte[] newPasswd = 
++        dtSecretManager.retrievePassword(identifier);
++      //compare the passwords
++      Assert.assertEquals(oldPasswd, newPasswd);
++    } finally {
++      dtSecretManager.stopThreads();
++    }
++  }
++  @Test
++  @SuppressWarnings("unchecked")
++  public void testDelegationTokenSelector() throws Exception {
++    TestDelegationTokenSecretManager dtSecretManager = 
++      new TestDelegationTokenSecretManager(24*60*60*1000,
++        10*1000,1*1000,3600000);
++    try {
++      dtSecretManager.startThreads();
++      AbstractDelegationTokenSelector ds = 
++      new AbstractDelegationTokenSelector<TestDelegationTokenIdentifier>(KIND);
++      
++      //Creates a collection of tokens
++      Token<TestDelegationTokenIdentifier> token1 = generateDelegationToken(
++          dtSecretManager, "SomeUser1", "JobTracker");
++      token1.setService(new Text("MY-SERVICE1"));
++      
++      Token<TestDelegationTokenIdentifier> token2 = generateDelegationToken(
++          dtSecretManager, "SomeUser2", "JobTracker");
++      token2.setService(new Text("MY-SERVICE2"));
++      
++      List<Token<TestDelegationTokenIdentifier>> tokens =
++        new ArrayList<Token<TestDelegationTokenIdentifier>>();
++      tokens.add(token1);
++      tokens.add(token2);
++      
++      //try to select a token with a given service name (created earlier)
++      Token<TestDelegationTokenIdentifier> t = 
++        ds.selectToken(new Text("MY-SERVICE1"), tokens);
++      Assert.assertEquals(t, token1);
++    } finally {
++      dtSecretManager.stopThreads();
++    }
++  }
++}
+-- 
+1.7.0.4
+

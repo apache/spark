@@ -1,0 +1,67 @@
+From ec8790e50f212782f59ec904210e6cd07a62eb8e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 9 Mar 2011 14:38:33 -0800
+Subject: [PATCH 0916/1179] MAPREDUCE-2374. Don't use PrintWriter API for writing taskjvm.sh
+
+Reason: PrintWriter obscures errors. Also seems to fix a race condition
+        which caused "Text file busy" errors launching taskjvm.sh
+        on some QA clusters
+Author: Todd Lipcon
+Ref: CDH-2794
+---
+ .../org/apache/hadoop/mapred/TaskController.java   |   25 ++++++++++++-------
+ 1 files changed, 16 insertions(+), 9 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskController.java b/src/mapred/org/apache/hadoop/mapred/TaskController.java
+index dd57917..2d649a2 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskController.java
+@@ -19,7 +19,7 @@ package org.apache.hadoop.mapred;
+ 
+ import java.io.File;
+ import java.io.IOException;
+-import java.io.PrintWriter;
++import java.io.FileWriter;
+ import java.net.InetSocketAddress;
+ import java.util.List;
+ 
+@@ -201,21 +201,28 @@ public abstract class TaskController implements Configurable {
+   // a file and execute it.
+   protected static String writeCommand(String cmdLine, FileSystem fs,
+       Path commandFile) throws IOException {
+-    PrintWriter pw = null;
+-    LOG.info("Writing commands to " + commandFile);
++    String path = commandFile.makeQualified(fs).toUri().getPath();
++    FileWriter w = null;
++    LOG.info("Writing commands to " + path);
+     try {
+-      pw = new PrintWriter(FileSystem.create(
+-            fs, commandFile, TASK_LAUNCH_SCRIPT_PERMISSION));
+-      pw.write(cmdLine);
++      File parent = new File(path).getParentFile();
++      if (!parent.isDirectory() && !parent.mkdirs()) {
++        throw new IOException(
++          "Couldn't ensure directory for task script: " + parent);
++      }
++      w = new FileWriter(path);
++      w.write(cmdLine);
+     } catch (IOException ioe) {
+       LOG.error("Caught IOException while writing JVM command line to file. ",
+           ioe);
++      throw ioe;
+     } finally {
+-      if (pw != null) {
+-        pw.close();
++      if (w != null) {
++        w.close();
+       }
+     }
+-    return commandFile.makeQualified(fs).toUri().getPath();
++    fs.setPermission(commandFile, TASK_LAUNCH_SCRIPT_PERMISSION);
++    return path;
+   }
+   
+   protected void logOutput(String output) {
+-- 
+1.7.0.4
+

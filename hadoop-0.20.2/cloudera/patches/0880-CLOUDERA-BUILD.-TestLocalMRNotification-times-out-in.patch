@@ -1,0 +1,26 @@
+From cbada181614e3a32c9bbc2bc5e274798aa94217e Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Mon, 14 Feb 2011 14:57:21 -0800
+Subject: [PATCH 0880/1179] CLOUDERA-BUILD. TestLocalMRNotification times out in CDH3.
+
+---
+ .../org/apache/hadoop/mapred/UtilsForTests.java    |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/mapred/UtilsForTests.java b/src/test/org/apache/hadoop/mapred/UtilsForTests.java
+index fbbd994..06c8e02 100644
+--- a/src/test/org/apache/hadoop/mapred/UtilsForTests.java
++++ b/src/test/org/apache/hadoop/mapred/UtilsForTests.java
+@@ -739,7 +739,8 @@ public class UtilsForTests {
+       try {
+         Thread.sleep(1000000);
+       } catch (InterruptedException e) {
+-        // Do nothing
++        // Respond to interrupts
++        Thread.currentThread().interrupt();
+       }
+     }
+   }
+-- 
+1.7.0.4
+

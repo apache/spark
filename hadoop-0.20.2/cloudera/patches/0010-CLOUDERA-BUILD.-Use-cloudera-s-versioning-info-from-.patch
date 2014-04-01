@@ -1,0 +1,63 @@
+From d5ead434b221076fb830308d2d112d53aa6dc59f Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:22:26 -0800
+Subject: [PATCH 0010/1179] CLOUDERA-BUILD. Use cloudera's versioning info from cloudera.hash in saveVersion.sh
+
+Description:
+    This should make the "hadoop version" output far more useful for
+    determing exactly what code is running. The cloudera.hash property is
+    set by cloudera/build.properties which is generated during the build
+    process.
+---
+ build.xml          |    1 +
+ src/saveVersion.sh |   19 ++++++++-----------
+ 2 files changed, 9 insertions(+), 11 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index 5966d58..37328d6 100644
+--- a/build.xml
++++ b/build.xml
+@@ -402,6 +402,7 @@
+       of the output directory -->
+     <exec executable="sh">
+        <arg line="src/saveVersion.sh ${version}"/>
++       <env key="HADOOP_REVISION" value="${cloudera.hash}" />
+     </exec>
+ 	
+     <!-- Compile Java files (excluding JSPs) checking warnings -->
+diff --git a/src/saveVersion.sh b/src/saveVersion.sh
+index a3a49a3..22b7867 100755
+--- a/src/saveVersion.sh
++++ b/src/saveVersion.sh
+@@ -18,20 +18,17 @@
+ 
+ # This file is used to generate the BuildStamp.java class that
+ # records the user, url, revision and timestamp.
+-unset LANG
+-unset LC_CTYPE
+ version=$1
+-user=`whoami`
+-date=`date`
+-if [ -d .git ]; then
+-  revision=`git log -1 --pretty=format:"%H"`
+-  hostname=`hostname`
+-  branch=`git branch | sed -n -e 's/^* //p'`
+-  url="git://$hostname/$cwd on branch $branch"
+-else
++revision=$HADOOP_REVISION
++if [ -z "$revision" ] ; then
+   revision=`svn info | sed -n -e 's/Last Changed Rev: \(.*\)/\1/p'`
+-  url=`svn info | sed -n -e 's/URL: \(.*\)/\1/p'`
+ fi
++if [ -z "$revision" ]  ; then
++  revision=`git rev-parse HEAD`
++fi
++url=`svn info | sed -n -e 's/URL: \(.*\)/\1/p'`
++user=`whoami`
++date=`date`
+ mkdir -p build/src/org/apache/hadoop
+ cat << EOF | \
+   sed -e "s/VERSION/$version/" -e "s/USER/$user/" -e "s/DATE/$date/" \
+-- 
+1.7.0.4
+

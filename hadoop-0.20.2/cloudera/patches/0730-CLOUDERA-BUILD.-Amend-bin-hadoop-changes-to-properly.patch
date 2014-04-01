@@ -1,0 +1,25 @@
+From eed3bc71002f4cbf3fd0aaeef7016cb80cf61a4a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@lipcon.org>
+Date: Wed, 6 Oct 2010 18:05:30 -0700
+Subject: [PATCH 0730/1179] CLOUDERA-BUILD. Amend bin/hadoop changes to properly start tasktracker and jobtracker with sudo
+
+---
+ bin/hadoop |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index 9ea13b4..e495b6f 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -338,7 +338,7 @@ HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.policy.file=$HADOOP_POLICYFILE"
+ #           Uses sudo in order to assume the identity of the daemon user.
+ #  "normal" - supported only when already running as the target user.
+ ###########################################################################
+-if [[ "$COMMAND" == *node ]]; then
++if [[ "$COMMAND" == *node ]] || [[ "$COMMAND" == *tracker ]]; then
+   command_uc=$(echo $COMMAND| tr a-z A-Z)
+   user_var="HADOOP_${command_uc}_USER"
+   _HADOOP_DAEMON_USER=$(eval "echo \$$user_var")
+-- 
+1.7.0.4
+

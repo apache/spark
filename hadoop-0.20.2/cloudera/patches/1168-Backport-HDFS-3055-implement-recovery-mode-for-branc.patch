@@ -1,0 +1,679 @@
+From 8b7c0be177f4b985ba1894b76e12ee32d78907fb Mon Sep 17 00:00:00 2001
+From: Colin Patrick Mccabe <cmccabe@cloudera.com>
+Date: Thu, 12 Apr 2012 14:27:18 -0700
+Subject: [PATCH 1168/1179] Backport HDFS-3055 (implement recovery mode for branch-1)
+
+Author: Colin McCabe
+Reason: New Feature
+Ref: CDH-4924
+---
+ .../content/xdocs/hdfs_user_guide.xml              |   28 ++++-
+ .../hadoop/hdfs/server/common/HdfsConstants.java   |   21 ++++
+ .../hadoop/hdfs/server/namenode/FSEditLog.java     |   10 +-
+ .../hadoop/hdfs/server/namenode/FSImage.java       |   18 ++--
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |    8 +-
+ .../hdfs/server/namenode/MetaRecoveryContext.java  |  100 ++++++++++++++++
+ .../hadoop/hdfs/server/namenode/NameNode.java      |   81 +++++++++++++-
+ .../hdfs/server/namenode/SecondaryNameNode.java    |    2 +-
+ src/test/findbugsExcludeFile.xml                   |    6 +
+ .../org/apache/hadoop/hdfs/MiniDFSCluster.java     |    3 +
+ .../hadoop/hdfs/server/namenode/TestEditLog.java   |    3 +-
+ .../hdfs/server/namenode/TestEditLogRace.java      |    2 +-
+ .../hdfs/server/namenode/TestNameNodeRecovery.java |  124 ++++++++++++++++++++
+ .../server/namenode/TestSecurityTokenEditLog.java  |    2 +-
+ 14 files changed, 388 insertions(+), 20 deletions(-)
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/server/namenode/MetaRecoveryContext.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeRecovery.java
+
+diff --git a/src/docs/src/documentation/content/xdocs/hdfs_user_guide.xml b/src/docs/src/documentation/content/xdocs/hdfs_user_guide.xml
+index 9458ac2..a5b9fab 100644
+--- a/src/docs/src/documentation/content/xdocs/hdfs_user_guide.xml
++++ b/src/docs/src/documentation/content/xdocs/hdfs_user_guide.xml
+@@ -408,8 +408,32 @@
+       the delegation token file. 
+       For command usage, see <a href="commands_manual.html#fetchdt"><code>fetchdt</code> command</a>. 
+      </p>
+-     
+-   </section> <section> <title> Upgrade and Rollback </title>
++     </section>
++     <section> <title>Recovery Mode</title>
++       <p>Typically, you will configure multiple metadata storage locations.
++       Then, if one storage location is corrupt, you can read the
++       metadata from one of the other storage locations.</p>
++
++       <p>However, what can you do if the only storage locations available are
++       corrupt?  In this case, there is a special NameNode startup mode called
++       Recovery mode that may allow you to recover most of your data.</p>
++
++       <p>You can start the NameNode in recovery mode like so:
++        <code>namenode -recover</code></p>
++
++        <p>When in recovery mode, the NameNode will interactively prompt you at
++       the command line about possible courses of action you can take to
++       recover your data.</p>
++
++       <p>If you don't want to be prompted, you can give the
++       <code>-force</code> option.  This option will force
++       recovery mode to always select the first choice.  Normally, this
++       will be the most reasonable choice.</p>
++
++       <p>Because Recovery mode can cause you to lose data, you should always
++       back up your edit log and fsimage before using it.</p>
++     </section>
++     <section> <title> Upgrade and Rollback </title>
+      <p>
+       When Hadoop is upgraded on an existing cluster, as with any
+       software upgrade, it is possible there are new bugs or
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/common/HdfsConstants.java b/src/hdfs/org/apache/hadoop/hdfs/server/common/HdfsConstants.java
+index 8705182..24a5b46 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/common/HdfsConstants.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/common/HdfsConstants.java
+@@ -17,6 +17,8 @@
+  */
+ package org.apache.hadoop.hdfs.server.common;
+ 
++import org.apache.hadoop.hdfs.server.namenode.MetaRecoveryContext;
++
+ 
+ /************************************
+  * Some handy internal HDFS constants
+@@ -37,13 +39,32 @@ public interface HdfsConstants {
+     FORMAT  ("-format"),
+     REGULAR ("-regular"),
+     UPGRADE ("-upgrade"),
++    RECOVER ("-recover"),
++    FORCE ("-force"),
+     ROLLBACK("-rollback"),
+     FINALIZE("-finalize"),
+     IMPORT  ("-importCheckpoint");
+     
++    // Used only with recovery option
++    private int force = MetaRecoveryContext.FORCE_NONE;
++
+     private String name = null;
+     private StartupOption(String arg) {this.name = arg;}
+     public String getName() {return name;}
++
++    public MetaRecoveryContext createRecoveryContext() {
++      if (!name.equals(RECOVER.name))
++        return null;
++      return new MetaRecoveryContext(force);
++    }
++
++    public void setForce(int force) {
++      this.force = force;
++    }
++    
++    public int getForce() {
++      return this.force;
++    }
+   }
+ 
+   // Timeouts for communicating with DataNode for streaming writes/reads
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+index f18ed8d..442175b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+@@ -538,7 +538,8 @@ public class FSEditLog {
+    * This is where we apply edits that we've been writing to disk all
+    * along.
+    */
+-  static int loadFSEdits(EditLogInputStream edits) throws IOException {
++  static int loadFSEdits(EditLogInputStream edits,
++      MetaRecoveryContext recovery) throws IOException {
+     FSNamesystem fsNamesys = FSNamesystem.getFSNamesystem();
+     FSDirectory fsDir = fsNamesys.dir;
+     int numEdits = 0;
+@@ -596,7 +597,8 @@ public class FSEditLog {
+           opcode = in.readByte();
+           if (opcode == OP_INVALID) {
+             FSNamesystem.LOG.info("Invalid opcode, reached end of edit log " +
+-                                   "Number of transactions found " + numEdits);
++                       "Number of transactions found: " + numEdits + ".  " +
++                       "Bytes read: " + tracker.getPos());
+             break; // no more transactions
+           }
+         } catch (EOFException e) {
+@@ -927,8 +929,8 @@ public class FSEditLog {
+         }
+       }
+       String errorMessage = sb.toString();
+-      FSImage.LOG.error(errorMessage);
+-      throw new IOException(errorMessage, t);
++      FSImage.LOG.error(errorMessage, t);
++      MetaRecoveryContext.editLogLoaderPrompt(errorMessage, recovery);
+     } finally {
+       in.close();
+     }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+index d442c47..241bd2e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+@@ -374,14 +374,15 @@ public class FSImage extends Storage {
+     case REGULAR:
+       // just load the image
+     }
+-    return loadFSImage();
++    return loadFSImage(startOpt.createRecoveryContext());
+   }
+ 
+   private void doUpgrade() throws IOException {
++    MetaRecoveryContext recovery = null;
+     if(getDistributedUpgradeState()) {
+       // only distributed upgrade need to continue
+       // don't do version upgrade
+-      this.loadFSImage();
++      this.loadFSImage(recovery);
+       initializeDistributedUpgrade();
+       return;
+     }
+@@ -397,7 +398,7 @@ public class FSImage extends Storage {
+     }
+ 
+     // load the latest image
+-    this.loadFSImage();
++    this.loadFSImage(recovery);
+ 
+     // Do upgrade for each directory
+     long oldCTime = this.getCTime();
+@@ -746,7 +747,7 @@ public class FSImage extends Storage {
+    * @return whether the image should be saved
+    * @throws IOException
+    */
+-  boolean loadFSImage() throws IOException {
++  boolean loadFSImage(MetaRecoveryContext recovery) throws IOException {
+     // Now check all curFiles and see which is the newest
+     long latestNameCheckpointTime = Long.MIN_VALUE;
+     long latestEditsCheckpointTime = Long.MIN_VALUE;
+@@ -841,7 +842,7 @@ public class FSImage extends Storage {
+       // the image is already current, discard edits
+       needToSave |= true;
+     else // latestNameCheckpointTime == latestEditsCheckpointTime
+-      needToSave |= (loadFSEdits(latestEditsSD) > 0);
++      needToSave |= (loadFSEdits(latestEditsSD, recovery) > 0);
+     
+     return needToSave;
+   }
+@@ -1026,16 +1027,17 @@ public class FSImage extends Storage {
+    * @return number of edits loaded
+    * @throws IOException
+    */
+-  int loadFSEdits(StorageDirectory sd) throws IOException {
++  int loadFSEdits(StorageDirectory sd, MetaRecoveryContext recovery)
++      throws IOException {
+     int numEdits = 0;
+     EditLogFileInputStream edits = 
+       new EditLogFileInputStream(getImageFile(sd, NameNodeFile.EDITS));
+-    numEdits = FSEditLog.loadFSEdits(edits);
++    numEdits = FSEditLog.loadFSEdits(edits, recovery);
+     edits.close();
+     File editsNew = getImageFile(sd, NameNodeFile.EDITS_NEW);
+     if (editsNew.exists() && editsNew.length() > 0) {
+       edits = new EditLogFileInputStream(editsNew);
+-      numEdits += FSEditLog.loadFSEdits(edits);
++      numEdits += FSEditLog.loadFSEdits(edits, recovery);
+       edits.close();
+     }
+     // update the counts.
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 341fbc9..632a5fc 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -333,9 +333,15 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+   FSNamesystem(NameNode nn, Configuration conf) throws IOException {
+     try {
+       initialize(nn, conf);
+-    } catch(IOException e) {
++    } catch (IOException e) {
+       LOG.error(getClass().getSimpleName() + " initialization failed.", e);
+       close();
++      shutdown();
++      throw e;
++    } catch (RuntimeException e) {
++      LOG.error(getClass().getSimpleName() + " initialization failed.", e);
++      close();
++      shutdown();
+       throw e;
+     }
+   }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/MetaRecoveryContext.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/MetaRecoveryContext.java
+new file mode 100644
+index 0000000..8fad5e4
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/MetaRecoveryContext.java
+@@ -0,0 +1,100 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs.server.namenode;
++
++import java.io.IOException;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++/** Context data for an ongoing NameNode recovery process. */
++public final class MetaRecoveryContext  {
++  public static final Log LOG = LogFactory.getLog(MetaRecoveryContext.class.getName());
++  private int force;
++  public static final int FORCE_NONE = 0;
++  public static final int FORCE_FIRST_CHOICE = 1;
++  public static final int FORCE_ALL = 2;
++
++  public MetaRecoveryContext(int force) {
++    this.force = force;
++  }
++  /** Display a prompt to the user and get his or her choice.
++   *  
++   * @param prompt      The prompt to display
++   * @param c1          Choice 1
++   * @param choices     Other choies
++   *
++   * @return            The choice that was taken
++   * @throws IOException
++   */
++  public String ask(String prompt, String firstChoice, String... choices) 
++      throws IOException {
++    while (true) {
++      LOG.error(prompt);
++      if (force > FORCE_NONE) {
++        LOG.info("Automatically choosing " + firstChoice);
++        return firstChoice;
++      }
++      StringBuilder responseBuilder = new StringBuilder();
++      while (true) {
++        int c = System.in.read();
++        if (c == -1 || c == '\r' || c == '\n') {
++          break;
++        }
++        responseBuilder.append((char)c);
++      }
++      String response = responseBuilder.toString();
++      if (response.equalsIgnoreCase(firstChoice)) {
++        return firstChoice;
++      }
++      for (String c : choices) {
++        if (response.equalsIgnoreCase(c)) {
++          return c;
++        }
++      }
++      LOG.error("I'm sorry, I cannot understand your response.\n");
++    }
++  }
++  /** Log a message and quit */
++  public void quit() {
++    LOG.error("Exiting on user request.");
++    System.exit(0);
++  }
++
++  static public void editLogLoaderPrompt(String prompt,
++      MetaRecoveryContext recovery) throws IOException
++  {
++    if (recovery == null) {
++      throw new IOException(prompt);
++    }
++    LOG.error(prompt);
++    String answer = recovery.ask(
++      "\nEnter 's' to stop reading the edit log here, abandoning any later " +
++        "edits.\n" +
++      "Enter 'q' to quit without saving.\n" +
++      "(s/q)", "s", "q");
++    if (answer.equals("s")) {
++      LOG.error("We will stop reading the edits log here.  "
++          + "NOTE: Some edits have been lost!");
++      return;
++    } else if (answer.equals("q")) {
++      recovery.quit();
++    }
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 82c95db..bf5d000 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -446,6 +446,8 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+    * <li>{@link StartupOption#REGULAR REGULAR} - normal name node startup</li>
+    * <li>{@link StartupOption#FORMAT FORMAT} - format name node</li>
+    * <li>{@link StartupOption#UPGRADE UPGRADE} - start the cluster  
++   * <li>{@link StartupOption#RECOVER RECOVER} - recover name node
++   * metadata</li>
+    * upgrade and create a snapshot of the current file system state</li> 
+    * <li>{@link StartupOption#ROLLBACK ROLLBACK} - roll the  
+    *            cluster back to the previous state</li>
+@@ -1193,7 +1195,9 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+       StartupOption.UPGRADE.getName() + "] | [" +
+       StartupOption.ROLLBACK.getName() + "] | [" +
+       StartupOption.FINALIZE.getName() + "] | [" +
+-      StartupOption.IMPORT.getName() + "]");
++      StartupOption.IMPORT.getName() + "] | [" + 
++      StartupOption.RECOVER.getName() +
++        " [ " + StartupOption.FORCE.getName() + " ] ]");
+   }
+ 
+   private static StartupOption parseArguments(String args[]) {
+@@ -1207,6 +1211,21 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+         startOpt = StartupOption.REGULAR;
+       } else if (StartupOption.UPGRADE.getName().equalsIgnoreCase(cmd)) {
+         startOpt = StartupOption.UPGRADE;
++      } else if (StartupOption.RECOVER.getName().equalsIgnoreCase(cmd)) {
++        if (startOpt != StartupOption.REGULAR) {
++          throw new RuntimeException("Can't combine -recover with " +
++              "other startup options.");
++        }
++        startOpt = StartupOption.RECOVER;
++        while (++i < argsLen) {
++          if (args[i].equalsIgnoreCase(
++                StartupOption.FORCE.getName())) {
++            startOpt.setForce(MetaRecoveryContext.FORCE_FIRST_CHOICE);
++          } else {
++            throw new RuntimeException("Error parsing recovery options: " + 
++              "can't understand option \"" + args[i] + "\"");
++          }
++        }
+       } else if (StartupOption.ROLLBACK.getName().equalsIgnoreCase(cmd)) {
+         startOpt = StartupOption.ROLLBACK;
+       } else if (StartupOption.FINALIZE.getName().equalsIgnoreCase(cmd)) {
+@@ -1228,6 +1247,63 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+                                           StartupOption.REGULAR.toString()));
+   }
+ 
++  private static void doRecovery(StartupOption startOpt, Configuration conf)
++              throws IOException {
++    if (startOpt.getForce() < MetaRecoveryContext.FORCE_ALL) {
++      if (!confirmPrompt("You have selected Metadata Recovery mode.  " +
++          "This mode is intended to recover lost metadata on a corrupt " +
++          "filesystem.  Metadata recovery mode often permanently deletes " +
++          "data from your HDFS filesystem.  Please back up your edit log " +
++          "and image before trying this!\n\n" +
++          "Are you ready to proceed? (Y/N)\n")) {
++        System.err.println("Recovery aborted at user request.\n");
++        return;
++      }
++    }
++    MetaRecoveryContext.LOG.info("starting recovery...");
++    Collection<File> namespaceDirs = FSNamesystem.getNamespaceDirs(conf);
++    Collection<File> editDirs = 
++                 FSNamesystem.getNamespaceEditsDirs(conf);
++    FSNamesystem fsn = null;
++    try {
++      fsn = new FSNamesystem(new FSImage(namespaceDirs, editDirs), conf);
++      fsn.dir.fsImage.loadFSImage(startOpt.createRecoveryContext());
++      fsn.dir.fsImage.saveNamespace(true);
++      MetaRecoveryContext.LOG.info("RECOVERY COMPLETE");
++    } finally {
++      if (fsn != null)
++        fsn.close();
++    }
++  }
++  
++  /**
++   * Print out a prompt to the user, and return true if the user
++   * responds with "Y" or "yes".
++   */
++  static boolean confirmPrompt(String prompt) throws IOException {
++    while (true) {
++      System.err.print(prompt + " (Y or N) ");
++      StringBuilder responseBuilder = new StringBuilder();
++      while (true) {
++        int c = System.in.read();
++        if (c == -1 || c == '\r' || c == '\n') {
++          break;
++        }
++        responseBuilder.append((char)c);
++      }
++
++      String response = responseBuilder.toString();
++      if (response.equalsIgnoreCase("y") ||
++          response.equalsIgnoreCase("yes")) {
++        return true;
++      } else if (response.equalsIgnoreCase("n") ||
++          response.equalsIgnoreCase("no")) {
++        return false;
++      }
++      // else ask them again
++    }
++  }
++
+   public static NameNode createNameNode(String argv[], 
+                                  Configuration conf) throws IOException {
+     if (conf == null)
+@@ -1246,6 +1322,9 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+       case FINALIZE:
+         aborted = finalize(conf, true);
+         System.exit(aborted ? 1 : 0);
++      case RECOVER:
++        NameNode.doRecovery(startOpt, conf);
++        return null;
+       default:
+     }
+     NameNode namenode = new NameNode(conf);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index 266761a..192910d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -726,7 +726,7 @@ public class SecondaryNameNode implements Runnable {
+       if ((sdName == null) || (sdEdits == null))
+         throw new IOException("Could not locate checkpoint directories");
+       loadFSImage(FSImage.getImageFile(sdName, NameNodeFile.IMAGE));
+-      loadFSEdits(sdEdits);
++      loadFSEdits(sdEdits, null);
+       sig.validateStorageInfo(this);
+       saveNamespace(false);
+     }
+diff --git a/src/test/findbugsExcludeFile.xml b/src/test/findbugsExcludeFile.xml
+index f2dbf60..26c62d9 100644
+--- a/src/test/findbugsExcludeFile.xml
++++ b/src/test/findbugsExcludeFile.xml
+@@ -126,4 +126,10 @@
+        <Class name="org.apache.hadoop.mapred.Child" />
+        <Bug pattern="DM_EXIT" />
+      </Match>
++     <!-- Don't complain about System.exit() being called from quit() -->
++     <Match>
++       <Class name="org.apache.hadoop.hdfs.server.namenode.MetaRecoveryContext" />
++       <Method name="quit" />
++       <Bug pattern="DM_EXIT" />
++     </Match>
+ </FindBugsFilter>
+diff --git a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+index 052a194..cecc4ae 100644
+--- a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
++++ b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+@@ -277,6 +277,9 @@ public class MiniDFSCluster {
+                    StaticMapping.class, DNSToSwitchMapping.class);
+     nameNode = NameNode.createNameNode(args, conf);
+     
++    if (operation == StartupOption.RECOVER) {
++      return;
++    }
+     // Start the DataNodes
+     startDataNodes(conf, numDataNodes, manageDataDfsDirs, 
+                     operation, racks, hosts, simulatedCapacities);
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLog.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLog.java
+index c1780d4..6bd631a 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLog.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLog.java
+@@ -145,7 +145,8 @@ public class TestEditLog extends TestCase {
+             fsimage.dirIterator(NameNodeDirType.EDITS); it.hasNext();) {
+       File editFile = FSImage.getImageFile(it.next(), NameNodeFile.EDITS);
+       System.out.println("Verifying file: " + editFile);
+-      int numEdits = FSEditLog.loadFSEdits(new EditLogFileInputStream(editFile));
++      int numEdits = FSEditLog.loadFSEdits(
++          new EditLogFileInputStream(editFile), null);
+       int numLeases = FSNamesystem.getFSNamesystem().leaseManager.countLease();
+       System.out.println("Number of outstanding leases " + numLeases);
+       assertEquals(0, numLeases);
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogRace.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogRace.java
+index 8eac337..574170d 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogRace.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogRace.java
+@@ -223,7 +223,7 @@ public class TestEditLogRace extends TestCase {
+       File editFile = FSImage.getImageFile(it.next(), NameNodeFile.EDITS);
+       System.out.println("Verifying file: " + editFile);
+       int numEdits = FSEditLog.loadFSEdits(
+-        new FSEditLog.EditLogFileInputStream(editFile));
++        new FSEditLog.EditLogFileInputStream(editFile), null);
+       System.out.println("Number of edits: " + numEdits);
+     }
+   }
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeRecovery.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeRecovery.java
+new file mode 100644
+index 0000000..066a498
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeRecovery.java
+@@ -0,0 +1,124 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs.server.namenode;
++
++import java.io.File;
++import java.io.IOException;
++import java.io.PrintWriter;
++import java.io.RandomAccessFile;
++import java.util.List;
++
++import static org.junit.Assert.*;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.hdfs.server.common.HdfsConstants.StartupOption;
++import org.apache.hadoop.hdfs.server.namenode.FSImage.NameNodeFile;
++import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
++import org.apache.hadoop.util.StringUtils;
++import org.junit.Test;
++
++/**
++ * This tests data recovery mode for the NameNode.
++ */
++public class TestNameNodeRecovery {
++  private static final Log LOG = LogFactory.getLog(TestNameNodeRecovery.class);
++  private static StartupOption recoverStartOpt = StartupOption.RECOVER;
++
++  static {
++    recoverStartOpt.setForce(MetaRecoveryContext.FORCE_ALL);
++  }
++
++  /** Test that we can successfully recover from a situation where the last
++   * entry in the edit log has been truncated. */
++  @Test(timeout=180000)
++  public void testRecoverTruncatedEditLog() throws IOException {
++    final String TEST_PATH = "/test/path/dir";
++    final String TEST_PATH2 = "/alt/test/path";
++
++    // Start up the mini dfs cluster
++    Configuration conf = new Configuration();
++    MiniDFSCluster cluster;
++    cluster = new MiniDFSCluster(0, conf, 0, true, true, false,
++        StartupOption.FORMAT, null, null, null);
++    cluster.waitActive();
++    FileSystem fileSys = cluster.getFileSystem();
++    fileSys.mkdirs(new Path(TEST_PATH));
++    fileSys.mkdirs(new Path(TEST_PATH2));
++
++    List<File> nameEditsDirs =
++        (List<File>)FSNamesystem.getNamespaceEditsDirs(conf);
++    cluster.shutdown();
++
++    File dir = nameEditsDirs.get(0); //has only one
++    File editFile = new File(new File(dir, "current"),
++        NameNodeFile.EDITS.getName());
++    assertTrue("Should exist: " + editFile, editFile.exists());
++
++    // Corrupt the last edit
++    long fileLen = editFile.length();
++    RandomAccessFile rwf = new RandomAccessFile(editFile, "rw");
++    rwf.setLength(fileLen - 1);
++    rwf.close();
++
++    // Make sure that we can't start the cluster normally before recovery
++    try {
++      LOG.debug("trying to start normally (this should fail)...");
++      cluster = new MiniDFSCluster(0, conf, 0, false, true, false,
++          StartupOption.REGULAR, null, null, null);
++      cluster.waitActive();
++      fail("expected the truncated edit log to prevent normal startup");
++    } catch (IOException e) {
++    } finally {
++      cluster.shutdown();
++    }
++
++    // Perform recovery
++    try {
++      LOG.debug("running recovery...");
++      cluster = new MiniDFSCluster(0, conf, 0, false, true, false,
++          StartupOption.RECOVER, null, null, null);
++      cluster.waitActive();
++    } catch (IOException e) {
++      fail("caught IOException while trying to recover. " +
++          "message was " + e.getMessage() +
++          "\nstack trace\n" + StringUtils.stringifyException(e));
++    } finally {
++      cluster.shutdown();
++    }
++
++    // Make sure that we can start the cluster normally after recovery
++    try {
++      cluster = new MiniDFSCluster(0, conf, 0, false, true, false,
++          StartupOption.REGULAR, null, null, null);
++      cluster.waitActive();
++      assertTrue(cluster.getFileSystem().exists(new Path(TEST_PATH)));
++    } catch (IOException e) {
++      fail("failed to recover.  Error message: " + e.getMessage());
++    } finally {
++      cluster.shutdown();
++    }
++    LOG.debug("testRecoverTruncatedEditLog: successfully recovered the " +
++        "truncated edit log");
++  }
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestSecurityTokenEditLog.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestSecurityTokenEditLog.java
+index 9867f72..3948056 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestSecurityTokenEditLog.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestSecurityTokenEditLog.java
+@@ -141,7 +141,7 @@ public class TestSecurityTokenEditLog extends TestCase {
+         File editFile = FSImage.getImageFile(it.next(), NameNodeFile.EDITS);
+         System.out.println("Verifying file: " + editFile);
+         int numEdits = FSEditLog.loadFSEdits(
+-                                  new EditLogFileInputStream(editFile));
++                                  new EditLogFileInputStream(editFile), null);
+         assertTrue("Verification for " + editFile + " failed. " +
+                    "Expected " + (NUM_THREADS * opsPerTrans * NUM_TRANSACTIONS + numKeys) + " transactions. "+
+                    "Found " + numEdits + " transactions.",
+-- 
+1.7.0.4
+

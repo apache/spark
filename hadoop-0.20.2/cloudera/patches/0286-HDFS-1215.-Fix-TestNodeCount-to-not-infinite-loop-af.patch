@@ -1,0 +1,194 @@
+From 7f0d67fa52b9c58360b06e851bf77bc2f909f65f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 5 May 2010 14:43:40 -0700
+Subject: [PATCH 0286/1179] HDFS-1215. Fix TestNodeCount to not infinite loop after HDFS-409 MiniCluster changes
+
+Description: Fixes a test to work properly after some test infrastructure
+             was changed by HDFS-142 in branch-0.20-append.
+Reason: Fixes failing test.
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ .../org/apache/hadoop/hdfs/MiniDFSCluster.java     |   20 ++++++-
+ .../hadoop/hdfs/server/namenode/TestNodeCount.java |   65 ++++++++++++++-----
+ 2 files changed, 66 insertions(+), 19 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+index e2870aa..e7735d5 100644
+--- a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
++++ b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+@@ -715,6 +715,14 @@ public class MiniDFSCluster {
+    * Wait until the cluster is active and running.
+    */
+   public void waitActive() throws IOException {
++    waitActive(true);
++  }
++
++  /**
++   * Wait until the cluster is active.
++   * @param waitHeartbeats if true, will wait until all DNs have heartbeat
++   */
++  public void waitActive(boolean waitHeartbeats) throws IOException {
+     if (nameNode == null) {
+       return;
+     }
+@@ -723,7 +731,8 @@ public class MiniDFSCluster {
+     DFSClient client = new DFSClient(addr, conf);
+ 
+     // make sure all datanodes are alive and sent heartbeat
+-    while (shouldWait(client.datanodeReport(DatanodeReportType.LIVE))) {
++    while (shouldWait(client.datanodeReport(DatanodeReportType.LIVE),
++                      waitHeartbeats)) {
+       try {
+         Thread.sleep(100);
+       } catch (InterruptedException e) {
+@@ -733,10 +742,17 @@ public class MiniDFSCluster {
+     client.close();
+   }
+ 
+-  private synchronized boolean shouldWait(DatanodeInfo[] dnInfo) {
++  private synchronized boolean shouldWait(DatanodeInfo[] dnInfo,
++                                          boolean waitHeartbeats) {
+     if (dnInfo.length != numDataNodes) {
+       return true;
+     }
++
++    // If we don't need heartbeats, we're done.
++    if (!waitHeartbeats) {
++      return false;
++    }
++
+     // make sure all datanodes have sent first heartbeat to namenode,
+     // using (capacity == 0) as proxy.
+     for (DatanodeInfo dn : dnInfo) {
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestNodeCount.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNodeCount.java
+index 89866e7..347a50a 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestNodeCount.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNodeCount.java
+@@ -3,6 +3,8 @@ package org.apache.hadoop.hdfs.server.namenode;
+ import java.util.Collection;
+ import java.util.Iterator;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+@@ -19,6 +21,8 @@ import junit.framework.TestCase;
+  * so NN makes right decision for under/over-replicated blocks
+  */
+ public class TestNodeCount extends TestCase {
++  static final Log LOG = LogFactory.getLog(TestNodeCount.class);
++
+   public void testNodeCount() throws Exception {
+     // start a mini dfs cluster of 2 nodes
+     final Configuration conf = new Configuration();
+@@ -41,8 +45,9 @@ public class TestNodeCount extends TestCase {
+       
+       // start two new nodes
+       cluster.startDataNodes(conf, 2, true, null, null);
+-      cluster.waitActive();
++      cluster.waitActive(false);
+       
++      LOG.info("Bringing down first DN");
+       // bring down first datanode
+       DatanodeDescriptor datanode = datanodes[0];
+       DataNodeProperties dnprop = cluster.stopDataNode(datanode.getName());
+@@ -51,21 +56,22 @@ public class TestNodeCount extends TestCase {
+         datanode.setLastUpdate(0); // mark it dead
+         namesystem.heartbeatCheck();
+       }
++
++      LOG.info("Waiting for block to be replicated");
+       // the block will be replicated
+       DFSTestUtil.waitReplication(fs, FILE_PATH, REPLICATION_FACTOR);
+ 
++      LOG.info("Restarting first datanode");
+       // restart the first datanode
+       cluster.restartDataNode(dnprop);
+-      cluster.waitActive();
+-      
++      cluster.waitActive(false);
++
++      LOG.info("Waiting for excess replicas to be detected");
++
+       // check if excessive replica is detected
+-      NumberReplicas num = null;
+-      do {
+-       synchronized (namesystem) {
+-         num = namesystem.countNodes(block);
+-       }
+-      } while (num.excessReplicas() == 0);
+-      
++      waitForExcessReplicasToChange(namesystem, block, 0);
++
++      LOG.info("Finding a non-excess node");
+       // find out a non-excess node
+       Iterator<DatanodeDescriptor> iter = namesystem.blocksMap.nodeIterator(block);
+       DatanodeDescriptor nonExcessDN = null;
+@@ -78,7 +84,8 @@ public class TestNodeCount extends TestCase {
+         }
+       }
+       assertTrue(nonExcessDN!=null);
+-      
++
++      LOG.info("Stopping non-excess node: " + nonExcessDN);
+       // bring down non excessive datanode
+       dnprop = cluster.stopDataNode(nonExcessDN.getName());
+       // make sure that NN detects that the datanode is down
+@@ -86,22 +93,46 @@ public class TestNodeCount extends TestCase {
+         nonExcessDN.setLastUpdate(0); // mark it dead
+         namesystem.heartbeatCheck();
+       }
+-      
++
++      LOG.info("Waiting for live replicas to hit repl factor");
+       // The block should be replicated
++      NumberReplicas num;
+       do {
+         num = namesystem.countNodes(block);
+       } while (num.liveReplicas() != REPLICATION_FACTOR);
+       
++      LOG.info("Restarting first DN");
+       // restart the first datanode
+       cluster.restartDataNode(dnprop);
+-      cluster.waitActive();
+-      
++      cluster.waitActive(false);
++
++      LOG.info("Waiting for excess replicas to be detected");
+       // check if excessive replica is detected
+-      do {
+-       num = namesystem.countNodes(block);
+-      } while (num.excessReplicas() == 2);
++      waitForExcessReplicasToChange(namesystem, block, 2);
+     } finally {
+       cluster.shutdown();
+     }
+   }
++
++  private void waitForExcessReplicasToChange(
++    FSNamesystem namesystem,
++    Block block,
++    int oldReplicas) throws Exception
++  {
++    NumberReplicas num;
++    long startChecking = System.currentTimeMillis();
++    do {
++      synchronized (namesystem) {
++        num = namesystem.countNodes(block);
++      }
++      Thread.sleep(100);
++      if (System.currentTimeMillis() - startChecking > 30000) {
++        namesystem.metaSave("TestNodeCount.meta");
++        LOG.warn("Dumping meta into log directory");
++        fail("Timed out waiting for excess replicas to change");
++      }
++
++    } while (num.excessReplicas() == oldReplicas);
++  }
++    
+ }
+-- 
+1.7.0.4
+

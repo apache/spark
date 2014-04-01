@@ -1,0 +1,417 @@
+From 43f756d9569ac009dbae2c84064b29e8163aaa19 Mon Sep 17 00:00:00 2001
+From: Andrew Bayer <andrew.bayer@gmail.com>
+Date: Thu, 3 Mar 2011 11:41:36 -0800
+Subject: [PATCH 0900/1179] CLOUDERA-BUILD. DISTRO-109 - Use original jars as Maven artifacts rather than exploding/rebuilding.
+
+---
+ cloudera/maven-packaging/hadoop-core/pom.xml      |   42 ++++++++------------
+ cloudera/maven-packaging/hadoop-examples/pom.xml  |   41 ++++++++------------
+ cloudera/maven-packaging/hadoop-mrunit/pom.xml    |   43 ++++++++------------
+ cloudera/maven-packaging/hadoop-streaming/pom.xml |   41 ++++++++------------
+ cloudera/maven-packaging/hadoop-test/pom.xml      |   41 ++++++++------------
+ cloudera/maven-packaging/hadoop-tools/pom.xml     |   41 ++++++++------------
+ 6 files changed, 97 insertions(+), 152 deletions(-)
+
+diff --git a/cloudera/maven-packaging/hadoop-core/pom.xml b/cloudera/maven-packaging/hadoop-core/pom.xml
+index 46bc4a4..4e83adf 100644
+--- a/cloudera/maven-packaging/hadoop-core/pom.xml
++++ b/cloudera/maven-packaging/hadoop-core/pom.xml
+@@ -30,7 +30,7 @@
+   <groupId>org.apache.hadoop</groupId>
+   <artifactId>hadoop-core</artifactId>
+   <version>0.20.2-cdh3u0-SNAPSHOT</version>
+-  <packaging>jar</packaging>
++  <packaging>pom</packaging>
+   
+   <name>hadoop-core</name>
+   
+@@ -166,6 +166,21 @@
+               </sources>
+             </configuration>
+           </execution>
++          <execution>
++            <id>add-jar</id>
++            <phase>package</phase>
++            <goals>
++              <goal>attach-artifact</goal>
++            </goals>
++            <configuration>
++              <artifacts>
++                <artifact>
++                  <file>${basedir}/../../../build/hadoop-core-${project.version}.jar</file>
++                  <type>jar</type>
++                </artifact>
++              </artifacts>
++            </configuration>
++          </execution>
+         </executions>
+       </plugin>
+       <plugin>
+@@ -188,31 +203,6 @@
+           </excludes>
+         </configuration>
+       </plugin>
+-      <plugin>
+-        <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-antrun-plugin</artifactId>
+-        <inherited>false</inherited>
+-        <executions>
+-          <execution>
+-            <id>compile</id>
+-            <configuration>
+-              <target>
+-                <copy todir="${basedir}/target">
+-                  <fileset dir="${basedir}/../../../build" includes="hadoop-core-${project.version}.jar" />
+-                </copy>
+-                <unzip dest="${basedir}/target/classes">
+-                  <fileset dir="${basedir}/target" includes="hadoop-core-${project.version}.jar" />
+-                </unzip>
+-              </target>
+-            </configuration>
+-            <goals>
+-              <goal>run</goal>
+-            </goals>
+-            <phase>compile</phase>
+-          </execution>
+-        </executions>
+-      </plugin>
+-      
+     </plugins>
+   </build>
+   
+diff --git a/cloudera/maven-packaging/hadoop-examples/pom.xml b/cloudera/maven-packaging/hadoop-examples/pom.xml
+index 5068aa2..6706667 100644
+--- a/cloudera/maven-packaging/hadoop-examples/pom.xml
++++ b/cloudera/maven-packaging/hadoop-examples/pom.xml
+@@ -31,7 +31,7 @@
+   <groupId>org.apache.hadoop</groupId>
+   <artifactId>hadoop-examples</artifactId>
+   <version>0.20.2-cdh3u0-SNAPSHOT</version>
+-  <packaging>jar</packaging>
++  <packaging>pom</packaging>
+   
+   <name>hadoop-examples</name>
+   
+@@ -66,6 +66,21 @@
+               </sources>
+             </configuration>
+           </execution>
++          <execution>
++            <id>add-jar</id>
++            <phase>package</phase>
++            <goals>
++              <goal>attach-artifact</goal>
++            </goals>
++            <configuration>
++              <artifacts>
++                <artifact>
++                  <file>${basedir}/../../../build/hadoop-examples-${project.version}.jar</file>
++                  <type>jar</type>
++                </artifact>
++              </artifacts>
++            </configuration>
++          </execution>
+         </executions>
+       </plugin>
+       <plugin>
+@@ -87,30 +102,6 @@
+         </configuration>
+       </plugin>
+ 
+-      <plugin>
+-        <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-antrun-plugin</artifactId>
+-        <inherited>false</inherited>
+-        <executions>
+-          <execution>
+-            <id>compile</id>
+-            <configuration>
+-              <target>
+-                <copy todir="${basedir}/target">
+-                  <fileset dir="${basedir}/../../../build" includes="hadoop-examples-${project.version}.jar" />
+-                </copy>
+-                <unzip dest="${basedir}/target/classes">
+-                  <fileset dir="${basedir}/target" includes="hadoop-examples-${project.version}.jar" />
+-                </unzip>
+-              </target>
+-            </configuration>
+-            <goals>
+-              <goal>run</goal>
+-            </goals>
+-            <phase>compile</phase>
+-          </execution>
+-        </executions>
+-      </plugin>
+     </plugins>
+   </build>
+   
+diff --git a/cloudera/maven-packaging/hadoop-mrunit/pom.xml b/cloudera/maven-packaging/hadoop-mrunit/pom.xml
+index 61ae852..aa46f65 100644
+--- a/cloudera/maven-packaging/hadoop-mrunit/pom.xml
++++ b/cloudera/maven-packaging/hadoop-mrunit/pom.xml
+@@ -31,9 +31,9 @@
+   <groupId>org.apache.hadoop</groupId>
+   <artifactId>hadoop-mrunit</artifactId>
+   <version>0.20.2-cdh3u0-SNAPSHOT</version>
+-  <packaging>jar</packaging>
++  <packaging>pom</packaging>
+   
+-  <name>hadoop-streaming</name>
++  <name>hadoop-mrunit</name>
+   
+   <dependencies>
+     <dependency>
+@@ -66,6 +66,21 @@
+               </sources>
+             </configuration>
+           </execution>
++          <execution>
++            <id>add-jar</id>
++            <phase>package</phase>
++            <goals>
++              <goal>attach-artifact</goal>
++            </goals>
++            <configuration>
++              <artifacts>
++                <artifact>
++                  <file>${basedir}/../../../build/contrib/mrunit/hadoop-mrunit-${project.version}.jar</file>
++                  <type>jar</type>
++                </artifact>
++              </artifacts>
++            </configuration>
++          </execution>
+         </executions>
+       </plugin>
+       <plugin>
+@@ -87,30 +102,6 @@
+         </configuration>
+       </plugin>
+ 
+-      <plugin>
+-        <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-antrun-plugin</artifactId>
+-        <inherited>false</inherited>
+-        <executions>
+-          <execution>
+-            <id>compile</id>
+-            <configuration>
+-              <target>
+-                <copy todir="${basedir}/target">
+-                  <fileset dir="${basedir}/../../../build/contrib/mrunit" includes="hadoop-mrunit-${project.version}.jar" />
+-                </copy>
+-                <unzip dest="${basedir}/target/classes">
+-                  <fileset dir="${basedir}/target" includes="hadoop-mrunit-${project.version}.jar" />
+-                </unzip>
+-              </target>
+-            </configuration>
+-            <goals>
+-              <goal>run</goal>
+-            </goals>
+-            <phase>compile</phase>
+-          </execution>
+-        </executions>
+-      </plugin>
+     </plugins>
+   </build>
+   
+diff --git a/cloudera/maven-packaging/hadoop-streaming/pom.xml b/cloudera/maven-packaging/hadoop-streaming/pom.xml
+index f12f904..4d1c5dc 100644
+--- a/cloudera/maven-packaging/hadoop-streaming/pom.xml
++++ b/cloudera/maven-packaging/hadoop-streaming/pom.xml
+@@ -31,7 +31,7 @@
+   <groupId>org.apache.hadoop</groupId>
+   <artifactId>hadoop-streaming</artifactId>
+   <version>0.20.2-cdh3u0-SNAPSHOT</version>
+-  <packaging>jar</packaging>
++  <packaging>pom</packaging>
+   
+   <name>hadoop-streaming</name>
+   
+@@ -66,6 +66,21 @@
+               </sources>
+             </configuration>
+           </execution>
++          <execution>
++            <id>add-jar</id>
++            <phase>package</phase>
++            <goals>
++              <goal>attach-artifact</goal>
++            </goals>
++            <configuration>
++              <artifacts>
++                <artifact>
++                  <file>${basedir}/../../../build/contrib/streaming/hadoop-streaming-${project.version}.jar</file>
++                  <type>jar</type>
++                </artifact>
++              </artifacts>
++            </configuration>
++          </execution>
+         </executions>
+       </plugin>
+       <plugin>
+@@ -87,30 +102,6 @@
+         </configuration>
+       </plugin>
+ 
+-      <plugin>
+-        <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-antrun-plugin</artifactId>
+-        <inherited>false</inherited>
+-        <executions>
+-          <execution>
+-            <id>compile</id>
+-            <configuration>
+-              <target>
+-                <copy todir="${basedir}/target">
+-                  <fileset dir="${basedir}/../../../build/contrib/streaming" includes="hadoop-streaming-${project.version}.jar" />
+-                </copy>
+-                <unzip dest="${basedir}/target/classes">
+-                  <fileset dir="${basedir}/target" includes="hadoop-streaming-${project.version}.jar" />
+-                </unzip>
+-              </target>
+-            </configuration>
+-            <goals>
+-              <goal>run</goal>
+-            </goals>
+-            <phase>compile</phase>
+-          </execution>
+-        </executions>
+-      </plugin>
+     </plugins>
+   </build>
+   
+diff --git a/cloudera/maven-packaging/hadoop-test/pom.xml b/cloudera/maven-packaging/hadoop-test/pom.xml
+index d2e858c..51cc767 100644
+--- a/cloudera/maven-packaging/hadoop-test/pom.xml
++++ b/cloudera/maven-packaging/hadoop-test/pom.xml
+@@ -30,7 +30,7 @@
+   
+   <groupId>org.apache.hadoop</groupId>
+   <artifactId>hadoop-test</artifactId>
+-  <packaging>jar</packaging>
++  <packaging>pom</packaging>
+   <version>0.20.2-cdh3u0-SNAPSHOT</version>
+   
+   <name>hadoop-test</name>
+@@ -83,6 +83,21 @@
+               </sources>
+             </configuration>
+           </execution>
++          <execution>
++            <id>add-jar</id>
++            <phase>package</phase>
++            <goals>
++              <goal>attach-artifact</goal>
++            </goals>
++            <configuration>
++              <artifacts>
++                <artifact>
++                  <file>${basedir}/../../../build/hadoop-test-${project.version}.jar</file>
++                  <type>jar</type>
++                </artifact>
++              </artifacts>
++            </configuration>
++          </execution>
+         </executions>
+       </plugin>
+       <plugin>
+@@ -104,30 +119,6 @@
+         </configuration>
+       </plugin>
+ 
+-      <plugin>
+-        <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-antrun-plugin</artifactId>
+-        <inherited>false</inherited>
+-        <executions>
+-          <execution>
+-            <id>compile</id>
+-            <configuration>
+-              <target>
+-                <copy todir="${basedir}/target">
+-                  <fileset dir="${basedir}/../../../build" includes="hadoop-test-${project.version}.jar" />
+-                </copy>
+-                <unzip dest="${basedir}/target/classes">
+-                  <fileset dir="${basedir}/target" includes="hadoop-test-${project.version}.jar" />
+-                </unzip>
+-              </target>
+-            </configuration>
+-            <goals>
+-              <goal>run</goal>
+-            </goals>
+-            <phase>compile</phase>
+-          </execution>
+-        </executions>
+-      </plugin>
+     </plugins>
+   </build>
+   
+diff --git a/cloudera/maven-packaging/hadoop-tools/pom.xml b/cloudera/maven-packaging/hadoop-tools/pom.xml
+index 1ada325..69550da 100644
+--- a/cloudera/maven-packaging/hadoop-tools/pom.xml
++++ b/cloudera/maven-packaging/hadoop-tools/pom.xml
+@@ -30,7 +30,7 @@
+   
+   <groupId>org.apache.hadoop</groupId>
+   <artifactId>hadoop-tools</artifactId>
+-  <packaging>jar</packaging>
++  <packaging>pom</packaging>
+   <version>0.20.2-cdh3u0-SNAPSHOT</version>
+   
+   <name>hadoop-tools</name>
+@@ -67,6 +67,21 @@
+               </sources>
+             </configuration>
+           </execution>
++          <execution>
++            <id>add-jar</id>
++            <phase>package</phase>
++            <goals>
++              <goal>attach-artifact</goal>
++            </goals>
++            <configuration>
++              <artifacts>
++                <artifact>
++                  <file>${basedir}/../../../build/hadoop-tools-${project.version}.jar</file>
++                  <type>jar</type>
++                </artifact>
++              </artifacts>
++            </configuration>
++          </execution>
+         </executions>
+       </plugin>
+       <plugin>
+@@ -88,30 +103,6 @@
+         </configuration>
+       </plugin>
+ 
+-      <plugin>
+-        <groupId>org.apache.maven.plugins</groupId>
+-        <artifactId>maven-antrun-plugin</artifactId>
+-        <inherited>false</inherited>
+-        <executions>
+-          <execution>
+-            <id>compile</id>
+-            <configuration>
+-              <target>
+-                <copy todir="${basedir}/target">
+-                  <fileset dir="${basedir}/../../../build" includes="hadoop-tools-${project.version}.jar" />
+-                </copy>
+-                <unzip dest="${basedir}/target/classes">
+-                  <fileset dir="${basedir}/target" includes="hadoop-tools-${project.version}.jar" />
+-                </unzip>
+-              </target>
+-            </configuration>
+-            <goals>
+-              <goal>run</goal>
+-            </goals>
+-            <phase>compile</phase>
+-          </execution>
+-        </executions>
+-      </plugin>
+     </plugins>
+   </build>
+   
+-- 
+1.7.0.4
+

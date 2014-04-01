@@ -1,0 +1,567 @@
+From 92d20469fe8cb4e1b6c9471b79f978c9543fd0c6 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Wed, 7 Mar 2012 17:22:19 -0800
+Subject: [PATCH 1154/1179] HDFS-3148. The client should be able to use multiple local interfaces for data transfer.
+
+Clients should also be able to utilize multiple local interfaces for
+outbound connections instead of always using the interface for the local
+hostname. This can be accomplished with a new configuration parameter
+(dfs.client.local.interfaces) that accepts a list of interfaces the
+client can bind it's socket to. Since the client already caches
+connections to DNs by default, choosing a local interface at random is a
+good policy. Users can also pin a specific client to a specific
+interface by specifying just that interface in
+dfs.client.local.interfaces.
+
+Author: Eli Collins
+Reason: Enable datanode multihoming
+Ref: CDH-4292
+---
+ .eclipse.templates/.classpath                      |    2 +-
+ ivy/libraries.properties                           |    2 +-
+ src/contrib/streaming/ivy.xml                      |    4 -
+ src/core/org/apache/hadoop/net/DNS.java            |   55 +++++++++--
+ src/core/org/apache/hadoop/net/NetUtils.java       |  104 +++++++++++++++++++-
+ src/hdfs/hdfs-default.xml                          |   14 +++
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |   71 +++++++++++++-
+ src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java |    1 +
+ .../org/apache/hadoop/hdfs/TestFileCreation.java   |   47 +++++++---
+ 9 files changed, 269 insertions(+), 31 deletions(-)
+
+diff --git a/.eclipse.templates/.classpath b/.eclipse.templates/.classpath
+index fd02b11..2301c2f 100644
+--- a/.eclipse.templates/.classpath
++++ b/.eclipse.templates/.classpath
+@@ -26,7 +26,7 @@
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/jasper-runtime-5.5.12.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/commons-logging-1.0.4.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/commons-logging-api-1.0.4.jar"/>
+-	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/commons-net-1.4.1.jar"/>
++	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/commons-net-3.1.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/guava-r09-jarjar.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/jets3t-0.6.1.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/junit-4.5.jar"/>
+diff --git a/ivy/libraries.properties b/ivy/libraries.properties
+index 0b3c715..d6c7700 100644
+--- a/ivy/libraries.properties
++++ b/ivy/libraries.properties
+@@ -33,7 +33,7 @@ commons-logging-api.version=1.0.4
+ commons-el.version=1.0
+ commons-fileupload.version=1.2
+ commons-io.version=1.4
+-commons-net.version=1.4.1
++commons-net.version=3.1
+ core.version=3.1.1
+ coreplugin.version=1.3.2
+ 
+diff --git a/src/contrib/streaming/ivy.xml b/src/contrib/streaming/ivy.xml
+index 5fa8620..ecfd0f5 100644
+--- a/src/contrib/streaming/ivy.xml
++++ b/src/contrib/streaming/ivy.xml
+@@ -68,10 +68,6 @@
+       name="jets3t"
+       rev="${jets3t.version}"
+       conf="common->master"/>  -->
+-<!--    <dependency org="commons-net"
+-      name="commons-net"
+-      rev="${commons-net.version}"
+-      conf="common->master"/>  -->
+     <dependency org="commons-codec"
+       name="commons-codec"
+       rev="${commons-codec.version}"
+diff --git a/src/core/org/apache/hadoop/net/DNS.java b/src/core/org/apache/hadoop/net/DNS.java
+index ddc4853..8b370f8 100644
+--- a/src/core/org/apache/hadoop/net/DNS.java
++++ b/src/core/org/apache/hadoop/net/DNS.java
+@@ -22,7 +22,9 @@ import java.net.InetAddress;
+ import java.net.NetworkInterface;
+ import java.net.SocketException;
+ import java.net.UnknownHostException;
++import java.util.Collections;
+ import java.util.Enumeration;
++import java.util.LinkedHashSet;
+ import java.util.Vector;
+ 
+ import javax.naming.NamingException;
+@@ -101,12 +103,40 @@ public class DNS {
+   }
+ 
+   /**
++   * @param nif network interface to get addresses for
++   * @return set containing addresses for each subinterface of nif,
++   *    see below for the rationale for using an ordered set
++   */
++  private static LinkedHashSet<InetAddress> getSubinterfaceInetAddrs(
++      NetworkInterface nif) {
++    LinkedHashSet<InetAddress> addrs = new LinkedHashSet<InetAddress>();
++    Enumeration<NetworkInterface> subNifs = nif.getSubInterfaces();
++    while (subNifs.hasMoreElements()) {
++      NetworkInterface subNif = subNifs.nextElement();
++      addrs.addAll(Collections.list(subNif.getInetAddresses()));
++    }
++    return addrs;
++  }
++
++  /**
++   * Like {@link DNS#getIPs(String, boolean), but returns all
++   * IPs associated with the given interface and its subinterfaces.
++   */
++  public static String[] getIPs(String strInterface)
++      throws UnknownHostException {
++    return getIPs(strInterface, true);
++  }
++
++  /**
+    * Returns all the IPs associated with the provided interface, if any, in
+    * textual form.
+    * 
+    * @param strInterface
+    *            The name of the network interface or subinterface to query
+    *            (eg eth0 or eth0:0) or the string "default"
++   * @param returnSubinterfaces
++   *            Whether to return IPs associated with subinterfaces of
++   *            the given interface
+    * @return A string vector of all the IPs associated with the provided
+    *         interface
+    * @throws UnknownHostException
+@@ -114,8 +144,8 @@ public class DNS {
+    *             default interface or the given interface can not be found
+    * 
+    */
+-  public static String[] getIPs(String strInterface)
+-    throws UnknownHostException {
++  public static String[] getIPs(String strInterface,
++      boolean returnSubinterfaces) throws UnknownHostException {
+     if ("default".equals(strInterface)) {
+       return new String[] {
+           InetAddress.getLocalHost().getHostAddress()
+@@ -136,11 +166,22 @@ public class DNS {
+           InetAddress.getLocalHost().getHostAddress()
+       };
+     }
+-    Vector<String> ips = new Vector<String>();
+-    Enumeration<InetAddress> e = netIf.getInetAddresses();
+-    while (e.hasMoreElements())
+-      ips.add(e.nextElement().getHostAddress());
+-    return ips.toArray(new String[] {});
++
++    // NB: Using a LinkedHashSet to preserve the order for callers
++    // that depend on a particular element being 1st in the array.
++    // For example, getDefaultIP always returns the first element.
++    LinkedHashSet<InetAddress> allAddrs = new LinkedHashSet<InetAddress>();
++    allAddrs.addAll(Collections.list(netIf.getInetAddresses()));
++    if (!returnSubinterfaces) {
++      allAddrs.removeAll(getSubinterfaceInetAddrs(netIf));
++    }
++
++    String ips[] = new String[allAddrs.size()];
++    int i = 0;
++    for (InetAddress addr : allAddrs) {
++      ips[i++] = addr.getHostAddress();
++    }
++    return ips;
+   }
+ 
+   /**
+diff --git a/src/core/org/apache/hadoop/net/NetUtils.java b/src/core/org/apache/hadoop/net/NetUtils.java
+index edd9795..d056972 100644
+--- a/src/core/org/apache/hadoop/net/NetUtils.java
++++ b/src/core/org/apache/hadoop/net/NetUtils.java
+@@ -22,8 +22,10 @@ import java.io.InputStream;
+ import java.io.OutputStream;
+ import java.net.InetAddress;
+ import java.net.InetSocketAddress;
++import java.net.NetworkInterface;
+ import java.net.Socket;
+ import java.net.SocketAddress;
++import java.net.SocketException;
+ import java.net.URI;
+ import java.net.UnknownHostException;
+ import java.net.ConnectException;
+@@ -35,11 +37,14 @@ import javax.net.SocketFactory;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.commons.net.util.SubnetUtils;
++import org.apache.commons.net.util.SubnetUtils.SubnetInfo;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.ipc.Server;
+ import org.apache.hadoop.ipc.VersionedProtocol;
+ import org.apache.hadoop.util.ReflectionUtils;
++import org.apache.hadoop.thirdparty.guava.common.base.Preconditions;
+ 
+ public class NetUtils {
+   private static final Log LOG = LogFactory.getLog(NetUtils.class);
+@@ -374,7 +379,7 @@ public class NetUtils {
+     return (socket.getChannel() == null) ? 
+             socket.getOutputStream() : new SocketOutputStream(socket, timeout);            
+   }
+-  
++
+   /**
+    * This is a drop-in replacement for 
+    * {@link Socket#connect(SocketAddress, int)}.
+@@ -389,11 +394,27 @@ public class NetUtils {
+    * @see java.net.Socket#connect(java.net.SocketAddress, int)
+    * 
+    * @param socket
+-   * @param endpoint 
+-   * @param timeout - timeout in milliseconds
++   * @param address the remote address
++   * @param timeout timeout in milliseconds
++   */
++  public static void connect(Socket socket,
++      SocketAddress address,
++      int timeout) throws IOException {
++    connect(socket, address, null, timeout);
++  }
++
++  /**
++   * Like {@link NetUtils#connect(Socket, SocketAddress, int)} but
++   * also takes a local address and port to bind the socket to. 
++   * 
++   * @param socket
++   * @param address the remote address
++   * @param localAddr the local address to bind the socket to
++   * @param timeout timeout in milliseconds
+    */
+   public static void connect(Socket socket, 
+-                             SocketAddress endpoint, 
++                             SocketAddress endpoint,
++                             SocketAddress localAddr,
+                              int timeout) throws IOException {
+     if (socket == null || endpoint == null || timeout < 0) {
+       throw new IllegalArgumentException("Illegal argument for connect()");
+@@ -401,6 +422,15 @@ public class NetUtils {
+     
+     SocketChannel ch = socket.getChannel();
+     
++    if (localAddr != null) {
++      Class localClass = localAddr.getClass();
++      Class remoteClass = endpoint.getClass();
++      Preconditions.checkArgument(localClass.equals(remoteClass),
++          "Local address %s must be of same family as remote address %s.",
++          localAddr, endpoint);
++      socket.bind(localAddr);
++    }
++
+     if (ch == null) {
+       // let the default implementation handle it.
+       socket.connect(endpoint, timeout);
+@@ -460,4 +490,70 @@ public class NetUtils {
+     }
+     return hostNames;
+   }
++
++  /**
++   * @return true if the given string is a subnet specified
++   *     using CIDR notation, false otherwise
++   */
++  public static boolean isValidSubnet(String subnet) {
++    try {
++      new SubnetUtils(subnet);
++      return true;
++    } catch (IllegalArgumentException iae) {
++      return false;
++    }
++  }
++
++  /**
++   * Add all addresses associated with the given nif in the
++   * given subnet to the given list.
++   */
++  private static void addMatchingAddrs(NetworkInterface nif,
++      SubnetInfo subnetInfo, List<InetAddress> addrs) {
++    Enumeration<InetAddress> ifAddrs = nif.getInetAddresses();
++    while (ifAddrs.hasMoreElements()) {
++      InetAddress ifAddr = ifAddrs.nextElement();
++      if (subnetInfo.isInRange(ifAddr.getHostAddress())) {
++        addrs.add(ifAddr);
++      }
++    }
++  }
++
++  /**
++   * Return an InetAddress for each interface that matches the
++   * given subnet specified using CIDR notation.
++   *
++   * @param subnet subnet specified using CIDR notation
++   * @param returnSubinterfaces
++   *            whether to return IPs associated with subinterfaces
++   * @throws IllegalArgumentException if subnet is invalid
++   */
++  public static List<InetAddress> getIPs(String subnet,
++      boolean returnSubinterfaces) {
++    List<InetAddress> addrs = new ArrayList<InetAddress>();
++    SubnetInfo subnetInfo = new SubnetUtils(subnet).getInfo();
++    Enumeration<NetworkInterface> nifs;
++
++    try {
++      nifs = NetworkInterface.getNetworkInterfaces();
++    } catch (SocketException e) {
++      LOG.error("Unable to get host interfaces", e);
++      return addrs;
++    }
++
++    while (nifs.hasMoreElements()) {
++      NetworkInterface nif = nifs.nextElement();
++      // NB: adding addresses even if the nif is not up
++      addMatchingAddrs(nif, subnetInfo, addrs);
++
++      if (!returnSubinterfaces) {
++        continue;
++      }
++      Enumeration<NetworkInterface> subNifs = nif.getSubInterfaces();
++      while (subNifs.hasMoreElements()) {
++        addMatchingAddrs(subNifs.nextElement(), subnetInfo, addrs);
++      }
++    }
++    return addrs;
++  }
+ }
+diff --git a/src/hdfs/hdfs-default.xml b/src/hdfs/hdfs-default.xml
+index d65fb88..c0e9c6a 100644
+--- a/src/hdfs/hdfs-default.xml
++++ b/src/hdfs/hdfs-default.xml
+@@ -485,4 +485,18 @@ creations/deletions), or "all".</description>
+   </description>
+ </property>
+ 
++<property>
++  <name>dfs.client.local.interfaces</name>
++  <value></value>
++  <description>A comma separated list of network interface names to use
++    for data transfer between the client and datanodes. When creating
++    a connection to read from or write to a datanode, the client
++    chooses one of the specified interfaces at random and binds its
++    socket to the IP of that interface. Individual names may be
++    specified as either an interface name (eg "eth0"), a subinterface
++    name (eg "eth0:0"), or an IP address (which may be specified using
++    CIDR notation to match a range of IPs).
++  </description>
++</property>
++
+ </configuration>
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 14fb24d..0e4cdb5 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.*;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.ipc.*;
+ import org.apache.hadoop.fs.FileAlreadyExistsException;
++import org.apache.hadoop.net.DNS;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.net.NodeBase;
+ import org.apache.hadoop.conf.*;
+@@ -55,6 +56,9 @@ import java.util.concurrent.ConcurrentHashMap;
+ import java.nio.BufferOverflowException;
+ import java.nio.ByteBuffer;
+ 
++import org.apache.hadoop.thirdparty.guava.common.base.Joiner;
++import org.apache.hadoop.thirdparty.guava.common.net.InetAddresses;
++
+ import javax.net.SocketFactory;
+ 
+ /********************************************************
+@@ -90,6 +94,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+   private int maxBlockAcquireFailures;
+   private boolean shortCircuitLocalReads;
+   private boolean connectToDnViaHostname;
++  private SocketAddress[] localInterfaceAddrs;
+ 
+   final SocketCache socketCache;
+ 
+@@ -270,6 +275,14 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     if (LOG.isDebugEnabled()) {
+       LOG.debug("Connect to datanode via hostname is " + connectToDnViaHostname);
+     }
++    String localInterfaces[] =
++      conf.getTrimmedStrings(DFSConfigKeys.DFS_CLIENT_LOCAL_INTERFACES);
++    this.localInterfaceAddrs = getLocalInterfaceAddrs(localInterfaces);
++    if (LOG.isDebugEnabled() && 0 != localInterfaces.length) {
++      LOG.debug("Using local interfaces [" +
++          Joiner.on(',').join(localInterfaces)+ "] with addresses [" +
++          Joiner.on(',').join(localInterfaceAddrs) + "]");
++    }
+   }
+ 
+   static int getMaxBlockAcquireFailures(Configuration conf) {
+@@ -848,6 +861,60 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+   }
+ 
+   /**
++   * Return the socket addresses to use with each configured
++   * local interface. Local interfaces may be specified by IP
++   * address, IP address range using CIDR notation, interface
++   * name (e.g. eth0) or sub-interface name (e.g. eth0:0).
++   * The socket addresses consist of the IPs for the interfaces
++   * and the ephemeral port (port 0). If an IP, IP range, or
++   * interface name matches an interface with sub-interfaces
++   * only the IP of the interface is used. Sub-interfaces can
++   * be used by specifying them explicitly (by IP or name).
++   * 
++   * @return SocketAddresses for the configured local interfaces,
++   *    or an empty array if none are configured
++   * @throws UnknownHostException if a given interface name is invalid
++   */
++  private static SocketAddress[] getLocalInterfaceAddrs(
++      String interfaceNames[]) throws UnknownHostException {
++    List<SocketAddress> localAddrs = new ArrayList<SocketAddress>();
++    for (String interfaceName : interfaceNames) {
++      if (InetAddresses.isInetAddress(interfaceName)) {
++        localAddrs.add(new InetSocketAddress(interfaceName, 0));
++      } else if (NetUtils.isValidSubnet(interfaceName)) {
++        for (InetAddress addr : NetUtils.getIPs(interfaceName, false)) {
++          localAddrs.add(new InetSocketAddress(addr, 0));
++        }
++      } else {
++        for (String ip : DNS.getIPs(interfaceName, false)) {
++          localAddrs.add(new InetSocketAddress(ip, 0));
++        }
++      }
++    }
++    return localAddrs.toArray(new SocketAddress[localAddrs.size()]);
++  }
++
++  /**
++   * Select one of the configured local interfaces at random. We use a random
++   * interface because other policies like round-robin are less effective
++   * given that we cache connections to datanodes.
++   *
++   * @return one of the local interface addresses at random, or null if no
++   *    local interfaces are configured
++   */
++  private SocketAddress getRandomLocalInterfaceAddr() {
++    if (localInterfaceAddrs.length == 0) {
++      return null;
++    }
++    final int idx = r.nextInt(localInterfaceAddrs.length);
++    final SocketAddress addr = localInterfaceAddrs[idx];
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("Using local interface " + addr);
++    }
++    return addr;
++  }
++
++  /**
+    * Get the checksum of a file.
+    * @param src The file path
+    * @return The checksum 
+@@ -2393,7 +2460,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+           sock.setTcpNoDelay(true);
+   
+           LOG.debug("Connecting to " + dnAddr);
+-          NetUtils.connect(sock, dnAddr, socketTimeout);
++          NetUtils.connect(sock, dnAddr, getRandomLocalInterfaceAddr(), socketTimeout);
+           sock.setSoTimeout(socketTimeout);
+         }
+   
+@@ -3490,7 +3557,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         s = socketFactory.createSocket();
+         int timeoutValue =
+           (socketTimeout > 0) ? (3000 * nodes.length + socketTimeout) : 0;
+-        NetUtils.connect(s, target, timeoutValue);
++        NetUtils.connect(s, target, getRandomLocalInterfaceAddr(), timeoutValue);
+         s.setSoTimeout(timeoutValue);
+         s.setSendBufferSize(DEFAULT_DATA_SOCKET_SIZE);
+         LOG.debug("Send buf size " + s.getSendBufferSize());
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+index f9f2288..d402bfa 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+@@ -133,6 +133,7 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final String  DFS_CLIENT_SOCKET_TIMEOUT_KEY = "dfs.client.socket-timeout";
+   public static final String  DFS_NAMENODE_CHECKPOINT_DIR_KEY = "dfs.namenode.checkpoint.dir";
+   public static final String  DFS_NAMENODE_CHECKPOINT_EDITS_DIR_KEY = "dfs.namenode.checkpoint.edits.dir";
++  public static final String  DFS_CLIENT_LOCAL_INTERFACES = "dfs.client.local.interfaces";
+ 
+   //Code in hdfs is not updated to use these keys.
+   public static final String  DFS_CLIENT_BLOCK_WRITE_LOCATEFOLLOWINGBLOCK_RETRIES_KEY = "dfs.client.block.write.locateFollowingBlock.retries";
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileCreation.java b/src/test/org/apache/hadoop/hdfs/TestFileCreation.java
+index e3a2da1..72a2547 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileCreation.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileCreation.java
+@@ -23,6 +23,7 @@ import java.io.FileNotFoundException;
+ import java.io.FileReader;
+ import java.io.IOException;
+ import java.net.InetSocketAddress;
++import java.net.UnknownHostException;
+ 
+ import org.apache.commons.logging.impl.Log4JLogger;
+ import org.apache.hadoop.conf.Configuration;
+@@ -47,6 +48,7 @@ import org.apache.hadoop.hdfs.server.namenode.LeaseManager;
+ import org.apache.hadoop.io.IOUtils;
+ import org.apache.log4j.Level;
+ 
++import static org.junit.Assume.assumeTrue;
+ 
+ /**
+  * This class tests that a file need not be closed before its
+@@ -171,29 +173,50 @@ public class TestFileCreation extends junit.framework.TestCase {
+   }
+ 
+   public void testFileCreation() throws IOException {
+-    checkFileCreation(false);
++    checkFileCreation(null, null);
+   }
+ 
++  /** Same test but the client should use DN hostname instead of IPs */
+   public void testFileCreationByHostname() throws IOException {
+-    checkFileCreation(true);
++    assumeTrue(System.getProperty("os.name").startsWith("Linux"));
++
++    // Since the mini cluster only listens on the loopback we have to
++    // ensure the hostname used to access DNs maps to the loopback. We
++    // do this by telling the DN to advertise localhost as its hostname
++    // instead of the default hostname.
++    checkFileCreation("localhost", null);
++  }
++
++  /** Same test but the client should bind to a local interface */
++  public void testFileCreationSetLocalInterface() throws IOException {
++    assumeTrue(System.getProperty("os.name").startsWith("Linux"));
++
++    // The mini cluster listens on the loopback so we can use it here
++    checkFileCreation(null, "lo");
++
++    try {
++      checkFileCreation(null, "bogus-interface");
++      fail("Able to specify a bogus interface");
++    } catch (UnknownHostException e) {
++      assertEquals("Unknown interface bogus-interface", e.getMessage());
++    }
+   }
+ 
+   /**
+    * Test that file data becomes available before file is closed.
+-   * @param useDnHostname if clients should access DNs by hostname (vs IP)
++   * @param hostname the hostname, if any, clients should use to access DNs
++   * @param netIf the local interface, if any, clients should use to access DNs
+    */
+-  public void checkFileCreation(boolean useDnHostname) throws IOException {
++  public void checkFileCreation(String hostname, String netIf) throws IOException {
+     Configuration conf = new Configuration();
+ 
+-    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME, useDnHostname);
+-    if (useDnHostname) {
+-      // Since the mini cluster only listens on the loopback we have to
+-      // ensure the hostname used to access DNs maps to the loopback. We
+-      // do this by telling the DN to advertise localhost as its hostname
+-      // instead of the default hostname.
+-      conf.set("slave.host.name", "localhost");
++    if (hostname != null) {
++      conf.setBoolean(DFSConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME, true);
++      conf.set("slave.host.name", hostname);
++    }
++    if (netIf != null) {
++      conf.set(DFSConfigKeys.DFS_CLIENT_LOCAL_INTERFACES, netIf);
+     }
+-
+     if (simulatedStorage) {
+       conf.setBoolean(SimulatedFSDataset.CONFIG_PROPERTY_SIMULATED, true);
+     }
+-- 
+1.7.0.4
+

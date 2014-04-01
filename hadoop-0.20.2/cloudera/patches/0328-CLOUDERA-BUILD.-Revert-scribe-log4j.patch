@@ -1,0 +1,26 @@
+From 5b5972174da804fb6dcb4d0723208bfa42366a31 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 24 Aug 2010 16:18:50 -0700
+Subject: [PATCH 0328/1179] CLOUDERA-BUILD. Revert scribe log4j.
+
+Ref: CDH-742
+---
+ build.xml |    2 --
+ 1 files changed, 0 insertions(+), 2 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index 9f8f3e7..a86e47a 100644
+--- a/build.xml
++++ b/build.xml
+@@ -1258,8 +1258,6 @@
+     <!-- CLOUDERA HOOKS -->
+     <copy todir="${dist.dir}/lib">
+       <fileset dir="${build.dir}/contrib/fairscheduler" includes="*.jar"/>
+-      <fileset dir="${build.dir}/contrib/scribe-log4j" includes="*.jar"/>
+-      <fileset dir="src/contrib/scribe-log4j/lib" includes="*.jar"/>
+     </copy>
+ 
+     <copy todir="${dist.dir}/cloudera">
+-- 
+1.7.0.4
+

@@ -1,0 +1,98 @@
+<html>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<head></head>
+<body>
+<h1>A client for the Kosmos filesystem (KFS)</h1>
+
+<h3>Introduction</h3>
+
+This pages describes how to use Kosmos Filesystem 
+(<a href="http://kosmosfs.sourceforge.net"> KFS </a>) as a backing
+store with Hadoop.   This page assumes that you have downloaded the
+KFS software and installed necessary binaries as outlined in the KFS
+documentation.
+
+<h3>Steps</h3>
+
+        <ul>
+          <li>In the Hadoop conf directory edit core-site.xml,
+          add the following:
+            <pre>
+&lt;property&gt;
+  &lt;name&gt;fs.kfs.impl&lt;/name&gt;
+  &lt;value&gt;org.apache.hadoop.fs.kfs.KosmosFileSystem&lt;/value&gt;
+  &lt;description&gt;The FileSystem for kfs: uris.&lt;/description&gt;
+&lt;/property&gt;
+            </pre>
+
+          <li>In the Hadoop conf directory edit core-site.xml,
+          adding the following (with appropriate values for
+          &lt;server&gt; and &lt;port&gt;):
+            <pre>
+&lt;property&gt;
+  &lt;name&gt;fs.default.name&lt;/name&gt;
+  &lt;value&gt;kfs://&lt;server:port&gt;&lt;/value&gt; 
+&lt;/property&gt;
+
+&lt;property&gt;
+  &lt;name&gt;fs.kfs.metaServerHost&lt;/name&gt;
+  &lt;value&gt;&lt;server&gt;&lt;/value&gt;
+  &lt;description&gt;The location of the KFS meta server.&lt;/description&gt;
+&lt;/property&gt;
+
+&lt;property&gt;
+  &lt;name&gt;fs.kfs.metaServerPort&lt;/name&gt;
+  &lt;value&gt;&lt;port&gt;&lt;/value&gt;
+  &lt;description&gt;The location of the meta server's port.&lt;/description&gt;
+&lt;/property&gt;
+
+</pre>
+          </li>
+
+          <li>Copy KFS's <i> kfs-0.1.jar </i> to Hadoop's lib directory.  This step
+          enables Hadoop's to load the KFS specific modules.  Note
+          that, kfs-0.1.jar was built when you compiled KFS source
+          code.  This jar file contains code that calls KFS's client
+          library code via JNI; the native code is in KFS's <i>
+          libkfsClient.so </i> library.
+          </li>
+
+          <li> When the Hadoop map/reduce trackers start up, those
+processes (on local as well as remote nodes) will now need to load
+KFS's <i> libkfsClient.so </i> library.  To simplify this process, it is advisable to
+store libkfsClient.so in an NFS accessible directory (similar to where
+Hadoop binaries/scripts are stored); then, modify Hadoop's
+conf/hadoop-env.sh adding the following line and providing suitable
+value for &lt;path&gt;:
+<pre>
+export LD_LIBRARY_PATH=&lt;path&gt;
+</pre>
+
+
+          <li>Start only the map/reduce trackers
+          <br />
+          example: execute Hadoop's bin/start-mapred.sh</li>
+        </ul>
+<br/>
+
+If the map/reduce job trackers start up, all file-I/O is done to KFS.
+
+</body>
+</html>

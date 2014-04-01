@@ -1,0 +1,42 @@
+From 01b42afec6b6e878ed7805aac2e9a95c779d9840 Mon Sep 17 00:00:00 2001
+From: Andrew Bayer <andrew.bayer@gmail.com>
+Date: Mon, 7 Mar 2011 10:50:47 -0800
+Subject: [PATCH 0901/1179] CLOUDERA-BUILD. Simplifying repository setup.
+
+---
+ cloudera/maven-packaging/pom.xml |   19 +++++++++++++++++++
+ 1 files changed, 19 insertions(+), 0 deletions(-)
+
+diff --git a/cloudera/maven-packaging/pom.xml b/cloudera/maven-packaging/pom.xml
+index 52e47eb..5fac49c 100644
+--- a/cloudera/maven-packaging/pom.xml
++++ b/cloudera/maven-packaging/pom.xml
+@@ -45,6 +45,25 @@
+     <url>http://www.cloudera.com</url>
+   </organization>
+ 
++  <repositories>
++    <repository>
++      <id>cdh.releases.repo</id>
++      <url>https://repository.cloudera.com/content/repositories/releases</url>
++      <name>CDH Releases Repository</name>
++      <snapshots>
++        <enabled>false</enabled>
++      </snapshots>
++    </repository>
++    <repository>
++      <id>cdh.snapshots.repo</id>
++      <url>https://repository.cloudera.com/content/repositories/snapshots</url>
++      <name>CDH Snapshots Repository</name>
++      <snapshots>
++        <enabled>true</enabled>
++      </snapshots>
++    </repository>
++  </repositories>
++  
+   <profiles>
+     <profile>
+       <id>non.release.build</id>
+-- 
+1.7.0.4
+

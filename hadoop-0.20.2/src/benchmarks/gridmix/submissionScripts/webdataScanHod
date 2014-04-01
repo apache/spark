@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+GRID_DIR=`dirname "$0"`
+GRID_DIR=`cd "$GRID_DIR"; pwd`
+source $GRID_DIR/../gridmix-env
+
+for ((i=0; i < $NUM_OF_SMALL_JOBS_PER_CLASS; i++))
+do
+    echo $i
+    CLUSTER_DIR=$CLUSTER_DIR_BASE/webdata_scan.small.$i
+    mkdir $CLUSTER_DIR
+    hod script -d $CLUSTER_DIR $SMALL_JOB_HOD_OPTIONS -s $GRID_MIX_HOME/webdatascan/webdata_scan.small  2>&1 > webdata_scan.small.$i.out&
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done
+    
+
+for ((i=0; i < $NUM_OF_MEDIUM_JOBS_PER_CLASS; i++))
+do
+    echo $i
+    CLUSTER_DIR=$CLUSTER_DIR_BASE/webdata_scan.medium.$i
+    mkdir $CLUSTER_DIR
+    hod script -d $CLUSTER_DIR $MEDIUM_JOB_HOD_OPTIONS -s $GRID_MIX_HOME/webdatascan/webdata_scan.medium  2>&1 > webdata_scan.medium.$i.out &
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done
+    
+for ((i=0; i < $NUM_OF_LARGE_JOBS_PER_CLASS; i++))
+do
+    echo $i
+    CLUSTER_DIR=$CLUSTER_DIR_BASE/webdata_scan.large.$i
+    mkdir $CLUSTER_DIR
+    hod script -d $CLUSTER_DIR $LARGE_JOB_HOD_OPTIONS -s $GRID_MIX_HOME/webdatascan/webdata_scan.large  2>&1 > webdata_scan.large.$i.out &
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done
+    

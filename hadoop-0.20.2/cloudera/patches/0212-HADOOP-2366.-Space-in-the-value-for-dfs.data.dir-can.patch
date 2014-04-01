@@ -1,0 +1,181 @@
+From 65a04ab8197a8db21a97d279ca881b5cd45a5365 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:48:03 -0800
+Subject: [PATCH 0212/1179] HADOOP-2366. Space in the value for dfs.data.dir can cause great problems
+
+Description: The following configuration causes problems:
+
+<p>&lt;property&gt;<br/>
+  &lt;name&gt;dfs.data.dir&lt;/name&gt;<br/>
+  &lt;value&gt;/mnt/hstore2/hdfs, /home/foo/dfs&lt;/value&gt;  <br/>
+  &lt;description&gt;<br/>
+  Determines where on the local filesystem an DFS data node  should store its bl<br/>
+ocks.  If this is a comma-delimited  list of directories, then data will be stor<br/>
+ed in all named  directories, typically on different devices.  Directories that <br/>
+do not exist are ignored.  <br/>
+  &lt;/description&gt;<br/>
+&lt;/property&gt;</p>
+
+<p>The problem is that the space after the comma causes the second directory for storage to be " /home/foo/dfs" which is in a directory named &lt;SPACE&gt; which contains a sub-dir named "home" in the hadoop datanodes default directory.  This will typically cause the user's home partition to fill, but will be very hard for the user to understand since a directory with a whitespace name is hard to understand.</p>
+
+<p>My proposed solution would be to trimLeft all path names from this and similar property after splitting on comma.  This still allows spaces in file and directory names but avoids this problem. </p>
+<hr/>
+    This provides support in Configuration to get comma-separated string lists in such
+    a way that whitespace in between elements is ignored. This patch is required for
+    later patches which fix mapred.local.dir, dfs.data.dir, etc to support spaces
+    in between elements.
+
+    Test plan: unit tested in TestStringUtils
+Reason: Configuration improvement
+Author: Michele (@pirroh) Catasta
+Ref: UNKNOWN
+---
+ src/core/org/apache/hadoop/conf/Configuration.java |   51 ++++++++++++++++++++
+ src/core/org/apache/hadoop/util/StringUtils.java   |   23 +++++++++
+ .../org/apache/hadoop/util/TestStringUtils.java    |   22 ++++++++
+ 3 files changed, 96 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/conf/Configuration.java b/src/core/org/apache/hadoop/conf/Configuration.java
+index cdfcc2c..4a507ec 100644
+--- a/src/core/org/apache/hadoop/conf/Configuration.java
++++ b/src/core/org/apache/hadoop/conf/Configuration.java
+@@ -32,6 +32,7 @@ import java.io.Writer;
+ import java.net.URL;
+ import java.util.ArrayList;
+ import java.util.Collection;
++import java.util.Collections;
+ import java.util.Enumeration;
+ import java.util.HashMap;
+ import java.util.HashSet;
+@@ -782,6 +783,56 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+       return StringUtils.getStrings(valueString);
+     }
+   }
++  
++  /** 
++   * Get the comma delimited values of the <code>name</code> property as 
++   * a collection of <code>String</code>s, trimmed of the leading and trailing whitespace.  
++   * If no such property is specified then empty <code>Collection</code> is returned.
++   *
++   * @param name property name.
++   * @return property value as a collection of <code>String</code>s, or empty <code>Collection</code> 
++   */
++  public Collection<String> getTrimmedStringCollection(String name) {
++    String valueString = get(name);
++    if (null == valueString) {
++      Collection<String> empty = Collections.emptyList();
++      return empty;
++    }
++    return StringUtils.getTrimmedStringCollection(valueString);
++  }
++  
++  /** 
++   * Get the comma delimited values of the <code>name</code> property as 
++   * an array of <code>String</code>s, trimmed of the leading and trailing whitespace.
++   * If no such property is specified then an empty array is returned.
++   * 
++   * @param name property name.
++   * @return property value as an array of trimmed <code>String</code>s, 
++   *         or empty array. 
++   */
++  public String[] getTrimmedStrings(String name) {
++    String valueString = get(name);
++    return StringUtils.getTrimmedStrings(valueString);
++  }
++
++  /** 
++   * Get the comma delimited values of the <code>name</code> property as 
++   * an array of <code>String</code>s, trimmed of the leading and trailing whitespace.
++   * If no such property is specified then default value is returned.
++   * 
++   * @param name property name.
++   * @param defaultValue The default value
++   * @return property value as an array of trimmed <code>String</code>s, 
++   *         or default value. 
++   */
++  public String[] getTrimmedStrings(String name, String... defaultValue) {
++    String valueString = get(name);
++    if (null == valueString) {
++      return defaultValue;
++    } else {
++      return StringUtils.getTrimmedStrings(valueString);
++    }
++  }
+ 
+   /** 
+    * Set the array of string values for the <code>name</code> property as 
+diff --git a/src/core/org/apache/hadoop/util/StringUtils.java b/src/core/org/apache/hadoop/util/StringUtils.java
+index d99fe43..32a7344 100644
+--- a/src/core/org/apache/hadoop/util/StringUtils.java
++++ b/src/core/org/apache/hadoop/util/StringUtils.java
+@@ -319,6 +319,29 @@ public class StringUtils {
+     return values;
+   }
+ 
++  /**
++   * Splits a comma separated value <code>String</code>, trimming leading and trailing whitespace on each value.
++   * @param str a comma separated <String> with values
++   * @return a <code>Collection</code> of <code>String</code> values
++   */
++  public static Collection<String> getTrimmedStringCollection(String str){
++    return Arrays.asList(getTrimmedStrings(str));
++  }
++  
++  /**
++   * Splits a comma separated value <code>String</code>, trimming leading and trailing whitespace on each value.
++   * @param str a comma separated <String> with values
++   * @return an array of <code>String</code> values
++   */
++  public static String[] getTrimmedStrings(String str){
++    if (null == str || "".equals(str.trim())) {
++      return emptyStringArray;
++    }
++
++    return str.trim().split("\\s*,\\s*");
++  }
++
++  final public static String[] emptyStringArray = {};
+   final public static char COMMA = ',';
+   final public static String COMMA_STR = ",";
+   final public static char ESCAPE_CHAR = '\\';
+diff --git a/src/test/org/apache/hadoop/util/TestStringUtils.java b/src/test/org/apache/hadoop/util/TestStringUtils.java
+index e68609a..028b752 100644
+--- a/src/test/org/apache/hadoop/util/TestStringUtils.java
++++ b/src/test/org/apache/hadoop/util/TestStringUtils.java
+@@ -19,6 +19,7 @@
+ package org.apache.hadoop.util;
+ 
+ import junit.framework.TestCase;
++import static org.junit.Assert.assertArrayEquals;
+ 
+ public class TestStringUtils extends TestCase {
+   final private static String NULL_STR = null;
+@@ -118,4 +119,25 @@ public class TestStringUtils extends TestCase {
+     assertEquals(-1259520L, StringUtils.TraditionalBinaryPrefix.string2long("-1230k"));
+     assertEquals(956703965184L, StringUtils.TraditionalBinaryPrefix.string2long("891g"));
+   }
++
++  public void testGetTrimmedStrings() throws Exception {
++    String compactDirList = "/spindle1/hdfs,/spindle2/hdfs,/spindle3/hdfs";
++    String spacedDirList = "/spindle1/hdfs, /spindle2/hdfs, /spindle3/hdfs";
++    String pathologicalDirList1 = " /spindle1/hdfs  ,  /spindle2/hdfs ,/spindle3/hdfs ";
++    String pathologicalDirList2 = " /spindle1/hdfs  ,  /spindle2/hdfs ,/spindle3/hdfs , ";
++    String emptyList1 = "";
++    String emptyList2 = "   ";
++    
++    String[] expectedArray = {"/spindle1/hdfs", "/spindle2/hdfs", "/spindle3/hdfs"};
++    String[] emptyArray = {};
++    
++    assertArrayEquals(expectedArray, StringUtils.getTrimmedStrings(compactDirList));
++    assertArrayEquals(expectedArray, StringUtils.getTrimmedStrings(spacedDirList));
++    assertArrayEquals(expectedArray, StringUtils.getTrimmedStrings(pathologicalDirList1));
++    assertArrayEquals(expectedArray, StringUtils.getTrimmedStrings(pathologicalDirList2));
++    
++    assertArrayEquals(emptyArray, StringUtils.getTrimmedStrings(emptyList1));
++    assertArrayEquals(emptyArray, StringUtils.getTrimmedStrings(emptyList2));
++  } 
++
+ }
+-- 
+1.7.0.4
+

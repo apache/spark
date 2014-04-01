@@ -1,0 +1,72 @@
+From 7c168a8a2613d93e19508a91e7c4db3b3cfb503b Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:15:26 -0800
+Subject: [PATCH 0119/1179] HADOOP-6269. Missing synchronization for defaultResources in Configuration.addResource
+
+Description: Configuration.defaultResources is a simple ArrayList. In two places in Configuration it is accessed without appropriate synchronization, which we've seen to occasionally result in ConcurrentModificationExceptions.
+Reason: bugfix (race condition)
+Author: Sreekanth Ramakrishnan
+Ref: UNKNOWN
+---
+ src/core/org/apache/hadoop/conf/Configuration.java |   37 ++++++++++++++------
+ 1 files changed, 26 insertions(+), 11 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/conf/Configuration.java b/src/core/org/apache/hadoop/conf/Configuration.java
+index 7194b81..63be5d6 100644
+--- a/src/core/org/apache/hadoop/conf/Configuration.java
++++ b/src/core/org/apache/hadoop/conf/Configuration.java
+@@ -255,13 +255,25 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+    * added.
+    * @param name file name. File should be present in the classpath.
+    */
+-  public static synchronized void addDefaultResource(String name) {
+-    if(!defaultResources.contains(name)) {
++  public static void addDefaultResource(String name) {
++    // The lock heirarchy is that we must always lock
++    // instances before locking the class. Since reloadConfiguration
++    // is synchronized on the instance, we must not call conf.reloadConfiguration
++    // while holding a lock on Configuration.class. Otherwise we could deadlock
++    // if that conf is attempting to lock the Class
++    ArrayList<Configuration> toReload;
++    synchronized (Configuration.class) {
++      if(defaultResources.contains(name)) {
++        return;
++      }
+       defaultResources.add(name);
+-      for(Configuration conf : REGISTRY.keySet()) {
+-        if(conf.loadDefaults) {
+-          conf.reloadConfiguration();
+-        }
++      // Make a copy so we don't iterate while not holding the lock
++      toReload = new ArrayList<Configuration>(REGISTRY.size());
++      toReload.addAll(REGISTRY.keySet());
++    }
++    for(Configuration conf : toReload) {
++      if(conf.loadDefaults) {
++        conf.reloadConfiguration();
+       }
+     }
+   }
+@@ -1075,11 +1087,14 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+                              boolean quiet) {
+     if(loadDefaults) {
+       // To avoid addResource causing a ConcurrentModificationException
+-      synchronized(Configuration.class) {
+-        for (String resource : defaultResources) {
+-          loadResource(properties, resource, quiet);
+-        }
+-      }    
++      ArrayList<String> toLoad;
++      synchronized (Configuration.class) {
++        toLoad = new ArrayList<String>(defaultResources);
++      }
++      for (String resource : toLoad) {
++        loadResource(properties, resource, quiet);
++      }
++
+       //support the hadoop-site.xml as a deprecated case
+       if(getResource("hadoop-site.xml")!=null) {
+         loadResource(properties, "hadoop-site.xml", quiet);
+-- 
+1.7.0.4
+

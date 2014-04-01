@@ -1,0 +1,44 @@
+From 63c98116795d0b7908d2de335e7fcd53449bc514 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 7 Mar 2011 17:36:15 -0800
+Subject: [PATCH 0906/1179] HADOOP-7167. Allow using a file to exclude certain tests from the build.
+
+Reason: ability to exclude known-flaky tests on golden Hudson
+Author: Todd Lipcon
+Ref: CDH-2777
+---
+ build.xml |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index fe2313b..d9c48c0 100644
+--- a/build.xml
++++ b/build.xml
+@@ -152,6 +152,7 @@
+   
+   <property name="test.commit.tests.file" value="${test.src.dir}/commit-tests" />
+   <property name="test.all.tests.file" value="${test.src.dir}/all-tests" />
++  <property name="test.exclude.file" value="/dev/null" />
+ 
+   <property name="test.libhdfs.conf.dir" value="${c++.libhdfs.src}/tests/conf"/>
+   <property name="test.libhdfs.dir" value="${test.build.dir}/libhdfs"/>
+@@ -1017,13 +1018,15 @@
+                    excludes="**/${test.exclude}.java aop/** system/**">
+             <patternset>
+               <includesfile name="@{test.file}"/>
++              <excludesfile name="${test.exclude.file}" />
+             </patternset>
+           </fileset>
+         </batchtest>
+         <batchtest todir="${test.build.dir}" if="tests.notestcase.fi">
+           <fileset dir="${test.src.dir}/aop"
+                    includes="**/${test.include}.java"
+-                   excludes="**/${test.exclude}.java" />
++                   excludes="**/${test.exclude}.java"
++                   excludesfile="${test.exclude.file}" />
+         </batchtest>
+         <batchtest todir="@{test.dir}" if="tests.testcase">
+           <fileset dir="@{fileset.dir}"
+-- 
+1.7.0.4
+

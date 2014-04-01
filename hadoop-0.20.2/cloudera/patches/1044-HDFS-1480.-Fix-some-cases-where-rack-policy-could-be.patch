@@ -1,0 +1,1075 @@
+From f29635a416a79d2aad6fa7361438381d9c02b713 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 15 Aug 2011 18:38:54 -0700
+Subject: [PATCH 1044/1179] HDFS-1480. Fix some cases where rack policy could be violated
+
+This patch fixes an issue in determining replication targets where
+decomissioning or corrupt replicas were considered the same as
+valid replicas when considering rack locality policy. This would
+cause all replicas of a block to end up on the same rack when
+many nodes were decommissioned.
+
+Reason: avoid replication policy violation
+Ref: CDH-3069
+Author: Todd Lipcon
+---
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   68 +++-
+ .../hdfs/server/namenode/TestBlockManager.java     |  387 +++++++++++++++
+ .../namenode/TestBlocksWithNotEnoughRacks.java     |  494 ++++++++++++++++++++
+ 3 files changed, 939 insertions(+), 10 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/namenode/TestBlockManager.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/namenode/TestBlocksWithNotEnoughRacks.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 43b1614..5d79d6e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -237,8 +237,8 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+   // We also store pending replication-orders.
+   // Set of: Block
+   //
+-  private UnderReplicatedBlocks neededReplications = new UnderReplicatedBlocks();
+-  private PendingReplicationBlocks pendingReplications;
++  UnderReplicatedBlocks neededReplications = new UnderReplicatedBlocks();
++  PendingReplicationBlocks pendingReplications;
+ 
+   public LeaseManager leaseManager = new LeaseManager(this); 
+ 
+@@ -606,9 +606,13 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+       for (Block block : neededReplications) {
+         List<DatanodeDescriptor> containingNodes =
+                                           new ArrayList<DatanodeDescriptor>();
++        List<DatanodeDescriptor> containingLiveReplicaNodes =
++          new ArrayList<DatanodeDescriptor>();
+         NumberReplicas numReplicas = new NumberReplicas();
+         // source node returned is not used
+-        chooseSourceDatanode(block, containingNodes, numReplicas);
++        chooseSourceDatanode(block, containingNodes,
++            containingLiveReplicaNodes, numReplicas);
++        assert containingLiveReplicaNodes.size() == numReplicas.liveReplicas();
+         int usableReplicas = numReplicas.liveReplicas() + 
+                              numReplicas.decommissionedReplicas(); 
+ 
+@@ -2415,7 +2419,11 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+     if (safeMode != null) {
+       safeMode.checkMode();
+     }
+-      
++    
++    unprotectedRegisterInHeartbeatMap(nodeDescr);
++  }
++    
++  void unprotectedRegisterInHeartbeatMap(DatanodeDescriptor nodeDescr) {
+     // also treat the registration message as a heartbeat
+     synchronized(heartbeats) {
+       heartbeats.add(nodeDescr);
+@@ -2423,9 +2431,8 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+       // no need to update its timestamp
+       // because its is done when the descriptor is created
+     }
+-    return;
+   }
+-    
++
+   /* Resolve a node's network location */
+   private void resolveNetworkLocation (DatanodeDescriptor node) {
+     List<String> names = new ArrayList<String>(1);
+@@ -2856,7 +2863,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+    */
+   boolean computeReplicationWorkForBlock(Block block, int priority) {
+     int requiredReplication, numEffectiveReplicas; 
+-    List<DatanodeDescriptor> containingNodes;
++    List<DatanodeDescriptor> containingNodes, containingLiveReplicasNodes;
+     DatanodeDescriptor srcNode;
+     
+     synchronized (this) {
+@@ -2873,8 +2880,12 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+ 
+         // get a source data-node
+         containingNodes = new ArrayList<DatanodeDescriptor>();
++        containingLiveReplicasNodes = new ArrayList<DatanodeDescriptor>();
+         NumberReplicas numReplicas = new NumberReplicas();
+-        srcNode = chooseSourceDatanode(block, containingNodes, numReplicas);
++        srcNode = chooseSourceDatanode(block, containingNodes,
++            containingLiveReplicasNodes, numReplicas);
++        assert containingLiveReplicasNodes.size() == numReplicas.liveReplicas();
++
+         if ((numReplicas.liveReplicas() + numReplicas.decommissionedReplicas())
+             <= 0) {          
+           missingBlocksInCurIter++;
+@@ -2895,11 +2906,21 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+         }
+       }
+     }
++    
++    // Exclude any nodes that have non-live replicas from the placement.
++    // (eg decommissioning or corrupt replicas)
++    List<Node> excludedNodes = new ArrayList<Node>();
++    for (Node n : containingNodes) {
++      if (!containingLiveReplicasNodes.contains(n)) {
++        excludedNodes.add(n);
++      }
++    }
+ 
+     // choose replication targets: NOT HOLDING THE GLOBAL LOCK
+     DatanodeDescriptor targets[] = replicator.chooseTarget(
+         requiredReplication - numEffectiveReplicas,
+-        srcNode, containingNodes, null, block.getNumBytes());
++        srcNode, containingLiveReplicasNodes, excludedNodes,
++        block.getNumBytes());
+     if(targets.length == 0)
+       return false;
+ 
+@@ -2985,8 +3006,10 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+   private DatanodeDescriptor chooseSourceDatanode(
+                                     Block block,
+                                     List<DatanodeDescriptor> containingNodes,
++                                    List<DatanodeDescriptor> containingLiveReplicasNodes,
+                                     NumberReplicas numReplicas) {
+     containingNodes.clear();
++    containingLiveReplicasNodes.clear();
+     DatanodeDescriptor srcNode = null;
+     int live = 0;
+     int decommissioned = 0;
+@@ -3005,6 +3028,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+       else if (excessBlocks != null && excessBlocks.contains(block)) {
+         excess++;
+       } else {
++        containingLiveReplicasNodes.add(node);
+         live++;
+       }
+       containingNodes.add(node);
+@@ -3836,7 +3860,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+       NameNode.stateChangeLog.warn("BLOCK* NameSystem.blockReceived: " + block
+           + " is received from dead or unregistered node " + nodeID.getName());
+       throw new IOException(
+-          "Got blockReceived message from unregistered or dead node " + block);
++          "Got blockReceived message from unregistered or dead node " + nodeID.getName());
+     }
+         
+     if (NameNode.stateChangeLog.isDebugEnabled()) {
+@@ -5694,4 +5718,28 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+                     "fsck", src, null, null);
+     }
+   }
++
++  /**
++   * Return the number of racks over which the given block is replicated.
++   * Nodes that are decommissioning (or are decommissioned) and corrupt
++   * replicas are not counted.
++   * 
++   * This is only used from the unit tests in 0.20.
++   */
++  int getNumberOfRacks(Block b) {
++    HashSet<String> rackSet = new HashSet<String>(0);
++    Collection<DatanodeDescriptor> corruptNodes = corruptReplicas.getNodes(b);
++    Iterator<DatanodeDescriptor> i = blocksMap.nodeIterator(b);
++    while (i.hasNext()) {
++      DatanodeDescriptor dn = i.next();
++      if (!dn.isDecommissionInProgress() && !dn.isDecommissioned() &&
++          (corruptNodes == null || !corruptNodes.contains(dn))) {
++        String name = dn.getNetworkLocation();
++        if (!rackSet.contains(name)) {
++          rackSet.add(name);
++        }
++      }
++    }
++    return rackSet.size();
++  }
+ }
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestBlockManager.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestBlockManager.java
+new file mode 100644
+index 0000000..4c1a567
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestBlockManager.java
+@@ -0,0 +1,387 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++
++import static org.junit.Assert.*;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.List;
++
++import org.apache.commons.logging.impl.Log4JLogger;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hdfs.DFSClient;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.hdfs.protocol.Block;
++import org.apache.hadoop.hdfs.protocol.DatanodeID;
++import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
++import org.apache.hadoop.hdfs.protocol.FSConstants;
++import org.apache.hadoop.hdfs.server.datanode.DataNode;
++import org.apache.hadoop.hdfs.server.namenode.BlocksMap.BlockInfo;
++import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
++import org.apache.hadoop.hdfs.server.namenode.INodeFile;
++import org.apache.hadoop.hdfs.server.protocol.BlockCommand;
++import org.apache.hadoop.net.NetworkTopology;
++import org.apache.hadoop.util.StringUtils;
++import org.apache.log4j.Level;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Ignore;
++import org.junit.Test;
++import org.mockito.Mockito;
++
++public class TestBlockManager {
++  {
++    ((Log4JLogger)NameNode.stateChangeLog).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger)LeaseManager.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger)FSNamesystem.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger)DataNode.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger)DFSClient.LOG).getLogger().setLevel(Level.ALL);
++  }
++
++  private final List<DatanodeDescriptor> nodes = Arrays.asList(
++      new DatanodeDescriptor[] {
++      new DatanodeDescriptor(new DatanodeID("h1:5020"), "/rackA"),
++      new DatanodeDescriptor(new DatanodeID("h2:5020"), "/rackA"),
++      new DatanodeDescriptor(new DatanodeID("h3:5020"), "/rackA"),
++      new DatanodeDescriptor(new DatanodeID("h4:5020"), "/rackB"),
++      new DatanodeDescriptor(new DatanodeID("h5:5020"), "/rackB"),
++      new DatanodeDescriptor(new DatanodeID("h6:5020"), "/rackB")
++      });
++  private final List<DatanodeDescriptor> rackA = nodes.subList(0, 3);
++  private final List<DatanodeDescriptor> rackB = nodes.subList(3, 6);
++  
++  /**
++   * Some of these tests exercise code which has some randomness involved -
++   * ie even if there's a bug, they may pass because the random node selection
++   * chooses the correct result.
++   * 
++   * Since they're true unit tests and run quickly, we loop them a number
++   * of times trying to trigger the incorrect behavior.
++   */
++  private static final int NUM_TEST_ITERS = 30;
++  
++  private static final int BLOCK_SIZE = 64*1024;
++  
++  private Configuration conf;
++  private FSNamesystem fsn;
++  private MiniDFSCluster cluster;
++
++  @Before
++  public void setupMockCluster() throws IOException {
++    conf = new Configuration();
++    cluster = new MiniDFSCluster(conf, 0, true, null);
++    fsn = cluster.getNameNode().getNamesystem();
++  }
++  
++  @After
++  public void tearDownCluster() throws IOException {
++    if (cluster != null) {
++      cluster.shutdown();
++    }
++  }
++  
++  private void addNodes(Iterable<DatanodeDescriptor> nodesToAdd) throws IOException {
++    NetworkTopology cluster = fsn.clusterMap;
++    // construct network topology
++    for (DatanodeDescriptor dn : nodesToAdd) {
++      cluster.add(dn);
++      dn.updateHeartbeat(
++          2*FSConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0L,
++          2*FSConstants.MIN_BLOCKS_FOR_WRITE*BLOCK_SIZE, 0, 0);
++      fsn.unprotectedAddDatanode(dn);
++      fsn.unprotectedRegisterInHeartbeatMap(dn);
++      assertNotNull(fsn.getDatanode(dn));
++    }
++  }
++
++
++  /**
++   * Test that replication of under-replicated blocks is detected
++   * and basically works
++   */
++  @Test
++  public void testBasicReplication() throws Exception {
++    addNodes(nodes);
++    for (int i = 0; i < NUM_TEST_ITERS; i++) {
++      doBasicTest(i);
++    }
++  }
++  
++  /**
++   * Regression test for HDFS-1480
++   * - Cluster has 2 racks, A and B, each with three nodes.
++   * - Block initially written on A1, A2, B1
++   * - Admin decommissions two of these nodes (let's say A1 and A2 but it doesn't matter)
++   * - Re-replication should respect rack policy
++   */
++  @Test
++  public void testTwoOfThreeNodesDecomissioned() throws Exception {
++    addNodes(nodes);
++    for (int i = 0; i < NUM_TEST_ITERS; i++) {
++      doTestTwoOfThreeNodesDecomissioned(i);
++    }
++  }
++  
++  @Test
++  public void testAllNodesHoldingReplicasDecomissioned() throws Exception {
++    addNodes(nodes);
++    for (int i = 0; i < NUM_TEST_ITERS; i++) {
++      doTestAllNodesHoldingReplicasDecomissioned(i);
++    }
++  }
++
++  @Test
++  public void testOneOfTwoRacksDecomissioned() throws Exception {
++    addNodes(nodes);
++    for (int i = 0; i < NUM_TEST_ITERS; i++) {
++      doTestOneOfTwoRacksDecomissioned(i);
++    }
++  }
++
++
++  /**
++   * Unit test version of testSufficientlyReplBlocksUsesNewRack
++   * 
++   * This test is currently ignored, since 0.20 doesn't check replication
++   * policy on sufficiently replicated blocks. If an additional rack is
++   * added to a 1-rack cluster, the replication level needs to be boosted
++   * and brought back down to attain the proper policy.
++   **/
++  @Test
++  @Ignore
++  public void testSufficientlyReplBlocksUsesNewRack() throws Exception {
++    addNodes(nodes);
++    for (int i = 0; i < NUM_TEST_ITERS; i++) {
++      doTestSufficientlyReplBlocksUsesNewRack(i);
++    }
++  }
++
++  private void doTestSufficientlyReplBlocksUsesNewRack(int testIndex) {
++    // Originally on only nodes in rack A.
++    List<DatanodeDescriptor> origNodes = rackA;
++    BlockInfo blockInfo = addBlockOnNodes((long)testIndex, origNodes);
++    DatanodeInfo[] pipeline = scheduleSingleReplication(blockInfo);
++    
++    assertEquals(2, pipeline.length); // single new copy
++    assertTrue("Source of replication should be one of the nodes the block " +
++        "was on. Was: " + pipeline[0],
++        nodeInList(pipeline[0], origNodes));
++    assertTrue("Destination of replication should be on the other rack. " +
++        "Was: " + pipeline[1],
++        nodeInList(pipeline[1], rackB));
++  }
++  
++  private void doBasicTest(int testIndex) {
++    List<DatanodeDescriptor> origNodes = nodesAtIndexes(0, 1);
++    BlockInfo blockInfo = addBlockOnNodes((long)testIndex, origNodes);
++
++    DatanodeInfo[] pipeline = scheduleSingleReplication(blockInfo);
++    assertEquals(2, pipeline.length);
++    assertTrue("Source of replication should be one of the nodes the block " +
++    		"was on. Was: " + pipeline[0],
++    		nodeInList(pipeline[0], origNodes));
++    assertTrue("Destination of replication should be on the other rack. " +
++        "Was: " + pipeline[1],
++        nodeInList(pipeline[1], rackB));
++  }
++  
++  private void doTestTwoOfThreeNodesDecomissioned(int testIndex) throws Exception {
++    // Block originally on A1, A2, B1
++    List<DatanodeDescriptor> origNodes = nodesAtIndexes(0, 1, 3);
++    BlockInfo blockInfo = addBlockOnNodes(testIndex, origNodes);
++    
++    // Decommission two of the nodes (A1, A2)
++    List<DatanodeDescriptor> decomNodes = startDecommission(0, 1);
++    
++    DatanodeInfo[] pipeline = scheduleSingleReplication(blockInfo);
++    assertTrue("Source of replication should be one of the nodes the block " +
++        "was on. Was: " + pipeline[0],
++        nodeInList(pipeline[0], origNodes));
++    assertEquals("Should have two targets", 3, pipeline.length);
++    
++    boolean foundOneOnRackA = false;
++    for (int i = 1; i < pipeline.length; i++) {
++      DatanodeInfo target = pipeline[i];
++      if (nodeInList(target, rackA)) {
++        foundOneOnRackA = true;
++      }
++      assertFalse(nodeInList(target, decomNodes));
++      assertFalse(nodeInList(target, origNodes));
++    }
++    
++    assertTrue("Should have at least one target on rack A. Pipeline: " +
++        StringUtils.joinObjects(",", Arrays.asList(pipeline)),
++        foundOneOnRackA);
++  }
++  
++  private boolean nodeInList(DatanodeInfo node,
++      List<DatanodeDescriptor> nodeList) {
++    for (DatanodeDescriptor candidate : nodeList) {
++      if (node.getName().equals(candidate.getName())) {
++        return true;
++      }
++    }
++    return false;
++  }
++
++  private void doTestAllNodesHoldingReplicasDecomissioned(int testIndex) throws Exception {
++    // Block originally on A1, A2, B1
++    List<DatanodeDescriptor> origNodes = nodesAtIndexes(0, 1, 3);
++    BlockInfo blockInfo = addBlockOnNodes(testIndex, origNodes);
++    
++    // Decommission all of the nodes
++    List<DatanodeDescriptor> decomNodes = startDecommission(0, 1, 3);
++    
++    DatanodeInfo[] pipeline = scheduleSingleReplication(blockInfo);
++    assertTrue("Source of replication should be one of the nodes the block " +
++        "was on. Was: " + pipeline[0],
++        nodeInList(pipeline[0], origNodes));
++    assertEquals("Should have three targets", 4, pipeline.length);
++    
++    boolean foundOneOnRackA = false;
++    boolean foundOneOnRackB = false;
++    for (int i = 1; i < pipeline.length; i++) {
++      DatanodeInfo target = pipeline[i];
++      if (nodeInList(target, rackA)) {
++        foundOneOnRackA = true;
++      } else if (nodeInList(target, rackB)) {
++        foundOneOnRackB = true;
++      }
++      assertFalse(nodeInList(target, decomNodes));
++      assertFalse(nodeInList(target, origNodes));
++    }
++    
++    assertTrue("Should have at least one target on rack A. Pipeline: " +
++        StringUtils.joinObjects(",", Arrays.asList(pipeline)),
++        foundOneOnRackA);
++    assertTrue("Should have at least one target on rack B. Pipeline: " +
++        StringUtils.joinObjects(",", Arrays.asList(pipeline)),
++        foundOneOnRackB);
++  }
++  
++  private void doTestOneOfTwoRacksDecomissioned(int testIndex) throws Exception {
++    System.out.println("Begin iter " + testIndex);
++    // Block originally on A1, A2, B1
++    List<DatanodeDescriptor> origNodes = nodesAtIndexes(0, 1, 3);
++    BlockInfo blockInfo = addBlockOnNodes(testIndex, origNodes);
++    
++    // Decommission all of the nodes in rack A
++    List<DatanodeDescriptor> decomNodes = startDecommission(0, 1, 2);
++    
++    DatanodeInfo[] pipeline = scheduleSingleReplication(blockInfo);
++    assertTrue("Source of replication should be one of the nodes the block " +
++        "was on. Was: " + pipeline[0],
++        nodeInList(pipeline[0], origNodes));
++    assertEquals("Should have 2 targets", 3, pipeline.length);
++    
++    boolean foundOneOnRackB = false;
++    for (int i = 1; i < pipeline.length; i++) {
++      DatanodeInfo target = pipeline[i];
++      if (nodeInList(target, rackB)) {
++        foundOneOnRackB = true;
++      }
++      assertFalse(nodeInList(target, decomNodes));
++      assertFalse(nodeInList(target, origNodes));
++    }
++    
++    assertTrue("Should have at least one target on rack B. Pipeline: " +
++        StringUtils.joinObjects(",", Arrays.asList(pipeline)),
++        foundOneOnRackB);    
++  }
++
++  private List<DatanodeDescriptor> nodesAtIndexes(int ... indexes) {
++    List<DatanodeDescriptor> ret = new ArrayList<DatanodeDescriptor>();
++    for (int idx : indexes) {
++      ret.add(nodes.get(idx));
++    }
++    return ret;
++  }
++  
++  private List<DatanodeDescriptor> startDecommission(int ... indexes) {
++    List<DatanodeDescriptor> nodes = nodesAtIndexes(indexes);
++    for (DatanodeDescriptor node : nodes) {
++      node.startDecommission();
++    }
++    return nodes;
++  }
++  
++  private BlockInfo addBlockOnNodes(long blockId, List<DatanodeDescriptor> nodes) {
++    INodeFile iNode = Mockito.mock(INodeFile.class);
++    Mockito.doReturn((short)3).when(iNode).getReplication();
++    Block block = new Block(blockId);
++
++    BlockInfo blockInfo = fsn.blocksMap.addINode(block, iNode);
++
++    // Block originally on A1, A2, B1
++    for (DatanodeDescriptor dn : nodes) {
++      blockInfo.addNode(dn);
++    }
++
++    return blockInfo;
++  }
++  
++  private DatanodeInfo[] scheduleSingleReplication(Block block) {
++    assertEquals("Block not initially pending replication",
++        0, fsn.pendingReplications.getNumReplicas(block));
++    assertTrue("computeReplicationWork should indicate replication is needed",
++        fsn.computeReplicationWorkForBlock(block, 1));
++    assertTrue("replication is pending after work is computed",
++        fsn.pendingReplications.getNumReplicas(block) > 0);
++    
++    List<PendingReplPipeline> pipelines = getAllPendingReplications();
++      
++    assertEquals(1, pipelines.size());
++    assertEquals(block, pipelines.get(0).block);
++    return pipelines.get(0).pipeline;
++  }
++
++  private List<PendingReplPipeline> getAllPendingReplications() {
++    List<PendingReplPipeline> pendingPipelines = new ArrayList<PendingReplPipeline>();
++    
++    for (DatanodeDescriptor dn : nodes) {
++      BlockCommand replCommand = dn.getReplicationCommand(10);
++      if (replCommand == null) continue;
++
++      Block[] blocks = replCommand.getBlocks();
++      DatanodeInfo[][] allTargets = replCommand.getTargets();
++      
++      for (int i = 0; i < blocks.length; i++) {
++        DatanodeInfo[] targets = allTargets[i];
++        Block block = blocks[i];
++                
++        DatanodeInfo[] pipeline = new DatanodeInfo[1 + targets.length];
++        pipeline[0] = dn;
++        System.arraycopy(targets, 0, pipeline, 1, targets.length);
++        pendingPipelines.add(new PendingReplPipeline(block, pipeline));
++      }
++    }
++    return pendingPipelines;
++  }
++  
++  private static class PendingReplPipeline {
++    final Block block;
++    final DatanodeInfo[] pipeline;
++    public PendingReplPipeline(Block block, DatanodeInfo[] pipeline) {
++      super();
++      this.block = block;
++      this.pipeline = pipeline;
++    }
++  }
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestBlocksWithNotEnoughRacks.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestBlocksWithNotEnoughRacks.java
+new file mode 100644
+index 0000000..7404745
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestBlocksWithNotEnoughRacks.java
+@@ -0,0 +1,494 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs.server.namenode;
++
++import java.util.ArrayList;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.BlockLocation;
++import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.DFSTestUtil;
++import org.apache.hadoop.hdfs.DistributedFileSystem;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.hdfs.protocol.Block;
++import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
++import org.apache.hadoop.hdfs.server.datanode.DataNode;
++import org.apache.hadoop.hdfs.server.namenode.NameNode;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.commons.logging.impl.Log4JLogger;
++import org.apache.log4j.Level;
++
++import org.junit.Ignore;
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++/**
++ * Tests that rack policy is properly maintained during various operations.
++ * 
++ * NOTE: many of the test cases here are Ignored in CDH but not in trunk.
++ * The reasoning is that trunk has HDFS-15, which causes rack policy to
++ * get checked on every replication decision. This is a potential performance
++ * issue that has not seen enough scale testing in trunk yet, so it
++ * has not been backported. Thus, in any case where replication has been
++ * reached the desired number of replicas, new replicas will not be made
++ * just to satisfy the rack policy. If HDFS-15 is backported, these tests
++ * may be re-enabled.
++ */
++public class TestBlocksWithNotEnoughRacks {
++  public static final Log LOG = LogFactory.getLog(TestBlocksWithNotEnoughRacks.class);
++  static {
++    ((Log4JLogger)NameNode.stateChangeLog).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger)FSNamesystem.LOG).getLogger().setLevel(Level.ALL);        
++  }
++
++  /*
++   * Wait up to 10s for the given block to be replicated across 
++   * the requested number of racks, with the requested number of 
++   * replicas, and the requested number of replicas still needed. 
++   */
++  private void waitForReplication(FSNamesystem ns, Block b, int racks, 
++      int replicas, int neededReplicas) throws Exception {
++    int curRacks = ns.getNumberOfRacks(b);
++    int curReplicas = ns.countNodes(b).liveReplicas();
++    int curNeededReplicas = ns.neededReplications.size();
++    int count = 0;
++
++    while (curRacks < racks || curReplicas < replicas || 
++           curNeededReplicas > neededReplicas) {
++      if (++count == 10) { 
++        break;
++      }
++      Thread.sleep(1000);
++      curRacks = ns.getNumberOfRacks(b);
++      curReplicas = ns.countNodes(b).liveReplicas();
++      curNeededReplicas = ns.neededReplications.size();
++    }
++    assertEquals(racks, curRacks);
++    assertEquals(replicas, curReplicas);
++    assertEquals(neededReplicas, curNeededReplicas);
++  }
++
++  /*
++   * Wait for the given DN (host:port) to be decommissioned.
++   */
++  private void waitForDecommission(FileSystem fs, String name) 
++      throws Exception {
++    DatanodeInfo dn = null;
++    while (dn == null || dn.isDecommissionInProgress() || !dn.isDecommissioned()) {
++      Thread.sleep(1000);
++      DistributedFileSystem dfs = (DistributedFileSystem)fs;
++      for (DatanodeInfo info : dfs.getDataNodeStats()) {
++        if (name.equals(info.getName())) {
++          dn = info;
++        }
++      }      
++    }
++  }
++
++  /*
++   * Return a configuration object with low timeouts for testing and 
++   * a topology script set (which enables rack awareness).  
++   */
++  private Configuration getConf() {
++    Configuration conf = new Configuration();
++    conf.setLong("dfs.heartbeat.interval", 1L);
++    conf.setInt("dfs.replication.interval", 1);
++    conf.setInt("dfs.replication.pending.timeout.sec", 1);
++    conf.setLong("dfs.blockreport.intervalMsec", 1000L);
++    conf.set("topology.script.file.name", "xyz");
++    return conf;
++  }
++
++  /*
++   * Write the given string to the given file.
++   */
++  private void writeFile(FileSystem fs, Path p, String s) throws Exception {
++    if (fs.exists(p)) {
++      fs.delete(p, true);
++    }
++    FSDataOutputStream stm = fs.create(p);
++    stm.writeBytes(s);
++    stm.writeBytes("\n");
++    stm.close();
++  }
++
++  /*
++   * Creates a block with all datanodes on the same rack, though the block
++   * is sufficiently replicated. Adds an additional datanode on a new rack. 
++   * The block should be replicated to the new rack.
++   */
++  @Test
++  @Ignore("See javadoc at top of class")
++  public void testSufficientlyReplBlocksUsesNewRack() throws Exception {
++    Configuration conf = getConf();
++    final short REPLICATION_FACTOR = 3;
++    final Path filePath = new Path("/testFile");
++    // All datanodes are on the same rack
++    String racks[] = {"/rack1", "/rack1", "/rack1"};
++    MiniDFSCluster cluster = new MiniDFSCluster(conf, racks.length, true, racks);
++    final FSNamesystem ns = cluster.getNameNode().getNamesystem();
++
++    try {
++      // Create a file with one block with a replication factor of 3
++      final FileSystem fs = cluster.getFileSystem();
++      DFSTestUtil.createFile(fs, filePath, 1L, REPLICATION_FACTOR, 1L);
++      Block b = DFSTestUtil.getFirstBlock(fs, filePath);
++      waitForReplication(ns, b, 1, REPLICATION_FACTOR, 1);      
++
++      // Add a new datanode on a different rack
++      String newRacks[] = {"/rack2"};
++      cluster.startDataNodes(conf, 1, true, null, newRacks);
++      cluster.waitActive();
++
++      waitForReplication(ns, b, 2, REPLICATION_FACTOR, 0);
++    } finally {
++      cluster.shutdown();
++    }
++  }
++
++  /*
++   * Creates a block with all datanodes on the same rack. Add additional
++   * datanodes on a different rack and increase the replication factor, 
++   * making sure there are enough replicas across racks. If the previous
++   * test passes this one should too, however this test may pass when
++   * the previous one fails because the replication code is explicitly
++   * triggered by setting the replication factor.
++   */
++  @Test
++  @Ignore("See javadoc at top of class")
++  public void testUnderReplicatedUsesNewRacks() throws Exception {
++    Configuration conf = getConf();
++    short REPLICATION_FACTOR = 3;
++    final Path filePath = new Path("/testFile");
++    // All datanodes are on the same rack
++    String racks[] = {"/rack1", "/rack1", "/rack1", "/rack1", "/rack1"};
++    MiniDFSCluster cluster = new MiniDFSCluster(conf, racks.length, true, racks);
++    final FSNamesystem ns = cluster.getNameNode().getNamesystem();
++
++    try {
++      // Create a file with one block
++      final FileSystem fs = cluster.getFileSystem();
++      DFSTestUtil.createFile(fs, filePath, 1L, REPLICATION_FACTOR, 1L);
++      Block b = DFSTestUtil.getFirstBlock(fs, filePath);
++      waitForReplication(ns, b, 1, REPLICATION_FACTOR, 1);
++      
++      // Add new datanodes on a different rack and increase the
++      // replication factor so the block is underreplicated and make
++      // sure at least one of the hosts on the new rack is used. 
++      String newRacks[] = {"/rack2", "/rack2"};
++      cluster.startDataNodes(conf, 2, true, null, newRacks);
++      REPLICATION_FACTOR = 5;
++      ns.setReplication("/testFile", REPLICATION_FACTOR); 
++
++      waitForReplication(ns, b, 2, REPLICATION_FACTOR, 0);
++    } finally {
++      cluster.shutdown();
++    }
++  }
++
++  /*
++   * Mark a block as corrupt, test that when it is re-replicated that it
++   * is still replicated across racks.
++   */
++  @Test
++  @Ignore("See class JavaDoc")
++  public void testCorruptBlockRereplicatedAcrossRacks() throws Exception {
++    Configuration conf = getConf();
++    short REPLICATION_FACTOR = 2;
++    final Path filePath = new Path("/testFile");
++    // Last datanode is on a different rack
++    String racks[] = {"/rack1", "/rack1", "/rack2"};
++    MiniDFSCluster cluster = new MiniDFSCluster(conf, racks.length, true, racks);
++    final FSNamesystem ns = cluster.getNameNode().getNamesystem();
++
++    try {
++      // Create a file with one block with a replication factor of 2
++      final FileSystem fs = cluster.getFileSystem();
++      DFSTestUtil.createFile(fs, filePath, 1L, REPLICATION_FACTOR, 1L);
++      Block b = DFSTestUtil.getFirstBlock(fs, filePath);
++      waitForReplication(ns, b, 2, REPLICATION_FACTOR, 0);
++
++      // 3rd datanode reports that the block is corrupt
++      ArrayList<DataNode> datanodes = cluster.getDataNodes();
++      assertEquals(3, datanodes.size());
++      DataNode dataNode = datanodes.get(2);
++      cluster.getNameNode().namesystem.markBlockAsCorrupt(b, 
++          new DatanodeInfo(dataNode.dnRegistration));
++
++      // The rack policy is still respected (the 3rd datanode got
++      // the new replica even though it reported the corrupt block).
++      waitForReplication(ns, b, 2, REPLICATION_FACTOR, 0);
++    } finally {
++      cluster.shutdown();
++    }
++  }
++
++  /*
++   * Reduce the replication factor of a file, making sure that the only
++   * block that is across racks is not removed when deleting replicas.
++   */
++  @Test
++  public void testReduceReplFactorRespectsRackPolicy() throws Exception {
++    Configuration conf = getConf();
++    short REPLICATION_FACTOR = 3;
++    final Path filePath = new Path("/testFile");
++    String racks[] = {"/rack1", "/rack1", "/rack2", "/rack2"};
++    MiniDFSCluster cluster = new MiniDFSCluster(conf, racks.length, true, racks);
++    final FSNamesystem ns = cluster.getNameNode().getNamesystem();
++
++    try {
++      // Create a file with one block
++      final FileSystem fs = cluster.getFileSystem();
++      DFSTestUtil.createFile(fs, filePath, 1L, REPLICATION_FACTOR, 1L);
++      Block b = DFSTestUtil.getFirstBlock(fs, filePath);
++      waitForReplication(ns, b, 2, REPLICATION_FACTOR, 0);
++
++      // Decrease the replication factor, make sure the deleted replica
++      // was not the one that lived on the rack with only one replica,
++      // ie we should still have 2 racks after reducing the repl factor.
++      REPLICATION_FACTOR = 2;
++      ns.setReplication("/testFile", REPLICATION_FACTOR); 
++
++      waitForReplication(ns, b, 2, REPLICATION_FACTOR, 0);
++    } finally {
++      cluster.shutdown();
++    }
++  }
++
++  /*
++   * Test that when a block is replicated because a replica is lost due
++   * to host failure the the rack policy is preserved.
++   */
++  @Test
++  public void testReplDueToNodeFailRespectsRackPolicy() throws Exception {
++    Configuration conf = getConf();
++    short REPLICATION_FACTOR = 3;
++    final Path filePath = new Path("/testFile");
++    // Last datanode is on a different rack
++    String racks[] = {"/rack1", "/rack1", "/rack1", "/rack2", "/rack2"};
++    MiniDFSCluster cluster = new MiniDFSCluster(conf, racks.length, true, racks);
++    final FSNamesystem ns = cluster.getNameNode().getNamesystem();
++
++    try {
++      // Create a file with one block with a replication factor of 2
++      final FileSystem fs = cluster.getFileSystem();
++      DFSTestUtil.createFile(fs, filePath, 1L, REPLICATION_FACTOR, 1L);
++      Block b = DFSTestUtil.getFirstBlock(fs, filePath);
++      waitForReplication(ns, b, 2, REPLICATION_FACTOR, 0);
++
++      // Make the last datanode look like it failed to heartbeat by 
++      // calling removeDatanode and stopping it.
++      ArrayList<DataNode> datanodes = cluster.getDataNodes();
++      int idx = datanodes.size() - 1;
++      DataNode dataNode = datanodes.get(idx);
++      cluster.stopDataNode(idx);
++      ns.removeDatanode(dataNode.dnRegistration);
++
++      // The block should still have sufficient # replicas, across racks.
++      // The last node may not have contained a replica, but if it did
++      // it should have been replicated within the same rack.
++      waitForReplication(ns, b, 2, REPLICATION_FACTOR, 0);
++      
++      // Fail the last datanode again, it's also on rack2 so there is
++      // only 1 rack for all the replicas
++      datanodes = cluster.getDataNodes();
++      idx = datanodes.size() - 1;
++      dataNode = datanodes.get(idx);
++      cluster.stopDataNode(idx);
++      ns.removeDatanode(dataNode.dnRegistration);
++
++      
++      // Make sure we have enough live replicas even though we are
++      // short one rack and therefore need one replica
++      /**
++       * In trunk, the assertion here is the following:
++       * waitForReplication(ns, b, 1, REPLICATION_FACTOR, 1);
++       * 
++       * i.e. that the block is on 1 rack with 2 replicas, and wants one
++       * more replica, since it isn't achieving the right rack policy.
++       * In 0.20, if there is only one live rack, then this block
++       * is not considered under-replicated, since rack policy is
++       * unachievable (see class JavaDoc above).
++       */
++      waitForReplication(ns, b, 1, REPLICATION_FACTOR, 0);
++    } finally {
++      cluster.shutdown();
++    }
++  }
++  
++  /*
++   * Test that when the execss replicas of a block are reduced due to a 
++   * node re-joining the cluster the rack policy is not violated.
++   */
++  @Test
++  @Ignore("See javadoc at top of class")
++  public void testReduceReplFactorDueToRejoinRespectsRackPolicy() throws Exception {
++    Configuration conf = getConf();
++    short REPLICATION_FACTOR = 2;
++    final Path filePath = new Path("/testFile");
++    // Last datanode is on a different rack
++    String racks[] = {"/rack1", "/rack1", "/rack2"};
++    MiniDFSCluster cluster = new MiniDFSCluster(conf, racks.length, true, racks);
++    final FSNamesystem ns = cluster.getNameNode().getNamesystem();
++
++    try {
++      // Create a file with one block
++      final FileSystem fs = cluster.getFileSystem();
++      DFSTestUtil.createFile(fs, filePath, 1L, REPLICATION_FACTOR, 1L);
++      Block b = DFSTestUtil.getFirstBlock(fs, filePath);
++      waitForReplication(ns, b, 2, REPLICATION_FACTOR, 0);
++
++      // Make the last (cross rack) datanode look like it failed
++      // to heartbeat by stopping it and calling removeDatanode.
++      ArrayList<DataNode> datanodes = cluster.getDataNodes();
++      assertEquals(3, datanodes.size());
++      DataNode dataNode = datanodes.get(2);
++      cluster.stopDataNode(2);
++      ns.removeDatanode(dataNode.dnRegistration);
++
++      // The block gets re-replicated to another datanode so it has a 
++      // sufficient # replicas, but not across racks, so there should
++      // be 1 rack, and 1 needed replica (even though there are 2 hosts 
++      // available and only 2 replicas required).
++      waitForReplication(ns, b, 1, REPLICATION_FACTOR, 1);
++
++      // Start the "failed" datanode, which has a replica so the block is
++      // now over-replicated and therefore a replica should be removed but
++      // not on the restarted datanode as that would violate the rack policy.
++      String rack2[] = {"/rack2"};
++      cluster.startDataNodes(conf, 1, true, null, rack2);
++      cluster.waitActive();      
++      
++      // The block now has sufficient # replicas, across racks
++      waitForReplication(ns, b, 2, REPLICATION_FACTOR, 0);
++    } finally {
++      cluster.shutdown();
++    }
++  }
++
++  /*
++   * Test that rack policy is still respected when blocks are replicated
++   * due to node decommissioning.
++   */
++  @Test
++  public void testNodeDecomissionRespectsRackPolicy() throws Exception {
++    Configuration conf = getConf();
++    short REPLICATION_FACTOR = 2;
++    final Path filePath = new Path("/testFile");
++
++    // Configure an excludes file
++    FileSystem localFileSys = FileSystem.getLocal(conf);
++    Path workingDir = localFileSys.getWorkingDirectory();
++    Path dir = new Path(workingDir, "build/test/data/temp/decommission");
++    Path excludeFile = new Path(dir, "exclude");
++    assertTrue(localFileSys.mkdirs(dir));
++    writeFile(localFileSys, excludeFile, "");
++    conf.set("dfs.hosts.exclude", excludeFile.toUri().getPath());
++
++    // Two blocks and four racks
++    String racks[] = {"/rack1", "/rack1", "/rack2", "/rack2"};
++    MiniDFSCluster cluster = new MiniDFSCluster(conf, racks.length, true, racks);
++    final FSNamesystem ns = cluster.getNameNode().getNamesystem();
++
++    try {
++      // Create a file with one block
++      final FileSystem fs = cluster.getFileSystem();
++      DFSTestUtil.createFile(fs, filePath, 1L, REPLICATION_FACTOR, 1L);
++      Block b = DFSTestUtil.getFirstBlock(fs, filePath);
++      waitForReplication(ns, b, 2, REPLICATION_FACTOR, 0);
++
++      // Decommission one of the hosts with the block, this should cause 
++      // the block to get replicated to another host on the same rack,
++      // otherwise the rack policy is violated.
++      BlockLocation locs[] = fs.getFileBlockLocations(
++          fs.getFileStatus(filePath), 0, Long.MAX_VALUE);
++      String name = locs[0].getNames()[0];
++      writeFile(localFileSys, excludeFile, name);
++      ns.refreshNodes(conf);
++      waitForDecommission(fs, name);
++
++      // Check the block still has sufficient # replicas across racks
++      waitForReplication(ns, b, 2, REPLICATION_FACTOR, 0);
++    } finally {
++      cluster.shutdown();
++    }
++  }
++
++  /*
++   * Test that rack policy is still respected when blocks are replicated
++   * due to node decommissioning, when the blocks are over-replicated.
++   */
++  @Test
++  public void testNodeDecomissionWithOverreplicationRespectsRackPolicy() 
++      throws Exception {
++    Configuration conf = getConf();
++    short REPLICATION_FACTOR = 5;
++    final Path filePath = new Path("/testFile");
++
++    // Configure an excludes file
++    FileSystem localFileSys = FileSystem.getLocal(conf);
++    Path workingDir = localFileSys.getWorkingDirectory();
++    Path dir = new Path(workingDir, "build/test/data/temp/decommission");
++    Path excludeFile = new Path(dir, "exclude");
++    assertTrue(localFileSys.mkdirs(dir));
++    writeFile(localFileSys, excludeFile, "");
++    conf.set("dfs.hosts.exclude", excludeFile.toUri().getPath());
++
++    // All hosts are on two racks, only one host on /rack2
++    String racks[] = {"/rack1", "/rack2", "/rack1", "/rack1", "/rack1"};
++    MiniDFSCluster cluster = new MiniDFSCluster(conf, racks.length, true, racks);
++    final FSNamesystem ns = cluster.getNameNode().getNamesystem();
++
++    try {
++      final FileSystem fs = cluster.getFileSystem();
++      DFSTestUtil.createFile(fs, filePath, 1L, REPLICATION_FACTOR, 1L);
++      Block b = DFSTestUtil.getFirstBlock(fs, filePath);
++      waitForReplication(ns, b, 2, REPLICATION_FACTOR, 0);
++
++      // Lower the replication factor so the blocks are over replicated
++      REPLICATION_FACTOR = 2;
++      fs.setReplication(filePath, REPLICATION_FACTOR);
++      
++      // Decommission one of the hosts with the block that is not on
++      // the lone host on rack2 (if we decomission that host it would
++      // be impossible to respect the rack policy).
++      BlockLocation locs[] = fs.getFileBlockLocations(
++          fs.getFileStatus(filePath), 0, Long.MAX_VALUE);
++      String[] tops = locs[0].getTopologyPaths();
++      for (String top : tops) {
++        if (!top.startsWith("/rack2")) {
++          String name = top.substring("/rack1".length()+1);
++          writeFile(localFileSys, excludeFile, name);
++          ns.refreshNodes(conf);
++          waitForDecommission(fs, name);
++          break;
++        }
++      }
++
++      // Check the block still has sufficient # replicas across racks,
++      // ie we didn't remove the replica on the host on /rack1.
++      waitForReplication(ns, b, 2, REPLICATION_FACTOR, 0);
++    } finally {
++      cluster.shutdown();
++    }
++  }
++}
+-- 
+1.7.0.4
+

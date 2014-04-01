@@ -1,0 +1,66 @@
+From c912024353450a0fa2c53a95500b4ed653f76129 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 24 Aug 2010 22:53:23 -0700
+Subject: [PATCH 0324/1179] MAPREDUCE-118. Job.getJobID() will always return null.
+
+Reason: Bug
+Author: Amareshwari Sriramadasu
+Ref: DISTRO-20
+---
+ src/mapred/org/apache/hadoop/mapreduce/Job.java    |    1 +
+ .../org/apache/hadoop/mapreduce/JobContext.java    |    6 +++++-
+ .../hadoop/mapreduce/TestMapReduceLocal.java       |    2 ++
+ 3 files changed, 8 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/Job.java b/src/mapred/org/apache/hadoop/mapreduce/Job.java
+index de55aef..a751ccb 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/Job.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/Job.java
+@@ -430,6 +430,7 @@ public class Job extends JobContext {
+     ensureState(JobState.DEFINE);
+     setUseNewAPI();
+     info = jobClient.submitJobInternal(conf);
++    super.setJobID(info.getID());
+     state = JobState.RUNNING;
+    }
+   
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/JobContext.java b/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
+index 110a160..de9ef6a 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
+@@ -47,13 +47,17 @@ public class JobContext {
+   public static final String JAR_UNPACK_PATTERN = "mapreduce.job.jar.unpack.pattern";
+ 
+   protected final org.apache.hadoop.mapred.JobConf conf;
+-  private final JobID jobId;
++  private JobID jobId;
+   
+   public JobContext(Configuration conf, JobID jobId) {
+     this.conf = new org.apache.hadoop.mapred.JobConf(conf);
+     this.jobId = jobId;
+   }
+ 
++  void setJobID(JobID jobId) {
++    this.jobId = jobId;
++  }
++
+   /**
+    * Return the configuration for the job.
+    * @return the shared configuration object
+diff --git a/src/test/org/apache/hadoop/mapreduce/TestMapReduceLocal.java b/src/test/org/apache/hadoop/mapreduce/TestMapReduceLocal.java
+index f679b2e..64dc59b 100644
+--- a/src/test/org/apache/hadoop/mapreduce/TestMapReduceLocal.java
++++ b/src/test/org/apache/hadoop/mapreduce/TestMapReduceLocal.java
+@@ -140,7 +140,9 @@ public class TestMapReduceLocal extends TestCase {
+     job.setInputFormatClass(TrackingTextInputFormat.class);
+     FileInputFormat.addInputPath(job, new Path(TEST_ROOT_DIR + "/in"));
+     FileOutputFormat.setOutputPath(job, new Path(TEST_ROOT_DIR + "/out"));
++    assertNull(job.getJobID());
+     assertTrue(job.waitForCompletion(false));
++    assertNotNull(job.getJobID());
+     String out = readFile("out/part-r-00000");
+     System.out.println(out);
+     assertEquals("a\t1\ncount\t1\nis\t1\nmore\t1\nof\t1\ntest\t4\nthis\t1\nword\t1\n",
+-- 
+1.7.0.4
+

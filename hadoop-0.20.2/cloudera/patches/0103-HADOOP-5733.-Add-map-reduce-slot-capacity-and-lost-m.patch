@@ -1,0 +1,196 @@
+From 99dfdb9a98e1ebd643f47877be3541962c32dcd0 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:07:18 -0800
+Subject: [PATCH 0103/1179] HADOOP-5733. Add map/reduce slot capacity and lost map/reduce slot capacity to JobTracker metrics
+
+Description: It would be nice to have the actual map/reduce slot capacity and the lost map/reduce slot capacity (# of blacklisted nodes * map-slot-per-node or reduce-slot-per-node). This information can be used to calculate a JT view of slot utilization.
+Reason: Metrics improvement
+Author: Sreekanth Ramakrishnan
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/mapred/JobTracker.java       |   35 +++++++++++----
+ .../hadoop/mapred/JobTrackerInstrumentation.java   |   18 ++++++++
+ .../hadoop/mapred/JobTrackerMetricsInst.java       |   45 +++++++++++++++++++-
+ 3 files changed, 87 insertions(+), 11 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 85e5b9c..0616559 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -621,11 +621,16 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       synchronized (taskTrackers) {
+         // remove the capacity of trackers on this host
+         for (TaskTrackerStatus status : getStatusesOnHost(hostName)) {
+-          totalMapTaskCapacity -= status.getMaxMapTasks();
+-          totalReduceTaskCapacity -= status.getMaxReduceTasks();
++          int mapSlots = status.getMaxMapTasks();
++          totalMapTaskCapacity -= mapSlots;
++          int reduceSlots = status.getMaxReduceTasks();
++          totalReduceTaskCapacity -= reduceSlots;
++          getInstrumentation().addBlackListedMapSlots(
++              mapSlots);
++          getInstrumentation().addBlackListedReduceSlots(
++              reduceSlots);
+         }
+-        numBlacklistedTrackers +=
+-          uniqueHostsMap.remove(hostName);
++        numBlacklistedTrackers += uniqueHostsMap.remove(hostName);
+       }
+     }
+     
+@@ -635,9 +640,13 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         int numTrackersOnHost = 0;
+         // add the capacity of trackers on the host
+         for (TaskTrackerStatus status : getStatusesOnHost(hostName)) {
+-          totalMapTaskCapacity += status.getMaxMapTasks();
+-          totalReduceTaskCapacity += status.getMaxReduceTasks();
++          int mapSlots = status.getMaxMapTasks();
++          totalMapTaskCapacity += mapSlots;
++          int reduceSlots = status.getMaxReduceTasks();
++          totalReduceTaskCapacity += reduceSlots;
+           numTrackersOnHost++;
++          getInstrumentation().decBlackListedMapSlots(mapSlots);
++          getInstrumentation().decBlackListedReduceSlots(reduceSlots);
+         }
+         uniqueHostsMap.put(hostName,
+                            numTrackersOnHost);
+@@ -2689,8 +2698,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       totalMaps -= oldStatus.countMapTasks();
+       totalReduces -= oldStatus.countReduceTasks();
+       if (!faultyTrackers.isBlacklisted(oldStatus.getHost())) {
+-        totalMapTaskCapacity -= oldStatus.getMaxMapTasks();
+-        totalReduceTaskCapacity -= oldStatus.getMaxReduceTasks();
++        int mapSlots = oldStatus.getMaxMapTasks();
++        totalMapTaskCapacity -= mapSlots;
++        int reduceSlots = oldStatus.getMaxReduceTasks();
++        totalReduceTaskCapacity -= reduceSlots;
+       }
+       if (status == null) {
+         taskTrackers.remove(trackerName);
+@@ -2709,8 +2720,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       totalMaps += status.countMapTasks();
+       totalReduces += status.countReduceTasks();
+       if (!faultyTrackers.isBlacklisted(status.getHost())) {
+-        totalMapTaskCapacity += status.getMaxMapTasks();
+-        totalReduceTaskCapacity += status.getMaxReduceTasks();
++        int mapSlots = status.getMaxMapTasks();
++        totalMapTaskCapacity += mapSlots;
++        int reduceSlots = status.getMaxReduceTasks();
++        totalReduceTaskCapacity += reduceSlots;
+       }
+       boolean alreadyPresent = false;
+       if (taskTrackers.containsKey(trackerName)) {
+@@ -2728,6 +2741,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         uniqueHostsMap.put(status.getHost(), numTaskTrackersInHost);
+       }
+     }
++    getInstrumentation().setMapSlots(totalMapTaskCapacity);
++    getInstrumentation().setReduceSlots(totalReduceTaskCapacity);
+     return oldStatus != null;
+   }
+     
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTrackerInstrumentation.java b/src/mapred/org/apache/hadoop/mapred/JobTrackerInstrumentation.java
+index 8ef7ff7..e13bfe9 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTrackerInstrumentation.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTrackerInstrumentation.java
+@@ -66,4 +66,22 @@ class JobTrackerInstrumentation {
+   
+   public void decWaitingReduces(JobID id, int task)
+   { }
++
++  public void setMapSlots(int slots)
++  { }
++
++  public void setReduceSlots(int slots)
++  { }
++
++  public void addBlackListedMapSlots(int slots)
++  { }
++
++  public void decBlackListedMapSlots(int slots)
++  { }
++
++  public void addBlackListedReduceSlots(int slots)
++  { }
++
++  public void decBlackListedReduceSlots(int slots)
++  { }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java b/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java
+index fbed7af..c844324 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java
+@@ -38,7 +38,13 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+   private int numJobsCompleted = 0;
+   private int numWaitingMaps = 0;
+   private int numWaitingReduces = 0;
+-  
++
++  //Cluster status fields.
++  private volatile int numMapSlots = 0;
++  private volatile int numReduceSlots = 0;
++  private int numBlackListedMapSlots = 0;
++  private int numBlackListedReduceSlots = 0;
++
+   public JobTrackerMetricsInst(JobTracker tracker, JobConf conf) {
+     super(tracker, conf);
+     String sessionId = conf.getSessionId();
+@@ -57,6 +63,11 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+    */
+   public void doUpdates(MetricsContext unused) {
+     synchronized (this) {
++      metricsRecord.setMetric("map_slots", numMapSlots);
++      metricsRecord.setMetric("reduce_slots", numReduceSlots);
++      metricsRecord.incrMetric("blacklisted_maps", numBlackListedMapSlots);
++      metricsRecord.incrMetric("blacklisted_reduces",
++          numBlackListedReduceSlots);
+       metricsRecord.incrMetric("maps_launched", numMapTasksLaunched);
+       metricsRecord.incrMetric("maps_completed", numMapTasksCompleted);
+       metricsRecord.incrMetric("maps_failed", numMapTasksFailed);
+@@ -78,6 +89,8 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+       numJobsCompleted = 0;
+       numWaitingMaps = 0;
+       numWaitingReduces = 0;
++      numBlackListedMapSlots = 0;
++      numBlackListedReduceSlots = 0;
+     }
+     metricsRecord.update();
+ 
+@@ -151,4 +164,34 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+   public synchronized void decWaitingReduces(JobID id, int task){
+     numWaitingReduces -= task;
+   }
++
++  @Override
++  public void setMapSlots(int slots) {
++    numMapSlots = slots;
++  }
++
++  @Override
++  public void setReduceSlots(int slots) {
++    numReduceSlots = slots;
++  }
++
++  @Override
++  public synchronized void addBlackListedMapSlots(int slots){
++    numBlackListedMapSlots += slots;
++  }
++
++  @Override
++  public synchronized void decBlackListedMapSlots(int slots){
++    numBlackListedMapSlots -= slots;
++  }
++
++  @Override
++  public synchronized void addBlackListedReduceSlots(int slots){
++    numBlackListedReduceSlots += slots;
++  }
++
++  @Override
++  public synchronized void decBlackListedReduceSlots(int slots){
++    numBlackListedReduceSlots -= slots;
++  }
+ }
+-- 
+1.7.0.4
+

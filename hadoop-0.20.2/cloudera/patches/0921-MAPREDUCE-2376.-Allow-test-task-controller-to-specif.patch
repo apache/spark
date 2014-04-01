@@ -1,0 +1,31 @@
+From da757539930beecd990188d5b0e2796f8fbb3953 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Mar 2011 13:10:28 -0800
+Subject: [PATCH 0921/1179] MAPREDUCE-2376. Allow test-task-controller to specify the user to test as
+
+Can now specify a username in the TC_TEST_USERNAME environment variable
+in order for this test to pass when running as a userid < 1000.
+
+Reason: fix build on Cloudera hudson where uid = 101
+Author: Todd Lipcon
+Ref: CDH-2811
+---
+ .../task-controller/test/test-task-controller.c    |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/c++/task-controller/test/test-task-controller.c b/src/c++/task-controller/test/test-task-controller.c
+index 656d0a8..6bbf028 100644
+--- a/src/c++/task-controller/test/test-task-controller.c
++++ b/src/c++/task-controller/test/test-task-controller.c
+@@ -709,7 +709,7 @@ int main(int argc, char **argv) {
+ 
+   if (getuid() == 0 && argc == 2) {
+     username = argv[1];
+-  } else {
++  } else if ((username = getenv("TC_TEST_USERNAME")) == NULL) {
+     username = strdup(getpwuid(getuid())->pw_name);
+     my_username = 1;
+   }
+-- 
+1.7.0.4
+

@@ -1,0 +1,48 @@
+From 084c390ed5fcb03c456121c8497759b40a74f809 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:18:13 -0800
+Subject: [PATCH 0128/1179] MAPREDUCE-1089. Fair Scheduler preemption triggers NPE when tasks are scheduled but not running
+
+Description: We see exceptions like this when preemption runs when a task has been scheduled on a TT but has not yet started running.
+
+<p>2009-10-09 14:30:53,989 INFO org.apache.hadoop.mapred.FairScheduler: Should preempt 2 MAP tasks for job_200910091420_0006: tasksDueToMinShare = 2, tasksDueToFairShare = 0<br/>
+2009-10-09 14:30:54,036 ERROR org.apache.hadoop.mapred.FairScheduler: Exception in fair scheduler UpdateThread<br/>
+java.lang.NullPointerException<br/>
+        at org.apache.hadoop.mapred.FairScheduler$2.compare(FairScheduler.java:1015)<br/>
+        at org.apache.hadoop.mapred.FairScheduler$2.compare(FairScheduler.java:1013)<br/>
+        at java.util.Arrays.mergeSort(Arrays.java:1270)<br/>
+        at java.util.Arrays.sort(Arrays.java:1210)<br/>
+        at java.util.Collections.sort(Collections.java:159)<br/>
+        at org.apache.hadoop.mapred.FairScheduler.preemptTasks(FairScheduler.java:1013)<br/>
+        at org.apache.hadoop.mapred.FairScheduler.preemptTasksIfNecessary(FairScheduler.java:911)<br/>
+        at org.apache.hadoop.mapred.FairScheduler$UpdateThread.run(FairScheduler.java:286)</p>
+Reason: Bugfix
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/mapred/FairScheduler.java    |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
+
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+index 22ba480..4c188f4 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+@@ -1003,9 +1003,14 @@ public class FairScheduler extends TaskScheduler {
+     List<TaskStatus> statuses = new ArrayList<TaskStatus>();
+     for (TaskInProgress tip: tips) {
+       for (TaskAttemptID id: tip.getActiveTasks().keySet()) {
+-        statuses.add(tip.getTaskStatus(id));
++        TaskStatus stat = tip.getTaskStatus(id);
++        // status is null when the task has been scheduled but not yet running
++        if (stat != null) {
++          statuses.add(stat);
++        }
+       }
+     }
++
+     // Sort the statuses in order of start time, with the latest launched first
+     Collections.sort(statuses, new Comparator<TaskStatus>() {
+       public int compare(TaskStatus t1, TaskStatus t2) {
+-- 
+1.7.0.4
+

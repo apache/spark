@@ -1,0 +1,111 @@
+From b131d77cefee39b7296530b018d59ca4d1516b01 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 25 Aug 2009 09:33:35 -0700
+Subject: [PATCH 0357/1179] Amend MAPREDUCE-768. Improved version of JobTracker configuration dump that also dumps job queues
+
+Author: V.V.Chaitanya Krishna
+Ref: YDH
+---
+ .../content/xdocs/commands_manual.xml              |   26 +++++++++++++-------
+ .../org/apache/hadoop/mapred/JobTracker.java       |    6 ++++-
+ .../org/apache/hadoop/mapred/QueueManager.java     |   16 ++++++++++++
+ 3 files changed, 38 insertions(+), 10 deletions(-)
+
+diff --git a/src/docs/src/documentation/content/xdocs/commands_manual.xml b/src/docs/src/documentation/content/xdocs/commands_manual.xml
+index 139a7c7..27a1caf 100644
+--- a/src/docs/src/documentation/content/xdocs/commands_manual.xml
++++ b/src/docs/src/documentation/content/xdocs/commands_manual.xml
+@@ -577,15 +577,23 @@
+         </tr>
+         </table>
+       </section>
+-			<section>
+-				<title> jobtracker </title>
+-				<p>
+-					Runs the MapReduce job Tracker node.
+-				</p> 
+-				<p>
+-					<code>Usage: hadoop jobtracker</code>
+-				</p>
+-			</section>
++      <section>
++	<title> jobtracker </title>
++	<p>Runs the MapReduce job Tracker node.</p> 
++	<p><code>Usage: hadoop jobtracker [-dumpConfiguration]</code></p>
++        <table>
++        <tr>
++        <th>COMMAND_OPTION</th><th> Description</th>
++        </tr>
++        <tr>
++        <td><code>-dumpConfiguration</code></td>
++        <td> Dumps the configuration used by the JobTracker alongwith queue
++        configuration in JSON format into Standard output used by the 
++        jobtracker and exits.</td>
++        </tr>
++        </table>
++				
++      </section>
+ 			
+ 			<section>
+ 				<title> namenode </title>
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 2c9c4e4..4a081b5 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -25,9 +25,9 @@ import java.io.FileInputStream;
+ import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.io.PrintWriter;
+-import java.io.Writer;
+ import java.io.InputStreamReader;
+ import java.io.OutputStreamWriter;
++import java.io.Writer;
+ import java.net.BindException;
+ import java.net.InetSocketAddress;
+ import java.net.UnknownHostException;
+@@ -4329,6 +4329,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+    */
+   private static void dumpConfiguration(Writer writer) throws IOException {
+     Configuration.dumpConfiguration(new JobConf(), writer);
++    writer.write("\n");
++    // get the QueueManager configuration properties
++    QueueManager.dumpConfiguration(writer);
++    writer.write("\n");
+   }
+ 
+   @Override
+diff --git a/src/mapred/org/apache/hadoop/mapred/QueueManager.java b/src/mapred/org/apache/hadoop/mapred/QueueManager.java
+index eec6d0c..96a8b55 100644
+--- a/src/mapred/org/apache/hadoop/mapred/QueueManager.java
++++ b/src/mapred/org/apache/hadoop/mapred/QueueManager.java
+@@ -21,6 +21,8 @@ package org.apache.hadoop.mapred;
+ import java.io.PrintWriter;
+ import java.io.Writer;
+ import java.io.IOException;
++import java.io.PrintWriter;
++import java.io.Writer;
+ import java.util.ArrayList;
+ import java.util.HashMap;
+ import java.util.Set;
+@@ -366,4 +368,18 @@ class QueueManager {
+             queueAclsInfolist.size()]);
+   }
+ 
++  /**
++   * prints the configuration of QueueManager in Json format.
++   * The method should be modified accordingly whenever
++   * QueueManager(Configuration) constructor is modified.
++   * @param writer {@link}Writer object to which the configuration properties 
++   * are printed in json format
++   * @throws IOException
++   */
++  static void dumpConfiguration(Writer writer) throws IOException {
++    Configuration conf = new Configuration(false);
++    conf.addResource(QUEUE_ACLS_FILE_NAME);
++    Configuration.dumpConfiguration(conf, writer);
++  }
++
+ }
+-- 
+1.7.0.4
+

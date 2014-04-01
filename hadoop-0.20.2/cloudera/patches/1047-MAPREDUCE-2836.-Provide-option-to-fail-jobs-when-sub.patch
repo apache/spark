@@ -1,0 +1,405 @@
+From 8f0f3f85374720b8daa89b69a053a85138804f94 Mon Sep 17 00:00:00 2001
+From: Ahmed Radwan <ahmed@cloudera.com>
+Date: Fri, 16 Sep 2011 01:55:10 -0700
+Subject: [PATCH 1047/1179] MAPREDUCE-2836. Provide option to fail jobs when submitted
+ to non-existent pools.
+
+Reason: Improvement
+Author: Ahmed Radwan
+Ref: CDH-3464
+---
+ .../org/apache/hadoop/mapred/FairScheduler.java    |   28 +++
+ .../java/org/apache/hadoop/mapred/PoolManager.java |   11 ++
+ .../hadoop/mapred/UndeclaredPoolException.java     |   32 ++++
+ .../hadoop/mapred/TestFairSchedulerPoolNames.java  |  179 ++++++++++++++++++++
+ .../documentation/content/xdocs/fair_scheduler.xml |    9 +
+ .../org/apache/hadoop/mapred/JobTracker.java       |    8 +
+ .../org/apache/hadoop/mapred/TaskScheduler.java    |   11 +-
+ 7 files changed, 277 insertions(+), 1 deletions(-)
+ create mode 100644 src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/UndeclaredPoolException.java
+ create mode 100644 src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairSchedulerPoolNames.java
+
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+index c2f60cb..5c31d33 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+@@ -34,6 +34,7 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.http.HttpServer;
+ import org.apache.hadoop.util.ReflectionUtils;
++import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker;
+ import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.hadoop.metrics.MetricsContext;
+@@ -96,6 +97,14 @@ public class FairScheduler extends TaskScheduler {
+   protected long lastHeartbeatTime;  // Time we last ran assignTasks 
+   private long lastPreemptCheckTime; // Time we last ran preemptTasksIfNecessary
+ 
++  /**
++   * A configuration property that controls the ability of submitting jobs to
++   * pools not declared in the scheduler allocation file.
++   */
++  public final static String ALLOW_UNDECLARED_POOLS_KEY =
++    "mapred.fairscheduler.allow.undeclared.pools";
++  private boolean allowUndeclaredPools = false;
++
+   private MetricsUpdater metricsUpdater; // responsible for pushing hadoop metrics
+ 
+   /**
+@@ -196,6 +205,7 @@ public class FairScheduler extends TaskScheduler {
+           "mapred.fairscheduler.preemption.only.log", false);
+       localityDelay = conf.getLong(
+           "mapred.fairscheduler.locality.delay", -1);
++      allowUndeclaredPools = conf.getBoolean(ALLOW_UNDECLARED_POOLS_KEY, true);
+       if (localityDelay == -1)
+         autoComputeLocalityDelay = true; // Compute from heartbeat interval
+ 
+@@ -1040,4 +1050,22 @@ public class FairScheduler extends TaskScheduler {
+   long getLastPreemptionUpdateTime() {
+     return lastPreemptionUpdateTime;
+   }
++
++  /**
++   * Examines the job's pool name to determine if it is a declared pool name (in
++   * the scheduler allocation file).
++   */
++  @Override
++  public void checkJobSubmission(JobInProgress job)
++      throws UndeclaredPoolException {
++    Set<String> declaredPools = poolMgr.getDeclaredPools();
++    if (!this.allowUndeclaredPools
++        && !declaredPools.contains(poolMgr.getPoolName(job)))
++      throw new UndeclaredPoolException("Pool name: '"
++          + poolMgr.getPoolName(job)
++          + "' is invalid. Add pool name to the fair scheduler allocation "
++          + "file. Valid pools are: "
++          + StringUtils.join(", ", declaredPools));
++  }
++
+ }
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
+index 8eb9eb8..bcc4bc4 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
+@@ -26,6 +26,8 @@ import java.util.Collections;
+ import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
++import java.util.Set;
++import java.util.TreeSet;
+ 
+ import javax.xml.parsers.DocumentBuilder;
+ import javax.xml.parsers.DocumentBuilderFactory;
+@@ -108,6 +110,8 @@ public class PoolManager {
+   private long lastSuccessfulReload; // Last time we successfully reloaded pools
+   private boolean lastReloadAttemptFailed = false;
+ 
++  private Set<String> declaredPools = new TreeSet<String>();
++
+   public PoolManager(FairScheduler scheduler) {
+     this.scheduler = scheduler;
+   }
+@@ -342,6 +346,8 @@ public class PoolManager {
+       this.fairSharePreemptionTimeout = fairSharePreemptionTimeout;
+       this.defaultMinSharePreemptionTimeout = defaultMinSharePreemptionTimeout;
+       this.defaultSchedulingMode = defaultSchedulingMode;
++      this.declaredPools = Collections.unmodifiableSet(new TreeSet<String>(
++          poolNamesInAllocFile));
+       for (String name: poolNamesInAllocFile) {
+         Pool pool = getPool(name);
+         if (poolModes.containsKey(name)) {
+@@ -515,4 +521,9 @@ public class PoolManager {
+       pool.updateMetrics();
+     }
+   }
++
++  public synchronized Set<String> getDeclaredPools() {
++    return declaredPools;
++  }
++
+ }
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/UndeclaredPoolException.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/UndeclaredPoolException.java
+new file mode 100644
+index 0000000..cdd0ef6
+--- /dev/null
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/UndeclaredPoolException.java
+@@ -0,0 +1,32 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.IOException;
++
++/**
++ * Thrown when the pool is not declared in the fair scheduler allocation file.
++ */
++public class UndeclaredPoolException extends IOException {
++
++  private static final long serialVersionUID = -3559057276650280117L;
++
++  public UndeclaredPoolException(String message) {
++    super(message);
++  }
++}
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairSchedulerPoolNames.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairSchedulerPoolNames.java
+new file mode 100644
+index 0000000..c5b222b
+--- /dev/null
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairSchedulerPoolNames.java
+@@ -0,0 +1,179 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.DataOutputStream;
++import java.io.File;
++import java.io.FileWriter;
++import java.io.IOException;
++import java.io.PrintWriter;
++import java.net.URI;
++
++import static org.junit.Assert.*;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.io.IntWritable;
++import org.apache.hadoop.io.Text;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Test;
++
++public class TestFairSchedulerPoolNames {
++
++  final static String TEST_DIR = new File(System.getProperty("test.build.data",
++      "build/contrib/streaming/test/data")).getAbsolutePath();
++  final static String ALLOC_FILE = new File(TEST_DIR, "test-pools")
++      .getAbsolutePath();
++
++  private static final String POOL_PROPERTY = "pool";
++  private String namenode;
++  private MiniDFSCluster miniDFSCluster = null;
++  private MiniMRCluster miniMRCluster = null;
++
++  /**
++   * Note that The PoolManager.ALLOW_UNDECLARED_POOLS_KEY property is set to
++   * false. So, the default pool is not added, and only pool names in the
++   * scheduler allocation file are considered valid.
++   */
++  @Before
++  public void setUp() throws Exception {
++    new File(TEST_DIR).mkdirs(); // Make sure data directory exists
++    // Create an allocation file with only one pool defined.
++    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
++    out.println("<?xml version=\"1.0\"?>");
++    out.println("<allocations>");
++    out.println("<pool name=\"poolA\">");
++    out.println("<minMaps>1</minMaps>");
++    out.println("<minReduces>1</minReduces>");
++    out.println("</pool>");
++    out.println("</allocations>");
++    out.close();
++
++    Configuration conf = new Configuration();
++    miniDFSCluster = new MiniDFSCluster(conf, 1, true, null);
++    namenode = miniDFSCluster.getFileSystem().getUri().toString();
++
++    JobConf clusterConf = new JobConf();
++    clusterConf.set("mapred.jobtracker.taskScheduler", FairScheduler.class
++        .getName());
++    clusterConf.set("mapred.fairscheduler.allocation.file", ALLOC_FILE);
++    clusterConf.set("mapred.fairscheduler.poolnameproperty", POOL_PROPERTY);
++    clusterConf.setBoolean(FairScheduler.ALLOW_UNDECLARED_POOLS_KEY, false);
++    miniMRCluster = new MiniMRCluster(1, namenode, 1, null, null, clusterConf);
++  }
++
++  @After
++  public void tearDown() throws Exception {
++    if (miniDFSCluster != null) {
++      miniDFSCluster.shutdown();
++    }
++    if (miniMRCluster != null) {
++      miniMRCluster.shutdown();
++    }
++  }
++
++  private void submitJob(String pool) throws IOException {
++    JobConf conf = new JobConf();
++    final Path inDir = new Path("/tmp/testing/wc/input");
++    final Path outDir = new Path("/tmp/testing/wc/output");
++    FileSystem fs = FileSystem.get(URI.create(namenode), conf);
++    fs.delete(outDir, true);
++    if (!fs.mkdirs(inDir)) {
++      throw new IOException("Mkdirs failed to create " + inDir.toString());
++    }
++    DataOutputStream file = fs.create(new Path(inDir, "part-00000"));
++    file.writeBytes("Sample text");
++    file.close();
++
++    FileSystem.setDefaultUri(conf, namenode);
++    conf.set("mapred.job.tracker", "localhost:"
++        + miniMRCluster.getJobTrackerPort());
++    conf.setJobName("wordcount");
++    conf.setInputFormat(TextInputFormat.class);
++
++    // the keys are words (strings)
++    conf.setOutputKeyClass(Text.class);
++    // the values are counts (ints)
++    conf.setOutputValueClass(IntWritable.class);
++
++    conf.setMapperClass(WordCount.MapClass.class);
++    conf.setCombinerClass(WordCount.Reduce.class);
++    conf.setReducerClass(WordCount.Reduce.class);
++    FileInputFormat.setInputPaths(conf, inDir);
++    FileOutputFormat.setOutputPath(conf, outDir);
++    conf.setNumMapTasks(1);
++    conf.setNumReduceTasks(0);
++    if (pool != null) {
++      conf.set(POOL_PROPERTY, pool);
++    }
++    JobClient.runJob(conf);
++  }
++
++  /**
++   * Tests job submission using the default pool name.
++   */
++  @Test
++  public void testDefaultPoolName() {
++    Throwable t = null;
++    try {
++      submitJob(null);
++    } catch (Exception e) {
++      t = e;
++    }
++    assertNotNull("No exception during submission", t);
++    assertTrue("Incorrect exception message", t.getMessage().contains(
++        "Add pool name to the fair scheduler allocation file"));
++  }
++
++  /**
++   * Tests job submission using a valid pool name (i.e., name exists in the fair
++   * scheduler allocation file).
++   */
++  @Test
++  public void testValidPoolName() {
++    Throwable t = null;
++    try {
++      submitJob("poolA");
++    } catch (Exception e) {
++      t = e;
++    }
++    assertNull("Exception during submission", t);
++  }
++
++  /**
++   * Tests job submission using an invalid pool name (i.e., name doesn't exist
++   * in the fair scheduler allocation file).
++   */
++  @Test
++  public void testInvalidPoolName() {
++    Throwable t = null;
++    try {
++      submitJob("poolB");
++    } catch (Exception e) {
++      t = e;
++    }
++    assertNotNull("No exception during submission", t);
++    assertTrue("Incorrect exception message", t.getMessage().contains(
++        "Add pool name to the fair scheduler allocation file"));
++  }
++
++}
+diff --git a/src/docs/src/documentation/content/xdocs/fair_scheduler.xml b/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
+index 02421af..15a5b61 100644
+--- a/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
++++ b/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
+@@ -203,6 +203,15 @@
+             mapred.fairscheduler.pool is not explicitly set.
+           </td>
+           </tr>
++          <tr>
++          <td>
++            mapred.fairscheduler.allow.undeclared.pools
++          </td>
++          <td>
++            Boolean property for enabling job submission to pools not declared
++            in the allocation file. Default: true.
++          </td>
++          </tr>
+         </table>
+         <p><strong>Advanced Parameters:</strong></p>
+         <table>
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 3196325..258b2a2 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -3786,6 +3786,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         throw ioe;
+       }
+ 
++      try {
++        this.taskScheduler.checkJobSubmission(job);
++      } catch (IOException ioe){
++        LOG.error("Problem in submitting job " + jobId, ioe);
++        job.fail();
++        throw ioe;
++      }
++
+       // Check the job if it cannot run in the cluster because of invalid memory
+       // requirements.
+       try {
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskScheduler.java b/src/mapred/org/apache/hadoop/mapred/TaskScheduler.java
+index ca0e0a8..9a55170 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskScheduler.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskScheduler.java
+@@ -96,5 +96,14 @@ abstract class TaskScheduler implements Configurable {
+    * Refresh the configuration of the scheduler.
+    */
+   public void refresh() throws IOException {}
+-  
++
++  /**
++   * Subclasses can override to provide any scheduler-specific checking
++   * mechanism for job submission.
++   * @param job
++   * @throws IOException
++   */
++  public void checkJobSubmission(JobInProgress job) throws IOException{
++  }
++
+ }
+-- 
+1.7.0.4
+

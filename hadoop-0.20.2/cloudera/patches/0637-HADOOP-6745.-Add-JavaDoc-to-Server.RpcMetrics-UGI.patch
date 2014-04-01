@@ -1,0 +1,142 @@
+From 497fefb3b9132b912a569577bc643c20a273707e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 5 May 2010 09:15:13 -0700
+Subject: [PATCH 0637/1179] HADOOP-6745. Add JavaDoc to Server.RpcMetrics, UGI
+
+Patch: https://issues.apache.org/jira/secure/attachment/12443726/HADOOP-6745-BP20-2.patch
+Author: Boris Shkolnik
+Reason: Security
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/ipc/Server.java         |    5 ++-
+ .../org/apache/hadoop/ipc/metrics/RpcMetrics.java  |   36 +++++++++++++++++++-
+ .../hadoop/security/UserGroupInformation.java      |   10 +++++-
+ 3 files changed, 48 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 57810c3..f8644e3 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -238,7 +238,10 @@ public abstract class Server {
+     }
+   }
+   
+-  /*Returns a handle to the rpcMetrics (required in tests)*/
++  /**
++   * Returns a handle to the rpcMetrics (required in tests)
++   * @return rpc metrics
++   */
+   public RpcMetrics getRpcMetrics() {
+     return rpcMetrics;
+   }
+diff --git a/src/core/org/apache/hadoop/ipc/metrics/RpcMetrics.java b/src/core/org/apache/hadoop/ipc/metrics/RpcMetrics.java
+index c6aec2f..edf46d9 100644
+--- a/src/core/org/apache/hadoop/ipc/metrics/RpcMetrics.java
++++ b/src/core/org/apache/hadoop/ipc/metrics/RpcMetrics.java
+@@ -74,26 +74,57 @@ public class RpcMetrics implements Updater {
+    *  -they can also be read directly - e.g. JMX does this.
+    */
+ 
++  /**
++   * metrics - number of bytes received
++   */
+   public final MetricsTimeVaryingLong receivedBytes = 
+          new MetricsTimeVaryingLong("ReceivedBytes", registry);
++  /**
++   * metrics - number of bytes sent
++   */
+   public final MetricsTimeVaryingLong sentBytes = 
+          new MetricsTimeVaryingLong("SentBytes", registry);
++  /**
++   * metrics - rpc queue time
++   */
+   public final MetricsTimeVaryingRate rpcQueueTime =
+           new MetricsTimeVaryingRate("RpcQueueTime", registry);
+-  public MetricsTimeVaryingRate rpcProcessingTime =
++  /**
++   * metrics - rpc processing time
++   */
++  public final MetricsTimeVaryingRate rpcProcessingTime =
+           new MetricsTimeVaryingRate("RpcProcessingTime", registry);
++  /**
++   * metrics - number of open connections
++   */
+   public final MetricsIntValue numOpenConnections = 
+           new MetricsIntValue("NumOpenConnections", registry);
++  /**
++   * metrics - length of the queue
++   */
+   public final MetricsIntValue callQueueLen = 
+           new MetricsIntValue("callQueueLen", registry);
++  /**
++   * metrics - number of failed authentications
++   */
+   public final MetricsTimeVaryingInt authenticationFailures = 
+           new MetricsTimeVaryingInt("rpcAuthenticationFailures", registry);
++  /**
++   * metrics - number of successful authentications
++   */
+   public final MetricsTimeVaryingInt authenticationSuccesses = 
+           new MetricsTimeVaryingInt("rpcAuthenticationSuccesses", registry);
++  /**
++   * metrics - number of failed authorizations
++   */
+   public final MetricsTimeVaryingInt authorizationFailures = 
+           new MetricsTimeVaryingInt("rpcAuthorizationFailures", registry);
++  /**
++   * metrics - number of successful authorizations
++   */
+   public final MetricsTimeVaryingInt authorizationSuccesses = 
+          new MetricsTimeVaryingInt("rpcAuthorizationSuccesses", registry);
++  
+   /**
+    * Push the metrics to the monitoring subsystem on doUpdate() call.
+    */
+@@ -111,6 +142,9 @@ public class RpcMetrics implements Updater {
+     metricsRecord.update();
+   }
+ 
++  /**
++   * shutdown the metrics
++   */
+   public void shutdown() {
+     if (rpcMBean != null) 
+       rpcMBean.shutdown();
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 094976f..5e063e4 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -771,6 +771,9 @@ public class UserGroupInformation {
+     return result;
+   }
+ 
++  /**
++   * existing types of authentications' methods
++   */
+   public static enum AuthenticationMethod {
+     SIMPLE,
+     KERBEROS,
+@@ -780,7 +783,8 @@ public class UserGroupInformation {
+     PROXY;
+   }
+ 
+-  /* Create a proxy user using username of the effective user and the ugi of the
++  /**
++   * Create a proxy user using username of the effective user and the ugi of the
+    * real user.
+    *
+    * @param effective
+@@ -804,6 +808,10 @@ public class UserGroupInformation {
+     return result;
+   }
+ 
++  /**
++   * get RealUser (vs. EffectiveUser)
++   * @return realUser running over proxy user
++   */
+   public UserGroupInformation getRealUser() {
+     for (RealUser p: subject.getPrincipals(RealUser.class)) {
+       return p.getRealUser();
+-- 
+1.7.0.4
+

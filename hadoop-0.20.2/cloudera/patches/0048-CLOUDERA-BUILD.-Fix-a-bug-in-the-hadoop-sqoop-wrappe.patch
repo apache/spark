@@ -1,0 +1,29 @@
+From 0caaf80f3a569b91f482de0dcb87f826967f5c7c Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:45:16 -0800
+Subject: [PATCH 0048/1179] CLOUDERA-BUILD. Fix a bug in the hadoop/sqoop wrapper generation
+
+Author: Matt Massie
+Ref: UNKNOWN
+---
+ cloudera/install_hadoop.sh |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index afc5090..93a748d 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -121,8 +121,8 @@ done
+ # Make bin wrappers
+ mkdir -p $BIN_DIR
+ 
+-for bin_wrapper in hadoop-$APACHE_BRANCH sqoop-$APACHE_BRANCH ; do
+-  cat > $BIN_DIR/$bin_wrapper <<EOF
++for bin_wrapper in hadoop sqoop ; do
++  cat > $BIN_DIR/$bin_wrapper-$APACHE_BRANCH <<EOF
+ #!/bin/sh
+ 
+ export HADOOP_HOME=$INSTALLED_LIB_DIR
+-- 
+1.7.0.4
+

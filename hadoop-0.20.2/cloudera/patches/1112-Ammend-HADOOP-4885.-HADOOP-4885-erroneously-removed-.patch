@@ -1,0 +1,31 @@
+From d0b1764daa4a3ca527d6ea553c009e46def2aeee Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 18 Dec 2011 13:28:46 -0800
+Subject: [PATCH 1112/1179] Ammend HADOOP-4885. HADOOP-4885 erroneously removed the call to
+ processIOError in rollEditLog. Without it the NN process will not exit
+ if there are no valid edit streams. GetImageServlet will NPE but the
+ NN keeps running, accepting modifications it will not be able to
+ persist.
+
+Reason: Bug
+Author: Eli Collins
+Ref: CDH-3921
+---
+ .../hadoop/hdfs/server/namenode/FSEditLog.java     |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+index 6fda911..864ddbb 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+@@ -1347,6 +1347,7 @@ public class FSEditLog {
+       } catch (IOException e) {
+         failedSd = true;
+         // remove stream and this storage directory from list
++        processIOError(sd);
+         sd.unlock();
+         fsimage.removedStorageDirs.add(sd);
+         it.remove();
+-- 
+1.7.0.4
+

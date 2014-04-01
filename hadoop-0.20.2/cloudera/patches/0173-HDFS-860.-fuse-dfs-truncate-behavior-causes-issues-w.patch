@@ -1,0 +1,35 @@
+From 00f6976093cc20ea825a35f6831f645dc5f61637 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:32:17 -0800
+Subject: [PATCH 0173/1179] HDFS-860. fuse-dfs truncate behavior causes issues with scp
+
+Description: For whatever reason, scp issues a "truncate" once it's written a file to truncate the file to the # of bytes it has written (i.e., if a file is X bytes, it calls truncate(X)).
+
+<p>This fails on the current fuse-dfs.</p>
+Reason: bugfix (tool compatibility)
+Author: Brian Bockelman
+Ref: UNKNOWN
+---
+ src/contrib/fuse-dfs/src/fuse_impls_truncate.c |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
+
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_truncate.c b/src/contrib/fuse-dfs/src/fuse_impls_truncate.c
+index 7132b8a..b93cb45 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_truncate.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_truncate.c
+@@ -29,8 +29,11 @@
+ int dfs_truncate(const char *path, off_t size)
+ {
+   TRACE1("truncate", path)
++  // Silently supress truncates with non-zero sizes, this allows
++  // fuse-dfs to work with some programs like scp, which truncate
++  // the files to the number of bytes they have written.
+   if (size != 0) {
+-    return -ENOTSUP;
++    return 0;
+   }
+ 
+   dfs_context *dfs = (dfs_context*)fuse_get_context()->private_data;
+-- 
+1.7.0.4
+

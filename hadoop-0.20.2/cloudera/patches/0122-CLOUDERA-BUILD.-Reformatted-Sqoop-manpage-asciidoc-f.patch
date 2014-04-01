@@ -1,0 +1,33 @@
+From 67d1c732cea0eebf59de512301ae8f2a1cb2f349 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:16:30 -0800
+Subject: [PATCH 0122/1179] CLOUDERA-BUILD. Reformatted Sqoop manpage asciidoc for CDH build process
+
+Author: Aaron Kimball
+---
+ src/contrib/sqoop/doc/Sqoop-manpage.txt |    5 ++---
+ 1 files changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/src/contrib/sqoop/doc/Sqoop-manpage.txt b/src/contrib/sqoop/doc/Sqoop-manpage.txt
+index a26391d..7c71f89 100644
+--- a/src/contrib/sqoop/doc/Sqoop-manpage.txt
++++ b/src/contrib/sqoop/doc/Sqoop-manpage.txt
+@@ -1,6 +1,3 @@
+-sqoop(1)
+-========
+-
+ ////
+    Licensed to the Apache Software Foundation (ASF) under one or more
+    contributor license agreements.  See the NOTICE file distributed with
+@@ -17,6 +14,8 @@ sqoop(1)
+    See the License for the specific language governing permissions and
+    limitations under the License.
+ ////
++sqoop(1)
++========
+ 
+ NAME
+ ----
+-- 
+1.7.0.4
+

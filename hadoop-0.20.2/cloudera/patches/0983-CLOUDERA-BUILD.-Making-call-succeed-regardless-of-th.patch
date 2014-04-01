@@ -1,0 +1,25 @@
+From e7ab332a8037e7117919c833c0ac0a999307d681 Mon Sep 17 00:00:00 2001
+From: Roman Shaposhnik <rvs@cloudera.com>
+Date: Tue, 28 Jun 2011 09:20:13 -0700
+Subject: [PATCH 0983/1179] CLOUDERA BUILD. Making call succeed regardless of the file permissions
+
+---
+ cloudera/do-release-build |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index 8b4960e..67bf126 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -54,7 +54,7 @@ SNAPPY_VERSION=1.0.3
+ 
+ # Get Snappy source
+ #
+-${RELEASE_DIR}/cloudera/getsnappysource.sh ${SNAPPY_VERSION} ${RELEASE_DIR}/cloudera ${BUILDDIR}
++sh -x ${RELEASE_DIR}/cloudera/getsnappysource.sh ${SNAPPY_VERSION} ${RELEASE_DIR}/cloudera ${BUILDDIR}
+ failIfNotOK
+ 
+ echo "Building Snappy"
+-- 
+1.7.0.4
+

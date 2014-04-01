@@ -1,0 +1,48 @@
+From 0eab1fbea6a968c2514a16a2f96a36ebfa30c6b6 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 5 Jul 2011 18:13:12 -0700
+Subject: [PATCH 1014/1179] Amend MAPREDUCE-2373. Fix a possible NPE if setPermissions fails while launching task script.
+
+Reason: avoid NPE seen in production
+Author: Todd Lipcon
+Ref: CDH-3151
+---
+ .../hadoop/mapred/DefaultTaskController.java       |   14 +++++++++++---
+ 1 files changed, 11 insertions(+), 3 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java b/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
+index e4c444d..9d1fd78 100644
+--- a/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/DefaultTaskController.java
+@@ -120,17 +120,25 @@ public class DefaultTaskController extends TaskController {
+           getConf()), COMMAND_FILE);
+ 
+       String commandFile = writeCommand(cmdLine, rawFs, p);
+-      rawFs.setPermission(p, TaskController.TASK_LAUNCH_SCRIPT_PERMISSION);
++      try {
++        rawFs.setPermission(p, TaskController.TASK_LAUNCH_SCRIPT_PERMISSION);
++      } catch (ExitCodeException ece) {
++        // we don't want to confuse this exception with an ExitCodeException
++        // from the shExec below.
++        throw new IOException("Could not set permissions on " + p, ece);
++      }
+       shExec = new ShellCommandExecutor(new String[]{
+           "bash", "-c", commandFile},
+           currentWorkDirectory);
+       shExec.execute();
+     } catch (ExitCodeException ece) {
+-      logShExecStatus(shExec);
++      if (shExec != null) {
++        logShExecStatus(shExec);
++      }
+       if (ece.getMessage() != null && !ece.getMessage().isEmpty()) {
+         LOG.warn("Task wrapper stderr: " + ece.getMessage());
+       }
+-      return shExec.getExitCode();
++      return (shExec != null) ? shExec.getExitCode() : -1;
+     } catch (Exception e) {
+       LOG.warn("Unexpected error launching task JVM", e);
+       if (shExec != null) {
+-- 
+1.7.0.4
+

@@ -1,0 +1,29 @@
+From d6dc22fecc058e12695a481fa354078d9b012089 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:27:21 -0800
+Subject: [PATCH 0151/1179] MAPREDUCE-1293. AutoInputFormat doesn't work with non-default FileSystems
+
+Description: AutoInputFormat uses the wrong FileSystem.get() method when getting a reference to a FileSystem object. AutoInputFormat gets the default FileSystem, so this method breaks if the InputSplit's path is pointing to a different FileSystem.
+Reason: bugfix
+Author: Andrew Hitchcock
+Ref: UNKNOWN
+---
+ .../apache/hadoop/streaming/AutoInputFormat.java   |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/AutoInputFormat.java b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/AutoInputFormat.java
+index 04b27e4..10cf614 100644
+--- a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/AutoInputFormat.java
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/AutoInputFormat.java
+@@ -52,7 +52,7 @@ public class AutoInputFormat extends FileInputFormat {
+   public RecordReader getRecordReader(InputSplit split, JobConf job,
+     Reporter reporter) throws IOException {
+     FileSplit fileSplit = (FileSplit) split;
+-    FileSystem fs = FileSystem.get(job);
++    FileSystem fs = FileSystem.get(fileSplit.getPath().toUri(), job);
+     FSDataInputStream is = fs.open(fileSplit.getPath());
+     byte[] header = new byte[3];
+     RecordReader reader = null;
+-- 
+1.7.0.4
+

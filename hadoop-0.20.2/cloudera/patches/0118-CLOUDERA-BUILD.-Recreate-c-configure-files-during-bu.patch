@@ -1,0 +1,36 @@
+From 8bf845170decdcb12254bc1dc98ccbf0fda7d233 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:15:01 -0800
+Subject: [PATCH 0118/1179] CLOUDERA-BUILD. Recreate c++ configure files during build if we have the right build dependencies
+
+Author: Todd Lipcon
+---
+ cloudera/do-release-build |   12 ++++++++++++
+ 1 files changed, 12 insertions(+), 0 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index 90ee287..d039fe5 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -47,6 +47,18 @@ RELEASE_DIR=$BIN_DIR/..
+ 
+ cd $RELEASE_DIR
+ 
++if which aclocal-1.9 && which autoconf ; then
++  ant -Dcompile.c++=true \
++    -Dcompile.native=true create-c++-configure
++fi
++
++if which libtoolize ; then
++  for dir in src/native src/examples/pipes src/c++/libhdfs/ src/c++/pipes src/c++/utils ; do
++    (cd $dir && libtoolize --force)
++  done
++fi
++
++
+ JAVA_HOME=$JAVA32_HOME \
+   CFLAGS=-m32 \
+   CXXFLAGS=-m32 \
+-- 
+1.7.0.4
+

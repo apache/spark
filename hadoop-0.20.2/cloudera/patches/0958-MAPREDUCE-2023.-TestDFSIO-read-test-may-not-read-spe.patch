@@ -1,0 +1,40 @@
+From c2804fb55590f62018f4fc379275ae01af001adc Mon Sep 17 00:00:00 2001
+From: Konstantin Boudnik <cos@apache.org>
+Date: Wed, 4 May 2011 17:01:30 -0700
+Subject: [PATCH 0958/1179] MAPREDUCE-2023. TestDFSIO read test may not read specified bytes.
+
+Reason: Fixing a bug in the test
+Author: Hong Tang
+Ref:    CDH-3148
+---
+ src/test/org/apache/hadoop/fs/TestDFSIO.java |    7 +++----
+ 1 files changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/fs/TestDFSIO.java b/src/test/org/apache/hadoop/fs/TestDFSIO.java
+index a06c261..de7baec 100644
+--- a/src/test/org/apache/hadoop/fs/TestDFSIO.java
++++ b/src/test/org/apache/hadoop/fs/TestDFSIO.java
+@@ -400,9 +400,8 @@ public class TestDFSIO extends Configured implements Tool {
+       DataInputStream in = fs.open(new Path(getDataDir(getConf()), name));
+       long actualSize = 0;
+       try {
+-        for(int curSize = bufferSize;
+-                curSize == bufferSize && actualSize < totalSize;) {
+-          curSize = in.read(buffer, 0, bufferSize);
++        while (actualSize < totalSize) {
++          int curSize = in.read(buffer, 0, bufferSize);
+           if (curSize < 0) break;
+           actualSize += curSize;
+           reporter.setStatus("reading " + name + "@" + 
+@@ -412,7 +411,7 @@ public class TestDFSIO extends Configured implements Tool {
+       } finally {
+         in.close();
+       }
+-      return Long.valueOf(actualSize);
++      return actualSize;
+     }
+   }
+ 
+-- 
+1.7.0.4
+

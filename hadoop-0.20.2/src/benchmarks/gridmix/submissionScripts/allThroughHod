@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+GRID_DIR=`dirname "$0"`
+GRID_DIR=`cd "$GRID_DIR"; pwd`
+source $GRID_DIR/../gridmix-env
+
+$GRID_MIX_HOME/submissionScripts/maxentHod 2>&1 >  maxentHod.out & 
+$GRID_MIX_HOME/submissionScripts/textSortHod 2>&1 >  textSortHod.out &
+$GRID_MIX_HOME/submissionScripts/monsterQueriesHod 2>&1 > monsterQueriesHod.out &
+$GRID_MIX_HOME/submissionScripts/webdataScanHod 2>&1 > webdataScanHod.out &
+$GRID_MIX_HOME/submissionScripts/webdataSortHod 2>&1 > webdataSortHod.out &
+
+

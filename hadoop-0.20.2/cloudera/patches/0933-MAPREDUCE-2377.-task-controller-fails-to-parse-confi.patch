@@ -1,0 +1,48 @@
+From d52118b2e49f1ccd29286574ad017707cdd63d0c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 16 Mar 2011 13:20:17 -0700
+Subject: [PATCH 0933/1179] MAPREDUCE-2377. task-controller fails to parse configuration if it doesn't end in \n
+
+Reason: fix hard-to-diagnose bug
+Author: Todd Lipcon
+Ref: CDH-2578
+---
+ src/c++/task-controller/impl/configuration.c       |    8 ++++++--
+ .../task-controller/test/test-task-controller.c    |    2 +-
+ 2 files changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/src/c++/task-controller/impl/configuration.c b/src/c++/task-controller/impl/configuration.c
+index 75932d5..0a2b7b2 100644
+--- a/src/c++/task-controller/impl/configuration.c
++++ b/src/c++/task-controller/impl/configuration.c
+@@ -146,8 +146,12 @@ void read_config(const char* file_name, int do_permissions_check) {
+         break;
+       }
+     }
+-    //trim the ending new line
+-    line[strlen(line)-1] = '\0';
++
++    //trim the ending new line if there is one
++    if (line[strlen(line) - 1] == '\n') {
++        line[strlen(line)-1] = '\0';
++    }
++
+     //comment line
+     if(line[0] == '#') {
+       free(line);
+diff --git a/src/c++/task-controller/test/test-task-controller.c b/src/c++/task-controller/test/test-task-controller.c
+index ca482ab..e0ed8ac 100644
+--- a/src/c++/task-controller/test/test-task-controller.c
++++ b/src/c++/task-controller/test/test-task-controller.c
+@@ -97,7 +97,7 @@ int write_config_file(char *file_name) {
+     fprintf(file, "," TEST_ROOT "/local-%d", i);
+   }
+   fprintf(file, "\n");
+-  fprintf(file, "hadoop.log.dir=" TEST_ROOT "/logs\n");
++  fprintf(file, "hadoop.log.dir=" TEST_ROOT "/logs");
+   fclose(file);
+   return 0;
+ }
+-- 
+1.7.0.4
+

@@ -1,0 +1,28 @@
+From c3b6e1fadf01e1955fff7361cb7872ff4fd997ab Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 15 Sep 2010 14:47:45 -0700
+Subject: [PATCH 0698/1179] Amend HADOOP-6656. Renewal thread should shut down if it fails to renew
+
+Reason: fixes tight infinite loop that heavily loads KDC
+Author: Todd Lipcon
+---
+ .../hadoop/security/UserGroupInformation.java      |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 859a83d..0cccc5f 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -547,7 +547,8 @@ public class UserGroupInformation {
+                 return;
+               } catch (IOException ie) {
+                 LOG.warn("Exception encountered while running the" +
+-                    " renewal command (but continuing)" + ie);
++                    " renewal command. Aborting renew thread",  ie);
++                return;
+               }
+             }
+           }
+-- 
+1.7.0.4
+

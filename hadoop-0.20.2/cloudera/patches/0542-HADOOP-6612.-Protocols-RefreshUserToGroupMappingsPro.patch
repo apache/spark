@@ -1,0 +1,191 @@
+From eb5a68ab5a10bd85527cd4495a17687a826af698 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sun, 7 Mar 2010 23:14:19 -0800
+Subject: [PATCH 0542/1179] HADOOP-6612. Protocols RefreshUserToGroupMappingsProtocol and RefreshAuthorizationPolicyProtocol will fail with security enabled
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437809/HADOOP-6612-BP20.patch
+Author: Boris Shkolnik
+Ref: CDH-648
+---
+ .../apache/hadoop/fs/CommonConfigurationKeys.java  |    2 +
+ src/core/org/apache/hadoop/ipc/Client.java         |    5 ++++
+ .../RefreshUserToGroupMappingsProtocol.java        |    3 ++
+ .../RefreshAuthorizationPolicyProtocol.java        |    4 +++
+ .../org/apache/hadoop/hdfs/tools/DFSAdmin.java     |   15 +++++++++++++
+ .../org/apache/hadoop/mapred/tools/MRAdmin.java    |   23 ++++++++++++++++++-
+ 6 files changed, 50 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java b/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
+index 7a1dc50..ac58099 100644
+--- a/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
++++ b/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
+@@ -131,6 +131,8 @@ public class CommonConfigurationKeys {
+   public static final String  HADOOP_SECURITY_AUTHENTICATION = "hadoop.security.authentication";
+   public static final String HADOOP_SECURITY_AUTHORIZATION =
+       "hadoop.security.authorization";
++  public static final String  HADOOP_SECURITY_SERVICE_USER_NAME_KEY = 
++      "hadoop.security.service.user.name.key";
+   /**
+    * ACL denoting the administrator ACLs for a hadoop cluster.
+    */
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index d4cf74d..0163255 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -262,6 +262,11 @@ public class Client {
+         if (krbInfo != null) {
+           String serverKey = krbInfo.serverPrincipal();
+           if (serverKey != null) {
++            if(LOG.isDebugEnabled()) {
++            LOG.debug("server principal key for protocol="
++                + protocol.getCanonicalName() + " is " + serverKey + 
++                " and val =" + conf.get(serverKey));
++            }
+             serverPrincipal = conf.get(serverKey);
+           }
+         }
+diff --git a/src/core/org/apache/hadoop/security/RefreshUserToGroupMappingsProtocol.java b/src/core/org/apache/hadoop/security/RefreshUserToGroupMappingsProtocol.java
+index 447cfa7..b0ebaac 100644
+--- a/src/core/org/apache/hadoop/security/RefreshUserToGroupMappingsProtocol.java
++++ b/src/core/org/apache/hadoop/security/RefreshUserToGroupMappingsProtocol.java
+@@ -20,12 +20,15 @@ package org.apache.hadoop.security;
+ import java.io.IOException;
+ 
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.CommonConfigurationKeys;
+ import org.apache.hadoop.ipc.VersionedProtocol;
+ 
+ /**
+  * Protocol use 
+  *
+  */
++@KerberosInfo(
++    serverPrincipal=CommonConfigurationKeys.HADOOP_SECURITY_SERVICE_USER_NAME_KEY)
+ public interface RefreshUserToGroupMappingsProtocol extends VersionedProtocol {
+   
+   /**
+diff --git a/src/core/org/apache/hadoop/security/authorize/RefreshAuthorizationPolicyProtocol.java b/src/core/org/apache/hadoop/security/authorize/RefreshAuthorizationPolicyProtocol.java
+index 7f9b530..99c2975 100644
+--- a/src/core/org/apache/hadoop/security/authorize/RefreshAuthorizationPolicyProtocol.java
++++ b/src/core/org/apache/hadoop/security/authorize/RefreshAuthorizationPolicyProtocol.java
+@@ -19,11 +19,15 @@ package org.apache.hadoop.security.authorize;
+ 
+ import java.io.IOException;
+ 
++import org.apache.hadoop.fs.CommonConfigurationKeys;
+ import org.apache.hadoop.ipc.VersionedProtocol;
++import org.apache.hadoop.security.KerberosInfo;
+ 
+ /**
+  * Protocol which is used to refresh the authorization policy in use currently.
+  */
++@KerberosInfo(
++    serverPrincipal=CommonConfigurationKeys.HADOOP_SECURITY_SERVICE_USER_NAME_KEY)
+ public interface RefreshAuthorizationPolicyProtocol extends VersionedProtocol {
+   
+   /**
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/DFSAdmin.java b/src/hdfs/org/apache/hadoop/hdfs/tools/DFSAdmin.java
+index 0c4a0df..f3b680e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/DFSAdmin.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/DFSAdmin.java
+@@ -21,6 +21,7 @@ import java.io.IOException;
+ import java.util.List;
+ 
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.hdfs.DistributedFileSystem;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.hdfs.protocol.FSConstants;
+@@ -28,6 +29,7 @@ import org.apache.hadoop.hdfs.protocol.FSConstants.DatanodeReportType;
+ import org.apache.hadoop.hdfs.protocol.FSConstants.UpgradeAction;
+ import org.apache.hadoop.hdfs.server.common.UpgradeStatusReport;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
++import org.apache.hadoop.fs.CommonConfigurationKeys;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.FsStatus;
+ import org.apache.hadoop.fs.FsShell;
+@@ -623,6 +625,13 @@ public class DFSAdmin extends FsShell {
+     // Get the current configuration
+     Configuration conf = getConf();
+     
++    // for security authorization
++    // server principal for this call   
++    // should be NN's one.
++    conf.set(CommonConfigurationKeys.HADOOP_SECURITY_SERVICE_USER_NAME_KEY, 
++        conf.get(DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY, ""));
++    
++    
+     // Create the client
+     RefreshAuthorizationPolicyProtocol refreshProtocol = 
+       (RefreshAuthorizationPolicyProtocol) 
+@@ -647,6 +656,12 @@ public class DFSAdmin extends FsShell {
+     // Get the current configuration
+     Configuration conf = getConf();
+     
++    // for security authorization
++    // server principal for this call 
++    // should be NAMENODE's one.
++    conf.set(CommonConfigurationKeys.HADOOP_SECURITY_SERVICE_USER_NAME_KEY, 
++        conf.get(DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY, ""));
++    
+     // Create the client
+     RefreshUserToGroupMappingsProtocol refreshProtocol = 
+       (RefreshUserToGroupMappingsProtocol) 
+diff --git a/src/mapred/org/apache/hadoop/mapred/tools/MRAdmin.java b/src/mapred/org/apache/hadoop/mapred/tools/MRAdmin.java
+index 60d3eac..c9e95dc 100644
+--- a/src/mapred/org/apache/hadoop/mapred/tools/MRAdmin.java
++++ b/src/mapred/org/apache/hadoop/mapred/tools/MRAdmin.java
+@@ -21,15 +21,16 @@ import java.io.IOException;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.conf.Configured;
++import org.apache.hadoop.fs.CommonConfigurationKeys;
+ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.ipc.RemoteException;
+-import org.apache.hadoop.mapred.JobTracker;
+ import org.apache.hadoop.mapred.AdminOperationsProtocol;
++import org.apache.hadoop.mapred.JobConf;
++import org.apache.hadoop.mapred.JobTracker;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.RefreshUserToGroupMappingsProtocol;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol;
+-import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.Tool;
+ import org.apache.hadoop.util.ToolRunner;
+ 
+@@ -129,6 +130,14 @@ public class MRAdmin extends Configured implements Tool {
+     // Get the current configuration
+     Configuration conf = getConf();
+     
++    // for security authorization
++    // server principal for this call   
++    // should be JT's one.
++    JobConf jConf = new JobConf(conf);
++    conf.set(CommonConfigurationKeys.HADOOP_SECURITY_SERVICE_USER_NAME_KEY, 
++        jConf.get(JobTracker.JT_USER_NAME, ""));
++    
++    
+     // Create the client
+     RefreshAuthorizationPolicyProtocol refreshProtocol = 
+       (RefreshAuthorizationPolicyProtocol) 
+@@ -196,6 +205,16 @@ public class MRAdmin extends Configured implements Tool {
+   private int refreshUserToGroupsMappings() throws IOException {
+     // Get the current configuration
+     Configuration conf = getConf();
++
++    // for security authorization
++    // server principal for this call   
++    // should be JT's one.
++    JobConf jConf = new JobConf(conf);
++    conf.set(CommonConfigurationKeys.HADOOP_SECURITY_SERVICE_USER_NAME_KEY, 
++        jConf.get(JobTracker.JT_USER_NAME, ""));
++    
++    
++    
+     // Create the client
+     RefreshUserToGroupMappingsProtocol refreshProtocol =
+       (RefreshUserToGroupMappingsProtocol)
+-- 
+1.7.0.4
+

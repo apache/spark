@@ -1,0 +1,3481 @@
+From 5141b5979120da19551385ff1ce13b545266b204 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 5 Feb 2010 15:35:16 -0800
+Subject: [PATCH 0459/1179] HADOOP-6419. Change RPC layer to support SASL based mutual authentication
+
+Patch: https://issues.apache.org/jira/secure/attachment/12434998/HADOOP-6419-0.20-15.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12435135/6419-bp20-jobsubmitprotocol.patch
+Author: Kan Zhang
+Ref: CDH-648
+---
+ .../apache/hadoop/fs/CommonConfigurationKeys.java  |  133 ++++++++
+ src/core/org/apache/hadoop/ipc/Client.java         |  109 ++++++-
+ src/core/org/apache/hadoop/ipc/RPC.java            |   27 ++-
+ src/core/org/apache/hadoop/ipc/Server.java         |  304 ++++++++++++++++---
+ .../org/apache/hadoop/security/KerberosInfo.java   |   31 ++
+ .../apache/hadoop/security/SaslInputStream.java    |  321 ++++++++++++++++++++
+ .../apache/hadoop/security/SaslOutputStream.java   |  181 +++++++++++
+ .../org/apache/hadoop/security/SaslRpcClient.java  |  249 +++++++++++++++
+ .../org/apache/hadoop/security/SaslRpcServer.java  |  218 +++++++++++++
+ .../hadoop/security/UserGroupInformation.java      |   14 +-
+ .../hadoop/security/token/SecretManager.java       |    6 +
+ .../hadoop/security/token/TokenIdentifier.java     |    6 +
+ .../apache/hadoop/security/token/TokenInfo.java    |   31 ++
+ .../hadoop/security/token/TokenSelector.java       |   34 ++
+ src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java |  197 ++++++++++++
+ .../hadoop/hdfs/protocol/ClientProtocol.java       |    6 +
+ .../token/DelegationTokenSecretManager.java        |    9 +
+ .../security/token/DelegationTokenSelector.java    |   50 +++
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |    2 +-
+ .../hadoop/hdfs/server/namenode/NameNode.java      |   11 +-
+ .../hdfs/server/protocol/DatanodeProtocol.java     |    4 +
+ .../server/protocol/InterDatanodeProtocol.java     |    3 +
+ .../hdfs/server/protocol/NamenodeProtocol.java     |    3 +
+ .../hadoop/mapred/AdminOperationsProtocol.java     |    3 +
+ src/mapred/org/apache/hadoop/mapred/Child.java     |   15 +-
+ .../apache/hadoop/mapred/InterTrackerProtocol.java |    3 +
+ .../hadoop/mapred/JobSubmissionProtocol.java       |    3 +
+ src/mapred/org/apache/hadoop/mapred/JvmTask.java   |    2 +-
+ .../mapred/MapTaskCompletionEventsUpdate.java      |    2 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    8 +-
+ .../hadoop/mapred/TaskUmbilicalProtocol.java       |    9 +-
+ .../hadoop/mapreduce/security/TokenCache.java      |    6 +-
+ .../security/token/JobTokenIdentifier.java         |   13 +
+ .../security/token/JobTokenSecretManager.java      |   10 +-
+ .../mapreduce/security/token/JobTokenSelector.java |   49 +++
+ src/test/core-site.xml                             |    6 +
+ src/test/findbugsExcludeFile.xml                   |    9 +
+ .../TestClientProtocolWithDelegationToken.java     |  122 ++++++++
+ src/test/org/apache/hadoop/ipc/TestRPC.java        |    2 +-
+ src/test/org/apache/hadoop/ipc/TestSaslRPC.java    |  216 +++++++++++++
+ .../TestUmbilicalProtocolWithJobToken.java         |  117 +++++++
+ .../hadoop/security/TestUserGroupInformation.java  |   10 +-
+ 42 files changed, 2453 insertions(+), 101 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
+ create mode 100644 src/core/org/apache/hadoop/security/KerberosInfo.java
+ create mode 100644 src/core/org/apache/hadoop/security/SaslInputStream.java
+ create mode 100644 src/core/org/apache/hadoop/security/SaslOutputStream.java
+ create mode 100644 src/core/org/apache/hadoop/security/SaslRpcClient.java
+ create mode 100644 src/core/org/apache/hadoop/security/SaslRpcServer.java
+ create mode 100644 src/core/org/apache/hadoop/security/token/TokenInfo.java
+ create mode 100644 src/core/org/apache/hadoop/security/token/TokenSelector.java
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSelector.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/security/token/JobTokenSelector.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/security/TestClientProtocolWithDelegationToken.java
+ create mode 100644 src/test/org/apache/hadoop/ipc/TestSaslRPC.java
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/security/TestUmbilicalProtocolWithJobToken.java
+
+diff --git a/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java b/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
+new file mode 100644
+index 0000000..e887231
+--- /dev/null
++++ b/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
+@@ -0,0 +1,133 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.fs;
++
++/** 
++ * This class contains constants for configuration keys used
++ * in the common code.
++ *
++ */
++
++public class CommonConfigurationKeys {
++  
++  // The Keys
++  public static final String  IO_NATIVE_LIB_AVAILABLE_KEY =
++                                           "io.native.lib.available";
++  public static final boolean IO_NATIVE_LIB_AVAILABLE_DEFAULT = true;
++  public static final String  NET_TOPOLOGY_SCRIPT_NUMBER_ARGS_KEY =
++                                         "net.topology.script.number.args";
++  public static final int     NET_TOPOLOGY_SCRIPT_NUMBER_ARGS_DEFAULT = 100;
++
++  //FS keys
++  public static final String  FS_HOME_DIR_KEY = "fs.homeDir";
++  public static final String  FS_HOME_DIR_DEFAULT = "/user";
++  public static final String  FS_DEFAULT_NAME_KEY = "fs.defaultFS";
++  public static final String  FS_DEFAULT_NAME_DEFAULT = "file:///";
++  public static final String  FS_PERMISSIONS_UMASK_KEY = "fs.permissions.umask-mode";
++  public static final int     FS_PERMISSIONS_UMASK_DEFAULT = 0022;
++  public static final String  FS_DF_INTERVAL_KEY = "fs.df.interval"; 
++  public static final long    FS_DF_INTERVAL_DEFAULT = 60000;
++
++
++  //Defaults are not specified for following keys
++  public static final String  NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY = 
++                                         "net.topology.script.file.name";
++  public static final String  NET_TOPOLOGY_CONFIGURED_NODE_MAPPING_KEY =
++                                     "net.topology.configured.node.mapping";
++  public static final String  NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY =
++                                   "net.topology.node.switch.mapping.impl";
++
++  public static final String  FS_CLIENT_BUFFER_DIR_KEY =
++                                         "fs.client.buffer.dir";
++
++  //TBD: Code is not updated to use following keys.
++  //These keys will be used in later versions
++  //
++  public static final long    FS_LOCAL_BLOCK_SIZE_DEFAULT = 32*1024*1024;
++  public static final String  FS_AUTOMATIC_CLOSE_KEY = "fs.automatic.close";
++  public static final boolean FS_AUTOMATIC_CLOSE_DEFAULT = true;
++  public static final String  FS_FILE_IMPL_KEY = "fs.file.impl";
++  public static final String  FS_FTP_HOST_KEY = "fs.ftp.host";
++  public static final String  FS_FTP_HOST_PORT_KEY = "fs.ftp.host.port";
++  public static final String  FS_TRASH_INTERVAL_KEY = "fs.trash.interval";
++  public static final long    FS_TRASH_INTERVAL_DEFAULT = 0;
++
++  public static final String  IO_MAPFILE_BLOOM_SIZE_KEY = "io.mapfile.bloom.size";
++  public static final int     IO_MAPFILE_BLOOM_SIZE_DEFAULT = 1024*1024;
++  public static final String  IO_MAPFILE_BLOOM_ERROR_RATE_KEY = 
++                                       "io.mapfile.bloom.error.rate" ;
++  public static final float   IO_MAPFILE_BLOOM_ERROR_RATE_DEFAULT = 0.005f;
++  public static final String  IO_COMPRESSION_CODEC_LZO_CLASS_KEY = "io.compression.codec.lzo.class";
++  public static final String  IO_COMPRESSION_CODEC_LZO_BUFFERSIZE_KEY = 
++                                       "io.compression.codec.lzo.buffersize";
++  public static final int     IO_COMPRESSION_CODEC_LZO_BUFFERSIZE_DEFAULT = 64*1024;
++  public static final String  IO_MAP_INDEX_INTERVAL_KEY = "io.map.index.interval";
++  public static final int     IO_MAP_INDEX_INTERVAL_DEFAULT = 128;
++  public static final String  IO_MAP_INDEX_SKIP_KEY = "io.map.index.skip";
++  public static final int     IO_MAP_INDEX_SKIP_DEFAULT = 0;
++  public static final String  IO_SEQFILE_COMPRESS_BLOCKSIZE_KEY = "io.seqfile.compress.blocksize";
++  public static final int     IO_SEQFILE_COMPRESS_BLOCKSIZE_DEFAULT = 1000000;
++  public static final String  IO_SKIP_CHECKSUM_ERRORS_KEY = "io.skip.checksum.errors";
++  public static final boolean IO_SKIP_CHECKSUM_ERRORS_DEFAULT = false;
++  public static final String  IO_SORT_MB_KEY = "io.sort.mb";
++  public static final int     IO_SORT_MB_DEFAULT = 100;
++  public static final String  IO_SORT_FACTOR_KEY = "io.sort.factor";
++  public static final int     IO_SORT_FACTOR_DEFAULT = 100;
++  public static final String  IO_SERIALIZATIONS_KEY = "io.serializations";
++
++  public static final String  TFILE_IO_CHUNK_SIZE_KEY = "tfile.io.chunk.size";
++  public static final int     TFILE_IO_CHUNK_SIZE_DEFAULT = 1024*1024;
++  public static final String  TFILE_FS_INPUT_BUFFER_SIZE_KEY = "tfile.fs.input.buffer.size";
++  public static final int     TFILE_FS_INPUT_BUFFER_SIZE_DEFAULT = 256*1024;
++  public static final String  TFILE_FS_OUTPUT_BUFFER_SIZE_KEY = "tfile.fs.output.buffer.size";
++  public static final int     TFILE_FS_OUTPUT_BUFFER_SIZE_DEFAULT = 256*1024;
++
++  public static final String  IPC_PING_INTERVAL_KEY = "ipc.ping.interval";
++  public static final int     IPC_PING_INTERVAL_DEFAULT = 60000;
++  public static final String  IPC_CLIENT_PING_KEY = "ipc.client.ping";
++  public static final boolean IPC_CLIENT_PING_DEFAULT = true;
++  public static final String  IPC_CLIENT_CONNECTION_MAXIDLETIME_KEY = 
++                                       "ipc.client.connection.maxidletime";
++  public static final int     IPC_CLIENT_CONNECTION_MAXIDLETIME_DEFAULT = 10000;
++  public static final String  IPC_CLIENT_CONNECT_MAX_RETRIES_KEY = 
++                                       "ipc.client.connect.max.retries";
++  public static final int     IPC_CLIENT_CONNECT_MAX_RETRIES_DEFAULT = 10;
++  public static final String  IPC_CLIENT_TCPNODELAY_KEY = "ipc.client.tcpnodelay";
++  public static final boolean IPC_CLIENT_TCPNODELAY_DEFAULT = false;
++  public static final String  IPC_SERVER_LISTEN_QUEUE_SIZE_KEY = 
++                                       "ipc.server.listen.queue.size";
++  public static final int     IPC_SERVER_LISTEN_QUEUE_SIZE_DEFAULT = 128;
++  public static final String  IPC_CLIENT_KILL_MAX_KEY = "ipc.client.kill.max";
++  public static final int     IPC_CLIENT_KILL_MAX_DEFAULT = 10;
++  public static final String  IPC_CLIENT_IDLETHRESHOLD_KEY = "ipc.client.idlethreshold";
++  public static final int     IPC_CLIENT_IDLETHRESHOLD_DEFAULT = 4000;
++  public static final String  IPC_SERVER_TCPNODELAY_KEY = "ipc.server.tcpnodelay";
++  public static final boolean IPC_SERVER_TCPNODELAY_DEFAULT = false;
++
++  public static final String  HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY = 
++                                       "hadoop.rpc.socket.factory.class.default";
++  public static final String  HADOOP_SOCKS_SERVER_KEY = "hadoop.socks.server";
++  public static final String  HADOOP_JOB_UGI_KEY = "hadoop.job.ugi";
++  public static final String  HADOOP_UTIL_HASH_TYPE_KEY = "hadoop.util.hash.type";
++  public static final String  HADOOP_UTIL_HASH_TYPE_DEFAULT = "murmur";
++  public static final String  HADOOP_SECURITY_GROUP_MAPPING = "hadoop.security.group.mapping";
++  public static final String  HADOOP_SECURITY_GROUPS_CACHE_SECS = "hadoop.security.groups.cache.secs";
++  public static final String  HADOOP_SECURITY_AUTHENTICATION = "hadoop.security.authentication";
++}
++
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index a053d25..46e9477 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -31,7 +31,9 @@ import java.io.BufferedInputStream;
+ import java.io.BufferedOutputStream;
+ import java.io.FilterInputStream;
+ import java.io.InputStream;
++import java.io.OutputStream;
+ 
++import java.security.PrivilegedExceptionAction;
+ import java.util.Hashtable;
+ import java.util.Iterator;
+ import java.util.Map.Entry;
+@@ -51,11 +53,19 @@ import org.apache.commons.logging.*;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.IOUtils;
++import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.io.WritableUtils;
+ import org.apache.hadoop.io.DataOutputBuffer;
+ import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.KerberosInfo;
++import org.apache.hadoop.security.SaslRpcClient;
++import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenIdentifier;
++import org.apache.hadoop.security.token.TokenSelector;
++import org.apache.hadoop.security.token.TokenInfo;
+ import org.apache.hadoop.util.ReflectionUtils;
+ 
+ /** A client for an IPC service.  IPC calls take a single {@link Writable} as a
+@@ -201,8 +211,13 @@ public class Client {
+    * socket: responses may be delivered out of order. */
+   private class Connection extends Thread {
+     private InetSocketAddress server;             // server ip:port
++    private String serverPrincipal;  // server's krb5 principal name
+     private ConnectionHeader header;              // connection header
+-    private ConnectionId remoteId;                // connection id
++    private final ConnectionId remoteId;                // connection id
++    private final AuthMethod authMethod; // authentication method
++    private final boolean useSasl;
++    private Token<? extends TokenIdentifier> token;
++    private SaslRpcClient saslRpcClient;
+     
+     private Socket socket = null;                 // connected socket
+     private DataInputStream in;
+@@ -228,6 +243,42 @@ public class Client {
+       Class<?> protocol = remoteId.getProtocol();
+       header = 
+         new ConnectionHeader(protocol == null ? null : protocol.getName(), ticket);
++      this.useSasl = UserGroupInformation.isSecurityEnabled();
++      if (useSasl && protocol != null) {
++        TokenInfo tokenInfo = protocol.getAnnotation(TokenInfo.class);
++        if (tokenInfo != null) {
++          TokenSelector<? extends TokenIdentifier> tokenSelector = null;
++          try {
++            tokenSelector = tokenInfo.value().newInstance();
++          } catch (InstantiationException e) {
++            throw new IOException(e.toString());
++          } catch (IllegalAccessException e) {
++            throw new IOException(e.toString());
++          }
++          InetSocketAddress addr = remoteId.getAddress();
++          token = tokenSelector.selectToken(new Text(addr.getAddress()
++              .getHostAddress() + ":" + addr.getPort()), 
++              ticket.getTokens());
++        }
++        KerberosInfo krbInfo = protocol.getAnnotation(KerberosInfo.class);
++        if (krbInfo != null) {
++          String serverKey = krbInfo.value();
++          if (serverKey != null) {
++            serverPrincipal = conf.get(serverKey);
++          }
++        }
++      }
++      
++      if (!useSasl) {
++        authMethod = AuthMethod.SIMPLE;
++      } else if (token != null) {
++        authMethod = AuthMethod.DIGEST;
++      } else {
++        authMethod = AuthMethod.KERBEROS;
++      }
++      if (LOG.isDebugEnabled())
++        LOG.debug("Use " + authMethod + " authentication for protocol "
++            + protocol.getSimpleName());
+       
+       this.setName("IPC Client (" + socketFactory.hashCode() +") connection to " +
+           remoteId.getAddress().toString() +
+@@ -309,11 +360,20 @@ public class Client {
+       }
+     }
+     
++    private synchronized void disposeSasl() {
++      if (saslRpcClient != null) {
++        try {
++          saslRpcClient.dispose();
++        } catch (IOException ignored) {
++        }
++      }
++    }
++    
+     /** Connect to the server and set up the I/O streams. It then sends
+      * a header to the server and starts
+      * the connection thread that waits for responses.
+      */
+-    private synchronized void setupIOstreams() {
++    private synchronized void setupIOstreams() throws InterruptedException {
+       if (socket != null || shouldCloseConnection.get()) {
+         return;
+       }
+@@ -341,10 +401,28 @@ public class Client {
+             handleConnectionFailure(ioFailures++, maxRetries, ie);
+           }
+         }
++        InputStream inStream = NetUtils.getInputStream(socket);
++        OutputStream outStream = NetUtils.getOutputStream(socket);
++        writeRpcHeader(outStream);
++        if (useSasl) {
++          final InputStream in2 = inStream;
++          final OutputStream out2 = outStream;
++          remoteId.getTicket().doAs(new PrivilegedExceptionAction<Object>() {
++            @Override
++            public Object run() throws IOException {
++              saslRpcClient = new SaslRpcClient(authMethod, token,
++                  serverPrincipal);
++              saslRpcClient.saslConnect(in2, out2);
++              return null;
++            }
++          });
++          inStream = saslRpcClient.getInputStream(inStream);
++          outStream = saslRpcClient.getOutputStream(outStream);
++        }
+         this.in = new DataInputStream(new BufferedInputStream
+-            (new PingInputStream(NetUtils.getInputStream(socket))));
++            (new PingInputStream(inStream)));
+         this.out = new DataOutputStream
+-            (new BufferedOutputStream(NetUtils.getOutputStream(socket)));
++            (new BufferedOutputStream(outStream));
+         writeHeader();
+ 
+         // update last activity time
+@@ -400,14 +478,20 @@ public class Client {
+           ". Already tried " + curRetries + " time(s).");
+     }
+ 
+-    /* Write the header for each connection
++    /* Write the RPC header */
++    private void writeRpcHeader(OutputStream outStream) throws IOException {
++      DataOutputStream out = new DataOutputStream(new BufferedOutputStream(outStream));
++      // Write out the header, version and authentication method
++      out.write(Server.HEADER.array());
++      out.write(Server.CURRENT_VERSION);
++      authMethod.write(out);
++      out.flush();
++    }
++    
++    /* Write the protocol header for each connection
+      * Out is not synchronized because only the first thread does this.
+      */
+     private void writeHeader() throws IOException {
+-      // Write out the header and version
+-      out.write(Server.HEADER.array());
+-      out.write(Server.CURRENT_VERSION);
+-
+       // Write out the ConnectionHeader
+       DataOutputBuffer buf = new DataOutputBuffer();
+       header.write(buf);
+@@ -617,6 +701,7 @@ public class Client {
+       // close the streams and therefore the socket
+       IOUtils.closeStream(out);
+       IOUtils.closeStream(in);
++      disposeSasl();
+ 
+       // clean up all calls
+       if (closeException == null) {
+@@ -865,7 +950,7 @@ public class Client {
+    */
+   @Deprecated
+   public Writable[] call(Writable[] params, InetSocketAddress[] addresses)
+-    throws IOException {
++    throws IOException, InterruptedException {
+     return call(params, addresses, null, null);
+   }
+   
+@@ -875,7 +960,7 @@ public class Client {
+    * contains nulls for calls that timed out or errored.  */
+   public Writable[] call(Writable[] params, InetSocketAddress[] addresses, 
+                          Class<?> protocol, UserGroupInformation ticket)
+-    throws IOException {
++    throws IOException, InterruptedException {
+     if (addresses.length == 0) return new Writable[0];
+ 
+     ParallelResults results = new ParallelResults(params.length);
+@@ -915,7 +1000,7 @@ public class Client {
+                                    Class<?> protocol,
+                                    UserGroupInformation ticket,
+                                    Call call)
+-                                   throws IOException {
++                                   throws IOException, InterruptedException {
+     if (!running.get()) {
+       // the client is stopped
+       throw new IOException("The client is stopped");
+diff --git a/src/core/org/apache/hadoop/ipc/RPC.java b/src/core/org/apache/hadoop/ipc/RPC.java
+index 664b7c7..25dc710 100644
+--- a/src/core/org/apache/hadoop/ipc/RPC.java
++++ b/src/core/org/apache/hadoop/ipc/RPC.java
+@@ -38,6 +38,8 @@ import org.apache.commons.logging.*;
+ 
+ import org.apache.hadoop.io.*;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.token.SecretManager;
++import org.apache.hadoop.security.token.TokenIdentifier;
+ import org.apache.hadoop.conf.*;
+ import org.apache.hadoop.metrics.util.MetricsTimeVaryingRate;
+ 
+@@ -404,7 +406,7 @@ public class RPC {
+    */
+   public static Object[] call(Method method, Object[][] params,
+                               InetSocketAddress[] addrs, Configuration conf)
+-    throws IOException {
++    throws IOException, InterruptedException {
+     return call(method, params, addrs, null, conf);
+   }
+   
+@@ -412,7 +414,7 @@ public class RPC {
+   public static Object[] call(Method method, Object[][] params,
+                               InetSocketAddress[] addrs, 
+                               UserGroupInformation ticket, Configuration conf)
+-    throws IOException {
++    throws IOException, InterruptedException {
+ 
+     Invocation[] invocations = new Invocation[params.length];
+     for (int i = 0; i < params.length; i++)
+@@ -451,9 +453,19 @@ public class RPC {
+                                  final int numHandlers,
+                                  final boolean verbose, Configuration conf) 
+     throws IOException {
+-    return new Server(instance, conf, bindAddress, port, numHandlers, verbose);
++    return getServer(instance, bindAddress, port, numHandlers, verbose, conf, null);
+   }
+ 
++  /** Construct a server for a protocol implementation instance listening on a
++   * port and address, with a secret manager. */
++  public static Server getServer(final Object instance, final String bindAddress, final int port,
++                                 final int numHandlers,
++                                 final boolean verbose, Configuration conf,
++                                 SecretManager<? extends TokenIdentifier> secretManager) 
++    throws IOException {
++    return new Server(instance, conf, bindAddress, port, numHandlers, verbose, secretManager);
++  }
++  
+   /** An RPC Server. */
+   public static class Server extends org.apache.hadoop.ipc.Server {
+     private Object instance;
+@@ -467,7 +479,7 @@ public class RPC {
+      */
+     public Server(Object instance, Configuration conf, String bindAddress, int port) 
+       throws IOException {
+-      this(instance, conf,  bindAddress, port, 1, false);
++      this(instance, conf,  bindAddress, port, 1, false, null);
+     }
+     
+     private static String classNameBase(String className) {
+@@ -487,8 +499,11 @@ public class RPC {
+      * @param verbose whether each call should be logged
+      */
+     public Server(Object instance, Configuration conf, String bindAddress,  int port,
+-                  int numHandlers, boolean verbose) throws IOException {
+-      super(bindAddress, port, Invocation.class, numHandlers, conf, classNameBase(instance.getClass().getName()));
++                  int numHandlers, boolean verbose, 
++                  SecretManager<? extends TokenIdentifier> secretManager) 
++        throws IOException {
++      super(bindAddress, port, Invocation.class, numHandlers, conf,
++          classNameBase(instance.getClass().getName()), secretManager);
+       this.instance = instance;
+       this.verbose = verbose;
+     }
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 836a62d..6841d63 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -32,6 +32,7 @@ import java.net.SocketException;
+ import java.net.UnknownHostException;
+ import java.nio.ByteBuffer;
+ import java.nio.channels.CancelledKeyException;
++import java.nio.channels.Channels;
+ import java.nio.channels.ClosedChannelException;
+ import java.nio.channels.ReadableByteChannel;
+ import java.nio.channels.SelectionKey;
+@@ -39,7 +40,6 @@ import java.nio.channels.Selector;
+ import java.nio.channels.ServerSocketChannel;
+ import java.nio.channels.SocketChannel;
+ import java.nio.channels.WritableByteChannel;
+-import java.security.PrivilegedActionException;
+ import java.security.PrivilegedExceptionAction;
+ import java.util.ArrayList;
+ import java.util.Collections;
+@@ -52,15 +52,26 @@ import java.util.concurrent.BlockingQueue;
+ import java.util.concurrent.ConcurrentHashMap;
+ import java.util.concurrent.LinkedBlockingQueue;
+ 
++import javax.security.sasl.Sasl;
++import javax.security.sasl.SaslException;
++import javax.security.sasl.SaslServer;
++
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.io.WritableUtils;
+ import org.apache.hadoop.ipc.metrics.RpcMetrics;
++import org.apache.hadoop.security.AccessControlException;
++import org.apache.hadoop.security.SaslRpcServer;
++import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
++import org.apache.hadoop.security.SaslRpcServer.SaslDigestCallbackHandler;
++import org.apache.hadoop.security.SaslRpcServer.SaslGssCallbackHandler;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.AuthorizationException;
+ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
++import org.apache.hadoop.security.token.TokenIdentifier;
++import org.apache.hadoop.security.token.SecretManager;
+ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.util.StringUtils;
+ 
+@@ -80,7 +91,8 @@ public abstract class Server {
+   
+   // 1 : Introduce ping and server does not throw away RPCs
+   // 3 : Introduce the protocol into the RPC connection header
+-  public static final byte CURRENT_VERSION = 3;
++  // 4 : Introduced SASL security layer
++  public static final byte CURRENT_VERSION = 4;
+   
+   /**
+    * How many calls/handler are allowed in the queue.
+@@ -160,6 +172,7 @@ public abstract class Server {
+   protected RpcMetrics  rpcMetrics;
+   
+   private Configuration conf;
++  private SecretManager<TokenIdentifier> secretManager;
+ 
+   private int maxQueueSize;
+   private int socketSendBufferSize;
+@@ -432,7 +445,7 @@ public abstract class Server {
+       if (count < 0) {
+         if (LOG.isDebugEnabled())
+           LOG.debug(getName() + ": disconnecting client " + 
+-                    c.getHostAddress() + ". Number of active connections: "+
++                    c + ". Number of active connections: "+
+                     numConnections);
+         closeConnection(c);
+         c = null;
+@@ -702,8 +715,7 @@ public abstract class Server {
+ 
+   /** Reads calls from a connection and queues them for handling. */
+   private class Connection {
+-    private boolean versionRead = false; //if initial signature and
+-                                         //version are read
++    private boolean rpcHeaderRead = false; // if initial rpc header is read
+     private boolean headerRead = false;  //if the connection header that
+                                          //follows version is read.
+ 
+@@ -722,6 +734,13 @@ public abstract class Server {
+     
+     ConnectionHeader header = new ConnectionHeader();
+     Class<?> protocol;
++    boolean useSasl;
++    SaslServer saslServer;
++    private AuthMethod authMethod;
++    private boolean saslContextEstablished;
++    private ByteBuffer rpcHeaderBuffer;
++    private ByteBuffer unwrappedData;
++    private ByteBuffer unwrappedDataLengthBuffer;
+     
+     UserGroupInformation user = null;
+ 
+@@ -730,6 +749,10 @@ public abstract class Server {
+     private final Call authFailedCall = 
+       new Call(AUTHROIZATION_FAILED_CALLID, null, null);
+     private ByteArrayOutputStream authFailedResponse = new ByteArrayOutputStream();
++    // Fake 'call' for SASL context setup
++    private static final int SASL_CALLID = -33;
++    private final Call saslCall = new Call(SASL_CALLID, null, null);
++    private final ByteArrayOutputStream saslResponse = new ByteArrayOutputStream();
+     
+     public Connection(SelectionKey key, SocketChannel channel, 
+                       long lastContact) {
+@@ -737,6 +760,8 @@ public abstract class Server {
+       this.lastContact = lastContact;
+       this.data = null;
+       this.dataLengthBuffer = ByteBuffer.allocate(4);
++      this.unwrappedData = null;
++      this.unwrappedDataLengthBuffer = ByteBuffer.allocate(4);
+       this.socket = channel.socket();
+       InetAddress addr = socket.getInetAddress();
+       if (addr == null) {
+@@ -794,6 +819,92 @@ public abstract class Server {
+       return false;
+     }
+ 
++    private void saslReadAndProcess(byte[] saslToken) throws IOException,
++        InterruptedException {
++      if (!saslContextEstablished) {
++        if (saslServer == null) {
++          switch (authMethod) {
++          case DIGEST:
++            saslServer = Sasl.createSaslServer(AuthMethod.DIGEST
++                .getMechanismName(), null, SaslRpcServer.SASL_DEFAULT_REALM,
++                SaslRpcServer.SASL_PROPS, new SaslDigestCallbackHandler(
++                    secretManager));
++            break;
++          default:
++            UserGroupInformation current = UserGroupInformation
++                .getCurrentUser();
++            String fullName = current.getUserName();
++            if (LOG.isDebugEnabled())
++              LOG.debug("Kerberos principal name is " + fullName);
++            final String names[] = SaslRpcServer.splitKerberosName(fullName);
++            if (names.length != 3) {
++              throw new IOException(
++                  "Kerberos principal name does NOT have the expected "
++                      + "hostname part: " + fullName);
++            }
++            current.doAs(new PrivilegedExceptionAction<Object>() {
++              @Override
++              public Object run() throws IOException {
++                saslServer = Sasl.createSaslServer(AuthMethod.KERBEROS
++                    .getMechanismName(), names[0], names[1],
++                    SaslRpcServer.SASL_PROPS, new SaslGssCallbackHandler());
++                return null;
++              }
++            });
++          }
++          if (saslServer == null)
++            throw new IOException(
++                "Unable to find SASL server implementation for "
++                    + authMethod.getMechanismName());
++          if (LOG.isDebugEnabled())
++            LOG.debug("Created SASL server with mechanism = "
++                + authMethod.getMechanismName());
++        }
++        if (LOG.isDebugEnabled())
++          LOG.debug("Have read input token of size " + saslToken.length
++              + " for processing by saslServer.evaluateResponse()");
++        byte[] replyToken = saslServer.evaluateResponse(saslToken);
++        if (replyToken != null) {
++          if (LOG.isDebugEnabled())
++            LOG.debug("Will send token of size " + replyToken.length
++                + " from saslServer.");
++          saslCall.connection = this;
++          saslResponse.reset();
++          DataOutputStream out = new DataOutputStream(saslResponse);
++          out.writeInt(replyToken.length);
++          out.write(replyToken, 0, replyToken.length);
++          saslCall.setResponse(ByteBuffer.wrap(saslResponse.toByteArray()));
++          responder.doRespond(saslCall);
++        }
++        if (saslServer.isComplete()) {
++          if (LOG.isDebugEnabled()) {
++            LOG.debug("SASL server context established. Negotiated QoP is "
++                + saslServer.getNegotiatedProperty(Sasl.QOP));
++          }
++          user = UserGroupInformation.createRemoteUser(saslServer
++              .getAuthorizationID());
++          LOG.info("SASL server successfully authenticated client: " + user);
++          saslContextEstablished = true;
++        }
++      } else {
++        if (LOG.isDebugEnabled())
++          LOG.debug("Have read input token of size " + saslToken.length
++              + " for processing by saslServer.unwrap()");
++        byte[] plaintextData = saslServer
++            .unwrap(saslToken, 0, saslToken.length);
++        processUnwrappedData(plaintextData);
++      }
++    }
++    
++    private void disposeSasl() {
++      if (saslServer != null) {
++        try {
++          saslServer.dispose();
++        } catch (SaslException ignored) {
++        }
++      }
++    }
++    
+     public int readAndProcess() throws IOException, InterruptedException {
+       while (true) {
+         /* Read at most one RPC. If the header is not read completely yet
+@@ -806,14 +917,33 @@ public abstract class Server {
+             return count;
+         }
+       
+-        if (!versionRead) {
++        if (!rpcHeaderRead) {
+           //Every connection is expected to send the header.
+-          ByteBuffer versionBuffer = ByteBuffer.allocate(1);
+-          count = channelRead(channel, versionBuffer);
+-          if (count <= 0) {
++          if (rpcHeaderBuffer == null) {
++            rpcHeaderBuffer = ByteBuffer.allocate(2);
++          }
++          count = channelRead(channel, rpcHeaderBuffer);
++          if (count < 0 || rpcHeaderBuffer.remaining() > 0) {
+             return count;
+           }
+-          int version = versionBuffer.get(0);
++          int version = rpcHeaderBuffer.get(0);
++          byte[] method = new byte[] {rpcHeaderBuffer.get(1)};
++          authMethod = AuthMethod.read(new DataInputStream(
++              new ByteArrayInputStream(method)));
++          if (authMethod == null) {
++            throw new IOException("Unable to read authentication method");
++          }
++          if (UserGroupInformation.isSecurityEnabled()
++              && authMethod == AuthMethod.SIMPLE) {
++            throw new IOException("Authentication is required");
++          } 
++          if (!UserGroupInformation.isSecurityEnabled()
++              && authMethod != AuthMethod.SIMPLE) {
++            throw new IOException("Authentication is not supported");
++          }
++          if (authMethod != AuthMethod.SIMPLE) {
++            useSasl = true;
++          }
+           
+           dataLengthBuffer.flip();          
+           if (!HEADER.equals(dataLengthBuffer) || version != CURRENT_VERSION) {
+@@ -825,7 +955,8 @@ public abstract class Server {
+             return -1;
+           }
+           dataLengthBuffer.clear();
+-          versionRead = true;
++          rpcHeaderBuffer = null;
++          rpcHeaderRead = true;
+           continue;
+         }
+         
+@@ -833,12 +964,11 @@ public abstract class Server {
+           dataLengthBuffer.flip();
+           dataLength = dataLengthBuffer.getInt();
+        
+-          if (dataLength == Client.PING_CALL_ID) {
++          if (!useSasl && dataLength == Client.PING_CALL_ID) {
+             dataLengthBuffer.clear();
+             return 0;  //ping message
+           }
+           data = ByteBuffer.allocate(dataLength);
+-          incRpcCount();  // Increment the rpc count
+         }
+         
+         count = channelRead(channel, data);
+@@ -846,33 +976,14 @@ public abstract class Server {
+         if (data.remaining() == 0) {
+           dataLengthBuffer.clear();
+           data.flip();
+-          if (headerRead) {
+-            processData();
+-            data = null;
+-            return count;
++          boolean isHeaderRead = headerRead;
++          if (useSasl) {
++            saslReadAndProcess(data.array());
+           } else {
+-            processHeader();
+-            headerRead = true;
+-            data = null;
+-            
+-            // Authorize the connection
+-            try {
+-              authorize(user, header);
+-              
+-              if (LOG.isDebugEnabled()) {
+-                LOG.debug("Successfully authorized " + header);
+-              }
+-            } catch (AuthorizationException ae) {
+-              authFailedCall.connection = this;
+-              setupResponse(authFailedResponse, authFailedCall, 
+-                            Status.FATAL, null, 
+-                            ae.getClass().getName(), ae.getMessage());
+-              responder.doRespond(authFailedCall);
+-              
+-              // Close this connection
+-              return -1;
+-            }
+-
++            processOneRpc(data.array());
++          }
++          data = null;
++          if (!isHeaderRead) {
+             continue;
+           }
+         } 
+@@ -881,9 +992,9 @@ public abstract class Server {
+     }
+ 
+     /// Reads the connection header following version
+-    private void processHeader() throws IOException {
++    private void processHeader(byte[] buf) throws IOException {
+       DataInputStream in =
+-        new DataInputStream(new ByteArrayInputStream(data.array()));
++        new DataInputStream(new ByteArrayInputStream(buf));
+       header.readFields(in);
+       try {
+         String protocolClassName = header.getProtocol();
+@@ -894,12 +1005,73 @@ public abstract class Server {
+         throw new IOException("Unknown protocol: " + header.getProtocol());
+       }
+       
+-      user = header.getUgi();
++      UserGroupInformation protocolUser = header.getUgi();
++      if (!useSasl) {
++        user = protocolUser;
++      } else if (protocolUser != null && !protocolUser.equals(user)) {
++        throw new AccessControlException("Authenticated user (" + user
++            + ") doesn't match what the client claims to be (" + protocolUser
++            + ")");
++      }
++    }
++    
++    private void processUnwrappedData(byte[] inBuf) throws IOException,
++        InterruptedException {
++      ReadableByteChannel ch = Channels.newChannel(new ByteArrayInputStream(
++          inBuf));
++      // Read all RPCs contained in the inBuf, even partial ones
++      while (true) {
++        int count = -1;
++        if (unwrappedDataLengthBuffer.remaining() > 0) {
++          count = channelRead(ch, unwrappedDataLengthBuffer);
++          if (count <= 0 || unwrappedDataLengthBuffer.remaining() > 0)
++            return;
++        }
++
++        if (unwrappedData == null) {
++          unwrappedDataLengthBuffer.flip();
++          int unwrappedDataLength = unwrappedDataLengthBuffer.getInt();
++
++          if (unwrappedDataLength == Client.PING_CALL_ID) {
++            if (LOG.isDebugEnabled())
++              LOG.debug("Received ping message");
++            unwrappedDataLengthBuffer.clear();
++            continue; // ping message
++          }
++          unwrappedData = ByteBuffer.allocate(unwrappedDataLength);
++        }
++
++        count = channelRead(ch, unwrappedData);
++        if (count <= 0 || unwrappedData.remaining() > 0)
++          return;
++
++        if (unwrappedData.remaining() == 0) {
++          unwrappedDataLengthBuffer.clear();
++          unwrappedData.flip();
++          processOneRpc(unwrappedData.array());
++          unwrappedData = null;
++        }
++      }
+     }
+     
+-    private void processData() throws  IOException, InterruptedException {
++    private void processOneRpc(byte[] buf) throws IOException,
++        InterruptedException {
++      if (headerRead) {
++        processData(buf);
++      } else {
++        processHeader(buf);
++        headerRead = true;
++        if (!authorizeConnection()) {
++          throw new AccessControlException("Connection from " + this
++              + " for protocol " + header.getProtocol()
++              + " is unauthorized for user " + user);
++        }
++      }
++    }
++    
++    private void processData(byte[] buf) throws  IOException, InterruptedException {
+       DataInputStream dis =
+-        new DataInputStream(new ByteArrayInputStream(data.array()));
++        new DataInputStream(new ByteArrayInputStream(buf));
+       int id = dis.readInt();                    // try to read an id
+         
+       if (LOG.isDebugEnabled())
+@@ -910,9 +1082,27 @@ public abstract class Server {
+         
+       Call call = new Call(id, param, this);
+       callQueue.put(call);              // queue the call; maybe blocked here
++      incRpcCount();  // Increment the rpc count
+     }
+ 
++    private boolean authorizeConnection() throws IOException {
++      try {
++        authorize(user, header);
++        if (LOG.isDebugEnabled()) {
++          LOG.debug("Successfully authorized " + header);
++        }
++      } catch (AuthorizationException ae) {
++        authFailedCall.connection = this;
++        setupResponse(authFailedResponse, authFailedCall, Status.FATAL, null,
++            ae.getClass().getName(), ae.getMessage());
++        responder.doRespond(authFailedCall);
++        return false;
++      }
++      return true;
++    }
++    
+     private synchronized void close() throws IOException {
++      disposeSasl();
+       data = null;
+       dataLengthBuffer = null;
+       if (!channel.isOpen())
+@@ -1008,16 +1198,17 @@ public abstract class Server {
+                   Configuration conf)
+     throws IOException 
+   {
+-    this(bindAddress, port, paramClass, handlerCount,  conf, Integer.toString(port));
++    this(bindAddress, port, paramClass, handlerCount,  conf, Integer.toString(port), null);
+   }
+   /** Constructs a server listening on the named port and address.  Parameters passed must
+    * be of the named class.  The <code>handlerCount</handlerCount> determines
+    * the number of handler threads that will be used to process calls.
+    * 
+    */
++  @SuppressWarnings("unchecked")
+   protected Server(String bindAddress, int port, 
+                   Class<? extends Writable> paramClass, int handlerCount, 
+-                  Configuration conf, String serverName) 
++                  Configuration conf, String serverName, SecretManager<? extends TokenIdentifier> secretManager) 
+     throws IOException {
+     this.bindAddress = bindAddress;
+     this.conf = conf;
+@@ -1032,6 +1223,7 @@ public abstract class Server {
+     this.maxIdleTime = 2*conf.getInt("ipc.client.connection.maxidletime", 1000);
+     this.maxConnectionsToNuke = conf.getInt("ipc.client.kill.max", 10);
+     this.thresholdIdleConnections = conf.getInt("ipc.client.idlethreshold", 4000);
++    this.secretManager = (SecretManager<TokenIdentifier>) secretManager;
+     this.authorize = 
+       conf.getBoolean(ServiceAuthorizationManager.SERVICE_AUTHORIZATION_CONFIG, 
+                       false);
+@@ -1085,9 +1277,29 @@ public abstract class Server {
+       WritableUtils.writeString(out, errorClass);
+       WritableUtils.writeString(out, error);
+     }
++    wrapWithSasl(response, call);
+     call.setResponse(ByteBuffer.wrap(response.toByteArray()));
+   }
+   
++  private void wrapWithSasl(ByteArrayOutputStream response, Call call)
++      throws IOException {
++    if (call.connection.useSasl) {
++      byte[] token = response.toByteArray();
++      // synchronization may be needed since there can be multiple Handler
++      // threads using saslServer to wrap responses.
++      synchronized (call.connection.saslServer) {
++        token = call.connection.saslServer.wrap(token, 0, token.length);
++      }
++      if (LOG.isDebugEnabled())
++        LOG.debug("Adding saslServer wrapped token of size " + token.length
++            + " as call response.");
++      response.reset();
++      DataOutputStream saslOut = new DataOutputStream(response);
++      saslOut.writeInt(token.length);
++      saslOut.write(token, 0, token.length);
++    }
++  }
++  
+   Configuration getConf() {
+     return conf;
+   }
+diff --git a/src/core/org/apache/hadoop/security/KerberosInfo.java b/src/core/org/apache/hadoop/security/KerberosInfo.java
+new file mode 100644
+index 0000000..e8b5747
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/KerberosInfo.java
+@@ -0,0 +1,31 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++import java.lang.annotation.*;
++
++/**
++ * Indicates Kerberos related information to be used
++ */
++@Retention(RetentionPolicy.RUNTIME)
++@Target(ElementType.TYPE)
++public @interface KerberosInfo {
++  /** Key for getting server's Kerberos principal name from Configuration */
++  String value();
++}
+diff --git a/src/core/org/apache/hadoop/security/SaslInputStream.java b/src/core/org/apache/hadoop/security/SaslInputStream.java
+new file mode 100644
+index 0000000..60ddefb
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/SaslInputStream.java
+@@ -0,0 +1,321 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++import java.io.DataInputStream;
++import java.io.EOFException;
++import java.io.InputStream;
++import java.io.IOException;
++
++import javax.security.sasl.SaslClient;
++import javax.security.sasl.SaslException;
++import javax.security.sasl.SaslServer;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++/**
++ * A SaslInputStream is composed of an InputStream and a SaslServer (or
++ * SaslClient) so that read() methods return data that are read in from the
++ * underlying InputStream but have been additionally processed by the SaslServer
++ * (or SaslClient) object. The SaslServer (or SaslClient) object must be fully
++ * initialized before being used by a SaslInputStream.
++ */
++public class SaslInputStream extends InputStream {
++  public static final Log LOG = LogFactory.getLog(SaslInputStream.class);
++
++  private final DataInputStream inStream;
++  /*
++   * data read from the underlying input stream before being processed by SASL
++   */
++  private byte[] saslToken;
++  private final SaslClient saslClient;
++  private final SaslServer saslServer;
++  private byte[] lengthBuf = new byte[4];
++  /*
++   * buffer holding data that have been processed by SASL, but have not been
++   * read out
++   */
++  private byte[] obuffer;
++  // position of the next "new" byte
++  private int ostart = 0;
++  // position of the last "new" byte
++  private int ofinish = 0;
++
++  private static int unsignedBytesToInt(byte[] buf) {
++    if (buf.length != 4) {
++      throw new IllegalArgumentException(
++          "Cannot handle byte array other than 4 bytes");
++    }
++    int result = 0;
++    for (int i = 0; i < 4; i++) {
++      result <<= 8;
++      result |= ((int) buf[i] & 0xff);
++    }
++    return result;
++  }
++
++  /**
++   * Read more data and get them processed <br>
++   * Entry condition: ostart = ofinish <br>
++   * Exit condition: ostart <= ofinish <br>
++   * 
++   * return (ofinish-ostart) (we have this many bytes for you), 0 (no data now,
++   * but could have more later), or -1 (absolutely no more data)
++   */
++  private int readMoreData() throws IOException {
++    try {
++      inStream.readFully(lengthBuf);
++      int length = unsignedBytesToInt(lengthBuf);
++      if (LOG.isDebugEnabled())
++        LOG.debug("Actual length is " + length);
++      saslToken = new byte[length];
++      inStream.readFully(saslToken);
++    } catch (EOFException e) {
++      return -1;
++    }
++    try {
++      if (saslServer != null) { // using saslServer
++        obuffer = saslServer.unwrap(saslToken, 0, saslToken.length);
++      } else { // using saslClient
++        obuffer = saslClient.unwrap(saslToken, 0, saslToken.length);
++      }
++    } catch (SaslException se) {
++      try {
++        disposeSasl();
++      } catch (SaslException ignored) {
++      }
++      throw se;
++    }
++    ostart = 0;
++    if (obuffer == null)
++      ofinish = 0;
++    else
++      ofinish = obuffer.length;
++    return ofinish;
++  }
++
++  /**
++   * Disposes of any system resources or security-sensitive information Sasl
++   * might be using.
++   * 
++   * @exception SaslException
++   *              if a SASL error occurs.
++   */
++  private void disposeSasl() throws SaslException {
++    if (saslClient != null) {
++      saslClient.dispose();
++    }
++    if (saslServer != null) {
++      saslServer.dispose();
++    }
++  }
++
++  /**
++   * Constructs a SASLInputStream from an InputStream and a SaslServer <br>
++   * Note: if the specified InputStream or SaslServer is null, a
++   * NullPointerException may be thrown later when they are used.
++   * 
++   * @param inStream
++   *          the InputStream to be processed
++   * @param saslServer
++   *          an initialized SaslServer object
++   */
++  public SaslInputStream(InputStream inStream, SaslServer saslServer) {
++    this.inStream = new DataInputStream(inStream);
++    this.saslServer = saslServer;
++    this.saslClient = null;
++  }
++
++  /**
++   * Constructs a SASLInputStream from an InputStream and a SaslClient <br>
++   * Note: if the specified InputStream or SaslClient is null, a
++   * NullPointerException may be thrown later when they are used.
++   * 
++   * @param inStream
++   *          the InputStream to be processed
++   * @param saslClient
++   *          an initialized SaslClient object
++   */
++  public SaslInputStream(InputStream inStream, SaslClient saslClient) {
++    this.inStream = new DataInputStream(inStream);
++    this.saslServer = null;
++    this.saslClient = saslClient;
++  }
++
++  /**
++   * Reads the next byte of data from this input stream. The value byte is
++   * returned as an <code>int</code> in the range <code>0</code> to
++   * <code>255</code>. If no byte is available because the end of the stream has
++   * been reached, the value <code>-1</code> is returned. This method blocks
++   * until input data is available, the end of the stream is detected, or an
++   * exception is thrown.
++   * <p>
++   * 
++   * @return the next byte of data, or <code>-1</code> if the end of the stream
++   *         is reached.
++   * @exception IOException
++   *              if an I/O error occurs.
++   */
++  public int read() throws IOException {
++    if (ostart >= ofinish) {
++      // we loop for new data as we are blocking
++      int i = 0;
++      while (i == 0)
++        i = readMoreData();
++      if (i == -1)
++        return -1;
++    }
++    return ((int) obuffer[ostart++] & 0xff);
++  }
++
++  /**
++   * Reads up to <code>b.length</code> bytes of data from this input stream into
++   * an array of bytes.
++   * <p>
++   * The <code>read</code> method of <code>InputStream</code> calls the
++   * <code>read</code> method of three arguments with the arguments
++   * <code>b</code>, <code>0</code>, and <code>b.length</code>.
++   * 
++   * @param b
++   *          the buffer into which the data is read.
++   * @return the total number of bytes read into the buffer, or <code>-1</code>
++   *         is there is no more data because the end of the stream has been
++   *         reached.
++   * @exception IOException
++   *              if an I/O error occurs.
++   */
++  public int read(byte[] b) throws IOException {
++    return read(b, 0, b.length);
++  }
++
++  /**
++   * Reads up to <code>len</code> bytes of data from this input stream into an
++   * array of bytes. This method blocks until some input is available. If the
++   * first argument is <code>null,</code> up to <code>len</code> bytes are read
++   * and discarded.
++   * 
++   * @param b
++   *          the buffer into which the data is read.
++   * @param off
++   *          the start offset of the data.
++   * @param len
++   *          the maximum number of bytes read.
++   * @return the total number of bytes read into the buffer, or <code>-1</code>
++   *         if there is no more data because the end of the stream has been
++   *         reached.
++   * @exception IOException
++   *              if an I/O error occurs.
++   */
++  public int read(byte[] b, int off, int len) throws IOException {
++    if (ostart >= ofinish) {
++      // we loop for new data as we are blocking
++      int i = 0;
++      while (i == 0)
++        i = readMoreData();
++      if (i == -1)
++        return -1;
++    }
++    if (len <= 0) {
++      return 0;
++    }
++    int available = ofinish - ostart;
++    if (len < available)
++      available = len;
++    if (b != null) {
++      System.arraycopy(obuffer, ostart, b, off, available);
++    }
++    ostart = ostart + available;
++    return available;
++  }
++
++  /**
++   * Skips <code>n</code> bytes of input from the bytes that can be read from
++   * this input stream without blocking.
++   * 
++   * <p>
++   * Fewer bytes than requested might be skipped. The actual number of bytes
++   * skipped is equal to <code>n</code> or the result of a call to
++   * {@link #available() <code>available</code>}, whichever is smaller. If
++   * <code>n</code> is less than zero, no bytes are skipped.
++   * 
++   * <p>
++   * The actual number of bytes skipped is returned.
++   * 
++   * @param n
++   *          the number of bytes to be skipped.
++   * @return the actual number of bytes skipped.
++   * @exception IOException
++   *              if an I/O error occurs.
++   */
++  public long skip(long n) throws IOException {
++    int available = ofinish - ostart;
++    if (n > available) {
++      n = available;
++    }
++    if (n < 0) {
++      return 0;
++    }
++    ostart += n;
++    return n;
++  }
++
++  /**
++   * Returns the number of bytes that can be read from this input stream without
++   * blocking. The <code>available</code> method of <code>InputStream</code>
++   * returns <code>0</code>. This method <B>should</B> be overridden by
++   * subclasses.
++   * 
++   * @return the number of bytes that can be read from this input stream without
++   *         blocking.
++   * @exception IOException
++   *              if an I/O error occurs.
++   */
++  public int available() throws IOException {
++    return (ofinish - ostart);
++  }
++
++  /**
++   * Closes this input stream and releases any system resources associated with
++   * the stream.
++   * <p>
++   * The <code>close</code> method of <code>SASLInputStream</code> calls the
++   * <code>close</code> method of its underlying input stream.
++   * 
++   * @exception IOException
++   *              if an I/O error occurs.
++   */
++  public void close() throws IOException {
++    disposeSasl();
++    ostart = 0;
++    ofinish = 0;
++    inStream.close();
++  }
++
++  /**
++   * Tests if this input stream supports the <code>mark</code> and
++   * <code>reset</code> methods, which it does not.
++   * 
++   * @return <code>false</code>, since this class does not support the
++   *         <code>mark</code> and <code>reset</code> methods.
++   */
++  public boolean markSupported() {
++    return false;
++  }
++}
+\ No newline at end of file
+diff --git a/src/core/org/apache/hadoop/security/SaslOutputStream.java b/src/core/org/apache/hadoop/security/SaslOutputStream.java
+new file mode 100644
+index 0000000..2f2807b
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/SaslOutputStream.java
+@@ -0,0 +1,181 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.io.OutputStream;
++
++import javax.security.sasl.SaslClient;
++import javax.security.sasl.SaslException;
++import javax.security.sasl.SaslServer;
++
++/**
++ * A SaslOutputStream is composed of an OutputStream and a SaslServer (or
++ * SaslClient) so that write() methods first process the data before writing
++ * them out to the underlying OutputStream. The SaslServer (or SaslClient)
++ * object must be fully initialized before being used by a SaslOutputStream.
++ */
++public class SaslOutputStream extends OutputStream {
++
++  private final DataOutputStream outStream;
++  // processed data ready to be written out
++  private byte[] saslToken;
++
++  private final SaslClient saslClient;
++  private final SaslServer saslServer;
++  // buffer holding one byte of incoming data
++  private final byte[] ibuffer = new byte[1];
++
++  /**
++   * Constructs a SASLOutputStream from an OutputStream and a SaslServer <br>
++   * Note: if the specified OutputStream or SaslServer is null, a
++   * NullPointerException may be thrown later when they are used.
++   * 
++   * @param outStream
++   *          the OutputStream to be processed
++   * @param saslServer
++   *          an initialized SaslServer object
++   */
++  public SaslOutputStream(OutputStream outStream, SaslServer saslServer) {
++    this.outStream = new DataOutputStream(outStream);
++    this.saslServer = saslServer;
++    this.saslClient = null;
++  }
++
++  /**
++   * Constructs a SASLOutputStream from an OutputStream and a SaslClient <br>
++   * Note: if the specified OutputStream or SaslClient is null, a
++   * NullPointerException may be thrown later when they are used.
++   * 
++   * @param outStream
++   *          the OutputStream to be processed
++   * @param saslClient
++   *          an initialized SaslClient object
++   */
++  public SaslOutputStream(OutputStream outStream, SaslClient saslClient) {
++    this.outStream = new DataOutputStream(outStream);
++    this.saslServer = null;
++    this.saslClient = saslClient;
++  }
++
++  /**
++   * Disposes of any system resources or security-sensitive information Sasl
++   * might be using.
++   * 
++   * @exception SaslException
++   *              if a SASL error occurs.
++   */
++  private void disposeSasl() throws SaslException {
++    if (saslClient != null) {
++      saslClient.dispose();
++    }
++    if (saslServer != null) {
++      saslServer.dispose();
++    }
++  }
++
++  /**
++   * Writes the specified byte to this output stream.
++   * 
++   * @param b
++   *          the <code>byte</code>.
++   * @exception IOException
++   *              if an I/O error occurs.
++   */
++  public void write(int b) throws IOException {
++    ibuffer[0] = (byte) b;
++    write(ibuffer, 0, 1);
++  }
++
++  /**
++   * Writes <code>b.length</code> bytes from the specified byte array to this
++   * output stream.
++   * <p>
++   * The <code>write</code> method of <code>SASLOutputStream</code> calls the
++   * <code>write</code> method of three arguments with the three arguments
++   * <code>b</code>, <code>0</code>, and <code>b.length</code>.
++   * 
++   * @param b
++   *          the data.
++   * @exception NullPointerException
++   *              if <code>b</code> is null.
++   * @exception IOException
++   *              if an I/O error occurs.
++   */
++  public void write(byte[] b) throws IOException {
++    write(b, 0, b.length);
++  }
++
++  /**
++   * Writes <code>len</code> bytes from the specified byte array starting at
++   * offset <code>off</code> to this output stream.
++   * 
++   * @param inBuf
++   *          the data.
++   * @param off
++   *          the start offset in the data.
++   * @param len
++   *          the number of bytes to write.
++   * @exception IOException
++   *              if an I/O error occurs.
++   */
++  public void write(byte[] inBuf, int off, int len) throws IOException {
++    try {
++      if (saslServer != null) { // using saslServer
++        saslToken = saslServer.wrap(inBuf, off, len);
++      } else { // using saslClient
++        saslToken = saslClient.wrap(inBuf, off, len);
++      }
++    } catch (SaslException se) {
++      try {
++        disposeSasl();
++      } catch (SaslException ignored) {
++      }
++      throw se;
++    }
++    if (saslToken != null) {
++      outStream.writeInt(saslToken.length);
++      outStream.write(saslToken, 0, saslToken.length);
++      saslToken = null;
++    }
++  }
++
++  /**
++   * Flushes this output stream
++   * 
++   * @exception IOException
++   *              if an I/O error occurs.
++   */
++  public void flush() throws IOException {
++    outStream.flush();
++  }
++
++  /**
++   * Closes this output stream and releases any system resources associated with
++   * this stream.
++   * 
++   * @exception IOException
++   *              if an I/O error occurs.
++   */
++  public void close() throws IOException {
++    disposeSasl();
++    outStream.close();
++  }
++}
+\ No newline at end of file
+diff --git a/src/core/org/apache/hadoop/security/SaslRpcClient.java b/src/core/org/apache/hadoop/security/SaslRpcClient.java
+new file mode 100644
+index 0000000..b061e43
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/SaslRpcClient.java
+@@ -0,0 +1,249 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++import java.io.BufferedInputStream;
++import java.io.BufferedOutputStream;
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.OutputStream;
++
++import javax.security.auth.callback.Callback;
++import javax.security.auth.callback.CallbackHandler;
++import javax.security.auth.callback.NameCallback;
++import javax.security.auth.callback.PasswordCallback;
++import javax.security.auth.callback.UnsupportedCallbackException;
++import javax.security.sasl.RealmCallback;
++import javax.security.sasl.RealmChoiceCallback;
++import javax.security.sasl.Sasl;
++import javax.security.sasl.SaslException;
++import javax.security.sasl.SaslClient;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenIdentifier;
++
++/**
++ * A utility class that encapsulates SASL logic for RPC client
++ */
++public class SaslRpcClient {
++  public static final Log LOG = LogFactory.getLog(SaslRpcClient.class);
++
++  private final SaslClient saslClient;
++
++  /**
++   * Create a SaslRpcClient for an authentication method
++   * 
++   * @param method
++   *          the requested authentication method
++   * @param token
++   *          token to use if needed by the authentication method
++   */
++  public SaslRpcClient(AuthMethod method,
++      Token<? extends TokenIdentifier> token, String serverPrincipal)
++      throws IOException {
++    switch (method) {
++    case DIGEST:
++      if (LOG.isDebugEnabled())
++        LOG.debug("Creating SASL " + AuthMethod.DIGEST.getMechanismName()
++            + " client to authenticate to service at " + token.getService());
++      saslClient = Sasl.createSaslClient(new String[] { AuthMethod.DIGEST
++          .getMechanismName() }, null, null, SaslRpcServer.SASL_DEFAULT_REALM,
++          SaslRpcServer.SASL_PROPS, new SaslClientCallbackHandler(token));
++      break;
++    case KERBEROS:
++      if (LOG.isDebugEnabled()) {
++        LOG
++            .debug("Creating SASL " + AuthMethod.KERBEROS.getMechanismName()
++                + " client. Server's Kerberos principal name is "
++                + serverPrincipal);
++      }
++      if (serverPrincipal == null || serverPrincipal.length() == 0) {
++        throw new IOException(
++            "Failed to specify server's Kerberos principal name");
++      }
++      String names[] = SaslRpcServer.splitKerberosName(serverPrincipal);
++      if (names.length != 3) {
++        throw new IOException(
++          "Kerberos principal name does NOT have the expected hostname part: "
++                + serverPrincipal);
++      }
++      saslClient = Sasl.createSaslClient(new String[] { AuthMethod.KERBEROS
++          .getMechanismName() }, null, names[0], names[1],
++          SaslRpcServer.SASL_PROPS, null);
++      break;
++    default:
++      throw new IOException("Unknown authentication method " + method);
++    }
++    if (saslClient == null)
++      throw new IOException("Unable to find SASL client implementation");
++  }
++
++  /**
++   * Do client side SASL authentication with server via the given InputStream
++   * and OutputStream
++   * 
++   * @param inS
++   *          InputStream to use
++   * @param outS
++   *          OutputStream to use
++   * @throws IOException
++   */
++  public void saslConnect(InputStream inS, OutputStream outS)
++      throws IOException {
++    DataInputStream inStream = new DataInputStream(new BufferedInputStream(inS));
++    DataOutputStream outStream = new DataOutputStream(new BufferedOutputStream(
++        outS));
++
++    try {
++      byte[] saslToken = new byte[0];
++      if (saslClient.hasInitialResponse())
++        saslToken = saslClient.evaluateChallenge(saslToken);
++      if (saslToken != null) {
++        outStream.writeInt(saslToken.length);
++        outStream.write(saslToken, 0, saslToken.length);
++        outStream.flush();
++        if (LOG.isDebugEnabled())
++          LOG.debug("Have sent token of size " + saslToken.length
++              + " from initSASLContext.");
++      }
++      if (!saslClient.isComplete()) {
++        saslToken = new byte[inStream.readInt()];
++        if (LOG.isDebugEnabled())
++          LOG.debug("Will read input token of size " + saslToken.length
++              + " for processing by initSASLContext");
++        inStream.readFully(saslToken);
++      }
++
++      while (!saslClient.isComplete()) {
++        saslToken = saslClient.evaluateChallenge(saslToken);
++        if (saslToken != null) {
++          if (LOG.isDebugEnabled())
++            LOG.debug("Will send token of size " + saslToken.length
++                + " from initSASLContext.");
++          outStream.writeInt(saslToken.length);
++          outStream.write(saslToken, 0, saslToken.length);
++          outStream.flush();
++        }
++        if (!saslClient.isComplete()) {
++          saslToken = new byte[inStream.readInt()];
++          if (LOG.isDebugEnabled())
++            LOG.debug("Will read input token of size " + saslToken.length
++                + " for processing by initSASLContext");
++          inStream.readFully(saslToken);
++        }
++      }
++      if (LOG.isDebugEnabled()) {
++        LOG.debug("SASL client context established. Negotiated QoP: "
++            + saslClient.getNegotiatedProperty(Sasl.QOP));
++      }
++    } catch (IOException e) {
++      saslClient.dispose();
++      throw e;
++    }
++  }
++
++  /**
++   * Get a SASL wrapped InputStream. Can be called only after saslConnect() has
++   * been called.
++   * 
++   * @param in
++   *          the InputStream to wrap
++   * @return a SASL wrapped InputStream
++   * @throws IOException
++   */
++  public InputStream getInputStream(InputStream in) throws IOException {
++    if (!saslClient.isComplete()) {
++      throw new IOException("Sasl authentication exchange hasn't completed yet");
++    }
++    return new SaslInputStream(in, saslClient);
++  }
++
++  /**
++   * Get a SASL wrapped OutputStream. Can be called only after saslConnect() has
++   * been called.
++   * 
++   * @param out
++   *          the OutputStream to wrap
++   * @return a SASL wrapped OutputStream
++   * @throws IOException
++   */
++  public OutputStream getOutputStream(OutputStream out) throws IOException {
++    if (!saslClient.isComplete()) {
++      throw new IOException("Sasl authentication exchange hasn't completed yet");
++    }
++    return new SaslOutputStream(out, saslClient);
++  }
++
++  /** Release resources used by wrapped saslClient */
++  public void dispose() throws SaslException {
++    saslClient.dispose();
++  }
++
++  private static class SaslClientCallbackHandler implements CallbackHandler {
++    private final String userName;
++    private final char[] userPassword;
++
++    public SaslClientCallbackHandler(Token<? extends TokenIdentifier> token) {
++      this.userName = SaslRpcServer.encodeIdentifier(token.getIdentifier());
++      this.userPassword = SaslRpcServer.encodePassword(token.getPassword());
++    }
++
++    public void handle(Callback[] callbacks)
++        throws UnsupportedCallbackException {
++      NameCallback nc = null;
++      PasswordCallback pc = null;
++      RealmCallback rc = null;
++      for (Callback callback : callbacks) {
++        if (callback instanceof RealmChoiceCallback) {
++          continue;
++        } else if (callback instanceof NameCallback) {
++          nc = (NameCallback) callback;
++        } else if (callback instanceof PasswordCallback) {
++          pc = (PasswordCallback) callback;
++        } else if (callback instanceof RealmCallback) {
++          rc = (RealmCallback) callback;
++        } else {
++          throw new UnsupportedCallbackException(callback,
++              "Unrecognized SASL client callback");
++        }
++      }
++      if (nc != null) {
++        if (LOG.isDebugEnabled())
++          LOG.debug("SASL client callback: setting username: " + userName);
++        nc.setName(userName);
++      }
++      if (pc != null) {
++        if (LOG.isDebugEnabled())
++          LOG.debug("SASL client callback: setting userPassword");
++        pc.setPassword(userPassword);
++      }
++      if (rc != null) {
++        if (LOG.isDebugEnabled())
++          LOG.debug("SASL client callback: setting realm: "
++              + rc.getDefaultText());
++        rc.setText(rc.getDefaultText());
++      }
++    }
++  }
++}
+diff --git a/src/core/org/apache/hadoop/security/SaslRpcServer.java b/src/core/org/apache/hadoop/security/SaslRpcServer.java
+new file mode 100644
+index 0000000..5226798
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/SaslRpcServer.java
+@@ -0,0 +1,218 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++import java.io.ByteArrayInputStream;
++import java.io.DataInput;
++import java.io.DataInputStream;
++import java.io.DataOutput;
++import java.io.IOException;
++import java.util.TreeMap;
++import java.util.Map;
++
++import javax.security.auth.callback.Callback;
++import javax.security.auth.callback.CallbackHandler;
++import javax.security.auth.callback.NameCallback;
++import javax.security.auth.callback.PasswordCallback;
++import javax.security.auth.callback.UnsupportedCallbackException;
++import javax.security.sasl.AuthorizeCallback;
++import javax.security.sasl.RealmCallback;
++import javax.security.sasl.Sasl;
++
++import org.apache.commons.codec.binary.Base64;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.security.token.SecretManager;
++import org.apache.hadoop.security.token.TokenIdentifier;
++
++/**
++ * A utility class for dealing with SASL on RPC server
++ */
++public class SaslRpcServer {
++  public static final Log LOG = LogFactory.getLog(SaslRpcServer.class);
++  public static final String SASL_DEFAULT_REALM = "default";
++  public static final Map<String, String> SASL_PROPS = 
++      new TreeMap<String, String>();
++  static {
++    // Request authentication plus integrity protection
++    SASL_PROPS.put(Sasl.QOP, "auth-int");
++    // Request mutual authentication
++    SASL_PROPS.put(Sasl.SERVER_AUTH, "true");
++  }
++
++  static String encodeIdentifier(byte[] identifier) {
++    return new String(Base64.encodeBase64(identifier));
++  }
++
++  static byte[] decodeIdentifier(String identifier) {
++    return Base64.decodeBase64(identifier.getBytes());
++  }
++
++  static char[] encodePassword(byte[] password) {
++    return new String(Base64.encodeBase64(password)).toCharArray();
++  }
++
++  /** Splitting fully qualified Kerberos name into parts */
++  public static String[] splitKerberosName(String fullName) {
++    return fullName.split("[/@]");
++  }
++
++  /** Authentication method */
++  public static enum AuthMethod {
++    SIMPLE((byte) 80, ""), // no authentication
++    KERBEROS((byte) 81, "GSSAPI"), // SASL Kerberos authentication
++    DIGEST((byte) 82, "DIGEST-MD5"); // SASL DIGEST-MD5 authentication
++
++    /** The code for this method. */
++    public final byte code;
++    public final String mechanismName;
++
++    private AuthMethod(byte code, String mechanismName) {
++      this.code = code;
++      this.mechanismName = mechanismName;
++    }
++
++    private static final int FIRST_CODE = values()[0].code;
++
++    /** Return the object represented by the code. */
++    private static AuthMethod valueOf(byte code) {
++      final int i = (code & 0xff) - FIRST_CODE;
++      return i < 0 || i >= values().length ? null : values()[i];
++    }
++
++    /** Return the SASL mechanism name */
++    public String getMechanismName() {
++      return mechanismName;
++    }
++
++    /** Read from in */
++    public static AuthMethod read(DataInput in) throws IOException {
++      return valueOf(in.readByte());
++    }
++
++    /** Write to out */
++    public void write(DataOutput out) throws IOException {
++      out.write(code);
++    }
++  };
++
++  /** CallbackHandler for SASL DIGEST-MD5 mechanism */
++  public static class SaslDigestCallbackHandler implements CallbackHandler {
++    private SecretManager<TokenIdentifier> secretManager;
++
++    public SaslDigestCallbackHandler(
++        SecretManager<TokenIdentifier> secretManager) {
++      this.secretManager = secretManager;
++    }
++
++    private TokenIdentifier getIdentifier(String id) throws IOException {
++      byte[] tokenId = decodeIdentifier(id);
++      TokenIdentifier tokenIdentifier = secretManager.createIdentifier();
++      tokenIdentifier.readFields(new DataInputStream(new ByteArrayInputStream(
++          tokenId)));
++      return tokenIdentifier;
++    }
++
++    private char[] getPassword(TokenIdentifier tokenid) throws IOException {
++      return encodePassword(secretManager.retrievePassword(tokenid));
++    }
++
++    /** {@inheritDoc} */
++    @Override
++    public void handle(Callback[] callbacks) throws IOException,
++        UnsupportedCallbackException {
++      NameCallback nc = null;
++      PasswordCallback pc = null;
++      AuthorizeCallback ac = null;
++      for (Callback callback : callbacks) {
++        if (callback instanceof AuthorizeCallback) {
++          ac = (AuthorizeCallback) callback;
++        } else if (callback instanceof NameCallback) {
++          nc = (NameCallback) callback;
++        } else if (callback instanceof PasswordCallback) {
++          pc = (PasswordCallback) callback;
++        } else if (callback instanceof RealmCallback) {
++          continue; // realm is ignored
++        } else {
++          throw new UnsupportedCallbackException(callback,
++              "Unrecognized SASL DIGEST-MD5 Callback");
++        }
++      }
++      if (pc != null) {
++        TokenIdentifier tokenIdentifier = getIdentifier(nc.getDefaultName());
++        char[] password = getPassword(tokenIdentifier);
++        if (LOG.isDebugEnabled()) {
++          LOG.debug("SASL server DIGEST-MD5 callback: setting password "
++              + "for client: " + tokenIdentifier.getUsername());
++        }
++        pc.setPassword(password);
++      }
++      if (ac != null) {
++        String authid = ac.getAuthenticationID();
++        String authzid = ac.getAuthorizationID();
++        if (authid.equals(authzid)) {
++          ac.setAuthorized(true);
++        } else {
++          ac.setAuthorized(false);
++        }
++        if (ac.isAuthorized()) {
++          String username = getIdentifier(authzid).getUsername().toString();
++          if (LOG.isDebugEnabled())
++            LOG.debug("SASL server DIGEST-MD5 callback: setting "
++                + "canonicalized client ID: " + username);
++          ac.setAuthorizedID(username);
++        }
++      }
++    }
++  }
++
++  /** CallbackHandler for SASL GSSAPI Kerberos mechanism */
++  public static class SaslGssCallbackHandler implements CallbackHandler {
++
++    /** {@inheritDoc} */
++    @Override
++    public void handle(Callback[] callbacks) throws IOException,
++        UnsupportedCallbackException {
++      AuthorizeCallback ac = null;
++      for (Callback callback : callbacks) {
++        if (callback instanceof AuthorizeCallback) {
++          ac = (AuthorizeCallback) callback;
++        } else {
++          throw new UnsupportedCallbackException(callback,
++              "Unrecognized SASL GSSAPI Callback");
++        }
++      }
++      if (ac != null) {
++        String authid = ac.getAuthenticationID();
++        String authzid = ac.getAuthorizationID();
++        if (authid.equals(authzid)) {
++          ac.setAuthorized(true);
++        } else {
++          ac.setAuthorized(false);
++        }
++        if (ac.isAuthorized()) {
++          if (LOG.isDebugEnabled())
++            LOG.debug("SASL server GSSAPI callback: setting "
++                + "canonicalized client ID: " + authzid);
++          ac.setAuthorizedID(authzid);
++        }
++      }
++    }
++  }
++}
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index a311288..7a7aa8b 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -17,6 +17,8 @@
+  */
+ package org.apache.hadoop.security;
+ 
++import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION;
++
+ import java.io.IOException;
+ import java.lang.reflect.UndeclaredThrowableException;
+ import java.security.AccessControlContext;
+@@ -61,7 +63,6 @@ import com.sun.security.auth.module.Krb5LoginModule;
+  */
+ public class UserGroupInformation {
+   private static final Log LOG =  LogFactory.getLog(UserGroupInformation.class);
+-  private static final String  HADOOP_SECURITY_AUTHENTICATION = "hadoop.security.authentication";
+   
+   /**
+    * A login module that looks at the Kerberos, Unix, or Windows principal and
+@@ -454,14 +455,13 @@ public class UserGroupInformation {
+    * 
+    * @return an unmodifiable collection of tokens associated with user
+    */
+-  @SuppressWarnings("unchecked")
+-  public synchronized <Ident extends TokenIdentifier>
+-  Collection<Token<Ident>> getTokens() {
++  public synchronized 
++  Collection<Token<? extends TokenIdentifier>> getTokens() {
+     Set<Object> creds = subject.getPrivateCredentials();
+-    List<Token<Ident>> result = new ArrayList<Token<Ident>>(creds.size());
++    List<Token<?>> result = new ArrayList<Token<?>>(creds.size());
+     for(Object o: creds) {
+-      if (o instanceof Token) {
+-        result.add((Token<Ident>) o);
++      if (o instanceof Token<?>) {
++        result.add((Token<?>) o);
+       }
+     }
+     return Collections.unmodifiableList(result);
+diff --git a/src/core/org/apache/hadoop/security/token/SecretManager.java b/src/core/org/apache/hadoop/security/token/SecretManager.java
+index e350211..f5eaf0d 100644
+--- a/src/core/org/apache/hadoop/security/token/SecretManager.java
++++ b/src/core/org/apache/hadoop/security/token/SecretManager.java
+@@ -62,6 +62,12 @@ public abstract class SecretManager<T extends TokenIdentifier> {
+   public abstract byte[] retrievePassword(T identifier) throws InvalidToken;
+   
+   /**
++   * Create an empty token identifier.
++   * @return the newly created empty token identifier
++   */
++  public abstract T createIdentifier();
++  
++  /**
+    * The name of the hashing algorithm.
+    */
+   private static final String DEFAULT_HMAC_ALGORITHM = "HmacSHA1";
+diff --git a/src/core/org/apache/hadoop/security/token/TokenIdentifier.java b/src/core/org/apache/hadoop/security/token/TokenIdentifier.java
+index 904a627..f3c8c59 100644
+--- a/src/core/org/apache/hadoop/security/token/TokenIdentifier.java
++++ b/src/core/org/apache/hadoop/security/token/TokenIdentifier.java
+@@ -35,6 +35,12 @@ public abstract class TokenIdentifier implements Writable {
+    * @return the kind of the token
+    */
+   public abstract Text getKind();
++  
++  /**
++   * Get the username encoded in the token identifier
++   * @return the username
++   */
++  public abstract Text getUsername();
+ 
+   /**
+    * Get the bytes for the token identifier
+diff --git a/src/core/org/apache/hadoop/security/token/TokenInfo.java b/src/core/org/apache/hadoop/security/token/TokenInfo.java
+new file mode 100644
+index 0000000..c4d1369
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/token/TokenInfo.java
+@@ -0,0 +1,31 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security.token;
++
++import java.lang.annotation.*;
++
++/**
++ * Indicates Token related information to be used
++ */
++@Retention(RetentionPolicy.RUNTIME)
++@Target(ElementType.TYPE)
++public @interface TokenInfo {
++  /** The type of TokenSelector to be used */
++  Class<? extends TokenSelector<? extends TokenIdentifier>> value();
++}
+\ No newline at end of file
+diff --git a/src/core/org/apache/hadoop/security/token/TokenSelector.java b/src/core/org/apache/hadoop/security/token/TokenSelector.java
+new file mode 100644
+index 0000000..33d7eb6
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/token/TokenSelector.java
+@@ -0,0 +1,34 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security.token;
++
++import java.util.Collection;
++
++import org.apache.hadoop.io.Text;
++
++/**
++ * Select token of type T from tokens for use with named service
++ * 
++ * @param <T>
++ *          T extends TokenIdentifier
++ */
++public interface TokenSelector<T extends TokenIdentifier> {
++  Token<T> selectToken(Text service,
++      Collection<Token<? extends TokenIdentifier>> tokens);
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+new file mode 100644
+index 0000000..3fc9a45
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+@@ -0,0 +1,197 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs;
++
++import org.apache.hadoop.fs.CommonConfigurationKeys;
++
++/** 
++ * This class contains constants for configuration keys used
++ * in hdfs.
++ *
++ */
++
++public class DFSConfigKeys extends CommonConfigurationKeys {
++
++  public static final String  DFS_BLOCK_SIZE_KEY = "dfs.blocksize";
++  public static final long    DFS_BLOCK_SIZE_DEFAULT = 64*1024*1024;
++  public static final String  DFS_REPLICATION_KEY = "dfs.replication";
++  public static final short   DFS_REPLICATION_DEFAULT = 3;
++  public static final String  DFS_STREAM_BUFFER_SIZE_KEY = "dfs.stream-buffer-size";
++  public static final int     DFS_STREAM_BUFFER_SIZE_DEFAULT = 4096;
++  public static final String  DFS_BYTES_PER_CHECKSUM_KEY = "dfs.bytes-per-checksum";
++  public static final int     DFS_BYTES_PER_CHECKSUM_DEFAULT = 512;
++  public static final String  DFS_CLIENT_WRITE_PACKET_SIZE_KEY = "dfs.client-write-packet-size";
++  public static final int     DFS_CLIENT_WRITE_PACKET_SIZE_DEFAULT = 64*1024;
++  
++  public static final String  DFS_NAMENODE_BACKUP_ADDRESS_KEY = "dfs.namenode.backup.address";
++  public static final String  DFS_NAMENODE_BACKUP_ADDRESS_DEFAULT = "localhost:50100";
++  public static final String  DFS_NAMENODE_BACKUP_HTTP_ADDRESS_KEY = "dfs.namenode.backup.http-address";
++  public static final String  DFS_NAMENODE_BACKUP_HTTP_ADDRESS_DEFAULT = "0.0.0.0:50105";
++  public static final String  DFS_DATANODE_BALANCE_BANDWIDTHPERSEC_KEY = "dfs.datanode.balance.bandwidthPerSec";
++  public static final long    DFS_DATANODE_BALANCE_BANDWIDTHPERSEC_DEFAULT = 1024*1024;
++  public static final String  DFS_NAMENODE_HTTP_ADDRESS_KEY = "dfs.namenode.http-address";
++  public static final String  DFS_NAMENODE_HTTP_ADDRESS_DEFAULT = "0.0.0.0:50070";
++  public static final String  DFS_NAMENODE_MAX_OBJECTS_KEY = "dfs.namenode.max.objects";
++  public static final long    DFS_NAMENODE_MAX_OBJECTS_DEFAULT = 0;
++  public static final String  DFS_NAMENODE_SAFEMODE_EXTENSION_KEY = "dfs.namenode.safemode.extension";
++  public static final int     DFS_NAMENODE_SAFEMODE_EXTENSION_DEFAULT = 30000;
++  public static final String  DFS_NAMENODE_SAFEMODE_THRESHOLD_PCT_KEY = "dfs.namenode.safemode.threshold-pct";
++  public static final float   DFS_NAMENODE_SAFEMODE_THRESHOLD_PCT_DEFAULT = 0.999f;
++  public static final String  DFS_NAMENODE_SECONDARY_HTTP_ADDRESS_KEY = "dfs.namenode.secondary.http-address";
++  public static final String  DFS_NAMENODE_SECONDARY_HTTP_ADDRESS_DEFAULT = "0.0.0.0:50090";
++  public static final String  DFS_NAMENODE_CHECKPOINT_PERIOD_KEY = "dfs.namenode.checkpoint.period";
++  public static final long    DFS_NAMENODE_CHECKPOINT_PERIOD_DEFAULT = 3600;
++  public static final String  DFS_NAMENODE_CHECKPOINT_SIZE_KEY = "dfs.namenode.checkpoint.size";
++  public static final long    DFS_NAMENODE_CHECKPOINT_SIZE_DEFAULT = 4194304;
++  public static final String  DFS_NAMENODE_UPGRADE_PERMISSION_KEY = "dfs.namenode.upgrade.permission";
++  public static final int     DFS_NAMENODE_UPGRADE_PERMISSION_DEFAULT = 00777;
++  public static final String  DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY = "dfs.namenode.heartbeat.recheck-interval";
++  public static final int     DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_DEFAULT = 5*60*1000;
++  public static final String  DFS_CLIENT_HTTPS_KEYSTORE_RESOURCE_KEY = "dfs.client.https.keystore.resource";
++  public static final String  DFS_CLIENT_HTTPS_KEYSTORE_RESOURCE_DEFAULT = "ssl-client.xml";
++  public static final String  DFS_CLIENT_HTTPS_NEED_AUTH_KEY = "dfs.client.https.need-auth";
++  public static final boolean DFS_CLIENT_HTTPS_NEED_AUTH_DEFAULT = false;
++  public static final String  DFS_NAMENODE_ACCESSTIME_PRECISION_KEY = "dfs.namenode.accesstime.precision";
++  public static final long    DFS_NAMENODE_ACCESSTIME_PRECISION_DEFAULT = 3600000;
++  public static final String  DFS_NAMENODE_REPLICATION_CONSIDERLOAD_KEY = "dfs.namenode.replication.considerLoad";
++  public static final boolean DFS_NAMENODE_REPLICATION_CONSIDERLOAD_DEFAULT = true;
++  public static final String  DFS_NAMENODE_REPLICATION_INTERVAL_KEY = "dfs.namenode.replication.interval";
++  public static final int     DFS_NAMENODE_REPLICATION_INTERVAL_DEFAULT = 3;
++  public static final String  DFS_NAMENODE_REPLICATION_MIN_KEY = "dfs.namenode.replication.min";
++  public static final int     DFS_NAMENODE_REPLICATION_MIN_DEFAULT = 1;
++  public static final String  DFS_NAMENODE_REPLICATION_PENDING_TIMEOUT_SEC_KEY = "dfs.namenode.replication.pending.timeout-sec";
++  public static final int     DFS_NAMENODE_REPLICATION_PENDING_TIMEOUT_SEC_DEFAULT = -1;
++  public static final String  DFS_NAMENODE_REPLICATION_MAX_STREAMS_KEY = "dfs.namenode.replication.max-streams";
++  public static final int     DFS_NAMENODE_REPLICATION_MAX_STREAMS_DEFAULT = 2;
++  public static final String  DFS_PERMISSIONS_ENABLED_KEY = "dfs.permissions.enabled";
++  public static final boolean DFS_PERMISSIONS_ENABLED_DEFAULT = true;
++  public static final String  DFS_PERMISSIONS_SUPERUSERGROUP_KEY = "dfs.permissions.superusergroup";
++  public static final String  DFS_PERMISSIONS_SUPERUSERGROUP_DEFAULT = "supergroup";
++  public static final String  DFS_SERVER_HTTPS_KEYSTORE_RESOURCE_KEY = "dfs.https.server.keystore.resource";
++  public static final String  DFS_SERVER_HTTPS_KEYSTORE_RESOURCE_DEFAULT = "ssl-server.xml";
++  public static final String  DFS_NAMENODE_NAME_DIR_RESTORE_KEY = "dfs.namenode.name.dir.restore";
++  public static final boolean DFS_NAMENODE_NAME_DIR_RESTORE_DEFAULT = false;
++
++  //Delegation token related keys
++  public static final String  DFS_NAMENODE_DELEGATION_KEY_UPDATE_INTERVAL_KEY = "dfs.namenode.delegation.key.update-interval";
++  public static final long    DFS_NAMENODE_DELEGATION_KEY_UPDATE_INTERVAL_DEFAULT = 86400;
++  public static final String  DFS_NAMENODE_DELEGATION_TOKEN_RENEW_INTERVAL_KEY = "dfs.namenode.delegation.token.renew-interval";
++  public static final long    DFS_NAMENODE_DELEGATION_TOKEN_RENEW_INTERVAL_DEFAULT = 86400;
++  public static final String  DFS_NAMENODE_DELEGATION_TOKEN_MAX_LIFETIME_KEY = "dfs.namenode.delegation.token.max-lifetime";
++  public static final long    DFS_NAMENODE_DELEGATION_TOKEN_MAX_LIFETIME_DEFAULT = 604800;
++
++  //Following keys have no defaults
++  public static final String  DFS_DATANODE_DATA_DIR_KEY = "dfs.datanode.data.dir";
++  public static final String  DFS_NAMENODE_HTTPS_ADDRESS_KEY = "dfs.namenode.https-address";
++  public static final String  DFS_NAMENODE_HTTPS_ADDRESS_DEFAULT = "0.0.0.0:50470";
++  public static final String  DFS_NAMENODE_NAME_DIR_KEY = "dfs.namenode.name.dir";
++  public static final String  DFS_NAMENODE_EDITS_DIR_KEY = "dfs.namenode.edits.dir";
++  public static final String  DFS_CLIENT_READ_PREFETCH_SIZE_KEY = "dfs.client.read.prefetch.size"; 
++  public static final String  DFS_CLIENT_RETRY_WINDOW_BASE= "dfs.client.retry.window.base";
++  public static final String  DFS_METRICS_SESSION_ID_KEY = "dfs.metrics.session-id";
++  public static final String  DFS_DATANODE_HOST_NAME_KEY = "dfs.datanode.hostname";
++  public static final String  DFS_DATANODE_STORAGEID_KEY = "dfs.datanode.StorageId";
++  public static final String  DFS_NAMENODE_HOSTS_KEY = "dfs.namenode.hosts";
++  public static final String  DFS_NAMENODE_HOSTS_EXCLUDE_KEY = "dfs.namenode.hosts.exclude";
++  public static final String  DFS_CLIENT_SOCKET_TIMEOUT_KEY = "dfs.client.socket-timeout";
++  public static final String  DFS_NAMENODE_CHECKPOINT_DIR_KEY = "dfs.namenode.checkpoint.dir";
++  public static final String  DFS_NAMENODE_CHECKPOINT_EDITS_DIR_KEY = "dfs.namenode.checkpoint.edits.dir";
++
++  //Code in hdfs is not updated to use these keys.
++  public static final String  DFS_CLIENT_BLOCK_WRITE_LOCATEFOLLOWINGBLOCK_RETRIES_KEY = "dfs.client.block.write.locateFollowingBlock.retries";
++  public static final int     DFS_CLIENT_BLOCK_WRITE_LOCATEFOLLOWINGBLOCK_RETRIES_DEFAULT = 5;
++  public static final String  DFS_CLIENT_BLOCK_WRITE_RETRIES_KEY = "dfs.client.block.write.retries";
++  public static final int     DFS_CLIENT_BLOCK_WRITE_RETRIES_DEFAULT = 3;
++  public static final String  DFS_CLIENT_MAX_BLOCK_ACQUIRE_FAILURES_KEY = "dfs.client.max.block.acquire.failures";
++  public static final int     DFS_CLIENT_MAX_BLOCK_ACQUIRE_FAILURES_DEFAULT = 3;
++  public static final String  DFS_BALANCER_MOVEDWINWIDTH_KEY = "dfs.balancer.movedWinWidth";
++  public static final int     DFS_BALANCER_MOVEDWINWIDTH_DEFAULT = 5400*1000;
++  public static final String  DFS_DATANODE_ADDRESS_KEY = "dfs.datanode.address";
++  public static final String  DFS_DATANODE_ADDRESS_DEFAULT = "0.0.0.0:50010";
++  public static final String  DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY = "dfs.datanode.directoryscan.interval";
++  public static final int     DFS_DATANODE_DIRECTORYSCAN_INTERVAL_DEFAULT = 21600;
++  public static final String  DFS_DATANODE_DNS_INTERFACE_KEY = "dfs.datanode.dns.interface";
++  public static final String  DFS_DATANODE_DNS_INTERFACE_DEFAULT = "default";
++  public static final String  DFS_DATANODE_DNS_NAMESERVER_KEY = "dfs.datanode.dns.nameserver";
++  public static final String  DFS_DATANODE_DNS_NAMESERVER_DEFAULT = "default";
++  public static final String  DFS_DATANODE_DU_RESERVED_KEY = "dfs.datanode.du.reserved";
++  public static final long    DFS_DATANODE_DU_RESERVED_DEFAULT = 0;
++  public static final String  DFS_DATANODE_HANDLER_COUNT_KEY = "dfs.datanode.handler.count";
++  public static final int     DFS_DATANODE_HANDLER_COUNT_DEFAULT = 3;
++  public static final String  DFS_DATANODE_HTTP_ADDRESS_KEY = "dfs.datanode.http.address";
++  public static final String  DFS_DATANODE_HTTP_ADDRESS_DEFAULT = "0.0.0.0:50075";
++  public static final String  DFS_DATANODE_MAX_XCIEVERS_KEY = "dfs.datanode.max.xcievers";
++  public static final int     DFS_DATANODE_MAX_XCIEVERS_DEFAULT = 256;
++  public static final String  DFS_DATANODE_NUMBLOCKS_KEY = "dfs.datanode.numblocks";
++  public static final int     DFS_DATANODE_NUMBLOCKS_DEFAULT = 64;
++  public static final String  DFS_DATANODE_SCAN_PERIOD_HOURS_KEY = "dfs.datanode.scan.period.hours";
++  public static final int     DFS_DATANODE_SCAN_PERIOD_HOURS_DEFAULT = 0;
++  public static final String  DFS_DATANODE_SIMULATEDDATASTORAGE_KEY = "dfs.datanode.simulateddatastorage";
++  public static final boolean DFS_DATANODE_SIMULATEDDATASTORAGE_DEFAULT = false;
++  public static final String  DFS_DATANODE_SIMULATEDDATASTORAGE_CAPACITY_KEY = "dfs.datanode.simulateddatastorage.capacity";
++  public static final long    DFS_DATANODE_SIMULATEDDATASTORAGE_CAPACITY_DEFAULT = 2L<<40;
++  public static final String  DFS_DATANODE_TRANSFERTO_ALLOWED_KEY = "dfs.datanode.transferTo.allowed";
++  public static final boolean DFS_DATANODE_TRANSFERTO_ALLOWED_DEFAULT = true;
++  public static final String  DFS_HEARTBEAT_INTERVAL_KEY = "dfs.heartbeat.interval";
++  public static final long    DFS_HEARTBEAT_INTERVAL_DEFAULT = 3;
++  public static final String  DFS_NAMENODE_DECOMMISSION_INTERVAL_KEY = "dfs.namenode.decommission.interval";
++  public static final int     DFS_NAMENODE_DECOMMISSION_INTERVAL_DEFAULT = 30;
++  public static final String  DFS_NAMENODE_DECOMMISSION_NODES_PER_INTERVAL_KEY = "dfs.namenode.decommission.nodes.per.interval";
++  public static final int     DFS_NAMENODE_DECOMMISSION_NODES_PER_INTERVAL_DEFAULT = 5;
++  public static final String  DFS_NAMENODE_HANDLER_COUNT_KEY = "dfs.namenode.handler.count";
++  public static final int     DFS_NAMENODE_HANDLER_COUNT_DEFAULT = 10;
++  public static final String  DFS_SUPPORT_APPEND_KEY = "dfs.support.append";
++  public static final boolean DFS_SUPPORT_APPEND_DEFAULT = false;
++  public static final String  DFS_HTTPS_ENABLE_KEY = "dfs.https.enable";
++  public static final boolean DFS_HTTPS_ENABLE_DEFAULT = false;
++  public static final String  DFS_DEFAULT_CHUNK_VIEW_SIZE_KEY = "dfs.default.chunk.view.size";
++  public static final int     DFS_DEFAULT_CHUNK_VIEW_SIZE_DEFAULT = 32*1024;
++  public static final String  DFS_DATANODE_HTTPS_ADDRESS_KEY = "dfs.datanode.https.address";
++  public static final String  DFS_DATANODE_HTTPS_ADDRESS_DEFAULT = "0.0.0.0:50475";
++  public static final String  DFS_DATANODE_IPC_ADDRESS_KEY = "dfs.datanode.ipc.address";
++  public static final String  DFS_DATANODE_IPC_ADDRESS_DEFAULT = "0.0.0.0:50020";
++
++  public static final String  DFS_BLOCK_ACCESS_TOKEN_ENABLE_KEY = "dfs.block.access.token.enable";
++  public static final boolean DFS_BLOCK_ACCESS_TOKEN_ENABLE_DEFAULT = false;
++  public static final String  DFS_BLOCK_ACCESS_KEY_UPDATE_INTERVAL_KEY = "dfs.block.access.key.update.interval";
++  public static final long    DFS_BLOCK_ACCESS_KEY_UPDATE_INTERVAL_DEFAULT = 600L;
++  public static final String  DFS_BLOCK_ACCESS_TOKEN_LIFETIME_KEY = "dfs.block.access.token.lifetime";
++  public static final long    DFS_BLOCK_ACCESS_TOKEN_LIFETIME_DEFAULT = 600L;
++
++  public static final String  DFS_REPLICATION_MAX_KEY = "dfs.replication.max";
++  public static final int     DFS_REPLICATION_MAX_DEFAULT = 512;
++  public static final String  DFS_DF_INTERVAL_KEY = "dfs.df.interval";
++  public static final int     DFS_DF_INTERVAL_DEFAULT = 60000;
++  public static final String  DFS_BLOCKREPORT_INTERVAL_MSEC_KEY = "dfs.blockreport.intervalMsec";
++  public static final long    DFS_BLOCKREPORT_INTERVAL_MSEC_DEFAULT = 21600000;
++  public static final String  DFS_BLOCKREPORT_INITIAL_DELAY_KEY = "dfs.blockreport.initialDelay";
++  public static final int     DFS_BLOCKREPORT_INITIAL_DELAY_DEFAULT = 0;
++
++  //Keys with no defaults
++  public static final String  DFS_DATANODE_PLUGINS_KEY = "dfs.datanode.plugins";
++  public static final String  DFS_DATANODE_SOCKET_WRITE_TIMEOUT_KEY = "dfs.datanode.socket.write.timeout";
++  public static final String  DFS_DATANODE_STARTUP_KEY = "dfs.datanode.startup";
++  public static final String  DFS_NAMENODE_PLUGINS_KEY = "dfs.namenode.plugins";
++  public static final String  DFS_WEB_UGI_KEY = "dfs.web.ugi";
++  public static final String  DFS_NAMENODE_STARTUP_KEY = "dfs.namenode.startup";
++  public static final String  DFS_DATANODE_KEYTAB_FILE_KEY = "dfs.datanode.keytab.file";
++  public static final String  DFS_DATANODE_USER_NAME_KEY = "dfs.datanode.user.name.key";
++  public static final String  DFS_NAMENODE_KEYTAB_FILE_KEY = "dfs.namenode.keytab.file";
++  public static final String  DFS_NAMENODE_USER_NAME_KEY = "dfs.namenode.user.name.key";
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+index bf48dbc..de2347a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+@@ -23,12 +23,16 @@ import org.apache.hadoop.ipc.VersionedProtocol;
+ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.hdfs.protocol.FSConstants.UpgradeAction;
+ import org.apache.hadoop.hdfs.security.token.DelegationTokenIdentifier;
++import org.apache.hadoop.hdfs.security.token.DelegationTokenSelector;
+ import org.apache.hadoop.hdfs.server.common.UpgradeStatusReport;
+ import org.apache.hadoop.fs.permission.*;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.fs.ContentSummary;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.KerberosInfo;
+ import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenInfo;
+ 
+ /**********************************************************************
+  * ClientProtocol is used by user code via 
+@@ -37,6 +41,8 @@ import org.apache.hadoop.security.token.Token;
+  * as well as open/close file streams, etc.
+  *
+  **********************************************************************/
++@KerberosInfo(DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY)
++@TokenInfo(DelegationTokenSelector.class)
+ public interface ClientProtocol extends VersionedProtocol {
+ 
+   /**
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSecretManager.java b/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSecretManager.java
+index 6388440..ed58c10 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSecretManager.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSecretManager.java
+@@ -267,6 +267,15 @@ public class DelegationTokenSecretManager
+   public static SecretKey createSecretKey(byte[] key) {
+     return SecretManager.createSecretKey(key);
+   }
++  
++  /**
++   * Create an empty delegation token identifier
++   * @return a newly created empty delegation token identifier
++   */
++  @Override
++  public DelegationTokenIdentifier createIdentifier() {
++    return new DelegationTokenIdentifier();
++  }
+ 
+ 
+   /** Utility class to encapsulate a token's renew date and password. */
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSelector.java b/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSelector.java
+new file mode 100644
+index 0000000..faf53c4
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/security/token/DelegationTokenSelector.java
+@@ -0,0 +1,50 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs.security.token;
++
++import java.util.Collection;
++
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenIdentifier;
++import org.apache.hadoop.security.token.TokenSelector;
++
++/**
++ * Look through tokens to find the first delegation token that matches the
++ * service and return it.
++ */
++public class DelegationTokenSelector implements
++    TokenSelector<DelegationTokenIdentifier> {
++
++  @SuppressWarnings("unchecked")
++  @Override
++  public Token<DelegationTokenIdentifier> selectToken(Text service,
++      Collection<Token<? extends TokenIdentifier>> tokens) {
++    if (service == null) {
++      return null;
++    }
++    for (Token<? extends TokenIdentifier> token : tokens) {
++      if (DelegationTokenIdentifier.KIND_NAME.equals(token.getKind())
++          && service.equals(token.getService())) {
++        return (Token<DelegationTokenIdentifier>) token;
++      }
++    }
++    return null;
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index abd3a67..b463ddb 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -314,7 +314,6 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       close();
+       throw e;
+     }
+-    dtSecretManager.startThreads();
+   }
+ 
+   /**
+@@ -324,6 +323,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     this.systemStart = now();
+     setConfigurationParameters(conf);
+     dtSecretManager = createDelegationTokenSecretManager(conf);
++    dtSecretManager.startThreads();
+ 
+     this.nameNodeAddress = nn.getNameNodeAddress();
+     this.registerMBean(conf); // register the MBean for the FSNamesystemStutus
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 1080c58..efc010a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -215,19 +215,22 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+             ServiceAuthorizationManager.SERVICE_AUTHORIZATION_CONFIG, false)) {
+       ServiceAuthorizationManager.refresh(conf, new HDFSPolicyProvider());
+     }
++    
++    myMetrics = new NameNodeMetrics(conf, this);
++    this.namesystem = new FSNamesystem(this, conf);
+ 
+     // create rpc server 
+-    this.server = RPC.getServer(this, socAddr.getHostName(), socAddr.getPort(),
+-                                handlerCount, false, conf);
++    this.server = RPC.getServer(this, socAddr.getHostName(),
++        socAddr.getPort(), handlerCount, false, conf, namesystem
++        .getDelegationTokenSecretManager());
+ 
+     // The rpc-server port can be ephemeral... ensure we have the correct info
+     this.serverAddress = this.server.getListenerAddress(); 
+     FileSystem.setDefaultUri(conf, getUri(serverAddress));
+     LOG.info("Namenode up at: " + this.serverAddress);
+ 
+-    myMetrics = new NameNodeMetrics(conf, this);
++    
+ 
+-    this.namesystem = new FSNamesystem(this, conf);
+     startHttpServer(conf);
+     this.server.start();  //start RPC server   
+     startTrashEmptier(conf);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
+index 3c5b29d..a23aa50 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
+@@ -20,11 +20,14 @@ package org.apache.hadoop.hdfs.server.protocol;
+ 
+ import java.io.*;
+ 
++import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.DatanodeID;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+ import org.apache.hadoop.ipc.VersionedProtocol;
+ 
++import org.apache.hadoop.security.KerberosInfo;
++
+ /**********************************************************************
+  * Protocol that a DFS datanode uses to communicate with the NameNode.
+  * It's used to upload current load information and block reports.
+@@ -33,6 +36,7 @@ import org.apache.hadoop.ipc.VersionedProtocol;
+  * returning values from these functions.
+  *
+  **********************************************************************/
++@KerberosInfo(DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY)
+ public interface DatanodeProtocol extends VersionedProtocol {
+   /**
+    * 20: SendHeartbeat may return KeyUpdateCommand
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/InterDatanodeProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/InterDatanodeProtocol.java
+index cded318..d18c7f6 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/InterDatanodeProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/InterDatanodeProtocol.java
+@@ -22,11 +22,14 @@ import java.io.IOException;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.ipc.VersionedProtocol;
++import org.apache.hadoop.security.KerberosInfo;
+ 
+ /** An inter-datanode protocol for updating generation stamp
+  */
++@KerberosInfo(DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY)
+ public interface InterDatanodeProtocol extends VersionedProtocol {
+   public static final Log LOG = LogFactory.getLog(InterDatanodeProtocol.class);
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/NamenodeProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/NamenodeProtocol.java
+index a5a35d2..89e7bdd 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/NamenodeProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/NamenodeProtocol.java
+@@ -20,15 +20,18 @@ package org.apache.hadoop.hdfs.server.protocol;
+ 
+ import java.io.IOException;
+ 
++import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.hdfs.security.ExportedAccessKeys;
+ import org.apache.hadoop.hdfs.server.namenode.CheckpointSignature;
+ import org.apache.hadoop.ipc.VersionedProtocol;
++import org.apache.hadoop.security.KerberosInfo;
+ 
+ /*****************************************************************************
+  * Protocol that a secondary NameNode uses to communicate with the NameNode.
+  * It's used to get part of the name node state
+  *****************************************************************************/
++@KerberosInfo(DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY)
+ public interface NamenodeProtocol extends VersionedProtocol {
+   /**
+    * 3: new method added: getAccessKeys()
+diff --git a/src/mapred/org/apache/hadoop/mapred/AdminOperationsProtocol.java b/src/mapred/org/apache/hadoop/mapred/AdminOperationsProtocol.java
+index 827495e..b10b7e2 100644
+--- a/src/mapred/org/apache/hadoop/mapred/AdminOperationsProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/AdminOperationsProtocol.java
+@@ -21,11 +21,14 @@ package org.apache.hadoop.mapred;
+ import java.io.IOException;
+ 
+ import org.apache.hadoop.ipc.VersionedProtocol;
++import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.security.KerberosInfo;
+ 
+ /**
+  * Protocol for admin operations. This is a framework-public interface and is
+  * NOT_TO_BE_USED_BY_USERS_DIRECTLY.
+  */
++@KerberosInfo(JobContext.JOB_JOBTRACKER_ID)
+ public interface AdminOperationsProtocol extends VersionedProtocol {
+   
+   /**
+diff --git a/src/mapred/org/apache/hadoop/mapred/Child.java b/src/mapred/org/apache/hadoop/mapred/Child.java
+index 545cf09..675f1dc 100644
+--- a/src/mapred/org/apache/hadoop/mapred/Child.java
++++ b/src/mapred/org/apache/hadoop/mapred/Child.java
+@@ -28,16 +28,17 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.fs.FSError;
+ import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.mapreduce.security.TokenCache;
+-import org.apache.hadoop.security.TokenStorage;
+-import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
+ import org.apache.hadoop.mapreduce.security.token.JobTokenSecretManager;
+ import org.apache.hadoop.metrics.MetricsContext;
+ import org.apache.hadoop.metrics.MetricsUtil;
+ import org.apache.hadoop.metrics.jvm.JvmMetrics;
++import org.apache.hadoop.security.TokenStorage;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
+-import org.apache.hadoop.security.token.TokenIdentifier;
+ import org.apache.hadoop.util.Shell;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.log4j.LogManager;
+@@ -73,6 +74,12 @@ class Child {
+       TokenCache.loadTaskTokenStorage(jobTokenFile, defaultConf);
+     LOG.debug("loading token. # keys =" +ts.numberOfSecretKeys() + 
+         "; from file=" + jobTokenFile);
++    
++    Token<JobTokenIdentifier> jt = TokenCache.getJobToken(ts);
++    jt.setService(new Text(address.getAddress().getHostAddress() + ":"
++        + address.getPort()));
++    UserGroupInformation current = UserGroupInformation.getCurrentUser();
++    current.addToken(jt);
+ 
+     TaskUmbilicalProtocol umbilical =
+       (TaskUmbilicalProtocol)RPC.getProxy(TaskUmbilicalProtocol.class,
+@@ -151,8 +158,6 @@ class Child {
+         TaskLog.syncLogs(firstTaskid, taskid, isCleanup);
+         JobConf job = new JobConf(task.getJobFile());
+ 
+-        // set job shuffle token
+-        Token<? extends TokenIdentifier> jt = TokenCache.getJobToken(ts);
+         // set the jobTokenFile into task
+         task.setJobTokenSecret(JobTokenSecretManager.
+             createSecretKey(jt.getPassword()));
+diff --git a/src/mapred/org/apache/hadoop/mapred/InterTrackerProtocol.java b/src/mapred/org/apache/hadoop/mapred/InterTrackerProtocol.java
+index dc8f398..587a83d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/InterTrackerProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/InterTrackerProtocol.java
+@@ -21,11 +21,14 @@ package org.apache.hadoop.mapred;
+ import java.io.IOException;
+ 
+ import org.apache.hadoop.ipc.VersionedProtocol;
++import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.security.KerberosInfo;
+ 
+ /** 
+  * Protocol that a TaskTracker and the central JobTracker use to communicate.
+  * The JobTracker is the Server, which implements this protocol.
+  */ 
++@KerberosInfo(JobContext.JOB_JOBTRACKER_ID)
+ interface InterTrackerProtocol extends VersionedProtocol {
+   /**
+    * version 3 introduced to replace 
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+index 91c6a77..17a2528 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+@@ -21,6 +21,8 @@ package org.apache.hadoop.mapred;
+ import java.io.IOException;
+ 
+ import org.apache.hadoop.ipc.VersionedProtocol;
++import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.security.KerberosInfo;
+ import org.apache.hadoop.security.TokenStorage;
+ 
+ /** 
+@@ -28,6 +30,7 @@ import org.apache.hadoop.security.TokenStorage;
+  * JobClient can use these methods to submit a Job for execution, and learn about
+  * the current system status.
+  */ 
++@KerberosInfo(JobContext.JOB_JOBTRACKER_ID)
+ interface JobSubmissionProtocol extends VersionedProtocol {
+   /* 
+    *Changing the versionID to 2L since the getTaskCompletionEvents method has
+diff --git a/src/mapred/org/apache/hadoop/mapred/JvmTask.java b/src/mapred/org/apache/hadoop/mapred/JvmTask.java
+index 9541245..65b5709 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JvmTask.java
++++ b/src/mapred/org/apache/hadoop/mapred/JvmTask.java
+@@ -23,7 +23,7 @@ import java.io.DataOutput;
+ import java.io.IOException;
+ import org.apache.hadoop.io.Writable;
+ 
+-class JvmTask implements Writable {
++public class JvmTask implements Writable {
+   Task t;
+   boolean shouldDie;
+   public JvmTask(Task t, boolean shouldDie) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/MapTaskCompletionEventsUpdate.java b/src/mapred/org/apache/hadoop/mapred/MapTaskCompletionEventsUpdate.java
+index 8bb4d14..8095301 100644
+--- a/src/mapred/org/apache/hadoop/mapred/MapTaskCompletionEventsUpdate.java
++++ b/src/mapred/org/apache/hadoop/mapred/MapTaskCompletionEventsUpdate.java
+@@ -28,7 +28,7 @@ import org.apache.hadoop.io.Writable;
+  * tasks w.r.t the map task completion events. It also indicates whether the 
+  * child task should reset its events index.
+  */
+-class MapTaskCompletionEventsUpdate implements Writable {
++public class MapTaskCompletionEventsUpdate implements Writable {
+   TaskCompletionEvent[] events;
+   boolean reset;
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index b9c24d0..77ca212 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -673,8 +673,8 @@ public class TaskTracker
+                        maxMapSlots : maxReduceSlots;
+     //set the num handlers to max*2 since canCommit may wait for the duration
+     //of a heartbeat RPC
+-    this.taskReportServer =
+-      RPC.getServer(this, bindAddress, tmpPort, 2 * max, false, this.fConf);
++    this.taskReportServer = RPC.getServer(this, bindAddress,
++        tmpPort, 2 * max, false, this.fConf, this.jobTokenSecretManager);
+     this.taskReportServer.start();
+ 
+     // get the assigned address
+@@ -995,7 +995,6 @@ public class TaskTracker
+    *         job as a starting point.
+    * @throws IOException
+    */
+-  @SuppressWarnings("unchecked")
+   JobConf localizeJobFiles(Task t, RunningJob rjob)
+       throws IOException, InterruptedException {
+     JobID jobId = t.getJobID();
+@@ -1014,8 +1013,7 @@ public class TaskTracker
+     
+     
+     TokenStorage ts = TokenCache.loadTokens(localJobTokenFile, fConf);
+-    Token<JobTokenIdentifier> jt = 
+-      (Token<JobTokenIdentifier>)TokenCache.getJobToken(ts);
++    Token<JobTokenIdentifier> jt = TokenCache.getJobToken(ts);
+     if (jt != null) { //could be null in the case of some unit tests
+       getJobTokenSecretManager().addTokenForJob(jobId.toString(), jt);
+     }
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskUmbilicalProtocol.java b/src/mapred/org/apache/hadoop/mapred/TaskUmbilicalProtocol.java
+index 1f7fc4f..1fcb3f4 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskUmbilicalProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskUmbilicalProtocol.java
+@@ -22,12 +22,15 @@ import java.io.IOException;
+ 
+ import org.apache.hadoop.ipc.VersionedProtocol;
+ import org.apache.hadoop.mapred.JvmTask;
++import org.apache.hadoop.mapreduce.security.token.JobTokenSelector;
++import org.apache.hadoop.security.token.TokenInfo;
+ 
+ /** Protocol that task child process uses to contact its parent process.  The
+  * parent is a daemon which which polls the central master for a new map or
+  * reduce task and runs it as a child process.  All communication between child
+- * and parent is via this protocol. */ 
+-interface TaskUmbilicalProtocol extends VersionedProtocol {
++ * and parent is via this protocol. */
++@TokenInfo(JobTokenSelector.class)
++public interface TaskUmbilicalProtocol extends VersionedProtocol {
+ 
+   /** 
+    * Changed the version to 2, since we have a new method getMapOutputs 
+@@ -141,7 +144,7 @@ interface TaskUmbilicalProtocol extends VersionedProtocol {
+    * task-tracker has changed or not. This will trigger some action at the 
+    * child-process.
+    *
+-   * @param taskId the reduce task id
++   * @param jobId the reducer job id
+    * @param fromIndex the index starting from which the locations should be 
+    * fetched
+    * @param maxLocs the max number of locations to fetch
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+index 9353f69..1d5fde2 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+@@ -34,6 +34,7 @@ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.TokenStorage;
+ import org.apache.hadoop.security.token.Token;
+@@ -230,8 +231,9 @@ public class TokenCache {
+    * @return job token
+    */
+   //@InterfaceAudience.Private
+-  public static Token<? extends TokenIdentifier> getJobToken(TokenStorage ts) {
+-    return ts.getToken(JOB_TOKEN);
++  @SuppressWarnings("unchecked")
++  public static Token<JobTokenIdentifier> getJobToken(TokenStorage ts) {
++    return (Token<JobTokenIdentifier>) ts.getToken(JOB_TOKEN);
+   }
+ 
+   /**
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/token/JobTokenIdentifier.java b/src/mapred/org/apache/hadoop/mapreduce/security/token/JobTokenIdentifier.java
+index 768e14a..8aa9646 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/token/JobTokenIdentifier.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/token/JobTokenIdentifier.java
+@@ -33,6 +33,13 @@ public class JobTokenIdentifier extends TokenIdentifier {
+   final static Text KIND_NAME = new Text("mapreduce.job");
+   
+   /**
++   * Default constructor
++   */
++  public JobTokenIdentifier() {
++    this.jobid = new Text();
++  }
++
++  /**
+    * Create a job token identifier from a jobid
+    * @param jobid the jobid to use
+    */
+@@ -46,6 +53,12 @@ public class JobTokenIdentifier extends TokenIdentifier {
+     return KIND_NAME;
+   }
+   
++  /** {@inheritDoc} */
++  @Override
++  public Text getUsername() {
++    return getJobId();
++  }
++
+   /**
+    * Get the jobid
+    * @return the jobid
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/token/JobTokenSecretManager.java b/src/mapred/org/apache/hadoop/mapreduce/security/token/JobTokenSecretManager.java
+index fc3b17c..2a7ecd2 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/token/JobTokenSecretManager.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/token/JobTokenSecretManager.java
+@@ -121,5 +121,13 @@ public class JobTokenSecretManager extends SecretManager<JobTokenIdentifier> {
+       throws InvalidToken {
+     return retrieveTokenSecret(identifier.getJobId().toString()).getEncoded();
+   }
+-
++  
++  /**
++   * Create an empty job token identifier
++   * @return a newly created empty job token identifier
++   */
++  @Override
++  public JobTokenIdentifier createIdentifier() {
++    return new JobTokenIdentifier();
++  }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/token/JobTokenSelector.java b/src/mapred/org/apache/hadoop/mapreduce/security/token/JobTokenSelector.java
+new file mode 100644
+index 0000000..024f6ea
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/token/JobTokenSelector.java
+@@ -0,0 +1,49 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.security.token;
++
++import java.util.Collection;
++
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenIdentifier;
++import org.apache.hadoop.security.token.TokenSelector;
++
++/**
++ * Look through tokens to find the first job token that matches the service
++ * and return it.
++ */
++public class JobTokenSelector implements TokenSelector<JobTokenIdentifier> {
++
++  @SuppressWarnings("unchecked")
++  @Override
++  public Token<JobTokenIdentifier> selectToken(Text service,
++      Collection<Token<? extends TokenIdentifier>> tokens) {
++    if (service == null) {
++      return null;
++    }
++    for (Token<? extends TokenIdentifier> token : tokens) {
++      if (JobTokenIdentifier.KIND_NAME.equals(token.getKind())
++          && service.equals(token.getService())) {
++        return (Token<JobTokenIdentifier>) token;
++      }
++    }
++    return null;
++  }
++}
+diff --git a/src/test/core-site.xml b/src/test/core-site.xml
+index d33d4d2..ad29fa7 100644
+--- a/src/test/core-site.xml
++++ b/src/test/core-site.xml
+@@ -47,4 +47,10 @@
+   <description>The name of the s3n file system for testing.</description>
+ </property>
+ 
++<!-- Turn security off for tests by default -->
++<property>
++  <name>hadoop.security.authentication</name>
++  <value>simple</value>
++</property>
++
+ </configuration>
+diff --git a/src/test/findbugsExcludeFile.xml b/src/test/findbugsExcludeFile.xml
+index 35f1665..ac97282 100644
+--- a/src/test/findbugsExcludeFile.xml
++++ b/src/test/findbugsExcludeFile.xml
+@@ -32,6 +32,15 @@
+        <Field name="out" />
+        <Bug pattern="IS2_INCONSISTENT_SYNC" />
+      </Match>
++     <!-- 
++       Accesses to Client.Connection.saslRpcClient are in fact
++       synchronized (inside synchronized methods).
++     --> 
++     <Match>
++       <Class name="org.apache.hadoop.ipc.Client$Connection" />
++       <Field name="saslRpcClient" />
++       <Bug pattern="IS2_INCONSISTENT_SYNC" />
++     </Match>
+      <Match>
+        <Class name="org.apache.hadoop.mapred.OutputCommitter" />
+        <Or>
+diff --git a/src/test/org/apache/hadoop/hdfs/security/TestClientProtocolWithDelegationToken.java b/src/test/org/apache/hadoop/hdfs/security/TestClientProtocolWithDelegationToken.java
+new file mode 100644
+index 0000000..3bc650c
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/security/TestClientProtocolWithDelegationToken.java
+@@ -0,0 +1,122 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs.security;
++
++import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION;
++import static org.mockito.Matchers.anyLong;
++import static org.mockito.Matchers.anyString;
++import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.when;
++
++import java.net.InetSocketAddress;
++import java.security.PrivilegedExceptionAction;
++
++import org.apache.commons.logging.*;
++import org.apache.commons.logging.impl.Log4JLogger;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.Text;
++
++import org.apache.hadoop.ipc.Client;
++import org.apache.hadoop.ipc.RPC;
++import org.apache.hadoop.ipc.Server;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
++import org.apache.hadoop.hdfs.protocol.ClientProtocol;
++import org.apache.hadoop.hdfs.security.token.DelegationTokenIdentifier;
++import org.apache.hadoop.hdfs.security.token.DelegationTokenSecretManager;
++import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.SaslInputStream;
++import org.apache.hadoop.security.SaslRpcClient;
++import org.apache.hadoop.security.SaslRpcServer;
++import org.apache.hadoop.security.UserGroupInformation;
++
++import org.apache.log4j.Level;
++import org.junit.Test;
++
++/** Unit tests for using Delegation Token over RPC. */
++public class TestClientProtocolWithDelegationToken {
++  private static final String ADDRESS = "0.0.0.0";
++
++  public static final Log LOG = LogFactory
++      .getLog(TestClientProtocolWithDelegationToken.class);
++
++  private static Configuration conf;
++  static {
++    conf = new Configuration();
++    conf.set(HADOOP_SECURITY_AUTHENTICATION, "kerberos");
++    UserGroupInformation.setConfiguration(conf);
++  }
++
++  static {
++    ((Log4JLogger) Client.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger) Server.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger) SaslRpcClient.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger) SaslRpcServer.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger) SaslInputStream.LOG).getLogger().setLevel(Level.ALL);
++  }
++
++  @Test
++  public void testDelegationTokenRpc() throws Exception {
++    ClientProtocol mockNN = mock(ClientProtocol.class);
++    when(mockNN.getProtocolVersion(anyString(), anyLong())).thenReturn(
++        ClientProtocol.versionID);
++    DelegationTokenSecretManager sm = new DelegationTokenSecretManager(
++        DFSConfigKeys.DFS_NAMENODE_DELEGATION_KEY_UPDATE_INTERVAL_DEFAULT,
++        DFSConfigKeys.DFS_NAMENODE_DELEGATION_KEY_UPDATE_INTERVAL_DEFAULT,
++        DFSConfigKeys.DFS_NAMENODE_DELEGATION_TOKEN_MAX_LIFETIME_DEFAULT,
++        3600000);
++    sm.startThreads();
++    final Server server = RPC.getServer(mockNN, ADDRESS,
++        0, 5, true, conf, sm);
++
++    server.start();
++
++    final UserGroupInformation current = UserGroupInformation.getCurrentUser();
++    final InetSocketAddress addr = NetUtils.getConnectAddress(server);
++    String user = current.getUserName();
++    Text owner = new Text(user);
++    DelegationTokenIdentifier dtId = new DelegationTokenIdentifier(owner, owner);
++    Token<DelegationTokenIdentifier> token = new Token<DelegationTokenIdentifier>(
++        dtId, sm);
++    Text host = new Text(addr.getAddress().getHostAddress() + ":"
++        + addr.getPort());
++    token.setService(host);
++    LOG.info("Service IP address for token is " + host);
++    current.addToken(token);
++    current.doAs(new PrivilegedExceptionAction<Object>() {
++      @Override
++      public Object run() throws Exception {
++        ClientProtocol proxy = null;
++        try {
++          proxy = (ClientProtocol) RPC.getProxy(ClientProtocol.class,
++              ClientProtocol.versionID, addr, conf);
++          proxy.getStats();
++        } finally {
++          server.stop();
++          if (proxy != null) {
++            RPC.stopProxy(proxy);
++          }
++        }
++        return null;
++      }
++    });
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/ipc/TestRPC.java b/src/test/org/apache/hadoop/ipc/TestRPC.java
+index bae18bd..98ad33f 100644
+--- a/src/test/org/apache/hadoop/ipc/TestRPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestRPC.java
+@@ -73,7 +73,7 @@ public class TestRPC extends TestCase {
+     String toString();
+   }
+ 
+-  public class TestImpl implements TestProtocol {
++  public static class TestImpl implements TestProtocol {
+     int fastPingCounter = 0;
+     
+     public long getProtocolVersion(String protocol, long clientVersion) {
+diff --git a/src/test/org/apache/hadoop/ipc/TestSaslRPC.java b/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
+new file mode 100644
+index 0000000..968a28d
+--- /dev/null
++++ b/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
+@@ -0,0 +1,216 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.ipc;
++
++import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++import java.net.InetSocketAddress;
++import java.util.Collection;
++
++import org.apache.commons.logging.*;
++import org.apache.commons.logging.impl.Log4JLogger;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.KerberosInfo;
++import org.apache.hadoop.security.token.SecretManager;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenIdentifier;
++import org.apache.hadoop.security.token.TokenInfo;
++import org.apache.hadoop.security.token.TokenSelector;
++import org.apache.hadoop.security.SaslInputStream;
++import org.apache.hadoop.security.SaslRpcClient;
++import org.apache.hadoop.security.SaslRpcServer;
++import org.apache.hadoop.security.UserGroupInformation;
++
++import org.apache.log4j.Level;
++import org.junit.Test;
++
++/** Unit tests for using Sasl over RPC. */
++public class TestSaslRPC {
++  private static final String ADDRESS = "0.0.0.0";
++
++  public static final Log LOG =
++    LogFactory.getLog(TestSaslRPC.class);
++  
++  static final String SERVER_PRINCIPAL_KEY = "test.ipc.server.principal";
++  private static Configuration conf;
++  static {
++    conf = new Configuration();
++    conf.set(HADOOP_SECURITY_AUTHENTICATION, "kerberos");
++    UserGroupInformation.setConfiguration(conf);
++  }
++
++  static {
++    ((Log4JLogger) Client.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger) Server.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger) SaslRpcClient.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger) SaslRpcServer.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger) SaslInputStream.LOG).getLogger().setLevel(Level.ALL);
++  }
++
++  public static class TestTokenIdentifier extends TokenIdentifier {
++    private Text tokenid;
++    final static Text KIND_NAME = new Text("test.token");
++    
++    public TestTokenIdentifier() {
++      this.tokenid = new Text();
++    }
++    public TestTokenIdentifier(Text tokenid) {
++      this.tokenid = tokenid;
++    }
++    @Override
++    public Text getKind() {
++      return KIND_NAME;
++    }
++    @Override
++    public Text getUsername() {
++      return tokenid;
++    }
++    @Override
++    public void readFields(DataInput in) throws IOException {
++      tokenid.readFields(in);
++    }
++    @Override
++    public void write(DataOutput out) throws IOException {
++      tokenid.write(out);
++    }
++  }
++  
++  public static class TestTokenSecretManager extends
++      SecretManager<TestTokenIdentifier> {
++    public byte[] createPassword(TestTokenIdentifier id) {
++      return id.getBytes();
++    }
++
++    public byte[] retrievePassword(TestTokenIdentifier id) 
++        throws InvalidToken {
++      return id.getBytes();
++    }
++    
++    public TestTokenIdentifier createIdentifier() {
++      return new TestTokenIdentifier();
++    }
++  }
++
++  public static class TestTokenSelector implements
++      TokenSelector<TestTokenIdentifier> {
++    @SuppressWarnings("unchecked")
++    @Override
++    public Token<TestTokenIdentifier> selectToken(Text service,
++        Collection<Token<? extends TokenIdentifier>> tokens) {
++      if (service == null) {
++        return null;
++      }
++      for (Token<? extends TokenIdentifier> token : tokens) {
++        if (TestTokenIdentifier.KIND_NAME.equals(token.getKind())
++            && service.equals(token.getService())) {
++          return (Token<TestTokenIdentifier>) token;
++        }
++      }
++      return null;
++    }
++  }
++  
++  @KerberosInfo(SERVER_PRINCIPAL_KEY)
++  @TokenInfo(TestTokenSelector.class)
++  public interface TestSaslProtocol extends TestRPC.TestProtocol {
++  }
++  
++  public static class TestSaslImpl extends TestRPC.TestImpl implements
++      TestSaslProtocol {
++  }
++
++  @Test
++  public void testDigestRpc() throws Exception {
++    TestTokenSecretManager sm = new TestTokenSecretManager();
++    final Server server = RPC.getServer(
++        new TestSaslImpl(), ADDRESS, 0, 5, true, conf, sm);
++
++    server.start();
++
++    final UserGroupInformation current = UserGroupInformation.getCurrentUser();
++    final InetSocketAddress addr = NetUtils.getConnectAddress(server);
++    TestTokenIdentifier tokenId = new TestTokenIdentifier(new Text(current
++        .getUserName()));
++    Token<TestTokenIdentifier> token = new Token<TestTokenIdentifier>(tokenId,
++        sm);
++    Text host = new Text(addr.getAddress().getHostAddress() + ":"
++        + addr.getPort());
++    token.setService(host);
++    LOG.info("Service IP address for token is " + host);
++    current.addToken(token);
++
++    TestSaslProtocol proxy = null;
++    try {
++      proxy = (TestSaslProtocol) RPC.getProxy(TestSaslProtocol.class,
++          TestSaslProtocol.versionID, addr, conf);
++      proxy.ping();
++    } finally {
++      server.stop();
++      if (proxy != null) {
++        RPC.stopProxy(proxy);
++      }
++    }
++  }
++  
++  static void testKerberosRpc(String principal, String keytab) throws Exception {
++    final Configuration newConf = new Configuration(conf);
++    newConf.set(SERVER_PRINCIPAL_KEY, principal);
++    UserGroupInformation.loginUserFromKeytab(principal, keytab);
++    UserGroupInformation current = UserGroupInformation.getCurrentUser();
++    System.out.println("UGI: " + current);
++
++    Server server = RPC.getServer(new TestSaslImpl(),
++        ADDRESS, 0, 5, true, newConf, null);
++    TestSaslProtocol proxy = null;
++
++    server.start();
++
++    InetSocketAddress addr = NetUtils.getConnectAddress(server);
++    try {
++      proxy = (TestSaslProtocol) RPC.getProxy(TestSaslProtocol.class,
++          TestSaslProtocol.versionID, addr, newConf);
++      proxy.ping();
++    } finally {
++      server.stop();
++      if (proxy != null) {
++        RPC.stopProxy(proxy);
++      }
++    }
++  }
++  
++  public static void main(String[] args) throws Exception {
++    System.out.println("Testing Kerberos authentication over RPC");
++    if (args.length != 2) {
++      System.err
++          .println("Usage: java <options> org.apache.hadoop.ipc.TestSaslRPC "
++              + " <serverPrincipal> <keytabFile>");
++      System.exit(-1);
++    }
++    String principal = args[0];
++    String keytab = args[1];
++    testKerberosRpc(principal, keytab);
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/mapreduce/security/TestUmbilicalProtocolWithJobToken.java b/src/test/org/apache/hadoop/mapreduce/security/TestUmbilicalProtocolWithJobToken.java
+new file mode 100644
+index 0000000..24eb07e
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/security/TestUmbilicalProtocolWithJobToken.java
+@@ -0,0 +1,117 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.security;
++
++import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION;
++import static org.mockito.Matchers.anyLong;
++import static org.mockito.Matchers.anyString;
++import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.when;
++
++import java.net.InetSocketAddress;
++import java.security.PrivilegedExceptionAction;
++
++import org.apache.commons.logging.*;
++import org.apache.commons.logging.impl.Log4JLogger;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.Text;
++
++import org.apache.hadoop.ipc.Client;
++import org.apache.hadoop.ipc.RPC;
++import org.apache.hadoop.ipc.Server;
++import org.apache.hadoop.mapred.TaskUmbilicalProtocol;
++import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
++import org.apache.hadoop.mapreduce.security.token.JobTokenSecretManager;
++import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.SaslInputStream;
++import org.apache.hadoop.security.SaslRpcClient;
++import org.apache.hadoop.security.SaslRpcServer;
++import org.apache.hadoop.security.UserGroupInformation;
++
++import org.apache.log4j.Level;
++import org.junit.Test;
++
++/** Unit tests for using Job Token over RPC. */
++public class TestUmbilicalProtocolWithJobToken {
++  private static final String ADDRESS = "0.0.0.0";
++
++  public static final Log LOG = LogFactory
++      .getLog(TestUmbilicalProtocolWithJobToken.class);
++
++  private static Configuration conf;
++  static {
++    conf = new Configuration();
++    conf.set(HADOOP_SECURITY_AUTHENTICATION, "kerberos");
++    UserGroupInformation.setConfiguration(conf);
++  }
++
++  static {
++    ((Log4JLogger) Client.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger) Server.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger) SaslRpcClient.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger) SaslRpcServer.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger) SaslInputStream.LOG).getLogger().setLevel(Level.ALL);
++  }
++
++  @Test
++  public void testJobTokenRpc() throws Exception {
++    TaskUmbilicalProtocol mockTT = mock(TaskUmbilicalProtocol.class);
++    when(mockTT.getProtocolVersion(anyString(), anyLong())).thenReturn(
++        TaskUmbilicalProtocol.versionID);
++
++    JobTokenSecretManager sm = new JobTokenSecretManager();
++    final Server server = RPC.getServer(mockTT,
++        ADDRESS, 0, 5, true, conf, sm);
++
++    server.start();
++
++    final UserGroupInformation current = UserGroupInformation.getCurrentUser();
++    final InetSocketAddress addr = NetUtils.getConnectAddress(server);
++    String jobId = current.getUserName();
++    JobTokenIdentifier tokenId = new JobTokenIdentifier(new Text(jobId));
++    Token<JobTokenIdentifier> token = new Token<JobTokenIdentifier>(tokenId, sm);
++    sm.addTokenForJob(jobId, token);
++    Text host = new Text(addr.getAddress().getHostAddress() + ":"
++        + addr.getPort());
++    token.setService(host);
++    LOG.info("Service IP address for token is " + host);
++    current.addToken(token);
++    current.doAs(new PrivilegedExceptionAction<Object>() {
++      @Override
++      public Object run() throws Exception {
++        TaskUmbilicalProtocol proxy = null;
++        try {
++          proxy = (TaskUmbilicalProtocol) RPC.getProxy(
++              TaskUmbilicalProtocol.class, TaskUmbilicalProtocol.versionID,
++              addr, conf);
++          proxy.ping(null);
++        } finally {
++          server.stop();
++          if (proxy != null) {
++            RPC.stopProxy(proxy);
++          }
++        }
++        return null;
++      }
++    });
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+index 9585d30..ea67036 100644
+--- a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
++++ b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+@@ -27,13 +27,11 @@ import static org.mockito.Mockito.mock;
+ import java.io.BufferedReader;
+ import java.io.IOException;
+ import java.io.InputStreamReader;
+-import java.security.PrivilegedAction;
+ import java.security.PrivilegedExceptionAction;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.List;
+ 
+-import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+ import org.junit.Test;
+@@ -175,7 +173,7 @@ public class TestUserGroupInformation {
+     ugi.addToken(t1);
+     ugi.addToken(t2);
+     
+-    Collection<Token<T>> z = ugi.getTokens();
++    Collection<Token<? extends TokenIdentifier>> z = ugi.getTokens();
+     assertTrue(z.contains(t1));
+     assertTrue(z.contains(t2));
+     assertEquals(2, z.size());
+@@ -188,9 +186,9 @@ public class TestUserGroupInformation {
+     }
+     
+     // ensure that the tokens are passed through doAs
+-    Collection<Token<T>> otherSet = 
+-      ugi.doAs(new PrivilegedExceptionAction<Collection<Token<T>>>(){
+-        public Collection<Token<T>> run() throws IOException {
++    Collection<Token<? extends TokenIdentifier>> otherSet = 
++      ugi.doAs(new PrivilegedExceptionAction<Collection<Token<?>>>(){
++        public Collection<Token<?>> run() throws IOException {
+           return UserGroupInformation.getCurrentUser().getTokens();
+         }
+       });
+-- 
+1.7.0.4
+

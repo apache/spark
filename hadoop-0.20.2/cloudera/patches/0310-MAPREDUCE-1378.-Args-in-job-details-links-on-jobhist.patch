@@ -1,0 +1,38 @@
+From e212ca0b0abbd78cdea4596fe9f3c6dbbaa57258 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 18 Jun 2010 16:20:01 -0700
+Subject: [PATCH 0310/1179] MAPREDUCE-1378. Args in job details links on jobhistory.jsp are not URL encoded
+
+Description: The logFile argument in the job links on the JT jobhistory.jsp
+page is not properly URL encoded leading to links that result in 500 errors.
+Reason: Bug
+Author: Eric Sammer
+Ref: CDH-645
+---
+ src/webapps/job/jobhistory.jsp |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/webapps/job/jobhistory.jsp b/src/webapps/job/jobhistory.jsp
+index c48e31b..1a17510 100644
+--- a/src/webapps/job/jobhistory.jsp
++++ b/src/webapps/job/jobhistory.jsp
+@@ -2,6 +2,7 @@
+   contentType="text/html; charset=UTF-8"
+   import="java.io.*"
+   import="java.util.*"
++  import="java.net.URLEncoder"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.util.*"
+   import="org.apache.hadoop.fs.*"
+@@ -260,7 +261,7 @@ window.location.href = url;
+       out.print("<td>" + trackerHostName + "</td>"); 
+       out.print("<td>" + new Date(Long.parseLong(trackerid)) + "</td>"); 
+       out.print("<td>" + "<a href=\"jobdetailshistory.jsp?jobid=" + jobId + 
+-                "&logFile=" + logFile.toString() + "\">" + jobId + "</a></td>"); 
++                "&logFile=" + URLEncoder.encode(logFile.toString(), "UTF-8") + "\">" + jobId + "</a></td>"); 
+       out.print("<td>" + jobName + "</td>"); 
+       out.print("<td>" + user + "</td>"); 
+       out.print("</tr>");
+-- 
+1.7.0.4
+

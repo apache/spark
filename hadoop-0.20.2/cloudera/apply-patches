@@ -1,0 +1,23 @@
+#!/bin/sh -x
+
+set -e
+
+if [ $# != 2 ]; then
+  echo usage: $0 '<target-dir> <patch-dir>'
+  exit 1
+fi
+
+TARGET_DIR=`readlink -f $1`
+PATCH_DIR=`readlink -f $2`
+
+cd $TARGET_DIR
+
+# We have to git init, or else git apply will search upwards and find
+# some other git repository (even though this build is taking place
+# inside a gitignored build/ dir)
+# even though we never commit to this "repository", this serves to
+# anchor the repository root at the source dir root.
+git init-db
+for PATCH in `ls -1 $PATCH_DIR/* | sort` ; do
+    git apply --whitespace=nowarn $PATCH
+done

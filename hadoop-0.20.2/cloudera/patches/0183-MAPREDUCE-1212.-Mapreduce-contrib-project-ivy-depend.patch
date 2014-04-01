@@ -1,0 +1,141 @@
+From 7e009a29c0806537cd50972df90ec87b617eb78f Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:34:54 -0800
+Subject: [PATCH 0183/1179] MAPREDUCE-1212. Mapreduce contrib project ivy dependencies are not included in binary target
+
+Description: As in <a href="http://issues.apache.org/jira/browse/HADOOP-6370" title="Contrib project ivy dependencies are not included in binary target">HADOOP-6370</a>, only Hadoop's own library dependencies are promoted to ${build.dir}/lib; any libraries required by contribs are not redistributed.
+Reason: Build system (packaging) improvement
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ src/contrib/build-contrib.xml     |   25 ++++++++++++++++++++++++-
+ src/contrib/fairscheduler/ivy.xml |    1 +
+ src/contrib/mrunit/ivy.xml        |    1 +
+ src/contrib/sqoop/build.xml       |    3 ++-
+ src/contrib/sqoop/ivy.xml         |   10 +++++++---
+ 5 files changed, 35 insertions(+), 5 deletions(-)
+
+diff --git a/src/contrib/build-contrib.xml b/src/contrib/build-contrib.xml
+index 52784b5..c8381e5 100644
+--- a/src/contrib/build-contrib.xml
++++ b/src/contrib/build-contrib.xml
+@@ -101,6 +101,7 @@
+     <pathelement location="${conf.dir}"/>
+     <pathelement location="${hadoop.root}/build"/>
+     <pathelement location="${build.examples}"/>
++    <path refid="${ant.project.name}.test-classpath"/>
+     <path refid="contrib-classpath"/>
+   </path>
+ 
+@@ -159,7 +160,7 @@
+   <!-- ================================================================== -->
+   <!-- Compile test code                                                  -->
+   <!-- ================================================================== -->
+-  <target name="compile-test" depends="compile-examples" if="test.available">
++  <target name="compile-test" depends="compile-examples, ivy-retrieve-test" if="test.available">
+     <echo message="contrib: ${name}"/>
+     <javac
+      encoding="${build.encoding}"
+@@ -208,6 +209,17 @@
+         <include name="hadoop-${version}-${name}.jar" />
+       </fileset>
+     </copy>
++
++    <!-- copy the dependency libraries into the contrib/lib dir -->
++    <mkdir dir="${dist.dir}/contrib/${name}/lib"/>
++    <copy todir="${dist.dir}/contrib/${name}/lib" includeEmptyDirs="false" flatten="true">
++      <fileset dir="${common.ivy.lib.dir}">
++        <!-- except for those already present due to Hadoop -->
++        <present present="srconly" targetdir="${dist.dir}/lib" />
++      </fileset>
++    </copy>
++    <!-- if the lib dir is empty, remove it. -->
++    <delete dir="${dist.dir}/contrib/${name}/lib" includeEmptyDirs="true" excludes="*.jar" />
+   </target>
+   
+   <!-- ================================================================== -->
+@@ -300,4 +312,15 @@
+       pattern="${build.ivy.lib.dir}/${ivy.artifact.retrieve.pattern}" sync="true" />
+     <ivy:cachepath pathid="${ant.project.name}.common-classpath" conf="common" />
+   </target>
++
++  <target name="ivy-resolve-test" depends="ivy-init">
++    <ivy:resolve settingsRef="${ant.project.name}.ivy.settings" conf="test" />
++  </target>
++
++  <target name="ivy-retrieve-test" depends="ivy-resolve-test"
++    description="Retrieve Ivy-managed artifacts for the test configuration">
++    <ivy:retrieve settingsRef="${ant.project.name}.ivy.settings"
++      pattern="${build.ivy.lib.dir}/${ivy.artifact.retrieve.pattern}" sync="true" />
++    <ivy:cachepath pathid="${ant.project.name}.test-classpath" conf="test" />
++  </target>
+ </project>
+diff --git a/src/contrib/fairscheduler/ivy.xml b/src/contrib/fairscheduler/ivy.xml
+index 59994eb..1d43e6e 100644
+--- a/src/contrib/fairscheduler/ivy.xml
++++ b/src/contrib/fairscheduler/ivy.xml
+@@ -15,6 +15,7 @@
+ 
+     <conf name="common" visibility="private" 
+       description="artifacts needed to compile/test the application"/>
++    <conf name="test" visibility="private" extends="runtime"/>
+   </configurations>
+ 
+   <publications>
+diff --git a/src/contrib/mrunit/ivy.xml b/src/contrib/mrunit/ivy.xml
+index 5d847ad..2a2939e 100644
+--- a/src/contrib/mrunit/ivy.xml
++++ b/src/contrib/mrunit/ivy.xml
+@@ -33,6 +33,7 @@
+ 
+     <conf name="common" visibility="private" 
+       description="artifacts needed to compile/test the application"/>
++    <conf name="test" visibility="private" extends="runtime"/>
+   </configurations>
+ 
+   <publications>
+diff --git a/src/contrib/sqoop/build.xml b/src/contrib/sqoop/build.xml
+index 359cd5e..d552dad 100644
+--- a/src/contrib/sqoop/build.xml
++++ b/src/contrib/sqoop/build.xml
+@@ -33,7 +33,8 @@ to call at top-level: ant deploy-contrib compile-core-test
+   <!-- Override with our own version so we can enforce build dependencies -->
+   <!-- on compile-core-test for MiniMRCluster, and MRUnit.                -->
+   <!-- ================================================================== -->
+-  <target name="compile-test" depends="compile-examples" if="test.available">
++  <target name="compile-test" depends="compile-examples, ivy-retrieve-test"
++      if="test.available">
+     <echo message="Compiling ${name} dependencies" />
+     <!-- need top-level compile-core-test for MiniMRCluster -->
+     <subant target="compile-core-test">
+diff --git a/src/contrib/sqoop/ivy.xml b/src/contrib/sqoop/ivy.xml
+index 7114cb2..63f5649 100644
+--- a/src/contrib/sqoop/ivy.xml
++++ b/src/contrib/sqoop/ivy.xml
+@@ -56,6 +56,10 @@
+       name="commons-io"
+       rev="${commons-io.version}"
+       conf="common->default"/>
++    <dependency org="commons-codec"
++      name="commons-codec"
++      rev="${commons-codec.version}"
++      conf="common->default"/>
+     <dependency org="junit"
+       name="junit"
+       rev="${junit.version}"
+@@ -68,9 +72,9 @@
+       name="hsqldb"
+       rev="${hsqldb.version}"
+       conf="common->default"/>
+-    <dependency org="javax.servlet"
+-      name="servlet-api"
+-      rev="${servlet-api.version}"
++    <dependency org="org.mortbay.jetty"
++      name="servlet-api-2.5"
++      rev="${servlet-api-2.5.version}"
+       conf="common->master"/>
+     <dependency org="org.mortbay.jetty"
+       name="jetty"
+-- 
+1.7.0.4
+

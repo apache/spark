@@ -1,0 +1,178 @@
+
+
+/* ==================== aural ============================ */
+
+@media aural {
+  h1, h2, h3, h4, h5, h6 { voice-family: paul, male; stress: 20; richness: 90 }
+  h1 { pitch: x-low; pitch-range: 90 }
+  h2 { pitch: x-low; pitch-range: 80 }
+  h3 { pitch: low; pitch-range: 70 }
+  h4 { pitch: medium; pitch-range: 60 }
+  h5 { pitch: medium; pitch-range: 50 }
+  h6 { pitch: medium; pitch-range: 40 }
+  li, dt, dd { pitch: medium; richness: 60 }
+  dt { stress: 80 }
+  pre, code, tt { pitch: medium; pitch-range: 0; stress: 0; richness: 80 }
+  em { pitch: medium; pitch-range: 60; stress: 60; richness: 50 }
+  strong { pitch: medium; pitch-range: 60; stress: 90; richness: 90 }
+  dfn { pitch: high; pitch-range: 60; stress: 60 }
+  s, strike { richness: 0 }
+  i { pitch: medium; pitch-range: 60; stress: 60; richness: 50 }
+  b { pitch: medium; pitch-range: 60; stress: 90; richness: 90 }
+  u { richness: 0 }
+  
+  :link { voice-family: harry, male }
+  :visited { voice-family: betty, female }
+  :active { voice-family: betty, female; pitch-range: 80; pitch: x-high }
+}
+  
+a.external  {
+  padding: 0 20px 0px 0px;
+	display:inline;
+  background-repeat: no-repeat;
+	background-position: center right;
+	background-image: url(images/external-link.gif);
+}
+  
+#top          { background-color: #FFFFFF;}  
+ 
+#top .header .current { background-color: #4C6C8F;} 
+#top .header .current a:link {  color: #ffffff;  }
+#top .header .current a:visited { color: #ffffff; }
+#top .header .current a:hover { color: #ffffff; }
+ 
+#tabs li      { background-color: #E5E4D9 ;} 
+#tabs li a:link {  color: #000000;  }
+#tabs li a:visited { color: #000000; }
+#tabs li a:hover { color: #000000; }
+
+#level2tabs a.selected      { background-color: #4C6C8F ;} 
+#level2tabs a:link {  color: #ffffff;  }
+#level2tabs a:visited { color: #ffffff; }
+#level2tabs a:hover { color: #ffffff; }
+
+#level2tabs { background-color: #E5E4D9;}
+#level2tabs a.unselected:link {  color: #000000;  }
+#level2tabs a.unselected:visited { color: #000000; }
+#level2tabs a.unselected:hover { color: #000000; }
+
+.heading { background-color: #E5E4D9;} 
+
+.boxed { background-color: #E5E4D9;} 
+.underlined_5 	{border-bottom: solid 5px #E5E4D9;}
+.underlined_10 	{border-bottom: solid 10px #E5E4D9;}
+table caption { 
+background-color: #E5E4D9; 
+color: #000000;
+}
+    
+#feedback {
+color: #FFFFFF;
+background: #4C6C8F;
+text-align: center;
+}
+#feedback #feedbackto {
+color: #FFFFFF;
+}   
+
+#publishedStrip { 
+color: #FFFFFF;
+background: #4C6C8F; 
+}
+
+#publishedStrip { 
+color: #000000;
+background: #E5E4D9; 
+}
+
+#menu .menupagetitle  { background-color: #CFDCED;
+  color: #000000;}
+
+#menu           { border-color: #999999;}
+#menu .menupagetitle  { border-color: #999999;}
+#menu .menupageitemgroup  { border-color: #999999;}
+
+#menu      { background-color: #4C6C8F;} 
+#menu  {  color: #ffffff;} 
+#menu a:link {  color: #ffffff;} 
+#menu a:visited {  color: #ffffff;} 
+#menu a:hover {  
+background-color: #4C6C8F;
+color: #ffffff;} 
+
+#menu h1 {
+color: #000000;
+background-color: #cfdced;
+}   
+ 
+#top .searchbox { 
+background-color: #E5E4D9 ;
+color: #000000; 
+} 
+ 
+#menu .menupageitemgroup     { 
+background-color: #E5E4D9;
+}
+#menu .menupageitem {
+color: #000000;
+} 
+#menu .menupageitem a:link {  color: #000000;} 
+#menu .menupageitem a:visited {  color: #000000;} 
+#menu .menupageitem a:hover {  
+background-color: #E5E4D9;
+color: #000000;
+}
+
+body{ 
+background-color: #ffffff;
+color: #000000;
+} 
+a:link { color:#0000ff} 
+a:visited { color:#009999} 
+a:hover { color:#6587ff} 
+
+ 
+.ForrestTable      { background-color: #ccc;} 
+ 
+.ForrestTable td   { background-color: #ffffff;} 
+ 
+.highlight        { background-color: #ffff00;} 
+ 
+.fixme        { border-color: #c60;} 
+ 
+.note         { border-color: #069;} 
+ 
+.warning         { border-color: #900;} 
+ 
+.code         { border-color: #a5b6c6;} 
+ 
+#footer       { background-color: #E5E4D9;} 
+/* extra-css */
+    
+    p.quote {
+      margin-left: 2em;
+      padding: .5em;
+      background-color: #f0f0f0;
+      font-family: monospace;
+    }
+    
+    
+	#content h1 {
+	  margin-bottom: .5em;
+	  font-size: 200%; color: black;
+	  font-family: arial;
+	}  
+    h2, .h3 { font-size: 195%; color: black; font-family: arial; }
+	h3, .h4 { font-size: 140%; color: black; font-family: arial; margin-bottom: 0.5em; }
+	h4, .h5 { font-size: 125%; color: black;  font-style: italic; font-weight: bold; font-family: arial; }
+	h5, h6 { font-size: 110%; color: #363636; font-weight: bold; } 
+   
+   
+    pre.code {
+      margin-left: 0em;
+      padding: 0.5em;
+      background-color: rgb(241,239,231);
+      font-family: monospace;
+    }   
+    
+  

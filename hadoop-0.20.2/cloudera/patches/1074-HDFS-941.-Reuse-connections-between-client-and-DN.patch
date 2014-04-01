@@ -1,0 +1,1701 @@
+From 7ed1f860044cef4a43b1eceadf2d0a5e8f11c174 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 26 Oct 2011 16:53:27 -0700
+Subject: [PATCH 1074/1179] HDFS-941. Reuse connections between client and DN
+
+Also incorporates HDFS-2071. Use of isConnected() in DataXceiver is invalid
+
+Reason: big performance improvement for random-read workloads
+Author: bc Wong and Todd Lipcon
+Ref: CDH-3777
+---
+ .eclipse.templates/.classpath                      |    1 +
+ ivy.xml                                            |    6 +
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |  261 +++++++++++++-----
+ src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java |    8 +-
+ src/hdfs/org/apache/hadoop/hdfs/SocketCache.java   |  128 +++++++++
+ .../hadoop/hdfs/server/common/HdfsConstants.java   |    1 +
+ .../hadoop/hdfs/server/datanode/BlockSender.java   |   17 +-
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   17 +-
+ .../hadoop/hdfs/server/datanode/DataXceiver.java   |  105 ++++++--
+ .../apache/hadoop/hdfs/BlockReaderTestUtil.java    |   33 ++-
+ .../hadoop/hdfs/TestClientBlockVerification.java   |   21 +-
+ src/test/org/apache/hadoop/hdfs/TestConnCache.java |  294 ++++++++++++++++++++
+ .../org/apache/hadoop/hdfs/TestParallelRead.java   |  284 +++++++++++++++++++
+ .../hdfs/server/datanode/TestDataXceiver.java      |    3 +-
+ 14 files changed, 1062 insertions(+), 117 deletions(-)
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/SocketCache.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/TestConnCache.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/TestParallelRead.java
+
+diff --git a/.eclipse.templates/.classpath b/.eclipse.templates/.classpath
+index 31ec086..5e0aa43 100644
+--- a/.eclipse.templates/.classpath
++++ b/.eclipse.templates/.classpath
+@@ -27,6 +27,7 @@
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/commons-logging-1.0.4.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/commons-logging-api-1.0.4.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/commons-net-1.4.1.jar"/>
++	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/guava-r09.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/jets3t-0.6.1.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/junit-4.5.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/log4j-1.2.15.jar"/>
+diff --git a/ivy.xml b/ivy.xml
+index 4b4dabd..4dbdf32 100644
+--- a/ivy.xml
++++ b/ivy.xml
+@@ -104,6 +104,12 @@
+       rev="${xmlenc.version}"
+       conf="server->default"/>
+ 
++    <dependency org="com.google.guava"
++      name="guava"
++      rev="r09"
++      conf="client->default" />
++
++
+     <!--Configuration: httpclient-->
+ 
+     <!--
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 6b757fe..916edc6 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -81,12 +81,14 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+   private Configuration conf;
+   private long defaultBlockSize;
+   private short defaultReplication;
+-  private SocketFactory socketFactory;
++  SocketFactory socketFactory;
+   private int socketTimeout;
+   private int datanodeWriteTimeout;
+   final int writePacketSize;
+   private final FileSystem.Statistics stats;
+   private int maxBlockAcquireFailures;
++  
++  final SocketCache socketCache;
+ 
+   /**
+    * We assume we're talking to another CDH server, which supports
+@@ -208,6 +210,11 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     }
+     defaultBlockSize = conf.getLong("dfs.block.size", DEFAULT_BLOCK_SIZE);
+     defaultReplication = (short) conf.getInt("dfs.replication", 3);
++    
++    this.socketCache = new SocketCache(
++        conf.getInt(DFSConfigKeys.DFS_CLIENT_SOCKET_CACHE_CAPACITY_KEY,
++            DFSConfigKeys.DFS_CLIENT_SOCKET_CACHE_CAPACITY_DEFAULT));
++
+ 
+     if (nameNodeAddr != null && rpcNamenode == null) {
+       this.rpcNamenode = createRPCNamenode(nameNodeAddr, conf, ugi);
+@@ -1199,8 +1206,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+    * and understands checksum, offset etc
+    */
+   public static class BlockReader extends FSInputChecker {
+-
+-    Socket dnSock; //for now just sending checksumOk.
++    Socket dnSock; //for now just sending the status code (e.g. checksumOk) after the read.
+     private DataInputStream in;
+     private DataChecksum checksum;
+     private long lastChunkOffset = -1;
+@@ -1211,10 +1217,12 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     private long firstChunkOffset;
+     private int bytesPerChecksum;
+     private int checksumSize;
+-    private boolean gotEOS = false;
++    private boolean eos = false;
++    private boolean sentStatusCode = false;
+     
+     byte[] skipBuf = null;
+     ByteBuffer checksumBytes = null;
++    /** Amount of unread data in the current received packet */
+     int dataLeft = 0;
+     boolean isLastPacket = false;
+     
+@@ -1231,7 +1239,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     public synchronized int read(byte[] buf, int off, int len) 
+                                  throws IOException {
+       
+-      boolean eosBefore = gotEOS;
++      boolean eosBefore = eos;
+ 
+       //for the first read, skip the extra bytes at the front.
+       if (lastChunkLen < 0 && startOffset > firstChunkOffset && len > 0) {
+@@ -1248,10 +1256,13 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       
+       int nRead = super.read(buf, off, len);
+       
+-      // if gotEOS was set in the previous read and checksum is enabled :
+-      if (gotEOS && !eosBefore && nRead >= 0 && needChecksum()) {
+-        //checksum is verified and there are no errors.
+-        checksumOk(dnSock);
++      // if eos was set in the previous read, send a status code to the DN
++      if (eos && !eosBefore && nRead >= 0) {
++        if (needChecksum()) {
++          sendReadResult(dnSock, DataTransferProtocol.OP_STATUS_CHECKSUM_OK);
++        } else {
++          sendReadResult(dnSock, DataTransferProtocol.OP_STATUS_SUCCESS);
++        }
+       }
+       return nRead;
+     }
+@@ -1324,7 +1335,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+                                          throws IOException {
+       // Read one chunk.
+       
+-      if ( gotEOS ) {
++      if (eos) {
+         if ( startOffset < 0 ) {
+           //This is mainly for debugging. can be removed.
+           throw new IOException( "BlockRead: already got EOS or an error" );
+@@ -1395,10 +1406,12 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       lastChunkLen = chunkLen;
+       
+       if ((dataLeft == 0 && isLastPacket) || chunkLen == 0) {
+-        gotEOS = true;
+-      }
+-      if ( chunkLen == 0 ) {
+-        return -1;
++        int markerLen = in.readInt();
++        if (markerLen != 0) {
++          throw new IOException("Expected EOS marker packet, but got: " +
++              markerLen);
++        }
++        eos = true;
+       }
+       
+       return chunkLen;
+@@ -1443,7 +1456,22 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       return newBlockReader(sock, file, blockId, accessToken, genStamp, startOffset,
+                             len, bufferSize, verifyChecksum, "");
+     }
+-
++      
++    /**
++     * Create a new BlockReader specifically to satisfy a read.
++     * This method also sends the OP_READ_BLOCK request.
++     *
++     * @param sock  An established Socket to the DN. The BlockReader will not close it normally
++     * @param file  File location
++     * @param block  The block object
++     * @param blockToken  The block token for security
++     * @param startOffset  The read offset, relative to block head
++     * @param len  The number of bytes to read
++     * @param bufferSize  The IO buffer size (not the client buffer size)
++     * @param verifyChecksum  Whether to verify checksum
++     * @param clientName  Client name
++     * @return New BlockReader instance, or null on error.
++     */
+     public static BlockReader newBlockReader( Socket sock, String file,
+                                        long blockId, 
+                                        Token<BlockTokenIdentifier> accessToken,
+@@ -1512,31 +1540,60 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     public synchronized void close() throws IOException {
+       startOffset = -1;
+       checksum = null;
++      if (dnSock != null) {
++        dnSock.close();
++      }
+       // in will be closed when its Socket is closed.
+     }
+-    
++
+     /** kind of like readFully(). Only reads as much as possible.
+      * And allows use of protected readFully().
+      */
+     public int readAll(byte[] buf, int offset, int len) throws IOException {
+       return readFully(this, buf, offset, len);
+     }
++
++    /**
++     * Take the socket used to talk to the DN.
++     */
++    public Socket takeSocket() {
++      assert hasSentStatusCode() :
++        "BlockReader shouldn't give back sockets mid-read";
++      Socket res = dnSock;
++      dnSock = null;
++      return res;
++    }
+     
+-    /* When the reader reaches end of the read and there are no checksum
+-     * errors, we send OP_STATUS_CHECKSUM_OK to datanode to inform that 
+-     * checksum was verified and there was no error.
+-     */ 
+-    void checksumOk(Socket sock) {
++    /**
++     * Whether the BlockReader has reached the end of its input stream
++     * and successfully sent a status code back to the datanode.
++     */
++    public boolean hasSentStatusCode() {
++      return sentStatusCode;
++    }
++    
++    /**
++     * When the reader reaches end of the read, it sends a status response
++     * (e.g. CHECKSUM_OK) to the DN. Failure to do so could lead to the DN
++     * closing our connection (which we will re-open), but won't affect
++     * data correctness.
++     */
++    void sendReadResult(Socket sock, int statusCode) {
++      if (sentStatusCode) {
++        throw new IllegalStateException("already sent status code to " + sock);
++      }
+       try {
+         OutputStream out = NetUtils.getOutputStream(sock, HdfsConstants.WRITE_TIMEOUT);
+-        byte buf[] = { (DataTransferProtocol.OP_STATUS_CHECKSUM_OK >>> 8) & 0xff,
+-                       (DataTransferProtocol.OP_STATUS_CHECKSUM_OK) & 0xff };
++        byte buf[] = { (byte)((statusCode >>> 8) & 0xff),
++                       (byte)((statusCode) & 0xff) };
+         out.write(buf);
+         out.flush();
++        
++        sentStatusCode = true;
+       } catch (IOException e) {
+-        // its ok not to be able to send this.
+-        LOG.debug("Could not write to datanode " + sock.getInetAddress() +
+-                  ": " + e.getMessage());
++        // It's ok not to be able to send this. But something is probably wrong.
++        LOG.info("Could not send read status (" + statusCode + ") to datanode " +
++                 sock.getInetAddress() + ": " + e.getMessage());
+       }
+     }
+   }
+@@ -1546,7 +1603,6 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+    * negotiation of the namenode and various datanodes as necessary.
+    ****************************************************************/
+   public class DFSInputStream extends FSInputStream {
+-    private Socket s = null;
+     private boolean closed = false;
+ 
+     private String src;
+@@ -1580,6 +1636,8 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     
+     private byte[] oneByteBuf = new byte[1]; // used for 'int read()'
+     
++    private int nCachedConnRetry;
++    
+     void addToDeadNodes(DatanodeInfo dnInfo) {
+       deadNodes.put(dnInfo, dnInfo);
+     }
+@@ -1590,6 +1648,10 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       this.buffersize = buffersize;
+       this.src = src;
+       prefetchSize = conf.getLong("dfs.read.prefetch.size", prefetchSize);
++      nCachedConnRetry = conf.getInt(
++          DFSConfigKeys.DFS_CLIENT_CACHED_CONN_RETRY_KEY,
++          DFSConfigKeys.DFS_CLIENT_CACHED_CONN_RETRY_DEFAULT);
++
+       openInfo();
+     }
+ 
+@@ -1774,15 +1836,11 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         throw new IOException("Attempted to read past end of file");
+       }
+ 
+-      if ( blockReader != null ) {
+-        blockReader.close(); 
++      // Will be getting a new BlockReader.
++      if (blockReader != null) {
++        closeBlockReader(blockReader);
+         blockReader = null;
+       }
+-      
+-      if (s != null) {
+-        s.close();
+-        s = null;
+-      }
+ 
+       //
+       // Connect to best DataNode for desired Block, with potential offset
+@@ -1802,13 +1860,11 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         InetSocketAddress targetAddr = retval.addr;
+ 
+         try {
+-          s = socketFactory.createSocket();
+-          NetUtils.connect(s, targetAddr, socketTimeout);
+-          s.setSoTimeout(socketTimeout);
+           Block blk = targetBlock.getBlock();
+           Token<BlockTokenIdentifier> accessToken = targetBlock.getBlockToken();
+           
+-          blockReader = BlockReader.newBlockReader(s, src, blk.getBlockId(), 
++          blockReader = getBlockReader(
++              targetAddr, src, blk.getBlockId(),
+               accessToken, 
+               blk.getGenerationStamp(),
+               offsetIntoBlock, blk.getNumBytes() - offsetIntoBlock,
+@@ -1837,13 +1893,6 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+             // Put chosen node into dead list, continue
+             addToDeadNodes(chosenNode);
+           }
+-          if (s != null) {
+-            try {
+-              s.close();
+-            } catch (IOException iex) {
+-            }                        
+-          }
+-          s = null;
+         }
+       }
+     }
+@@ -1858,15 +1907,11 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       }
+       checkOpen();
+       
+-      if ( blockReader != null ) {
+-        blockReader.close();
++      if (blockReader != null ) {
++        closeBlockReader(blockReader);
+         blockReader = null;
+       }
+-      
+-      if (s != null) {
+-        s.close();
+-        s = null;
+-      }
++
+       super.close();
+       closed = true;
+     }
+@@ -1879,7 +1924,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+ 
+     /* This is a used by regular read() and handles ChecksumExceptions.
+      * name readBuffer() is chosen to imply similarity to readBuffer() in
+-     * ChecksuFileSystem
++     * ChecksumFileSystem
+      */ 
+     private synchronized int readBuffer(byte buf[], int off, int len) 
+                                                     throws IOException {
+@@ -2017,7 +2062,6 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       //
+       // Connect to best DataNode for desired Block, with potential offset
+       //
+-      Socket dn = null;
+       int refetchToken = 1; // only need to get a new access token once
+       
+       while (true) {
+@@ -2031,24 +2075,17 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         BlockReader reader = null;
+             
+         try {
+-          dn = socketFactory.createSocket();
+-          NetUtils.connect(dn, targetAddr, socketTimeout);
+-          dn.setSoTimeout(socketTimeout);
+           Token<BlockTokenIdentifier> accessToken = block.getBlockToken();
+               
+           int len = (int) (end - start + 1);
+               
+-          reader = BlockReader.newBlockReader(dn, src, 
++          reader = getBlockReader(targetAddr, src, 
+                                               block.getBlock().getBlockId(),
+                                               accessToken,
+                                               block.getBlock().getGenerationStamp(),
+                                               start, len, buffersize, 
+                                               verifyChecksum, clientName);
+-          int nread = reader.readAll(buf, offset, len);
+-          if (nread != len) {
+-            throw new IOException("truncated return from reader.read(): " +
+-                                  "excpected " + len + ", got " + nread);
+-          }
++          IOUtils.readFully(reader, buf, offset, len);
+           return;
+         } catch (ChecksumException e) {
+           LOG.warn("fetchBlockByteRange(). Got a checksum exception for " +
+@@ -2070,8 +2107,9 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+                      StringUtils.stringifyException(e));
+           }
+         } finally {
+-          IOUtils.closeStream(reader);
+-          IOUtils.closeSocket(dn);
++          if (reader != null) {
++            closeBlockReader(reader);
++          }
+         }
+         // Put chosen node into dead list, continue
+         addToDeadNodes(chosenNode);
+@@ -2079,6 +2117,99 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     }
+ 
+     /**
++     * Close the given BlockReader and cache its socket.
++     */
++    private void closeBlockReader(BlockReader reader) throws IOException {
++      if (reader.hasSentStatusCode()) {
++        Socket oldSock = reader.takeSocket();
++        socketCache.put(oldSock);
++      } else if (LOG.isDebugEnabled()) {
++        LOG.debug("Client couldn't reuse - didnt send code");
++      }
++      reader.close();
++    }
++  
++    /**
++     * Retrieve a BlockReader suitable for reading.
++     * This method will reuse the cached connection to the DN if appropriate.
++     * Otherwise, it will create a new connection.
++     *
++     * @param dnAddr  Address of the datanode
++     * @param file  File location
++     * @param block  The Block object
++     * @param blockToken  The access token for security
++     * @param startOffset  The read offset, relative to block head
++     * @param len  The number of bytes to read
++     * @param bufferSize  The IO buffer size (not the client buffer size)
++     * @param verifyChecksum  Whether to verify checksum
++     * @param clientName  Client name
++     * @return New BlockReader instance
++     */
++    protected BlockReader getBlockReader(InetSocketAddress dnAddr,
++                                         String file,
++                                         long blockId,
++                                         Token<BlockTokenIdentifier> blockToken,
++                                         long genStamp,
++                                         long startOffset,
++                                         long len,
++                                         int bufferSize,
++                                         boolean verifyChecksum,
++                                         String clientName)
++        throws IOException {
++      IOException err = null;
++      boolean fromCache = true;
++  
++      // Allow retry since there is no way of knowing whether the cached socket
++      // is good until we actually use it.
++      for (int retries = 0; retries <= nCachedConnRetry && fromCache; ++retries) {
++        Socket sock = socketCache.get(dnAddr);
++        if (sock == null) {
++          fromCache = false;
++  
++          sock = socketFactory.createSocket();
++          
++          // TCP_NODELAY is crucial here because of bad interactions between
++          // Nagle's Algorithm and Delayed ACKs. With connection keepalive
++          // between the client and DN, the conversation looks like:
++          //   1. Client -> DN: Read block X
++          //   2. DN -> Client: data for block X
++          //   3. Client -> DN: Status OK (successful read)
++          //   4. Client -> DN: Read block Y
++          // The fact that step #3 and #4 are both in the client->DN direction
++          // triggers Nagling. If the DN is using delayed ACKs, this results
++          // in a delay of 40ms or more.
++          //
++          // TCP_NODELAY disables nagling and thus avoids this performance
++          // disaster.
++          sock.setTcpNoDelay(true);
++  
++          NetUtils.connect(sock, dnAddr, socketTimeout);
++          sock.setSoTimeout(socketTimeout);
++        }
++  
++        try {
++          // The OP_READ_BLOCK request is sent as we make the BlockReader
++          BlockReader reader =
++              BlockReader.newBlockReader(sock, file, blockId,
++                                         blockToken, genStamp,
++                                         startOffset, len,
++                                         bufferSize, verifyChecksum,
++                                         clientName);
++          return reader;
++        } catch (IOException ex) {
++          // Our socket is no good.
++          DFSClient.LOG.debug("Error making BlockReader. Closing stale " + sock, ex);
++          sock.close();
++          err = ex;
++        }
++      }
++  
++      throw err;
++    }
++
++
++
++    /**
+      * Read bytes starting from the specified position.
+      * 
+      * @param position start read from this position
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+index 17a7404..9c682ea 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+@@ -37,6 +37,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final int     DFS_BYTES_PER_CHECKSUM_DEFAULT = 512;
+   public static final String  DFS_CLIENT_WRITE_PACKET_SIZE_KEY = "dfs.client-write-packet-size";
+   public static final int     DFS_CLIENT_WRITE_PACKET_SIZE_DEFAULT = 64*1024;
++  public static final String  DFS_CLIENT_SOCKET_CACHE_CAPACITY_KEY = "dfs.client.socketcache.capacity";
++  public static final int     DFS_CLIENT_SOCKET_CACHE_CAPACITY_DEFAULT = 16;
++  public static final String  DFS_CLIENT_CACHED_CONN_RETRY_KEY = "dfs.client.cached.conn.retry";
++  public static final int     DFS_CLIENT_CACHED_CONN_RETRY_DEFAULT = 3;
+   
+   public static final String  DFS_NAMENODE_BACKUP_ADDRESS_KEY = "dfs.namenode.backup.address";
+   public static final String  DFS_NAMENODE_BACKUP_ADDRESS_DEFAULT = "localhost:50100";
+@@ -53,7 +57,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final boolean DFS_DATANODE_SYNC_BEHIND_WRITES_DEFAULT = false;
+   public static final String  DFS_DATANODE_DROP_CACHE_BEHIND_READS_KEY = "dfs.datanode.drop.cache.behind.reads";
+   public static final boolean DFS_DATANODE_DROP_CACHE_BEHIND_READS_DEFAULT = false;
+-
++  public static final String  DFS_DATANODE_SOCKET_REUSE_KEEPALIVE_KEY = "dfs.datanode.socket.reuse.keepalive";
++  public static final int     DFS_DATANODE_SOCKET_REUSE_KEEPALIVE_DEFAULT = 1000;
++  
+   public static final String  DFS_NAMENODE_HTTP_ADDRESS_KEY = "dfs.namenode.http-address";
+   public static final String  DFS_NAMENODE_HTTP_ADDRESS_DEFAULT = "0.0.0.0:50070";
+   public static final String  DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY = "dfs.namenode.servicerpc-address";
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/SocketCache.java b/src/hdfs/org/apache/hadoop/hdfs/SocketCache.java
+new file mode 100644
+index 0000000..508ec61
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/SocketCache.java
+@@ -0,0 +1,128 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs;
++
++import java.net.Socket;
++import java.net.SocketAddress;
++
++import java.util.Iterator;
++import java.util.List;
++import java.util.Map.Entry;
++
++import com.google.common.base.Preconditions;
++import com.google.common.collect.LinkedListMultimap;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.io.IOUtils;
++
++/**
++ * A cache of sockets.
++ */
++class SocketCache {
++  static final Log LOG = LogFactory.getLog(SocketCache.class);
++
++  private final LinkedListMultimap<SocketAddress, Socket> multimap;
++  private final int capacity;
++
++  /**
++   * Create a SocketCache with the given capacity.
++   * @param capacity  Max cache size.
++   */
++  public SocketCache(int capacity) {
++    multimap = LinkedListMultimap.create();
++    this.capacity = capacity;
++  }
++
++  /**
++   * Get a cached socket to the given address.
++   * @param remote  Remote address the socket is connected to.
++   * @return  A socket with unknown state, possibly closed underneath. Or null.
++   */
++  public synchronized Socket get(SocketAddress remote) {
++    List<Socket> socklist = multimap.get(remote);
++    if (socklist == null) {
++      return null;
++    }
++
++    Iterator<Socket> iter = socklist.iterator();
++    while (iter.hasNext()) {
++      Socket candidate = iter.next();
++      iter.remove();
++      if (!candidate.isClosed()) {
++        return candidate;
++      }
++    }
++    return null;
++  }
++
++  /**
++   * Give an unused socket to the cache.
++   * @param sock socket not used by anyone.
++   */
++  public synchronized void put(Socket sock) {
++    Preconditions.checkNotNull(sock);
++
++    SocketAddress remoteAddr = sock.getRemoteSocketAddress();
++    if (remoteAddr == null) {
++      LOG.warn("Cannot cache (unconnected) socket with no remote address: " +
++               sock);
++      IOUtils.closeSocket(sock);
++      return;
++    }
++
++    if (capacity == multimap.size()) {
++      evictOldest();
++    }
++    multimap.put(remoteAddr, sock);
++  }
++
++  public synchronized int size() {
++    return multimap.size();
++  }
++
++  /**
++   * Evict the oldest entry in the cache.
++   */
++  private synchronized void evictOldest() {
++    Iterator<Entry<SocketAddress, Socket>> iter =
++      multimap.entries().iterator();
++    if (!iter.hasNext()) {
++      throw new IllegalStateException("Cannot evict from empty cache!");
++    }
++    Entry<SocketAddress, Socket> entry = iter.next();
++    iter.remove();
++    Socket sock = entry.getValue();
++    IOUtils.closeSocket(sock);
++  }
++
++  /**
++   * Empty the cache, and close all sockets.
++   */
++  public synchronized void clear() {
++    for (Socket sock : multimap.values()) {
++      IOUtils.closeSocket(sock);
++    }
++    multimap.clear();
++  }
++
++  protected void finalize() {
++    clear();
++  }
++
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/common/HdfsConstants.java b/src/hdfs/org/apache/hadoop/hdfs/server/common/HdfsConstants.java
+index 8705182..20e4ce5 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/common/HdfsConstants.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/common/HdfsConstants.java
+@@ -51,6 +51,7 @@ public interface HdfsConstants {
+   public static int READ_TIMEOUT_EXTENSION = 3 * 1000;
+   public static int WRITE_TIMEOUT = 8 * 60 * 1000;
+   public static int WRITE_TIMEOUT_EXTENSION = 5 * 1000; //for write pipeline
++  public static int DN_KEEPALIVE_TIMEOUT = 5 * 1000;
+ 
+ 
+   // The lease holder for recovery initiated by the NameNode
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java
+index 97c8ae5..16aa073 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java
+@@ -66,7 +66,9 @@ class BlockSender implements java.io.Closeable, FSConstants {
+   private long seqno; // sequence number of packet
+ 
+   private boolean transferToAllowed = true;
+-  private boolean blockReadFully; //set when the whole block is read
++  // set once entire requested byte range has been sent to the client
++  private boolean sentEntireByteRange;
++  private boolean blockReadFully; // set if the entire block was read
+   private boolean verifyChecksum; //if true, check is verified while reading
+   private BlockTransferThrottler throttler;
+   private final String clientTraceFmt; // format of client trace log message
+@@ -491,16 +493,19 @@ class BlockSender implements java.io.Closeable, FSConstants {
+         long len = sendChunks(pktBuf, maxChunksPerPacket, 
+                               streamForSendChunks);
+         offset += len;
+-        totalRead += len + ((len + bytesPerChecksum - 1)/bytesPerChecksum*
+-                            checksumSize);
++        long numChunksSent = (len + bytesPerChecksum - 1)/bytesPerChecksum;
++        totalRead += len + (numChunksSent * checksumSize);
+         seqno++;
+       }
++      
+       try {
+         out.writeInt(0); // mark the end of block        
+         out.flush();
+       } catch (IOException e) { //socket error
+         throw ioeToSocketException(e);
+       }
++      
++      sentEntireByteRange = true;
+     }
+     catch (RuntimeException e) {
+       LOG.error("unexpected exception sending block", e);
+@@ -514,7 +519,7 @@ class BlockSender implements java.io.Closeable, FSConstants {
+       }
+       close();
+     }
+-
++    
+     blockReadFully = (initialOffset == 0 && offset >= blockLength);
+ 
+     return totalRead;
+@@ -558,6 +563,10 @@ class BlockSender implements java.io.Closeable, FSConstants {
+     return (endOffset - offset) > LONG_READ_THRESHOLD_BYTES;
+   }
+ 
++  boolean didSendEntireByteRange() {
++    return sentEntireByteRange;
++  }
++  
+   boolean isBlockReadFully() {
+     return blockReadFully;
+   }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index e888152..11c2e83 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -1280,14 +1280,17 @@ public class DataNode extends Configured
+     A "PACKET" is defined further below.
+     
+     The client reads data until it receives a packet with 
+-    "LastPacketInBlock" set to true or with a zero length. If there is 
+-    no checksum error, it replies to DataNode with OP_STATUS_CHECKSUM_OK:
++    "LastPacketInBlock" set to true or with a zero length. It then replies
++    to DataNode with one of the status codes:
++    - CHECKSUM_OK:    All the chunk checksums have been verified
++    - SUCCESS:        Data received; checksums not verified
++    - ERROR_CHECKSUM: (Currently not used) Detected invalid checksums
++
++      +---------------+
++      | 2 byte Status |
++      +---------------+
+     
+-    Client optional response at the end of data transmission of any length:
+-      +------------------------------+
+-      | 2 byte OP_STATUS_CHECKSUM_OK |
+-      +------------------------------+
+-    The DataNode always expects OP_STATUS_CHECKSUM_OK. It will close the
++    The DataNode always expects the 2 byte status code. It will close the
+     client connection if it is absent.
+     
+     PACKET : Contains a packet header, checksum and data. Amount of data
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+index 4627f7e..802dd5b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+@@ -21,13 +21,17 @@ import java.io.BufferedInputStream;
+ import java.io.BufferedOutputStream;
+ import java.io.DataInputStream;
+ import java.io.DataOutputStream;
++import java.io.EOFException;
+ import java.io.IOException;
++import java.io.InterruptedIOException;
+ import java.io.OutputStream;
+ import java.net.InetSocketAddress;
+ import java.net.Socket;
+ import java.net.SocketException;
++import java.nio.channels.ClosedChannelException;
+ 
+ import org.apache.commons.logging.Log;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.DataTransferProtocol;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+@@ -59,6 +63,8 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+   DataNode datanode;
+   DataXceiverServer dataXceiverServer;
+   
++  private int socketKeepaliveTimeout;
++  
+   public DataXceiver(Socket s, DataNode datanode, 
+       DataXceiverServer dataXceiverServer) {
+     super(datanode.threadGroup, "DataXceiver (initializing)");
+@@ -69,6 +75,11 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+     dataXceiverServer.childSockets.put(s, s);
+     remoteAddress = s.getRemoteSocketAddress().toString();
+     localAddress = s.getLocalSocketAddress().toString();
++    
++    socketKeepaliveTimeout = datanode.getConf().getInt(
++        DFSConfigKeys.DFS_DATANODE_SOCKET_REUSE_KEEPALIVE_KEY,
++        DFSConfigKeys.DFS_DATANODE_SOCKET_REUSE_KEEPALIVE_DEFAULT);
++    
+     LOG.debug("Number of active connections is: " + datanode.getXceiverCount());
+     updateThreadName("waiting for handshake");
+   }
+@@ -89,18 +100,55 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+    * Read/write data from/to the DataXceiverServer.
+    */
+   public void run() {
+-    DataInputStream in=null; 
++    DataInputStream in=null;
++    int opsProcessed = 0;
+     try {
+       in = new DataInputStream(
+           new BufferedInputStream(NetUtils.getInputStream(s), 
+                                   SMALL_BUFFER_SIZE));
+-      short version = in.readShort();
+-      if ( version != DataTransferProtocol.DATA_TRANSFER_VERSION ) {
+-        throw new IOException( "Version Mismatch" );
+-      }
+       boolean local = s.getInetAddress().equals(s.getLocalAddress());
+       updateThreadName("waiting for operation");
+-      byte op = in.readByte();
++      int stdTimeout = s.getSoTimeout();
++
++      // We process requests in a loop, and stay around for a short timeout.
++      // This optimistic behaviour allows the other end to reuse connections.
++      // Setting keepalive timeout to 0 disable this behavior.
++      do {
++        byte op;
++        try {
++          if (opsProcessed != 0) {
++            assert socketKeepaliveTimeout > 0;
++            s.setSoTimeout(socketKeepaliveTimeout);
++          }
++          short version = in.readShort();
++          if ( version != DataTransferProtocol.DATA_TRANSFER_VERSION ) {
++            throw new IOException( "Version Mismatch" );
++          }
++
++          op = in.readByte();
++        } catch (InterruptedIOException ignored) {
++          // Time out while waiting for client RPC
++          break;
++        } catch (IOException err) {
++          // Since we optimistically expect the next op, it's quite normal to get EOF here.
++          if (opsProcessed > 0 &&
++              (err instanceof EOFException || err instanceof ClosedChannelException ||
++               err.getMessage().contains("Connection reset by peer"))) {
++            if (LOG.isDebugEnabled()) {
++              LOG.debug("Cached " + s.toString() + " closing after " + opsProcessed + " ops");
++            }
++          } else {
++            throw err;
++          }
++          break;
++        }
++        
++        // restore normal timeout
++        if (opsProcessed != 0) {
++          s.setSoTimeout(stdTimeout);
++        }
++        // Indentation is left alone here so that patches merge easier from 0.20.20x
++        
+       // Make sure the xciver count is not exceeded
+       int curXceiverCount = datanode.getXceiverCount();
+       if (curXceiverCount > dataXceiverServer.maxXceiverCount) {
+@@ -142,6 +190,9 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+       default:
+         throw new IOException("Unknown opcode " + op + " in data stream");
+       }
++      
++        ++opsProcessed;
++      } while (!s.isClosed() && socketKeepaliveTimeout > 0);
+     } catch (Throwable t) {
+       LOG.error(datanode.dnRegistration + ":DataXceiver",t);
+     } finally {
+@@ -206,30 +257,41 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+         blockSender = new BlockSender(block, startOffset, length,
+             true, true, false, datanode, clientTraceFmt);
+       } catch(IOException e) {
+-        out.writeShort(DataTransferProtocol.OP_STATUS_ERROR);
++        sendResponse(s, (short)DataTransferProtocol.OP_STATUS_ERROR,
++            datanode.socketWriteTimeout);
+         throw e;
+       }
+ 
+       out.writeShort(DataTransferProtocol.OP_STATUS_SUCCESS); // send op status
+       long read = blockSender.sendBlock(out, baseStream, null); // send data
+ 
+-      // If client verification succeeded, and if it's for the whole block,
+-      // tell the DataBlockScanner that it's good. This is an optional response
+-      // from client. If absent, we close the connection (which is what we
+-      // always do anyways).
+-      try {
+-        if (in.readShort() == DataTransferProtocol.OP_STATUS_CHECKSUM_OK) {
+-          if (blockSender.isBlockReadFully() && datanode.blockScanner != null) {
+-            datanode.blockScanner.verifiedByClient(block);
++      if (blockSender.didSendEntireByteRange()) {
++        // If client verification succeeded, and if it's for the whole block,
++        // tell the DataBlockScanner that it's good. This is an optional response
++        // from client. If absent, we close the connection (which is what we
++        // always do anyways).
++        try {
++          short status = in.readShort();
++          if (status == DataTransferProtocol.OP_STATUS_CHECKSUM_OK) {
++            if (blockSender.isBlockReadFully() && datanode.blockScanner != null) {
++              datanode.blockScanner.verifiedByClient(block);
++            }
+           }
++        } catch (IOException ioe) {
++          LOG.debug("Error reading client status response. Will close connection.", ioe);
++          IOUtils.closeStream(out);
+         }
+-      } catch (IOException ignored) {}
+-
++      } else {
++        LOG.info("didnt send entire byte range, closing");
++        IOUtils.closeStream(out);
++      }
++      
+       datanode.myMetrics.bytesRead.inc((int) read);
+       datanode.myMetrics.blocksRead.inc();
+     } catch ( SocketException ignored ) {
+       // Its ok for remote side to close the connection anytime.
+       datanode.myMetrics.blocksRead.inc();
++      IOUtils.closeStream(out);
+     } catch ( IOException ioe ) {
+       /* What exactly should we do here?
+        * Earlier version shutdown() datanode if there is disk error.
+@@ -240,7 +302,6 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+                 StringUtils.stringifyException(ioe) );
+       throw ioe;
+     } finally {
+-      IOUtils.closeStream(out);
+       IOUtils.closeStream(blockSender);
+     }
+   }
+@@ -715,11 +776,7 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+                                                        throws IOException {
+     DataOutputStream reply = 
+       new DataOutputStream(NetUtils.getOutputStream(s, timeout));
+-    try {
+-      reply.writeShort(opStatus);
+-      reply.flush();
+-    } finally {
+-      IOUtils.closeStream(reply);
+-    }
++    reply.writeShort(opStatus);
++    reply.flush();
+   }
+ }
+diff --git a/src/test/org/apache/hadoop/hdfs/BlockReaderTestUtil.java b/src/test/org/apache/hadoop/hdfs/BlockReaderTestUtil.java
+index b967efe..b716dc9 100644
+--- a/src/test/org/apache/hadoop/hdfs/BlockReaderTestUtil.java
++++ b/src/test/org/apache/hadoop/hdfs/BlockReaderTestUtil.java
+@@ -75,29 +75,43 @@ public class BlockReaderTestUtil {
+ 
+   /**
+    * Create a file of the given size filled with random data.
+-   * @return  List of Blocks of the new file.
++   * @return  File data.
+    */
+-  public List<LocatedBlock> writeFile(Path filepath, int sizeKB)
++  public byte[] writeFile(Path filepath, int sizeKB)
+       throws IOException {
+     FileSystem fs = cluster.getFileSystem();
+ 
+     // Write a file with 256K of data
+     DataOutputStream os = fs.create(filepath);
+-    byte data[] = new byte[1024];
+-    new Random().nextBytes(data);
+-    for (int i = 0; i < sizeKB; i++) {
+-      os.write(data);
++    byte data[] = new byte[1024 * sizeKB];
++    for (int i = 0; i < data.length; i++) {
++      data[i] = (byte)(i&0xff);
+     }
++    // new Random().nextBytes(data);
++    os.write(data);
+     os.close();
++    return data;
++  }
+ 
++  /**
++   * Get the list of Blocks for a file.
++   */
++  public List<LocatedBlock> getFileBlocks(Path filepath, int sizeKB)
++      throws IOException {
+     // Return the blocks we just wrote
+-    DFSClient dfsclient = new DFSClient(
+-      new InetSocketAddress("localhost", cluster.getNameNodePort()), conf);
++    DFSClient dfsclient = getDFSClient();
+     return dfsclient.namenode.getBlockLocations(
+       filepath.toString(), 0, sizeKB * 1024).getLocatedBlocks();
+   }
+ 
+-
++  /**
++   * Get the DFSClient.
++   */
++  public DFSClient getDFSClient() throws IOException {
++    InetSocketAddress nnAddr = new InetSocketAddress("localhost", cluster.getNameNodePort());
++    return new DFSClient(nnAddr, conf);
++  }
++    
+   /**
+    * Exercise the BlockReader and read length bytes.
+    *
+@@ -137,6 +151,7 @@ public class BlockReaderTestUtil {
+ 
+     return BlockReader.newBlockReader(
+       sock, targetAddr.toString()+ ":" + block.getBlockId(), block.getBlockId(),
++      testBlock.getBlockToken(),
+       block.getGenerationStamp(),
+       offset, lenToRead,
+       conf.getInt("io.file.buffer.size", 4096));
+diff --git a/src/test/org/apache/hadoop/hdfs/TestClientBlockVerification.java b/src/test/org/apache/hadoop/hdfs/TestClientBlockVerification.java
+index 08e75ea..99205d9 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestClientBlockVerification.java
++++ b/src/test/org/apache/hadoop/hdfs/TestClientBlockVerification.java
+@@ -28,6 +28,7 @@ import java.io.IOException;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.DFSClient.BlockReader;
+ import org.apache.hadoop.hdfs.protocol.Block;
++import org.apache.hadoop.hdfs.protocol.DataTransferProtocol;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants;
+@@ -107,7 +108,9 @@ public class TestClientBlockVerification {
+   public void testBlockVerification() throws Exception {
+     BlockReader reader = spy(getBlockReader(0, FILE_SIZE_K * 1024));
+     slurpReader(reader, FILE_SIZE_K * 1024, true);
+-    verify(reader).checksumOk(reader.dnSock);
++    verify(reader).sendReadResult(
++      reader.dnSock,
++      (short)DataTransferProtocol.OP_STATUS_CHECKSUM_OK);
+     reader.close();
+   }
+ 
+@@ -120,14 +123,16 @@ public class TestClientBlockVerification {
+     slurpReader(reader, FILE_SIZE_K / 2 * 1024, false);
+ 
+     // We asked the blockreader for the whole file, and only read
+-    // half of it, so no checksumOk
+-    verify(reader, never()).checksumOk(reader.dnSock);
++    // half of it, so no CHECKSUM_OK
++    verify(reader, never()).sendReadResult(
++      reader.dnSock,
++      (short)DataTransferProtocol.OP_STATUS_CHECKSUM_OK);
+     reader.close();
+   }
+ 
+   /**
+    * Test that if we ask for a half block, and read it all, we *do*
+-   * call checksumOk. The DN takes care of knowing whether it was
++   * send CHECKSUM_OK. The DN takes care of knowing whether it was
+    * the whole block or not.
+    */
+   @Test
+@@ -136,7 +141,9 @@ public class TestClientBlockVerification {
+     BlockReader reader = spy(getBlockReader(0, FILE_SIZE_K * 1024 / 2));
+     // And read half the file
+     slurpReader(reader, FILE_SIZE_K * 1024 / 2, true);
+-    verify(reader).checksumOk(reader.dnSock);
++    verify(reader).sendReadResult(reader.dnSock,
++      (short)DataTransferProtocol.OP_STATUS_CHECKSUM_OK);
++
+     reader.close();
+   }
+ 
+@@ -154,7 +161,9 @@ public class TestClientBlockVerification {
+                            " len=" + length);
+         BlockReader reader = spy(getBlockReader(startOffset, length));
+         slurpReader(reader, length, true);
+-        verify(reader).checksumOk(reader.dnSock);
++        verify(reader).sendReadResult(
++          reader.dnSock,
++          (short)DataTransferProtocol.OP_STATUS_CHECKSUM_OK);
+         reader.close();
+       }
+     }
+diff --git a/src/test/org/apache/hadoop/hdfs/TestConnCache.java b/src/test/org/apache/hadoop/hdfs/TestConnCache.java
+new file mode 100644
+index 0000000..1a5a5cf
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/TestConnCache.java
+@@ -0,0 +1,294 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs;
++
++import java.net.InetSocketAddress;
++import java.net.Socket;
++import java.io.IOException;
++import java.util.List;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.DFSClient;
++import org.apache.hadoop.hdfs.DFSClient.DFSInputStream;
++import org.apache.hadoop.hdfs.DFSClient.BlockReader;
++import org.apache.hadoop.hdfs.SocketCache;
++import org.apache.hadoop.hdfs.protocol.Block;
++import org.apache.hadoop.hdfs.protocol.LocatedBlock;
++import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
++import org.apache.hadoop.hdfs.server.datanode.DataNode;
++
++import org.apache.hadoop.security.token.Token;
++import org.junit.Test;
++import org.junit.AfterClass;
++import org.junit.BeforeClass;
++import static org.junit.Assert.*;
++
++import org.mockito.Matchers;
++import org.mockito.Mockito;
++import org.mockito.stubbing.Answer;
++import org.mockito.invocation.InvocationOnMock;
++import static org.mockito.Mockito.spy;
++
++/**
++ * This class tests the client connection caching in a single node
++ * mini-cluster.
++ */
++public class TestConnCache {
++  static final Log LOG = LogFactory.getLog(TestConnCache.class);
++
++  static final int BLOCK_SIZE = 4096;
++  static final int FILE_SIZE = 3 * BLOCK_SIZE;
++
++  static Configuration conf = null;
++  static MiniDFSCluster cluster = null;
++  static FileSystem fs = null;
++
++  static final Path testFile = new Path("/testConnCache.dat");
++  static byte authenticData[] = null;
++
++  static BlockReaderTestUtil util = null;
++
++
++  /**
++   * A mock Answer to remember the BlockReader used.
++   *
++   * It verifies that all invocation to DFSInputStream.getBlockReader()
++   * use the same socket.
++   */
++  private class MockGetBlockReader implements Answer<BlockReader> {
++    public BlockReader reader = null;
++    private Socket sock = null;
++    private final boolean shouldBeAllTheSame;
++
++    public MockGetBlockReader(boolean shouldBeAllTheSame) {
++      this.shouldBeAllTheSame = shouldBeAllTheSame;
++    }
++
++    public BlockReader answer(InvocationOnMock invocation) throws Throwable {
++      BlockReader prevReader = reader;
++      reader = (BlockReader) invocation.callRealMethod();
++      if (sock == null) {
++        sock = reader.dnSock;
++      } else if (prevReader != null &&
++          (shouldBeAllTheSame || prevReader.hasSentStatusCode())) {
++        // Can't reuse socket if the previous BlockReader didn't read till EOS.
++        assertSame("DFSInputStream should use the same socket",
++                   sock, reader.dnSock);
++      } return reader;
++    }
++  }
++
++  @BeforeClass
++  public static void setupCluster() throws Exception {
++    final int REPLICATION_FACTOR = 1;
++
++    util = new BlockReaderTestUtil(REPLICATION_FACTOR);
++    cluster = util.getCluster();
++    conf = util.getConf();
++    fs = cluster.getFileSystem();
++
++    authenticData = util.writeFile(testFile, FILE_SIZE / 1024);
++  }
++
++
++  /**
++   * (Optionally) seek to position, read and verify data.
++   *
++   * Seek to specified position if pos is non-negative.
++   */
++  private void seekAndRead(DFSInputStream in,
++                     long pos,
++                     byte[] buffer,
++                     int offset,
++                     int length)
++      throws IOException {
++    assertTrue("Test buffer too small", buffer.length >= offset + length);
++
++    if (pos >= 0)
++      in.seek(pos);
++
++    LOG.info("Reading from file of size " + in.getFileLength() +
++             " at offset " + in.getPos());
++
++    while (length > 0) {
++      int cnt = in.read(buffer, offset, length);
++      assertTrue("Error in read", cnt > 0);
++      offset += cnt;
++      length -= cnt;
++    }
++
++    // Verify
++    for (int i = 0; i < length; ++i) {
++      byte actual = buffer[i];
++      byte expect = authenticData[(int)pos + i];
++      assertEquals("Read data mismatch at file offset " + (pos + i) +
++                   ". Expects " + expect + "; got " + actual,
++                   actual, expect);
++    }
++  }
++  
++  private void pread(DFSInputStream in,
++                     long pos,
++                     byte[] buffer,
++                     int offset,
++                     int length)
++      throws IOException {
++    assertTrue("Test buffer too small", buffer.length >= offset + length);
++
++    LOG.info("PReading from file of size " + in.getFileLength() +
++             " at offset " + in.getPos());
++
++    while (length > 0) {
++      int cnt = in.read(pos, buffer, offset, length);
++      assertTrue("Error in read", cnt > 0);
++      offset += cnt;
++      length -= cnt;
++      pos += cnt;
++    }
++
++    // Verify
++    for (int i = 0; i < length; ++i) {
++      byte actual = buffer[i];
++      byte expect = authenticData[(int)pos + i];
++      assertEquals("Read data mismatch at file offset " + (pos + i) +
++                   ". Expects " + expect + "; got " + actual,
++                   actual, expect);
++    }
++  }
++  
++
++  /**
++   * Test the SocketCache itself.
++   */
++  @Test
++  public void testSocketCache() throws IOException {
++    final int CACHE_SIZE = 4;
++    SocketCache cache = new SocketCache(CACHE_SIZE);
++
++    // Make a client
++    InetSocketAddress nnAddr =
++        new InetSocketAddress("localhost", cluster.getNameNodePort());
++    DFSClient client = new DFSClient(nnAddr, conf);
++
++    // Find out the DN addr
++    LocatedBlock block =
++        client.namenode.getBlockLocations(
++            testFile.toString(), 0, FILE_SIZE)
++        .getLocatedBlocks().get(0);
++    DataNode dn = util.getDataNode(block);
++    InetSocketAddress dnAddr = dn.getSelfAddr();
++
++    // Make some sockets to the DN
++    Socket[] dnSockets = new Socket[CACHE_SIZE];
++    for (int i = 0; i < dnSockets.length; ++i) {
++      dnSockets[i] = client.socketFactory.createSocket(
++          dnAddr.getAddress(), dnAddr.getPort());
++    }
++
++    // Insert a socket to the NN
++    Socket nnSock = new Socket(nnAddr.getAddress(), nnAddr.getPort());
++    cache.put(nnSock);
++    assertSame("Read the write", nnSock, cache.get(nnAddr));
++    cache.put(nnSock);
++
++    // Insert DN socks
++    for (Socket dnSock : dnSockets) {
++      cache.put(dnSock);
++    }
++
++    assertEquals("NN socket evicted", null, cache.get(nnAddr));
++    assertTrue("Evicted socket closed", nnSock.isClosed());
++
++    // Lookup the DN socks
++    for (Socket dnSock : dnSockets) {
++      assertEquals("Retrieve cached sockets", dnSock, cache.get(dnAddr));
++      dnSock.close();
++    }
++
++    assertEquals("Cache is empty", 0, cache.size());
++  }
++
++  /**
++   * Read a file served entirely from one DN. Seek around and read from
++   * different offsets. And verify that they all use the same socket.
++   *
++   * @throws java.io.IOException
++   */
++  @Test
++  public void testReadFromOneDN() throws IOException {
++    doOneDNTest(false);
++  }
++  
++  @Test
++  public void testPreadFromOneDN() throws IOException {
++    doOneDNTest(true);
++  }
++
++  
++  private void doOneDNTest(boolean usePread) throws IOException {
++    LOG.info("Starting testReadFromOneDN()");
++    DFSClient client = new DFSClient(
++        new InetSocketAddress("localhost", cluster.getNameNodePort()), conf);
++    DFSInputStream in = spy(client.open(testFile.toString()));
++    LOG.info("opened " + testFile.toString());
++
++    byte[] dataBuf = new byte[BLOCK_SIZE];
++
++    MockGetBlockReader answer = new MockGetBlockReader(usePread);
++    Mockito.doAnswer(answer).when(in).getBlockReader(
++      Matchers.<InetSocketAddress>anyObject(), // addr
++      Matchers.anyString(), // file
++      Matchers.anyLong(), // id
++      Matchers.<Token<BlockTokenIdentifier>>anyObject(), // accessToken
++      Matchers.anyLong(), //genStamp
++      Matchers.anyLong(), //startOffset
++      Matchers.anyLong(), // len
++      Matchers.anyInt(), // bufferSize
++      Matchers.anyBoolean(), // verifyChecksum
++      Matchers.anyString()); //clientName
++
++    if (usePread) {
++      // Initial read
++      pread(in, 0, dataBuf, 0, dataBuf.length);
++      // Read again and verify that the socket is the same
++      pread(in, FILE_SIZE - dataBuf.length, dataBuf, 0, dataBuf.length);
++      pread(in, 1024, dataBuf, 0, dataBuf.length);
++      pread(in, 64, dataBuf, 0, dataBuf.length / 2);
++    } else {
++      // Seek and read
++      seekAndRead(in, 0, dataBuf, 0, dataBuf.length);
++      // Read again and verify that the socket is the same
++      seekAndRead(in, FILE_SIZE - dataBuf.length, dataBuf, 0, dataBuf.length);
++      seekAndRead(in, 1024, dataBuf, 0, dataBuf.length);
++      seekAndRead(in, -1, dataBuf, 0, dataBuf.length);            // No seek; just read
++      seekAndRead(in, 64, dataBuf, 0, dataBuf.length / 2);
++    }
++
++    in.close();
++  }
++
++  @AfterClass
++  public static void teardownCluster() throws Exception {
++    util.shutdown();
++  }
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/TestParallelRead.java b/src/test/org/apache/hadoop/hdfs/TestParallelRead.java
+new file mode 100644
+index 0000000..518e7a2
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/TestParallelRead.java
+@@ -0,0 +1,284 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs;
++
++import java.io.IOException;
++import java.util.Random;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.server.datanode.DataNode;
++import org.apache.hadoop.hdfs.DFSClient.DFSInputStream;
++import org.apache.log4j.Level;
++import org.apache.log4j.LogManager;
++
++import org.junit.Test;
++import org.junit.AfterClass;
++import org.junit.BeforeClass;
++import static org.junit.Assert.*;
++
++/**
++ * Test the use of DFSInputStream by multiple concurrent readers.
++ */
++public class TestParallelRead {
++
++  static final Log LOG = LogFactory.getLog(TestParallelRead.class);
++  static BlockReaderTestUtil util = null;
++  static DFSClient dfsClient = null;
++  static final int FILE_SIZE_K = 256;
++  static Random rand = null;
++  
++  static {
++    // The client-trace log ends up causing a lot of blocking threads
++    // in this when it's being used as a performance benchmark.
++    LogManager.getLogger(DataNode.class.getName() + ".clienttrace")
++      .setLevel(Level.WARN);
++  }
++
++  private class TestFileInfo {
++    public DFSInputStream dis;
++    public Path filepath;
++    public byte[] authenticData;
++  }
++
++  @BeforeClass
++  public static void setupCluster() throws Exception {
++    final int REPLICATION_FACTOR = 2;
++    util = new BlockReaderTestUtil(REPLICATION_FACTOR);
++    dfsClient = util.getDFSClient();
++    rand = new Random(System.currentTimeMillis());
++  }
++
++  /**
++   * A worker to do one "unit" of read.
++   */
++  static class ReadWorker extends Thread {
++    static public final int N_ITERATIONS = 1024;
++
++    private static final double PROPORTION_NON_POSITIONAL_READ = 0.10;
++
++    private TestFileInfo testInfo;
++    private long fileSize;
++    private long bytesRead;
++    private boolean error;
++
++    ReadWorker(TestFileInfo testInfo, int id) {
++      super("ReadWorker-" + id + "-" + testInfo.filepath.toString());
++      this.testInfo = testInfo;
++      fileSize = testInfo.dis.getFileLength();
++      assertEquals(fileSize, testInfo.authenticData.length);
++      bytesRead = 0;
++      error = false;
++    }
++
++    /**
++     * Randomly do one of (1) Small read; and (2) Large Pread.
++     */
++    @Override
++    public void run() {
++      for (int i = 0; i < N_ITERATIONS; ++i) {
++        int startOff = rand.nextInt((int) fileSize);
++        int len = 0;
++        try {
++          double p = rand.nextDouble();
++          if (p < PROPORTION_NON_POSITIONAL_READ) {
++            // Do a small regular read. Very likely this will leave unread
++            // data on the socket and make the socket uncacheable.
++            len = Math.min(rand.nextInt(64), (int) fileSize - startOff);
++            read(startOff, len);
++            bytesRead += len;
++          } else {
++            // Do a positional read most of the time.
++            len = rand.nextInt((int) (fileSize - startOff));
++            pRead(startOff, len);
++            bytesRead += len;
++          }
++        } catch (Throwable t) {
++          LOG.error(getName() + ": Error while testing read at " + startOff +
++                    " length " + len);
++          error = true;
++          fail(t.getMessage());
++        }
++      }
++    }
++
++    public long getBytesRead() {
++      return bytesRead;
++    }
++
++    /**
++     * Raising error in a thread doesn't seem to fail the test.
++     * So check afterwards.
++     */
++    public boolean hasError() {
++      return error;
++    }
++
++    /**
++     * Seek to somewhere random and read.
++     */
++    private void read(int start, int len) throws Exception {
++      assertTrue(
++          "Bad args: " + start + " + " + len + " should be <= " + fileSize,
++          start + len <= fileSize);
++      DFSInputStream dis = testInfo.dis;
++
++      synchronized (dis) {
++        dis.seek(start);
++
++        byte buf[] = new byte[len];
++        int cnt = 0;
++        while (cnt < len) {
++          cnt += dis.read(buf, cnt, buf.length - cnt);
++        }
++        verifyData("Read data corrupted", buf, start, start + len);
++      }
++    }
++
++    /**
++     * Positional read.
++     */
++    private void pRead(int start, int len) throws Exception {
++      assertTrue(
++          "Bad args: " + start + " + " + len + " should be < " + fileSize,
++          start + len < fileSize);
++      DFSInputStream dis = testInfo.dis;
++
++      byte buf[] = new byte[len];
++      int cnt = 0;
++      while (cnt < len) {
++        cnt += dis.read(start, buf, cnt, buf.length - cnt);
++      }
++      verifyData("Pread data corrupted", buf, start, start + len);
++    }
++
++    /**
++     * Verify read data vs authentic data
++     */
++    private void verifyData(String msg, byte actual[], int start, int end)
++        throws Exception {
++      byte auth[] = testInfo.authenticData;
++      if (end > auth.length) {
++        throw new Exception(msg + ": Actual array (" + end +
++                            ") is past the end of authentic data (" +
++                            auth.length + ")");
++      }
++
++      int j = start;
++      for (int i = 0; i < actual.length; ++i, ++j) {
++        if (auth[j] != actual[i]) {
++          throw new Exception(msg + ": Arrays byte " + i + " (at offset " +
++                              j + ") differs: expect " +
++                              auth[j] + " got " + actual[i]);
++        }
++      }
++    }
++  }
++
++  /**
++   * Do parallel read several times with different number of files and threads.
++   *
++   * Note that while this is the only "test" in a junit sense, we're actually
++   * dispatching a lot more. Failures in the other methods (and other threads)
++   * need to be manually collected, which is inconvenient.
++   */
++  @Test
++  public void testParallelRead() throws IOException {
++    if (!runParallelRead(1, 4)) {
++      fail("Check log for errors");
++    }
++    if (!runParallelRead(1, 16)) {
++      fail("Check log for errors");
++    }
++    if (!runParallelRead(2, 4)) {
++      fail("Check log for errors");
++    }
++  }
++
++  /**
++   * Start the parallel read with the given parameters.
++   */
++  boolean runParallelRead(int nFiles, int nWorkerEach) throws IOException {
++    ReadWorker workers[] = new ReadWorker[nFiles * nWorkerEach];
++    TestFileInfo testInfoArr[] = new TestFileInfo[nFiles];
++
++    // Prepare the files and workers
++    int nWorkers = 0;
++    for (int i = 0; i < nFiles; ++i) {
++      TestFileInfo testInfo = new TestFileInfo();
++      testInfoArr[i] = testInfo;
++
++      testInfo.filepath = new Path("/TestParallelRead.dat." + i);
++      testInfo.authenticData = util.writeFile(testInfo.filepath, FILE_SIZE_K);
++      testInfo.dis = dfsClient.open(testInfo.filepath.toString());
++
++      for (int j = 0; j < nWorkerEach; ++j) {
++        workers[nWorkers++] = new ReadWorker(testInfo, nWorkers);
++      }
++    }
++
++    // Start the workers and wait
++    long starttime = System.currentTimeMillis();
++    for (ReadWorker worker : workers) {
++      worker.start();
++    }
++
++    for (ReadWorker worker : workers) {
++      try {
++        worker.join();
++      } catch (InterruptedException ignored) { }
++    }
++    long endtime = System.currentTimeMillis();
++
++    // Cleanup
++    for (TestFileInfo testInfo : testInfoArr) {
++      testInfo.dis.close();
++    }
++
++    // Report
++    boolean res = true;
++    long totalRead = 0;
++    for (ReadWorker worker : workers) {
++      long nread = worker.getBytesRead();
++      LOG.info("--- Report: " + worker.getName() + " read " + nread + " B; " +
++               "average " + nread / ReadWorker.N_ITERATIONS + " B per read");
++      totalRead += nread;
++      if (worker.hasError()) {
++        res = false;
++      }
++    }
++
++    double timeTakenSec = (endtime - starttime) / 1000.0;
++    long totalReadKB = totalRead / 1024;
++    LOG.info("=== Report: " + nWorkers + " threads read " +
++             totalReadKB + " KB (across " +
++             nFiles + " file(s)) in " +
++             timeTakenSec + "s; average " +
++             totalReadKB / timeTakenSec + " KB/s");
++
++    return res;
++  }
++
++  @AfterClass
++  public static void teardownCluster() throws Exception {
++    util.shutdown();
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataXceiver.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataXceiver.java
+index 49133ca..8424dd3 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataXceiver.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataXceiver.java
+@@ -44,7 +44,8 @@ public class TestDataXceiver {
+   public static void setupCluster() throws Exception {
+     final int REPLICATION_FACTOR = 1;
+     util = new BlockReaderTestUtil(REPLICATION_FACTOR);
+-    List<LocatedBlock> blkList = util.writeFile(TEST_FILE, FILE_SIZE_K);
++    util.writeFile(TEST_FILE, FILE_SIZE_K);
++    List<LocatedBlock> blkList = util.getFileBlocks(TEST_FILE, FILE_SIZE_K);
+     testBlock = blkList.get(0);     // Use the first block to test
+   }
+ 
+-- 
+1.7.0.4
+

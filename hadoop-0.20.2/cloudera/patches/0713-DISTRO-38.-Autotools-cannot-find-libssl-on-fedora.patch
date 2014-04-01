@@ -1,0 +1,35 @@
+From 9309cf6f1851cc1b379028235b79cc2cf9fe1774 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Bruno=20Mah=C3=A9?= <bruno@cloudera.com>
+Date: Mon, 27 Sep 2010 19:43:02 -0700
+Subject: [PATCH 0713/1179] DISTRO-38. Autotools cannot find libssl on fedora
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Description: Some GNU/Linux distribution have changed the DSO-linking semantics of the gcc compiler.
+Previously ld would attempt to implicitly satisfy link requirements and therefore implictely add libcrypto when linking to libssl.
+The dependency on libcrypto must now be explicitely stated on these platform when linking to libssl.
+See https://fedoraproject.org/wiki/Features/ChangeInImplicitDSOLinking and https://fedoraproject.org/wiki/UnderstandingDSOLinkChange
+Reason: Bug
+Author: Bruno Mahé
+Ref: DISTRO-38
+---
+ src/c++/utils/m4/hadoop_utils.m4 |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/c++/utils/m4/hadoop_utils.m4 b/src/c++/utils/m4/hadoop_utils.m4
+index dd76af9..ebacfcd 100644
+--- a/src/c++/utils/m4/hadoop_utils.m4
++++ b/src/c++/utils/m4/hadoop_utils.m4
+@@ -52,7 +52,7 @@ AC_CHECK_HEADERS([pthread.h], [],
+ AC_CHECK_LIB([pthread], [pthread_create], [], 
+   AC_MSG_ERROR(Cannot find libpthread.so, please check))
+ AC_CHECK_LIB([ssl], [HMAC_Init], [], 
+-  AC_MSG_ERROR(Cannot find libssl.so, please check))
++  AC_MSG_ERROR(Cannot find libssl.so, please check), [-lcrypto])
+ ])
+ 
+ # define a macro for using hadoop pipes
+-- 
+1.7.0.4
+

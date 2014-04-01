@@ -1,0 +1,550 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="nutch-conf.xsl"?>
+
+<!-- Put site-specific property overrides in this file. -->
+
+<configuration>
+
+
+<property>
+  <name>GRID_MIX_DATA</name>
+  <value>/gridmix/data</value>
+  <description></description>
+</property>
+
+<property>
+  <name>FIXCOMPTEXT</name>
+  <value>${GRID_MIX_DATA}/EntropySimulationCompressed</value>
+  <description></description>
+</property>
+
+<property>
+  <name>VARINFLTEXT</name>
+  <value>${GRID_MIX_DATA}/SortUncompressed</value>
+  <description></description>
+</property>
+
+<property>
+  <name>FIXCOMPSEQ</name>
+  <value>${GRID_MIX_DATA}/MonsterQueryBlockCompressed</value>
+  <description></description>
+</property>
+
+<property>
+  <name>VARCOMPSEQ</name>
+  <value>${GRID_MIX_DATA}/WebSimulationBlockCompressed</value>
+  <description></description>
+</property>
+
+
+<property>
+  <name>streamSort.smallJobs.inputFiles</name>
+  <value>${VARINFLTEXT}/{part-00000,part-00001,part-00002}</value>
+  <description></description>
+</property>
+
+<property>
+  <name>streamSort.smallJobs.numOfJobs</name>
+  <value>40</value>
+  <description></description>
+</property>
+
+<property>
+  <name>streamSort.smallJobs.numOfReduces</name>
+  <value>15</value>
+  <description></description>
+</property>
+
+<property>
+  <name>streamSort.smallJobs.numOfMapoutputCompressed</name>
+  <value>40</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>streamSort.smallJobs.numOfOutputCompressed</name>
+  <value>20</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>streamSort.mediumJobs.numOfJobs</name>
+  <value>16</value>
+  <description></description>
+</property>
+<property>
+  <name>streamSort.mediumJobs.inputFiles</name>
+  <value>${VARINFLTEXT}/{part-000*0,part-000*1,part-000*2}</value>
+  <description></description>
+</property>
+<property>
+  <name>streamSort.mediumJobs.numOfReduces</name>
+  <value>170</value>
+  <description></description>
+</property>
+
+<property>
+  <name>streamSort.mediumJobs.numOfMapoutputCompressed</name>
+  <value>16</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>streamSort.mediumJobs.numOfOutputCompressed</name>
+  <value>12</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>streamSort.largeJobs.numOfJobs</name>
+  <value>5</value>
+  <description></description>
+</property>
+<property>
+  <name>streamSort.largeJobs.inputFiles</name>
+  <value>${VARINFLTEXT}</value>
+  <description></description>
+</property>
+<property>
+  <name>streamSort.largeJobs.numOfReduces</name>
+  <value>370</value>
+  <description></description>
+</property>
+
+<property>
+  <name>streamSort.largeJobs.numOfMapoutputCompressed</name>
+  <value>5</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>streamSort.largeJobs.numOfOutputCompressed</name>
+  <value>3</value>
+  <description> </description>
+</property>
+
+
+<property>
+  <name>javaSort.smallJobs.numOfJobs</name>
+  <value>8,2</value>
+  <description></description>
+</property>
+<property>
+  <name>javaSort.smallJobs.inputFiles</name>
+  <value>${VARINFLTEXT}/{part-00000,part-00001,part-00002}</value>
+  <description></description>
+</property>
+<property>
+  <name>javaSort.smallJobs.numOfReduces</name>
+  <value>15,70</value>
+  <description></description>
+</property>
+
+<property>
+  <name>javaSort.smallJobs.numOfMapoutputCompressed</name>
+  <value>10</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>javaSort.smallJobs.numOfOutputCompressed</name>
+  <value>3</value>
+  <description> </description>
+</property>
+
+
+<property>
+  <name>javaSort.mediumJobs.numOfJobs</name>
+  <value>4,2</value>
+  <description></description>
+</property>
+<property>
+  <name>javaSort.mediumJobs.inputFiles</name>
+  <value>${VARINFLTEXT}/{part-000*0,part-000*1,part-000*2}</value>
+  <description></description>
+</property>
+<property>
+  <name>javaSort.mediumJobs.numOfReduces</name>
+  <value>170,70</value>
+  <description></description>
+</property>
+
+<property>
+  <name>javaSort.mediumJobs.numOfMapoutputCompressed</name>
+  <value>6</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>javaSort.mediumJobs.numOfOutputCompressed</name>
+  <value>4</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>javaSort.largeJobs.numOfJobs</name>
+  <value>3</value>
+  <description></description>
+</property>
+<property>
+  <name>javaSort.largeJobs.inputFiles</name>
+  <value>${VARINFLTEXT}</value>
+  <description></description>
+</property>
+<property>
+  <name>javaSort.largeJobs.numOfReduces</name>
+  <value>370</value>
+  <description></description>
+</property>
+
+<property>
+  <name>javaSort.largeJobs.numOfMapoutputCompressed</name>
+  <value>3</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>javaSort.largeJobs.numOfOutputCompressed</name>
+  <value>2</value>
+  <description> </description>
+</property>
+
+
+<property>
+  <name>combiner.smallJobs.numOfJobs</name>
+  <value>11,4</value>
+  <description></description>
+</property>
+<property>
+  <name>combiner.smallJobs.inputFiles</name>
+  <value>${VARINFLTEXT}/{part-00000,part-00001,part-00002}</value>
+  <description></description>
+</property>
+<property>
+  <name>combiner.smallJobs.numOfReduces</name>
+  <value>10,1</value>
+  <description></description>
+</property>
+
+<property>
+  <name>combiner.smallJobs.numOfMapoutputCompressed</name>
+  <value>15</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>combiner.smallJobs.numOfOutputCompressed</name>
+  <value>0</value>
+  <description> </description>
+</property>
+
+
+<property>
+  <name>combiner.mediumJobs.numOfJobs</name>
+  <value>8</value>
+  <description></description>
+</property>
+<property>
+  <name>combiner.mediumJobs.inputFiles</name>
+  <value>${VARINFLTEXT}/{part-000*0,part-000*1,part-000*2}</value>
+  <description></description>
+</property>
+<property>
+  <name>combiner.mediumJobs.numOfReduces</name>
+  <value>100</value>
+  <description></description>
+</property>
+
+<property>
+  <name>combiner.mediumJobs.numOfMapoutputCompressed</name>
+  <value>8</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>combiner.mediumJobs.numOfOutputCompressed</name>
+  <value>0</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>combiner.largeJobs.numOfJobs</name>
+  <value>4</value>
+  <description></description>
+</property>
+<property>
+  <name>combiner.largeJobs.inputFiles</name>
+  <value>${VARINFLTEXT}</value>
+  <description></description>
+</property>
+<property>
+  <name>combiner.largeJobs.numOfReduces</name>
+  <value>360</value>
+  <description></description>
+</property>
+
+<property>
+  <name>combiner.largeJobs.numOfMapoutputCompressed</name>
+  <value>4</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>combiner.largeJobs.numOfOutputCompressed</name>
+  <value>0</value>
+  <description> </description>
+</property>
+
+
+<property>
+  <name>monsterQuery.smallJobs.numOfJobs</name>
+  <value>7</value>
+  <description></description>
+</property>
+<property>
+  <name>monsterQuery.smallJobs.inputFiles</name>
+  <value>${FIXCOMPSEQ}/{part-00000,part-00001,part-00002}</value>
+  <description></description>
+</property>
+<property>
+  <name>monsterQuery.smallJobs.numOfReduces</name>
+  <value>5</value>
+  <description></description>
+</property>
+
+<property>
+  <name>monsterQuery.smallJobs.numOfMapoutputCompressed</name>
+  <value>7</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>monsterQuery.smallJobs.numOfOutputCompressed</name>
+  <value>0</value>
+  <description> </description>
+</property>
+
+
+<property>
+  <name>monsterQuery.mediumJobs.numOfJobs</name>
+  <value>5</value>
+  <description></description>
+</property>
+<property>
+  <name>monsterQuery.mediumJobs.inputFiles</name>
+  <value>${FIXCOMPSEQ}/{part-000*0,part-000*1,part-000*2}</value>
+  <description></description>
+</property>
+<property>
+  <name>monsterQuery.mediumJobs.numOfReduces</name>
+  <value>100</value>
+  <description></description>
+</property>
+
+<property>
+  <name>monsterQuery.mediumJobs.numOfMapoutputCompressed</name>
+  <value>5</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>monsterQuery.mediumJobs.numOfOutputCompressed</name>
+  <value>0</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>monsterQuery.largeJobs.numOfJobs</name>
+  <value>3</value>
+  <description></description>
+</property>
+<property>
+  <name>monsterQuery.largeJobs.inputFiles</name>
+  <value>${FIXCOMPSEQ}</value>
+  <description></description>
+</property>
+<property>
+  <name>monsterQuery.largeJobs.numOfReduces</name>
+  <value>370</value>
+  <description></description>
+</property>
+
+<property>
+  <name>monsterQuery.largeJobs.numOfMapoutputCompressed</name>
+  <value>3</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>monsterQuery.largeJobs.numOfOutputCompressed</name>
+  <value>0</value>
+  <description> </description>
+</property>
+
+
+<property>
+  <name>webdataScan.smallJobs.numOfJobs</name>
+  <value>24</value>
+  <description></description>
+</property>
+
+<property>
+  <name>webdataScan.smallJobs.inputFiles</name>
+  <value>${VARCOMPSEQ}/{part-00000,part-00001,part-00002}</value>
+  <description></description>
+</property>
+<property>
+  <name>webdataScan.smallJobs.numOfMapoutputCompressed</name>
+  <value>24</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>webdataScan.smallJobs.numOfOutputCompressed</name>
+  <value>0</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>webdataScan.mediumJobs.numOfJobs</name>
+  <value>12</value>
+  <description></description>
+</property>
+
+<property>
+  <name>webdataScan.mediumJobs.inputFiles</name>
+  <value>${VARCOMPSEQ}/{part-000*0,part-000*1,part-000*2}</value>
+  <description></description>
+</property>
+<property>
+  <name>webdataScan.mediumJobs.numOfMapoutputCompressed</name>
+  <value>12</value>
+  <description> </description>
+</property>
+<property>
+  <name>webdataScan.mediumJobs.numOfReduces</name>
+  <value>7</value>
+  <description></description>
+</property>
+
+<property>
+  <name>webdataScan.mediumJobs.numOfOutputCompressed</name>
+  <value>0</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>webdataScan.largeJobs.numOfJobs</name>
+  <value>2</value>
+  <description></description>
+</property>
+
+<property>
+  <name>webdataScan.largeJobs.inputFiles</name>
+  <value>${VARCOMPSEQ}</value>
+  <description></description>
+</property>
+<property>
+  <name>webdataScan.largeJobs.numOfMapoutputCompressed</name>
+  <value>3</value>
+  <description> </description>
+</property>
+<property>
+  <name>webdataScan.largeJobs.numOfReduces</name>
+  <value>70</value>
+  <description></description>
+</property>
+
+<property>
+  <name>webdataScan.largeJobs.numOfOutputCompressed</name>
+  <value>3</value>
+  <description> </description>
+</property>
+
+
+<property>
+  <name>webdataSort.smallJobs.numOfJobs</name>
+  <value>7</value>
+  <description></description>
+</property>
+<property>
+  <name>webdataSort.smallJobs.inputFiles</name>
+  <value>${VARCOMPSEQ}/{part-00000,part-00001,part-00002}</value>
+  <description></description>
+</property>
+<property>
+  <name>webdataSort.smallJobs.numOfReduces</name>
+  <value>15</value>
+  <description></description>
+</property>
+
+<property>
+  <name>webdataSort.smallJobs.numOfMapoutputCompressed</name>
+  <value>7</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>webdataSort.smallJobs.numOfOutputCompressed</name>
+  <value>7</value>
+  <description> </description>
+</property>
+
+
+<property>
+  <name>webdataSort.mediumJobs.numOfJobs</name>
+  <value>4</value>
+  <description></description>
+</property>
+<property>
+  <name>webdataSort.mediumJobs.inputFiles</name>
+  <value>${VARCOMPSEQ}/{part-000*0,part-000*1,part-000*2}</value>
+  <description></description>
+</property>
+<property>
+  <name>webdataSort.mediumJobs.numOfReduces</name>
+  <value>170</value>
+  <description></description>
+</property>
+
+<property>
+  <name>webdataSort.mediumJobs.numOfMapoutputCompressed</name>
+  <value>4</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>webdataSort.mediumJobs.numOfOutputCompressed</name>
+  <value>4</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>webdataSort.largeJobs.numOfJobs</name>
+  <value>1</value>
+  <description></description>
+</property>
+<property>
+  <name>webdataSort.largeJobs.inputFiles</name>
+  <value>${VARCOMPSEQ}</value>
+  <description></description>
+</property>
+<property>
+  <name>webdataSort.largeJobs.numOfReduces</name>
+  <value>800</value>
+  <description></description>
+</property>
+
+<property>
+  <name>webdataSort.largeJobs.numOfMapoutputCompressed</name>
+  <value>1</value>
+  <description> </description>
+</property>
+
+<property>
+  <name>webdataSort.largeJobs.numOfOutputCompressed</name>
+  <value>1</value>
+  <description> </description>
+</property>
+
+</configuration>

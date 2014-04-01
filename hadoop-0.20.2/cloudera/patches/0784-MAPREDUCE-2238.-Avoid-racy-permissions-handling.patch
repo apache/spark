@@ -1,0 +1,310 @@
+From 562be1407b9e3c2d8907daaa9500ac96364c9fa2 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 18 Jan 2011 10:12:08 -0800
+Subject: [PATCH 0784/1179] MAPREDUCE-2238. Avoid racy permissions handling
+
+Reason: leaving undeletable dirs in userlogs directory
+Author: Todd Lipcon
+---
+ .../org/apache/hadoop/mapred/TaskController.java   |   12 +-
+ .../org/apache/hadoop/mapred/TaskRunner.java       |    7 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    4 +-
+ .../mapreduce/server/tasktracker/Localizer.java    |  142 +++-----------------
+ 4 files changed, 30 insertions(+), 135 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskController.java b/src/mapred/org/apache/hadoop/mapred/TaskController.java
+index f65824d..9961d58 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskController.java
+@@ -26,9 +26,9 @@ import org.apache.hadoop.conf.Configurable;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.mapred.CleanupQueue.PathDeletionContext;
+ import org.apache.hadoop.mapred.JvmManager.JvmEnv;
+-import org.apache.hadoop.mapreduce.server.tasktracker.Localizer;
+ import org.apache.hadoop.util.DiskChecker;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.Shell.ShellCommandExecutor;
+@@ -75,6 +75,8 @@ public abstract class TaskController implements Configurable {
+    * </ul>
+    */
+   public void setup() throws IOException {
++    FileSystem localFs = FileSystem.getLocal(conf);
++
+     for (String localDir : this.mapredLocalDirs) {
+       // Set up the mapred-local directories.
+       File mapredlocalDir = new File(localDir);
+@@ -82,8 +84,8 @@ public abstract class TaskController implements Configurable {
+         LOG.warn("Unable to create mapred-local directory : "
+             + mapredlocalDir.getPath());
+       } else {
+-        Localizer.PermissionsHandler.setPermissions(mapredlocalDir,
+-            Localizer.PermissionsHandler.sevenFiveFive);
++        localFs.setPermission(new Path(mapredlocalDir.getCanonicalPath()),
++                              new FsPermission((short)0755));
+       }
+     }
+ 
+@@ -92,8 +94,8 @@ public abstract class TaskController implements Configurable {
+     if (!taskLog.isDirectory() && !taskLog.mkdirs()) {
+       LOG.warn("Unable to create taskLog directory : " + taskLog.getPath());
+     } else {
+-      Localizer.PermissionsHandler.setPermissions(taskLog,
+-          Localizer.PermissionsHandler.sevenFiveFive);
++      localFs.setPermission(new Path(taskLog.getCanonicalPath()),
++                            new FsPermission((short)0755));
+     }
+     DiskChecker.checkDir(TaskLog.getUserLogDir());
+   }
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index 4b1c25b..911d29f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -37,12 +37,12 @@ import org.apache.hadoop.filecache.DistributedCache;
+ import org.apache.hadoop.filecache.TaskDistributedCacheManager;
+ import org.apache.hadoop.filecache.TrackerDistributedCacheManager;
+ import org.apache.hadoop.mapreduce.security.TokenCache;
+-import org.apache.hadoop.mapreduce.server.tasktracker.Localizer;
+ import org.apache.hadoop.fs.FSError;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.LocalDirAllocator;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.util.Shell;
+ import org.apache.hadoop.util.StringUtils;
+@@ -282,8 +282,9 @@ abstract class TaskRunner extends Thread {
+     if (!b) {
+       LOG.warn("mkdirs failed. Ignoring");
+     } else {
+-      Localizer.PermissionsHandler.setPermissions(logDir,
+-          Localizer.PermissionsHandler.sevenZeroZero);
++      FileSystem localFs = FileSystem.getLocal(conf);
++      localFs.setPermission(new Path(logDir.getCanonicalPath()),
++                            new FsPermission((short)0700));
+     }
+ 
+     return logFiles;
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 673052d..2ae86a7 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -1113,7 +1113,7 @@ public class TaskTracker
+ 
+     FileOutputStream out;
+     try {
+-      out = SecureIOUtils.createForWrite(aclFile, 0600);
++      out = SecureIOUtils.createForWrite(aclFile, 0700);
+     } catch (SecureIOUtils.AlreadyExistsException aee) {
+       LOG.warn("Job ACL file already exists at " + aclFile, aee);
+       return;
+@@ -1124,8 +1124,6 @@ public class TaskTracker
+     } finally {
+       out.close();
+     }
+-    Localizer.PermissionsHandler.setPermissions(aclFile,
+-        Localizer.PermissionsHandler.sevenZeroZero);
+   }
+ 
+   /**
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/server/tasktracker/Localizer.java b/src/mapred/org/apache/hadoop/mapreduce/server/tasktracker/Localizer.java
+index d55e224..e0d078a 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/server/tasktracker/Localizer.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/server/tasktracker/Localizer.java
+@@ -28,6 +28,7 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.mapred.TaskController;
+ import org.apache.hadoop.mapred.TaskLog;
+ import org.apache.hadoop.mapred.TaskTracker;
+@@ -59,104 +60,6 @@ public class Localizer {
+     taskController = tc;
+   }
+ 
+-  /**
+-   * NOTE: This class is internal only class and not intended for users!!
+-   * 
+-   */
+-  public static class PermissionsHandler {
+-    /**
+-     * Permission information useful for setting permissions for a given path.
+-     * Using this, one can set all possible combinations of permissions for the
+-     * owner of the file. But permissions for the group and all others can only
+-     * be set together, i.e. permissions for group cannot be set different from
+-     * those for others and vice versa.
+-     */
+-    public static class PermissionsInfo {
+-      public boolean readPermissions;
+-      public boolean writePermissions;
+-      public boolean executablePermissions;
+-      public boolean readPermsOwnerOnly;
+-      public boolean writePermsOwnerOnly;
+-      public boolean executePermsOwnerOnly;
+-
+-      /**
+-       * Create a permissions-info object with the given attributes
+-       * 
+-       * @param readPerms
+-       * @param writePerms
+-       * @param executePerms
+-       * @param readOwnerOnly
+-       * @param writeOwnerOnly
+-       * @param executeOwnerOnly
+-       */
+-      public PermissionsInfo(boolean readPerms, boolean writePerms,
+-          boolean executePerms, boolean readOwnerOnly, boolean writeOwnerOnly,
+-          boolean executeOwnerOnly) {
+-        readPermissions = readPerms;
+-        writePermissions = writePerms;
+-        executablePermissions = executePerms;
+-        readPermsOwnerOnly = readOwnerOnly;
+-        writePermsOwnerOnly = writeOwnerOnly;
+-        executePermsOwnerOnly = executeOwnerOnly;
+-      }
+-    }
+-
+-    /**
+-     * Set permission on the given file path using the specified permissions
+-     * information. We use java api to set permission instead of spawning chmod
+-     * processes. This saves a lot of time. Using this, one can set all possible
+-     * combinations of permissions for the owner of the file. But permissions
+-     * for the group and all others can only be set together, i.e. permissions
+-     * for group cannot be set different from those for others and vice versa.
+-     * 
+-     * This method should satisfy the needs of most of the applications. For
+-     * those it doesn't, {@link FileUtil#chmod} can be used.
+-     * 
+-     * @param f file path
+-     * @param pInfo permissions information
+-     * @return true if success, false otherwise
+-     */
+-    public static boolean setPermissions(File f, PermissionsInfo pInfo) {
+-      if (pInfo == null) {
+-        LOG.debug(" PermissionsInfo is null, returning.");
+-        return true;
+-      }
+-
+-      LOG.debug("Setting permission for " + f.getAbsolutePath());
+-
+-      boolean ret = true;
+-
+-      // Clear all the flags
+-      ret = f.setReadable(false, false) && ret;
+-      ret = f.setWritable(false, false) && ret;
+-      ret = f.setExecutable(false, false) && ret;
+-
+-      ret = f.setReadable(pInfo.readPermissions, pInfo.readPermsOwnerOnly);
+-      LOG.debug("Readable status for " + f + " set to " + ret);
+-      ret =
+-          f.setWritable(pInfo.writePermissions, pInfo.writePermsOwnerOnly)
+-              && ret;
+-      LOG.debug("Writable status for " + f + " set to " + ret);
+-      ret =
+-          f.setExecutable(pInfo.executablePermissions,
+-              pInfo.executePermsOwnerOnly)
+-              && ret;
+-
+-      LOG.debug("Executable status for " + f + " set to " + ret);
+-      return ret;
+-    }
+-
+-    /**
+-     * Permissions rwxr_xr_x
+-     */
+-    public static final PermissionsInfo sevenFiveFive =
+-        new PermissionsInfo(true, true, true, false, true, false);
+-    /**
+-     * Completely private permissions
+-     */
+-    public static final PermissionsInfo sevenZeroZero =
+-        new PermissionsInfo(true, true, true, true, true, true);
+-  }
+ 
+   // Data-structure for synchronizing localization of user directories.
+   private Map<String, AtomicBoolean> localizedUsers =
+@@ -214,35 +117,31 @@ public class Localizer {
+         if (fs.exists(userDir) || fs.mkdirs(userDir)) {
+ 
+           // Set permissions on the user-directory
+-          PermissionsHandler.setPermissions(
+-              new File(userDir.toUri().getPath()),
+-              PermissionsHandler.sevenZeroZero);
++          fs.setPermission(userDir, new FsPermission((short)0700));
+           userDirStatus = true;
+ 
+           // Set up the jobcache directory
+-          File jobCacheDir =
+-              new File(localDir, TaskTracker.getJobCacheSubdir(user));
+-          if (jobCacheDir.exists() || jobCacheDir.mkdirs()) {
++          Path jobCacheDir =
++              new Path(localDir, TaskTracker.getJobCacheSubdir(user));
++          if (fs.exists(jobCacheDir) || fs.mkdirs(jobCacheDir)) {
+             // Set permissions on the jobcache-directory
+-            PermissionsHandler.setPermissions(jobCacheDir,
+-                PermissionsHandler.sevenZeroZero);
++            fs.setPermission(jobCacheDir, new FsPermission((short)0700));
+             jobCacheDirStatus = true;
+           } else {
+             LOG.warn("Unable to create job cache directory : "
+-                + jobCacheDir.getPath());
++                + jobCacheDir);
+           }
+ 
+           // Set up the cache directory used for distributed cache files
+-          File distributedCacheDir =
+-              new File(localDir, TaskTracker.getPrivateDistributedCacheDir(user));
+-          if (distributedCacheDir.exists() || distributedCacheDir.mkdirs()) {
++          Path distributedCacheDir =
++              new Path(localDir, TaskTracker.getPrivateDistributedCacheDir(user));
++          if (fs.exists(distributedCacheDir) || fs.mkdirs(distributedCacheDir)) {
+             // Set permissions on the distcache-directory
+-            PermissionsHandler.setPermissions(distributedCacheDir,
+-                PermissionsHandler.sevenZeroZero);
++            fs.setPermission(distributedCacheDir, new FsPermission((short)0700));
+             distributedCacheDirStatus = true;
+           } else {
+             LOG.warn("Unable to create distributed-cache directory : "
+-                + distributedCacheDir.getPath());
++                + distributedCacheDir);
+           }
+         } else {
+           LOG.warn("Unable to create the user directory : " + userDir);
+@@ -311,8 +210,7 @@ public class Localizer {
+       initJobDirStatus = initJobDirStatus || jobDirStatus;
+ 
+       // job-dir has to be private to the TT
+-      Localizer.PermissionsHandler.setPermissions(new File(jobDir.toUri()
+-          .getPath()), Localizer.PermissionsHandler.sevenZeroZero);
++      fs.setPermission(jobDir, new FsPermission((short)0700));
+     }
+ 
+     if (!initJobDirStatus) {
+@@ -366,15 +264,11 @@ public class Localizer {
+    * @param jobId
+    */
+   public void initializeJobLogDir(JobID jobId) throws IOException {
+-    File jobUserLogDir = TaskLog.getJobDir(jobId);
+-    if (!jobUserLogDir.exists()) {
+-      boolean ret = jobUserLogDir.mkdirs();
+-      if (!ret) {
+-        throw new IOException("Could not create job user log directory: " +
+-            jobUserLogDir);
+-      }
++    Path jobUserLogDir = new Path(TaskLog.getJobDir(jobId).getCanonicalPath());
++    if (!fs.mkdirs(jobUserLogDir)) {
++      throw new IOException("Could not create job user log directory: " +
++                            jobUserLogDir);
+     }
+-    Localizer.PermissionsHandler.setPermissions(jobUserLogDir,
+-        Localizer.PermissionsHandler.sevenZeroZero);
++    fs.setPermission(jobUserLogDir, new FsPermission((short)0700));
+   }
+ }
+-- 
+1.7.0.4
+

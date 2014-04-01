@@ -1,0 +1,342 @@
+From 349cd124819f31d29c0a6dad7f21ad595e7ab788 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Wed, 3 Aug 2011 13:32:41 -0700
+Subject: [PATCH 1029/1179] HDFS-1340. A null delegation token is appended to the url if security
+ is disabled when browsing filesystem.
+
+Reason: Bug
+Author: Jitendra Pandey
+Ref: CDH-3304
+---
+ .../hadoop/hdfsproxy/ProxyFileDataServlet.java     |    3 +-
+ .../org/apache/hadoop/hdfs/HftpFileSystem.java     |    2 +-
+ .../hadoop/hdfs/server/namenode/DfsServlet.java    |    2 +-
+ .../hdfs/server/namenode/FileDataServlet.java      |    3 +-
+ .../hadoop/hdfs/server/namenode/JspHelper.java     |   31 +++++-
+ .../hadoop/hdfs/server/namenode/TestJspHelper.java |  111 ++++++++++++++++++++
+ src/webapps/datanode/browseBlock.jsp               |    6 +-
+ src/webapps/datanode/browseDirectory.jsp           |    8 +-
+ src/webapps/hdfs/nn_browsedfscontent.jsp           |    2 +-
+ 9 files changed, 148 insertions(+), 20 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/namenode/TestJspHelper.java
+
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
+index 13f7ebf..330d599 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
+@@ -45,8 +45,7 @@ public class ProxyFileDataServlet extends FileDataServlet {
+     
+     String dtParam="";
+     if (dt != null) {
+-      StringBuilder sb = new StringBuilder(JspHelper.SET_DELEGATION).append(dt);
+-      dtParam=sb.toString();
++      dtParam=JspHelper.getDelegationTokenUrlParam(dt);
+     }
+     
+     return new URI(request.getScheme(), null, request.getServerName(), request
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+index 42d17e3..b23bf32 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+@@ -280,7 +280,7 @@ public class HftpFileSystem extends FileSystem {
+       synchronized (this) {
+         if (delegationToken != null) {
+           tokenString = delegationToken.encodeToUrlString();
+-          return (query + JspHelper.SET_DELEGATION + tokenString);
++          return (query + JspHelper.getDelegationTokenUrlParam(tokenString));
+         } // else we are talking to an insecure cluster
+       }
+     }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
+index 050f739..d240d0b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
+@@ -105,7 +105,7 @@ abstract class DfsServlet extends HttpServlet {
+     final String filename = request.getPathInfo();
+     String dt="";
+     if(tokenString!=null) {
+-      dt = JspHelper.SET_DELEGATION + tokenString;
++      dt = JspHelper.getDelegationTokenUrlParam(tokenString);
+     }
+     return new URI(scheme, null, hostname, port, servletpath,
+         "filename=" + filename + "&ugi=" + ugi.getShortUserName() + dt, null);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+index bf95f60..92d134a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+@@ -54,8 +54,7 @@ public class FileDataServlet extends DfsServlet {
+     
+     String dtParam="";
+     if (dt != null) {
+-      StringBuilder sb = new StringBuilder(JspHelper.SET_DELEGATION).append(dt);
+-      dtParam=sb.toString();
++      dtParam = JspHelper.getDelegationTokenUrlParam(dt);
+     }
+     
+     return new URI(scheme, null, hostname,
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+index d3db4bb..413ee37 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+@@ -64,7 +64,7 @@ public class JspHelper {
+   public static final String CURRENT_CONF = "current.conf";
+   final static public String WEB_UGI_PROPERTY_NAME = "dfs.web.ugi";
+   public static final String DELEGATION_PARAMETER_NAME = "delegation";
+-  public static final String SET_DELEGATION = "&" + DELEGATION_PARAMETER_NAME +
++  static final String SET_DELEGATION = "&" + DELEGATION_PARAMETER_NAME +
+                                               "=";
+   private static final Log LOG = LogFactory.getLog(JspHelper.class);
+ 
+@@ -352,15 +352,16 @@ public class JspHelper {
+       String[] parts = dir.split(Path.SEPARATOR);
+       StringBuilder tempPath = new StringBuilder(dir.length());
+       out.print("<a href=\"browseDirectory.jsp" + "?dir="+ Path.SEPARATOR
+-          + "&namenodeInfoPort=" + namenodeInfoPort + SET_DELEGATION
+-          + tokenString + "\">" + Path.SEPARATOR + "</a>");
++          + "&namenodeInfoPort=" + namenodeInfoPort
++          + getDelegationTokenUrlParam(tokenString) + "\">" + Path.SEPARATOR
++          + "</a>");
+       tempPath.append(Path.SEPARATOR);
+       for (int i = 0; i < parts.length-1; i++) {
+         if (!parts[i].equals("")) {
+           tempPath.append(parts[i]);
+           out.print("<a href=\"browseDirectory.jsp" + "?dir="
+               + tempPath.toString() + "&namenodeInfoPort=" + namenodeInfoPort
+-              + SET_DELEGATION + tokenString);
++              + getDelegationTokenUrlParam(tokenString));
+           out.print("\">" + parts[i] + "</a>" + Path.SEPARATOR);
+           tempPath.append(Path.SEPARATOR);
+         }
+@@ -384,8 +385,10 @@ public class JspHelper {
+     out.print("<input name=\"go\" type=\"submit\" value=\"go\">");
+     out.print("<input name=\"namenodeInfoPort\" type=\"hidden\" "
+         + "value=\"" + namenodeInfoPort  + "\">");
+-    out.print("<input name=\"" + DELEGATION_PARAMETER_NAME +
+-              "\" type=\"hidden\" value=\"" + tokenString + "\">");
++    if (UserGroupInformation.isSecurityEnabled()) {
++      out.print("<input name=\"" + DELEGATION_PARAMETER_NAME
++          + "\" type=\"hidden\" value=\"" + tokenString + "\">");
++    }
+     out.print("</form>");
+   }
+   
+@@ -484,6 +487,22 @@ public class JspHelper {
+         }
+       });
+   }
++  
++  /**
++   * Returns the url parameter for the given token string.
++   * @param tokenString
++   * @return url parameter
++   */
++  public static String getDelegationTokenUrlParam(String tokenString) {
++    if (tokenString == null ) {
++      return "";
++    }
++    if (UserGroupInformation.isSecurityEnabled()) {
++      return SET_DELEGATION + tokenString;
++    } else {
++      return "";
++    }
++  }
+ 
+    /** Convert a String to chunk-size-to-view. */
+    public static int string2ChunkSizeToView(String s, int defaultValue) {
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestJspHelper.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestJspHelper.java
+new file mode 100644
+index 0000000..b87b7fc
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestJspHelper.java
+@@ -0,0 +1,111 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++
++import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.when;
++
++import java.io.IOException;
++import java.net.InetSocketAddress;
++
++import javax.servlet.http.HttpServletRequest;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
++import org.apache.hadoop.hdfs.server.namenode.NameNode;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenIdentifier;
++import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenSecretManager;
++import org.junit.Assert;
++import org.junit.Test;
++
++public class TestJspHelper {
++
++  private Configuration conf = new Configuration();
++
++  public static class DummySecretManager extends
++      AbstractDelegationTokenSecretManager<DelegationTokenIdentifier> {
++
++    public DummySecretManager(long delegationKeyUpdateInterval,
++        long delegationTokenMaxLifetime, long delegationTokenRenewInterval,
++        long delegationTokenRemoverScanInterval) {
++      super(delegationKeyUpdateInterval, delegationTokenMaxLifetime,
++          delegationTokenRenewInterval, delegationTokenRemoverScanInterval);
++    }
++
++    @Override
++    public DelegationTokenIdentifier createIdentifier() {
++      return null;
++    }
++
++    @Override
++    public byte[] createPassword(DelegationTokenIdentifier dtId) {
++      return new byte[1];
++    }
++  }
++
++  @Test
++  public void testGetUgi() throws IOException {
++    conf.set(DFSConfigKeys.FS_DEFAULT_NAME_KEY, "hdfs://localhost:4321/");
++    HttpServletRequest request = mock(HttpServletRequest.class);
++    String user = "TheDoctor";
++    Text userText = new Text(user);
++    DelegationTokenIdentifier dtId = new DelegationTokenIdentifier(userText,
++        userText, null);
++    Token<DelegationTokenIdentifier> token = new Token<DelegationTokenIdentifier>(
++        dtId, new DummySecretManager(0, 0, 0, 0));
++    String tokenString = token.encodeToUrlString();
++    when(request.getParameter(JspHelper.DELEGATION_PARAMETER_NAME)).thenReturn(
++        tokenString);
++    when(request.getRemoteUser()).thenReturn(user);
++
++    conf.set(DFSConfigKeys.HADOOP_SECURITY_AUTHENTICATION, "kerberos");
++    UserGroupInformation.setConfiguration(conf);
++
++    InetSocketAddress serviceAddr = NameNode.getAddress(conf);
++    Text tokenService = new Text(serviceAddr.getAddress().getHostAddress()
++        + ":" + serviceAddr.getPort());
++
++    UserGroupInformation ugi = JspHelper.getUGI(request, conf);
++    Token<? extends TokenIdentifier> tokenInUgi = ugi.getTokens().iterator()
++        .next();
++    Assert.assertEquals(tokenInUgi.getService(), tokenService);
++  }
++  
++  @Test
++  public void testDelegationTokenUrlParam() {
++    conf.set(DFSConfigKeys.HADOOP_SECURITY_AUTHENTICATION, "kerberos");
++    UserGroupInformation.setConfiguration(conf);
++    String tokenString = "xyzabc";
++    String delegationTokenParam = JspHelper
++        .getDelegationTokenUrlParam(tokenString);
++    //Security is enabled
++    Assert.assertEquals(JspHelper.SET_DELEGATION + "xyzabc",
++        delegationTokenParam);
++    conf.set(DFSConfigKeys.HADOOP_SECURITY_AUTHENTICATION, "simple");
++    UserGroupInformation.setConfiguration(conf);
++    delegationTokenParam = JspHelper
++        .getDelegationTokenUrlParam(tokenString);
++    //Empty string must be returned because security is disabled.
++    Assert.assertEquals("", delegationTokenParam);
++  }
++
++}
+diff --git a/src/webapps/datanode/browseBlock.jsp b/src/webapps/datanode/browseBlock.jsp
+index 8c0b150..4ec2b2e 100644
+--- a/src/webapps/datanode/browseBlock.jsp
++++ b/src/webapps/datanode/browseBlock.jsp
+@@ -115,7 +115,7 @@
+                  "&referrer=" + 
+           URLEncoder.encode(req.getRequestURL() + "?" + req.getQueryString(),
+                             "UTF-8") +
+-                 JspHelper.SET_DELEGATION + tokenString;
++                 JspHelper.getDelegationTokenUrlParam(tokenString);
+     out.print("<a href=\"" + tailUrl + "\">Tail this file</a><br>");
+ 
+     out.print("<form action=\"/browseBlock.jsp\" method=GET>");
+@@ -329,7 +329,7 @@
+                 "&chunkSizeToView=" + chunkSizeToView + 
+                 "&datanodePort=" + nextDatanodePort +
+                 "&namenodeInfoPort=" + namenodeInfoPort +
+-                JspHelper.SET_DELEGATION + tokenString;
++                JspHelper.getDelegationTokenUrlParam(tokenString);
+       out.print("<a href=\"" + nextUrl + "\">View Next chunk</a>&nbsp;&nbsp;");        
+     }
+     //determine data for the prev link
+@@ -386,7 +386,7 @@
+                 "&genstamp=" + prevGenStamp +
+                 "&datanodePort=" + prevDatanodePort +
+                 "&namenodeInfoPort=" + namenodeInfoPort +
+-                JspHelper.SET_DELEGATION + tokenString;
++                JspHelper.getDelegationTokenUrlParam(tokenString);
+       out.print("<a href=\"" + prevUrl + "\">View Prev chunk</a>&nbsp;&nbsp;");
+     }
+     out.print("<hr>");
+diff --git a/src/webapps/datanode/browseDirectory.jsp b/src/webapps/datanode/browseDirectory.jsp
+index 84340dc..c02970c 100644
+--- a/src/webapps/datanode/browseDirectory.jsp
++++ b/src/webapps/datanode/browseDirectory.jsp
+@@ -79,7 +79,7 @@
+             "&filename=" + URLEncoder.encode(dir, "UTF-8") + 
+             "&datanodePort="
+             + datanodePort + "&namenodeInfoPort=" + namenodeInfoPort
+-            + JspHelper.SET_DELEGATION + tokenString;
++            + JspHelper.getDelegationTokenUrlParam(tokenString);
+           resp.sendRedirect(redirectLocation);
+         }
+         return;
+@@ -100,7 +100,7 @@
+       if ((parent = f.getParent()) != null)
+         out.print("<a href=\"" + req.getRequestURL() + "?dir=" + parent +
+                   "&namenodeInfoPort=" + namenodeInfoPort +
+-                  JspHelper.SET_DELEGATION + tokenString +
++                  JspHelper.getDelegationTokenUrlParam(tokenString) +
+                   "\">Go to parent directory</a><br>");
+ 
+       DirectoryListing thisListing = dfs.listPaths(target, HdfsFileStatus.EMPTY_NAME);
+@@ -133,8 +133,8 @@
+             }
+             String datanodeUrl = req.getRequestURL()+"?dir="+
+               URLEncoder.encode(files[i].getFullName(target), "UTF-8") + 
+-              "&namenodeInfoPort=" + namenodeInfoPort + JspHelper.SET_DELEGATION + 
+-              tokenString;
++              "&namenodeInfoPort=" + namenodeInfoPort + 
++              JspHelper.getDelegationTokenUrlParam(tokenString);
+             cols[0] = "<a href=\""+datanodeUrl+"\">"+localname+"</a>";
+             cols[5] = FsShell.dateForm.format(new Date((files[i].getModificationTime())));
+             cols[6] = files[i].getPermission().toString();
+diff --git a/src/webapps/hdfs/nn_browsedfscontent.jsp b/src/webapps/hdfs/nn_browsedfscontent.jsp
+index d788cd8..e37e549 100644
+--- a/src/webapps/hdfs/nn_browsedfscontent.jsp
++++ b/src/webapps/hdfs/nn_browsedfscontent.jsp
+@@ -65,7 +65,7 @@
+                        nn.getHttpAddress().getPort() +
+                        "&dir=/" + 
+                        (tokenString == null ? "" :
+-                        JspHelper.SET_DELEGATION + tokenString);
++                        JspHelper.getDelegationTokenUrlParam(tokenString));
+     resp.sendRedirect(redirectLocation);
+   }
+ %>
+-- 
+1.7.0.4
+

@@ -1,0 +1,32 @@
+From 0f0f7b996033179d70f3750b3d1d0ff4a1b1aef3 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Wed, 5 Jan 2011 11:32:26 -0800
+Subject: [PATCH 0767/1179] CLOUDERA-BUILD. Fix documentation urls that use "current".
+
+Reason: Bug
+Author: Eli Collins
+Ref: CDH-2405
+---
+ src/docs/src/documentation/content/xdocs/site.xml |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/docs/src/documentation/content/xdocs/site.xml b/src/docs/src/documentation/content/xdocs/site.xml
+index 2e4e613..1c4f1c2 100644
+--- a/src/docs/src/documentation/content/xdocs/site.xml
++++ b/src/docs/src/documentation/content/xdocs/site.xml
+@@ -87,9 +87,9 @@ See http://forrest.apache.org/docs/linking.html for more info.
+     <wiki      href="http://wiki.apache.org/hadoop/" />
+     <faq       href="http://wiki.apache.org/hadoop/FAQ" />
+     <hadoop-default href="http://hadoop.apache.org/core/docs/current/hadoop-default.html" />
+-    <core-default href="http://hadoop.apache.org/core/docs/current/core-default.html" />
+-    <hdfs-default href="http://hadoop.apache.org/core/docs/current/hdfs-default.html" />
+-    <mapred-default href="http://hadoop.apache.org/core/docs/current/mapred-default.html" />
++    <core-default href="http://hadoop.apache.org/core/docs/r0.20.2/core-default.html" />
++    <hdfs-default href="http://hadoop.apache.org/core/docs/r0.20.2/hdfs-default.html" />
++    <mapred-default href="http://hadoop.apache.org/core/docs/r0.20.2/mapred-default.html" />
+     <zlib      href="http://www.zlib.net/" />
+     <gzip      href="http://www.gzip.org/" />
+     <bzip      href="http://www.bzip.org/" />
+-- 
+1.7.0.4
+

@@ -1,0 +1,105 @@
+From 4f96064bf4bb838ce0c6d4e99152a02ad9737032 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 5 Feb 2010 15:03:57 -0800
+Subject: [PATCH 0456/1179] HADOOP-6521. FsPermission:SetUMask not updated to use new-style umask setting.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12434469/hadoop-6521.rel20.1.patch
+Author: Suresh Srinivas
+Ref: YDH
+---
+ .../apache/hadoop/fs/permission/FsPermission.java  |   26 ++++++++--------
+ .../org/apache/hadoop/security/TestPermission.java |   33 ++++++++++++++++++++
+ 2 files changed, 46 insertions(+), 13 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/permission/FsPermission.java b/src/core/org/apache/hadoop/fs/permission/FsPermission.java
+index fdb2616..bac25ec 100644
+--- a/src/core/org/apache/hadoop/fs/permission/FsPermission.java
++++ b/src/core/org/apache/hadoop/fs/permission/FsPermission.java
+@@ -168,19 +168,19 @@ public class FsPermission implements Writable {
+   public static FsPermission getUMask(Configuration conf) {
+     int umask = DEFAULT_UMASK;
+     
+-    // Attempt to pull value from configuration, trying new key first and then
+-    // deprecated key, along with a warning, if not present
++    // To ensure backward compatibility first use the deprecated key.
++    // If the deprecated key is not present then check for the new key
+     if(conf != null) {
+-      String confUmask = conf.get(UMASK_LABEL);
+-      if(confUmask != null) { // UMASK_LABEL is set
+-        umask = new UmaskParser(confUmask).getUMask();
+-      } else { // check for deprecated key label
+-        int oldStyleValue = conf.getInt(DEPRECATED_UMASK_LABEL, Integer.MIN_VALUE);
+-        if(oldStyleValue != Integer.MIN_VALUE) { // Property was set with old key
+-          LOG.warn(DEPRECATED_UMASK_LABEL + " configuration key is deprecated. " +
+-              "Convert to " + UMASK_LABEL + ", using octal or symbolic umask " +
+-              "specifications.");
+-          umask = oldStyleValue;
++      int oldStyleValue = conf.getInt(DEPRECATED_UMASK_LABEL, Integer.MIN_VALUE);
++      if(oldStyleValue != Integer.MIN_VALUE) { // Property was set with old key
++        LOG.warn(DEPRECATED_UMASK_LABEL + " configuration key is deprecated. " +
++            "Convert to " + UMASK_LABEL + ", using octal or symbolic umask " +
++            "specifications.");
++        umask = oldStyleValue;
++      } else {
++        String confUmask = conf.get(UMASK_LABEL);
++        if(confUmask != null) { // UMASK_LABEL is set
++          umask = new UmaskParser(confUmask).getUMask();
+         }
+       }
+     }
+@@ -189,7 +189,7 @@ public class FsPermission implements Writable {
+   }
+   /** Set the user file creation mask (umask) */
+   public static void setUMask(Configuration conf, FsPermission umask) {
+-    conf.setInt(UMASK_LABEL, umask.toShort());
++    conf.set(UMASK_LABEL, String.format("%1$03o", umask.toShort()));
+   }
+ 
+   /** Get the default permission. */
+diff --git a/src/test/org/apache/hadoop/security/TestPermission.java b/src/test/org/apache/hadoop/security/TestPermission.java
+index 1d99c5e..0787e9d 100644
+--- a/src/test/org/apache/hadoop/security/TestPermission.java
++++ b/src/test/org/apache/hadoop/security/TestPermission.java
+@@ -58,6 +58,39 @@ public class TestPermission extends TestCase {
+     return s.getPermission();
+   }
+ 
++  /**
++   * Tests backward compatibility. Configuration can be
++   * either set with old param dfs.umask that takes decimal umasks
++   * or dfs.umaskmode that takes symbolic or octal umask.
++   */
++  public void testBackwardCompatibility() {
++    // Test 1 - old configuration key with decimal 
++    // umask value should be handled when set using 
++    // FSPermission.setUMask() API
++    FsPermission perm = new FsPermission((short)18);
++    Configuration conf = new Configuration();
++    FsPermission.setUMask(conf, perm);
++    assertEquals(18, FsPermission.getUMask(conf).toShort());
++    
++    // Test 2 - old configuration key set with decimal 
++    // umask value should be handled
++    perm = new FsPermission((short)18);
++    conf = new Configuration();
++    conf.set(FsPermission.DEPRECATED_UMASK_LABEL, "18");
++    assertEquals(18, FsPermission.getUMask(conf).toShort());
++    
++    // Test 3 - old configuration key overrides the new one
++    conf = new Configuration();
++    conf.set(FsPermission.DEPRECATED_UMASK_LABEL, "18");
++    conf.set(FsPermission.UMASK_LABEL, "000");
++    assertEquals(18, FsPermission.getUMask(conf).toShort());
++    
++    // Test 4 - new configuration key is handled
++    conf = new Configuration();
++    conf.set(FsPermission.UMASK_LABEL, "022");
++    assertEquals(18, FsPermission.getUMask(conf).toShort());
++  }
++  
+   public void testCreate() throws Exception {
+     Configuration conf = new Configuration();
+     conf.setBoolean("dfs.permissions", true);
+-- 
+1.7.0.4
+

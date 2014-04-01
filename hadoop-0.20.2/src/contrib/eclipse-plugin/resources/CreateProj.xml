@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cheatsheet title="MapReduce project creation tutorial">
+	<intro>
+		<description>
+			This tutorial guides you through the creation of a simple
+			MapReduce project with three MapReduce classes: a Mapper, a
+			Reducer, and a Driver.
+		</description>
+	</intro>
+	<item title="Open the MapReduce Perspective">
+		<action pluginId="org.eclipse.ui.cheatsheets"
+			class="org.eclipse.ui.internal.cheatsheets.actions.OpenPerspective"
+			param1="org.apache.hadoop.eclipse.Perspective" />
+		<description>
+			Select <b>Window->Open Perspective->MapReduce</b> in the menubar at
+			the top of the workbench. This step changes the perspective
+			to set up the Eclipse workbench for MapReduce development.
+		</description>
+	</item>
+	<item title="Create a MapReduce project" skip="true">
+		<action pluginId="com.ibm.hipods.mapreduce"
+			class="org.apache.hadoop.eclipse.actions.OpenNewMRProjectAction" />
+		<description>
+			The first thing you will need is a MapReduce Project. If you
+			already have a MapReduce project in your workspace that you
+			would like to use, you may skip this step by clicking the
+			"Click to Skip" button. If not, select <b>File->New->Project</b>
+			and choose MapReduce Project in the list. Complete the
+			subsequent pages as required.
+		</description>
+	</item>
+	<item title="Create a MapReduce package" skip="true">
+		<action pluginId="org.eclipse.jdt.ui"
+			class="org.eclipse.jdt.ui.actions.OpenNewPackageWizardAction" />
+		<description>
+			You should now have a MapReduce project in your workspace.
+			The next thing to do is creating a package. Use the Eclipse
+			tools by selecting <b>File -> New ->Package</b> action. Specify the
+			source folder (the project containing the package). Then,
+			give the package a name, such as "mapreduce.test", and click
+			the "Finish" button. If you already have a project with a
+			package you might as well skip this step.
+		</description>
+	</item>
+	<item title="Create the MapReduce application classes" skip="true">
+		<description>
+			Now you should be set up for creating your MapReduce
+			application.  The MapReduce application consists of three
+			classes: a Mapper class, a Reducer class and a Driver class.
+			In this step you will create the three classes.  Use the
+			class wizard by selecting <b>File -> New -> Class</b>.  
+			Repeat this for	every class.
+		</description>
+		<repeated-subitem values="Mapper,Reducer,Driver">
+			<subitem label="Create the class ${this}.">
+				<action pluginId="com.ibm.hipods.mapreduce"
+					class="org.apache.hadoop.eclipse.actions.OpenNewMRClassWizardAction"
+					param1="${this}" />
+			</subitem>
+		</repeated-subitem>
+	</item>
+</cheatsheet>

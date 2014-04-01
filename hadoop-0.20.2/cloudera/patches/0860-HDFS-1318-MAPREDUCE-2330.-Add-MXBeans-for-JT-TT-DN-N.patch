@@ -1,0 +1,1368 @@
+From a2b4149afd53d59fd9a279117c6917e4c83583a3 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 10 Feb 2011 19:40:24 -0800
+Subject: [PATCH 0860/1179] HDFS-1318, MAPREDUCE-2330. Add MXBeans for JT, TT, DN, NN
+
+Author: Tanping Wang, Luke Lu
+Ref: CDH-2622
+---
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   82 +++++++++++-
+ .../hdfs/server/datanode/DataNodeMXBean.java       |   66 +++++++++
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |   47 ++++++
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |  150 +++++++++++++++++++-
+ .../hadoop/hdfs/server/namenode/NameNode.java      |    1 -
+ .../hdfs/server/namenode/NameNodeMXBean.java       |  138 ++++++++++++++++++
+ src/mapred/org/apache/hadoop/mapred/InfoMap.java   |   31 ++++
+ .../org/apache/hadoop/mapred/JobTracker.java       |  116 +++++++++++++++-
+ .../org/apache/hadoop/mapred/JobTrackerMXBean.java |   66 +++++++++
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   75 ++++++++++-
+ .../apache/hadoop/mapred/TaskTrackerMXBean.java    |   66 +++++++++
+ .../hdfs/server/datanode/TestDataNodeMXBean.java   |   71 +++++++++
+ .../hdfs/server/namenode/TestEditLogRace.java      |    1 +
+ .../hdfs/server/namenode/TestNameNodeMXBean.java   |   90 ++++++++++++
+ 14 files changed, 992 insertions(+), 8 deletions(-)
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNodeMXBean.java
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeMXBean.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapred/InfoMap.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapred/JobTrackerMXBean.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapred/TaskTrackerMXBean.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeMXBean.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeMXBean.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 18e95e3..8b4964b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -35,6 +35,7 @@ import java.security.SecureRandom;
+ import java.util.AbstractList;
+ import java.util.ArrayList;
+ import java.util.Arrays;
++import java.util.Collection;
+ import java.util.EnumSet;
+ import java.util.HashMap;
+ import java.util.LinkedList;
+@@ -44,6 +45,8 @@ import java.util.Random;
+ import java.util.Set;
+ import java.util.concurrent.atomic.AtomicInteger;
+ 
++import javax.management.ObjectName;
++
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+@@ -53,6 +56,7 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.LocalFileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.metrics.util.MBeanUtil;
+ import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.hdfs.HDFSPolicyProvider;
+ import org.apache.hadoop.hdfs.protocol.Block;
+@@ -72,6 +76,7 @@ import org.apache.hadoop.hdfs.server.common.HdfsConstants;
+ import org.apache.hadoop.hdfs.server.common.IncorrectVersionException;
+ import org.apache.hadoop.hdfs.server.common.Storage;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants.StartupOption;
++import org.apache.hadoop.hdfs.server.datanode.FSDataset.VolumeInfo;
+ import org.apache.hadoop.hdfs.server.datanode.SecureDataNodeStarter.SecureResources;
+ import org.apache.hadoop.hdfs.server.datanode.metrics.DataNodeMetrics;
+ import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+@@ -111,6 +116,8 @@ import org.apache.hadoop.util.SingleArgumentRunnable;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.DiskChecker.DiskErrorException;
+ import org.apache.hadoop.util.DiskChecker.DiskOutOfSpaceException;
++import org.apache.hadoop.util.VersionInfo;
++import org.mortbay.util.ajax.JSON;
+ 
+ /**********************************************************
+  * DataNode is a class (and program) that stores a set of
+@@ -144,7 +151,8 @@ import org.apache.hadoop.util.DiskChecker.DiskOutOfSpaceException;
+  *
+  **********************************************************/
+ public class DataNode extends Configured 
+-    implements InterDatanodeProtocol, ClientDatanodeProtocol, FSConstants, Runnable {
++    implements InterDatanodeProtocol, ClientDatanodeProtocol, FSConstants, 
++    Runnable, DataNodeMXBean {
+   public static final Log LOG = LogFactory.getLog(DataNode.class);
+   
+   static{
+@@ -286,6 +294,9 @@ public class DataNode extends Configured
+    * 
+    * @param dataDirs - only for a non-simulated storage data node
+    * @throws IOException
++   * @throws MalformedObjectNameException 
++   * @throws MBeanRegistrationException 
++   * @throws InstanceAlreadyExistsException 
+    */
+   void startDataNode(Configuration conf, 
+                      AbstractList<File> dataDirs, SecureResources resources
+@@ -364,6 +375,9 @@ public class DataNode extends Configured
+     artificialBlockReceivedDelay = conf.getInt(
+       "dfs.datanode.artificialBlockReceivedDelay", 0);
+ 
++    // register datanode MXBean
++    this.registerMXBean(conf); // register the MXBean for DataNode
++
+     // find free port or use privileged port provide
+     ServerSocket ss;
+     if(secureResources == null) {
+@@ -469,6 +483,23 @@ public class DataNode extends Configured
+     pluginDispatcher.dispatchStart(this);
+   }
+ 
++  private ObjectName mxBean = null;
++  /**
++   * Register the DataNode MXBean using the name
++   *        "hadoop:service=DataNode,name=DataNodeInfo"
++   */
++  void registerMXBean(Configuration conf) {
++    // We wrap to bypass standard mbean naming convention.
++    // This wraping can be removed in java 6 as it is more flexible in 
++    // package naming for mbeans and their impl.
++    mxBean = MBeanUtil.registerMBean("DataNode", "DataNodeInfo", this);
++  }
++  
++  public void unRegisterMXBean() {
++    if (mxBean != null)
++      MBeanUtil.unregisterMBean(mxBean);
++  }
++
+   /**
+    * Determine the http server's effective addr
+    */
+@@ -681,6 +712,8 @@ public class DataNode extends Configured
+    * Otherwise, deadlock might occur.
+    */
+   public void shutdown() {
++    this.unRegisterMXBean();
++
+     if (pluginDispatcher != null) {
+       pluginDispatcher.dispatchStop();
+     }
+@@ -1915,4 +1948,51 @@ public class DataNode extends Configured
+                                 "dfs.datanode.address");
+     return NetUtils.createSocketAddr(address);
+   }
++
++  
++  @Override // DataNodeMXBean
++  public String getHostName() {
++    return this.machineName;
++  }
++  
++  @Override // DataNodeMXBean
++  public String getVersion() {
++    return VersionInfo.getVersion();
++  }
++  
++  @Override // DataNodeMXBean
++  public String getRpcPort(){
++    InetSocketAddress ipcAddr = NetUtils.createSocketAddr(
++        this.getConf().get("dfs.datanode.ipc.address"));
++    return Integer.toString(ipcAddr.getPort());
++  }
++
++  @Override // DataNodeMXBean
++  public String getHttpPort(){
++    return this.getConf().get("dfs.datanode.info.port");
++  }
++
++  @Override // DataNodeMXBean
++  public String getNamenodeAddress(){
++    return nameNodeAddr.getHostName();
++  }
++
++  /**
++   * Returned information is a JSON representation of a map with 
++   * volume name as the key and value is a map of volume attribute 
++   * keys to its values
++   */
++  @Override // DataNodeMXBean
++  public String getVolumeInfo() {
++    final Map<String, Object> info = new HashMap<String, Object>();
++    Collection<VolumeInfo> volumes = ((FSDataset)this.data).getVolumeInfo();
++    for (VolumeInfo v : volumes) {
++      final Map<String, Object> innerInfo = new HashMap<String, Object>();
++      innerInfo.put("usedSpace", v.usedSpace);
++      innerInfo.put("freeSpace", v.freeSpace);
++      innerInfo.put("reservedSpace", v.reservedSpace);
++      info.put(v.directory, innerInfo);
++    }
++    return JSON.toString(info);
++  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNodeMXBean.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNodeMXBean.java
+new file mode 100644
+index 0000000..b1627ab
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNodeMXBean.java
+@@ -0,0 +1,66 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.datanode;
++
++/**
++ * 
++ * This is the JMX management interface for data node information
++ */
++public interface DataNodeMXBean {
++  
++  /**
++   * @return the host name
++   */
++  public String getHostName();
++  
++  /**
++   * Gets the version of Hadoop.
++   * 
++   * @return the version of Hadoop
++   */
++  public String getVersion();
++  
++  /**
++   * Gets the rpc port.
++   * 
++   * @return the rpc port
++   */
++  public String getRpcPort();
++  
++  /**
++   * Gets the http port.
++   * 
++   * @return the http port
++   */
++  public String getHttpPort();
++  
++  /**
++   * Gets the namenode IP address.
++   * 
++   * @return the namenode IP address
++   */
++  public String getNamenodeAddress();
++  
++  /**
++   * Gets the information of each volume on the Datanode. Please
++   * see the implementation for the format of returned information.
++   * 
++   * @return the volume info
++   */
++  public String getVolumeInfo();
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index 9204664..c804798 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -26,6 +26,7 @@ import java.io.InputStream;
+ import java.io.RandomAccessFile;
+ import java.util.ArrayList;
+ import java.util.Arrays;
++import java.util.Collection;
+ import java.util.HashMap;
+ import java.util.Iterator;
+ import java.util.List;
+@@ -438,6 +439,10 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       return (remaining > 0) ? remaining : 0;
+     }
+       
++    long getReserved(){
++      return reserved;
++    }
++    
+     String getMount() throws IOException {
+       return usage.getMount();
+     }
+@@ -1917,4 +1922,46 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       return info;
+     }
+   }
++
++  /**
++   * Class for representing the Datanode volume information
++   */
++  static class VolumeInfo {
++    final String directory;
++    final long usedSpace;
++    final long freeSpace;
++    final long reservedSpace;
++
++    VolumeInfo(String dir, long usedSpace, long freeSpace, long reservedSpace) {
++      this.directory = dir;
++      this.usedSpace = usedSpace;
++      this.freeSpace = freeSpace;
++      this.reservedSpace = reservedSpace;
++    }
++  }  
++  
++  synchronized Collection<VolumeInfo> getVolumeInfo() {
++    Collection<VolumeInfo> info = new ArrayList<VolumeInfo>();
++    synchronized(volumes.volumes) {
++      for (FSVolume volume : volumes.volumes) {
++        long used = 0;
++        try {
++          used = volume.getDfsUsed();
++        } catch (IOException e) {
++          DataNode.LOG.warn(e.getMessage());
++        }
++        
++        long free= 0;
++        try {
++          free = volume.getAvailable();
++        } catch (IOException e) {
++          DataNode.LOG.warn(e.getMessage());
++        }
++        
++        info.add(new VolumeInfo(volume.toString(), used, free, 
++            volume.getReserved()));
++      }
++      return info;
++    }
++  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 8ad3d9d..73c4964 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -65,6 +65,7 @@ import org.apache.hadoop.fs.permission.*;
+ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.ipc.Server;
++import org.mortbay.util.ajax.JSON;
+ 
+ import java.io.BufferedWriter;
+ import java.io.ByteArrayInputStream;
+@@ -75,6 +76,7 @@ import java.io.FileNotFoundException;
+ import java.io.IOException;
+ import java.io.PrintWriter;
+ import java.io.DataOutputStream;
++import java.lang.management.ManagementFactory;
+ import java.net.InetAddress;
+ import java.net.InetSocketAddress;
+ import java.util.*;
+@@ -97,7 +99,8 @@ import javax.management.StandardMBean;
+  * 4)  machine --> blocklist (inverted #2)
+  * 5)  LRU cache of updated-heartbeat machines
+  ***************************************************/
+-public class FSNamesystem implements FSConstants, FSNamesystemMBean {
++public class FSNamesystem implements FSConstants, FSNamesystemMBean,
++    NameNodeMXBean {
+   public static final Log LOG = LogFactory.getLog(FSNamesystem.class);
+   public static final String AUDIT_FORMAT =
+     "ugi=%s\t" +  // ugi
+@@ -308,6 +311,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+ 
+   // precision of access times.
+   private long accessTimePrecision = 0;
++  private String nameNodeHostName;
+   
+   /**
+    * FSNamesystem constructor.
+@@ -381,6 +385,9 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     if (dnsToSwitchMapping instanceof CachedDNSToSwitchMapping) {
+       dnsToSwitchMapping.resolve(new ArrayList<String>(hostsReader.getHosts()));
+     }
++    
++    InetSocketAddress socAddr = NameNode.getAddress(conf);
++    this.nameNodeHostName = socAddr.getHostName();
+   }
+ 
+   public static Collection<File> getNamespaceDirs(Configuration conf) {
+@@ -4977,9 +4984,13 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   }
+   
+   private ObjectName mbeanName;
++  
++  private ObjectName mxBean = null;
+   /**
+    * Register the FSNamesystem MBean using the name
+    *        "hadoop:service=NameNode,name=FSNamesystemState"
++   * Register the FSNamesystem MXBean using the name
++   *        "hadoop:service=NameNode,name=NameNodeInfo"
+    */
+   void registerMBean(Configuration conf) {
+     // We wrap to bypass standard mbean naming convention.
+@@ -4993,8 +5004,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     } catch (NotCompliantMBeanException e) {
+       e.printStackTrace();
+     }
+-
+-    LOG.info("Registered FSNamesystemStatusMBean");
++    mxBean = MBeanUtil.registerMBean("NameNode", "NameNodeInfo", this);
+   }
+ 
+   /**
+@@ -5010,6 +5020,8 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   public void shutdown() {
+     if (mbeanName != null)
+       MBeanUtil.unregisterMBean(mbeanName);
++    if (mxBean != null)
++      MBeanUtil.unregisterMBean(mxBean);
+   }
+   
+ 
+@@ -5362,6 +5374,138 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     return authMethod;
+   }
+   
++  @Override // NameNodeMXBean
++  public String getHostName() {
++    return this.nameNodeHostName;
++  }
++  
++  @Override // NameNodeMXBean
++  public String getVersion() {
++    return VersionInfo.getVersion();
++  }
++
++  @Override // NameNodeMXBean
++  public long getUsed() {
++    return this.getCapacityUsed();
++  }
++
++  @Override // NameNodeMXBean
++  public long getFree() {
++    return this.getCapacityRemaining();
++  }
++
++  @Override // NameNodeMXBean
++  public long getTotal() {
++    return this.getCapacityTotal();
++  }
++
++  @Override // NameNodeMXBean
++  public String getSafemode() {
++    if (!this.isInSafeMode())
++      return "";
++    return "Safe mode is ON." + this.getSafeModeTip();
++  }
++
++  @Override // NameNodeMXBean
++  public boolean isUpgradeFinalized() {
++    return this.getFSImage().isUpgradeFinalized();
++  }
++
++  @Override // NameNodeMXBean
++  public long getNonDfsUsedSpace() {
++    return getCapacityUsedNonDFS();
++  }
++
++  @Override // NameNodeMXBean
++  public float getPercentUsed() {
++    return getCapacityUsedPercent();
++  }
++
++  @Override // NameNodeMXBean
++  public float getPercentRemaining() {
++    return getCapacityRemainingPercent();
++  }
++
++  @Override // NameNodeMXBean
++  public long getTotalBlocks() {
++    return getBlocksTotal();
++  }
++
++  @Override // NameNodeMXBean
++  public long getTotalFiles() {
++    return getFilesTotal();
++  }
++
++  @Override // NameNodeMXBean
++  public int getThreads() {
++    return ManagementFactory.getThreadMXBean().getThreadCount();
++  }
++
++  /**
++   * Returned information is a JSON representation of map with host name as the
++   * key and value is a map of live node attribute keys to its values
++   */
++  @Override // NameNodeMXBean
++  public String getLiveNodes() {
++    final Map<String, Object> info = new HashMap<String, Object>();
++    final ArrayList<DatanodeDescriptor> aliveNodeList =
++      this.getDatanodeListForReport(DatanodeReportType.LIVE); 
++    for (DatanodeDescriptor node : aliveNodeList) {
++      final Map<String, Object> innerinfo = new HashMap<String, Object>();
++      innerinfo.put("lastContact", getLastContact(node));
++      innerinfo.put("usedSpace", getDfsUsed(node));
++      info.put(node.getHostName(), innerinfo);
++    }
++    return JSON.toString(info);
++  }
++
++  /**
++   * Returned information is a JSON representation of map with host name as the
++   * key and value is a map of dead node attribute keys to its values
++   */
++  @Override // NameNodeMXBean
++  public String getDeadNodes() {
++    final Map<String, Object> info = new HashMap<String, Object>();
++    final ArrayList<DatanodeDescriptor> deadNodeList =
++      this.getDatanodeListForReport(DatanodeReportType.DEAD); 
++    for (DatanodeDescriptor node : deadNodeList) {
++      final Map<String, Object> innerinfo = new HashMap<String, Object>();
++      innerinfo.put("lastContact", getLastContact(node));
++      info.put(node.getHostName(), innerinfo);
++    }
++    return JSON.toString(info);
++  }
++
++  /**
++   * Returned information is a JSON representation of map with host name as the
++   * key and value is a map of decomisioning node attribute keys to its values
++   */
++  @Override // NameNodeMXBean
++  public String getDecomNodes() {
++    final Map<String, Object> info = new HashMap<String, Object>();
++    final ArrayList<DatanodeDescriptor> decomNodeList = 
++      this.getDecommissioningNodes();
++    for (DatanodeDescriptor node : decomNodeList) {
++      final Map<String, Object> innerinfo = new HashMap<String, Object>();
++      innerinfo.put("underReplicatedBlocks", node.decommissioningStatus
++          .getUnderReplicatedBlocks());
++      innerinfo.put("decommissionOnlyReplicas", node.decommissioningStatus
++          .getDecommissionOnlyReplicas());
++      innerinfo.put("underReplicateInOpenFiles", node.decommissioningStatus
++          .getUnderReplicatedInOpenFiles());
++      info.put(node.getHostName(), innerinfo);
++    }
++    return JSON.toString(info);
++  }
++
++  private long getLastContact(DatanodeDescriptor alivenode) {
++    return (System.currentTimeMillis() - alivenode.getLastUpdate())/1000;
++  }
++
++  private long getDfsUsed(DatanodeDescriptor alivenode) {
++    return alivenode.getDfsUsed();
++  }
++  
+   /**
+    * If the remote IP for namenode method invokation is null, then the
+    * invocation is internal to the namenode. Client invoked methods are invoked
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index eafbca4..a7a1923 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -1199,7 +1199,6 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+         System.exit(aborted ? 1 : 0);
+       default:
+     }
+-
+     NameNode namenode = new NameNode(conf);
+     return namenode;
+   }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeMXBean.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeMXBean.java
+new file mode 100644
+index 0000000..40d0573
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeMXBean.java
+@@ -0,0 +1,138 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++
++/**
++ * 
++ * This is the JMX management interface for namenode information
++ */
++public interface NameNodeMXBean {
++
++  /**
++   * @return the host name
++   */
++  public String getHostName();
++  
++  /**
++   * Gets the version of Hadoop.
++   * 
++   * @return the version
++   */
++  public String getVersion();
++  
++  /**
++   * Gets the used space by data nodes.
++   * 
++   * @return the used space by data nodes
++   */
++  public long getUsed();
++  
++  /**
++   * Gets total non-used raw bytes.
++   * 
++   * @return total non-used raw bytes
++   */
++  public long getFree();
++  
++  /**
++   * Gets total raw bytes including non-dfs used space.
++   * 
++   * @return the total raw bytes including non-dfs used space
++   */
++  public long getTotal();
++  
++  /**
++   * Gets the safemode status
++   * 
++   * @return the safemode status
++   * 
++   */
++  public String getSafemode();
++  
++  /**
++   * Checks if upgrade is finalized.
++   * 
++   * @return true, if upgrade is finalized
++   */
++  public boolean isUpgradeFinalized();
++  
++  /**
++   * Gets total used space by data nodes for non DFS purposes such as storing
++   * temporary files on the local file system
++   * 
++   * @return the non dfs space of the cluster
++   */
++  public long getNonDfsUsedSpace();
++  
++  /**
++   * Gets the total used space by data nodes as percentage of total capacity
++   * 
++   * @return the percentage of used space on the cluster.
++   */
++  public float getPercentUsed();
++  
++  /**
++   * Gets the total remaining space by data nodes as percentage of total 
++   * capacity
++   * 
++   * @return the percentage of the remaining space on the cluster
++   */
++  public float getPercentRemaining();
++  
++  /**
++   * Gets the total numbers of blocks on the cluster.
++   * 
++   * @return the total number of blocks of the cluster
++   */
++  public long getTotalBlocks();
++  
++  /**
++   * Gets the total number of files on the cluster
++   * 
++   * @return the total number of files on the cluster
++   */
++  public long getTotalFiles();
++  
++  /**
++   * Gets the number of threads.
++   * 
++   * @return the number of threads
++   */
++  public int getThreads();
++
++  /**
++   * Gets the live node information of the cluster.
++   * 
++   * @return the live node information
++   */
++  public String getLiveNodes();
++  
++  /**
++   * Gets the dead node information of the cluster.
++   * 
++   * @return the dead node information
++   */
++  public String getDeadNodes();
++  
++  /**
++   * Gets the decommissioning node information of the cluster.
++   * 
++   * @return the decommissioning node information
++   */
++  public String getDecomNodes();
++}
+diff --git a/src/mapred/org/apache/hadoop/mapred/InfoMap.java b/src/mapred/org/apache/hadoop/mapred/InfoMap.java
+new file mode 100644
+index 0000000..a562a9d
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapred/InfoMap.java
+@@ -0,0 +1,31 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.util.LinkedHashMap;
++import org.mortbay.util.ajax.JSON;
++
++class InfoMap extends LinkedHashMap<String, Object> {
++
++  private static final long serialVersionUID = 1L;
++
++  String toJson() {
++    return JSON.toString(this);
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 6d4776f..3f40b42 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -26,6 +26,7 @@ import java.io.IOException;
+ import java.io.PrintWriter;
+ import java.io.InputStreamReader;
+ import java.io.Writer;
++import java.lang.management.ManagementFactory;
+ import java.net.BindException;
+ import java.net.InetSocketAddress;
+ import java.net.UnknownHostException;
+@@ -81,6 +82,7 @@ import org.apache.hadoop.mapred.JobInProgress.KillInterruptedException;
+ import org.apache.hadoop.mapred.JobStatusChangeEvent.EventType;
+ import org.apache.hadoop.mapred.QueueManager.QueueACL;
+ import org.apache.hadoop.mapred.TaskTrackerStatus.TaskTrackerHealthStatus;
++import org.apache.hadoop.metrics.util.MBeanUtil;
+ import org.apache.hadoop.net.DNSToSwitchMapping;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.net.NetworkTopology;
+@@ -111,6 +113,7 @@ import org.apache.hadoop.mapreduce.security.token.DelegationTokenRenewal;
+ import org.apache.hadoop.mapreduce.security.token.JobTokenSecretManager;
+ import org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker;
+ import org.apache.hadoop.security.Credentials;
++import org.mortbay.util.ajax.JSON;
+ 
+ /*******************************************************
+  * JobTracker is the central location for submitting and 
+@@ -119,7 +122,8 @@ import org.apache.hadoop.security.Credentials;
+  *******************************************************/
+ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     JobSubmissionProtocol, TaskTrackerManager, RefreshUserMappingsProtocol,
+-    RefreshAuthorizationPolicyProtocol, AdminOperationsProtocol {
++    RefreshAuthorizationPolicyProtocol, AdminOperationsProtocol,
++    JobTrackerMXBean {
+ 
+   static{
+     Configuration.addDefaultResource("mapred-default.xml");
+@@ -257,6 +261,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+ 
+   public static final Log LOG = LogFactory.getLog(JobTracker.class);
+   
++  static final String CONF_VERSION_KEY = "mapreduce.jobtracker.conf.version";
++  static final String CONF_VERSION_DEFAULT = "default";
++
+   private PluginDispatcher<JobTrackerPlugin> pluginDispatcher;
+ 
+   public Clock getClock() {
+@@ -305,6 +312,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     }
+     if (result != null) {
+       JobEndNotifier.startNotifier();
++      MBeanUtil.registerMBean("JobTracker", "JobTrackerInfo", result);
+     }    
+     return result;
+   }
+@@ -5032,4 +5040,110 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     return aclsManager;
+   }
+ 
++  // Begin MXBean implementation
++  @Override
++  public String getHostname() {
++    return StringUtils.simpleHostname(getJobTrackerMachine());
++  }
++
++  @Override
++  public String getVersion() {
++    return VersionInfo.getVersion() +", r"+ VersionInfo.getRevision();
++  }
++
++  @Override
++  public String getConfigVersion() {
++    return conf.get(CONF_VERSION_KEY, CONF_VERSION_DEFAULT);
++  }
++
++  @Override
++  public int getThreadCount() {
++    return ManagementFactory.getThreadMXBean().getThreadCount();
++  }
++
++  @Override
++  public String getSummaryJson() {
++    return getSummary().toJson();
++  }
++
++  InfoMap getSummary() {
++    final ClusterMetrics metrics = getClusterMetrics();
++    InfoMap map = new InfoMap();
++    map.put("nodes", metrics.getTaskTrackerCount()
++            + getBlacklistedTrackerCount());
++    map.put("alive", metrics.getTaskTrackerCount());
++    map.put("blacklisted", getBlacklistedTrackerCount());
++    map.put("slots", new InfoMap() {{
++      put("map_slots", metrics.getMapSlotCapacity());
++      put("map_slots_used", metrics.getOccupiedMapSlots());
++      put("reduce_slots", metrics.getReduceSlotCapacity());
++      put("reduce_slots_used", metrics.getOccupiedReduceSlots());
++    }});
++    map.put("jobs", metrics.getTotalJobSubmissions());
++    return map;
++  }
++
++  @Override
++  public String getAliveNodesInfoJson() {
++    return JSON.toString(getAliveNodesInfo());
++  }
++
++  List<InfoMap> getAliveNodesInfo() {
++    List<InfoMap> info = new ArrayList<InfoMap>();
++    for (final TaskTrackerStatus  tts : activeTaskTrackers()) {
++      final int mapSlots = tts.getMaxMapSlots();
++      final int redSlots = tts.getMaxReduceSlots();
++      info.add(new InfoMap() {{
++        put("hostname", tts.getHost());
++        put("last_seen", tts.getLastSeen());
++        put("health", tts.getHealthStatus().isNodeHealthy() ? "OK" : "");
++        put("slots", new InfoMap() {{
++          put("map_slots", mapSlots);
++          put("map_slots_used", mapSlots - tts.getAvailableMapSlots());
++          put("reduce_slots", redSlots);
++          put("reduce_slots_used", redSlots - tts.getAvailableReduceSlots());
++        }});
++        put("failures", tts.getFailures());
++      }});
++    }
++    return info;
++  }
++
++  @Override
++  public String getBlacklistedNodesInfoJson() {
++    return JSON.toString(getUnhealthyNodesInfo(blacklistedTaskTrackers()));
++  }
++
++  List<InfoMap> getUnhealthyNodesInfo(Collection<TaskTrackerStatus> list) {
++    List<InfoMap> info = new ArrayList<InfoMap>();
++    for (final TaskTrackerStatus tts : list) {
++      info.add(new InfoMap() {{
++        put("hostname", tts.getHost());
++        put("last_seen", tts.getLastSeen());
++        put("reason", tts.getHealthStatus().getHealthReport());
++      }});
++    }
++    return info;
++  }
++  
++  @Override
++  public String getQueueInfoJson() {
++    return getQueueInfo().toJson();
++  }
++
++  InfoMap getQueueInfo() {
++    InfoMap map = new InfoMap();
++    try {
++      for (final JobQueueInfo q : getQueues()) {
++        map.put(q.getQueueName(), new InfoMap() {{
++          put("info", q.getSchedulingInfo());
++        }});
++      }
++    }
++    catch (Exception e) {
++      throw new RuntimeException("Getting queue info", e);
++    }
++    return map;
++  }
++  // End MXbean implementaiton
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTrackerMXBean.java b/src/mapred/org/apache/hadoop/mapred/JobTrackerMXBean.java
+new file mode 100644
+index 0000000..9a1fa88
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapred/JobTrackerMXBean.java
+@@ -0,0 +1,66 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++/**
++ * The MXBean interface for JobTrackerInfo
++ */
++public interface JobTrackerMXBean {
++
++  /**
++   * @return hostname of the jobtracker
++   */
++  String getHostname();
++
++  /**
++   * @return version of the code base
++   */
++  String getVersion();
++
++  /**
++   * @return the config version (from a config property)
++   */
++  String getConfigVersion();
++
++  /**
++   * @return number of threads of the jobtracker jvm
++   */
++  int getThreadCount();
++
++  /**
++   * @return the summary info in json
++   */
++  String getSummaryJson();
++
++  /**
++   * @return the alive nodes info in json
++   */
++  String getAliveNodesInfoJson();
++
++  /**
++   * @return the blacklisted nodes info in json
++   */
++  String getBlacklistedNodesInfoJson();
++
++  /**
++   * @return the queue info json
++   */
++  String getQueueInfoJson();
++
++}
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index c8f3501..c1195fd 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -94,6 +94,7 @@ import org.apache.hadoop.metrics.MetricsException;
+ import org.apache.hadoop.metrics.MetricsRecord;
+ import org.apache.hadoop.metrics.MetricsUtil;
+ import org.apache.hadoop.metrics.Updater;
++import org.apache.hadoop.metrics.util.MBeanUtil;
+ import org.apache.hadoop.net.DNS;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.SecurityUtil;
+@@ -120,7 +121,7 @@ import org.apache.hadoop.security.Credentials;
+  *
+  *******************************************************/
+ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+-    Runnable {
++    Runnable, TaskTrackerMXBean {
+   /**
+    * @deprecated
+    */
+@@ -134,6 +135,9 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+   static final String MAPRED_TASKTRACKER_PMEM_RESERVED_PROPERTY =
+      "mapred.tasktracker.pmem.reserved";
+ 
++  static final String CONF_VERSION_KEY = "mapreduce.tasktracker.conf.version";
++  static final String CONF_VERSION_DEFAULT = "default";
++
+   static final long WAIT_FOR_DONE = 3 * 1000;
+   private int httpPort;
+ 
+@@ -1322,8 +1326,8 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     int httpPort = infoSocAddr.getPort();
+     this.server = new HttpServer("task", httpBindAddress, httpPort,
+         httpPort == 0, conf, aclsManager.getAdminsAcl());
+-    workerThreads = conf.getInt("tasktracker.http.threads", 40);
+     this.shuffleServerMetrics = new ShuffleServerMetrics(conf);
++    workerThreads = conf.getInt("tasktracker.http.threads", 40);
+     server.setThreads(1, workerThreads);
+     // let the jsp pages get to the task tracker, config, and other relevant
+     // objects
+@@ -3412,6 +3416,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+       ReflectionUtils.setContentionTracing
+         (conf.getBoolean("tasktracker.contention.tracking", false));
+       TaskTracker tt = new TaskTracker(conf);
++      MBeanUtil.registerMBean("TaskTracker", "TaskTrackerInfo", tt);
+       tt.run();
+     } catch (Throwable e) {
+       LOG.error("Can not start task tracker because "+
+@@ -3947,6 +3952,72 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+       return aclsManager;
+     }
+ 
++  // Begin MXBean implementation
++  @Override
++  public String getHostname() {
++    return localHostname;
++  }
++
++  @Override
++  public String getVersion() {
++    return VersionInfo.getVersion() +", r"+ VersionInfo.getRevision();
++  }
++
++  @Override
++  public String getConfigVersion() {
++    return originalConf.get(CONF_VERSION_KEY, CONF_VERSION_DEFAULT);
++  }
++
++  @Override
++  public String getJobTrackerUrl() {
++    return originalConf.get("mapred.job.tracker");
++  }
++
++  @Override
++  public int getRpcPort() {
++    return taskReportAddress.getPort();
++  }
++
++  @Override
++  public int getHttpPort() {
++    return httpPort;
++  }
++
++  @Override
++  public boolean isHealthy() {
++    boolean healthy = true;
++    TaskTrackerHealthStatus hs = new TaskTrackerHealthStatus();
++    if (healthChecker != null) {
++      healthChecker.setHealthStatus(hs);
++      healthy = hs.isNodeHealthy();
++    }    
++    return healthy;
++  }
++
++  @Override
++  public String getTasksInfoJson() {
++    return getTasksInfo().toJson();
++  }
++
++  InfoMap getTasksInfo() {
++    InfoMap map = new InfoMap();
++    int failed = 0;
++    int commitPending = 0;
++    for (TaskStatus st : getNonRunningTasks()) {
++      if (st.getRunState() == TaskStatus.State.FAILED ||
++          st.getRunState() == TaskStatus.State.FAILED_UNCLEAN) {
++        ++failed;
++      } else if (st.getRunState() == TaskStatus.State.COMMIT_PENDING) {
++        ++commitPending;
++      }
++    }
++    map.put("running", runningTasks.size());
++    map.put("failed", failed);
++    map.put("commit_pending", commitPending);
++    return map;
++  }
++  // End MXBean implemenation
++
+   @Override
+   public void 
+   updatePrivateDistributedCacheSizes(org.apache.hadoop.mapreduce.JobID jobId,
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTrackerMXBean.java b/src/mapred/org/apache/hadoop/mapred/TaskTrackerMXBean.java
+new file mode 100644
+index 0000000..3297940
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTrackerMXBean.java
+@@ -0,0 +1,66 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++/**
++ * MXBean interface for TaskTracker
++ */
++public interface TaskTrackerMXBean {
++
++  /**
++   * @return the hostname of the tasktracker
++   */
++  String getHostname();
++
++  /**
++   * @return the version of the code base
++   */
++  String getVersion();
++
++  /**
++   * @return the config version (from a config properties)
++   */
++  String getConfigVersion();
++
++  /**
++   * @return the URL of the jobtracker
++   */
++  String getJobTrackerUrl();
++
++  /**
++   * @return the RPC port of the tasktracker
++   */
++  int getRpcPort();
++
++  /**
++   * @return the HTTP port of the tasktracker
++   */
++  int getHttpPort();
++
++  /**
++   * @return the health status of the tasktracker
++   */
++  boolean isHealthy();
++
++  /**
++   * @return a json formatted info about tasks of the tasktracker
++   */
++  String getTasksInfoJson();
++
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeMXBean.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeMXBean.java
+new file mode 100644
+index 0000000..e18dddc
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeMXBean.java
+@@ -0,0 +1,71 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.datanode;
++
++import java.lang.management.ManagementFactory;
++import java.util.List;
++
++import javax.management.MBeanServer;
++import javax.management.ObjectName;
++
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.conf.Configuration;
++import org.junit.Test;
++import junit.framework.Assert;
++
++/**
++ * Class for testing {@link DataNodeMXBean} implementation
++ */
++public class TestDataNodeMXBean {
++  @Test
++  public void testDataNodeMXBean() throws Exception {
++    Configuration conf = new Configuration();
++    MiniDFSCluster cluster = new MiniDFSCluster(conf, 1, true, null);
++
++    try {
++      List<DataNode> datanodes = cluster.getDataNodes();
++      Assert.assertEquals(datanodes.size(), 1);
++      DataNode datanode = datanodes.get(0);
++
++      MBeanServer mbs = ManagementFactory.getPlatformMBeanServer(); 
++      ObjectName mxbeanName = new ObjectName(
++          "hadoop:service=DataNode,name=DataNodeInfo");
++      // get attribute "HostName"
++      String hostname = (String) mbs.getAttribute(mxbeanName, "HostName");
++      Assert.assertEquals(datanode.getHostName(), hostname);
++      // get attribute "Version"
++      String version = (String)mbs.getAttribute(mxbeanName, "Version");
++      Assert.assertEquals(datanode.getVersion(),version);
++      // get attribute "RpcPort"
++      String rpcPort = (String)mbs.getAttribute(mxbeanName, "RpcPort");
++      Assert.assertEquals(datanode.getRpcPort(),rpcPort);
++      // get attribute "HttpPort"
++      String httpPort = (String)mbs.getAttribute(mxbeanName, "HttpPort");
++      Assert.assertEquals(datanode.getHttpPort(),httpPort);
++      // get attribute "NamenodeAddress"
++      String namenodeAddress = (String)mbs.getAttribute(mxbeanName, 
++          "NamenodeAddress");
++      Assert.assertEquals(datanode.getNamenodeAddress(),namenodeAddress);
++      // get attribute "getVolumeInfo"
++      String volumeInfo = (String)mbs.getAttribute(mxbeanName, "VolumeInfo");
++      Assert.assertEquals(datanode.getVolumeInfo(),volumeInfo);
++    } finally {
++      if (cluster != null) {cluster.shutdown();}
++    }
++  }
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogRace.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogRace.java
+index 0618df6..d711bb1 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogRace.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestEditLogRace.java
+@@ -291,6 +291,7 @@ public class TestEditLogRace extends TestCase {
+  
+   private Configuration getConf() {
+     Configuration conf = new Configuration();
++    conf.set("fs.default.name", "hdfs://localhost/");
+     conf.set("dfs.name.dir", MiniDFSCluster.getBaseDir() + "/data");
+     conf.setBoolean("dfs.permissions", false);
+     return conf;
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeMXBean.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeMXBean.java
+new file mode 100644
+index 0000000..022e384
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeMXBean.java
+@@ -0,0 +1,90 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++
++import java.lang.management.ManagementFactory;
++
++import javax.management.MBeanServer;
++import javax.management.ObjectName;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
++
++import org.junit.Test;
++import junit.framework.Assert;
++
++/**
++ * Class for testing {@link NameNodeMXBean} implementation
++ */
++public class TestNameNodeMXBean {
++  @Test
++  public void testNameNodeMXBeanInfo() throws Exception {
++    Configuration conf = new Configuration();
++    MiniDFSCluster cluster = null;
++
++    try {
++      cluster = new MiniDFSCluster(conf, 1, true, null);
++      cluster.waitActive();
++
++      FSNamesystem fsn = cluster.getNameNode().namesystem;
++
++      MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
++      ObjectName mxbeanName = new ObjectName(
++        "hadoop:service=NameNode,name=NameNodeInfo");
++      // get attribute "HostName"
++      String hostname = (String) mbs.getAttribute(mxbeanName, "HostName");
++      Assert.assertEquals(fsn.getHostName(), hostname);
++      // get attribute "Version"
++      String version = (String) mbs.getAttribute(mxbeanName, "Version");
++      Assert.assertEquals(fsn.getVersion(), version);
++      // get attribute "Used"
++      Long used = (Long) mbs.getAttribute(mxbeanName, "Used");
++      Assert.assertEquals(fsn.getUsed(), used.longValue());
++      // get attribute "Total"
++      Long total = (Long) mbs.getAttribute(mxbeanName, "Total");
++      Assert.assertEquals(fsn.getTotal(), total.longValue());
++      // get attribute "safemode"
++      String safemode = (String) mbs.getAttribute(mxbeanName, "Safemode");
++      Assert.assertEquals(fsn.getSafemode(), safemode);
++      // get attribute nondfs
++      Long nondfs = (Long) (mbs.getAttribute(mxbeanName, "NonDfsUsedSpace"));
++      Assert.assertEquals(fsn.getNonDfsUsedSpace(), nondfs.longValue());
++      // get attribute percentremaining
++      Float percentremaining = (Float) (mbs.getAttribute(mxbeanName,
++          "PercentRemaining"));
++      Assert.assertEquals(fsn.getPercentRemaining(), percentremaining
++          .floatValue());
++      // get attribute Totalblocks
++      Long totalblocks = (Long) (mbs.getAttribute(mxbeanName, "TotalBlocks"));
++      Assert.assertEquals(fsn.getTotalBlocks(), totalblocks.longValue());
++      // get attribute alivenodeinfo
++      String alivenodeinfo = (String) (mbs.getAttribute(mxbeanName,
++          "LiveNodes"));
++      Assert.assertEquals(fsn.getLiveNodes(), alivenodeinfo);
++      // get attribute deadnodeinfo
++      String deadnodeinfo = (String) (mbs.getAttribute(mxbeanName,
++          "DeadNodes"));
++      Assert.assertEquals(fsn.getDeadNodes(), deadnodeinfo);
++    } finally {
++      if (cluster != null) {
++        cluster.shutdown();
++      }
++    }
++  }
++}
+-- 
+1.7.0.4
+

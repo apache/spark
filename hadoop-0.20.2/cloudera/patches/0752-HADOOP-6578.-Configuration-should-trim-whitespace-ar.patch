@@ -1,0 +1,212 @@
+From f9f9182ecf6d208fd28b23941b5e851e1efedec7 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Mon, 3 Jan 2011 21:35:29 -0800
+Subject: [PATCH 0752/1179] HADOOP-6578. Configuration should trim whitespace around a lot of value types.
+
+Reason: Improvement
+Author: Michele Catasta
+Ref: CDH-2266
+---
+ src/core/org/apache/hadoop/conf/Configuration.java |   37 ++++++++--
+ .../org/apache/hadoop/conf/TestConfiguration.java  |   74 ++++++++++++++++++++
+ 2 files changed, 104 insertions(+), 7 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/conf/Configuration.java b/src/core/org/apache/hadoop/conf/Configuration.java
+index a6f2bb6..0f4e59c 100644
+--- a/src/core/org/apache/hadoop/conf/Configuration.java
++++ b/src/core/org/apache/hadoop/conf/Configuration.java
+@@ -414,6 +414,29 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+   public String get(String name) {
+     return substituteVars(getProps().getProperty(name));
+   }
++  
++  /**
++   * Get the value of the <code>name</code> property as a trimmed <code>String</code>, 
++   * <code>null</code> if no such property exists. 
++   * If the key is deprecated, it returns the value of
++   * the first key which replaces the deprecated key and is not null
++   * 
++   * Values are processed for <a href="#VariableExpansion">variable expansion</a> 
++   * before being returned. 
++   * 
++   * @param name the property name.
++   * @return the value of the <code>name</code> or its replacing property, 
++   *         or null if no such property exists.
++   */
++  public String getTrimmed(String name) {
++    String value = get(name);
++    
++    if (null == value) {
++      return null;
++    } else {
++      return value.trim();
++    }
++  }
+ 
+   /**
+    * Get the value of the <code>name</code> property, without doing
+@@ -482,7 +505,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+    *         or <code>defaultValue</code>. 
+    */
+   public int getInt(String name, int defaultValue) {
+-    String valueString = get(name);
++    String valueString = getTrimmed(name);
+     if (valueString == null)
+       return defaultValue;
+     try {
+@@ -518,7 +541,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+    *         or <code>defaultValue</code>. 
+    */
+   public long getLong(String name, long defaultValue) {
+-    String valueString = get(name);
++    String valueString = getTrimmed(name);
+     if (valueString == null)
+       return defaultValue;
+     try {
+@@ -571,7 +594,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+    *         or <code>defaultValue</code>. 
+    */
+   public float getFloat(String name, float defaultValue) {
+-    String valueString = get(name);
++    String valueString = getTrimmed(name);
+     if (valueString == null)
+       return defaultValue;
+     try {
+@@ -601,7 +624,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+    *         or <code>defaultValue</code>. 
+    */
+   public boolean getBoolean(String name, boolean defaultValue) {
+-    String valueString = get(name);
++    String valueString = getTrimmed(name);
+     if ("true".equals(valueString))
+       return true;
+     else if ("false".equals(valueString))
+@@ -915,7 +938,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+       }
+     }
+ 
+-    Class clazz = map.get(name);
++    Class<?> clazz = map.get(name);
+     if (clazz == null) {
+       clazz = Class.forName(name, true, classLoader);
+       if (clazz != null) {
+@@ -939,7 +962,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+    *         or <code>defaultValue</code>. 
+    */
+   public Class<?>[] getClasses(String name, Class<?> ... defaultValue) {
+-    String[] classnames = getStrings(name);
++    String[] classnames = getTrimmedStrings(name);
+     if (classnames == null)
+       return defaultValue;
+     try {
+@@ -964,7 +987,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+    *         or <code>defaultValue</code>. 
+    */
+   public Class<?> getClass(String name, Class<?> defaultValue) {
+-    String valueString = get(name);
++    String valueString = getTrimmed(name);
+     if (valueString == null)
+       return defaultValue;
+     try {
+diff --git a/src/test/org/apache/hadoop/conf/TestConfiguration.java b/src/test/org/apache/hadoop/conf/TestConfiguration.java
+index 3b97854..20b3138 100644
+--- a/src/test/org/apache/hadoop/conf/TestConfiguration.java
++++ b/src/test/org/apache/hadoop/conf/TestConfiguration.java
+@@ -33,6 +33,7 @@ import java.util.Random;
+ import java.util.regex.Pattern;
+ 
+ import junit.framework.TestCase;
++import static org.junit.Assert.assertArrayEquals;
+ 
+ import org.apache.hadoop.fs.Path;
+ import org.codehaus.jackson.map.ObjectMapper;
+@@ -342,6 +343,7 @@ public class TestConfiguration extends TestCase {
+     appendProperty("test.int1", "20");
+     appendProperty("test.int2", "020");
+     appendProperty("test.int3", "-20");
++    appendProperty("test.int4", " -20 ");
+     endConfig();
+     Path fileResource = new Path(CONFIG);
+     conf.addResource(fileResource);
+@@ -351,6 +353,78 @@ public class TestConfiguration extends TestCase {
+     assertEquals(20, conf.getLong("test.int2", 0));
+     assertEquals(-20, conf.getInt("test.int3", 0));
+     assertEquals(-20, conf.getLong("test.int3", 0));
++    assertEquals(-20, conf.getInt("test.int4", 0));
++    assertEquals(-20, conf.getLong("test.int4", 0));
++  }
++
++  public void testBooleanValues() throws IOException {
++    out=new BufferedWriter(new FileWriter(CONFIG));
++    startConfig();
++    appendProperty("test.bool1", "true");
++    appendProperty("test.bool2", "false");
++    appendProperty("test.bool3", "  true ");
++    appendProperty("test.bool4", " false ");
++    appendProperty("test.bool5", "foo");
++    endConfig();
++    Path fileResource = new Path(CONFIG);
++    conf.addResource(fileResource);
++    assertEquals(true, conf.getBoolean("test.bool1", false));
++    assertEquals(false, conf.getBoolean("test.bool2", true));
++    assertEquals(true, conf.getBoolean("test.bool3", false));
++    assertEquals(false, conf.getBoolean("test.bool4", true));
++    assertEquals(true, conf.getBoolean("test.bool5", true));
++  }
++  
++  public void testFloatValues() throws IOException {
++    out=new BufferedWriter(new FileWriter(CONFIG));
++    startConfig();
++    appendProperty("test.float1", "3.1415");
++    appendProperty("test.float2", "003.1415");
++    appendProperty("test.float3", "-3.1415");
++    appendProperty("test.float4", " -3.1415 ");
++    endConfig();
++    Path fileResource = new Path(CONFIG);
++    conf.addResource(fileResource);
++    assertEquals(3.1415f, conf.getFloat("test.float1", 0.0f));
++    assertEquals(3.1415f, conf.getFloat("test.float2", 0.0f));
++    assertEquals(-3.1415f, conf.getFloat("test.float3", 0.0f));
++    assertEquals(-3.1415f, conf.getFloat("test.float4", 0.0f));
++  }
++  
++  public void testGetClass() throws IOException {
++    out=new BufferedWriter(new FileWriter(CONFIG));
++    startConfig();
++    appendProperty("test.class1", "java.lang.Integer");
++    appendProperty("test.class2", " java.lang.Integer ");
++    endConfig();
++    Path fileResource = new Path(CONFIG);
++    conf.addResource(fileResource);
++    assertEquals("java.lang.Integer", conf.getClass("test.class1", null).getCanonicalName());
++    assertEquals("java.lang.Integer", conf.getClass("test.class2", null).getCanonicalName());
++  }
++  
++  public void testGetClasses() throws IOException {
++    out=new BufferedWriter(new FileWriter(CONFIG));
++    startConfig();
++    appendProperty("test.classes1", "java.lang.Integer,java.lang.String");
++    appendProperty("test.classes2", " java.lang.Integer , java.lang.String ");
++    endConfig();
++    Path fileResource = new Path(CONFIG);
++    conf.addResource(fileResource);
++    String[] expectedNames = {"java.lang.Integer", "java.lang.String"};
++    Class<?>[] defaultClasses = {};
++    Class<?>[] classes1 = conf.getClasses("test.classes1", defaultClasses);
++    Class<?>[] classes2 = conf.getClasses("test.classes2", defaultClasses);
++    assertArrayEquals(expectedNames, extractClassNames(classes1));
++    assertArrayEquals(expectedNames, extractClassNames(classes2));
++  }
++  
++  private static String[] extractClassNames(Class<?>[] classes) {
++    String[] classNames = new String[classes.length];
++    for (int i = 0; i < classNames.length; i++) {
++      classNames[i] = classes[i].getCanonicalName();
++    }
++    return classNames;
+   }
+ 
+   public void testPattern() throws IOException {
+-- 
+1.7.0.4
+

@@ -1,0 +1,3448 @@
+From 34c6a146be045127f5e43828fd3c578ebb3c113c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 22 Jan 2010 16:03:23 -0800
+Subject: [PATCH 0447/1179] MAPREDUCE-1376. Support for varied user submission in Gridmix
+
+Patch: https://issues.apache.org/jira/secure/attachment/12431174/M1376-4.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12440324/1376-5-yhadoop20-100.patch
+Author: Chris Douglas
+Ref: YDH
+---
+ .../hadoop/mapred/gridmix/EchoUserResolver.java    |   53 +++
+ .../apache/hadoop/mapred/gridmix/GenerateData.java |   57 +++-
+ .../org/apache/hadoop/mapred/gridmix/Gridmix.java  |  165 +++++++--
+ .../apache/hadoop/mapred/gridmix/GridmixJob.java   |  125 +++++--
+ .../mapred/gridmix/GridmixJobSubmissionPolicy.java |   87 +++++
+ .../apache/hadoop/mapred/gridmix/JobFactory.java   |  143 +++-----
+ .../apache/hadoop/mapred/gridmix/JobMonitor.java   |   24 +-
+ .../apache/hadoop/mapred/gridmix/JobSubmitter.java |   29 ++-
+ .../hadoop/mapred/gridmix/ReplayJobFactory.java    |  127 +++++++
+ .../mapred/gridmix/RoundRobinUserResolver.java     |  117 ++++++
+ .../hadoop/mapred/gridmix/SerialJobFactory.java    |  177 +++++++++
+ .../apache/hadoop/mapred/gridmix/StatListener.java |   32 ++
+ .../apache/hadoop/mapred/gridmix/Statistics.java   |  377 ++++++++++++++++++++
+ .../hadoop/mapred/gridmix/StressJobFactory.java    |  258 +++++++++++++
+ .../mapred/gridmix/SubmitterUserResolver.java      |   50 +++
+ .../apache/hadoop/mapred/gridmix/UserResolver.java |   59 +++
+ .../hadoop/mapred/gridmix/DebugJobFactory.java     |  281 +++------------
+ .../hadoop/mapred/gridmix/DebugJobProducer.java    |  280 +++++++++++++++
+ .../hadoop/mapred/gridmix/GridmixTestUtils.java    |   90 +++++
+ .../mapred/gridmix/TestGridmixSubmission.java      |  131 +++++---
+ .../hadoop/mapred/gridmix/TestUserResolve.java     |   96 +++++
+ 21 files changed, 2309 insertions(+), 449 deletions(-)
+ create mode 100644 src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/EchoUserResolver.java
+ create mode 100644 src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/GridmixJobSubmissionPolicy.java
+ create mode 100644 src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/ReplayJobFactory.java
+ create mode 100644 src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/RoundRobinUserResolver.java
+ create mode 100644 src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/SerialJobFactory.java
+ create mode 100644 src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/StatListener.java
+ create mode 100644 src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/Statistics.java
+ create mode 100644 src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/StressJobFactory.java
+ create mode 100644 src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/SubmitterUserResolver.java
+ create mode 100644 src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/UserResolver.java
+ create mode 100644 src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/DebugJobProducer.java
+ create mode 100644 src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/GridmixTestUtils.java
+ create mode 100644 src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestUserResolve.java
+
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/EchoUserResolver.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/EchoUserResolver.java
+new file mode 100644
+index 0000000..7d13a1d
+--- /dev/null
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/EchoUserResolver.java
+@@ -0,0 +1,53 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred.gridmix;
++
++import java.io.IOException;
++import java.net.URI;
++import java.util.Collections;
++import java.util.List;
++import java.util.ArrayList;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.ShellBasedUnixGroupsMapping;
++import org.apache.hadoop.security.Groups;
++import org.apache.hadoop.fs.CommonConfigurationKeys;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++/**
++ * Echos the UGI offered.
++ */
++public class EchoUserResolver implements UserResolver {
++  public static final Log LOG = LogFactory.getLog(Gridmix.class);
++
++  public EchoUserResolver() {
++    LOG.info(" Current user resolver is EchoUserResolver ");
++  }
++
++  public synchronized boolean setTargetUsers(URI userdesc, Configuration conf)
++      throws IOException {
++    return false;
++  }
++
++  public synchronized UserGroupInformation getTargetUgi(
++      UserGroupInformation ugi) {
++    return ugi;
++  }
++}
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/GenerateData.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/GenerateData.java
+index dacd07a..6efd534 100644
+--- a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/GenerateData.java
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/GenerateData.java
+@@ -21,6 +21,7 @@ import java.io.IOException;
+ import java.io.DataInput;
+ import java.io.DataOutput;
+ import java.io.OutputStream;
++import java.security.PrivilegedExceptionAction;
+ import java.util.Arrays;
+ import java.util.ArrayList;
+ import java.util.List;
+@@ -31,6 +32,7 @@ import java.util.regex.Pattern;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.io.BytesWritable;
+ import org.apache.hadoop.io.LongWritable;
+ import org.apache.hadoop.io.NullWritable;
+@@ -49,10 +51,12 @@ import org.apache.hadoop.mapreduce.RecordWriter;
+ import org.apache.hadoop.mapreduce.TaskAttemptContext;
+ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
++import org.apache.hadoop.security.UserGroupInformation;
+ 
+ // TODO can replace with form of GridmixJob
+ class GenerateData extends GridmixJob {
+ 
++
+   /**
+    * Total bytes to write.
+    */
+@@ -73,6 +77,16 @@ class GenerateData extends GridmixJob {
+    */
+   public static final String GRIDMIX_GEN_INTERVAL = "gendata.interval.mb";
+ 
++  /**
++   * Blocksize of generated data.
++   */
++  public static final String GRIDMIX_GEN_BLOCKSIZE = "gridmix.gen.blocksize";
++
++  /**
++   * Replication of generated data.
++   */
++  public static final String GRIDMIX_GEN_REPLICATION = "gridmix.gen.replicas";
++
+   public GenerateData(Configuration conf, Path outdir, long genbytes)
+       throws IOException {
+     super(conf, 0L, "GRIDMIX_GENDATA");
+@@ -83,15 +97,26 @@ class GenerateData extends GridmixJob {
+   @Override
+   public Job call() throws IOException, InterruptedException,
+                            ClassNotFoundException {
+-    job.setMapperClass(GenDataMapper.class);
+-    job.setNumReduceTasks(0);
+-    job.setMapOutputKeyClass(NullWritable.class);
+-    job.setMapOutputValueClass(BytesWritable.class);
+-    job.setInputFormatClass(GenDataFormat.class);
+-    job.setOutputFormatClass(RawBytesOutputFormat.class);
+-    job.setJarByClass(GenerateData.class);
+-    FileInputFormat.addInputPath(job, new Path("ignored"));
+-    job.submit();
++    UserGroupInformation ugi = UserGroupInformation.getLoginUser();
++    job = ugi.doAs( new PrivilegedExceptionAction <Job>() {
++       public Job run() throws IOException, ClassNotFoundException,
++                               InterruptedException {
++        job.setMapperClass(GenDataMapper.class);
++        job.setNumReduceTasks(0);
++        job.setMapOutputKeyClass(NullWritable.class);
++        job.setMapOutputValueClass(BytesWritable.class);
++        job.setInputFormatClass(GenDataFormat.class);
++        job.setOutputFormatClass(RawBytesOutputFormat.class);
++        job.setJarByClass(GenerateData.class);
++         try {
++           FileInputFormat.addInputPath(job, new Path("ignored"));
++         } catch (IOException e) {
++           LOG.error("Error  while adding input path ",e);
++         }
++         job.submit();
++         return job;
++      }
++    });
+     return job;
+   }
+ 
+@@ -248,7 +273,10 @@ class GenerateData extends GridmixJob {
+     static class ChunkWriter extends RecordWriter<NullWritable,BytesWritable> {
+       private final Path outDir;
+       private final FileSystem fs;
++      private final int blocksize;
++      private final short replicas;
+       private final long maxFileBytes;
++      private final FsPermission genPerms = new FsPermission((short) 0777);
+ 
+       private long accFileBytes = 0L;
+       private long fileIdx = -1L;
+@@ -257,6 +285,8 @@ class GenerateData extends GridmixJob {
+       public ChunkWriter(Path outDir, Configuration conf) throws IOException {
+         this.outDir = outDir;
+         fs = outDir.getFileSystem(conf);
++        blocksize = conf.getInt(GRIDMIX_GEN_BLOCKSIZE, 1 << 28);
++        replicas = (short) conf.getInt(GRIDMIX_GEN_REPLICATION, 3);
+         maxFileBytes = conf.getLong(GRIDMIX_GEN_CHUNK, 1L << 30);
+         nextDestination();
+       }
+@@ -264,7 +294,8 @@ class GenerateData extends GridmixJob {
+         if (fileOut != null) {
+           fileOut.close();
+         }
+-        fileOut = fs.create(new Path(outDir, "segment-" + (++fileIdx)), false);
++        fileOut = fs.create(new Path(outDir, "segment-" + (++fileIdx)),
++            genPerms, false, 64 * 1024, replicas, blocksize, null);
+         accFileBytes = 0L;
+       }
+       @Override
+@@ -273,14 +304,14 @@ class GenerateData extends GridmixJob {
+         int written = 0;
+         final int total = value.getLength();
+         while (written < total) {
++          if (accFileBytes >= maxFileBytes) {
++            nextDestination();
++          }
+           final int write = (int)
+             Math.min(total - written, maxFileBytes - accFileBytes);
+           fileOut.write(value.getBytes(), written, write);
+           written += write;
+           accFileBytes += write;
+-          if (accFileBytes >= maxFileBytes) {
+-            nextDestination();
+-          }
+         }
+       }
+       @Override
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/Gridmix.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/Gridmix.java
+index de653ae..fda4f6d 100644
+--- a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/Gridmix.java
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/Gridmix.java
+@@ -20,18 +20,26 @@ package org.apache.hadoop.mapred.gridmix;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.io.PrintStream;
++import java.net.URI;
++import java.security.PrivilegedExceptionAction;
+ import java.util.List;
+ import java.util.concurrent.CountDownLatch;
+ import java.util.concurrent.TimeUnit;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.conf.Configured;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.FsShell;
++import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.Tool;
+ import org.apache.hadoop.util.ToolRunner;
++import org.apache.hadoop.tools.rumen.ZombieJobProducer;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -78,10 +86,17 @@ public class Gridmix extends Configured implements Tool {
+    */
+   public static final String GRIDMIX_SUB_MUL = "gridmix.submit.multiplier";
+ 
++  /**
++   * Class used to resolve users in the trace to the list of target users
++   * on the cluster.
++   */
++  public static final String GRIDMIX_USR_RSV = "gridmix.user.resolve.class";
++
+   // Submit data structures
+   private JobFactory factory;
+   private JobSubmitter submitter;
+   private JobMonitor monitor;
++  private Statistics statistics;
+ 
+   // Shutdown hook
+   private final Shutdown sdh = new Shutdown();
+@@ -107,6 +122,15 @@ public class Gridmix extends Configured implements Tool {
+     if (!genData.getJob().isSuccessful()) {
+       throw new IOException("Data generation failed!");
+     }
++
++    FsShell shell = new FsShell(conf);
++    try {
++      LOG.info("Changing the permissions for inputPath " + ioPath.toString());
++      shell.run(new String[] {"-chmod","-R","777", ioPath.toString()});
++    } catch (Exception e) {
++      LOG.error("Couldnt change the file permissions " , e);
++      throw new IOException(e);
++    }
+     LOG.info("Done.");
+   }
+ 
+@@ -128,74 +152,140 @@ public class Gridmix extends Configured implements Tool {
+    * @param startFlag Semaphore for starting job trace pipeline
+    */
+   private void startThreads(Configuration conf, String traceIn, Path ioPath,
+-      Path scratchDir, CountDownLatch startFlag) throws IOException {
+-    monitor = createJobMonitor();
+-    submitter = createJobSubmitter(monitor,
+-        conf.getInt(GRIDMIX_SUB_THR,
+-          Runtime.getRuntime().availableProcessors() + 1),
+-        conf.getInt(GRIDMIX_QUE_DEP, 5),
+-        new FilePool(conf, ioPath));
+-    factory = createJobFactory(submitter, traceIn, scratchDir, conf, startFlag);
+-    monitor.start();
+-    submitter.start();
+-    factory.start();
++      Path scratchDir, CountDownLatch startFlag, UserResolver userResolver)
++      throws IOException {
++    try {
++      GridmixJobSubmissionPolicy policy = GridmixJobSubmissionPolicy.getPolicy(
++        conf, GridmixJobSubmissionPolicy.STRESS);
++      LOG.info(" Submission policy is " + policy.name());
++      statistics = new Statistics(conf, policy.getPollingInterval(), startFlag,userResolver);
++      monitor = createJobMonitor(statistics);
++      int noOfSubmitterThreads = policy.name().equals(
++        GridmixJobSubmissionPolicy.SERIAL.name()) ? 1 :
++        Runtime.getRuntime().availableProcessors() + 1;
++
++      submitter = createJobSubmitter(
++        monitor, conf.getInt(
++          GRIDMIX_SUB_THR, noOfSubmitterThreads), conf.getInt(
++          GRIDMIX_QUE_DEP, 5), new FilePool(
++          conf, ioPath), userResolver);
++      
++      factory = createJobFactory(
++        submitter, traceIn, scratchDir, conf, startFlag, userResolver);
++      if (policy.name().equals(GridmixJobSubmissionPolicy.SERIAL.name())) {
++        statistics.addJobStatsListeners(factory);
++      } else {
++        statistics.addClusterStatsObservers(factory);
++      }
++      
++      monitor.start();
++      submitter.start();
++    }catch(Exception e) {
++      LOG.error(" Exception at start " ,e);
++      throw new IOException(e);
++    }
+   }
+ 
+-  protected JobMonitor createJobMonitor() throws IOException {
+-    return new JobMonitor();
++  protected JobMonitor createJobMonitor(Statistics stats) throws IOException {
++    return new JobMonitor(stats);
+   }
+ 
+   protected JobSubmitter createJobSubmitter(JobMonitor monitor, int threads,
+-      int queueDepth, FilePool pool) throws IOException {
+-    return new JobSubmitter(monitor, threads, queueDepth, pool);
++      int queueDepth, FilePool pool,UserResolver resolver) throws IOException {
++    return new JobSubmitter(monitor, threads, queueDepth, pool, resolver);
+   }
+ 
+-  protected JobFactory createJobFactory(JobSubmitter submitter, String traceIn,
+-      Path scratchDir, Configuration conf, CountDownLatch startFlag)
+-      throws IOException {
+-    return new JobFactory(submitter, createInputStream(traceIn), scratchDir,
+-        conf, startFlag);
++  protected JobFactory createJobFactory(
++    JobSubmitter submitter, String traceIn, Path scratchDir, Configuration conf,
++    CountDownLatch startFlag, UserResolver resolver)
++    throws IOException {
++    return GridmixJobSubmissionPolicy.getPolicy(
++      conf, GridmixJobSubmissionPolicy.STRESS).createJobFactory(
++      submitter, new ZombieJobProducer(
++        createInputStream(
++          traceIn), null), scratchDir, conf, startFlag, resolver);
+   }
+ 
+-  public int run(String[] argv) throws IOException, InterruptedException {
++  public int run(final String[] argv) throws IOException, InterruptedException {
++    int val = -1;
++    final Configuration conf = getConf();
++    UserGroupInformation.setConfiguration(conf);
++    UserGroupInformation ugi = UserGroupInformation.getLoginUser();
++
++    val = ugi.doAs(new PrivilegedExceptionAction<Integer>() {
++      public Integer run() throws Exception {
++        return runJob(conf,argv);
++      }
++    });
++    return val; 
++  }
++
++  private static UserResolver userResolver;
++
++  public UserResolver getCurrentUserResolver() {
++    return userResolver;
++  }
++
++  private int runJob(Configuration conf, String[] argv)
++    throws IOException, InterruptedException {
+     if (argv.length < 2) {
+       printUsage(System.err);
+       return 1;
+     }
+-    long genbytes = 0;
++    long genbytes = -1L;
+     String traceIn = null;
+     Path ioPath = null;
++    URI userRsrc = null;
++    userResolver = ReflectionUtils.newInstance(
++        conf.getClass(GRIDMIX_USR_RSV, SubmitterUserResolver.class,
++          UserResolver.class), conf);
+     try {
+-      int i = 0;
+-      genbytes = "-generate".equals(argv[i++])
+-        ? StringUtils.TraditionalBinaryPrefix.string2long(argv[i++])
+-        : --i;
+-      ioPath = new Path(argv[i++]);
+-      traceIn = argv[i++];
+-      if (i != argv.length) {
+-        printUsage(System.err);
+-        return 1;
++      for (int i = 0; i < argv.length - 2; ++i) {
++        if ("-generate".equals(argv[i])) {
++          genbytes = StringUtils.TraditionalBinaryPrefix.string2long(argv[++i]);
++        } else if ("-users".equals(argv[i])) {
++          userRsrc = new URI(argv[++i]);
++        } else {
++          printUsage(System.err);
++          return 1;
++        }
+       }
++      if (!userResolver.setTargetUsers(userRsrc, conf)) {
++        LOG.warn("Resource " + userRsrc + " ignored");
++      }
++      ioPath = new Path(argv[argv.length - 2]);
++      traceIn = argv[argv.length - 1];
+     } catch (Exception e) {
++      e.printStackTrace();
+       printUsage(System.err);
+       return 1;
+     }
++    return start(conf, traceIn, ioPath, genbytes, userResolver);
++  }
++
++  int start(Configuration conf, String traceIn, Path ioPath, long genbytes,
++      UserResolver userResolver) throws IOException, InterruptedException {
+     InputStream trace = null;
+     try {
+-      final Configuration conf = getConf();
+       Path scratchDir = new Path(ioPath, conf.get(GRIDMIX_OUT_DIR, "gridmix"));
++      final FileSystem scratchFs = scratchDir.getFileSystem(conf);
++      scratchFs.mkdirs(scratchDir, new FsPermission((short) 0777));
++      scratchFs.setPermission(scratchDir, new FsPermission((short) 0777));
+       // add shutdown hook for SIGINT, etc.
+       Runtime.getRuntime().addShutdownHook(sdh);
+       CountDownLatch startFlag = new CountDownLatch(1);
+       try {
+         // Create, start job submission threads
+-        startThreads(conf, traceIn, ioPath, scratchDir, startFlag);
++        startThreads(conf, traceIn, ioPath, scratchDir, startFlag,
++            userResolver);
+         // Write input data if specified
+         if (genbytes > 0) {
+           writeInputData(genbytes, ioPath);
+         }
+         // scan input dir contents
+         submitter.refreshFilePool();
++        factory.start();
++        statistics.start();
+       } catch (Throwable e) {
+         LOG.error("Startup failed", e);
+         if (factory != null) factory.abort(); // abort pipeline
+@@ -203,7 +293,6 @@ public class Gridmix extends Configured implements Tool {
+         // signal for factory to start; sets start time
+         startFlag.countDown();
+       }
+-
+       if (factory != null) {
+         // wait for input exhaustion
+         factory.join(Long.MAX_VALUE);
+@@ -218,6 +307,10 @@ public class Gridmix extends Configured implements Tool {
+         // wait for running tasks to complete
+         monitor.shutdown();
+         monitor.join(Long.MAX_VALUE);
++
++        statistics.shutdown();
++        statistics.join(Long.MAX_VALUE);
++
+       }
+     } finally {
+       IOUtils.cleanup(LOG, trace);
+@@ -256,6 +349,7 @@ public class Gridmix extends Configured implements Tool {
+         killComponent(factory, FAC_SLEEP);   // read no more tasks
+         killComponent(submitter, SUB_SLEEP); // submit no more tasks
+         killComponent(monitor, MON_SLEEP);   // process remaining jobs here
++        killComponent(statistics,MON_SLEEP);
+       } finally {
+         if (monitor == null) {
+           return;
+@@ -301,7 +395,7 @@ public class Gridmix extends Configured implements Tool {
+ 
+   protected void printUsage(PrintStream out) {
+     ToolRunner.printGenericCommandUsage(out);
+-    out.println("Usage: gridmix [-generate <MiB>] <iopath> <trace>");
++    out.println("Usage: gridmix [-generate <MiB>] [-users URI] <iopath> <trace>");
+     out.println("  e.g. gridmix -generate 100m foo -");
+     out.println("Configuration parameters:");
+     out.printf("       %-40s : Output directory\n", GRIDMIX_OUT_DIR);
+@@ -309,6 +403,7 @@ public class Gridmix extends Configured implements Tool {
+     out.printf("       %-40s : Queued job desc\n", GRIDMIX_QUE_DEP);
+     out.printf("       %-40s : Key fraction of rec\n",
+         AvgRecordFactory.GRIDMIX_KEY_FRC);
++    out.printf("       %-40s : User resolution class\n", GRIDMIX_USR_RSV);
+   }
+ 
+   /**
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/GridmixJob.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/GridmixJob.java
+index aa29007..5a34a09 100644
+--- a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/GridmixJob.java
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/GridmixJob.java
+@@ -26,6 +26,8 @@ import java.util.concurrent.Callable;
+ import java.util.concurrent.ConcurrentHashMap;
+ import java.util.concurrent.Delayed;
+ import java.util.concurrent.TimeUnit;
++import java.security.PrivilegedExceptionAction;
++import javax.security.auth.login.LoginException;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+@@ -50,6 +52,7 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
+ import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.tools.rumen.JobStory;
+ import org.apache.hadoop.tools.rumen.TaskInfo;
+ 
+@@ -77,15 +80,40 @@ class GridmixJob implements Callable<Job>, Delayed {
+ 
+   private final int seq;
+   private final Path outdir;
+-  protected final Job job;
++  protected Job job;
+   private final JobStory jobdesc;
++  private final UserGroupInformation ugi;
+   private final long submissionTimeNanos;
+ 
+-  public GridmixJob(Configuration conf, long submissionMillis,
+-      JobStory jobdesc, Path outRoot, int seq) throws IOException {
++  public GridmixJob(
++    final Configuration conf, long submissionMillis, final JobStory jobdesc,
++    Path outRoot, UserGroupInformation ugi, final int seq) throws IOException {
++    this.ugi = ugi;
+     ((StringBuilder)nameFormat.get().out()).setLength(JOBNAME.length());
+-    // TODO(broken compile in HADOOP-6299
+-    job = new Job(conf, nameFormat.get().format("%05d", seq).toString());
++    try {
++      job = this.ugi.doAs(new PrivilegedExceptionAction<Job>() {
++        public Job run(){
++          try {
++            return new Job(
++              conf, nameFormat.get().format(
++                "%05d", seq).toString());
++          } catch (IOException e) {
++            LOG.error(" Could not run job submitted " + jobdesc.getName());
++            return null;
++          }
++        }
++      });
++    } catch (InterruptedException e) {
++      throw new IOException(e);
++    } catch (IOException e) {
++      throw e;
++    }
++
++    if(job == null) {
++      throw new IOException(
++        " Could not create Job instance for job " + jobdesc.getName());
++    }
++    
+     submissionTimeNanos = TimeUnit.NANOSECONDS.convert(
+         submissionMillis, TimeUnit.MILLISECONDS);
+     this.jobdesc = jobdesc;
+@@ -93,14 +121,34 @@ class GridmixJob implements Callable<Job>, Delayed {
+     outdir = new Path(outRoot, "" + seq);
+   }
+ 
+-  protected GridmixJob(Configuration conf, long submissionMillis, String name)
+-      throws IOException {
+-    job = new Job(conf, name);
++  protected GridmixJob(
++    final Configuration conf, long submissionMillis, final String name)
++  throws IOException {
+     submissionTimeNanos = TimeUnit.NANOSECONDS.convert(
+         submissionMillis, TimeUnit.MILLISECONDS);
+     jobdesc = null;
+     outdir = null;
+     seq = -1;
++    ugi = UserGroupInformation.getCurrentUser();
++
++    try {
++      job = this.ugi.doAs(new PrivilegedExceptionAction<Job>() {
++          public Job run(){
++            try {
++              return new Job(conf,name);
++            } catch (IOException e) {
++              LOG.error(" Could not run job submitted " + name);
++              return null;
++            }
++          }
++        });
++    } catch (InterruptedException e) {
++      LOG.error(" Error while creating new job " , e);
++    }
++  }
++
++  public UserGroupInformation getUgi() {
++    return ugi;
+   }
+ 
+   public String toString() {
+@@ -160,24 +208,49 @@ class GridmixJob implements Callable<Job>, Delayed {
+ 
+   public Job call() throws IOException, InterruptedException,
+                            ClassNotFoundException {
+-    job.setMapperClass(GridmixMapper.class);
+-    job.setReducerClass(GridmixReducer.class);
+-    job.setNumReduceTasks(jobdesc.getNumberReduces());
+-    job.setMapOutputKeyClass(GridmixKey.class);
+-    job.setMapOutputValueClass(GridmixRecord.class);
+-    job.setSortComparatorClass(GridmixKey.Comparator.class);
+-    job.setGroupingComparatorClass(SpecGroupingComparator.class);
+-    job.setInputFormatClass(GridmixInputFormat.class);
+-    job.setOutputFormatClass(RawBytesOutputFormat.class);
+-    job.setPartitionerClass(DraftPartitioner.class);
+-    job.setJarByClass(GridmixJob.class);
+-    job.getConfiguration().setInt("gridmix.job.seq", seq);
+-    job.getConfiguration().set(ORIGNAME, null == jobdesc.getJobID()
+-        ? "<unknown>" : jobdesc.getJobID().toString());
+-    job.getConfiguration().setBoolean("mapred.used.genericoptionsparser", true);
+-    FileInputFormat.addInputPath(job, new Path("ignored"));
+-    FileOutputFormat.setOutputPath(job, outdir);
+-    job.submit();
++    job = ugi.doAs(
++      new PrivilegedExceptionAction<Job>() {
++        public Job run() {
++          job.setMapperClass(GridmixMapper.class);
++          job.setReducerClass(GridmixReducer.class);
++          job.setNumReduceTasks(jobdesc.getNumberReduces());
++          job.setMapOutputKeyClass(GridmixKey.class);
++          job.setMapOutputValueClass(GridmixRecord.class);
++          job.setSortComparatorClass(GridmixKey.Comparator.class);
++          job.setGroupingComparatorClass(SpecGroupingComparator.class);
++          job.setInputFormatClass(GridmixInputFormat.class);
++          job.setOutputFormatClass(RawBytesOutputFormat.class);
++          job.setPartitionerClass(DraftPartitioner.class);
++          job.setJarByClass(GridmixJob.class);
++          job.getConfiguration().setInt("gridmix.job.seq", seq);
++          job.getConfiguration().set(
++            ORIGNAME, null == jobdesc.getJobID() ? "<unknown>" :
++              jobdesc.getJobID().toString());
++          job.getConfiguration().setBoolean(
++            "mapred.used.genericoptionsparser", true);
++          try {
++            FileInputFormat.addInputPath(job, new Path("ignored"));
++          } catch (IOException e) {
++            LOG.error(" Exception while addingInpuPath job " , e);
++            return null;
++          }
++          FileOutputFormat.setOutputPath(job, outdir);
++          try {
++            job.submit();
++          } catch (IOException e) {
++            LOG.error(" Exception while submitting job " , e);
++            return null;
++          } catch (InterruptedException e) {
++            LOG.error(" Exception while submitting job " , e);
++            return null;
++          } catch (ClassNotFoundException e) {
++            LOG.error(" Exception while submitting job " , e);
++            return null;
++          }
++          return job;
++        }
++      });
++
+     return job;
+   }
+ 
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/GridmixJobSubmissionPolicy.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/GridmixJobSubmissionPolicy.java
+new file mode 100644
+index 0000000..6c56413
+--- /dev/null
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/GridmixJobSubmissionPolicy.java
+@@ -0,0 +1,87 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ * <p/>
++ * http://www.apache.org/licenses/LICENSE-2.0
++ * <p/>
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred.gridmix;
++
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.tools.rumen.JobStoryProducer;
++import org.apache.hadoop.mapred.gridmix.Statistics.JobStats;
++import org.apache.hadoop.mapred.gridmix.Statistics.ClusterStats;
++
++import java.util.concurrent.CountDownLatch;
++import java.io.IOException;
++
++enum GridmixJobSubmissionPolicy {
++
++  REPLAY("REPLAY",320000) {
++    @Override
++    public JobFactory<ClusterStats> createJobFactory(
++      JobSubmitter submitter, JobStoryProducer producer, Path scratchDir,
++      Configuration conf, CountDownLatch startFlag, UserResolver userResolver)
++      throws IOException {
++      return new ReplayJobFactory(
++        submitter, producer, scratchDir, conf, startFlag,userResolver);
++    }},
++
++  STRESS("STRESS",5000) {
++    @Override
++    public JobFactory<ClusterStats> createJobFactory(
++      JobSubmitter submitter, JobStoryProducer producer, Path scratchDir,
++      Configuration conf, CountDownLatch startFlag, UserResolver userResolver)
++      throws IOException {
++      return new StressJobFactory(
++        submitter, producer, scratchDir, conf, startFlag,userResolver);
++    }},
++
++  SERIAL("SERIAL",0) {
++    @Override
++    public JobFactory<JobStats> createJobFactory(
++      JobSubmitter submitter, JobStoryProducer producer, Path scratchDir,
++      Configuration conf, CountDownLatch startFlag, UserResolver userResolver)
++      throws IOException {
++      return new SerialJobFactory(
++        submitter, producer, scratchDir, conf, startFlag,userResolver);
++    }
++  };
++
++  public static final String JOB_SUBMISSION_POLICY =
++    "gridmix.job-submission.policy";
++
++  private final String name;
++  private final int pollingInterval;
++
++  GridmixJobSubmissionPolicy(String name,int pollingInterval) {
++    this.name = name;
++    this.pollingInterval = pollingInterval;
++  }
++
++  public abstract JobFactory createJobFactory(
++    JobSubmitter submitter, JobStoryProducer producer, Path scratchDir,
++    Configuration conf, CountDownLatch startFlag, UserResolver userResolver)
++    throws IOException;
++
++  public int getPollingInterval() {
++    return pollingInterval;
++  }
++
++  public static GridmixJobSubmissionPolicy getPolicy(
++    Configuration conf, GridmixJobSubmissionPolicy defaultPolicy) {
++    String policy = conf.get(JOB_SUBMISSION_POLICY, defaultPolicy.name());
++    return valueOf(policy.toUpperCase());
++  }
++}
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobFactory.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobFactory.java
+index 859d406..6dfc7e4 100644
+--- a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobFactory.java
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobFactory.java
+@@ -17,29 +17,28 @@
+  */
+ package org.apache.hadoop.mapred.gridmix;
+ 
+-import java.io.IOException;
+-import java.io.InputStream;
+-import java.util.concurrent.CountDownLatch;
+-import java.util.concurrent.TimeUnit;
+-import java.util.concurrent.atomic.AtomicInteger;
+-
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.Path;
+-import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.mapred.JobConf;
++import org.apache.hadoop.mapred.gridmix.Statistics.ClusterStats;
+ import org.apache.hadoop.mapreduce.InputSplit;
+ import org.apache.hadoop.mapreduce.JobID;
+ import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.hadoop.tools.rumen.JobStory;
+ import org.apache.hadoop.tools.rumen.JobStoryProducer;
+ import org.apache.hadoop.tools.rumen.Pre21JobHistoryConstants.Values;
+-import org.apache.hadoop.tools.rumen.Pre21JobHistoryConstants;
+ import org.apache.hadoop.tools.rumen.TaskAttemptInfo;
+ import org.apache.hadoop.tools.rumen.TaskInfo;
+ import org.apache.hadoop.tools.rumen.ZombieJobProducer;
++import org.apache.hadoop.tools.rumen.Pre21JobHistoryConstants;
+ 
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
++import java.io.IOException;
++import java.io.InputStream;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.locks.ReentrantLock;
++import java.util.concurrent.atomic.AtomicInteger;
+ 
+ 
+ /**
+@@ -49,19 +48,21 @@ import org.apache.commons.logging.LogFactory;
+  * construction.
+  * @see org.apache.hadoop.tools.rumen.HadoopLogsAnalyzer
+  */
+-class JobFactory implements Gridmix.Component<Void> {
++abstract class JobFactory<T> implements Gridmix.Component<Void>,StatListener<T>{
+ 
+   public static final Log LOG = LogFactory.getLog(JobFactory.class);
+ 
+-  private final Path scratch;
+-  private final float rateFactor;
+-  private final Configuration conf;
+-  private final ReaderThread rThread;
+-  private final AtomicInteger sequence;
+-  private final JobSubmitter submitter;
+-  private final CountDownLatch startFlag;
+-  private volatile IOException error = null;
++  protected final Path scratch;
++  protected final float rateFactor;
++  protected final Configuration conf;
++  protected final Thread rThread;
++  protected final AtomicInteger sequence;
++  protected final JobSubmitter submitter;
++  protected final CountDownLatch startFlag;
++  protected final UserResolver userResolver;
++  protected volatile IOException error = null;
+   protected final JobStoryProducer jobProducer;
++  protected final ReentrantLock lock = new ReentrantLock(true);
+ 
+   /**
+    * Creating a new instance does not start the thread.
+@@ -71,12 +72,13 @@ class JobFactory implements Gridmix.Component<Void> {
+    * @param scratch Directory into which to write output from simulated jobs
+    * @param conf Config passed to all jobs to be submitted
+    * @param startFlag Latch released from main to start pipeline
++   * @throws java.io.IOException
+    */
+   public JobFactory(JobSubmitter submitter, InputStream jobTrace,
+-      Path scratch, Configuration conf, CountDownLatch startFlag)
+-      throws IOException {
++      Path scratch, Configuration conf, CountDownLatch startFlag,
++      UserResolver userResolver) throws IOException {
+     this(submitter, new ZombieJobProducer(jobTrace, null), scratch, conf,
+-        startFlag);
++        startFlag, userResolver);
+   }
+ 
+   /**
+@@ -88,7 +90,8 @@ class JobFactory implements Gridmix.Component<Void> {
+    * @param startFlag Latch released from main to start pipeline
+    */
+   protected JobFactory(JobSubmitter submitter, JobStoryProducer jobProducer,
+-      Path scratch, Configuration conf, CountDownLatch startFlag) {
++      Path scratch, Configuration conf, CountDownLatch startFlag,
++      UserResolver userResolver) {
+     sequence = new AtomicInteger(0);
+     this.scratch = scratch;
+     this.rateFactor = conf.getFloat(Gridmix.GRIDMIX_SUB_MUL, 1.0f);
+@@ -96,9 +99,14 @@ class JobFactory implements Gridmix.Component<Void> {
+     this.conf = new Configuration(conf);
+     this.submitter = submitter;
+     this.startFlag = startFlag;
+-    this.rThread = new ReaderThread();
++    this.rThread = createReaderThread();
++    if(LOG.isDebugEnabled()) {
++      LOG.debug(" The submission thread name is " + rThread.getName());
++    }
++    this.userResolver = userResolver;
+   }
+ 
++
+   static class MinTaskInfo extends TaskInfo {
+     public MinTaskInfo(TaskInfo info) {
+       super(info.getInputBytes(), info.getInputRecords(),
+@@ -122,7 +130,7 @@ class JobFactory implements Gridmix.Component<Void> {
+     }
+   }
+ 
+-  static class FilterJobStory implements JobStory {
++  protected static class FilterJobStory implements JobStory {
+ 
+     protected final JobStory job;
+ 
+@@ -154,74 +162,23 @@ class JobFactory implements Gridmix.Component<Void> {
+     }
+   }
+ 
+-  /**
+-   * Worker thread responsible for reading descriptions, assigning sequence
+-   * numbers, and normalizing time.
+-   */
+-  private class ReaderThread extends Thread {
+-
+-    public ReaderThread() {
+-      super("GridmixJobFactory");
+-    }
+-
+-    private JobStory getNextJobFiltered() throws IOException {
+-      JobStory job;
+-      do {
+-        job = jobProducer.getNextJob();
+-      } while (job != null
+-          && (job.getOutcome() != Pre21JobHistoryConstants.Values.SUCCESS ||
+-              job.getSubmissionTime() < 0));
+-      return null == job ? null : new FilterJobStory(job) {
+-          @Override
+-          public TaskInfo getTaskInfo(TaskType taskType, int taskNumber) {
+-            return new MinTaskInfo(this.job.getTaskInfo(taskType, taskNumber));
+-          }
+-        };
+-    }
+-
+-    @Override
+-    public void run() {
+-      try {
+-        startFlag.await();
+-        if (Thread.currentThread().isInterrupted()) {
+-          return;
+-        }
+-        final long initTime = TimeUnit.MILLISECONDS.convert(
+-            System.nanoTime(), TimeUnit.NANOSECONDS);
+-        LOG.debug("START @ " + initTime);
+-        long first = -1;
+-        long last = -1;
+-        while (!Thread.currentThread().isInterrupted()) {
+-          try {
+-            final JobStory job = getNextJobFiltered();
+-            if (null == job) {
+-              return;
+-            }
+-            if (first < 0) {
+-              first = job.getSubmissionTime();
+-            }
+-            final long current = job.getSubmissionTime();
+-            if (current < last) {
+-              LOG.warn("Job " + job.getJobID() + " out of order");
+-              continue;
+-            }
+-            last = current;
+-            submitter.add(new GridmixJob(conf, initTime +
+-                  Math.round(rateFactor * (current - first)),
+-                job, scratch, sequence.getAndIncrement()));
+-          } catch (IOException e) {
+-            JobFactory.this.error = e;
+-            return;
+-          }
+-        }
+-      } catch (InterruptedException e) {
+-        // exit thread; ignore any jobs remaining in the trace
+-        return;
+-      } finally {
+-        IOUtils.cleanup(null, jobProducer);
+-      }
+-    }
+-  }
++  protected abstract Thread createReaderThread() ;
++
++  protected JobStory getNextJobFiltered() throws IOException {
++    JobStory job;
++    do {
++      job = jobProducer.getNextJob();
++    } while (job != null
++        && (job.getOutcome() != Pre21JobHistoryConstants.Values.SUCCESS ||
++            job.getSubmissionTime() < 0));
++    return null == job ? null : new FilterJobStory(job) {
++        @Override
++        public TaskInfo getTaskInfo(TaskType taskType, int taskNumber) {
++          return new MinTaskInfo(this.job.getTaskInfo(taskType, taskNumber));
++         }
++      };
++   }
++     
+ 
+   /**
+    * Obtain the error that caused the thread to exit unexpectedly.
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobMonitor.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobMonitor.java
+index 94863a5..c55e46e 100644
+--- a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobMonitor.java
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobMonitor.java
+@@ -47,14 +47,12 @@ class JobMonitor implements Gridmix.Component<Job> {
+   private final MonitorThread mThread;
+   private final BlockingQueue<Job> runningJobs;
+   private final long pollDelayMillis;
++  private Statistics statistics;
+   private boolean graceful = false;
+   private boolean shutdown = false;
+ 
+-  /**
+-   * Create a JobMonitor with a default polling interval of 5s.
+-   */
+-  public JobMonitor() {
+-    this(5, TimeUnit.SECONDS);
++  public JobMonitor(Statistics statistics) {
++    this(5,TimeUnit.SECONDS, statistics);
+   }
+ 
+   /**
+@@ -62,12 +60,14 @@ class JobMonitor implements Gridmix.Component<Job> {
+    * polling a still-running job.
+    * @param pollDelay Delay after polling a running job
+    * @param unit Time unit for pollDelaySec (rounded to milliseconds)
++   * @param statistics StatCollector , listener to job completion.
+    */
+-  public JobMonitor(int pollDelay, TimeUnit unit) {
++  public JobMonitor(int pollDelay, TimeUnit unit, Statistics statistics) {
+     mThread = new MonitorThread();
+     runningJobs = new LinkedBlockingQueue<Job>();
+     mJobs = new LinkedList<Job>();
+     this.pollDelayMillis = TimeUnit.MILLISECONDS.convert(pollDelay, unit);
++    this.statistics = statistics;
+   }
+ 
+   /**
+@@ -78,6 +78,17 @@ class JobMonitor implements Gridmix.Component<Job> {
+   }
+ 
+   /**
++   * Add a submission failed job , such tht it can be communicated
++   * back to serial.
++   * TODO: Cleaner solution for this problem
++   * @param job
++   */
++  public void submissionFailed(Job job) {
++    LOG.info(" Job submission failed notify if anyone is waiting " + job);
++    this.statistics.add(job);
++  }
++
++  /**
+    * Temporary hook for recording job success.
+    */
+   protected void onSuccess(Job job) {
+@@ -162,6 +173,7 @@ class JobMonitor implements Gridmix.Component<Job> {
+             try {
+               if (job.isComplete()) {
+                 process(job);
++                statistics.add(job);
+                 continue;
+               }
+             } catch (IOException e) {
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobSubmitter.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobSubmitter.java
+index 7990d50..04cd196 100644
+--- a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobSubmitter.java
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobSubmitter.java
+@@ -25,10 +25,13 @@ import java.util.concurrent.RejectedExecutionException;
+ import java.util.concurrent.Semaphore;
+ import java.util.concurrent.ThreadPoolExecutor;
+ import java.util.concurrent.TimeUnit;
++import java.security.PrivilegedExceptionAction;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ 
++import org.apache.hadoop.security.UserGroupInformation;
++
+ /**
+  * Component accepting deserialized job traces, computing split data, and
+  * submitting to the cluster on deadline. Each job added from an upstream
+@@ -45,6 +48,7 @@ class JobSubmitter implements Gridmix.Component<GridmixJob> {
+   private final JobMonitor monitor;
+   private final ExecutorService sched;
+   private volatile boolean shutdown = false;
++  private final UserResolver resolver;
+ 
+   /**
+    * Initialize the submission component with downstream monitor and pool of
+@@ -58,12 +62,13 @@ class JobSubmitter implements Gridmix.Component<GridmixJob> {
+    *   synthetic jobs.
+    */
+   public JobSubmitter(JobMonitor monitor, int threads, int queueDepth,
+-      FilePool inputDir) {
++      FilePool inputDir, UserResolver resolver) {
+     sem = new Semaphore(queueDepth);
+     sched = new ThreadPoolExecutor(threads, threads, 0L,
+         TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
+     this.inputDir = inputDir;
+     this.monitor = monitor;
++    this.resolver = resolver;
+   }
+ 
+   /**
+@@ -81,7 +86,14 @@ class JobSubmitter implements Gridmix.Component<GridmixJob> {
+         try {
+           job.buildSplits(inputDir);
+         } catch (IOException e) {
+-          LOG.warn("Failed to submit " + job.getJob().getJobName(), e);
++          LOG.warn("Failed to submit " + job.getJob().getJobName() + " as " +
++              job.getUgi(), e);
++          monitor.submissionFailed(job.getJob());
++          return;
++        }catch (Exception e) {
++          LOG.warn("Failed to submit " + job.getJob().getJobName() + " as " +
++              job.getUgi(), e);
++          monitor.submissionFailed(job.getJob());
+           return;
+         }
+         // Sleep until deadline
+@@ -96,23 +108,30 @@ class JobSubmitter implements Gridmix.Component<GridmixJob> {
+           LOG.debug("SUBMIT " + job + "@" + System.currentTimeMillis() +
+               " (" + job.getJob().getJobID() + ")");
+         } catch (IOException e) {
+-          LOG.warn("Failed to submit " + job.getJob().getJobName(), e);
++          LOG.warn("Failed to submit " + job.getJob().getJobName() + " as " +
++              job.getUgi(), e);
+           if (e.getCause() instanceof ClosedByInterruptException) {
+             throw new InterruptedException("Failed to submit " +
+                 job.getJob().getJobName());
+           }
++          monitor.submissionFailed(job.getJob());
+         } catch (ClassNotFoundException e) {
+           LOG.warn("Failed to submit " + job.getJob().getJobName(), e);
++          monitor.submissionFailed(job.getJob());
+         }
+       } catch (InterruptedException e) {
+         // abort execution, remove splits if nesc
+         // TODO release ThdLoc
+         GridmixJob.pullDescription(job.id());
+         Thread.currentThread().interrupt();
+-        return;
++        monitor.submissionFailed(job.getJob());
++      } catch(Exception e) {
++        //Due to some exception job wasnt submitted.
++        LOG.info(" Job " + job.getJob() + " submission failed " , e);
++        monitor.submissionFailed(job.getJob());
+       } finally {
+         sem.release();
+-      }
++      }                               
+     }
+   }
+ 
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/ReplayJobFactory.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/ReplayJobFactory.java
+new file mode 100644
+index 0000000..8e6c113
+--- /dev/null
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/ReplayJobFactory.java
+@@ -0,0 +1,127 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ * <p/>
++ * http://www.apache.org/licenses/LICENSE-2.0
++ * <p/>
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred.gridmix;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.IOUtils;
++import org.apache.hadoop.tools.rumen.JobStory;
++import org.apache.hadoop.tools.rumen.JobStoryProducer;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++import java.io.IOException;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.TimeUnit;
++
++ class ReplayJobFactory extends JobFactory<Statistics.ClusterStats> {
++  public static final Log LOG = LogFactory.getLog(ReplayJobFactory.class);
++
++  /**
++   * Creating a new instance does not start the thread.
++   *
++   * @param submitter   Component to which deserialized jobs are passed
++   * @param jobProducer Job story producer
++   *                    {@link org.apache.hadoop.tools.rumen.ZombieJobProducer}
++   * @param scratch     Directory into which to write output from simulated jobs
++   * @param conf        Config passed to all jobs to be submitted
++   * @param startFlag   Latch released from main to start pipeline
++   * @param resolver
++   * @throws java.io.IOException
++   */
++  public ReplayJobFactory(
++    JobSubmitter submitter, JobStoryProducer jobProducer, Path scratch,
++    Configuration conf, CountDownLatch startFlag, UserResolver resolver)
++    throws IOException {
++    super(submitter, jobProducer, scratch, conf, startFlag,resolver);
++  }
++
++   
++    @Override
++  public Thread createReaderThread() {
++    return new ReplayReaderThread("ReplayJobFactory");
++  }
++
++   /**
++    * @param item
++    */
++   public void update(Statistics.ClusterStats item) {
++   }
++
++   private class ReplayReaderThread extends Thread {
++
++    public ReplayReaderThread(String threadName) {
++      super(threadName);
++    }
++
++
++    public void run() {
++      try {
++        startFlag.await();
++        if (Thread.currentThread().isInterrupted()) {
++          return;
++        }
++        final long initTime = TimeUnit.MILLISECONDS.convert(
++          System.nanoTime(), TimeUnit.NANOSECONDS);
++        LOG.info("START REPLAY @ " + initTime);
++        long first = -1;
++        long last = -1;
++        while (!Thread.currentThread().isInterrupted()) {
++          try {
++            final JobStory job = getNextJobFiltered();
++            if (null == job) {
++              return;
++            }
++            if (first < 0) {
++              first = job.getSubmissionTime();
++            }
++            final long current = job.getSubmissionTime();
++            if (current < last) {
++              LOG.warn("Job " + job.getJobID() + " out of order");
++              continue;
++            }
++            last = current;
++            submitter.add(
++              new GridmixJob(
++                conf, initTime + Math.round(rateFactor * (current - first)),
++                job, scratch, userResolver.getTargetUgi(
++                  UserGroupInformation.createRemoteUser(job.getUser())),
++                sequence.getAndIncrement()));
++          } catch (IOException e) {
++            error = e;
++            return;
++          }
++        }
++      } catch (InterruptedException e) {
++        // exit thread; ignore any jobs remaining in the trace
++      } finally {
++        IOUtils.cleanup(null, jobProducer);
++      }
++    }
++  }
++
++   /**
++    * Start the reader thread, wait for latch if necessary.
++    */
++   @Override
++   public void start() {
++     this.rThread.start();
++   }
++
++}
+\ No newline at end of file
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/RoundRobinUserResolver.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/RoundRobinUserResolver.java
+new file mode 100644
+index 0000000..a7924f9
+--- /dev/null
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/RoundRobinUserResolver.java
+@@ -0,0 +1,117 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred.gridmix;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.util.LineReader;
++
++import java.io.IOException;
++import java.net.URI;
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.HashMap;
++import java.util.List;
++
++public class RoundRobinUserResolver implements UserResolver {
++  public static final Log LOG = LogFactory.getLog(RoundRobinUserResolver.class);
++
++  private int uidx = 0;
++  private List<UserGroupInformation> users = Collections.emptyList();
++  private final HashMap<UserGroupInformation,UserGroupInformation> usercache =
++    new HashMap<UserGroupInformation,UserGroupInformation>();
++  
++  /**
++   * Userlist assumes one UGI per line, each UGI matching
++   * &lt;username&gt;,&lt;group&gt;[,group]*
++   */
++  private List<UserGroupInformation> parseUserList(
++      URI userUri, Configuration conf) throws IOException {
++    if (null == userUri) {
++      return Collections.emptyList();
++    }
++    
++    final Path userloc = new Path(userUri.toString());
++    final Text rawUgi = new Text();
++    final FileSystem fs = userloc.getFileSystem(conf);
++    final ArrayList<UserGroupInformation> ret = new ArrayList();
++
++    LineReader in = null;
++    try {
++      final ArrayList<String> groups = new ArrayList();
++      in = new LineReader(fs.open(userloc));
++      while (in.readLine(rawUgi) > 0) {
++        int e = rawUgi.find(",");
++        if (e <= 0) {
++          throw new IOException("Missing username: " + rawUgi);
++        }
++        final String username = Text.decode(rawUgi.getBytes(), 0, e);
++        int s = e;
++        while ((e = rawUgi.find(",", ++s)) != -1) {
++          groups.add(Text.decode(rawUgi.getBytes(), s, e - s));
++          s = e;
++        }
++        groups.add(Text.decode(rawUgi.getBytes(), s, rawUgi.getLength() - s));
++        if (groups.size() == 0) {
++          throw new IOException("Missing groups: " + rawUgi);
++        }
++        ret.add(UserGroupInformation.createRemoteUser(username));
++      }
++    } finally {
++      if (in != null) {
++        in.close();
++      }
++    }
++    return ret;
++  }
++
++  @Override
++  public synchronized boolean setTargetUsers(URI userloc, Configuration conf)
++      throws IOException {
++    users = parseUserList(userloc, conf);
++    if (users.size() == 0) {
++      throw new IOException("Empty user list");
++    }
++    usercache.keySet().retainAll(users);
++    return true;
++  }
++
++  @Override
++  public synchronized UserGroupInformation getTargetUgi(
++      UserGroupInformation ugi) {
++    UserGroupInformation ret = usercache.get(ugi);
++    if (null == ret) {
++      ret = users.get(uidx++ % users.size());
++      usercache.put(ugi, ret);
++    }
++    UserGroupInformation val = null;
++    try {
++      val = UserGroupInformation.createProxyUser(
++        ret.getUserName(), UserGroupInformation.getLoginUser());
++    } catch (IOException e) {
++      LOG.error("Error while creating the proxy user " ,e);
++    }
++    return val;
++  }
++
++}
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/SerialJobFactory.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/SerialJobFactory.java
+new file mode 100644
+index 0000000..d38e1a7
+--- /dev/null
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/SerialJobFactory.java
+@@ -0,0 +1,177 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ * <p/>
++ * http://www.apache.org/licenses/LICENSE-2.0
++ * <p/>
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred.gridmix;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.IOUtils;
++import org.apache.hadoop.tools.rumen.JobStory;
++import org.apache.hadoop.tools.rumen.JobStoryProducer;
++import org.apache.hadoop.mapred.gridmix.Statistics.JobStats;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++import java.io.IOException;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.locks.Condition;
++
++public class SerialJobFactory extends JobFactory<JobStats> {
++
++  public static final Log LOG = LogFactory.getLog(SerialJobFactory.class);
++  private final Condition jobCompleted = lock.newCondition();
++
++  /**
++   * Creating a new instance does not start the thread.
++   *
++   * @param submitter   Component to which deserialized jobs are passed
++   * @param jobProducer Job story producer
++   *                    {@link org.apache.hadoop.tools.rumen.ZombieJobProducer}
++   * @param scratch     Directory into which to write output from simulated jobs
++   * @param conf        Config passed to all jobs to be submitted
++   * @param startFlag   Latch released from main to start pipeline
++   * @throws java.io.IOException
++   */
++  public SerialJobFactory(
++    JobSubmitter submitter, JobStoryProducer jobProducer, Path scratch,
++    Configuration conf, CountDownLatch startFlag, UserResolver resolver)
++    throws IOException {
++    super(submitter, jobProducer, scratch, conf, startFlag, resolver);
++  }
++
++  @Override
++  public Thread createReaderThread() {
++    return new SerialReaderThread("SerialJobFactory");
++  }
++
++  private class SerialReaderThread extends Thread {
++
++    public SerialReaderThread(String threadName) {
++      super(threadName);
++    }
++
++    /**
++     * SERIAL : In this scenario .  method waits on notification ,
++     * that a submitted job is actually completed. Logic is simple.
++     * ===
++     * while(true) {
++     * wait till previousjob is completed.
++     * break;
++     * }
++     * submit newJob.
++     * previousJob = newJob;
++     * ==
++     */
++    @Override
++    public void run() {
++      try {
++        startFlag.await();
++        if (Thread.currentThread().isInterrupted()) {
++          return;
++        }
++        LOG.info("START SERIAL @ " + System.currentTimeMillis());
++        GridmixJob prevJob;
++        while (!Thread.currentThread().isInterrupted()) {
++          final JobStory job;
++          try {
++            job = getNextJobFiltered();
++            if (null == job) {
++              return;
++            }
++            if (LOG.isDebugEnabled()) {
++              LOG.debug(
++                "Serial mode submitting job " + job.getName());
++            }
++            prevJob = new GridmixJob(
++              conf, 0L, job, scratch, userResolver.getTargetUgi(
++                UserGroupInformation.createRemoteUser(job.getUser())),
++              sequence.getAndIncrement());
++
++            lock.lock();
++            try {
++              LOG.info(" Submitted the job " + prevJob);
++              submitter.add(prevJob);
++            } finally {
++              lock.unlock();
++            }
++          } catch (IOException e) {
++            error = e;
++            //If submission of current job fails , try to submit the next job.
++            return;
++          }
++
++          if (prevJob != null) {
++            //Wait till previous job submitted is completed.
++            lock.lock();
++            try {
++              while (true) {
++                try {
++                  jobCompleted.await();
++                } catch (InterruptedException ie) {
++                  LOG.error(
++                    " Error in SerialJobFactory while waiting for job completion ",
++                    ie);
++                  return;
++                }
++                if (LOG.isDebugEnabled()) {
++                  LOG.info(" job " + job.getName() + " completed ");
++                }
++                break;
++              }
++            } finally {
++              lock.unlock();
++            }
++            prevJob = null;
++          }
++        }
++      } catch (InterruptedException e) {
++        return;
++      } finally {
++        IOUtils.cleanup(null, jobProducer);
++      }
++    }
++
++  }
++
++  /**
++   * SERIAL. Once you get notification from StatsCollector about the job
++   * completion ,simply notify the waiting thread.
++   *
++   * @param item
++   */
++  @Override
++  public void update(Statistics.JobStats item) {
++    //simply notify in case of serial submissions. We are just bothered
++    //if submitted job is completed or not.
++    lock.lock();
++    try {
++      jobCompleted.signalAll();
++    } finally {
++      lock.unlock();
++    }
++  }
++
++  /**
++   * Start the reader thread, wait for latch if necessary.
++   */
++  @Override
++  public void start() {
++    LOG.info(" Starting Serial submission ");
++    this.rThread.start();
++  }
++}
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/StatListener.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/StatListener.java
+new file mode 100644
+index 0000000..2a0f74f
+--- /dev/null
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/StatListener.java
+@@ -0,0 +1,32 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ * <p/>
++ * http://www.apache.org/licenses/LICENSE-2.0
++ * <p/>
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred.gridmix;
++
++/**
++ * Stat listener.
++ * @param <T>
++ */
++interface StatListener<T>{
++
++  /**
++   * 
++   * @param item
++   */
++  void update(T item);
++}
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/Statistics.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/Statistics.java
+new file mode 100644
+index 0000000..84fce31
+--- /dev/null
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/Statistics.java
+@@ -0,0 +1,377 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ * <p/>
++ * http://www.apache.org/licenses/LICENSE-2.0
++ * <p/>
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred.gridmix;
++
++import org.apache.hadoop.mapred.gridmix.Gridmix.Component;
++import org.apache.hadoop.mapred.JobConf;
++import org.apache.hadoop.mapred.JobClient;
++import org.apache.hadoop.mapred.ClusterStatus;
++import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapred.JobStatus;
++import org.apache.hadoop.mapred.TaskReport;
++import org.apache.hadoop.mapreduce.JobID;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++import java.security.PrivilegedExceptionAction;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Map;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.locks.ReentrantLock;
++import java.util.concurrent.locks.Condition;
++import java.io.IOException;
++
++/**
++ * Component collecting the stats required by other components
++ * to make decisions.
++ * Single thread Collector tries to collec the stats.
++ * Each of thread poll updates certain datastructure(Currently ClusterStats).
++ * Components interested in these datastructure, need to register.
++ * StatsCollector notifies each of the listeners.
++ */
++public class Statistics implements Component<Job> {
++  public static final Log LOG = LogFactory.getLog(Statistics.class);
++
++  private final StatCollector statistics = new StatCollector();
++  private JobClient cluster;
++
++  //List of cluster status listeners.
++  private final List<StatListener<ClusterStats>> clusterStatlisteners =
++    new ArrayList<StatListener<ClusterStats>>();
++
++  //List of job status listeners.
++  private final List<StatListener<JobStats>> jobStatListeners =
++    new ArrayList<StatListener<JobStats>>();
++
++  private int completedJobsInCurrentInterval = 0;
++  private final int jtPollingInterval;
++  private volatile boolean shutdown = false;
++  private final int maxJobCompletedInInterval;
++  private static final String MAX_JOBS_COMPLETED_IN_POLL_INTERVAL_KEY =
++    "gridmix.max-jobs-completed-in-poll-interval";
++  private final ReentrantLock lock = new ReentrantLock();
++  private final Condition jobCompleted = lock.newCondition();
++  private final CountDownLatch startFlag;
++  private final UserResolver userResolver;
++  private static Map<JobID, TaskReport[]> jobTaskReports =
++    new ConcurrentHashMap<JobID, TaskReport[]>();
++
++  public Statistics(
++    final Configuration conf, int pollingInterval, CountDownLatch startFlag,UserResolver userResolver)
++    throws IOException {
++    UserGroupInformation ugi = UserGroupInformation.getLoginUser();
++    this.userResolver = userResolver;
++    try {
++      this.cluster = ugi.doAs(new PrivilegedExceptionAction<JobClient>(){
++        public JobClient run() {
++          try {
++            return new JobClient(new JobConf(conf));
++          } catch (IOException e) {
++            LOG.error(" error while createing job client " + e.getMessage());
++          }
++          return null;
++        }
++      });
++    } catch (InterruptedException e) {
++      LOG.error(" Exception in statisitics " + e.getMessage());
++    } catch (IOException e) {
++      LOG.error("Exception in statistics " + e.getMessage());
++    }
++    this.jtPollingInterval = pollingInterval;
++    maxJobCompletedInInterval = conf.getInt(
++      MAX_JOBS_COMPLETED_IN_POLL_INTERVAL_KEY, 1);
++    this.startFlag = startFlag;
++  }
++
++  /**
++   * Used by JobMonitor to add the completed job.
++   */
++  @Override
++  public void add(Job job) {
++    //This thread will be notified initially by jobmonitor incase of
++    //data generation. Ignore that as we are getting once the input is
++    //generated.
++    if(!statistics.isAlive()) {
++      return;
++    }
++    completedJobsInCurrentInterval++;
++    if (job.getJobID() != null) {
++      jobTaskReports.remove(job.getJobID());
++    }
++    //check if we have reached the maximum level of job completions.
++    if (completedJobsInCurrentInterval >= maxJobCompletedInInterval) {
++      if (LOG.isDebugEnabled()) {
++        LOG.debug(
++          " Reached maximum limit of jobs in a polling interval " +
++            completedJobsInCurrentInterval);
++      }
++      completedJobsInCurrentInterval = 0;
++      lock.lock();
++      try {
++        //Job is completed notify all the listeners.
++        if (jobStatListeners.size() > 0) {
++          for (StatListener<JobStats> l : jobStatListeners) {
++            JobStats stats = new JobStats();
++            stats.setCompleteJob(job);
++            l.update(stats);
++          }
++        }
++        this.jobCompleted.signalAll();
++      } finally {
++        lock.unlock();
++      }
++    }
++  }
++
++  //TODO: We have just 2 types of listeners as of now . If no of listeners
++  //increase then we should move to map kind of model.
++
++  public void addClusterStatsObservers(StatListener<ClusterStats> listener) {
++    clusterStatlisteners.add(listener);
++  }
++
++  public void addJobStatsListeners(StatListener<JobStats> listener) {
++    this.jobStatListeners.add(listener);
++  }
++
++  /**
++   * Attempt to start the service.
++   */
++  @Override
++  public void start() {
++    statistics.start();
++  }
++
++  private class StatCollector extends Thread {
++
++    StatCollector() {
++      super("StatsCollectorThread");
++    }
++
++    public void run() {
++      try {
++        startFlag.await();
++        if (Thread.currentThread().isInterrupted()) {
++          return;
++        }
++      } catch (InterruptedException ie) {
++        LOG.error(
++          "Statistics Error while waiting for other threads to get ready ", ie);
++        return;
++      }
++      while (!shutdown) {
++        lock.lock();
++        try {
++          jobCompleted.await(jtPollingInterval, TimeUnit.MILLISECONDS);
++        } catch (InterruptedException ie) {
++          LOG.error(
++            "Statistics interrupt while waiting for polling " + ie.getCause(),
++            ie);
++          return;
++        } finally {
++          lock.unlock();
++        }
++
++        //Fetch cluster data only if required.i.e .
++        // only if there are clusterStats listener.
++        if (clusterStatlisteners.size() > 0) {
++          try {
++            ClusterStatus clusterStatus = cluster.getClusterStatus();
++            JobStatus[] allJobs = cluster.getAllJobs();
++            List<JobStatus> runningWaitingJobs = getRunningWaitingJobs(allJobs);
++            getJobReports(runningWaitingJobs);
++            updateAndNotifyClusterStatsListeners(
++              clusterStatus, runningWaitingJobs);
++          } catch (IOException e) {
++            LOG.error(
++              "Statistics io exception while polling JT ", e);
++            return;
++          } catch (InterruptedException e) {
++            LOG.error(
++              "Statistics interrupt exception while polling JT ", e);
++            return;
++          }
++        }
++      }
++    }
++
++    private void updateAndNotifyClusterStatsListeners(
++      ClusterStatus clusterStatus, List<JobStatus> runningWaitingJobs) {
++      ClusterStats stats = ClusterStats.getClusterStats();
++      stats.setClusterMetric(clusterStatus);
++      stats.setRunningWaitingJobs(runningWaitingJobs);
++      for (StatListener<ClusterStats> listener : clusterStatlisteners) {
++        listener.update(stats);
++      }
++    }
++
++    private void getJobReports(List<JobStatus> jobs) throws IOException {
++      for (final JobStatus job : jobs) {
++        UserGroupInformation user = userResolver.getTargetUgi(
++          UserGroupInformation.createRemoteUser(job.getUsername()));
++        try {
++          user.doAs(
++            new PrivilegedExceptionAction<Void>() {
++              public Void run() {
++                JobID id = job.getJobID();
++                if (!jobTaskReports.containsKey(id)) {
++                  try {
++                    jobTaskReports.put(
++                      id, cluster.getMapTaskReports(
++                        org.apache.hadoop.mapred.JobID.downgrade(id)));
++                  } catch (IOException e) {
++                    LOG.error(
++                      " Couldnt get the MapTaskResports for "+ job.getJobId());
++                  }
++                }
++                return null;
++              }
++            });
++        } catch (InterruptedException e) {
++          LOG.error(
++            " Could nt get information for user " + user + " and job " +
++              job.getJobId());
++        } catch (IOException e) {
++          LOG.error(
++            " Could nt get information for user " + user + " and job " +
++              job.getJobId());
++          throw new IOException(e);
++        }
++      }
++    }
++
++    /**
++     * From the list of Jobs , give the list of jobs whoes state is eigther
++     * PREP or RUNNING.
++     *
++     * @param allJobs
++     * @return
++     * @throws java.io.IOException
++     * @throws InterruptedException
++     */
++    private List<JobStatus> getRunningWaitingJobs(JobStatus[] allJobs)
++      throws IOException, InterruptedException {
++      List<JobStatus> result = new ArrayList<JobStatus>();
++      for (JobStatus job : allJobs) {
++        //TODO Check if job.getStatus() makes a rpc call
++        int state = job.getRunState();
++        if (JobStatus.PREP == state || JobStatus.RUNNING == state) {
++          result.add(job);
++        }
++      }
++      return result;
++    }
++
++  }
++
++  /**
++   * Wait until the service completes. It is assumed that either a
++   * {@link #shutdown} or {@link #abort} has been requested.
++   */
++  @Override
++  public void join(long millis) throws InterruptedException {
++    statistics.join(millis);
++  }
++
++  @Override
++  public void shutdown() {
++    shutdown = true;
++    jobTaskReports.clear();
++    clusterStatlisteners.clear();
++    jobStatListeners.clear();
++    statistics.interrupt();
++  }
++
++  @Override
++  public void abort() {
++    shutdown = true;
++    jobTaskReports.clear();
++    clusterStatlisteners.clear();
++    jobStatListeners.clear();
++    statistics.interrupt();
++  }
++
++  /**
++   * Class to encapsulate the JobStats information.
++   * Current we just need information about completedJob.
++   * TODO: In future we need to extend this to send more information.
++   */
++  static class JobStats {
++    private Job completedJob;
++
++    public Job getCompleteJob() {
++      return completedJob;
++    }
++
++    public void setCompleteJob(Job job) {
++      this.completedJob = job;
++    }
++  }
++
++  static class ClusterStats {
++    private ClusterStatus status = null;
++    private static ClusterStats stats = new ClusterStats();
++    private List<JobStatus> runningWaitingJobs;
++
++    private ClusterStats() {
++
++    }
++
++    /**
++     * @return stats
++     */
++    static ClusterStats getClusterStats() {
++      return stats;
++    }
++
++    /**
++     * @param metrics
++     */
++    void setClusterMetric(ClusterStatus metrics) {
++      this.status = metrics;
++    }
++
++    /**
++     * @return metrics
++     */
++    public ClusterStatus getStatus() {
++      return status;
++    }
++
++    /**
++     * @return runningWatitingJobs
++     */
++    public List<JobStatus> getRunningWaitingJobs() {
++      return runningWaitingJobs;
++    }
++
++    public void setRunningWaitingJobs(List<JobStatus> runningWaitingJobs) {
++      this.runningWaitingJobs = runningWaitingJobs;
++    }
++
++    public Map<JobID, TaskReport[]> getJobReports() {
++      return jobTaskReports;
++    }
++
++  }
++}
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/StressJobFactory.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/StressJobFactory.java
+new file mode 100644
+index 0000000..1f11fd8
+--- /dev/null
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/StressJobFactory.java
+@@ -0,0 +1,258 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ * <p/>
++ * http://www.apache.org/licenses/LICENSE-2.0
++ * <p/>
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred.gridmix;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.IOUtils;
++import org.apache.hadoop.mapred.ClusterStatus;
++import org.apache.hadoop.mapred.JobStatus;
++import org.apache.hadoop.tools.rumen.JobStory;
++import org.apache.hadoop.tools.rumen.JobStoryProducer;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++import java.io.IOException;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.locks.Condition;
++import java.util.List;
++
++public class StressJobFactory extends JobFactory<Statistics.ClusterStats> {
++  public static final Log LOG = LogFactory.getLog(StressJobFactory.class);
++
++  private LoadStatus loadStatus = new LoadStatus();
++  private List<JobStatus> runningWaitingJobs;
++  private final Condition overloaded = this.lock.newCondition();
++  /**
++   * The minimum ratio between pending+running map tasks (aka. incomplete map
++   * tasks) and cluster map slot capacity for us to consider the cluster is
++   * overloaded. For running maps, we only count them partially. Namely, a 40%
++   * completed map is counted as 0.6 map tasks in our calculation.
++   */
++  static final float OVERLAOD_MAPTASK_MAPSLOT_RATIO = 2.0f;
++
++  /**
++   * Creating a new instance does not start the thread.
++   *
++   * @param submitter   Component to which deserialized jobs are passed
++   * @param jobProducer Stream of job traces with which to construct a
++   *                    {@link org.apache.hadoop.tools.rumen.ZombieJobProducer}
++   * @param scratch     Directory into which to write output from simulated jobs
++   * @param conf        Config passed to all jobs to be submitted
++   * @param startFlag   Latch released from main to start pipeline
++   * @throws java.io.IOException
++   */
++  public StressJobFactory(
++    JobSubmitter submitter, JobStoryProducer jobProducer, Path scratch,
++    Configuration conf, CountDownLatch startFlag, UserResolver resolver)
++    throws IOException {
++    super(
++      submitter, jobProducer, scratch, conf, startFlag, resolver);
++
++    //Setting isOverloaded as true , now JF would wait for atleast first
++    //set of ClusterStats based on which it can decide how many job it has
++    //to submit.
++    this.loadStatus.isOverloaded = true;
++  }
++
++  public Thread createReaderThread() {
++    return new StressReaderThread("StressJobFactory");
++  }
++
++  /*
++  * Worker thread responsible for reading descriptions, assigning sequence
++  * numbers, and normalizing time.
++  */
++  private class StressReaderThread extends Thread {
++
++    public StressReaderThread(String name) {
++      super(name);
++    }
++
++    /**
++     * STRESS: Submits the job in STRESS mode.
++     * while(JT is overloaded) {
++     * wait();
++     * }
++     * If not overloaded , get number of slots available.
++     * Keep submitting the jobs till ,total jobs  is sufficient to
++     * load the JT.
++     * That is submit  (Sigma(no of maps/Job)) > (2 * no of slots available)
++     */
++    public void run() {
++      try {
++        startFlag.await();
++        if (Thread.currentThread().isInterrupted()) {
++          return;
++        }
++        LOG.info("START STRESS @ " + System.currentTimeMillis());
++        while (!Thread.currentThread().isInterrupted()) {
++          lock.lock();
++          try {
++            while (loadStatus.isOverloaded) {
++              //Wait while JT is overloaded.
++              try {
++                overloaded.await();
++              } catch (InterruptedException ie) {
++                return;
++              }
++            }
++
++            int noOfSlotsAvailable = loadStatus.numSlotsBackfill;
++            LOG.info(" No of slots to be backfilled are " + noOfSlotsAvailable);
++
++            for (int i = 0; i < noOfSlotsAvailable; i++) {
++              try {
++                final JobStory job = getNextJobFiltered();
++                if (null == job) {
++                  return;
++                }
++                //TODO: We need to take care of scenario when one map takes more
++                //than 1 slot.
++                i += job.getNumberMaps();
++
++                submitter.add(
++                  new GridmixJob(
++                    conf, 0L, job, scratch, userResolver.getTargetUgi(
++                      UserGroupInformation.createRemoteUser(
++                        job.getUser())), sequence.getAndIncrement()));
++              } catch (IOException e) {
++                LOG.error(" EXCEPTOIN in availableSlots ", e);
++                error = e;
++                return;
++              }
++
++            }
++          } finally {
++            lock.unlock();
++          }
++        }
++      } catch (InterruptedException e) {
++        return;
++      } finally {
++        IOUtils.cleanup(null, jobProducer);
++      }
++    }
++  }
++
++  /**
++   * <p/>
++   * STRESS Once you get the notification from StatsCollector.Collect the
++   * clustermetrics. Update current loadStatus with new load status of JT.
++   *
++   * @param item
++   */
++  @Override
++  public void update(Statistics.ClusterStats item) {
++    lock.lock();
++    try {
++      ClusterStatus clusterMetrics = item.getStatus();
++      LoadStatus newStatus;
++      runningWaitingJobs = item.getRunningWaitingJobs();
++      newStatus = checkLoadAndGetSlotsToBackfill(item, clusterMetrics);
++      loadStatus.isOverloaded = newStatus.isOverloaded;
++      loadStatus.numSlotsBackfill = newStatus.numSlotsBackfill;
++      overloaded.signalAll();
++    } finally {
++      lock.unlock();
++    }
++  }
++
++  /**
++   * We try to use some light-weight mechanism to determine cluster load.
++   *
++   * @param stats
++   * @param clusterStatus
++   * @return Whether, from job client perspective, the cluster is overloaded.
++   */
++  private LoadStatus checkLoadAndGetSlotsToBackfill(
++    Statistics.ClusterStats stats, ClusterStatus clusterStatus) {
++    LoadStatus loadStatus = new LoadStatus();
++    // If there are more jobs than number of task trackers, we assume the
++    // cluster is overloaded. This is to bound the memory usage of the
++    // simulator job tracker, in situations where we have jobs with small
++    // number of map tasks and large number of reduce tasks.
++    if (runningWaitingJobs.size() >= clusterStatus.getTaskTrackers()) {
++      if (LOG.isDebugEnabled()) {
++        LOG.debug(
++          System.currentTimeMillis() + " Overloaded is " +
++            Boolean.TRUE.toString() + " #runningJobs >= taskTrackerCount (" +
++            runningWaitingJobs.size() + " >= " +
++            clusterStatus.getTaskTrackers() + " )\n");
++      }
++      loadStatus.isOverloaded = true;
++      loadStatus.numSlotsBackfill = 0;
++      return loadStatus;
++    }
++
++    float incompleteMapTasks = 0; // include pending & running map tasks.
++    for (JobStatus job : runningWaitingJobs) {
++      incompleteMapTasks += (1 - Math.min(
++        job.mapProgress(), 1.0)) * stats.getJobReports().get(
++        job.getJobID()).length;
++    }
++
++    float overloadedThreshold =
++      OVERLAOD_MAPTASK_MAPSLOT_RATIO * clusterStatus.getMaxMapTasks();
++    boolean overloaded = incompleteMapTasks > overloadedThreshold;
++    String relOp = (overloaded) ? ">" : "<=";
++    if (LOG.isDebugEnabled()) {
++      LOG.info(
++        System.currentTimeMillis() + " Overloaded is " + Boolean.toString(
++          overloaded) + " incompleteMapTasks " + relOp + " " +
++          OVERLAOD_MAPTASK_MAPSLOT_RATIO + "*mapSlotCapacity" + "(" +
++          incompleteMapTasks + " " + relOp + " " +
++          OVERLAOD_MAPTASK_MAPSLOT_RATIO + "*" +
++          clusterStatus.getMaxMapTasks() + ")");
++    }
++    if (overloaded) {
++      loadStatus.isOverloaded = true;
++      loadStatus.numSlotsBackfill = 0;
++    } else {
++      loadStatus.isOverloaded = false;
++      loadStatus.numSlotsBackfill =
++        (int) (overloadedThreshold - incompleteMapTasks);
++    }
++
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("Current load Status is " + loadStatus);
++    }
++    return loadStatus;
++  }
++
++  static class LoadStatus {
++    volatile boolean isOverloaded = false;
++    volatile int numSlotsBackfill = -1;
++
++    public String toString() {
++      return " is Overloaded " + isOverloaded + " no of slots available " +
++        numSlotsBackfill;
++    }
++  }
++
++  /**
++   * Start the reader thread, wait for latch if necessary.
++   */
++  @Override
++  public void start() {
++    LOG.info(" Starting Stress submission ");
++    this.rThread.start();
++  }
++
++}
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/SubmitterUserResolver.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/SubmitterUserResolver.java
+new file mode 100644
+index 0000000..050f31f
+--- /dev/null
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/SubmitterUserResolver.java
+@@ -0,0 +1,50 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred.gridmix;
++
++import java.io.IOException;
++import java.net.URI;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++/**
++ * Resolves all UGIs to the submitting user.
++ */
++public class SubmitterUserResolver implements UserResolver {
++  public static final Log LOG = LogFactory.getLog(SubmitterUserResolver.class);
++  
++  private UserGroupInformation ugi = null;
++
++  public SubmitterUserResolver() {
++    LOG.info(" Current user resolver is SubmitterUserResolver ");
++  }
++
++  public synchronized boolean setTargetUsers(URI userdesc, Configuration conf)
++      throws IOException {
++    ugi = UserGroupInformation.getLoginUser();
++    return false;
++  }
++
++  public synchronized UserGroupInformation getTargetUgi(
++      UserGroupInformation ugi) {
++    return this.ugi;
++  }
++
++}
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/UserResolver.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/UserResolver.java
+new file mode 100644
+index 0000000..6fbe2b7
+--- /dev/null
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/UserResolver.java
+@@ -0,0 +1,59 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred.gridmix;
++
++import java.io.IOException;
++import java.net.URI;
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.List;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.util.LineReader;
++
++/**
++ * Maps users in the trace to a set of valid target users on the test cluster.
++ */
++public interface UserResolver {
++
++  /**
++   * Configure the user map given the URI and configuration. The resolver's
++   * contract will define how the resource will be interpreted, but the default
++   * will typically interpret the URI as a {@link org.apache.hadoop.fs.Path}
++   * listing target users. The format of this file is defined by {@link
++   * #parseUserList}.
++   * @param userdesc URI (possibly null) from which user information may be
++   * loaded per the subclass contract.
++   * @param conf The tool configuration.
++   * @return true if the resource provided was used in building the list of
++   * target users
++   */
++  public boolean setTargetUsers(URI userdesc, Configuration conf)
++    throws IOException;
++
++  /**
++   * Map the given UGI to another per the subclass contract.
++   * @param ugi User information from the trace.
++   */
++  public UserGroupInformation getTargetUgi(UserGroupInformation ugi);
++
++}
+diff --git a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/DebugJobFactory.java b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/DebugJobFactory.java
+index 8ba3b10..0e3f5c7 100644
+--- a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/DebugJobFactory.java
++++ b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/DebugJobFactory.java
+@@ -17,261 +17,90 @@
+  */
+ package org.apache.hadoop.mapred.gridmix;
+ 
+-import java.io.IOException;
+-import java.util.ArrayList;
+-import java.util.Arrays;
+-import java.util.Random;
+-import java.util.concurrent.CountDownLatch;
+-import java.util.concurrent.TimeUnit;
+-import java.util.concurrent.atomic.AtomicInteger;
+-import java.util.concurrent.atomic.AtomicLong;
+-
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.Path;
+-import org.apache.hadoop.mapreduce.InputSplit;
+-import org.apache.hadoop.mapreduce.JobID;
+-import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.hadoop.tools.rumen.JobStory;
+-import org.apache.hadoop.tools.rumen.JobStoryProducer;
+-import org.apache.hadoop.tools.rumen.TaskAttemptInfo;
+-import org.apache.hadoop.tools.rumen.TaskInfo;
+-import org.apache.hadoop.tools.rumen.Pre21JobHistoryConstants.Values;;
+ 
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.concurrent.CountDownLatch;
+ 
+ /**
+  * Component generating random job traces for testing on a single node.
+  */
+-class DebugJobFactory extends JobFactory {
++class DebugJobFactory {
+ 
+-  public DebugJobFactory(JobSubmitter submitter, Path scratch, int numJobs,
+-      Configuration conf, CountDownLatch startFlag) throws IOException {
+-    super(submitter, new DebugJobProducer(numJobs, conf), scratch, conf,
+-        startFlag);
++  interface Debuggable {
++    ArrayList<JobStory> getSubmitted();
+   }
+ 
+-  ArrayList<JobStory> getSubmitted() {
+-    return ((DebugJobProducer)jobProducer).submitted;
++  public static JobFactory getFactory(
++    JobSubmitter submitter, Path scratch, int numJobs, Configuration conf,
++    CountDownLatch startFlag,UserResolver resolver) throws IOException {
++    GridmixJobSubmissionPolicy policy = GridmixJobSubmissionPolicy.getPolicy(
++      conf, GridmixJobSubmissionPolicy.STRESS);
++    if (policy.name().equalsIgnoreCase("REPLAY")) {
++      return new DebugReplayJobFactory(
++        submitter, scratch, numJobs, conf, startFlag,resolver);
++    } else if (policy.name().equalsIgnoreCase("STRESS")) {
++      return new DebugStressJobFactory(
++        submitter, scratch, numJobs, conf, startFlag,resolver);
++    } else if (policy.name().equalsIgnoreCase("SERIAL")) {
++      return new DebugSerialJobFactory(
++        submitter, scratch, numJobs, conf, startFlag,resolver);
++
++    }
++    return null;
+   }
+ 
+-  private static class DebugJobProducer implements JobStoryProducer {
+-    final ArrayList<JobStory> submitted;
+-    private final Configuration conf;
+-    private final AtomicInteger numJobs;
+-
+-    public DebugJobProducer(int numJobs, Configuration conf) {
+-      super();
+-      this.conf = conf;
+-      this.numJobs = new AtomicInteger(numJobs);
+-      this.submitted = new ArrayList<JobStory>();
++  static class DebugReplayJobFactory extends ReplayJobFactory
++    implements Debuggable {
++    public DebugReplayJobFactory(
++      JobSubmitter submitter, Path scratch, int numJobs, Configuration conf,
++      CountDownLatch startFlag,UserResolver resolver) throws IOException {
++      super(
++        submitter, new DebugJobProducer(numJobs, conf), scratch, conf,
++        startFlag,resolver);
+     }
+ 
+     @Override
+-    public JobStory getNextJob() throws IOException {
+-      if (numJobs.getAndDecrement() > 0) {
+-        final MockJob ret = new MockJob(conf);
+-        submitted.add(ret);
+-        return ret;
+-      }
+-      return null;
++    public ArrayList<JobStory> getSubmitted() {
++      return ((DebugJobProducer) jobProducer).submitted;
+     }
+ 
+-    @Override
+-    public void close() { }
+-  }
+-
+-  static double[] getDistr(Random r, double mindist, int size) {
+-    assert 0.0 <= mindist && mindist <= 1.0;
+-    final double min = mindist / size;
+-    final double rem = 1.0 - min * size;
+-    final double[] tmp = new double[size];
+-    for (int i = 0; i < tmp.length - 1; ++i) {
+-      tmp[i] = r.nextDouble() * rem;
+-    }
+-    tmp[tmp.length - 1] = rem;
+-    Arrays.sort(tmp);
+-
+-    final double[] ret = new double[size];
+-    ret[0] = tmp[0] + min;
+-    for (int i = 1; i < size; ++i) {
+-      ret[i] = tmp[i] - tmp[i-1] + min;
+-    }
+-    return ret;
+   }
+ 
+-  /**
+-   * Generate random task data for a synthetic job.
+-   */
+-  static class MockJob implements JobStory {
+-
+-    static final int MIN_REC = 1 << 14;
+-    static final int MIN_BYTES = 1 << 20;
+-    static final int VAR_REC = 1 << 14;
+-    static final int VAR_BYTES = 4 << 20;
+-    static final int MAX_MAP = 5;
+-    static final int MAX_RED = 3;
+-
+-    static void initDist(Random r, double min, int[] recs, long[] bytes,
+-        long tot_recs, long tot_bytes) {
+-      final double[] recs_dist = getDistr(r, min, recs.length);
+-      final double[] bytes_dist = getDistr(r, min, recs.length);
+-      long totalbytes = 0L;
+-      int totalrecs = 0;
+-      for (int i = 0; i < recs.length; ++i) {
+-        recs[i] = (int) Math.round(tot_recs * recs_dist[i]);
+-        bytes[i] = Math.round(tot_bytes * bytes_dist[i]);
+-        totalrecs += recs[i];
+-        totalbytes += bytes[i];
+-      }
+-      // Add/remove excess
+-      recs[0] += totalrecs - tot_recs;
+-      bytes[0] += totalbytes - tot_bytes;
+-      if (LOG.isInfoEnabled()) {
+-        LOG.info("DIST: " + Arrays.toString(recs) + " " +
+-            tot_recs + "/" + totalrecs + " " +
+-            Arrays.toString(bytes) + " " + tot_bytes + "/" + totalbytes);
+-      }
+-    }
+-
+-    private static final AtomicInteger seq = new AtomicInteger(0);
+-    // set timestamps in the past
+-    private static final AtomicLong timestamp =
+-      new AtomicLong(System.currentTimeMillis() -
+-        TimeUnit.MILLISECONDS.convert(60, TimeUnit.DAYS));
+-
+-    private final int id;
+-    private final String name;
+-    private final int[] m_recsIn, m_recsOut, r_recsIn, r_recsOut;
+-    private final long[] m_bytesIn, m_bytesOut, r_bytesIn, r_bytesOut;
+-    private final long submitTime;
+-
+-    public MockJob(Configuration conf) {
+-      final Random r = new Random();
+-      final long seed = r.nextLong();
+-      r.setSeed(seed);
+-      id = seq.getAndIncrement();
+-      name = String.format("MOCKJOB%05d", id);
+-      LOG.info(name + " (" + seed + ")");
+-      submitTime = timestamp.addAndGet(TimeUnit.MILLISECONDS.convert(
+-            r.nextInt(10), TimeUnit.SECONDS));
+-
+-      m_recsIn = new int[r.nextInt(MAX_MAP) + 1];
+-      m_bytesIn = new long[m_recsIn.length];
+-      m_recsOut = new int[m_recsIn.length];
+-      m_bytesOut = new long[m_recsIn.length];
+-
+-      r_recsIn = new int[r.nextInt(MAX_RED) + 1];
+-      r_bytesIn = new long[r_recsIn.length];
+-      r_recsOut = new int[r_recsIn.length];
+-      r_bytesOut = new long[r_recsIn.length];
+-
+-      // map input
+-      final long map_recs = r.nextInt(VAR_REC) + MIN_REC;
+-      final long map_bytes = r.nextInt(VAR_BYTES) + MIN_BYTES;
+-      initDist(r, 0.5, m_recsIn, m_bytesIn, map_recs, map_bytes);
+-
+-      // shuffle
+-      final long shuffle_recs = r.nextInt(VAR_REC) + MIN_REC;
+-      final long shuffle_bytes = r.nextInt(VAR_BYTES) + MIN_BYTES;
+-      initDist(r, 0.4, m_recsOut, m_bytesOut, shuffle_recs, shuffle_bytes);
+-      initDist(r, 0.8, r_recsIn, r_bytesIn, shuffle_recs, shuffle_bytes);
+-
+-      // reduce output
+-      final long red_recs = r.nextInt(VAR_REC) + MIN_REC;
+-      final long red_bytes = r.nextInt(VAR_BYTES) + MIN_BYTES;
+-      initDist(r, 0.4, r_recsOut, r_bytesOut, red_recs, red_bytes);
+-
+-      if (LOG.isDebugEnabled()) {
+-        int iMapBTotal = 0, oMapBTotal = 0, iRedBTotal = 0, oRedBTotal = 0;
+-        int iMapRTotal = 0, oMapRTotal = 0, iRedRTotal = 0, oRedRTotal = 0;
+-        for (int i = 0; i < m_recsIn.length; ++i) {
+-          iMapRTotal += m_recsIn[i];
+-          iMapBTotal += m_bytesIn[i];
+-          oMapRTotal += m_recsOut[i];
+-          oMapBTotal += m_bytesOut[i];
+-        }
+-        for (int i = 0; i < r_recsIn.length; ++i) {
+-          iRedRTotal += r_recsIn[i];
+-          iRedBTotal += r_bytesIn[i];
+-          oRedRTotal += r_recsOut[i];
+-          oRedBTotal += r_bytesOut[i];
+-        }
+-        LOG.debug(String.format("%s: M (%03d) %6d/%10d -> %6d/%10d" +
+-                                   " R (%03d) %6d/%10d -> %6d/%10d @%d", name,
+-            m_bytesIn.length, iMapRTotal, iMapBTotal, oMapRTotal, oMapBTotal,
+-            r_bytesIn.length, iRedRTotal, iRedBTotal, oRedRTotal, oRedBTotal,
+-            submitTime));
+-      }
++  static class DebugSerialJobFactory extends SerialJobFactory
++    implements Debuggable {
++    public DebugSerialJobFactory(
++      JobSubmitter submitter, Path scratch, int numJobs, Configuration conf,
++      CountDownLatch startFlag,UserResolver resolver) throws IOException {
++      super(
++        submitter, new DebugJobProducer(numJobs, conf), scratch, conf,
++        startFlag,resolver);
+     }
+ 
+     @Override
+-    public String getName() {
+-      return name;
++    public ArrayList<JobStory> getSubmitted() {
++      return ((DebugJobProducer) jobProducer).submitted;
+     }
+ 
+-    @Override
+-    public String getUser() {
+-      return "FOOBAR";
+-    }
+-
+-    @Override
+-    public JobID getJobID() {
+-      return new JobID("job_mock_" + name, id);
+-    }
+-
+-    @Override
+-    public Values getOutcome() {
+-      return Values.SUCCESS;
+-    }
+-
+-    @Override
+-    public long getSubmissionTime() {
+-      return submitTime;
+-    }
+-
+-    @Override
+-    public int getNumberMaps() {
+-      return m_bytesIn.length;
+-    }
+-
+-    @Override
+-    public int getNumberReduces() {
+-      return r_bytesIn.length;
+-    }
+-
+-    @Override
+-    public TaskInfo getTaskInfo(TaskType taskType, int taskNumber) {
+-      switch (taskType) {
+-        case MAP:
+-          return new TaskInfo(m_bytesIn[taskNumber], m_recsIn[taskNumber],
+-              m_bytesOut[taskNumber], m_recsOut[taskNumber], -1);
+-        case REDUCE:
+-          return new TaskInfo(r_bytesIn[taskNumber], r_recsIn[taskNumber],
+-              r_bytesOut[taskNumber], r_recsOut[taskNumber], -1);
+-        default:
+-          throw new IllegalArgumentException("Not interested");
+-      }
+-    }
+-
+-    @Override
+-    public InputSplit[] getInputSplits() {
+-      throw new UnsupportedOperationException();
+-    }
+-
+-    @Override
+-    public TaskAttemptInfo getTaskAttemptInfo(TaskType taskType,
+-        int taskNumber, int taskAttemptNumber) {
+-      throw new UnsupportedOperationException();
+-    }
++  }
+ 
+-    @Override
+-    public TaskAttemptInfo getMapTaskAttemptInfoAdjusted(int taskNumber,
+-        int taskAttemptNumber, int locality) {
+-      throw new UnsupportedOperationException();
++  static class DebugStressJobFactory extends StressJobFactory
++    implements Debuggable {
++    public DebugStressJobFactory(
++      JobSubmitter submitter, Path scratch, int numJobs, Configuration conf,
++      CountDownLatch startFlag,UserResolver resolver) throws IOException {
++      super(
++        submitter, new DebugJobProducer(numJobs, conf), scratch, conf,
++        startFlag,resolver);
+     }
+ 
+     @Override
+-    public org.apache.hadoop.mapred.JobConf getJobConf() {
+-      throw new UnsupportedOperationException();
++    public ArrayList<JobStory> getSubmitted() {
++      return ((DebugJobProducer) jobProducer).submitted;
+     }
+   }
++
+ }
+diff --git a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/DebugJobProducer.java b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/DebugJobProducer.java
+new file mode 100644
+index 0000000..2e4e412
+--- /dev/null
++++ b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/DebugJobProducer.java
+@@ -0,0 +1,280 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ * <p/>
++ * http://www.apache.org/licenses/LICENSE-2.0
++ * <p/>
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred.gridmix;
++
++import org.apache.hadoop.tools.rumen.JobStoryProducer;
++import org.apache.hadoop.tools.rumen.JobStory;
++import org.apache.hadoop.tools.rumen.TaskInfo;
++import org.apache.hadoop.tools.rumen.TaskAttemptInfo;
++import org.apache.hadoop.tools.rumen.Pre21JobHistoryConstants.Values;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.mapreduce.JobID;
++import org.apache.hadoop.mapreduce.TaskType;
++import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapred.JobConf;
++
++import java.util.ArrayList;
++import java.util.Random;
++import java.util.Arrays;
++import java.util.concurrent.atomic.AtomicInteger;
++import java.util.concurrent.atomic.AtomicLong;
++import java.util.concurrent.TimeUnit;
++import java.io.IOException;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++
++public class DebugJobProducer implements JobStoryProducer {
++  public static final Log LOG = LogFactory.getLog(DebugJobProducer.class);
++  final ArrayList<JobStory> submitted;
++  private final Configuration conf;
++  private final AtomicInteger numJobs;
++
++  public DebugJobProducer(int numJobs, Configuration conf) {
++    super();
++    MockJob.reset();
++    this.conf = conf;
++    this.numJobs = new AtomicInteger(numJobs);
++    this.submitted = new ArrayList<JobStory>();
++  }
++
++  @Override
++  public JobStory getNextJob() throws IOException {
++    if (numJobs.getAndDecrement() > 0) {
++      final MockJob ret = new MockJob(conf);
++      submitted.add(ret);
++      return ret;
++    }
++    return null;
++  }
++
++  @Override
++  public void close() {
++  }
++
++
++  static double[] getDistr(Random r, double mindist, int size) {
++    assert 0.0 <= mindist && mindist <= 1.0;
++    final double min = mindist / size;
++    final double rem = 1.0 - min * size;
++    final double[] tmp = new double[size];
++    for (int i = 0; i < tmp.length - 1; ++i) {
++      tmp[i] = r.nextDouble() * rem;
++    }
++    tmp[tmp.length - 1] = rem;
++    Arrays.sort(tmp);
++
++    final double[] ret = new double[size];
++    ret[0] = tmp[0] + min;
++    for (int i = 1; i < size; ++i) {
++      ret[i] = tmp[i] - tmp[i - 1] + min;
++    }
++    return ret;
++  }
++
++
++  /**
++   * Generate random task data for a synthetic job.
++   */
++  static class MockJob implements JobStory {
++
++    static final int MIN_REC = 1 << 14;
++    static final int MIN_BYTES = 1 << 20;
++    static final int VAR_REC = 1 << 14;
++    static final int VAR_BYTES = 4 << 20;
++    static final int MAX_MAP = 5;
++    static final int MAX_RED = 3;
++    final Configuration conf;
++
++    static void initDist(
++      Random r, double min, int[] recs, long[] bytes, long tot_recs,
++      long tot_bytes) {
++      final double[] recs_dist = getDistr(r, min, recs.length);
++      final double[] bytes_dist = getDistr(r, min, recs.length);
++      long totalbytes = 0L;
++      int totalrecs = 0;
++      for (int i = 0; i < recs.length; ++i) {
++        recs[i] = (int) Math.round(tot_recs * recs_dist[i]);
++        bytes[i] = Math.round(tot_bytes * bytes_dist[i]);
++        totalrecs += recs[i];
++        totalbytes += bytes[i];
++      }
++      // Add/remove excess
++      recs[0] += totalrecs - tot_recs;
++      bytes[0] += totalbytes - tot_bytes;
++      if (LOG.isInfoEnabled()) {
++        LOG.info(
++          "DIST: " + Arrays.toString(recs) + " " + tot_recs + "/" + totalrecs +
++            " " + Arrays.toString(bytes) + " " + tot_bytes + "/" + totalbytes);
++      }
++    }
++
++    private static final AtomicInteger seq = new AtomicInteger(0);
++    // set timestamp in the past
++    private static final AtomicLong timestamp = new AtomicLong(
++      System.currentTimeMillis() - TimeUnit.MILLISECONDS.convert(
++        60, TimeUnit.DAYS));
++
++    private final int id;
++    private final String name;
++    private final int[] m_recsIn, m_recsOut, r_recsIn, r_recsOut;
++    private final long[] m_bytesIn, m_bytesOut, r_bytesIn, r_bytesOut;
++    private final long submitTime;
++
++    public MockJob(Configuration conf) {
++      final Random r = new Random();
++      final long seed = r.nextLong();
++      r.setSeed(seed);
++      id = seq.getAndIncrement();
++      name = String.format("MOCKJOB%05d", id);
++      this.conf = conf;
++      LOG.info(name + " (" + seed + ")");
++      submitTime = timestamp.addAndGet(
++        TimeUnit.MILLISECONDS.convert(
++          r.nextInt(10), TimeUnit.SECONDS));
++
++      m_recsIn = new int[r.nextInt(MAX_MAP) + 1];
++      m_bytesIn = new long[m_recsIn.length];
++      m_recsOut = new int[m_recsIn.length];
++      m_bytesOut = new long[m_recsIn.length];
++
++      r_recsIn = new int[r.nextInt(MAX_RED) + 1];
++      r_bytesIn = new long[r_recsIn.length];
++      r_recsOut = new int[r_recsIn.length];
++      r_bytesOut = new long[r_recsIn.length];
++
++      // map input
++      final long map_recs = r.nextInt(VAR_REC) + MIN_REC;
++      final long map_bytes = r.nextInt(VAR_BYTES) + MIN_BYTES;
++      initDist(r, 0.5, m_recsIn, m_bytesIn, map_recs, map_bytes);
++
++      // shuffle
++      final long shuffle_recs = r.nextInt(VAR_REC) + MIN_REC;
++      final long shuffle_bytes = r.nextInt(VAR_BYTES) + MIN_BYTES;
++      initDist(r, 0.5, m_recsOut, m_bytesOut, shuffle_recs, shuffle_bytes);
++      initDist(r, 0.8, r_recsIn, r_bytesIn, shuffle_recs, shuffle_bytes);
++
++      // reduce output
++      final long red_recs = r.nextInt(VAR_REC) + MIN_REC;
++      final long red_bytes = r.nextInt(VAR_BYTES) + MIN_BYTES;
++      initDist(r, 0.5, r_recsOut, r_bytesOut, red_recs, red_bytes);
++
++      if (LOG.isDebugEnabled()) {
++        int iMapBTotal = 0, oMapBTotal = 0, iRedBTotal = 0, oRedBTotal = 0;
++        int iMapRTotal = 0, oMapRTotal = 0, iRedRTotal = 0, oRedRTotal = 0;
++        for (int i = 0; i < m_recsIn.length; ++i) {
++          iMapRTotal += m_recsIn[i];
++          iMapBTotal += m_bytesIn[i];
++          oMapRTotal += m_recsOut[i];
++          oMapBTotal += m_bytesOut[i];
++        }
++        for (int i = 0; i < r_recsIn.length; ++i) {
++          iRedRTotal += r_recsIn[i];
++          iRedBTotal += r_bytesIn[i];
++          oRedRTotal += r_recsOut[i];
++          oRedBTotal += r_bytesOut[i];
++        }
++        LOG.debug(
++          String.format(
++            "%s: M (%03d) %6d/%10d -> %6d/%10d" +
++              " R (%03d) %6d/%10d -> %6d/%10d @%d", name, m_bytesIn.length,
++            iMapRTotal, iMapBTotal, oMapRTotal, oMapBTotal, r_bytesIn.length,
++            iRedRTotal, iRedBTotal, oRedRTotal, oRedBTotal, submitTime));
++      }
++    }
++    @Override
++   public String getName() {
++     return name;
++    }
++
++   @Override
++   public String getUser() {
++     String s = String.format("foobar%d", id);
++     GridmixTestUtils.createHomeAndStagingDirectory(s,(JobConf)conf);
++     return s;
++   }
++
++   @Override
++   public JobID getJobID() {
++     return new JobID("job_mock_" + name, id);
++    }
++
++    @Override
++   public Values getOutcome() {
++     return Values.SUCCESS;
++    }
++
++   @Override
++   public long getSubmissionTime() {
++     return submitTime;
++   }
++
++   @Override
++   public int getNumberMaps() {
++     return m_bytesIn.length;
++   }
++
++   @Override
++   public int getNumberReduces() {
++     return r_bytesIn.length;
++   }
++    
++    @Override
++    public TaskInfo getTaskInfo(TaskType taskType, int taskNumber) {
++      switch (taskType) {
++        case MAP:
++          return new TaskInfo(m_bytesIn[taskNumber], m_recsIn[taskNumber],
++              m_bytesOut[taskNumber], m_recsOut[taskNumber], -1);
++        case REDUCE:
++          return new TaskInfo(r_bytesIn[taskNumber], r_recsIn[taskNumber],
++              r_bytesOut[taskNumber], r_recsOut[taskNumber], -1);
++        default:
++          throw new IllegalArgumentException("Not interested");
++      }
++    }
++
++    @Override
++    public InputSplit[] getInputSplits() {
++      throw new UnsupportedOperationException();
++    }
++
++    @Override
++    public TaskAttemptInfo getTaskAttemptInfo(
++      TaskType taskType, int taskNumber, int taskAttemptNumber) {
++      throw new UnsupportedOperationException();
++    }
++
++    @Override
++    public TaskAttemptInfo getMapTaskAttemptInfoAdjusted(
++      int taskNumber, int taskAttemptNumber, int locality) {
++      throw new UnsupportedOperationException();
++    }
++
++    @Override
++    public org.apache.hadoop.mapred.JobConf getJobConf() {
++      throw new UnsupportedOperationException();
++    }
++
++    public static void reset() {
++      seq.set(0);
++      timestamp.set(System.currentTimeMillis() - TimeUnit.MILLISECONDS.convert(
++        60, TimeUnit.DAYS));
++    }
++  }
++}
+diff --git a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/GridmixTestUtils.java b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/GridmixTestUtils.java
+new file mode 100644
+index 0000000..98d9d28
+--- /dev/null
++++ b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/GridmixTestUtils.java
+@@ -0,0 +1,90 @@
++package org.apache.hadoop.mapred.gridmix;
++
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.CommonConfigurationKeys;
++import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.mapred.MiniMRCluster;
++import org.apache.hadoop.mapred.JobConf;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.security.ShellBasedUnixGroupsMapping;
++import org.apache.hadoop.security.Groups;
++
++import java.io.IOException;
++
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ * <p/>
++ * http://www.apache.org/licenses/LICENSE-2.0
++ * <p/>
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++public class GridmixTestUtils {
++  static final Path DEST = new Path("/gridmix");
++  static FileSystem dfs = null;
++  static MiniDFSCluster dfsCluster = null;
++  static MiniMRCluster mrCluster = null;
++
++  public static void initCluster() throws IOException {
++    Configuration conf = new Configuration();
++    dfsCluster = new MiniDFSCluster(conf, 3, true, null);
++    dfs = dfsCluster.getFileSystem();
++    mrCluster = new MiniMRCluster(
++      3, dfs.getUri().toString(), 1, null, null, new JobConf(conf));
++  }
++
++  public static void shutdownCluster() throws IOException {
++    if (mrCluster != null) {
++      mrCluster.shutdown();
++    }
++    if (dfsCluster != null) {
++      dfsCluster.shutdown();
++    }
++  }
++
++  /**
++   * Methods to generate the home directory for dummy users.
++   *
++   * @param conf
++   */
++  public static void createHomeAndStagingDirectory(String user, JobConf conf) {
++    try {
++      FileSystem fs = dfsCluster.getFileSystem();
++      String path = "/user/" + user;
++      Path homeDirectory = new Path(path);
++      if(fs.exists(homeDirectory)) {
++        fs.delete(homeDirectory,true);
++      }
++      TestGridmixSubmission.LOG.info(
++        "Creating Home directory : " + homeDirectory);
++      fs.mkdirs(homeDirectory);
++      changePermission(user,homeDirectory, fs);
++      Path stagingArea = new Path(
++        conf.get(
++          "mapreduce.jobtracker.staging.root.dir",
++          "/tmp/hadoop/mapred/staging"));
++      TestGridmixSubmission.LOG.info(
++        "Creating Staging root directory : " + stagingArea);
++      fs.mkdirs(stagingArea);
++      fs.setPermission(stagingArea, new FsPermission((short) 0777));
++    } catch (IOException ioe) {
++      ioe.printStackTrace();
++    }
++  }
++
++  static void changePermission(String user, Path homeDirectory, FileSystem fs)
++    throws IOException {
++    fs.setOwner(homeDirectory, user, "");
++  }
++}
+diff --git a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestGridmixSubmission.java b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestGridmixSubmission.java
+index e4487a4..66e8c00 100644
+--- a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestGridmixSubmission.java
++++ b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestGridmixSubmission.java
+@@ -28,14 +28,13 @@ import java.util.concurrent.LinkedBlockingQueue;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.ContentSummary;
+ import org.apache.hadoop.fs.FileStatus;
+-import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+-import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.fs.CommonConfigurationKeys;
++import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.mapred.Counters;
+ import org.apache.hadoop.mapred.JobClient;
+ import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapred.JobID;
+-import org.apache.hadoop.mapred.MiniMRCluster;
+ import org.apache.hadoop.mapred.Task;
+ import org.apache.hadoop.mapred.TaskReport;
+ import org.apache.hadoop.mapreduce.Job;
+@@ -45,46 +44,39 @@ import org.apache.hadoop.tools.rumen.TaskInfo;
+ import org.apache.hadoop.util.ToolRunner;
+ import static org.apache.hadoop.mapred.Task.Counter.*;
+ 
+-import org.junit.AfterClass;
+-import org.junit.BeforeClass;
+ import org.junit.Test;
++import org.junit.BeforeClass;
++import org.junit.AfterClass;
+ import static org.junit.Assert.*;
+ 
+ import org.apache.commons.logging.LogFactory;
++import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.impl.Log4JLogger;
+ import org.apache.log4j.Level;
++import org.apache.hadoop.security.UserGroupInformation;
++import java.security.PrivilegedExceptionAction;
+ 
+ public class TestGridmixSubmission {
++  static GridmixJobSubmissionPolicy policy = GridmixJobSubmissionPolicy.REPLAY;
++  public static final Log LOG = LogFactory.getLog(Gridmix.class);
++
+   {
+     ((Log4JLogger)LogFactory.getLog("org.apache.hadoop.mapred.gridmix")
+         ).getLogger().setLevel(Level.DEBUG);
+   }
+ 
+-  private static FileSystem dfs = null;
+-  private static MiniDFSCluster dfsCluster = null;
+-  private static MiniMRCluster mrCluster = null;
+-
+   private static final int NJOBS = 2;
+   private static final long GENDATA = 50; // in megabytes
+   private static final int GENSLOP = 100 * 1024; // +/- 100k for logs
+ 
+   @BeforeClass
+-  public static void initCluster() throws IOException {
+-    Configuration conf = new Configuration();
+-    dfsCluster = new MiniDFSCluster(conf, 3, true, null);
+-    dfs = dfsCluster.getFileSystem();
+-    mrCluster = new MiniMRCluster(3, dfs.getUri().toString(), 1, null, null,
+-        new JobConf(conf));
++  public static void init() throws IOException {
++    GridmixTestUtils.initCluster();
+   }
+ 
+   @AfterClass
+-  public static void shutdownCluster() throws IOException {
+-    if (mrCluster != null) {
+-      mrCluster.shutdown();
+-    }
+-    if (dfsCluster != null) {
+-      dfsCluster.shutdown();
+-    }
++  public static void shutDown() throws IOException {
++    GridmixTestUtils.shutdownCluster();
+   }
+ 
+   static class TestMonitor extends JobMonitor {
+@@ -93,8 +85,8 @@ public class TestGridmixSubmission {
+     private final int expected;
+     private final BlockingQueue<Job> retiredJobs;
+ 
+-    public TestMonitor(int expected) {
+-      super();
++    public TestMonitor(int expected, Statistics stats) {
++      super(stats);
+       this.expected = expected;
+       retiredJobs = new LinkedBlockingQueue<Job>();
+     }
+@@ -106,17 +98,17 @@ public class TestGridmixSubmission {
+       for (JobStory spec : submitted) {
+         sub.put(spec.getName(), spec);
+       }
+-      final JobClient client = new JobClient(mrCluster.createJobConf());
++      final JobClient client = new JobClient(GridmixTestUtils.mrCluster.createJobConf());
+       for (Job job : succeeded) {
+         final String jobname = job.getJobName();
+         if ("GRIDMIX_GENDATA".equals(jobname)) {
+-          final Path in = new Path("foo").makeQualified(dfs);
+-          final Path out = new Path("/gridmix").makeQualified(dfs);
+-          final ContentSummary generated = dfs.getContentSummary(in);
++          final Path in = new Path("foo").makeQualified(GridmixTestUtils.dfs);
++          final Path out = new Path("/gridmix").makeQualified(GridmixTestUtils.dfs);
++          final ContentSummary generated = GridmixTestUtils.dfs.getContentSummary(in);
+           assertTrue("Mismatched data gen", // +/- 100k for logs
+               (GENDATA << 20) < generated.getLength() + GENSLOP ||
+               (GENDATA << 20) > generated.getLength() - GENSLOP);
+-          FileStatus[] outstat = dfs.listStatus(out);
++          FileStatus[] outstat = GridmixTestUtils.dfs.listStatus(out);
+           assertEquals("Mismatched job count", NJOBS, outstat.length);
+           continue;
+         }
+@@ -124,6 +116,12 @@ public class TestGridmixSubmission {
+           sub.get(job.getJobName().replace("GRIDMIX", "MOCKJOB"));
+         assertNotNull("No spec for " + job.getJobName(), spec);
+         assertNotNull("No counters for " + job.getJobName(), job.getCounters());
++        final String specname = spec.getName();
++        final FileStatus stat = GridmixTestUtils.dfs.getFileStatus(new Path(
++          GridmixTestUtils.DEST, "" +
++              Integer.valueOf(specname.substring(specname.length() - 5))));
++        assertEquals("Wrong owner for " + job.getJobName(), spec.getUser(),
++            stat.getOwner());
+ 
+         final int nMaps = spec.getNumberMaps();
+         final int nReds = spec.getNumberReduces();
+@@ -279,46 +277,89 @@ public class TestGridmixSubmission {
+ 
+   static class DebugGridmix extends Gridmix {
+ 
+-    private DebugJobFactory factory;
++    private JobFactory factory;
+     private TestMonitor monitor;
+ 
+     public void checkMonitor() throws Exception {
+-      monitor.verify(factory.getSubmitted());
++       monitor.verify(((DebugJobFactory.Debuggable)factory).getSubmitted());
+     }
+ 
+     @Override
+-    protected JobMonitor createJobMonitor() {
+-      monitor = new TestMonitor(NJOBS + 1); // include data generation job
++    protected JobMonitor createJobMonitor(Statistics stats) {
++      Configuration conf = new Configuration();
++      conf.set(GridmixJobSubmissionPolicy.JOB_SUBMISSION_POLICY, policy.name());
++      monitor = new TestMonitor(NJOBS + 1, stats);
+       return monitor;
+     }
+-
++    
+     @Override
+-    protected JobFactory createJobFactory(JobSubmitter submitter,
+-        String traceIn, Path scratchDir, Configuration conf,
+-        CountDownLatch startFlag) throws IOException {
+-      factory =
+-        new DebugJobFactory(submitter, scratchDir, NJOBS, conf, startFlag);
++    protected JobFactory createJobFactory(
++      JobSubmitter submitter, String traceIn, Path scratchDir, Configuration conf,
++      CountDownLatch startFlag, UserResolver userResolver)
++        throws IOException {
++      factory = DebugJobFactory.getFactory(
++        submitter, scratchDir, NJOBS, conf, startFlag, userResolver);
+       return factory;
+     }
+   }
+ 
+   @Test
+-  public void testSubmit() throws Exception {
+-    final Path in = new Path("foo").makeQualified(dfs);
+-    final Path out = new Path("/gridmix").makeQualified(dfs);
++  public void testReplaySubmit() throws Exception {
++    policy = GridmixJobSubmissionPolicy.REPLAY;
++    System.out.println(" Replay started at " + System.currentTimeMillis());
++    doSubmission();
++    System.out.println(" Replay ended at " + System.currentTimeMillis());
++  }
++
++  @Test
++  public void testStressSubmit() throws Exception {
++    policy = GridmixJobSubmissionPolicy.STRESS;
++    System.out.println(" Stress started at " + System.currentTimeMillis());
++    doSubmission();
++    System.out.println(" Stress ended at " + System.currentTimeMillis());
++  }
++
++  @Test
++  public void testSerialSubmit() throws Exception {
++    policy = GridmixJobSubmissionPolicy.SERIAL;
++    System.out.println("Serial started at " + System.currentTimeMillis());
++    doSubmission();
++    System.out.println("Serial ended at " + System.currentTimeMillis());
++  }
++
++  private void doSubmission() throws Exception {
++    final Path in = new Path("foo").makeQualified(GridmixTestUtils.dfs);
++    final Path out = GridmixTestUtils.DEST.makeQualified(GridmixTestUtils.dfs);
++    final Path root = new Path("/user");
++    Configuration conf = null;
++    try{
+     final String[] argv = {
+       "-D" + FilePool.GRIDMIX_MIN_FILE + "=0",
+       "-D" + Gridmix.GRIDMIX_OUT_DIR + "=" + out,
++      "-D" + Gridmix.GRIDMIX_USR_RSV + "=" + EchoUserResolver.class.getName(),
+       "-generate", String.valueOf(GENDATA) + "m",
+       in.toString(),
+       "-" // ignored by DebugGridmix
+     };
+     DebugGridmix client = new DebugGridmix();
+-    final Configuration conf = mrCluster.createJobConf();
+-    //conf.setInt(Gridmix.GRIDMIX_KEY_LEN, 2);
++    conf = new Configuration();
++      conf.set(GridmixJobSubmissionPolicy.JOB_SUBMISSION_POLICY,policy.name());
++    conf = GridmixTestUtils.mrCluster.createJobConf(new JobConf(conf));
++//    GridmixTestUtils.createHomeAndStagingDirectory((JobConf)conf);
++    // allow synthetic users to create home directories
++    GridmixTestUtils.dfs.mkdirs(root, new FsPermission((short)0777));
++    GridmixTestUtils.dfs.setPermission(root, new FsPermission((short)0777));
+     int res = ToolRunner.run(conf, client, argv);
+     assertEquals("Client exited with nonzero status", 0, res);
+     client.checkMonitor();
+-  }
++     } catch (Exception e) {
++       e.printStackTrace();
++     } finally {
++       in.getFileSystem(conf).delete(in, true);
++       out.getFileSystem(conf).delete(out, true);
++       root.getFileSystem(conf).delete(root,true);
++     }
++   }
++
+ 
+ }
+diff --git a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestUserResolve.java b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestUserResolve.java
+new file mode 100644
+index 0000000..35e95e1
+--- /dev/null
++++ b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestUserResolve.java
+@@ -0,0 +1,96 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred.gridmix;
++
++import java.io.IOException;
++import java.net.URI;
++
++import org.junit.BeforeClass;
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.security.UserGroupInformation;
++
++public class TestUserResolve {
++
++  static Path userlist;
++
++  @BeforeClass
++  public static void writeUserList() throws IOException {
++    final Configuration conf = new Configuration();
++    final FileSystem fs = FileSystem.getLocal(conf);
++    final Path wd = new Path(new Path(
++          System.getProperty("test.build.data", "/tmp")).makeQualified(fs),
++        "gridmixUserResolve");
++    userlist = new Path(wd, "users");
++    FSDataOutputStream out = null;
++    try {
++      out = fs.create(userlist, true);
++      out.writeBytes("user0,groupA,groupB,groupC\n");
++      out.writeBytes("user1,groupA,groupC\n");
++      out.writeBytes("user2,groupB\n");
++      out.writeBytes("user3,groupA,groupB,groupC\n");
++    } finally {
++      if (out != null) {
++        out.close();
++      }
++    }
++  }
++
++  @Test
++  public void testRoundRobinResolver() throws Exception {
++    final Configuration conf = new Configuration();
++    final UserResolver rslv = new RoundRobinUserResolver();
++
++    boolean fail = false;
++    try {
++      rslv.setTargetUsers(null, conf);
++    } catch (IOException e) {
++      fail = true;
++    }
++    assertTrue("User list required for RoundRobinUserResolver", fail);
++
++    rslv.setTargetUsers(new URI(userlist.toString()), conf);
++    assertEquals("user0", rslv.getTargetUgi(UserGroupInformation.createRemoteUser("hfre0")).getUserName());
++    assertEquals("user1", rslv.getTargetUgi(UserGroupInformation.createRemoteUser("hfre1")).getUserName());
++    assertEquals("user2", rslv.getTargetUgi(UserGroupInformation.createRemoteUser("hfre2")).getUserName());
++    assertEquals("user0", rslv.getTargetUgi(UserGroupInformation.createRemoteUser("hfre0")).getUserName());
++    assertEquals("user3", rslv.getTargetUgi(UserGroupInformation.createRemoteUser("hfre3")).getUserName());
++    assertEquals("user0", rslv.getTargetUgi(UserGroupInformation.createRemoteUser("hfre0")).getUserName());
++    assertEquals("user0", rslv.getTargetUgi(UserGroupInformation.createRemoteUser("hfre4")).getUserName());
++  }
++
++  @Test
++  public void testSubmitterResolver() throws Exception {
++    final Configuration conf = new Configuration();
++    final UserResolver rslv = new SubmitterUserResolver();
++    rslv.setTargetUsers(null, conf);
++    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++    assertEquals(ugi, rslv.getTargetUgi((UserGroupInformation)null));
++    System.out.println(" Submitter current user " + ugi);
++    System.out.println(
++      " Target ugi " + rslv.getTargetUgi(
++        (UserGroupInformation) null));
++  }
++
++}
+-- 
+1.7.0.4
+

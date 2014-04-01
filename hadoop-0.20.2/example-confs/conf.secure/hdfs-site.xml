@@ -1,0 +1,226 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<configuration>
+
+<!-- file system properties -->
+
+  <property>
+    <name>dfs.name.dir</name>
+    <value>/var/local/hadoop/hdfs/name</value>
+    <description>Determines where on the local filesystem the DFS name node
+      should store the name table.  If this is a comma-delimited list
+      of directories then the name table is replicated in all of the
+      directories, for redundancy. </description>
+    <final>true</final>
+  </property>
+
+  <property>
+    <name>dfs.data.dir</name>
+    <value>/var/local/hadoop/hdfs/data</value>
+    <description>Determines where on the local filesystem an DFS data node
+       should store its blocks.  If this is a comma-delimited
+       list of directories, then data will be stored in all named
+       directories, typically on different devices.
+       Directories that do not exist are ignored.
+    </description>
+    <final>true</final>
+  </property>
+
+  <property>
+    <name>dfs.heartbeat.interval</name>
+    <value>3</value>
+    <description>Determines datanode heartbeat interval in seconds.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.safemode.threshold.pct</name>
+    <value>1.0f</value>
+    <description>
+        Specifies the percentage of blocks that should satisfy 
+        the minimal replication requirement defined by dfs.replication.min.
+        Values less than or equal to 0 mean not to start in safe mode.
+        Values greater than 1 will make safe mode permanent.
+        </description>
+  </property>
+
+  <property>
+    <name>dfs.datanode.address</name>
+    <value>0.0.0.0:1004</value>
+  </property>
+
+  <property>
+    <name>dfs.datanode.http.address</name>
+    <value>0.0.0.0:1006</value>
+  </property>
+
+  <property>
+    <name>dfs.http.address</name>
+    <value>0.0.0.0:50070</value>
+    <description>The name of the default file system.  Either the
+       literal string "local" or a host:port for NDFS.
+    </description>
+    <final>true</final>
+  </property>
+
+  <property>
+    <name>dfs.datanode.ipc.address</name>
+    <value>0.0.0.0:8025</value>
+    <description>
+      The datanode ipc server address and port.
+      If the port is 0 then the server will start on a free port.
+    </description>
+  </property>
+
+<!-- Permissions configuration -->
+
+  <property>
+    <name>dfs.umaskmode</name>
+    <value>077</value>
+    <description>
+      The octal umask used when creating files and directories.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.permissions</name> 
+    <value>true</value>
+    <description>
+      If "true", enable permission checking in HDFS.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.permissions.supergroup</name>
+    <value>hdfs</value>
+    <description>The name of the group of super-users.</description>
+  </property>
+
+  <property>
+    <name>dfs.block.access.token.enable</name>
+    <value>true</value>
+    <description>
+      Are access tokens are used as capabilities for accessing datanodes.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.namenode.kerberos.principal</name>
+    <value>hdfs/_HOST@${local.realm}</value>
+    <description>
+      Kerberos principal name for the NameNode
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.secondary.namenode.kerberos.principal</name>
+    <value>hdfs/_HOST@${local.realm}</value>
+    <description>
+        Kerberos principal name for the secondary NameNode.
+    </description>
+  </property>
+
+
+  <property>
+    <name>dfs.namenode.kerberos.https.principal</name>
+    <value>host/_HOST@${local.realm}</value>
+    <description>
+       The Kerberos principal for the host that the NameNode runs on.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.secondary.namenode.kerberos.https.principal</name>
+    <value>host/_HOST@${local.realm}</value>
+    <description>
+      The Kerberos principal for the hostthat the secondary NameNode runs on.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.secondary.http.address</name>
+    <value>${local.secondnamenode}:50090</value>
+    <description>Address of secondary namenode web server</description>
+  </property>
+
+  <property>
+    <name>dfs.secondary.https.port</name>
+    <value>50490</value>
+    <description>The https port where secondary-namenode binds</description>
+
+  </property>
+
+  <property>
+    <name>dfs.datanode.kerberos.principal</name>
+    <value>hdfs/_HOST@${local.realm}</value>
+    <description>
+      The Kerberos principal that the DataNode runs as. "_HOST" is replaced by 
+      the real host name.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.namenode.keytab.file</name>
+    <value>/var/local/hadoop/hdfs.keytab</value>
+    <description>
+      Combined keytab file containing the namenode service and host principals.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.secondary.namenode.keytab.file</name>
+    <value>${dfs.namenode.keytab.file}</value>
+    <description>
+      Combined keytab file containing the namenode service and host principals.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.datanode.keytab.file</name>
+    <value>${dfs.namenode.keytab.file}</value>
+    <description>
+        The filename of the keytab file for the DataNode.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.https.port</name>
+    <value>50470</value>
+ <description>The https port where namenode binds</description>
+
+  </property>
+
+  <property>
+    <name>dfs.https.address</name>
+    <value>0.0.0.0:50470</value>
+  <description>The https address where namenode binds</description>
+
+  </property>
+
+  <property>
+    <name>dfs.datanode.data.dir.perm</name>
+    <value>700</value>
+<description>The permissions that should be there on dfs.data.dir
+directories. The datanode will not come up if the permissions are
+different on existing dfs.data.dir directories. If the directories
+don't exist, they will be created with this permission.</description>
+  </property>
+
+  <property>
+  <name>dfs.access.time.precision</name>
+  <value>0</value>
+  <description>The access time for HDFS file is precise upto this value.
+               The default value is 1 hour. Setting a value of 0 disables
+               access times for HDFS.
+  </description>
+</property>
+
+<property>
+ <name>dfs.cluster.administrators</name>
+ <value> hdfs</value>
+ <description>ACL for who all can view the default servlets in the HDFS</description>
+</property>
+
+
+</configuration>

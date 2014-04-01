@@ -1,0 +1,323 @@
+From 520bda2edcb90dfe9461e16b96aa4a048d33ed7b Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:57:11 -0800
+Subject: [PATCH 0084/1179] HADOOP-5450. Add support for application-specific typecodes to typed bytes
+
+Description: For serializing objects of types that are not supported by typed bytes serialization, applications might want to use a custom serialization format. Right now, typecode 0 has to be used for the bytes resulting from this custom serialization, which could lead to problems when deserializing the objects because the application cannot know if a byte sequence following typecode 0 is a customly serialized object or just a raw sequence of bytes. Therefore, a range of typecodes that are treated as aliases for 0 should be added, such that different typecodes can be used for application-specific purposes.
+Reason: New feature
+Author: Klaas Bosteels
+Ref: UNKNOWN
+---
+ .../java/org/apache/hadoop/typedbytes/Type.java    |    6 ++
+ .../apache/hadoop/typedbytes/TypedBytesInput.java  |    4 ++
+ .../apache/hadoop/typedbytes/TypedBytesOutput.java |   17 ++++++-
+ .../hadoop/typedbytes/TypedBytesWritableInput.java |   49 +++++++++++++++++++-
+ .../typedbytes/TypedBytesWritableOutput.java       |    7 ++-
+ .../java/org/apache/hadoop/typedbytes/package.html |    2 +
+ .../test/org/apache/hadoop/typedbytes/TestIO.java  |   12 ++++-
+ 7 files changed, 87 insertions(+), 10 deletions(-)
+
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/Type.java b/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/Type.java
+index 1c9ac06..8922617 100644
+--- a/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/Type.java
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/Type.java
+@@ -23,6 +23,7 @@ package org.apache.hadoop.typedbytes;
+  */
+ public enum Type {
+ 
++  // codes for supported types (< 50):
+   BYTES(0),
+   BYTE(1),
+   BOOL(2),
+@@ -34,6 +35,11 @@ public enum Type {
+   VECTOR(8),
+   LIST(9),
+   MAP(10),
++  
++  // application-specific codes (50-200):
++  WRITABLE(50),
++  
++  // low-level codes (> 200):
+   MARKER(255);
+ 
+   final int code;
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesInput.java b/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesInput.java
+index 1eaa1d0..2591f85 100644
+--- a/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesInput.java
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesInput.java
+@@ -101,6 +101,8 @@ public class TypedBytesInput {
+       return readMap();
+     } else if (code == Type.MARKER.code) {
+       return null;
++    } else if (50 <= code && code <= 200) { // application-specific typecodes
++      return new Buffer(readBytes());
+     } else {
+       throw new RuntimeException("unknown type");
+     }
+@@ -146,6 +148,8 @@ public class TypedBytesInput {
+       return readRawMap();
+     } else if (code == Type.MARKER.code) {
+       return null;
++    } else if (50 <= code && code <= 200) { // application-specific typecodes
++      return readRawBytes();
+     } else {
+       throw new RuntimeException("unknown type");
+     }
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesOutput.java b/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesOutput.java
+index 18b15fa..a032257 100644
+--- a/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesOutput.java
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesOutput.java
+@@ -124,16 +124,27 @@ public class TypedBytesOutput {
+   }
+ 
+   /**
+-   * Writes a bytes array as a typed bytes sequence.
++   * Writes a bytes array as a typed bytes sequence, using a given typecode.
+    * 
+    * @param bytes the bytes array to be written
++   * @param code the typecode to use
+    * @throws IOException
+    */
+-  public void writeBytes(byte[] bytes) throws IOException {
+-    out.write(Type.BYTES.code);
++  public void writeBytes(byte[] bytes, int code) throws IOException {
++    out.write(code);
+     out.writeInt(bytes.length);
+     out.write(bytes);
+   }
++  
++  /**
++   * Writes a bytes array as a typed bytes sequence.
++   * 
++   * @param bytes the bytes array to be written
++   * @throws IOException
++   */
++  public void writeBytes(byte[] bytes) throws IOException {
++    writeBytes(bytes, Type.BYTES.code);
++  }
+ 
+   /**
+    * Writes a byte as a typed bytes sequence.
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesWritableInput.java b/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesWritableInput.java
+index 12715c4..f15ae26 100644
+--- a/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesWritableInput.java
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesWritableInput.java
+@@ -18,9 +18,13 @@
+ 
+ package org.apache.hadoop.typedbytes;
+ 
++import java.io.ByteArrayInputStream;
+ import java.io.DataInput;
++import java.io.DataInputStream;
+ import java.io.IOException;
+ 
++import org.apache.hadoop.conf.Configurable;
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.ArrayWritable;
+ import org.apache.hadoop.io.BooleanWritable;
+ import org.apache.hadoop.io.ByteWritable;
+@@ -36,17 +40,22 @@ import org.apache.hadoop.io.VIntWritable;
+ import org.apache.hadoop.io.VLongWritable;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.io.WritableComparable;
++import org.apache.hadoop.io.WritableUtils;
++import org.apache.hadoop.util.ReflectionUtils;
+ 
+ /**
+  * Provides functionality for reading typed bytes as Writable objects.
+  * 
+  * @see TypedBytesInput
+  */
+-public class TypedBytesWritableInput {
++public class TypedBytesWritableInput implements Configurable {
+ 
+   private TypedBytesInput in;
++  private Configuration conf;
+ 
+-  private TypedBytesWritableInput() {}
++  private TypedBytesWritableInput() {
++    conf = new Configuration();
++  }
+ 
+   private void setTypedBytesInput(TypedBytesInput in) {
+     this.in = in;
+@@ -86,6 +95,7 @@ public class TypedBytesWritableInput {
+ 
+   /** Creates a new instance of TypedBytesWritableInput. */
+   public TypedBytesWritableInput(TypedBytesInput in) {
++    this();
+     this.in = in;
+   }
+ 
+@@ -120,6 +130,8 @@ public class TypedBytesWritableInput {
+       return readArray();
+     case MAP:
+       return readMap();
++    case WRITABLE:
++      return readWritable();
+     default:
+       throw new RuntimeException("unknown type");
+     }
+@@ -151,6 +163,8 @@ public class TypedBytesWritableInput {
+       return ArrayWritable.class;
+     case MAP:
+       return MapWritable.class;
++    case WRITABLE:
++      return Writable.class;
+     default:
+       throw new RuntimeException("unknown type");
+     }
+@@ -331,5 +345,36 @@ public class TypedBytesWritableInput {
+   public SortedMapWritable readSortedMap() throws IOException {
+     return readSortedMap(null);
+   }
++  
++  public Writable readWritable(Writable writable) throws IOException {
++    ByteArrayInputStream bais = new ByteArrayInputStream(in.readBytes());
++    DataInputStream dis = new DataInputStream(bais);
++    String className = WritableUtils.readString(dis);
++    if (writable == null) {
++      try {
++        Class<? extends Writable> cls = 
++          conf.getClassByName(className).asSubclass(Writable.class);
++        writable = (Writable) ReflectionUtils.newInstance(cls, conf);
++      } catch (ClassNotFoundException e) {
++        throw new IOException(e);
++      }
++    } else if (!writable.getClass().getName().equals(className)) {
++      throw new IOException("wrong Writable class given");
++    }
++    writable.readFields(dis);
++    return writable;
++  }
++
++  public Writable readWritable() throws IOException {
++    return readWritable(null);
++  }
++
++  public Configuration getConf() {
++    return conf;
++  }
+ 
++  public void setConf(Configuration conf) {
++    this.conf = conf;
++  }
++  
+ }
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesWritableOutput.java b/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesWritableOutput.java
+index f477627..3fb11cc 100644
+--- a/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesWritableOutput.java
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/TypedBytesWritableOutput.java
+@@ -40,6 +40,7 @@ import org.apache.hadoop.io.VIntWritable;
+ import org.apache.hadoop.io.VLongWritable;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.io.WritableComparable;
++import org.apache.hadoop.io.WritableUtils;
+ import org.apache.hadoop.record.Record;
+ 
+ /**
+@@ -91,6 +92,7 @@ public class TypedBytesWritableOutput {
+ 
+   /** Creates a new instance of TypedBytesWritableOutput. */
+   public TypedBytesWritableOutput(TypedBytesOutput out) {
++    this();
+     this.out = out;
+   }
+ 
+@@ -209,13 +211,12 @@ public class TypedBytesWritableOutput {
+   }
+ 
+   public void writeWritable(Writable w) throws IOException {
+-    out.writeVectorHeader(2);
+-    out.writeString(w.getClass().getName());
+     ByteArrayOutputStream baos = new ByteArrayOutputStream();
+     DataOutputStream dos = new DataOutputStream(baos);
++    WritableUtils.writeString(dos, w.getClass().getName());
+     w.write(dos);
+     dos.close();
+-    out.writeBytes(baos.toByteArray());
++    out.writeBytes(baos.toByteArray(), Type.WRITABLE.code);
+   }
+ 
+ }
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/package.html b/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/package.html
+index 1082c5d..38c09f1 100644
+--- a/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/package.html
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/typedbytes/package.html
+@@ -41,6 +41,8 @@ Each typed bytes sequence starts with an unsigned byte that contains the type co
+ <tr><td><i>10</i></td><td>A map.</td></tr>
+ </table>
+ </p>
++The type codes <i>50</i> to <i>200</i> are treated as aliases for <i>0</i>, and can thus be used for
++application-specific serialization.
+ 
+ <h3>Subsequent Bytes</h3>
+ 
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/typedbytes/TestIO.java b/src/contrib/streaming/src/test/org/apache/hadoop/typedbytes/TestIO.java
+index 5ad1c9c..6f91122 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/typedbytes/TestIO.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/typedbytes/TestIO.java
+@@ -40,6 +40,7 @@ import org.apache.hadoop.io.BytesWritable;
+ import org.apache.hadoop.io.DoubleWritable;
+ import org.apache.hadoop.io.FloatWritable;
+ import org.apache.hadoop.io.MapWritable;
++import org.apache.hadoop.io.ObjectWritable;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.io.VIntWritable;
+ import org.apache.hadoop.io.VLongWritable;
+@@ -80,6 +81,7 @@ public class TestIO extends TestCase {
+       (byte) 123, true, 12345, 123456789L, (float) 1.2, 1.234,
+       "random string", vector, list, map 
+     };
++    byte[] appSpecificBytes = new byte[] { 1, 2, 3 };
+ 
+     FileOutputStream ostream = new FileOutputStream(tmpfile);
+     DataOutputStream dostream = new DataOutputStream(ostream);
+@@ -87,6 +89,7 @@ public class TestIO extends TestCase {
+     for (Object obj : objects) {
+       out.write(obj);
+     }
++    out.writeBytes(appSpecificBytes, 100);
+     dostream.close();
+     ostream.close();
+ 
+@@ -96,6 +99,7 @@ public class TestIO extends TestCase {
+     for (Object obj : objects) {
+       assertEquals(obj, in.read());
+     }
++    assertEquals(new Buffer(appSpecificBytes), in.read());
+     distream.close();
+     istream.close();
+ 
+@@ -114,6 +118,9 @@ public class TestIO extends TestCase {
+       dis = new DataInputStream(bais);
+       assertEquals(obj, (new TypedBytesInput(dis)).read());
+     }
++    byte[] rawBytes = in.readRaw();
++    assertEquals(new Buffer(appSpecificBytes),
++      new Buffer(rawBytes, 5, rawBytes.length - 5));
+     distream.close();
+     istream.close();
+   }
+@@ -164,7 +171,8 @@ public class TestIO extends TestCase {
+       new ByteWritable((byte) 123), new BooleanWritable(true),
+       new VIntWritable(12345), new VLongWritable(123456789L),
+       new FloatWritable((float) 1.2), new DoubleWritable(1.234),
+-      new Text("random string")
++      new Text("random string"),
++      new ObjectWritable("test")
+     };
+     TypedBytesWritable tbw = new TypedBytesWritable();
+     tbw.setValue("typed bytes text");
+@@ -201,7 +209,7 @@ public class TestIO extends TestCase {
+ 
+     TypedBytesWritableInput in = new TypedBytesWritableInput(distream);
+     for (Writable w : writables) {
+-      assertEquals(w, in.read());
++      assertEquals(w.toString(), in.read().toString());
+     }
+ 
+     assertEquals(tbw.getValue().toString(), in.read().toString());
+-- 
+1.7.0.4
+

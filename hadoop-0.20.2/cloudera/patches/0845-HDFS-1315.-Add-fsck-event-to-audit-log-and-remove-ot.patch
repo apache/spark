@@ -1,0 +1,430 @@
+From f1625663dc6008b89af3ff80e19d64f4717f1a9b Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:52 -0800
+Subject: [PATCH 0845/1179] HDFS-1315. Add fsck event to audit log and remove other audit log events corresponding to FSCK listStatus
+
+Author: Suresh Srinivas
+Ref: CDH-2622
+---
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   55 ++++++++++++++------
+ .../hadoop/hdfs/server/namenode/FsckServlet.java   |    5 ++-
+ .../hadoop/hdfs/server/namenode/NameNode.java      |   13 -----
+ .../hadoop/hdfs/server/namenode/NamenodeFsck.java  |   24 +++++++--
+ .../hadoop/hdfs/server/namenode/TestFsck.java      |   47 ++++++++++++++++-
+ 5 files changed, 107 insertions(+), 37 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index a78ac91..3d342ca 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -777,7 +777,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       dir.setPermission(src, permission);
+     }
+     getEditLog().logSync();
+-    if (auditLog.isInfoEnabled()) {
++    if (auditLog.isInfoEnabled() && isExternalInvocation()) {
+       final HdfsFileStatus stat = dir.getFileInfo(src);
+       logAuditEvent(UserGroupInformation.getCurrentUser(),
+                     Server.getRemoteIp(),
+@@ -807,7 +807,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       dir.setOwner(src, username, group);
+     }
+     getEditLog().logSync();
+-    if (auditLog.isInfoEnabled()) {
++    if (auditLog.isInfoEnabled() && isExternalInvocation()) {
+       final HdfsFileStatus stat = dir.getFileInfo(src);
+       logAuditEvent(UserGroupInformation.getCurrentUser(),
+                     Server.getRemoteIp(),
+@@ -822,7 +822,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+    */
+   LocatedBlocks getBlockLocations(String clientMachine, String src,
+       long offset, long length) throws IOException {
+-    LocatedBlocks blocks = getBlockLocations(src, offset, length, true);
++    LocatedBlocks blocks = getBlockLocations(src, offset, length, true, true);
+     if (blocks != null) {
+       //sort the blocks
+       DatanodeDescriptor client = host2DataNodeMap.getDatanodeByHost(
+@@ -840,7 +840,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+    */
+   public LocatedBlocks getBlockLocations(String src, long offset, long length
+       ) throws IOException {
+-    return getBlockLocations(src, offset, length, false);
++    return getBlockLocations(src, offset, length, false, true);
+   }
+ 
+   /**
+@@ -848,7 +848,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+    * @see ClientProtocol#getBlockLocations(String, long, long)
+    */
+   public LocatedBlocks getBlockLocations(String src, long offset, long length,
+-      boolean doAccessTime) throws IOException {
++      boolean doAccessTime, boolean needBlockToken) throws IOException {
+     if (isPermissionEnabled) {
+       checkPathAccess(src, FsAction.READ);
+     }
+@@ -860,8 +860,8 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       throw new IOException("Negative length is not supported. File: " + src );
+     }
+     final LocatedBlocks ret = getBlockLocationsInternal(src, 
+-        offset, length, Integer.MAX_VALUE, doAccessTime);  
+-    if (auditLog.isInfoEnabled()) {
++        offset, length, Integer.MAX_VALUE, doAccessTime, needBlockToken);  
++    if (auditLog.isInfoEnabled() && isExternalInvocation()) {
+       logAuditEvent(UserGroupInformation.getCurrentUser(),
+                     Server.getRemoteIp(),
+                     "open", src, null, null);
+@@ -873,7 +873,8 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+                                                        long offset, 
+                                                        long length,
+                                                        int nrBlocksToReturn,
+-                                                       boolean doAccessTime) 
++                                                       boolean doAccessTime, 
++                                                       boolean needBlockToken)
+                                                        throws IOException {
+     INodeFile inode = dir.getFileINode(src);
+     if(inode == null) {
+@@ -945,7 +946,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       }
+       LocatedBlock b = new LocatedBlock(blocks[curBlk], machineSet, curPos,
+           blockCorrupt);
+-      if(isAccessTokenEnabled) {
++      if(isAccessTokenEnabled && needBlockToken) {
+         b.setBlockToken(accessTokenHandler.generateToken(b.getBlock(), 
+             EnumSet.of(BlockTokenSecretManager.AccessMode.READ)));
+       }
+@@ -981,7 +982,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     INodeFile inode = dir.getFileINode(src);
+     if (inode != null) {
+       dir.setTimes(src, inode, mtime, atime, true);
+-      if (auditLog.isInfoEnabled()) {
++      if (auditLog.isInfoEnabled() && isExternalInvocation()) {
+         final HdfsFileStatus stat = dir.getFileInfo(src);
+         logAuditEvent(UserGroupInformation.getCurrentUser(),
+                       Server.getRemoteIp(),
+@@ -1009,7 +1010,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+                                 throws IOException {
+     boolean status = setReplicationInternal(src, replication);
+     getEditLog().logSync();
+-    if (status && auditLog.isInfoEnabled()) {
++    if (status && auditLog.isInfoEnabled() && isExternalInvocation()) {
+       logAuditEvent(UserGroupInformation.getCurrentUser(),
+                     Server.getRemoteIp(),
+                     "setReplication", src, null, null);
+@@ -1096,7 +1097,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     startFileInternal(src, permissions, holder, clientMachine, overwrite, false,
+                       replication, blockSize);
+     getEditLog().logSync();
+-    if (auditLog.isInfoEnabled()) {
++    if (auditLog.isInfoEnabled() && isExternalInvocation()) {
+       final HdfsFileStatus stat = dir.getFileInfo(src);
+       logAuditEvent(UserGroupInformation.getCurrentUser(),
+                     Server.getRemoteIp(),
+@@ -1341,7 +1342,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       }
+     }
+ 
+-    if (auditLog.isInfoEnabled()) {
++    if (auditLog.isInfoEnabled() && isExternalInvocation()) {
+       logAuditEvent(UserGroupInformation.getCurrentUser(),
+                     Server.getRemoteIp(),
+                     "append", src, null, null);
+@@ -1778,7 +1779,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   public boolean renameTo(String src, String dst) throws IOException {
+     boolean status = renameToInternal(src, dst);
+     getEditLog().logSync();
+-    if (status && auditLog.isInfoEnabled()) {
++    if (status && auditLog.isInfoEnabled() && isExternalInvocation()) {
+       final HdfsFileStatus stat = dir.getFileInfo(dst);
+       logAuditEvent(UserGroupInformation.getCurrentUser(),
+                     Server.getRemoteIp(),
+@@ -1823,7 +1824,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       }
+       boolean status = deleteInternal(src, true);
+       getEditLog().logSync();
+-      if (status && auditLog.isInfoEnabled()) {
++      if (status && auditLog.isInfoEnabled() && isExternalInvocation()) {
+         logAuditEvent(UserGroupInformation.getCurrentUser(),
+                       Server.getRemoteIp(),
+                       "delete", src, null, null);
+@@ -1878,7 +1879,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       ) throws IOException {
+     boolean status = mkdirsInternal(src, permissions);
+     getEditLog().logSync();
+-    if (status && auditLog.isInfoEnabled()) {
++    if (status && auditLog.isInfoEnabled() && isExternalInvocation()) {
+       final HdfsFileStatus stat = dir.getFileInfo(src);
+       logAuditEvent(UserGroupInformation.getCurrentUser(),
+                     Server.getRemoteIp(),
+@@ -2195,7 +2196,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+         checkTraverse(src);
+       }
+     }
+-    if (auditLog.isInfoEnabled()) {
++    if (auditLog.isInfoEnabled() && isExternalInvocation()) {
+       logAuditEvent(UserGroupInformation.getCurrentUser(),
+                     Server.getRemoteIp(),
+                     "listStatus", src, null, null);
+@@ -5359,4 +5360,24 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     }
+     return authMethod;
+   }
++  
++  /**
++   * If the remote IP for namenode method invokation is null, then the
++   * invocation is internal to the namenode. Client invoked methods are invoked
++   * over RPC and always have address != null.
++   */
++  private boolean isExternalInvocation() {
++    return Server.getRemoteIp() != null;
++  }
++  
++  /**
++   * Log fsck event in the audit log 
++   */
++  void logFsckEvent(String src, InetAddress remoteAddress) throws IOException {
++    if (auditLog.isInfoEnabled()) {
++      logAuditEvent(UserGroupInformation.getCurrentUser(),
++                    remoteAddress,
++                    "fsck", src, null, null);
++    }
++  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FsckServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FsckServlet.java
+index 9488b14..90e919b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FsckServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FsckServlet.java
+@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.namenode;
+ 
+ import java.io.IOException;
+ import java.io.PrintWriter;
++import java.net.InetAddress;
+ import java.security.PrivilegedExceptionAction;
+ import java.util.Map;
+ 
+@@ -43,6 +44,8 @@ public class FsckServlet extends DfsServlet {
+     @SuppressWarnings("unchecked")
+     final Map<String,String[]> pmap = request.getParameterMap();
+     final PrintWriter out = response.getWriter();
++    final InetAddress remoteAddress = 
++      InetAddress.getByName(request.getRemoteAddr());
+     final ServletContext context = getServletContext();
+     final Configuration conf = 
+       (Configuration) context.getAttribute(JspHelper.CURRENT_CONF);
+@@ -56,7 +59,7 @@ public class FsckServlet extends DfsServlet {
+           final short minReplication = nn.namesystem.getMinReplication();
+ 
+           new NamenodeFsck(conf, nn, nn.getNetworkTopology(), pmap, out,
+-              totalDatanodes, minReplication).fsck();
++              totalDatanodes, minReplication, remoteAddress).fsck();
+                     return null;
+           }
+       });
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index d742ed9..4bf09df 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -485,19 +485,6 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+                                         src, offset, length);
+   }
+   
+-  /**
+-   * The specification of this method matches that of
+-   * {@link getBlockLocations(Path)}
+-   * except that it does not update the file's access time.
+-   */
+-  LocatedBlocks getBlockLocationsNoATime(String src, 
+-                                         long offset, 
+-                                         long length)
+-      throws IOException {
+-    myMetrics.numGetBlockLocations.inc();
+-    return namesystem.getBlockLocations(src, offset, length, false);
+-  }
+-  
+   private static String getClientMachine() {
+     String clientMachine = Server.getRemoteAddress();
+     if (clientMachine == null) {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java
+index 526297c..abfd3fe 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java
+@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.namenode;
+ import java.io.IOException;
+ import java.io.OutputStream;
+ import java.io.PrintWriter;
++import java.net.InetAddress;
+ import java.net.InetSocketAddress;
+ import java.net.Socket;
+ import java.util.ArrayList;
+@@ -44,6 +45,7 @@ import org.apache.hadoop.hdfs.server.common.HdfsConstants;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.net.NetworkTopology;
+ import org.apache.hadoop.net.NodeBase;
++import org.apache.hadoop.security.UserGroupInformation;
+ 
+ /**
+  * This class provides rudimentary checking of DFS volumes for errors and
+@@ -87,6 +89,7 @@ public class NamenodeFsck {
+   private final NetworkTopology networktopology;
+   private final int totalDatanodes;
+   private final short minReplication;
++  private final InetAddress remoteAddress;
+ 
+   private String lostFound = null;
+   private boolean lfInited = false;
+@@ -106,20 +109,24 @@ public class NamenodeFsck {
+    * Filesystem checker.
+    * @param conf configuration (namenode config)
+    * @param nn namenode that this fsck is going to use
+-   * @param pmap key=value[] map that is passed to the http servlet as url parameters
+-   * @param response the object into which  this servelet writes the url contents
++   * @param pmap key=value[] map passed to the http servlet as url parameters
++   * @param out output stream to write the fsck output
++   * @param totalDatanodes number of live datanodes
++   * @param minReplication minimum replication
++   * @param remoteAddress source address of the fsck request
+    * @throws IOException
+    */
+   NamenodeFsck(Configuration conf, NameNode namenode,
+       NetworkTopology networktopology, 
+       Map<String,String[]> pmap, PrintWriter out,
+-      int totalDatanodes, short minReplication) {
++      int totalDatanodes, short minReplication, InetAddress remoteAddress) {
+     this.conf = conf;
+     this.namenode = namenode;
+     this.networktopology = networktopology;
+     this.out = out;
+     this.totalDatanodes = totalDatanodes;
+     this.minReplication = minReplication;
++    this.remoteAddress = remoteAddress;
+ 
+     for (Iterator<String> it = pmap.keySet().iterator(); it.hasNext();) {
+       String key = it.next();
+@@ -140,7 +147,11 @@ public class NamenodeFsck {
+   public void fsck() {
+     final long startTime = System.currentTimeMillis();
+     try {
+-      out.println("Namenode FSCK started at " + new Date());
++      String msg = "FSCK started by " + UserGroupInformation.getCurrentUser()
++          + " from " + remoteAddress + " for path " + path + " at " + new Date();
++      LOG.info(msg);
++      out.println(msg);
++      namenode.getNamesystem().logFsckEvent(path, remoteAddress);
+       Result res = new Result(conf);
+       final HdfsFileStatus file = namenode.getFileInfo(path);
+       if (file != null) {
+@@ -203,7 +214,10 @@ public class NamenodeFsck {
+       return;
+     }
+     long fileLen = file.getLen();
+-    LocatedBlocks blocks = namenode.getBlockLocationsNoATime(path, 0, fileLen);
++    // Get block locations without updating the file access time 
++    // and without block access tokens
++    LocatedBlocks blocks = namenode.getNamesystem().getBlockLocations(path, 0,
++        fileLen, false, false);
+     if (blocks == null) { // the file is deleted
+       return;
+     }
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestFsck.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestFsck.java
+index b34f616..d092935 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestFsck.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestFsck.java
+@@ -18,8 +18,10 @@
+ 
+ package org.apache.hadoop.hdfs.server.namenode;
+ 
++import java.io.BufferedReader;
+ import java.io.ByteArrayOutputStream;
+ import java.io.File;
++import java.io.FileReader;
+ import java.io.IOException;
+ import java.io.PrintStream;
+ import java.io.RandomAccessFile;
+@@ -27,6 +29,7 @@ import java.net.InetSocketAddress;
+ import java.nio.channels.FileChannel;
+ import java.security.PrivilegedExceptionAction;
+ import java.util.Random;
++import java.util.regex.Pattern;
+ 
+ import junit.framework.TestCase;
+ 
+@@ -38,7 +41,6 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.DFSClient;
+-import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.hdfs.DFSTestUtil;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+@@ -47,11 +49,25 @@ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.util.ToolRunner;
+ import org.apache.log4j.Level;
++import org.apache.log4j.Logger;
++import org.apache.log4j.PatternLayout;
++import org.apache.log4j.RollingFileAppender;
+ 
+ /**
+  * A JUnit test for doing fsck
+  */
+ public class TestFsck extends TestCase {
++  static final String auditLogFile = System.getProperty("test.build.dir",
++      "build/test") + "/audit.log";
++  
++  // Pattern for: 
++  // ugi=name ip=/address cmd=FSCK src=/ dst=null perm=null
++  static final Pattern fsckPattern = Pattern.compile(
++      "ugi=.*?\\s" + 
++      "ip=/\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\s" + 
++      "cmd=fsck\\ssrc=\\/\\sdst=null\\s" + 
++      "perm=null");
++  
+   static String runFsck(Configuration conf, int expectedErrCode, 
+                         boolean checkErrorCode,String... path) 
+                         throws Exception {
+@@ -88,7 +104,9 @@ public class TestFsck extends TestCase {
+       final Path file = stats[0].getPath();
+       long aTime = fs.getFileStatus(file).getAccessTime();
+       Thread.sleep(2*precision);
++      setupAuditLogs();
+       String outStr = runFsck(conf, 0, true, "/");
++      verifyAuditLogs();
+       assertEquals(aTime, fs.getFileStatus(file).getAccessTime());
+       assertTrue(outStr.contains(NamenodeFsck.HEALTHY_STATUS));
+       System.out.println(outStr);
+@@ -114,6 +132,33 @@ public class TestFsck extends TestCase {
+     }
+   }
+ 
++  /** Sets up log4j logger for auditlogs */
++  private void setupAuditLogs() throws IOException {
++    File file = new File(auditLogFile);
++    if (file.exists()) {
++      file.delete();
++    }
++    Logger logger = ((Log4JLogger) FSNamesystem.auditLog).getLogger();
++    logger.setLevel(Level.INFO);
++    PatternLayout layout = new PatternLayout("%m%n");
++    RollingFileAppender appender = new RollingFileAppender(layout, auditLogFile);
++    logger.addAppender(appender);
++  }
++  
++  private void verifyAuditLogs() throws IOException {
++    // Turn off the logs
++    Logger logger = ((Log4JLogger) FSNamesystem.auditLog).getLogger();
++    logger.setLevel(Level.OFF);
++    
++    // Ensure audit log has only one for FSCK
++    BufferedReader reader = new BufferedReader(new FileReader(auditLogFile));
++    String line = reader.readLine();
++    assertNotNull(line);
++    assertTrue("Expected fsck event not found in audit log",
++        fsckPattern.matcher(line).matches());
++    assertNull("Unexpected event in audit log", reader.readLine());
++  }
++  
+   public void testFsckNonExistent() throws Exception {
+     DFSTestUtil util = new DFSTestUtil("TestFsck", 20, 3, 8*1024);
+     MiniDFSCluster cluster = null;
+-- 
+1.7.0.4
+

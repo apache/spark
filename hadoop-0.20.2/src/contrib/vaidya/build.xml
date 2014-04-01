@@ -1,0 +1,68 @@
+<?xml version="1.0" ?>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<project name="vaidya" default="jar">
+
+	<import file="../build-contrib.xml" />
+
+	<target name="init">
+		<mkdir dir="${build.dir}" />
+		<mkdir dir="${build.classes}" />
+		<mkdir dir="${build.dir}/bin" />
+		<mkdir dir="${build.dir}/conf" />
+
+		<copy todir="${build.dir}/bin">
+			<!-- copy hadoop vaidya command script file to hadoop-vaidya/bin -->
+			<fileset dir="${basedir}/src/java/org/apache/hadoop/vaidya">
+				<include name="vaidya.sh" />
+			</fileset>
+		</copy>
+
+		<copy todir="${build.dir}/conf">
+			<!-- copy hadoop vaidya tests config file to chuckwa/conf -->
+			<fileset dir="${basedir}/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests">
+				<include name="postex_diagnosis_tests.xml" />
+			</fileset>
+		</copy>
+	</target>
+
+	<!-- ====================================================== -->
+	<!-- Override jar target to include the tests conf xml file -->
+	<!-- ====================================================== -->
+	<target name="jar" depends="compile" unless="skip.contrib">
+		<echo message="contrib: ${name}" />
+		<jar jarfile="${build.dir}/hadoop-${name}-${version}.jar">
+			<fileset dir="${build.classes}" />
+			<fileset dir="${basedir}/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests">
+				<include name="postex_diagnosis_tests.xml" />
+			</fileset>
+		</jar>
+	</target>
+
+	<target name="package" depends="jar">
+		<mkdir dir="${dist.dir}/contrib/${name}" />
+		<copy todir="${dist.dir}/contrib/${name}" includeEmptyDirs="false">
+			<fileset dir="${build.dir}">
+				<exclude name="**/classes/" />
+			</fileset>
+		</copy>
+		<chmod dir="${dist.dir}/contrib/${name}/bin" perm="a+x" includes="*" />
+	</target>
+
+</project>

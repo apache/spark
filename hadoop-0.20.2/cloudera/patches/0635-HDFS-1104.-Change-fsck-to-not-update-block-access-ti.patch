@@ -1,0 +1,149 @@
+From 2647aae4985ca29e222567d8bfc77e2569fde81c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 4 May 2010 19:14:10 +0000
+Subject: [PATCH 0635/1179] HDFS-1104. Change fsck to not update block access times
+
+Patch: https://issues.apache.org/jira/secure/attachment/12443523/fsckATime_Yahoo0.20.patch
+Author: Hairong Kuang
+Reason: prevents a possible NN OOME during fsck
+Ref: YDH
+---
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |    8 ++++----
+ .../hadoop/hdfs/server/namenode/NameNode.java      |   13 +++++++++++++
+ .../hadoop/hdfs/server/namenode/NamenodeFsck.java  |    7 +++----
+ .../hadoop/hdfs/server/namenode/TestFsck.java      |   15 +++++++++++++--
+ 4 files changed, 33 insertions(+), 10 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index d2b9f58..81e8096 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -815,10 +815,6 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+    */
+   LocatedBlocks getBlockLocations(String clientMachine, String src,
+       long offset, long length) throws IOException {
+-    if (isPermissionEnabled) {
+-      checkPathAccess(src, FsAction.READ);
+-    }
+-
+     LocatedBlocks blocks = getBlockLocations(src, offset, length, true);
+     if (blocks != null) {
+       //sort the blocks
+@@ -846,6 +842,10 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+    */
+   public LocatedBlocks getBlockLocations(String src, long offset, long length,
+       boolean doAccessTime) throws IOException {
++    if (isPermissionEnabled) {
++      checkPathAccess(src, FsAction.READ);
++    }
++
+     if (offset < 0) {
+       throw new IOException("Negative offset is not supported. File: " + src );
+     }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 9640c53..677a3cd 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -476,6 +476,19 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+                                         src, offset, length);
+   }
+   
++  /**
++   * The specification of this method matches that of
++   * {@link getBlockLocations(Path)}
++   * except that it does not update the file's access time.
++   */
++  LocatedBlocks getBlockLocationsNoATime(String src, 
++                                         long offset, 
++                                         long length)
++      throws IOException {
++    myMetrics.numGetBlockLocations.inc();
++    return namesystem.getBlockLocations(src, offset, length, false);
++  }
++  
+   private static String getClientMachine() {
+     String clientMachine = Server.getRemoteAddress();
+     if (clientMachine == null) {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java
+index 9876d13..b2de9e0 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java
+@@ -34,7 +34,6 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.DFSClient;
+ import org.apache.hadoop.hdfs.protocol.Block;
+-import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+@@ -83,7 +82,7 @@ public class NamenodeFsck {
+   /** Delete corrupted files. */
+   public static final int FIXING_DELETE = 2;
+   
+-  private final ClientProtocol namenode;
++  private final NameNode namenode;
+   private final NetworkTopology networktopology;
+   private final int totalDatanodes;
+   private final short minReplication;
+@@ -110,7 +109,7 @@ public class NamenodeFsck {
+    * @param response the object into which  this servelet writes the url contents
+    * @throws IOException
+    */
+-  NamenodeFsck(Configuration conf, ClientProtocol namenode,
++  NamenodeFsck(Configuration conf, NameNode namenode,
+       NetworkTopology networktopology, 
+       Map<String,String[]> pmap, PrintWriter out,
+       int totalDatanodes, short minReplication) {
+@@ -195,7 +194,7 @@ public class NamenodeFsck {
+       return;
+     }
+     long fileLen = file.getLen();
+-    LocatedBlocks blocks = namenode.getBlockLocations(path, 0, fileLen);
++    LocatedBlocks blocks = namenode.getBlockLocationsNoATime(path, 0, fileLen);
+     if (blocks == null) { // the file is deleted
+       return;
+     }
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestFsck.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestFsck.java
+index c0ea6df..b34f616 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestFsck.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestFsck.java
+@@ -33,10 +33,12 @@ import junit.framework.TestCase;
+ import org.apache.commons.logging.impl.Log4JLogger;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.DFSClient;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.hdfs.DFSTestUtil;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+@@ -73,12 +75,21 @@ public class TestFsck extends TestCase {
+     FileSystem fs = null;
+     try {
+       Configuration conf = new Configuration();
++      final long precision = 1L;
++      conf.setLong("dfs.access.time.precision", precision);
+       conf.setLong("dfs.blockreport.intervalMsec", 10000L);
+       cluster = new MiniDFSCluster(conf, 4, true, null);
+       fs = cluster.getFileSystem();
+-      util.createFiles(fs, "/srcdat");
+-      util.waitReplication(fs, "/srcdat", (short)3);
++      final String fileName = "/srcdat";
++      util.createFiles(fs, fileName);
++      util.waitReplication(fs, fileName, (short)3);
++      FileStatus[] stats = fs.listStatus(new Path(fileName));
++      assertFalse(0==stats.length);
++      final Path file = stats[0].getPath();
++      long aTime = fs.getFileStatus(file).getAccessTime();
++      Thread.sleep(2*precision);
+       String outStr = runFsck(conf, 0, true, "/");
++      assertEquals(aTime, fs.getFileStatus(file).getAccessTime());
+       assertTrue(outStr.contains(NamenodeFsck.HEALTHY_STATUS));
+       System.out.println(outStr);
+       if (fs != null) {try{fs.close();} catch(Exception e){}}
+-- 
+1.7.0.4
+

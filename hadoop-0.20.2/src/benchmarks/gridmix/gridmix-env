@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+
+
+## Environment configuration
+# Hadoop installation
+# set var only if it has not already been set externally
+if [ -z "${HADOOP_HOME}" ] ; then
+  export HADOOP_HOME=
+fi
+# Base directory for gridmix install
+# set var only if it has not already been set externally
+if [ -z "${GRID_MIX_HOME}" ] ; then
+  export GRID_MIX_HOME=${GRID_DIR}
+fi
+# Hadoop example jar
+# set var only if it has not already been set externally
+if [ -z "${EXAMPLE_JAR}" ] ; then
+  export EXAMPLE_JAR="${HADOOP_HOME}/hadoop-*examples.jar"
+fi
+# Hadoop test jar
+# set var only if it has not already been set externally
+if [ -z "${APP_JAR}" ] ; then
+  export APP_JAR="${HADOOP_HOME}/hadoop-*test.jar"
+fi
+# Hadoop streaming jar
+# set var only if it has not already been set externally
+if [ -z "${STREAM_JAR}" ] ; then
+  export STREAM_JAR="${HADOOP_HOME}/contrib/streaming/hadoop-*streaming.jar"
+fi
+# Location on default filesystem for writing gridmix data (usually HDFS)
+# Default: /gridmix/data
+# set var only if it has not already been set externally
+if [ -z "${GRID_MIX_DATA}" ] ; then
+  export GRID_MIX_DATA=/gridmix/data
+fi
+# Location of executables in default filesystem (usually HDFS)
+# Default: /gridmix/programs
+# set var only if it has not already been set externally
+if [ -z "${GRID_MIX_PROG}" ] ; then
+  export GRID_MIX_PROG=/gridmix/programs
+fi
+
+## Data sources
+# Variable length key, value compressed SequenceFile
+export VARCOMPSEQ=${GRID_MIX_DATA}/WebSimulationBlockCompressed
+# Fixed length key, value compressed SequenceFile
+export FIXCOMPSEQ=${GRID_MIX_DATA}/MonsterQueryBlockCompressed
+# Variable length key, value uncompressed Text File
+export VARINFLTEXT=${GRID_MIX_DATA}/SortUncompressed
+# Fixed length key, value compressed Text File
+export FIXCOMPTEXT=${GRID_MIX_DATA}/EntropySimulationCompressed
+
+## Job sizing
+export NUM_OF_LARGE_JOBS_FOR_ENTROPY_CLASS=5
+export NUM_OF_LARGE_JOBS_PER_CLASS=3
+export NUM_OF_MEDIUM_JOBS_PER_CLASS=20
+export NUM_OF_SMALL_JOBS_PER_CLASS=40
+
+export NUM_OF_REDUCERS_FOR_LARGE_JOB=370
+export NUM_OF_REDUCERS_FOR_MEDIUM_JOB=170
+export NUM_OF_REDUCERS_FOR_SMALL_JOB=15
+
+## Throttling
+export INTERVAL_BETWEEN_SUBMITION=20
+
+## Hod
+#export HOD_OPTIONS=""
+
+export CLUSTER_DIR_BASE=$GRID_MIX_HOME/CLUSTER_DIR_BASE
+export HOD_CONFIG=
+export ALL_HOD_OPTIONS="-c ${HOD_CONFIG} ${HOD_OPTIONS}"
+export SMALL_JOB_HOD_OPTIONS="$ALL_HOD_OPTIONS -n 5"
+export MEDIUM_JOB_HOD_OPTIONS="$ALL_HOD_OPTIONS -n 50"
+export LARGE_JOB_HOD_OPTIONS="$ALL_HOD_OPTIONS -n 100"
+

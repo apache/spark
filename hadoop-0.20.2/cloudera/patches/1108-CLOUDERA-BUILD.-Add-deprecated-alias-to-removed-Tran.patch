@@ -1,0 +1,38 @@
+From 164e84c499699ada743fdc5f39dce212f3e742fc Mon Sep 17 00:00:00 2001
+From: Philip Zeyliger <philip@cloudera.com>
+Date: Sun, 4 Dec 2011 21:31:52 -0800
+Subject: [PATCH 1108/1179] CLOUDERA-BUILD. Add deprecated alias to removed TransferFsImage method.
+
+The fix for HDFS-2305/CDH-2761 changed the method signature
+of a static method in TransferFsImage.  This adds back
+the old method signature to allow for compatibility with
+plug-ins that wish to use it with CDH3.
+
+Reason: Compatibility
+Author: Philip Zeyliger
+Ref: OPSAPS-5105, CDH-2761
+---
+ .../hdfs/server/namenode/TransferFsImage.java      |    9 +++++++++
+ 1 files changed, 9 insertions(+), 0 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
+index d22c54e..0e1a300 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/TransferFsImage.java
+@@ -240,4 +240,13 @@ class TransferFsImage implements FSConstants {
+     }
+     return digester == null ? null : new MD5Hash(digester.digest());
+   }
++
++  /**
++   * @deprecated use {@link getFileClient(String, String, File[], boolean)} instead.
++   */
++  @Deprecated
++  static void getFileClient(String fsName, String id, File[] localPath)
++      throws IOException {
++    getFileClient(fsName, id, localPath, false);
++  }
+ }
+-- 
+1.7.0.4
+

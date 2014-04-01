@@ -1,0 +1,30 @@
+From d4375b1e0415d9c76885af1df6cd2ebc3db33237 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 15 Apr 2011 12:29:35 -0700
+Subject: [PATCH 0946/1179] HADOOP-7159. RPC server should log the client hostname when read exception happened.
+
+Reason: Improvement
+Author: Scott Chen
+Ref: CDH-2766
+---
+ src/core/org/apache/hadoop/ipc/Server.java |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index b83c65a..7a87ceb 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -568,7 +568,9 @@ public abstract class Server {
+         LOG.info(getName() + ": readAndProcess caught InterruptedException", ieo);
+         throw ieo;
+       } catch (Exception e) {
+-        LOG.info(getName() + ": readAndProcess threw exception " + e + ". Count of bytes read: " + count, e);
++        LOG.info(getName() + ": readAndProcess threw exception " + e +
++            " from client " + c.getHostAddress() +
++            ". Count of bytes read: " + count, e);
+         count = -1; //so that the (count < 0) block is executed
+       }
+       if (count < 0) {
+-- 
+1.7.0.4
+

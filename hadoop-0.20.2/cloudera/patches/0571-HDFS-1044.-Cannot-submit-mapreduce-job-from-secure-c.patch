@@ -1,0 +1,69 @@
+From 5abf4f644d7fc869858f896708b49f211ddf17d4 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 18 Mar 2010 15:42:18 -0700
+Subject: [PATCH 0571/1179] HDFS-1044. Cannot submit mapreduce job from secure client to unsecure sever
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439220/HDFS-1044-BP20-6.patch
+Author: Boris Shkolnik
+Ref: CDH-648
+---
+ .../AbstractDelegationTokenSecretManager.java      |    8 ++++++++
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |    5 +++++
+ .../hadoop/mapreduce/security/TokenCache.java      |    6 ++++--
+ 3 files changed, 17 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java
+index 8367778..4aea9ec 100644
+--- a/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java
++++ b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java
+@@ -102,6 +102,14 @@ extends AbstractDelegationTokenIdentifier>
+     tokenRemoverThread.start();
+   }
+   
++  /**
++   * is secretMgr running
++   * @return true if secret mgr is running
++   */
++  public synchronized boolean isRunning() {
++    return running;
++  }
++  
+   /** 
+    * Add a previously used master key to cache (when NN restarts), 
+    * should be called before activate().
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 62be9bb..92ceb13 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -5179,6 +5179,11 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       throw new IOException(
+           "Delegation Token can be issued only with kerberos or web authentication");
+     }
++    if(dtSecretManager == null || !dtSecretManager.isRunning()) {
++      LOG.warn("trying to get DT with no secret manager running");
++      return null;
++    }
++    
+     UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+     String user = ugi.getUserName();
+     Text owner = new Text(user);
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+index 7734380..5e4be14 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+@@ -123,8 +123,10 @@ public class TokenCache {
+         }
+         // get the token
+         token = dfs.getDelegationToken(delegTokenRenewer);
+-        if(token==null) 
+-          throw new IOException("Token from " + fs_addr + " is null");
++        if(token==null) {
++          LOG.warn("Token from " + fs_addr + " is null");
++          continue;
++        }
+ 
+         token.setService(new Text(fs_addr));
+         credentials.addToken(new Text(fs_addr), token);
+-- 
+1.7.0.4
+

@@ -1,0 +1,129 @@
+From 25d2544f138b41918c7861880c4dc61988b808b0 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Mon, 5 Dec 2011 16:16:31 -0800
+Subject: [PATCH 1097/1179] HDFS-2638. Improve a block recovery log.
+
+It would be useful to know whether an attempt to recover a block is
+failing because the block was already recovered (has a new GS) or the
+block is missing.
+
+Reason: Debugging
+Author: Eli Collins
+Ref: CDH-3888
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |    4 ++--
+ .../org/apache/hadoop/hdfs/protocol/Block.java     |    4 ++++
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    4 +---
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |    7 ++-----
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   11 ++++++++---
+ 5 files changed, 17 insertions(+), 13 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 16591ad..79db211 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -2628,7 +2628,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+               // get new block from namenode.
+               if (blockStream == null) {
+                 LOG.debug("Allocating new block");
+-                nodes = nextBlockOutputStream(src); 
++                nodes = nextBlockOutputStream();
+                 this.setName("DataStreamer for file " + src +
+                              " block " + block);
+                 response = new ResponseProcessor(nodes);
+@@ -3161,7 +3161,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+      * Must get block ID and the IDs of the destinations from the namenode.
+      * Returns the list of target datanodes.
+      */
+-    private DatanodeInfo[] nextBlockOutputStream(String client) throws IOException {
++    private DatanodeInfo[] nextBlockOutputStream() throws IOException {
+       LocatedBlock lb = null;
+       boolean retry = false;
+       DatanodeInfo[] nodes;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/Block.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/Block.java
+index b994fc6..c1eac94 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/Block.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/Block.java
+@@ -116,6 +116,10 @@ public class Block implements Writable, Comparable<Block> {
+     generationStamp = stamp;
+   }
+ 
++  public Block getWithWildcardGS() {
++    return new Block(blockId, numBytes, GenerationStamp.WILDCARD_STAMP);
++  }
++
+   /**
+    */
+   public String toString() {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 5764326..2323b1d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -1807,9 +1807,7 @@ public class DataNode extends Configured
+     // This can happen if the namenode and client start recovering the same
+     // file at the same time.
+     synchronized (ongoingRecovery) {
+-      Block tmp = new Block();
+-      tmp.set(block.getBlockId(), block.getNumBytes(), GenerationStamp.WILDCARD_STAMP);
+-      if (ongoingRecovery.get(tmp) != null) {
++      if (ongoingRecovery.get(block.getWithWildcardGS()) != null) {
+         String msg = "Block " + block + " is already being recovered, " +
+                      " ignoring this request to recover it.";
+         LOG.info(msg);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index b8ffedf..1bdc20f 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -1294,9 +1294,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+    */
+   private synchronized List<Thread> tryUpdateBlock(
+       Block oldblock, Block newblock) throws IOException {
+-    Block oldblockWildcardGS = new Block(
+-      oldblock.getBlockId(), oldblock.getNumBytes(),
+-      GenerationStamp.WILDCARD_STAMP);
++    Block oldblockWildcardGS = oldblock.getWithWildcardGS();
+ 
+     //check ongoing create threads
+     ArrayList<Thread> activeThreads = getActiveThreads(oldblockWildcardGS);
+@@ -1494,8 +1492,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+         }
+         ongoingCreates.remove(b);
+       }
+-      if (ongoingCreates.containsKey(new Block(
+-        b.getBlockId(), b.getNumBytes(), GenerationStamp.WILDCARD_STAMP))) {
++      if (ongoingCreates.containsKey(b.getWithWildcardGS())) {
+         DataNode.LOG.error("Unexpected: wildcard ongoingCreates exists for block " + b);
+       }
+       FSVolume v = null;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index facfa23..490c40f 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -2186,8 +2186,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+ 
+     if (deleteblock) {
+       pendingFile.removeBlock(lastblock);
+-    }
+-    else {
++    } else {
+       // update last block, construct newblockinfo and add it to the blocks map
+       lastblock.set(lastblock.getBlockId(), newlength, newgenerationstamp);
+       final BlockInfo newblockinfo = blocksMap.addINode(lastblock, pendingFile);
+@@ -5343,7 +5342,13 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+     }
+     BlockInfo storedBlock = blocksMap.getStoredBlock(block);
+     if (storedBlock == null) {
+-      String msg = block + " is already commited, storedBlock == null.";
++      BlockInfo match =
++        blocksMap.getStoredBlock(block.getWithWildcardGS());
++      String msg = (match == null)
++        ? block + " is missing"
++        : block + " has out of date GS " + block.getGenerationStamp() +
++                  " found " + match.getGenerationStamp() +
++                  ", may already be committed";
+       LOG.info(msg);
+       throw new IOException(msg);
+     }
+-- 
+1.7.0.4
+

@@ -1,0 +1,160 @@
+From be5652e5aa6a3888f4e52608c3a591b03ad48487 Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Wed, 6 Jul 2011 17:43:59 +0100
+Subject: [PATCH 1019/1179] CLOUDERA-BUILD. Undeprecate backported MapReduce library classes using the old API.
+
+Ref: CDH-3203
+---
+ .../hadoop/mapred/lib/BinaryPartitioner.java       |    4 ----
+ .../hadoop/mapred/lib/MultipleOutputFormat.java    |    4 ----
+ .../apache/hadoop/mapred/lib/MultipleOutputs.java  |    3 ---
+ .../lib/MultipleSequenceFileOutputFormat.java      |    3 ---
+ .../mapred/lib/MultipleTextOutputFormat.java       |    3 ---
+ .../hadoop/mapred/lib/db/DBConfiguration.java      |    5 -----
+ .../apache/hadoop/mapred/lib/db/DBInputFormat.java |    5 -----
+ .../hadoop/mapred/lib/db/DBOutputFormat.java       |    4 ----
+ .../apache/hadoop/mapred/lib/db/DBWritable.java    |    5 -----
+ 9 files changed, 0 insertions(+), 36 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/BinaryPartitioner.java b/src/mapred/org/apache/hadoop/mapred/lib/BinaryPartitioner.java
+index 2c81338..ad87fa5 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/BinaryPartitioner.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/BinaryPartitioner.java
+@@ -27,11 +27,7 @@ import org.apache.hadoop.mapred.Partitioner;
+  * the bytes array returned by {@link BinaryComparable#getBytes()}. 
+  * 
+  * @see org.apache.hadoop.mapreduce.lib.partition.BinaryPartitioner
+- * @deprecated Use
+- *   {@link org.apache.hadoop.mapreduce.lib.partition.BinaryPartitioner}
+- *   instead.
+  */
+-@Deprecated
+ public class BinaryPartitioner<V>  
+   extends org.apache.hadoop.mapreduce.lib.partition.BinaryPartitioner<V>
+   implements Partitioner<BinaryComparable, V> {
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/MultipleOutputFormat.java b/src/mapred/org/apache/hadoop/mapred/lib/MultipleOutputFormat.java
+index d8ab309..133d262 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/MultipleOutputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/MultipleOutputFormat.java
+@@ -46,11 +46,7 @@ import org.apache.hadoop.util.Progressable;
+  * 
+  * Case three: This class is used for a map only job. The job wants to use an
+  * output file name that depends on both the keys and the input file name,
+- * 
+- * @deprecated Use 
+- * {@link org.apache.hadoop.mapreduce.lib.output.MultipleOutputs} instead
+  */
+-@Deprecated
+ public abstract class MultipleOutputFormat<K, V>
+ extends FileOutputFormat<K, V> {
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/MultipleOutputs.java b/src/mapred/org/apache/hadoop/mapred/lib/MultipleOutputs.java
+index 4b9d900..aaaa458 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/MultipleOutputs.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/MultipleOutputs.java
+@@ -112,10 +112,7 @@ import java.util.*;
+  *
+  * }
+  * </pre>
+- * @deprecated Use 
+- * {@link org.apache.hadoop.mapreduce.lib.output.MultipleOutputs} instead
+  */
+-@Deprecated
+ public class MultipleOutputs {
+ 
+   private static final String NAMED_OUTPUTS = "mo.namedOutputs";
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/MultipleSequenceFileOutputFormat.java b/src/mapred/org/apache/hadoop/mapred/lib/MultipleSequenceFileOutputFormat.java
+index ab30ad4..4e79775 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/MultipleSequenceFileOutputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/MultipleSequenceFileOutputFormat.java
+@@ -29,10 +29,7 @@ import org.apache.hadoop.util.Progressable;
+ /**
+  * This class extends the MultipleOutputFormat, allowing to write the output data 
+  * to different output files in sequence file output format. 
+- * @deprecated Use 
+- * {@link org.apache.hadoop.mapreduce.lib.output.MultipleOutputs} instead
+  */
+-@Deprecated
+ public class MultipleSequenceFileOutputFormat <K,V>
+ extends MultipleOutputFormat<K, V> {
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/MultipleTextOutputFormat.java b/src/mapred/org/apache/hadoop/mapred/lib/MultipleTextOutputFormat.java
+index e9bb2a1..7e8ca68 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/MultipleTextOutputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/MultipleTextOutputFormat.java
+@@ -29,10 +29,7 @@ import org.apache.hadoop.util.Progressable;
+ /**
+  * This class extends the MultipleOutputFormat, allowing to write the output
+  * data to different output files in Text output format.
+- * @deprecated Use 
+- * {@link org.apache.hadoop.mapreduce.lib.output.MultipleOutputs} instead
+  */
+-@Deprecated
+ public class MultipleTextOutputFormat<K, V>
+     extends MultipleOutputFormat<K, V> {
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/db/DBConfiguration.java b/src/mapred/org/apache/hadoop/mapred/lib/db/DBConfiguration.java
+index fe9c430..f112511 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/db/DBConfiguration.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/db/DBConfiguration.java
+@@ -20,11 +20,6 @@ package org.apache.hadoop.mapred.lib.db;
+ 
+ import org.apache.hadoop.mapred.JobConf;
+ 
+-/**
+- * @deprecated Use 
+- * {@link org.apache.hadoop.mapreduce.lib.db.DBConfiguration} instead 
+- */
+-@Deprecated
+ public class DBConfiguration extends 
+     org.apache.hadoop.mapreduce.lib.db.DBConfiguration {
+   /** The JDBC Driver class name */
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/db/DBInputFormat.java b/src/mapred/org/apache/hadoop/mapred/lib/db/DBInputFormat.java
+index 0e740c7..97222ab 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/db/DBInputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/db/DBInputFormat.java
+@@ -34,11 +34,6 @@ import org.apache.hadoop.mapred.RecordReader;
+ import org.apache.hadoop.mapred.Reporter;
+ import org.apache.hadoop.mapreduce.Job;
+ 
+-/**
+- * @deprecated 
+- * Use {@link org.apache.hadoop.mapreduce.lib.db.DBInputFormat} instead.
+- */
+-@Deprecated
+ public class DBInputFormat<T  extends DBWritable>
+     extends org.apache.hadoop.mapreduce.lib.db.DBInputFormat<T> 
+     implements InputFormat<LongWritable, T>, JobConfigurable {
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/db/DBOutputFormat.java b/src/mapred/org/apache/hadoop/mapred/lib/db/DBOutputFormat.java
+index b891357..f42c57f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/db/DBOutputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/db/DBOutputFormat.java
+@@ -32,10 +32,6 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
+ import org.apache.hadoop.mapreduce.TaskAttemptID;
+ import org.apache.hadoop.util.Progressable;
+ 
+-/**
+- * @deprecated Use org.apache.hadoop.mapreduce.lib.db.DBOutputFormat instead
+- */
+-@Deprecated
+ public class DBOutputFormat<K  extends DBWritable, V> 
+     extends org.apache.hadoop.mapreduce.lib.db.DBOutputFormat<K, V>
+     implements OutputFormat<K, V> {
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/db/DBWritable.java b/src/mapred/org/apache/hadoop/mapred/lib/db/DBWritable.java
+index 25c2672..81e9a81 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/db/DBWritable.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/db/DBWritable.java
+@@ -1,10 +1,5 @@
+ package org.apache.hadoop.mapred.lib.db;
+ 
+-/**
+- * @deprecated 
+- * Use {@link org.apache.hadoop.mapreduce.lib.db.DBWritable} instead
+- */
+-@Deprecated
+ public interface DBWritable 
+     extends org.apache.hadoop.mapreduce.lib.db.DBWritable {
+ 	
+-- 
+1.7.0.4
+

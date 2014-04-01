@@ -1,0 +1,125 @@
+# Copyright 2005 The Apache Software Foundation Licensed under the
+# Apache License, Version 2.0 (the "License"); you may not use this
+# file except in compliance with the License.  You may obtain a copy
+# of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless
+# required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied.  See the License for the specific language governing
+# permissions and limitations under the License.
+
+Fuse-DFS
+
+Supports reads, writes, and directory operations (e.g., cp, ls, more, cat, find, less, rm, mkdir, mv, rmdir).  Things like touch, chmod, chown, and permissions are in the works. Fuse-dfs currently shows all files as owned by nobody.
+
+Contributing
+
+It's pretty straightforward to add functionality to fuse-dfs as fuse makes things relatively simple. Some other tasks require also augmenting libhdfs to expose more hdfs functionality to C. See [http://issues.apache.org/jira/secure/IssueNavigator.jspa?reset=true&mode=hide&pid=12310240&sorter/order=DESC&sorter/field=priority&resolution=-1&component=12312376  contrib/fuse-dfs JIRAs]
+
+Requirements
+
+ * Hadoop with compiled libhdfs.so
+ * Linux kernel > 2.6.9 with fuse, which is the default or Fuse 2.7.x, 2.8.x installed. See: [http://fuse.sourceforge.net/]
+ * modprobe fuse to load it
+ * fuse-dfs executable (see below)
+ * fuse_dfs_wrapper.sh installed in /bin or other appropriate location (see below)
+
+
+BUILDING
+
+   1. in HADOOP_HOME: `ant compile-libhdfs -Dlibhdfs=1
+   2. in HADOOP_HOME: `ant package` to deploy libhdfs
+   3. in HADOOP_HOME: `ant compile-contrib -Dlibhdfs=1 -Dfusedfs=1`
+
+NOTE: for amd64 architecture, libhdfs will not compile unless you edit
+the Makefile in src/c++/libhdfs/Makefile and set OS_ARCH=amd64
+(probably the same for others too). See [https://issues.apache.org/jira/browse/HADOOP-3344 HADOOP-3344]
+
+Common build problems include not finding the libjvm.so in JAVA_HOME/jre/lib/OS_ARCH/server or not finding fuse in FUSE_HOME or /usr/local.
+
+
+CONFIGURING
+
+Look at all the paths in fuse_dfs_wrapper.sh and either correct them or set them in your environment before running. (note for automount and mount as root, you probably cannot control the environment, so best to set them in the wrapper)
+
+INSTALLING
+
+1. `mkdir /export/hdfs` (or wherever you want to mount it)
+
+2. `fuse_dfs_wrapper.sh dfs://hadoop_server1.foo.com:9000 /export/hdfs -d` and from another terminal, try `ls /export/hdfs`
+
+If 2 works, try again dropping the debug mode, i.e., -d
+
+(note - common problems are that you don't have libhdfs.so or libjvm.so or libfuse.so on your LD_LIBRARY_PATH, and your CLASSPATH does not contain hadoop and other required jars.)
+
+Also note, fuse-dfs will write error/warn messages to the syslog - typically in /var/log/messages
+
+You can use fuse-dfs to mount multiple hdfs instances by just changing the server/port name and directory mount point above.
+
+DEPLOYING
+
+in a root shell do the following:
+
+1. add the following to /etc/fstab
+
+fuse_dfs#dfs://hadoop_server.foo.com:9000 /export/hdfs fuse -oallow_other,rw,-ousetrash,-oinitchecks 0 0
+
+
+2. Mount using: `mount /export/hdfs`. Expect problems with not finding fuse_dfs. You will need to probably add this to /sbin and then problems finding the above 3 libraries. Add these using ldconfig.
+
+
+Fuse DFS takes the following mount options (i.e., on the command line or the comma separated list of options in /etc/fstab:
+
+-oserver=%s  (optional place to specify the server but in fstab use the format above)
+-oport=%d (optional port see comment on server option)
+-oentry_timeout=%d (how long directory entries are cached by fuse in seconds - see fuse docs)
+-oattribute_timeout=%d (how long attributes are cached by fuse in seconds - see fuse docs)
+-oprotected=%s (a colon separated list of directories that fuse-dfs should not allow to be deleted or moved - e.g., /user:/tmp)
+-oprivate (not often used but means only the person who does the mount can use the filesystem - aka ! allow_others in fuse speak)
+-ordbuffer=%d (in KBs how large a buffer should fuse-dfs use when doing hdfs reads)
+ro 
+rw
+-ousetrash (should fuse dfs throw things in /Trash when deleting them)
+-onotrash (opposite of usetrash)
+-odebug (do not daemonize - aka -d in fuse speak)
+-obig_writes (use fuse big_writes option so as to allow better performance of writes on kernels >= 2.6.26)
+-initchecks - have fuse-dfs try to connect to hdfs to ensure all is ok upon startup. recommended to have this  on
+The defaults are:
+
+entry,attribute_timeouts = 60 seconds
+rdbuffer = 10 MB
+protected = null
+debug = 0
+notrash
+private = 0
+
+EXPORTING
+
+Add the following to /etc/exports:
+
+/export/hdfs *.foo.com(no_root_squash,rw,fsid=1,sync)
+
+NOTE - you cannot export this with a FUSE module built into the kernel
+- e.g., kernel 2.6.17. For info on this, refer to the FUSE wiki.
+
+
+RECOMMENDATIONS
+
+1. From /bin, `ln -s $HADOOP_HOME/contrib/fuse-dfs/fuse_dfs* .`
+
+2. Always start with debug on so you can see if you are missing a classpath or something like that.
+
+3. use -obig_writes
+
+4. use -initchecks
+
+KNOWN ISSUES 
+
+1. if you alias `ls` to `ls --color=auto` and try listing a directory with lots (over thousands) of files, expect it to be slow and at 10s of thousands, expect it to be very very slow.  This is because `--color=auto` causes ls to stat every file in the directory. Since fuse-dfs does not cache attribute entries when doing a readdir, 
+this is very slow. see [https://issues.apache.org/jira/browse/HADOOP-3797 HADOOP-3797]
+
+2. Writes are approximately 33% slower than the DFSClient. TBD how to optimize this. see: [https://issues.apache.org/jira/browse/HADOOP-3805 HADOOP-3805] - try using -obig_writes if on a >2.6.26 kernel, should perform much better since bigger writes implies less context switching.
+
+3. Reads are ~20-30% slower even with the read buffering. 
+
+4. fuse-dfs and underlying libhdfs have no support for permissions. See [https://issues.apache.org/jira/browse/HADOOP-3536 HADOOP-3536] 

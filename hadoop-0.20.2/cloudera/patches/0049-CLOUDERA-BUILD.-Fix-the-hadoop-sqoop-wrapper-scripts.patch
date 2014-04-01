@@ -1,0 +1,34 @@
+From 7e77c6b13f06dec9c742bf76c81e2ec02d81c7cb Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:45:35 -0800
+Subject: [PATCH 0049/1179] CLOUDERA-BUILD. Fix the hadoop/sqoop wrapper scripts
+
+Author: Matt Massie
+---
+ cloudera/install_hadoop.sh |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index 93a748d..9560330 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -122,13 +122,14 @@ done
+ mkdir -p $BIN_DIR
+ 
+ for bin_wrapper in hadoop sqoop ; do
+-  cat > $BIN_DIR/$bin_wrapper-$APACHE_BRANCH <<EOF
++  wrapper=$BIN_DIR/$bin_wrapper-$APACHE_BRANCH
++  cat > $wrapper <<EOF
+ #!/bin/sh
+ 
+ export HADOOP_HOME=$INSTALLED_LIB_DIR
+ exec $INSTALLED_LIB_DIR/bin/$bin_wrapper \$*
+ EOF
+-  chmod 755 $BIN_DIR/$bin_wrapper
++  chmod 755 $wrapper
+ done
+ 
+ # Fix some bad permissions in HOD
+-- 
+1.7.0.4
+

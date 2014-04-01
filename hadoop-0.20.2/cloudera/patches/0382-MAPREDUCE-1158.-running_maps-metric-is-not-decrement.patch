@@ -1,0 +1,186 @@
+From 93ea3b6b97dd23cc0a69eacd2438f11e8a64be54 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 28 Oct 2009 21:12:36 +0530
+Subject: [PATCH 0382/1179] MAPREDUCE-1158. running_maps metric is not decremented when the tasks of a job is killed/failed
+
+Patch: https://issues.apache.org/jira/secure/attachment/12423451/1158_yahoo.patch
+Author: Sharad Agarwal
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobInProgress.java    |    6 ------
+ .../org/apache/hadoop/mapred/JobTracker.java       |    4 ++++
+ .../hadoop/mapred/JobTrackerInstrumentation.java   |    8 ++++----
+ .../hadoop/mapred/JobTrackerMetricsInst.java       |    8 ++++----
+ .../mapred/TestJobTrackerInstrumentation.java      |    8 ++++----
+ 5 files changed, 16 insertions(+), 18 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 1712c94..ed6cbde 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -1421,7 +1421,6 @@ public class JobInProgress {
+       name = Values.CLEANUP.name();
+     } else if (tip.isMapTask()) {
+       ++runningMapTasks;
+-      metrics.addRunningMaps(jobId, 1);
+       name = Values.MAP.name();
+       counter = Counter.TOTAL_LAUNCHED_MAPS;
+       splits = tip.getSplitNodes();
+@@ -1430,7 +1429,6 @@ public class JobInProgress {
+       metrics.launchMap(id);
+     } else {
+       ++runningReduceTasks;
+-      metrics.addRunningReduces(jobId, 1);
+       name = Values.REDUCE.name();
+       counter = Counter.TOTAL_LAUNCHED_REDUCES;
+       if (tip.getActiveTasks().size() > 1)
+@@ -2349,7 +2347,6 @@ public class JobInProgress {
+       jobtracker.markCompletedTaskAttempt(status.getTaskTracker(), taskid);
+     } else if (tip.isMapTask()) {
+       runningMapTasks -= 1;
+-      metrics.decRunningMaps(jobId, 1);
+       // check if this was a sepculative task
+       if (oldNumAttempts > 1) {
+         speculativeMapTasks -= (oldNumAttempts - newNumAttempts);
+@@ -2363,7 +2360,6 @@ public class JobInProgress {
+       }
+     } else {
+       runningReduceTasks -= 1;
+-      metrics.decRunningReduces(jobId, 1);
+       if (oldNumAttempts > 1) {
+         speculativeReduceTasks -= (oldNumAttempts - newNumAttempts);
+       }
+@@ -2625,7 +2621,6 @@ public class JobInProgress {
+         launchedSetup = false;
+       } else if (tip.isMapTask()) {
+         runningMapTasks -= 1;
+-        metrics.decRunningMaps(jobId, 1);
+         metrics.failedMap(taskid);
+         // remove from the running queue and put it in the non-running cache
+         // if the tip is not complete i.e if the tip still needs to be run
+@@ -2635,7 +2630,6 @@ public class JobInProgress {
+         }
+       } else {
+         runningReduceTasks -= 1;
+-        metrics.decRunningReduces(jobId, 1);
+         metrics.failedReduce(taskid);
+         // remove from the running queue and put in the failed queue if the tip
+         // is not complete
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 6a1fe6d..1ffdea7 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -3135,6 +3135,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       totalReduces -= oldStatus.countReduceTasks();
+       occupiedMapSlots -= oldStatus.countOccupiedMapSlots();
+       occupiedReduceSlots -= oldStatus.countOccupiedReduceSlots();
++      getInstrumentation().decRunningMaps(oldStatus.countMapTasks());
++      getInstrumentation().decRunningReduces(oldStatus.countReduceTasks());
+       getInstrumentation().decOccupiedMapSlots(oldStatus.countOccupiedMapSlots());
+       getInstrumentation().decOccupiedReduceSlots(oldStatus.countOccupiedReduceSlots());
+       if (!faultyTrackers.isBlacklisted(oldStatus.getHost())) {
+@@ -3161,6 +3163,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       totalReduces += status.countReduceTasks();
+       occupiedMapSlots += status.countOccupiedMapSlots();
+       occupiedReduceSlots += status.countOccupiedReduceSlots();
++      getInstrumentation().addRunningMaps(status.countMapTasks());
++      getInstrumentation().addRunningReduces(status.countReduceTasks());
+       getInstrumentation().addOccupiedMapSlots(status.countOccupiedMapSlots());
+       getInstrumentation().addOccupiedReduceSlots(status.countOccupiedReduceSlots());
+       if (!faultyTrackers.isBlacklisted(status.getHost())) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTrackerInstrumentation.java b/src/mapred/org/apache/hadoop/mapred/JobTrackerInstrumentation.java
+index af0fdc9..1d7a9b8 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTrackerInstrumentation.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTrackerInstrumentation.java
+@@ -127,16 +127,16 @@ class JobTrackerInstrumentation {
+   public void decRunningJob(JobConf conf, JobID id) 
+   { }
+ 
+-  public void addRunningMaps(JobID id, int task)
++  public void addRunningMaps(int tasks)
+   { }
+ 
+-  public void decRunningMaps(JobID id, int task) 
++  public void decRunningMaps(int tasks) 
+   { }
+ 
+-  public void addRunningReduces(JobID id, int task)
++  public void addRunningReduces(int tasks)
+   { }
+ 
+-  public void decRunningReduces(JobID id, int task)
++  public void decRunningReduces(int tasks)
+   { }
+ 
+   public void killedMap(TaskAttemptID taskAttemptID)
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java b/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java
+index f397643..e5da65a 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java
+@@ -341,25 +341,25 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+   }
+ 
+   @Override
+-  public synchronized void addRunningMaps(JobID id, int task)
++  public synchronized void addRunningMaps(int task)
+   {
+     numRunningMaps += task;
+   }
+ 
+   @Override
+-  public synchronized void decRunningMaps(JobID id, int task) 
++  public synchronized void decRunningMaps(int task) 
+   {
+     numRunningMaps -= task;
+   }
+ 
+   @Override
+-  public synchronized void addRunningReduces(JobID id, int task)
++  public synchronized void addRunningReduces(int task)
+   {
+     numRunningReduces += task;
+   }
+ 
+   @Override
+-  public synchronized void decRunningReduces(JobID id, int task)
++  public synchronized void decRunningReduces(int task)
+   {
+     numRunningReduces -= task;
+   }
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobTrackerInstrumentation.java b/src/test/org/apache/hadoop/mapred/TestJobTrackerInstrumentation.java
+index d35e4b9..c8777fe 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobTrackerInstrumentation.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobTrackerInstrumentation.java
+@@ -138,25 +138,25 @@ public class TestJobTrackerInstrumentation extends TestCase {
+     }
+     
+     @Override
+-    public synchronized void addRunningMaps(JobID id, int task)
++    public synchronized void addRunningMaps(int task)
+     {
+       incrRunningMaps += task;
+     }
+ 
+     @Override
+-    public synchronized void decRunningMaps(JobID id, int task) 
++    public synchronized void decRunningMaps(int task) 
+     {
+       decrRunningMaps += task;
+     }
+ 
+     @Override
+-    public synchronized void addRunningReduces(JobID id, int task)
++    public synchronized void addRunningReduces(int task)
+     {
+       incrRunningReduces += task;
+     }
+ 
+     @Override
+-    public synchronized void decRunningReduces(JobID id, int task)
++    public synchronized void decRunningReduces(int task)
+     {
+       decrRunningReduces += task;
+     }
+-- 
+1.7.0.4
+

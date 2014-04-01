@@ -1,0 +1,498 @@
+From 4214d3e60326a9b41e84f85895aca325d634c304 Mon Sep 17 00:00:00 2001
+From: Konstantin Boudnik <cos@apache.org>
+Date: Mon, 20 Dec 2010 12:16:32 -0800
+Subject: [PATCH 0751/1179] CDH-2381. org.apache.hadoop.cli.TestCLI.testAll (from TestCLI) failing in golden CDH3-Hadoop Hudson job
+
+Description:
+Reason: test is affected.
+Author: cos
+Ref: CDH-2381
+---
+ src/test/org/apache/hadoop/cli/testConf.xml |  136 +++++++++++++-------------
+ 1 files changed, 68 insertions(+), 68 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/cli/testConf.xml b/src/test/org/apache/hadoop/cli/testConf.xml
+index 2d4e45d..a379db5 100644
+--- a/src/test/org/apache/hadoop/cli/testConf.xml
++++ b/src/test/org/apache/hadoop/cli/testConf.xml
+@@ -506,7 +506,7 @@
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^15( |\t)*hdfs://localhost[.a-z]*:[0-9]*/data15bytes</expected-output>
++          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/data15bytes</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -527,7 +527,7 @@
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^15( |\t)*hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/data15bytes</expected-output>
++          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/data15bytes</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -551,19 +551,19 @@
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^15( |\t)*hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/data15bytes</expected-output>
++          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/data15bytes</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^30( |\t)*hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/data30bytes</expected-output>
++          <expected-output>^30( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/data30bytes</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^60( |\t)*hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/data60bytes</expected-output>
++          <expected-output>^60( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/data60bytes</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^120( |\t)*hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/data120bytes</expected-output>
++          <expected-output>^120( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/data120bytes</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -585,7 +585,7 @@
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^15( |\t)*hdfs://localhost[.a-z]*:[0-9]*/dir0/data15bytes</expected-output>
++          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/dir0/data15bytes</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -607,7 +607,7 @@
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^15( |\t)*hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir0/data15bytes</expected-output>
++          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/data15bytes</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -632,19 +632,19 @@
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^15( |\t)*hdfs://localhost[.a-z]*:[0-9]*/dir0/data15bytes</expected-output>
++          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/dir0/data15bytes</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^30( |\t)*hdfs://localhost[.a-z]*:[0-9]*/dir0/data30bytes</expected-output>
++          <expected-output>^30( |\t)*hdfs://\w+[.a-z]*:[0-9]*/dir0/data30bytes</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^60( |\t)*hdfs://localhost[.a-z]*:[0-9]*/dir0/data60bytes</expected-output>
++          <expected-output>^60( |\t)*hdfs://\w+[.a-z]*:[0-9]*/dir0/data60bytes</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^120( |\t)*hdfs://localhost[.a-z]*:[0-9]*/dir0/data120bytes</expected-output>
++          <expected-output>^120( |\t)*hdfs://\w+[.a-z]*:[0-9]*/dir0/data120bytes</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -677,7 +677,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^hdfs://localhost[.a-z]*:[0-9]*/dir0( |\t)*450</expected-output>
++          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/dir0( |\t)*450</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -709,7 +709,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir0( |\t)*450</expected-output>
++          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0( |\t)*450</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -747,7 +747,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^hdfs://localhost[.a-z]*:[0-9]*/dir0( |\t)*450</expected-output>
++          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/dir0( |\t)*450</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -791,7 +791,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^mv: Failed to rename hdfs://localhost[.a-z]*:[0-9]*/file1 to file2</expected-output>
++          <expected-output>^mv: Failed to rename hdfs://\w+[.a-z]*:[0-9]*/file1 to file2</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -1301,7 +1301,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/dir0/file0</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/dir0/file0</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -1318,7 +1318,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -1338,19 +1338,19 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/dir0/file0</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/dir0/file0</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/dir0/file1</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/dir0/file1</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/dir0/file2</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/dir0/file2</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/dir0/file3</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/dir0/file3</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -1370,19 +1370,19 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/file1</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file1</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/file2</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file2</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/file3</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file3</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -1399,7 +1399,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^rm: Cannot remove directory "hdfs://localhost[.a-z]*:[0-9]*/dir0", use -rmr instead</expected-output>
++          <expected-output>^rm: Cannot remove directory "hdfs://\w+[.a-z]*:[0-9]*/dir0", use -rmr instead</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -1466,7 +1466,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/dir0/file0</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/dir0/file0</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -1483,7 +1483,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -1500,7 +1500,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/dir0</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/dir0</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -1517,7 +1517,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir0</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -1537,19 +1537,19 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/dir0</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/dir0</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/dir1</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/dir1</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/dir2</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/dir2</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/dir3</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/dir3</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -1569,19 +1569,19 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir0</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir1</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir1</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir2</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir2</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Deleted hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir3</expected-output>
++          <expected-output>^Deleted hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir3</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -1739,11 +1739,11 @@
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^15( |\t)*hdfs://localhost[.a-z]*:[0-9]*/dir0/data15bytes</expected-output>
++          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/dir0/data15bytes</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^30( |\t)*hdfs://localhost[.a-z]*:[0-9]*/dir0/data30bytes</expected-output>
++          <expected-output>^30( |\t)*hdfs://\w+[.a-z]*:[0-9]*/dir0/data30bytes</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -1765,11 +1765,11 @@
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^15( |\t)*hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir0/data15bytes</expected-output>
++          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/data15bytes</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^30( |\t)*hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir0/data30bytes</expected-output>
++          <expected-output>^30( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/data30bytes</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -1995,11 +1995,11 @@
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^15( |\t)*hdfs://localhost[.a-z]*:[0-9]*/dir0/data15bytes</expected-output>
++          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/dir0/data15bytes</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^30( |\t)*hdfs://localhost[.a-z]*:[0-9]*/dir0/data30bytes</expected-output>
++          <expected-output>^30( |\t)*hdfs://\w+[.a-z]*:[0-9]*/dir0/data30bytes</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -2021,11 +2021,11 @@
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^15( |\t)*hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir0/data15bytes</expected-output>
++          <expected-output>^15( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/data15bytes</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^30( |\t)*hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir0/data30bytes</expected-output>
++          <expected-output>^30( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/data30bytes</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -2402,7 +2402,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^hdfs://localhost[.a-z]*:[0-9]*/dir0(|\t)*0</expected-output>
++          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/dir0(|\t)*0</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -2419,7 +2419,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir0(|\t)*0</expected-output>
++          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0(|\t)*0</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -2439,19 +2439,19 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^hdfs://localhost[.a-z]*:[0-9]*/dir0(|\t)*0</expected-output>
++          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/dir0(|\t)*0</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^hdfs://localhost[.a-z]*:[0-9]*/dir1(|\t)*0</expected-output>
++          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/dir1(|\t)*0</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^hdfs://localhost[.a-z]*:[0-9]*/dir2(|\t)*0</expected-output>
++          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/dir2(|\t)*0</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^hdfs://localhost[.a-z]*:[0-9]*/dir3(|\t)*0</expected-output>
++          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/dir3(|\t)*0</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -2471,19 +2471,19 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir0(|\t)*0</expected-output>
++          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0(|\t)*0</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir1(|\t)*0</expected-output>
++          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir1(|\t)*0</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir2(|\t)*0</expected-output>
++          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir2(|\t)*0</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir3(|\t)*0</expected-output>
++          <expected-output>^hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir3(|\t)*0</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -2535,7 +2535,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Replication 2 set: hdfs://localhost[.a-z]*:[0-9]*/dir0/file0</expected-output>
++          <expected-output>^Replication 2 set: hdfs://\w+[.a-z]*:[0-9]*/dir0/file0</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -2552,7 +2552,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Replication 2 set: hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
++          <expected-output>^Replication 2 set: hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -2570,11 +2570,11 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Replication 2 set: hdfs://localhost[.a-z]*:[0-9]*/dir0/file0</expected-output>
++          <expected-output>^Replication 2 set: hdfs://\w+[.a-z]*:[0-9]*/dir0/file0</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Replication 2 set: hdfs://localhost[.a-z]*:[0-9]*/dir0/file1</expected-output>
++          <expected-output>^Replication 2 set: hdfs://\w+[.a-z]*:[0-9]*/dir0/file1</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -2592,11 +2592,11 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Replication 2 set: hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir0/file0</expected-output>
++          <expected-output>^Replication 2 set: hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/file0</expected-output>
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^Replication 2 set: hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/dir0/file1</expected-output>
++          <expected-output>^Replication 2 set: hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/dir0/file1</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -2651,7 +2651,7 @@
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^0( |\t)*hdfs://localhost[.a-z]*:[0-9]*/user/file0</expected-output>
++          <expected-output>^0( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/file0</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -2672,7 +2672,7 @@
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^0( |\t)*hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
++          <expected-output>^0( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -2693,9 +2693,9 @@
+         </comparator>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^0( |\t)*hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
+-          <expected-output>^0( |\t)*hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/file1</expected-output>
+-          <expected-output>^0( |\t)*hdfs://localhost[.a-z]*:[0-9]*/user/[a-z]*/file2</expected-output>
++          <expected-output>^0( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file0</expected-output>
++          <expected-output>^0( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file1</expected-output>
++          <expected-output>^0( |\t)*hdfs://\w+[.a-z]*:[0-9]*/user/[a-z]*/file2</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+-- 
+1.7.0.4
+

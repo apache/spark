@@ -1,0 +1,28 @@
+From b4be440cd928976544bcbeb7e10566fc523dbd0c Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:53:13 -0800
+Subject: [PATCH 0222/1179] MAPREDUCE-1092. Enable asserts for tests by default
+
+Description: See <a href="http://issues.apache.org/jira/browse/HADOOP-6309" title="Enable asserts for tests by default"><del>HADOOP-6309</del></a>. Let's make the tests run with java asserts by default.
+Reason: Test coverage improvement
+Author: Eli Collins
+Ref: UNKNOWN
+---
+ build.xml |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index bd5d782..de13070 100644
+--- a/build.xml
++++ b/build.xml
+@@ -737,6 +737,7 @@
+       maxmemory="${test.junit.maxmemory}"
+       dir="${basedir}" timeout="${test.timeout}"
+       errorProperty="tests.failed" failureProperty="tests.failed">
++      <jvmarg value="-ea" />
+       <sysproperty key="test.build.data" value="${test.build.data}"/>
+       <sysproperty key="test.cache.data" value="${test.cache.data}"/>    	
+       <sysproperty key="test.debug.data" value="${test.debug.data}"/>
+-- 
+1.7.0.4
+

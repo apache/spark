@@ -1,0 +1,40 @@
+From 6b63d73a1917a6c0529158c3bb78ec2ec16ad7ce Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 20 Jan 2011 16:05:01 -0800
+Subject: [PATCH 0787/1179] HDFS-1589. Dont start secure cluster with insecure ports
+
+Reason: security
+Author: Todd Lipcon
+Ref: CDH-2557
+---
+ .../server/datanode/SecureDataNodeStarter.java     |    7 +++++--
+ 1 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/SecureDataNodeStarter.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/SecureDataNodeStarter.java
+index 3a10221..3ab8c3c 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/SecureDataNodeStarter.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/SecureDataNodeStarter.java
+@@ -27,6 +27,7 @@ import org.apache.commons.daemon.DaemonContext;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants;
+ import org.apache.hadoop.http.HttpServer;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.mortbay.jetty.nio.SelectChannelConnector;
+ 
+ /**
+@@ -91,8 +92,10 @@ public class SecureDataNodeStarter implements Daemon {
+     System.err.println("Successfully obtained privileged resources (streaming port = "
+         + ss + " ) (http listener port = " + listener.getConnection() +")");
+     
+-    if(ss.getLocalPort() >= 1023 || listener.getPort() >= 1023)
+-      System.err.println("Warning: Starting secure datanode with unprivileged ports");
++    if ((ss.getLocalPort() >= 1023 || listener.getPort() >= 1023) &&
++        UserGroupInformation.isSecurityEnabled()) {
++      throw new RuntimeException("Cannot start secure datanode with unprivileged ports");
++    }
+     
+     resources = new SecureResources(ss, listener);
+   }
+-- 
+1.7.0.4
+

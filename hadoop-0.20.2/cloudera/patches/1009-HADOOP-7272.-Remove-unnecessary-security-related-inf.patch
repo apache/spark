@@ -1,0 +1,44 @@
+From 3412dde10617df0cffa4d4744d6b1f2a0d59e23a Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 5 Jul 2011 14:49:16 -0700
+Subject: [PATCH 1009/1179] HADOOP-7272. Remove unnecessary security related info logs.
+
+Two info logs are printed when connection to RPC server is
+established, is not necessary. On a production cluster, these log
+lines made up of close to 50% of lines in the namenode log. I propose
+changing them into debug logs.
+
+Reason: Improvement
+Author: Suresh Srinivas
+Ref: CDH-3174
+---
+ src/core/org/apache/hadoop/ipc/Server.java |   10 +++++++---
+ 1 files changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index f14d911..fd73dfd 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -1064,12 +1064,16 @@ public abstract class Server {
+               null);
+         }
+         if (saslServer.isComplete()) {
+-          LOG.info("SASL server context established. Negotiated QoP is "
+-              + saslServer.getNegotiatedProperty(Sasl.QOP));
++          if (LOG.isDebugEnabled()) {
++            LOG.debug("SASL server context established. Negotiated QoP is "
++                + saslServer.getNegotiatedProperty(Sasl.QOP));
++          }
+           String qop = (String) saslServer.getNegotiatedProperty(Sasl.QOP);
+           useWrap = qop != null && !"auth".equalsIgnoreCase(qop);
+           user = getAuthorizedUgi(saslServer.getAuthorizationID());
+-          LOG.info("SASL server successfully authenticated client: " + user);
++          if (LOG.isDebugEnabled()) {
++            LOG.debug("SASL server successfully authenticated client: " + user);
++          }
+           rpcMetrics.authenticationSuccesses.inc();
+           AUDITLOG.info(AUTH_SUCCESSFULL_FOR + user);
+           saslContextEstablished = true;
+-- 
+1.7.0.4
+

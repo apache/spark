@@ -1,0 +1,36 @@
+From a6670de0a1c4b03c293ae47d1595e8c33764aaa5 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:33:43 -0800
+Subject: [PATCH 0025/1179] HADOOP-5613. change S3Exception to checked exception
+
+Description: Currently the S3 filesystems can throw unchecked exceptions (S3Exception) which are not declared in the interface of FileSystem. These aren't caught by the various callers and can cause unpredictable behavior. IOExceptions are caught by most users of FileSystem since it is declared in the interface and hence is handled better.
+
+S3Exception now extends IOException.
+Reason: Improved error-checking at compile time for user applications.
+Author: Andrew Hitchcock
+Ref: UNKNOWN
+---
+ src/core/org/apache/hadoop/fs/s3/S3Exception.java |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/s3/S3Exception.java b/src/core/org/apache/hadoop/fs/s3/S3Exception.java
+index bbc52c4..7857534 100644
+--- a/src/core/org/apache/hadoop/fs/s3/S3Exception.java
++++ b/src/core/org/apache/hadoop/fs/s3/S3Exception.java
+@@ -18,10 +18,12 @@
+ 
+ package org.apache.hadoop.fs.s3;
+ 
++import java.io.IOException;
++
+ /**
+  * Thrown if there is a problem communicating with Amazon S3.
+  */
+-public class S3Exception extends RuntimeException {
++public class S3Exception extends IOException {
+ 
+   public S3Exception(Throwable t) {
+     super(t);
+-- 
+1.7.0.4
+

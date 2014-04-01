@@ -1,0 +1,37 @@
+From 39ff7e5ee285df97c765a73271066df718be0e30 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:03:23 -0800
+Subject: [PATCH 0098/1179] HADOOP-6267. build-contrib.xml unnecessarily enforces that contrib projects be located in contrib/ dir
+
+Description: build-contrib.xml currently sets hadoop.root to ${basedir}/../../../. This path is relative to the contrib project which is assumed to be inside src/contrib/. We occasionally work on contrib projects in other repositories until they're ready to contribute. We can use the &lt;dirname&gt; ant task to do this more correctly.
+Reason: Build system improvement
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ src/contrib/build-contrib.xml |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/contrib/build-contrib.xml b/src/contrib/build-contrib.xml
+index d47803b..16504d6 100644
+--- a/src/contrib/build-contrib.xml
++++ b/src/contrib/build-contrib.xml
+@@ -22,6 +22,7 @@
+ <project name="hadoopbuildcontrib" xmlns:ivy="antlib:org.apache.ivy.ant">
+ 
+   <property name="name" value="${ant.project.name}"/>
++  <dirname property="src.contrib.dir" file="${ant.file.hadoopbuildcontrib}" />
+   <property name="root" value="${basedir}"/>
+ 
+   <!-- Load all the default properties, and any the user wants    -->
+@@ -29,7 +30,7 @@
+   <property file="${user.home}/${name}.build.properties" />
+   <property file="${root}/build.properties" />
+ 
+-  <property name="hadoop.root" location="${root}/../../../"/>
++  <property name="hadoop.root" location="${src.contrib.dir}/../../"/>
+   <property name="src.dir"  location="${root}/src/java"/>
+   <property name="src.test" location="${root}/src/test"/>
+   <property name="src.examples" location="${root}/src/examples"/>
+-- 
+1.7.0.4
+

@@ -1,0 +1,181 @@
+From 37bbc27c772ba033670be8d6323ca1a9191d34a7 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 7 May 2010 16:23:32 -0700
+Subject: [PATCH 0647/1179] HADOOP-6756. Clean up and document configuration keys in CommonConfigurationKeys.java
+
+Patch: https://issues.apache.org/jira/secure/attachment/12444008/jira.HADOOP-6756-0.20-1.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12444017/jira.HADOOP-6756-0.20-1-FS_DEFAULT_NAME_KEY.patch
+Author: Erik Steffl
+Ref: YDH
+---
+ src/core/core-default.xml                          |   17 +++
+ .../apache/hadoop/fs/CommonConfigurationKeys.java  |  115 ++------------------
+ 2 files changed, 29 insertions(+), 103 deletions(-)
+
+diff --git a/src/core/core-default.xml b/src/core/core-default.xml
+index 43e54dc..d73ba90 100644
+--- a/src/core/core-default.xml
++++ b/src/core/core-default.xml
+@@ -31,6 +31,13 @@
+   ordering of the filters.</description>
+ </property>
+ 
++ <property>
++  <name>hadoop.security.group.mapping</name>
++  <value>org.apache.hadoop.security.ShellBasedUnixGroupsMapping</value>
++  <description>Class for user to group mapping (get groups for a given user)
++  </description>
++</property>
++
+ <property>
+   <name>hadoop.security.authorization</name>
+   <value>false</value>
+@@ -44,6 +51,16 @@
+   </description>
+ </property>
+ 
++<!--
++<property>
++  <name>hadoop.security.service.user.name.key</name>
++  <value></value>
++  <description>Name of the kerberos principal of the user that owns
++  a given service daemon
++  </description>
++</property>
++-->
++
+ <!--- logging properties -->
+ 
+ <property>
+diff --git a/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java b/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
+index 29ad59c..a64e3ff 100644
+--- a/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
++++ b/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
+@@ -26,112 +26,21 @@ package org.apache.hadoop.fs;
+ 
+ public class CommonConfigurationKeys {
+   
+-  // The Keys
+-  public static final String  IO_NATIVE_LIB_AVAILABLE_KEY =
+-                                           "io.native.lib.available";
+-  public static final boolean IO_NATIVE_LIB_AVAILABLE_DEFAULT = true;
+-  public static final String  NET_TOPOLOGY_SCRIPT_NUMBER_ARGS_KEY =
+-                                         "net.topology.script.number.args";
+-  public static final int     NET_TOPOLOGY_SCRIPT_NUMBER_ARGS_DEFAULT = 100;
+-
+-  //FS keys
+-  public static final String  FS_HOME_DIR_KEY = "fs.homeDir";
+-  public static final String  FS_HOME_DIR_DEFAULT = "/user";
+-  public static final String  FS_DEFAULT_NAME_KEY = "fs.defaultFS";
++  /** See src/core/core-default.xml */
++  public static final String  FS_DEFAULT_NAME_KEY = "fs.default.name";
+   public static final String  FS_DEFAULT_NAME_DEFAULT = "file:///";
+-  public static final String  FS_PERMISSIONS_UMASK_KEY = "fs.permissions.umask-mode";
+-  public static final int     FS_PERMISSIONS_UMASK_DEFAULT = 0022;
+-  public static final String  FS_DF_INTERVAL_KEY = "fs.df.interval"; 
+-  public static final long    FS_DF_INTERVAL_DEFAULT = 60000;
+-
+-
+-  //Defaults are not specified for following keys
+-  public static final String  NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY = 
+-                                         "net.topology.script.file.name";
+-  public static final String  NET_TOPOLOGY_CONFIGURED_NODE_MAPPING_KEY =
+-                                     "net.topology.configured.node.mapping";
+-  public static final String  NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY =
+-                                   "net.topology.node.switch.mapping.impl";
+-
+-  public static final String  FS_CLIENT_BUFFER_DIR_KEY =
+-                                         "fs.client.buffer.dir";
+-
+-  //TBD: Code is not updated to use following keys.
+-  //These keys will be used in later versions
+-  //
+-  public static final long    FS_LOCAL_BLOCK_SIZE_DEFAULT = 32*1024*1024;
+-  public static final String  FS_AUTOMATIC_CLOSE_KEY = "fs.automatic.close";
+-  public static final boolean FS_AUTOMATIC_CLOSE_DEFAULT = true;
+-  public static final String  FS_FILE_IMPL_KEY = "fs.file.impl";
+-  public static final String  FS_FTP_HOST_KEY = "fs.ftp.host";
+-  public static final String  FS_FTP_HOST_PORT_KEY = "fs.ftp.host.port";
+-  public static final String  FS_TRASH_INTERVAL_KEY = "fs.trash.interval";
+-  public static final long    FS_TRASH_INTERVAL_DEFAULT = 0;
+-
+-  public static final String  IO_MAPFILE_BLOOM_SIZE_KEY = "io.mapfile.bloom.size";
+-  public static final int     IO_MAPFILE_BLOOM_SIZE_DEFAULT = 1024*1024;
+-  public static final String  IO_MAPFILE_BLOOM_ERROR_RATE_KEY = 
+-                                       "io.mapfile.bloom.error.rate" ;
+-  public static final float   IO_MAPFILE_BLOOM_ERROR_RATE_DEFAULT = 0.005f;
+-  public static final String  IO_COMPRESSION_CODEC_LZO_CLASS_KEY = "io.compression.codec.lzo.class";
+-  public static final String  IO_COMPRESSION_CODEC_LZO_BUFFERSIZE_KEY = 
+-                                       "io.compression.codec.lzo.buffersize";
+-  public static final int     IO_COMPRESSION_CODEC_LZO_BUFFERSIZE_DEFAULT = 64*1024;
+-  public static final String  IO_MAP_INDEX_INTERVAL_KEY = "io.map.index.interval";
+-  public static final int     IO_MAP_INDEX_INTERVAL_DEFAULT = 128;
+-  public static final String  IO_MAP_INDEX_SKIP_KEY = "io.map.index.skip";
+-  public static final int     IO_MAP_INDEX_SKIP_DEFAULT = 0;
+-  public static final String  IO_SEQFILE_COMPRESS_BLOCKSIZE_KEY = "io.seqfile.compress.blocksize";
+-  public static final int     IO_SEQFILE_COMPRESS_BLOCKSIZE_DEFAULT = 1000000;
+-  public static final String  IO_SKIP_CHECKSUM_ERRORS_KEY = "io.skip.checksum.errors";
+-  public static final boolean IO_SKIP_CHECKSUM_ERRORS_DEFAULT = false;
+-  public static final String  IO_SORT_MB_KEY = "io.sort.mb";
+-  public static final int     IO_SORT_MB_DEFAULT = 100;
+-  public static final String  IO_SORT_FACTOR_KEY = "io.sort.factor";
+-  public static final int     IO_SORT_FACTOR_DEFAULT = 100;
+-  public static final String  IO_SERIALIZATIONS_KEY = "io.serializations";
+-
+-  public static final String  TFILE_IO_CHUNK_SIZE_KEY = "tfile.io.chunk.size";
+-  public static final int     TFILE_IO_CHUNK_SIZE_DEFAULT = 1024*1024;
+-  public static final String  TFILE_FS_INPUT_BUFFER_SIZE_KEY = "tfile.fs.input.buffer.size";
+-  public static final int     TFILE_FS_INPUT_BUFFER_SIZE_DEFAULT = 256*1024;
+-  public static final String  TFILE_FS_OUTPUT_BUFFER_SIZE_KEY = "tfile.fs.output.buffer.size";
+-  public static final int     TFILE_FS_OUTPUT_BUFFER_SIZE_DEFAULT = 256*1024;
+-
+-  public static final String  IPC_PING_INTERVAL_KEY = "ipc.ping.interval";
+-  public static final int     IPC_PING_INTERVAL_DEFAULT = 60000;
+-  public static final String  IPC_CLIENT_PING_KEY = "ipc.client.ping";
+-  public static final boolean IPC_CLIENT_PING_DEFAULT = true;
+-  public static final String  IPC_CLIENT_CONNECTION_MAXIDLETIME_KEY = 
+-                                       "ipc.client.connection.maxidletime";
+-  public static final int     IPC_CLIENT_CONNECTION_MAXIDLETIME_DEFAULT = 10000;
+-  public static final String  IPC_CLIENT_CONNECT_MAX_RETRIES_KEY = 
+-                                       "ipc.client.connect.max.retries";
+-  public static final int     IPC_CLIENT_CONNECT_MAX_RETRIES_DEFAULT = 10;
+-  public static final String  IPC_CLIENT_TCPNODELAY_KEY = "ipc.client.tcpnodelay";
+-  public static final boolean IPC_CLIENT_TCPNODELAY_DEFAULT = false;
+-  public static final String  IPC_SERVER_LISTEN_QUEUE_SIZE_KEY = 
+-                                       "ipc.server.listen.queue.size";
+-  public static final int     IPC_SERVER_LISTEN_QUEUE_SIZE_DEFAULT = 128;
+-  public static final String  IPC_CLIENT_KILL_MAX_KEY = "ipc.client.kill.max";
+-  public static final int     IPC_CLIENT_KILL_MAX_DEFAULT = 10;
+-  public static final String  IPC_CLIENT_IDLETHRESHOLD_KEY = "ipc.client.idlethreshold";
+-  public static final int     IPC_CLIENT_IDLETHRESHOLD_DEFAULT = 4000;
+-  public static final String  IPC_SERVER_TCPNODELAY_KEY = "ipc.server.tcpnodelay";
+-  public static final boolean IPC_SERVER_TCPNODELAY_DEFAULT = false;
+ 
+-  public static final String  HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY = 
+-                                       "hadoop.rpc.socket.factory.class.default";
+-  public static final String  HADOOP_SOCKS_SERVER_KEY = "hadoop.socks.server";
+-  public static final String  HADOOP_JOB_UGI_KEY = "hadoop.job.ugi";
+-  public static final String  HADOOP_UTIL_HASH_TYPE_KEY = "hadoop.util.hash.type";
+-  public static final String  HADOOP_UTIL_HASH_TYPE_DEFAULT = "murmur";
+-  public static final String  HADOOP_SECURITY_GROUP_MAPPING = "hadoop.security.group.mapping";
+-  public static final String  HADOOP_SECURITY_GROUPS_CACHE_SECS = "hadoop.security.groups.cache.secs";
+-  public static final String  HADOOP_SECURITY_AUTHENTICATION = "hadoop.security.authentication";
++  /** See src/core/core-default.xml */
++  public static final String  HADOOP_SECURITY_GROUP_MAPPING =
++    "hadoop.security.group.mapping";
++  /** See src/core/core-default.xml */
++  public static final String  HADOOP_SECURITY_AUTHENTICATION =
++    "hadoop.security.authentication";
++  /** See src/core/core-default.xml */
+   public static final String HADOOP_SECURITY_AUTHORIZATION =
+-      "hadoop.security.authorization";
++    "hadoop.security.authorization";
++  /** See src/core/core-default.xml */
+   public static final String  HADOOP_SECURITY_SERVICE_USER_NAME_KEY = 
+-      "hadoop.security.service.user.name.key";
++    "hadoop.security.service.user.name.key";
+ }
+ 
+-- 
+1.7.0.4
+

@@ -1,0 +1,467 @@
+From 0b213def5dbb9dc7a90009a3446a913ea15f5ee7 Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Fri, 24 Sep 2010 11:47:16 -0700
+Subject: [PATCH 0704/1179] HADOOP-6951. Distinct minicluster services (e.g. NN and JT) overwrite each other's service policies
+
+Description: Make ServiceAuthorizationManager's map of service ACLs instance-specific, instead of static.
+Reason: To make HUE's tests work against CDH3.
+Author: Aaron T. Myers
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/ipc/Server.java         |   20 +++++++++++++-
+ .../authorize/ServiceAuthorizationManager.java     |   12 ++++++--
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   15 +++++-----
+ .../hadoop/hdfs/server/namenode/NameNode.java      |   29 +++++++++++--------
+ .../org/apache/hadoop/mapred/JobTracker.java       |   19 +++++++------
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   23 ++++++++-------
+ .../hdfs/server/namenode/NameNodeAdapter.java      |    9 +++++-
+ src/test/org/apache/hadoop/ipc/TestRPC.java        |    5 +--
+ .../authorize/TestServiceLevelAuthorization.java   |   27 ++++++++++++++++++
+ 9 files changed, 112 insertions(+), 47 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 13d67f4..b10e8d1 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -75,6 +75,7 @@ import org.apache.hadoop.security.SaslRpcServer.SaslDigestCallbackHandler;
+ import org.apache.hadoop.security.SaslRpcServer.SaslGssCallbackHandler;
+ import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+ import org.apache.hadoop.security.authorize.AuthorizationException;
++import org.apache.hadoop.security.authorize.PolicyProvider;
+ import org.apache.hadoop.security.authorize.ProxyUsers;
+ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+ import org.apache.hadoop.security.token.SecretManager;
+@@ -189,6 +190,7 @@ public abstract class Server {
+   
+   private Configuration conf;
+   private SecretManager<TokenIdentifier> secretManager;
++  private ServiceAuthorizationManager serviceAuthorizationManager = new ServiceAuthorizationManager();
+ 
+   private int maxQueueSize;
+   private final int maxRespSize;
+@@ -246,6 +248,22 @@ public abstract class Server {
+     return rpcMetrics;
+   }
+ 
++  /**
++   * Refresh the service authorization ACL for the service handled by this server.
++   */
++  public void refreshServiceAcl(Configuration conf, PolicyProvider provider) {
++    serviceAuthorizationManager.refresh(conf, provider);
++  }
++
++  /**
++   * Returns a handle to the serviceAuthorizationManager (required in tests)
++   * @return instance of ServiceAuthorizationManager for this server
++   */
++  //@InterfaceAudience.LimitedPrivate({"HDFS", "MapReduce"})
++  public ServiceAuthorizationManager getServiceAuthorizationManager() {
++    return serviceAuthorizationManager;
++  }
++
+   /** A call queued for handling. */
+   private static class Call {
+     private int id;                               // the client's call id
+@@ -1572,7 +1590,7 @@ public abstract class Server {
+         throw new AuthorizationException("Unknown protocol: " + 
+                                          connection.getProtocol());
+       }
+-      ServiceAuthorizationManager.authorize(user, protocol, getConf(), hostname);
++      serviceAuthorizationManager.authorize(user, protocol, getConf(), hostname);
+     }
+   }
+   
+diff --git a/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java b/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
+index 6eca6dc..4b65c53 100644
+--- a/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
++++ b/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
+@@ -20,6 +20,7 @@ package org.apache.hadoop.security.authorize;
+ import java.io.IOException;
+ import java.util.IdentityHashMap;
+ import java.util.Map;
++import java.util.Set;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -39,7 +40,7 @@ public class ServiceAuthorizationManager {
+   private static final Log LOG = LogFactory
+       .getLog(ServiceAuthorizationManager.class);
+ 
+-  private static Map<Class<?>, AccessControlList> protocolToAcl =
++  private Map<Class<?>, AccessControlList> protocolToAcl =
+     new IdentityHashMap<Class<?>, AccessControlList>();
+   
+   /**
+@@ -68,7 +69,7 @@ public class ServiceAuthorizationManager {
+    * @param hostname fully qualified domain name of the client
+    * @throws AuthorizationException on authorization failure
+    */
+-  public static void authorize(UserGroupInformation user, 
++  public void authorize(UserGroupInformation user, 
+                                Class<?> protocol,
+                                Configuration conf,
+                                String hostname
+@@ -122,7 +123,7 @@ public class ServiceAuthorizationManager {
+     AUDITLOG.info(AUTHZ_SUCCESSFULL_FOR + user + " for protocol="+protocol);
+   }
+ 
+-  public static synchronized void refresh(Configuration conf,
++  public synchronized void refresh(Configuration conf,
+                                           PolicyProvider provider) {
+     // Get the system property 'hadoop.policy.file'
+     String policyFile = 
+@@ -151,4 +152,9 @@ public class ServiceAuthorizationManager {
+     // Flip to the newly parsed permissions
+     protocolToAcl = newAcls;
+   }
++
++  // Package-protected for use in tests.
++  Set<Class<?>> getProtocolsWithAcls() {
++    return protocolToAcl.keySet();
++  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 6d1bc8c..b50bd7a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -48,6 +48,7 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.conf.Configured;
++import org.apache.hadoop.fs.CommonConfigurationKeys;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.LocalFileSystem;
+ import org.apache.hadoop.fs.Path;
+@@ -99,7 +100,6 @@ import org.apache.hadoop.net.DNS;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.UserGroupInformation;
+-import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+ import org.apache.hadoop.util.Daemon;
+@@ -442,12 +442,6 @@ public class DataNode extends Configured
+     // adjust info port
+     this.dnRegistration.setInfoPort(this.infoServer.getPort());
+     myMetrics = new DataNodeMetrics(conf, dnRegistration.getName());
+-    
+-    // set service-level authorization security policy
+-    if (conf.getBoolean(
+-          ServiceAuthorizationManager.SERVICE_AUTHORIZATION_CONFIG, false)) {
+-      ServiceAuthorizationManager.refresh(conf, new HDFSPolicyProvider());
+-    }
+ 
+     // BlockTokenSecretManager is created here, but it shouldn't be
+     // used until it is initialized in register().
+@@ -459,6 +453,13 @@ public class DataNode extends Configured
+     ipcServer = RPC.getServer(this, ipcAddr.getHostName(), ipcAddr.getPort(), 
+         conf.getInt("dfs.datanode.handler.count", 3), false, conf,
+         blockTokenSecretManager);
++
++    // set service-level authorization security policy
++    if (conf.getBoolean(
++        CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, false)) {
++      ipcServer.refreshServiceAcl(conf, new HDFSPolicyProvider());
++    }
++
+     dnRegistration.setIpcPort(ipcServer.getListenerAddress().getPort());
+ 
+     LOG.info("dnRegistration = " + dnRegistration);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 268a528..879f40a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.namenode;
+ 
+ import org.apache.commons.logging.*;
+ 
++import org.apache.hadoop.fs.CommonConfigurationKeys;
+ import org.apache.hadoop.fs.ContentSummary;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.Trash;
+@@ -55,7 +56,6 @@ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.AuthorizationException;
+ import org.apache.hadoop.security.authorize.ProxyUsers;
+ import org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol;
+-import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+ import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+@@ -137,8 +137,8 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+   public static final Log LOG = LogFactory.getLog(NameNode.class.getName());
+   public static final Log stateChangeLog = LogFactory.getLog("org.apache.hadoop.hdfs.StateChange");
+   public FSNamesystem namesystem; // TODO: This should private. Use getNamesystem() instead. 
+-  /** RPC server */
+-  private Server server;
++  /** RPC server. Package-protected for use in tests. */
++  Server server;
+   /** RPC server address */
+   private InetSocketAddress serverAddress = null;
+   /** httpServer */
+@@ -210,13 +210,6 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+         DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY, socAddr.getHostName());
+     int handlerCount = conf.getInt("dfs.namenode.handler.count", 10);
+     
+-    // set service-level authorization security policy
+-    if (serviceAuthEnabled = 
+-          conf.getBoolean(
+-            ServiceAuthorizationManager.SERVICE_AUTHORIZATION_CONFIG, false)) {
+-      ServiceAuthorizationManager.refresh(conf, new HDFSPolicyProvider());
+-    }
+-    
+     myMetrics = new NameNodeMetrics(conf, this);
+     this.namesystem = new FSNamesystem(this, conf);
+ 
+@@ -229,6 +222,16 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+         socAddr.getPort(), handlerCount, false, conf, namesystem
+         .getDelegationTokenSecretManager());
+ 
++    // set service-level authorization security policy
++    if (serviceAuthEnabled =
++          conf.getBoolean(
++            CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, false)) {
++      this.server.refreshServiceAcl(conf, new HDFSPolicyProvider());
++      if (this.server != null) {
++        this.server.refreshServiceAcl(conf, new HDFSPolicyProvider());
++      }
++    }
++
+     // The rpc-server port can be ephemeral... ensure we have the correct info
+     this.serverAddress = this.server.getListenerAddress(); 
+     FileSystem.setDefaultUri(conf, getUri(serverAddress));
+@@ -1059,8 +1062,10 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+       throw new AuthorizationException("Service Level Authorization not enabled!");
+     }
+ 
+-    ServiceAuthorizationManager.refresh(
+-      new Configuration(), new HDFSPolicyProvider());
++    this.server.refreshServiceAcl(new Configuration(), new HDFSPolicyProvider());
++    if (this.server != null) {
++      this.server.refreshServiceAcl(new Configuration(), new HDFSPolicyProvider());
++    }
+   }
+ 
+   @Override
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 520df5f..cbb4fb2 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -56,6 +56,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.CommonConfigurationKeys;
+ import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileStatus;
+@@ -96,7 +97,6 @@ import org.apache.hadoop.security.authorize.AccessControlList;
+ import org.apache.hadoop.security.authorize.AuthorizationException;
+ import org.apache.hadoop.security.authorize.ProxyUsers;
+ import org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol;
+-import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.util.HostsFileReader;
+ import org.apache.hadoop.util.MRAsyncDiskService;
+@@ -2108,16 +2108,17 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+           JobQueueTaskScheduler.class, TaskScheduler.class);
+     taskScheduler = (TaskScheduler) ReflectionUtils.newInstance(schedulerClass, conf);
+     
+-    // Set service-level authorization security policy
+-    if (conf.getBoolean(
+-          ServiceAuthorizationManager.SERVICE_AUTHORIZATION_CONFIG, false)) {
+-      ServiceAuthorizationManager.refresh(conf, new MapReducePolicyProvider());
+-    }
+-    
+     int handlerCount = conf.getInt("mapred.job.tracker.handler.count", 10);
+     this.interTrackerServer = 
+       RPC.getServer(this, addr.getHostName(), addr.getPort(), handlerCount, 
+           false, conf, secretManager);
++
++    // Set service-level authorization security policy
++    if (conf.getBoolean(
++        CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, false)) {
++      this.interTrackerServer.refreshServiceAcl(conf, new MapReducePolicyProvider());
++    }
++
+     if (LOG.isDebugEnabled()) {
+       Properties p = System.getProperties();
+       for (Iterator it = p.keySet().iterator(); it.hasNext();) {
+@@ -4793,10 +4794,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   @Override
+   public void refreshServiceAcl() throws IOException {
+     if (!conf.getBoolean(
+-            ServiceAuthorizationManager.SERVICE_AUTHORIZATION_CONFIG, false)) {
++        CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, false)) {
+       throw new AuthorizationException("Service Level Authorization not enabled!");
+     }
+-    ServiceAuthorizationManager.refresh(conf, new MapReducePolicyProvider());
++    this.interTrackerServer.refreshServiceAcl(conf, new MapReducePolicyProvider());
+   }
+ 
+   private void initializeTaskMemoryRelatedConfig() {
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 315832f..007c5db 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -59,6 +59,7 @@ import org.apache.hadoop.filecache.TrackerDistributedCacheManager;
+ import org.apache.hadoop.mapreduce.server.tasktracker.*;
+ import org.apache.hadoop.mapreduce.server.tasktracker.userlogs.*;
+ import org.apache.hadoop.fs.DF;
++import org.apache.hadoop.fs.CommonConfigurationKeys;
+ import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+@@ -97,7 +98,6 @@ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.PolicyProvider;
+-import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+ import org.apache.hadoop.util.DiskChecker;
+ import org.apache.hadoop.util.MemoryCalculatorPlugin;
+ import org.apache.hadoop.util.ProcfsBasedProcessTree;
+@@ -652,25 +652,26 @@ public class TaskTracker
+     int tmpPort = socAddr.getPort();
+     
+     this.jvmManager = new JvmManager(this);
++    
++    // RPC initialization
++    int max = maxMapSlots > maxReduceSlots ? 
++                       maxMapSlots : maxReduceSlots;
++    //set the num handlers to max*2 since canCommit may wait for the duration
++    //of a heartbeat RPC
++    this.taskReportServer = RPC.getServer(this, bindAddress,
++        tmpPort, 2 * max, false, this.fConf, this.jobTokenSecretManager);
+ 
+     // Set service-level authorization security policy
+     if (this.fConf.getBoolean(
+-          ServiceAuthorizationManager.SERVICE_AUTHORIZATION_CONFIG, false)) {
++          CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, false)) {
+       PolicyProvider policyProvider = 
+         (PolicyProvider)(ReflectionUtils.newInstance(
+             this.fConf.getClass(PolicyProvider.POLICY_PROVIDER_CONFIG, 
+                 MapReducePolicyProvider.class, PolicyProvider.class), 
+             this.fConf));
+-      ServiceAuthorizationManager.refresh(fConf, policyProvider);
++      this.taskReportServer.refreshServiceAcl(fConf, policyProvider);
+     }
+-    
+-    // RPC initialization
+-    int max = maxMapSlots > maxReduceSlots ? 
+-                       maxMapSlots : maxReduceSlots;
+-    //set the num handlers to max*2 since canCommit may wait for the duration
+-    //of a heartbeat RPC
+-    this.taskReportServer = RPC.getServer(this, bindAddress,
+-        tmpPort, 2 * max, false, this.fConf, this.jobTokenSecretManager);
++
+     this.taskReportServer.start();
+ 
+     // get the assigned address
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/NameNodeAdapter.java b/src/test/org/apache/hadoop/hdfs/server/namenode/NameNodeAdapter.java
+index 8f1d34e..9509376 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/NameNodeAdapter.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/NameNodeAdapter.java
+@@ -18,6 +18,7 @@
+ package org.apache.hadoop.hdfs.server.namenode;
+ import java.io.IOException;
+ import org.apache.hadoop.hdfs.protocol.Block;
++import org.apache.hadoop.ipc.Server;
+ 
+ public abstract class NameNodeAdapter {
+   public static boolean checkFileProgress(FSNamesystem fsn, String path, boolean checkall) throws IOException {
+@@ -30,5 +31,11 @@ public abstract class NameNodeAdapter {
+     return fsn.nextGenerationStampForBlock(block);
+   }
+ 
++  /**
++   * Get the internal RPC server instance.
++   * @return rpc server
++   */
++  public static Server getRpcServer(NameNode namenode) {
++    return namenode.server;
++  }
+ }
+-
+diff --git a/src/test/org/apache/hadoop/ipc/TestRPC.java b/src/test/org/apache/hadoop/ipc/TestRPC.java
+index dc1ada6..87a54e6 100644
+--- a/src/test/org/apache/hadoop/ipc/TestRPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestRPC.java
+@@ -45,7 +45,6 @@ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.authorize.AuthorizationException;
+ import org.apache.hadoop.security.authorize.PolicyProvider;
+ import org.apache.hadoop.security.authorize.Service;
+-import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+ import org.apache.hadoop.security.AccessControlException;
+ 
+ /** Unit tests for RPC. */
+@@ -364,10 +363,10 @@ public class TestRPC extends TestCase {
+   }
+   
+   private void doRPCs(Configuration conf, boolean expectFailure) throws Exception {
+-    ServiceAuthorizationManager.refresh(conf, new TestPolicyProvider());
+-    
+     Server server = RPC.getServer(new TestImpl(), ADDRESS, 0, 5, true, conf);
+ 
++    server.refreshServiceAcl(conf, new TestPolicyProvider());
++
+     TestProtocol proxy = null;
+ 
+     server.start();
+diff --git a/src/test/org/apache/hadoop/security/authorize/TestServiceLevelAuthorization.java b/src/test/org/apache/hadoop/security/authorize/TestServiceLevelAuthorization.java
+index 6a14707..38b0aee 100644
+--- a/src/test/org/apache/hadoop/security/authorize/TestServiceLevelAuthorization.java
++++ b/src/test/org/apache/hadoop/security/authorize/TestServiceLevelAuthorization.java
+@@ -21,6 +21,7 @@ import java.io.File;
+ import java.io.FileWriter;
+ import java.io.IOException;
+ import java.security.PrivilegedExceptionAction;
++import java.util.Set;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+@@ -28,6 +29,7 @@ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.HDFSPolicyProvider;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.hdfs.server.namenode.NameNodeAdapter;
+ import org.apache.hadoop.hdfs.tools.DFSAdmin;
+ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.mapred.JobConf;
+@@ -55,10 +57,35 @@ public class TestServiceLevelAuthorization extends TestCase {
+       
+       // Start the mini clusters
+       dfs = new MiniDFSCluster(conf, slaves, true, null);
++
++      // Ensure that the protocols authorized on the name node are only the HDFS protocols.
++      Set<Class<?>> protocolsWithAcls = NameNodeAdapter.getRpcServer(dfs.getNameNode())
++          .getServiceAuthorizationManager().getProtocolsWithAcls();
++      Service[] hdfsServices = new HDFSPolicyProvider().getServices();
++      for (Service service : hdfsServices) {
++        if (!protocolsWithAcls.contains(service.getProtocol()))
++          fail("service authorization manager has no entry for protocol " + service.getProtocol());
++      }
++      if (hdfsServices.length != protocolsWithAcls.size())
++        fail("there should be an entry for every HDFS service in the protocols with ACLs map");
++
+       fileSys = dfs.getFileSystem();
+       JobConf mrConf = new JobConf(conf);
+       mr = new MiniMRCluster(slaves, fileSys.getUri().toString(), 1, 
+                              null, null, mrConf);
++
++      // Ensure that the protocols configured for the name node did not change
++      // when the MR cluster was started.
++      protocolsWithAcls = NameNodeAdapter.getRpcServer(dfs.getNameNode())
++          .getServiceAuthorizationManager().getProtocolsWithAcls();
++      hdfsServices = new HDFSPolicyProvider().getServices();
++      for (Service service : hdfsServices) {
++        if (!protocolsWithAcls.contains(service.getProtocol()))
++          fail("service authorization manager has no entry for protocol " + service.getProtocol());
++      }
++      if (hdfsServices.length != protocolsWithAcls.size())
++        fail("there should be an entry for every HDFS service in the protocols with ACLs map");
++
+       // make cleanup inline sothat validation of existence of these directories
+       // can be done
+       mr.setInlineCleanupThreads();
+-- 
+1.7.0.4
+

@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+
+<antlib>
+  <taskdef name="hdfs"
+           classname="org.apache.hadoop.ant.DfsTask" />
+  <taskdef name="exists"
+           classname="org.apache.hadoop.ant.condition.DfsExists" />
+  <taskdef name="isdir"
+           classname="org.apache.hadoop.ant.condition.DfsIsDir" />
+  <taskdef name="sizezero"
+           classname="org.apache.hadoop.ant.condition.DfsZeroLen" />
+</antlib>

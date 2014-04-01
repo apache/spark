@@ -1,0 +1,57 @@
+From 15d9970fde48893b17320bf6596b39f4c512b0f2 Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Thu, 22 Sep 2011 18:27:40 -0700
+Subject: [PATCH 1056/1179] HADOOP-7645. HTTP auth tests requiring Kerberos infrastructure are not disabled on branch-0.20-security
+
+Reason: Bug
+Author: Jitendra Nath Pandey
+Ref: CDH-3609
+---
+ .../client/TestKerberosAuthenticator.java          |    3 +++
+ .../server/TestKerberosAuthenticationHandler.java  |    3 +++
+ 2 files changed, 6 insertions(+), 0 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/security/authentication/client/TestKerberosAuthenticator.java b/src/test/org/apache/hadoop/security/authentication/client/TestKerberosAuthenticator.java
+index f086870..dd9a2eb 100644
+--- a/src/test/org/apache/hadoop/security/authentication/client/TestKerberosAuthenticator.java
++++ b/src/test/org/apache/hadoop/security/authentication/client/TestKerberosAuthenticator.java
+@@ -17,12 +17,15 @@ import org.apache.hadoop.security.authentication.KerberosTestUtils;
+ import org.apache.hadoop.security.authentication.server.AuthenticationFilter;
+ import org.apache.hadoop.security.authentication.server.PseudoAuthenticationHandler;
+ import org.apache.hadoop.security.authentication.server.KerberosAuthenticationHandler;
++import org.junit.Ignore;
+ 
+ import java.net.HttpURLConnection;
+ import java.net.URL;
+ import java.util.Properties;
+ import java.util.concurrent.Callable;
+ 
++//Disabled because kerberos setup and valid keytabs are required.
++@Ignore("requires kerberos setup")
+ public class TestKerberosAuthenticator extends AuthenticatorTestCase {
+ 
+   private Properties getAuthenticationHandlerConfiguration() {
+diff --git a/src/test/org/apache/hadoop/security/authentication/server/TestKerberosAuthenticationHandler.java b/src/test/org/apache/hadoop/security/authentication/server/TestKerberosAuthenticationHandler.java
+index 8187c9e..fc99aac 100644
+--- a/src/test/org/apache/hadoop/security/authentication/server/TestKerberosAuthenticationHandler.java
++++ b/src/test/org/apache/hadoop/security/authentication/server/TestKerberosAuthenticationHandler.java
+@@ -21,6 +21,7 @@ import org.apache.commons.codec.binary.Base64;
+ import org.ietf.jgss.GSSContext;
+ import org.ietf.jgss.GSSManager;
+ import org.ietf.jgss.GSSName;
++import org.junit.Ignore;
+ import org.mockito.Mockito;
+ import sun.security.jgss.GSSUtil;
+ 
+@@ -29,6 +30,8 @@ import javax.servlet.http.HttpServletResponse;
+ import java.util.Properties;
+ import java.util.concurrent.Callable;
+ 
++//Disabled because kerberos setup and valid keytabs are required.
++@Ignore("requires kerberos setup")
+ public class TestKerberosAuthenticationHandler extends TestCase {
+ 
+   private KerberosAuthenticationHandler handler;
+-- 
+1.7.0.4
+

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+GRID_DIR=`dirname "$0"`
+GRID_DIR=`cd "$GRID_DIR"; pwd`
+source $GRID_DIR/../gridmix-env
+
+NUM_OF_REDUCERS=100
+INDIR=${FIXCOMPTEXT}
+Date=`date +%F-%H-%M-%S-%N`
+
+OUTDIR=perf-out/maxent-out-dir-large_$Date
+${HADOOP_HOME}/bin/hadoop dfs -rmr $OUTDIR
+
+${HADOOP_HOME}/bin/hadoop jar $APP_JAR loadgen -keepmap 50 -keepred 100 -inFormatIndirect org.apache.hadoop.mapred.TextInputFormat -outFormat org.apache.hadoop.mapred.TextOutputFormat -outKey org.apache.hadoop.io.LongWritable -outValue org.apache.hadoop.io.Text -indir $INDIR -outdir $OUTDIR.1 -r $NUM_OF_REDUCERS
+
+ITER=7
+for ((i=1; i<$ITER; ++i))
+do
+  ${HADOOP_HOME}/bin/hadoop jar $APP_JAR loadgen -keepmap 50 -keepred 100 -inFormatIndirect org.apache.hadoop.mapred.TextInputFormat -outFormat org.apache.hadoop.mapred.TextOutputFormat -outKey org.apache.hadoop.io.LongWritable -outValue org.apache.hadoop.io.Text -indir $INDIR -indir $OUTDIR.$i -outdir $OUTDIR.$(($i+1)) -r $NUM_OF_REDUCERS
+  if [ $? -ne "0" ]
+    then exit $?
+  fi
+  ${HADOOP_HOME}/bin/hadoop dfs -rmr $OUTDIR.$i
+done
+
+${HADOOP_HOME}/bin/hadoop dfs -rmr $OUTDIR.$ITER

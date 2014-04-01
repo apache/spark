@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+export HADOOP_HOME=../../../../..
+
+export CLASSPATH="$HADOOP_HOME/build/classes"
+export CLASSPATH=${CLASSPATH}:"$HADOOP_HOME/build/contrib/abacus/classes"
+
+# so that filenames w/ spaces are handled correctly in loops below
+IFS=
+
+# add libs to CLASSPATH
+for f in $HADOOP_HOME/lib/*.jar; do
+  CLASSPATH=${CLASSPATH}:$f;
+done
+
+for f in $HADOOP_HOME/lib/jetty-ext/*.jar; do
+  CLASSPATH=${CLASSPATH}:$f;
+done
+
+# restore ordinary behaviour
+unset IFS
+jythonc -p org.apache.hadoop.abacus.examples -d -j jwc.jar -c JythonAbacus.py JyAbacusWCPlugIN.py
+
+jar -uvf jwc.jar -C $HADOOP_HOME/build/contrib/abacus/classes .
+

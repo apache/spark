@@ -1,0 +1,64 @@
+From cc22e9f92db6470d244fb17f57601b93bab6db80 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:07:55 -0800
+Subject: [PATCH 0105/1179] MAPREDUCE-683. TestJobTrackerRestart fails with Map task completion events ordering mismatch
+
+Description: <tt>TestJobTrackerRestart</tt> fails consistently with Map task completion events ordering mismatch error.
+Reason: bugfix
+Author: Amar Kamat
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/mapred/JobHistory.java       |    8 +++++---
+ .../hadoop/mapred/TestJobHistoryParsing.java       |    6 +++---
+ 2 files changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobHistory.java b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+index ee57a64..ac3cfdd 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobHistory.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+@@ -92,12 +92,11 @@ public class JobHistory {
+   public static final int JOB_NAME_TRIM_LENGTH = 50;
+   private static String JOBTRACKER_UNIQUE_STRING = null;
+   private static String LOG_DIR = null;
+-  private static boolean disableHistory = false; 
++  private static boolean disableHistory = true; 
+   private static final String SECONDARY_FILE_SUFFIX = ".recover";
+   private static long jobHistoryBlockSize = 0;
+   private static String jobtrackerHostname;
+-  private static JobHistoryFilesManager fileManager = 
+-    new JobHistoryFilesManager();
++  private static JobHistoryFilesManager fileManager = null;
+   final static FsPermission HISTORY_DIR_PERMISSION =
+     FsPermission.createImmutable((short) 0750); // rwxr-x---
+   final static FsPermission HISTORY_FILE_PERMISSION =
+@@ -235,6 +234,9 @@ public class JobHistory {
+ 
+       // create the done folder with appropriate permission
+       fs.mkdirs(DONE, HISTORY_DIR_PERMISSION);
++
++      // initialize the file manager
++      fileManager = new JobHistoryFilesManager();
+     } catch(IOException e) {
+         LOG.error("Failed to initialize JobHistory log file", e); 
+         disableHistory = true;
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobHistoryParsing.java b/src/test/org/apache/hadoop/mapred/TestJobHistoryParsing.java
+index c46cf41..d6d9dc3 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobHistoryParsing.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobHistoryParsing.java
+@@ -56,10 +56,10 @@ public class TestJobHistoryParsing  extends TestCase {
+     // open a test history file
+     Path historyDir = new Path(System.getProperty("test.build.data", "."), 
+                                 "history");
++    JobConf conf = new JobConf();
++    conf.set("hadoop.job.history.location", historyDir.toString());
+     FileSystem fs = FileSystem.getLocal(new JobConf());
+-    if (!fs.mkdirs(historyDir)) {
+-      fail("Failed to create history directory");
+-    }
++    JobHistory.init(conf, "localhost", 1234);
+     Path historyLog = new Path(historyDir, "testlog");
+     PrintWriter out = new PrintWriter(fs.create(historyLog));
+     historyWriter.add(out);
+-- 
+1.7.0.4
+

@@ -1,0 +1,30 @@
+From 7d08d6a9f223f270e5f4728a85e0ed3934a347f7 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 5 Jul 2011 14:33:07 -0700
+Subject: [PATCH 1008/1179] HADOOP-7325. hadoop command - do not accept class names starting with a hyphen.
+
+Reason: Improvement
+Author: Brock Noland
+Ref: CDH-3244
+---
+ bin/hadoop |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index 222861b..cb5d882 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -278,6 +278,10 @@ elif [ "$COMMAND" = "dfsgroups" ] ; then
+ elif [ "$COMMAND" = "mrgroups" ] ; then
+   CLASS=org.apache.hadoop.mapred.tools.GetGroups
+   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
++elif [[ "$COMMAND" = -*  ]] ; then
++  # class and package names cannot begin with a -
++  echo "Error: No command named \`$COMMAND' was found. Perhaps you meant \`hadoop ${COMMAND#-}'"
++  exit 1
+ else
+   CLASS=$COMMAND
+ fi
+-- 
+1.7.0.4
+

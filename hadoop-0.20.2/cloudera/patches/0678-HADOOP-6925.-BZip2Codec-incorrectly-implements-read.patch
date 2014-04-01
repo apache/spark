@@ -1,0 +1,83 @@
+From 527b0ee624e8a02b357f2a2a1a31fa798f832d35 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 27 Aug 2010 16:26:17 -0700
+Subject: [PATCH 0678/1179] HADOOP-6925. BZip2Codec incorrectly implements read().
+
+Description: HADOOP-4012 added an implementation of read() in BZip2InputStream
+that doesn't work correctly when reading bytes > 0x80. This causes
+EOFExceptions when working with BZip2 compressed data inside of sequence files
+in some datasets.
+
+Reason: Bug
+Author: Todd Lipcon
+Ref: CDH-2068
+---
+ .../org/apache/hadoop/io/compress/BZip2Codec.java  |    2 +-
+ .../org/apache/hadoop/io/compress/TestCodec.java   |   24 ++++++++++++++++---
+ 2 files changed, 21 insertions(+), 5 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/io/compress/BZip2Codec.java b/src/core/org/apache/hadoop/io/compress/BZip2Codec.java
+index 66db329..fa8e23d 100644
+--- a/src/core/org/apache/hadoop/io/compress/BZip2Codec.java
++++ b/src/core/org/apache/hadoop/io/compress/BZip2Codec.java
+@@ -439,7 +439,7 @@ public class BZip2Codec implements SplittableCompressionCodec {
+     public int read() throws IOException {
+       byte b[] = new byte[1];
+       int result = this.read(b, 0, 1);
+-      return (result < 0) ? result : b[0];
++      return (result < 0) ? result : (b[0] & 0xff);
+     }
+ 
+     private void internalReset() throws IOException {
+diff --git a/src/test/org/apache/hadoop/io/compress/TestCodec.java b/src/test/org/apache/hadoop/io/compress/TestCodec.java
+index 9b1910a..13d81e1 100644
+--- a/src/test/org/apache/hadoop/io/compress/TestCodec.java
++++ b/src/test/org/apache/hadoop/io/compress/TestCodec.java
+@@ -128,10 +128,6 @@ public class TestCodec {
+       key.write(data);
+       value.write(data);
+     }
+-    DataInputBuffer originalData = new DataInputBuffer();
+-    DataInputStream originalIn = new DataInputStream(new BufferedInputStream(originalData));
+-    originalData.reset(data.getData(), 0, data.getLength());
+-    
+     LOG.info("Generated " + count + " records");
+     
+     // Compress data
+@@ -155,6 +151,9 @@ public class TestCodec {
+       new DataInputStream(new BufferedInputStream(inflateFilter));
+ 
+     // Check
++    DataInputBuffer originalData = new DataInputBuffer();
++    originalData.reset(data.getData(), 0, data.getLength());
++    DataInputStream originalIn = new DataInputStream(new BufferedInputStream(originalData));
+     for(int i=0; i < count; ++i) {
+       RandomDatum k1 = new RandomDatum();
+       RandomDatum v1 = new RandomDatum();
+@@ -166,6 +165,23 @@ public class TestCodec {
+       k2.readFields(inflateIn);
+       v2.readFields(inflateIn);
+     }
++
++    // De-compress data byte-at-a-time
++    originalData.reset(data.getData(), 0, data.getLength());
++    deCompressedDataBuffer.reset(compressedDataBuffer.getData(), 0, 
++                                 compressedDataBuffer.getLength());
++    inflateFilter = 
++      codec.createInputStream(deCompressedDataBuffer);
++
++    // Check
++    originalIn = new DataInputStream(new BufferedInputStream(originalData));
++    int expected;
++    do {
++      expected = originalIn.read();
++      assertEquals("Inflated stream read by byte does not match",
++        expected, inflateFilter.read());
++    } while (expected != -1);
++
+     LOG.info("SUCCESS! Completed checking " + count + " records");
+   }
+ 
+-- 
+1.7.0.4
+

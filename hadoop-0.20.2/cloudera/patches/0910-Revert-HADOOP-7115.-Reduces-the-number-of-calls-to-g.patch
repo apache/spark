@@ -1,0 +1,116 @@
+From cc57649b0c17113dde2fc8b350206dbeb159c9e3 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 7 Mar 2011 22:23:14 -0800
+Subject: [PATCH 0910/1179] Revert "HADOOP-7115. Reduces the number of calls to getpwuid_r and getpwgid_r, by implementing a cache in NativeIO."
+
+This reverts commit 3ef31bcc86610d496976b4de9ada82e73f47f162.
+---
+ src/core/core-default.xml                          |    6 ---
+ .../org/apache/hadoop/io/nativeio/NativeIO.java    |   47 --------------------
+ .../hadoop/io/nativeio/NativeIOException.java      |    1 -
+ 3 files changed, 0 insertions(+), 54 deletions(-)
+
+diff --git a/src/core/core-default.xml b/src/core/core-default.xml
+index bd1554d..be2f455 100644
+--- a/src/core/core-default.xml
++++ b/src/core/core-default.xml
+@@ -476,12 +476,6 @@
+   </description>
+ </property>
+ 
+-<property>
+-  <name>hadoop.security.uid.cache.secs</name>
+-  <value>14400</value>
+-  <description> NativeIO maintains a cache from UID to UserName. This is
+-  the timeout for an entry in that cache. </description>
+-</property>
+ 
+ 
+ </configuration>
+diff --git a/src/core/org/apache/hadoop/io/nativeio/NativeIO.java b/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
+index 51f7771..db45125 100644
+--- a/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
++++ b/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
+@@ -19,10 +19,7 @@ package org.apache.hadoop.io.nativeio;
+ 
+ import java.io.FileDescriptor;
+ import java.io.IOException;
+-import java.util.Map;
+-import java.util.concurrent.ConcurrentHashMap;
+ 
+-import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.util.NativeCodeLoader;
+ 
+ import org.apache.commons.logging.Log;
+@@ -76,56 +73,12 @@ public class NativeIO {
+   /** Wrapper around open(2) */
+   public static native FileDescriptor open(String path, int flags, int mode) throws IOException;
+   /** Wrapper around fstat(2) */
+-  //TODO: fstat is an old implementation. Doesn't use the cache. This should be 
+-  //changed to use the cache.
+   public static native Stat fstat(FileDescriptor fd) throws IOException;
+   /** Wrapper around chmod(2) */
+   public static native void chmod(String path, int mode) throws IOException;
+ 
+-  private static native long getUIDforFDOwnerforOwner(FileDescriptor fd) throws IOException;
+-  private static native String getUserName(long uid) throws IOException;
+   /** Initialize the JNI method ID and class ID cache */
+   private static native void initNative();
+-  
+-  private static class CachedUid {
+-    final long timestamp;
+-    final String username;
+-    public CachedUid(String username, long timestamp) {
+-      this.timestamp = timestamp;
+-      this.username = username;
+-    }
+-  }
+-  private static final Map<Long, CachedUid> uidCache = 
+-    new ConcurrentHashMap<Long, CachedUid>();
+-  private static long cacheTimeout;
+-  private static boolean initialized = false;
+-  
+-  public static String getOwner(FileDescriptor fd) throws IOException {
+-    ensureInitialized();
+-    long uid = getUIDforFDOwnerforOwner(fd);
+-    CachedUid cUid = uidCache.get(uid);
+-    long now = System.currentTimeMillis();
+-    if (cUid != null && (cUid.timestamp + cacheTimeout) > now) {
+-      return cUid.username;
+-    }
+-    String user = getUserName(uid);
+-    LOG.info("Got UserName " + user + " for UID " + uid + 
+-        " from the native implementation");
+-    cUid = new CachedUid(user, now);
+-    uidCache.put(uid, cUid);
+-    return user;
+-  }
+-    
+-  private synchronized static void ensureInitialized() {
+-    if (!initialized) {
+-      cacheTimeout = 
+-        new Configuration().getLong("hadoop.security.uid.cache.secs", 
+-                                     4*60*60) * 1000;
+-      LOG.info("Initialized cache for UID to User mapping with a cache" +
+-      		" timeout of " + cacheTimeout/1000 + " seconds.");
+-      initialized = true;
+-    }
+-  }
+ 
+ 
+   /**
+diff --git a/src/core/org/apache/hadoop/io/nativeio/NativeIOException.java b/src/core/org/apache/hadoop/io/nativeio/NativeIOException.java
+index 4135f0f..2bf13de 100644
+--- a/src/core/org/apache/hadoop/io/nativeio/NativeIOException.java
++++ b/src/core/org/apache/hadoop/io/nativeio/NativeIOException.java
+@@ -25,7 +25,6 @@ import java.io.IOException;
+  * These exceptions simply wrap <i>errno</i> result codes.
+  */
+ public class NativeIOException extends IOException {
+-  private static final long serialVersionUID = -6615764817732323232L;
+   private Errno errno;
+ 
+   public NativeIOException(String msg, Errno errno) {
+-- 
+1.7.0.4
+

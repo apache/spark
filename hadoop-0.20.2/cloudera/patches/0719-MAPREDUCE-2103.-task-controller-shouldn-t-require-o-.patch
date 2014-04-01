@@ -1,0 +1,34 @@
+From 7fb2c9a498db04a93aeee6fe7f2beb4abdf7489f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sun, 3 Oct 2010 22:51:21 -0700
+Subject: [PATCH 0719/1179] MAPREDUCE-2103. task-controller shouldn't require o-r permissions
+
+Author: Todd Lipcon
+Ref: CDH-648
+---
+ src/c++/task-controller/main.c |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/c++/task-controller/main.c b/src/c++/task-controller/main.c
+index c38a2d8..5322399 100644
+--- a/src/c++/task-controller/main.c
++++ b/src/c++/task-controller/main.c
+@@ -99,11 +99,11 @@ int check_taskcontroller_permissions(char *executable_file) {
+     return -1;
+   }
+ 
+-  // check others do not have read/write/execute permissions
+-  if ((filestat.st_mode & S_IROTH) == S_IROTH || (filestat.st_mode & S_IWOTH)
+-      == S_IWOTH || (filestat.st_mode & S_IXOTH) == S_IXOTH) {
++  // check others do not have write/execute permissions
++  if ((filestat.st_mode & S_IWOTH) == S_IWOTH ||
++      (filestat.st_mode & S_IXOTH) == S_IXOTH) {
+     fprintf(LOGFILE,
+-      "The task-controller binary should not have read or write or execute for others.\n");
++      "The task-controller binary should not have write or execute for others.\n");
+     return -1;
+   }
+ 
+-- 
+1.7.0.4
+

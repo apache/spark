@@ -1,0 +1,126 @@
+From 53782d128507af30429e8c697788aa14fa9849c8 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 22 Dec 2009 14:52:12 -0800
+Subject: [PATCH 0410/1179] HADOOP-6176. Adding a couple private methods to AccessTokenHandler for testing purposes
+
+Patch: https://issues.apache.org/jira/secure/attachment/12428771/HADOOP-6176-0_20.2.patch.
+Author: Kan Zhang
+Ref: CDH-648
+---
+ .../apache/hadoop/security/AccessTokenHandler.java |   26 ++++++++++--
+ .../apache/hadoop/security/SecurityTestUtil.java   |   43 ++++++++++++++++++++
+ 2 files changed, 65 insertions(+), 4 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/security/SecurityTestUtil.java
+
+diff --git a/src/core/org/apache/hadoop/security/AccessTokenHandler.java b/src/core/org/apache/hadoop/security/AccessTokenHandler.java
+index 8ede2bb..bd61628 100644
+--- a/src/core/org/apache/hadoop/security/AccessTokenHandler.java
++++ b/src/core/org/apache/hadoop/security/AccessTokenHandler.java
+@@ -60,7 +60,7 @@ public class AccessTokenHandler {
+    * sync'ed their access keys with NN at least once during each interval.
+    */
+   private final long keyUpdateInterval;
+-  private final long tokenLifetime;
++  private long tokenLifetime;
+   private long serialNo = new SecureRandom().nextLong();
+   private KeyGenerator keyGen;
+   private AccessKey currentKey;
+@@ -203,7 +203,7 @@ public class AccessTokenHandler {
+   }
+ 
+   /** Check if token is well formed */
+-  private synchronized Boolean verifyToken(long keyID, AccessToken token)
++  private synchronized boolean verifyToken(long keyID, AccessToken token)
+       throws IOException {
+     AccessKey key = allKeys.get(keyID);
+     if (key == null) {
+@@ -252,7 +252,7 @@ public class AccessTokenHandler {
+   }
+ 
+   /** Check if access should be allowed. userID is not checked if null */
+-  public Boolean checkAccess(AccessToken token, String userID, long blockID,
++  public boolean checkAccess(AccessToken token, String userID, long blockID,
+       AccessMode mode) throws IOException {
+     long oExpiry = 0;
+     long oKeyID = 0;
+@@ -282,8 +282,26 @@ public class AccessTokenHandler {
+           + blockID + ", access mode=" + mode + ", keyID=" + oKeyID);
+     }
+     return (userID == null || userID.equals(oUserID)) && oBlockID == blockID
+-        && System.currentTimeMillis() < oExpiry && oModes.contains(mode)
++        && !isExpired(oExpiry) && oModes.contains(mode)
+         && verifyToken(oKeyID, token);
+   }
+ 
++  private static boolean isExpired(long expiryDate) {
++    return System.currentTimeMillis() > expiryDate;
++  }
++
++  /** check if a token is expired. for unit test only.
++   *  return true when token is expired, false otherwise */
++  static boolean isTokenExpired(AccessToken token) throws IOException {
++    ByteArrayInputStream buf = new ByteArrayInputStream(token.getTokenID()
++        .getBytes());
++    DataInputStream in = new DataInputStream(buf);
++    long expiryDate = WritableUtils.readVLong(in);
++    return isExpired(expiryDate);
++  }
++
++  /** set token lifetime. for unit test only */
++  synchronized void setTokenLifetime(long tokenLifetime) {
++    this.tokenLifetime = tokenLifetime;
++  }
+ }
+\ No newline at end of file
+diff --git a/src/test/org/apache/hadoop/security/SecurityTestUtil.java b/src/test/org/apache/hadoop/security/SecurityTestUtil.java
+new file mode 100644
+index 0000000..d6a30fc
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/SecurityTestUtil.java
+@@ -0,0 +1,43 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++import java.io.IOException;
++
++/** Utilities for security tests */
++public class SecurityTestUtil {
++
++  /**
++   * check if an access token is expired. return true when token is expired,
++   * false otherwise
++   */
++  public static boolean isAccessTokenExpired(AccessToken token)
++      throws IOException {
++    return AccessTokenHandler.isTokenExpired(token);
++  }
++
++  /**
++   * set access token lifetime.
++   */
++  public static void setAccessTokenLifetime(AccessTokenHandler handler,
++      long tokenLifetime) {
++    handler.setTokenLifetime(tokenLifetime);
++  }
++
++}
+-- 
+1.7.0.4
+

@@ -1,0 +1,81 @@
+<?xml version="1.0"?>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<project name="hod" default="compile">
+    <import file="../build-contrib.xml"/>
+    <target name="compile">
+        <mkdir dir="${build.dir}"/>
+        <copy todir="${build.dir}">
+            <fileset dir="${basedir}">
+                <exclude name="**/VERSION"/>
+            </fileset>
+        </copy>
+        <exec executable="echo" output="${build.dir}/bin/VERSION">
+            <arg line="${version}" />
+        </exec>
+    </target>
+    <target name="package" depends="compile">
+        <mkdir dir="${dist.dir}/contrib/${name}"/>
+        <copy todir="${dist.dir}/contrib/${name}">
+            <fileset dir="${build.dir}"/>
+        </copy>
+        <chmod dir="${dist.dir}/contrib/${name}/bin" perm="a+x" includes="*"/>
+    </target>
+
+    <target name="test" depends="compile" description="Run HOD unit tests">  
+      <antcall target="python.pathcheck"/>
+      <antcall target="checkAndRunTests"/>
+    </target>
+
+    <target name="checkAndRunTests" if="python.home">
+      <!-- Check python version now -->
+      <exec executable="/bin/sh" outputproperty="hodtest.pythonVersion">
+          <arg value="-c" />
+          <arg value="${python.home}/python -V" />
+      </exec>
+      <condition property="python.versionmatched">
+        <!--- Currently check for only 2.5.1 -->
+        <equals arg1="${hodtest.pythonVersion}" arg2="Python 2.5.1" />
+      </condition>
+      <antcall target="python.versioncheck"/>
+      <antcall target="runtests"/>
+    </target>
+ 
+    <target name="python.pathcheck" unless="python.home">
+      <echo message="'python.home' is not defined. Please pass -Dpython.home=&lt;Path to Python&gt; to Ant on the command-line."/>
+    </target>
+
+    <target name="runtests" if="python.versionmatched">
+      <echo message="Using Python at : ${python.home}" />
+      <echo message="Version : ${hodtest.pythonVersion}"/>
+      <exec executable="/bin/sh" resultproperty="hodtest.failedTests">
+        <arg value="-c" />
+          <arg value="${python.home}/python ${build.dir}/testing/main.py" />
+      </exec>
+      <condition property="hodtest.success">
+        <equals arg1="${hodtest.failedTests}" arg2="0"/>
+      </condition>
+      <fail message="TestCases failed. ${hodtest.failedTests} failed to run successfully." unless="hodtest.success"/>
+    </target>
+    
+    <target name="python.versioncheck" unless="python.versionmatched">
+      <echo message="Need Python version 2.5.1. You specified ${hodtest.pythonVersion}"/>
+    </target>
+
+</project>

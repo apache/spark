@@ -1,0 +1,178 @@
+From 4d71976d7346279ff6aa6063b8e9562a9d0df281 Mon Sep 17 00:00:00 2001
+From: Ahmed Radwan <ahmed@cloudera.com>
+Date: Wed, 17 Aug 2011 12:52:48 -0700
+Subject: [PATCH 1045/1179] MAPREDUCE-2992. TestLinuxTaskController is broken.
+
+Reason: Bug
+Author: Ahmed Radwan
+Ref: CDH-3477
+---
+ build.xml                                          |    1 +
+ .../apache/hadoop/mapred/LinuxTaskController.java  |    2 +-
+ .../mapred/ClusterWithLinuxTaskController.java     |   10 ++--
+ .../hadoop/mapred/TestLinuxTaskController.java     |   52 ++++++++++++++------
+ 4 files changed, 44 insertions(+), 21 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index 76d16bb..7ef210d 100644
+--- a/build.xml
++++ b/build.xml
+@@ -1049,6 +1049,7 @@
+         <sysproperty key="hadoop.log.dir" value="${test.log.dir}" />
+         <sysproperty key="test.src.dir" value="${test.src.dir}" />
+         <sysproperty key="taskcontroller-path" value="${taskcontroller-path}" />
++        <sysproperty key="taskcontroller-invalid-group" value="${taskcontroller-invalid-group}" />
+         <sysproperty key="taskcontroller-ugi" value="${taskcontroller-ugi}" />
+         <sysproperty key="test.build.extraconf"
+                      value="@{test.dir}/extraconf" />
+diff --git a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+index 50e8522..5791387 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+@@ -66,7 +66,7 @@ class LinuxTaskController extends TaskController {
+             LogFactory.getLog(LinuxTaskController.class);
+ 
+   // Path to the setuid executable.
+-  private String taskControllerExe;
++  protected String taskControllerExe;
+   private static final String TASK_CONTROLLER_EXEC_KEY =
+     "mapreduce.tasktracker.task-controller.exe";
+   
+diff --git a/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
+index 073bcd1..918ba86 100644
+--- a/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
+@@ -56,9 +56,11 @@ import junit.framework.TestCase;
+  * <li>Make the built binary to setuid and setgid executable</li>
+  * <li>Execute following targets:
+  * <code>ant test -Dcompile.c++=true -Dtaskcontroller-path=<em>path to built binary</em> 
+- * -Dtaskcontroller-ugi=<em>user,group</em></code></li>
++ * -Dtaskcontroller-ugi=<em>user,group</em>
++ * -Dtaskcontroller-invalid-group=<em>group2</em></code></li>
++ * , where group2 is any existing group (other than group1).
+  * </ol>
+- * 
++ * The user running the tests need to have password-less sudo access.
+  */
+ public class ClusterWithLinuxTaskController extends TestCase {
+   private static final Log LOG =
+@@ -187,7 +189,7 @@ public class ClusterWithLinuxTaskController extends TestCase {
+   }
+ 
+   static File getTaskControllerConfFile(String path) {
+-    File confDirectory = new File(path, "../conf");
++    File confDirectory = new File(path, "../../conf");
+     return new File(confDirectory, "taskcontroller.cfg");
+   }
+ 
+@@ -201,7 +203,7 @@ public class ClusterWithLinuxTaskController extends TestCase {
+    */
+   static File createTaskControllerConf(String path,
+       Configuration conf) throws IOException {
+-    File confDirectory = new File(path, "../conf");
++    File confDirectory = new File(path, "../../conf");
+     if (!confDirectory.exists()) {
+       confDirectory.mkdirs();
+     }
+diff --git a/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
+index ab355a3..654fc81 100644
+--- a/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
++++ b/src/test/org/apache/hadoop/mapred/TestLinuxTaskController.java
+@@ -23,11 +23,16 @@ import java.io.IOException;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.LocalDirAllocator;
++import org.apache.hadoop.util.Shell;
+ 
+ import junit.framework.TestCase;
+ 
+ public class TestLinuxTaskController extends TestCase {
+   private static int INVALID_TASKCONTROLLER_PERMISSIONS = 22;
++  private static int INVALID_CONFIG_FILE = 24;
++  private static String TASKCONTROLLER_INVALID_GROUP =
++     "taskcontroller-invalid-group";
++
+   private static File testDir = new File(System.getProperty("test.build.data",
+       "/tmp"), TestLinuxTaskController.class.getName());
+   private static String taskControllerPath = System
+@@ -42,11 +47,19 @@ public class TestLinuxTaskController extends TestCase {
+   }
+ 
+   public static class MyLinuxTaskController extends LinuxTaskController {
+-    String taskControllerExePath = taskControllerPath + "/task-controller";
++    @Override
++    public void setConf(Configuration conf) {
++      super.setConf(conf);
++      taskControllerExe = taskControllerPath + "/task-controller";
++    }
+   }
+ 
+-  private void validateTaskControllerSetup(TaskController controller,
+-      boolean shouldFail) throws IOException {
++  private void validateTaskControllerSetup(Configuration conf,
++      TaskController controller, boolean shouldFail, int exitCode)
++  throws IOException {
++    File confFile = ClusterWithLinuxTaskController
++         .createTaskControllerConf(taskControllerPath, conf);
++    execCommand(confFile, "sudo", Shell.SET_OWNER_COMMAND, "root");
+     if (shouldFail) {
+       // task controller setup should fail validating permissions.
+       Throwable th = null;
+@@ -56,13 +69,14 @@ public class TestLinuxTaskController extends TestCase {
+         th = ie;
+       }
+       assertNotNull("No exception during setup", th);
+-      assertTrue("Exception message does not contain exit code"
+-          + INVALID_TASKCONTROLLER_PERMISSIONS, th.getMessage().contains(
+-          "with exit code " + INVALID_TASKCONTROLLER_PERMISSIONS));
++      assertTrue("Exception message does not contain exit code "
++          + exitCode, th.getMessage().contains(
++          "with exit code " + exitCode));
+     } else {
+       controller.setup(new LocalDirAllocator("mapred.local.dir"));
+     }
+ 
++    execCommand(confFile, "sudo", "rm");
+   }
+ 
+   public void testTaskControllerGroup() throws Exception {
+@@ -81,20 +95,26 @@ public class TestLinuxTaskController extends TestCase {
+     // setup task-controller without setting any group name
+     TaskController controller = new MyLinuxTaskController();
+     controller.setConf(conf);
+-    validateTaskControllerSetup(controller, true);
++    validateTaskControllerSetup(conf, controller, true, INVALID_CONFIG_FILE);
+ 
+     // set an invalid group name for the task controller group
+-    conf.set(ClusterWithLinuxTaskController.TT_GROUP, "invalid");
+-    // write the task-controller's conf file
+-    ClusterWithLinuxTaskController.createTaskControllerConf(taskControllerPath,
+-        conf);
+-    validateTaskControllerSetup(controller, true);
++    conf.set(ClusterWithLinuxTaskController.TT_GROUP, System
++            .getProperty(TASKCONTROLLER_INVALID_GROUP));
++    validateTaskControllerSetup(conf, controller, true,
++            INVALID_TASKCONTROLLER_PERMISSIONS);
+ 
++    // set the valid group name for the task controller group
+     conf.set(ClusterWithLinuxTaskController.TT_GROUP,
+         ClusterWithLinuxTaskController.taskTrackerSpecialGroup);
+-    // write the task-controller's conf file
+-    ClusterWithLinuxTaskController.createTaskControllerConf(taskControllerPath,
+-        conf);
+-    validateTaskControllerSetup(controller, false);
++    validateTaskControllerSetup(conf, controller, false, 0);
++
++  }
++
++  private static String execCommand(File f, String... cmd) throws IOException {
++    String[] args = new String[cmd.length + 1];
++    System.arraycopy(cmd, 0, args, 0, cmd.length);
++    args[cmd.length] = f.getCanonicalPath();
++    String output = Shell.execCommand(args);
++    return output;
+   }
+ }
+-- 
+1.7.0.4
+

@@ -1,0 +1,38 @@
+From 60a51e89b21e9577519b447d3779acc8b83ce990 Mon Sep 17 00:00:00 2001
+From: Harsh J <harsh@cloudera.com>
+Date: Wed, 23 Nov 2011 14:09:55 +0530
+Subject: [PATCH 1110/1179] CLOUDERA-BUILD. Log jsvc output to HADOOP_LOG_DIR instead of /tmp.
+
+Description: JSVC output currently goes to /tmp and is not configurable.
+Reason: Customer request
+Author: Harsh J
+Ref: CDH-3832
+---
+ bin/hadoop |    9 ++++-----
+ 1 files changed, 4 insertions(+), 5 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index 1c60602..61409b7 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -420,13 +420,12 @@ case "$_HADOOP_RUN_MODE" in
+       # Even though we are trying to run a non-detached datanode,
+       # jsvc will not write to stdout/stderr, so we have to pipe
+       # it and tail the logfile.
+-      log_path=/tmp/jsvc_${COMMAND}.$$
+       _JSVC_FLAGS="-nodetach
+                    -errfile &1
+-                   -outfile $log_path"
+-      echo Non-detached jsvc output piping to: $log_path
+-      touch $log_path
+-      tail -f $log_path &
++                   -outfile $HADOOP_LOG_DIR/jsvc.out"
++      echo Non-detached jsvc output piping to: $HADOOP_LOG_DIR/jsvc.out
++      touch $HADOOP_LOG_DIR/jsvc.out
++      tail -f $HADOOP_LOG_DIR/jsvc.out &
+     fi
+     unset _HADOOP_DAEMON_DETACHED
+ 
+-- 
+1.7.0.4
+

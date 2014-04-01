@@ -1,0 +1,55 @@
+From 698fe169f31e54111d30e4420cd1c1c5eaeecdec Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:21:03 -0800
+Subject: [PATCH 0137/1179] HDFS-686. NullPointerException is thrown while merging edit log and image
+
+Description: Our secondary name node is not able to start on NullPointerException:<br/>
+ERROR org.apache.hadoop.hdfs.server.namenode.SecondaryNameNode: java.lang.NullPointerException<br/>
+        at org.apache.hadoop.hdfs.server.namenode.FSDirectory.unprotectedSetTimes(FSDirectory.java:1232)<br/>
+        at org.apache.hadoop.hdfs.server.namenode.FSDirectory.unprotectedSetTimes(FSDirectory.java:1221)<br/>
+        at org.apache.hadoop.hdfs.server.namenode.FSEditLog.loadFSEdits(FSEditLog.java:776)<br/>
+        at org.apache.hadoop.hdfs.server.namenode.FSImage.loadFSEdits(FSImage.java:992)<br/>
+        at<br/>
+org.apache.hadoop.hdfs.server.namenode.SecondaryNameNode$CheckpointStorage.doMerge(SecondaryNameNode.java:590)<br/>
+        at<br/>
+org.apache.hadoop.hdfs.server.namenode.SecondaryNameNode$CheckpointStorage.access$000(SecondaryNameNode.java:473)<br/>
+        at org.apache.hadoop.hdfs.server.namenode.SecondaryNameNode.doMerge(SecondaryNameNode.java:350)<br/>
+        at org.apache.hadoop.hdfs.server.namenode.SecondaryNameNode.doCheckpoint(SecondaryNameNode.java:314)<br/>
+        at org.apache.hadoop.hdfs.server.namenode.SecondaryNameNode.run(SecondaryNameNode.java:225)<br/>
+        at java.lang.Thread.run(Thread.java:619)
+
+<p>This was caused by setting access time on a non-existent file.</p>
+Reason: bugfix
+Author: Hairong Kuang
+Ref: UNKNOWN
+---
+ .../hadoop/hdfs/server/namenode/FSDirectory.java   |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
+index fad88d8..f6570fc 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
+@@ -33,6 +33,7 @@ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants.StartupOption;
+ import org.apache.hadoop.hdfs.server.namenode.BlocksMap.BlockInfo;
++import org.mortbay.log.Log;
+ 
+ /*************************************************
+  * FSDirectory stores the filesystem directory state.
+@@ -1306,6 +1307,11 @@ class FSDirectory implements FSConstants, Closeable {
+   boolean unprotectedSetTimes(String src, long mtime, long atime, boolean force) 
+                               throws IOException {
+     INodeFile inode = getFileINode(src);
++    if (inode == null) {
++      NameNode.stateChangeLog.warn("DIR* FSDirectory.unprotectedSetTimes: "
++          +"failed to setTimes " + src + " because source does not exist");
++      return false;
++    }
+     return unprotectedSetTimes(src, inode, mtime, atime, force);
+   }
+ 
+-- 
+1.7.0.4
+

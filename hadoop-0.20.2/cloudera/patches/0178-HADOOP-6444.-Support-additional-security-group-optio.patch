@@ -1,0 +1,129 @@
+From 083a6a1cfb2a5198243aa82a020681ad62da5938 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:33:58 -0800
+Subject: [PATCH 0178/1179] HADOOP-6444. Support additional security group option in hadoop-ec2 script
+
+Description: When deploying a hadoop cluster on ec2 alongside other services it is very useful to be able to specify additional (pre-existing) security groups to facilitate access control.  For example one could use this feature to add a cluster to a generic "hadoop" group, which authorizes hdfs access from instances outside the cluster.  Without such an option the access control for the security groups created by the script need to manually updated after cluster launch.
+Reason: Security improvement
+Author: Paul Egan
+Ref: UNKNOWN
+---
+ src/contrib/cloud/src/py/hadoop/cloud/cli.py       |   18 +++++++++++++-----
+ .../cloud/src/py/hadoop/cloud/providers/ec2.py     |    3 ++-
+ src/contrib/cloud/src/py/hadoop/cloud/service.py   |    7 +++++--
+ 3 files changed, 20 insertions(+), 8 deletions(-)
+
+diff --git a/src/contrib/cloud/src/py/hadoop/cloud/cli.py b/src/contrib/cloud/src/py/hadoop/cloud/cli.py
+index 2f7a960..2403e59 100644
+--- a/src/contrib/cloud/src/py/hadoop/cloud/cli.py
++++ b/src/contrib/cloud/src/py/hadoop/cloud/cli.py
+@@ -84,6 +84,9 @@ automatically shut down."),
+   make_option("--client-cidr", metavar="CIDR", action="append",
+     help="The CIDR of the client, which is used to allow access through the \
+ firewall to the master node. (May be specified multiple times.)"),
++  make_option("--security-group", metavar="SECURITY_GROUP", action="append",
++    default=[], help="Additional security groups within which the instances \
++should be run. (Amazon EC2 only.) (May be specified multiple times.)"),
+   make_option("--public-key", metavar="FILE",
+     help="The public key to authorize on launching instances. (Non-EC2 \
+ providers only.)"),
+@@ -282,7 +285,8 @@ def main():
+                          opt.get('instance_type'), opt.get('key_name'),
+                          opt.get('public_key'), opt.get('user_data_file'),
+                          opt.get('availability_zone'), opt.get('user_packages'),
+-                         opt.get('auto_shutdown'), opt.get('env'))
++                         opt.get('auto_shutdown'), opt.get('env'),
++                         opt.get('security_group'))
+     service.launch_master(template, config_dir, opt.get('client_cidr'))
+ 
+   elif command == 'launch-slaves':
+@@ -295,7 +299,8 @@ def main():
+                          opt.get('instance_type'), opt.get('key_name'),
+                          opt.get('public_key'), opt.get('user_data_file'),
+                          opt.get('availability_zone'), opt.get('user_packages'),
+-                         opt.get('auto_shutdown'), opt.get('env'))
++                         opt.get('auto_shutdown'), opt.get('env'),
++                         opt.get('security_group'))
+     service.launch_slaves(template)
+ 
+   elif command == 'launch-cluster':
+@@ -315,13 +320,15 @@ def main():
+                          opt.get('instance_type'), opt.get('key_name'),
+                          opt.get('public_key'), opt.get('user_data_file'),
+                          opt.get('availability_zone'), opt.get('user_packages'),
+-                         opt.get('auto_shutdown'), opt.get('env')),
++                         opt.get('auto_shutdown'), opt.get('env'),
++                         opt.get('security_group')),
+         InstanceTemplate((DATANODE, TASKTRACKER), number_of_slaves,
+                          get_image_id(service.cluster, opt),
+                          opt.get('instance_type'), opt.get('key_name'),
+                          opt.get('public_key'), opt.get('user_data_file'),
+                          opt.get('availability_zone'), opt.get('user_packages'),
+-                         opt.get('auto_shutdown'), opt.get('env')),
++                         opt.get('auto_shutdown'), opt.get('env'),
++                         opt.get('security_group')),
+                          ]
+     elif len(args) > 2 and len(args) % 2 == 0:
+       print_usage(sys.argv[0])
+@@ -336,7 +343,8 @@ def main():
+                            opt.get('public_key'), opt.get('user_data_file'),
+                            opt.get('availability_zone'),
+                            opt.get('user_packages'),
+-                           opt.get('auto_shutdown'), opt.get('env')))
++                           opt.get('auto_shutdown'), opt.get('env'),
++                           opt.get('security_group')))
+ 
+     service.launch_cluster(instance_templates, config_dir,
+                            opt.get('client_cidr'))
+diff --git a/src/contrib/cloud/src/py/hadoop/cloud/providers/ec2.py b/src/contrib/cloud/src/py/hadoop/cloud/providers/ec2.py
+index 6616756..d535ad8 100644
+--- a/src/contrib/cloud/src/py/hadoop/cloud/providers/ec2.py
++++ b/src/contrib/cloud/src/py/hadoop/cloud/providers/ec2.py
+@@ -221,10 +221,11 @@ class Ec2Cluster(Cluster):
+       self._create_groups(role)
+       
+     user_data = instance_user_data.read_as_gzip_stream()
++    security_groups = self._get_group_names(roles) + kwargs.get('security_groups', [])
+ 
+     reservation = self.ec2Connection.run_instances(image_id, min_count=number,
+       max_count=number, key_name=kwargs.get('key_name', None),
+-      security_groups=self._get_group_names(roles), user_data=user_data,
++      security_groups=security_groups, user_data=user_data,
+       instance_type=size_id, placement=kwargs.get('placement', None))
+     return [instance.id for instance in reservation.instances]
+ 
+diff --git a/src/contrib/cloud/src/py/hadoop/cloud/service.py b/src/contrib/cloud/src/py/hadoop/cloud/service.py
+index 64fa6d8..84327fd 100644
+--- a/src/contrib/cloud/src/py/hadoop/cloud/service.py
++++ b/src/contrib/cloud/src/py/hadoop/cloud/service.py
+@@ -51,7 +51,8 @@ class InstanceTemplate(object):
+   def __init__(self, roles, number, image_id, size_id,
+                      key_name, public_key,
+                      user_data_file_template=None, placement=None,
+-                     user_packages=None, auto_shutdown=None, env_strings=[]):
++                     user_packages=None, auto_shutdown=None, env_strings=[],
++                     security_groups=[]):
+     self.roles = roles
+     self.number = number
+     self.image_id = image_id
+@@ -63,6 +64,7 @@ class InstanceTemplate(object):
+     self.user_packages = user_packages
+     self.auto_shutdown = auto_shutdown
+     self.env_strings = env_strings
++    self.security_groups = security_groups
+ 
+   def add_env_strings(self, env_strings):
+     new_env_strings = list(self.env_strings or [])
+@@ -307,7 +309,8 @@ echo Proxy pid %s;""" % (process.pid, process.pid)
+                                             instance_user_data,
+                                             key_name=it.key_name,
+                                             public_key=it.public_key,
+-                                            placement=it.placement)
++                                            placement=it.placement,
++                                            security_groups=it.security_groups)
+     print "Waiting for %s instances in role %s to start" % \
+       (it.number, ",".join(it.roles))
+     try:
+-- 
+1.7.0.4
+

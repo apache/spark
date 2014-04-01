@@ -1,0 +1,343 @@
+From 3d026b0a1706483a4860ad80fc17b103448ac1b0 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:52 -0800
+Subject: [PATCH 0844/1179] HDFS-1383. Better error messages in HFTP
+
+Author: Tsz Wo (Nicholas) Sze
+Ref: CDH-2622
+---
+ .../org/apache/hadoop/hdfs/HftpFileSystem.java     |   21 ++++++++++----
+ .../hdfs/server/namenode/FileDataServlet.java      |    4 +-
+ .../hdfs/server/namenode/ListPathsServlet.java     |   16 ++++++-----
+ .../org/apache/hadoop/hdfs/MiniDFSCluster.java     |   18 ++++++++++++
+ .../hadoop/hdfs/TestDistributedFileSystem.java     |   23 +++++++++++++++-
+ .../org/apache/hadoop/hdfs/TestFileStatus.java     |   28 ++++++++++++++++---
+ .../apache/hadoop/hdfs/TestListPathServlet.java    |   25 +++++++++++++++++
+ 7 files changed, 114 insertions(+), 21 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+index 5ad1800..5662d6a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+@@ -262,17 +262,26 @@ public class HftpFileSystem extends FileSystem {
+ 
+   @Override
+   public FSDataInputStream open(Path f, int buffersize) throws IOException {
+-    HttpURLConnection connection = null;
+-    connection = openConnection("/data" + f.toUri().getPath(),
+-        "ugi=" + getUgiParameter());
+-    connection.setRequestMethod("GET");
+-    connection.connect();
++    final HttpURLConnection connection = openConnection(
++        "/data" + f.toUri().getPath(), "ugi=" + getUgiParameter());
++    final InputStream in;
++    try {
++      connection.setRequestMethod("GET");
++      connection.connect();
++      in = connection.getInputStream();
++    } catch(IOException ioe) {
++      final int code = connection.getResponseCode();
++      final String s = connection.getResponseMessage();
++      throw s == null? ioe:
++          new IOException(s + " (error code=" + code + ")", ioe);
++    }
++
+     final String cl = connection.getHeaderField(StreamFile.CONTENT_LENGTH);
+     final long filelength = cl == null? -1: Long.parseLong(cl);
+     if (LOG.isDebugEnabled()) {
+       LOG.debug("filelength = " + filelength);
+     }
+-    final InputStream in = connection.getInputStream();
++
+     return new FSDataInputStream(new FSInputStream() {
+         long currentPos = 0;
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+index d7511c7..a7f8a29 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+@@ -122,9 +122,9 @@ public class FileDataServlet extends DfsServlet {
+                   response.getWriter().println(e.toString());
+                 }
+               } else if (info == null){
+-                response.sendError(400, "cat: File not found " + path);
++                response.sendError(400, "File not found " + path);
+               } else {
+-                response.sendError(400, "cat: " + path + ": is a directory");
++                response.sendError(400, path + " is a directory");
+               }
+               return null;
+             }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
+index 128c418..e968ed3 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
+@@ -23,7 +23,6 @@ import org.apache.hadoop.hdfs.HftpFileSystem;
+ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+ import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
+ import org.apache.hadoop.hdfs.protocol.DirectoryListing;
+-import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.util.VersionInfo;
+ 
+ import org.znerd.xmlenc.*;
+@@ -129,9 +128,11 @@ public class ListPathsServlet extends DfsServlet {
+     throws ServletException, IOException {
+     final PrintWriter out = response.getWriter();
+     final XMLOutputter doc = new XMLOutputter(out, "UTF-8");
++
++    final Map<String, String> root = buildRoot(request, doc);
++    final String path = root.get("path");
++
+     try {
+-      final Map<String, String> root = buildRoot(request, doc);
+-      final String path = root.get("path");
+       final boolean recur = "yes".equals(root.get("recursive"));
+       final Pattern filter = Pattern.compile(root.get("filter"));
+       final Pattern exclude = Pattern.compile(root.get("exclude"));
+@@ -188,17 +189,18 @@ public class ListPathsServlet extends DfsServlet {
+               writeXml(re, p, doc);
+             }
+           }
+-          if (doc != null) {
+-            doc.endDocument();
+-          }
+           return null;
+         }
+       });
+-      
++    } catch(IOException ioe) {
++      writeXml(ioe, path, doc);
+     } catch (InterruptedException e) {
+       LOG.warn("ListPathServlet encountered InterruptedException", e);
+       response.sendError(400, e.getMessage());
+     } finally {
++      if (doc != null) {
++        doc.endDocument();
++      }
+       if (out != null) {
+         out.close();
+       }
+diff --git a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+index 975a57c..48d3132 100644
+--- a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
++++ b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+@@ -24,6 +24,7 @@ import java.net.InetSocketAddress;
+ import java.net.URI;
+ import java.net.URISyntaxException;
+ import java.nio.channels.FileChannel;
++import java.security.PrivilegedExceptionAction;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.Random;
+@@ -45,6 +46,7 @@ import org.apache.hadoop.net.DNSToSwitchMapping;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.net.StaticMapping;
+ import org.apache.hadoop.security.authorize.ProxyUsers;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.ToolRunner;
+ 
+@@ -792,6 +794,22 @@ public class MiniDFSCluster {
+   }
+ 
+   /**
++   *  @return a {@link HftpFileSystem} object as specified user. 
++   */
++  public HftpFileSystem getHftpFileSystemAs(final String username,
++      final Configuration conf, final String... groups
++      ) throws IOException, InterruptedException {
++    final UserGroupInformation ugi = UserGroupInformation.createUserForTesting(
++        username, groups);
++    return ugi.doAs(new PrivilegedExceptionAction<HftpFileSystem>() {
++      @Override
++      public HftpFileSystem run() throws Exception {
++        return getHftpFileSystem();
++      }
++    });
++  }
++
++  /**
+    * Get the directories where the namenode stores its image.
+    */
+   public Collection<File> getNameDirs() {
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDistributedFileSystem.java b/src/test/org/apache/hadoop/hdfs/TestDistributedFileSystem.java
+index a30257b..3a26730 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDistributedFileSystem.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDistributedFileSystem.java
+@@ -18,6 +18,11 @@
+ 
+ package org.apache.hadoop.hdfs;
+ 
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.assertTrue;
++import static org.junit.Assert.fail;
++
+ import java.io.IOException;
+ import java.net.URI;
+ import java.util.Random;
+@@ -29,6 +34,8 @@ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileChecksum;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.log4j.Level;
+ 
+ public class TestDistributedFileSystem extends junit.framework.TestCase {
+@@ -118,7 +125,7 @@ public class TestDistributedFileSystem extends junit.framework.TestCase {
+     }
+   }
+   
+-  public void testFileChecksum() throws IOException {
++  public void testFileChecksum() throws Exception {
+     ((Log4JLogger)HftpFileSystem.LOG).getLogger().setLevel(Level.ALL);
+ 
+     final long seed = RAN.nextLong();
+@@ -190,6 +197,20 @@ public class TestDistributedFileSystem extends junit.framework.TestCase {
+         assertEquals(qfoocs.hashCode(), barhashcode);
+         assertEquals(qfoocs, barcs);
+       }
++
++      { //test permission error on hftp 
++        hdfs.setPermission(new Path(dir), new FsPermission((short)0));
++        try {
++          final String username = UserGroupInformation.getCurrentUser().getShortUserName() + "1";
++          final HftpFileSystem hftp2 = cluster.getHftpFileSystemAs(username, conf, "somegroup");
++          hftp2.getFileChecksum(qualified);
++          fail();
++        } catch(IOException ioe) {
++          FileSystem.LOG.info("GOOD: getting an exception", ioe);
++        }
++      }
+     }
++    cluster.shutdown();
+   }
++  
+ }
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileStatus.java b/src/test/org/apache/hadoop/hdfs/TestFileStatus.java
+index a446133..13d62ee 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileStatus.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileStatus.java
+@@ -17,7 +17,9 @@
+  */
+ package org.apache.hadoop.hdfs;
+ 
+-import junit.framework.TestCase;
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertTrue;
++import static org.junit.Assert.fail;
+ 
+ import java.io.FileNotFoundException;
+ import java.io.IOException;
+@@ -25,20 +27,23 @@ import java.util.Random;
+ 
+ import org.apache.commons.logging.impl.Log4JLogger;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+-import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.DFSClient.DFSDataInputStream;
+ import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
+ import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.log4j.Level;
++import org.junit.Test;
+ 
+ /**
+  * This class tests the FileStatus API.
+  */
+-public class TestFileStatus extends TestCase {
++public class TestFileStatus {
+   {
+     ((Log4JLogger)FSNamesystem.LOG).getLogger().setLevel(Level.ALL);
+     ((Log4JLogger)FileSystem.LOG).getLogger().setLevel(Level.ALL);
+@@ -71,7 +76,8 @@ public class TestFileStatus extends TestCase {
+   /**
+    * Tests various options of DFSShell.
+    */
+-  public void testFileStatus() throws IOException {
++  @Test
++  public void testFileStatus() throws Exception {
+     Configuration conf = new Configuration();
+     conf.setInt(DFSConfigKeys.DFS_LIST_LIMIT, 2);
+     MiniDFSCluster cluster = new MiniDFSCluster(conf, 1, true, null);
+@@ -132,7 +138,7 @@ public class TestFileStatus extends TestCase {
+ 
+       // test listStatus on a non-existent file/directory
+       stats = fs.listStatus(dir);
+-      assertEquals(null, stats);
++      assertTrue(null == stats);
+       try {
+         status = fs.getFileStatus(dir);
+         fail("getFileStatus of non-existent path should fail");
+@@ -226,6 +232,18 @@ public class TestFileStatus extends TestCase {
+       assertEquals(dir5.toString(), stats[2].getPath().toString());
+       assertEquals(file2.toString(), stats[3].getPath().toString());
+       assertEquals(file3.toString(), stats[4].getPath().toString());
++
++      { //test permission error on hftp 
++        fs.setPermission(dir, new FsPermission((short)0));
++        try {
++          final String username = UserGroupInformation.getCurrentUser().getShortUserName() + "1";
++          final HftpFileSystem hftp2 = cluster.getHftpFileSystemAs(username, conf, "somegroup");
++          hftp2.getContentSummary(dir);
++          fail();
++        } catch(IOException ioe) {
++          FileSystem.LOG.info("GOOD: getting an exception", ioe);
++        }
++      }
+     } finally {
+       fs.close();
+       cluster.shutdown();
+diff --git a/src/test/org/apache/hadoop/hdfs/TestListPathServlet.java b/src/test/org/apache/hadoop/hdfs/TestListPathServlet.java
+index 12a502c..fc68961 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestListPathServlet.java
++++ b/src/test/org/apache/hadoop/hdfs/TestListPathServlet.java
+@@ -27,7 +27,9 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.server.namenode.ListPathsServlet;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.junit.AfterClass;
+ import org.junit.Assert;
+ import org.junit.BeforeClass;
+@@ -100,6 +102,29 @@ public class TestListPathServlet {
+     // Non existent path
+     checkStatus("/nonexistent");
+     checkStatus("/nonexistent/a");
++
++    final String username = UserGroupInformation.getCurrentUser().getShortUserName() + "1";
++    final HftpFileSystem hftp2 = cluster.getHftpFileSystemAs(username, CONF, "somegroup");
++    { //test file not found on hftp 
++      final Path nonexistent = new Path("/nonexistent");
++      try {
++        hftp2.getFileStatus(nonexistent);
++        Assert.fail();
++      } catch(IOException ioe) {
++        FileSystem.LOG.info("GOOD: getting an exception", ioe);
++      }
++    }
++
++    { //test permission error on hftp
++      final Path dir = new Path("/dir");
++      fs.setPermission(dir, new FsPermission((short)0));
++      try {
++        hftp2.getFileStatus(new Path(dir, "a"));
++        Assert.fail();
++      } catch(IOException ioe) {
++        FileSystem.LOG.info("GOOD: getting an exception", ioe);
++      }
++    }
+   }
+ 
+   private void checkStatus(String listdir) throws IOException {
+-- 
+1.7.0.4
+

@@ -1,0 +1,162 @@
+From f8e6600fbdc454600990e4f3732462e9b56e0b1b Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 6 Feb 2011 13:37:24 -0800
+Subject: [PATCH 0803/1179] MAPREDUCE-2256. FairScheduler fairshare preemption from multiple pools may
+ preempt all tasks from one pool causing that pool to go below fairshare.
+
+You have a cluster with 600 map slots and 3 pools. Fairshare for each pool is
+200 to start with. Fairsharepreemption timeout is 5 mins.
+
+1) Pool1 schedules 300 map tasks first
+2) Pool2 then schedules another 300 map tasks
+3) Pool3 demands 300 map tasks but doesn't get any slot as all slots are taken.
+4) After 5 mins pool3 should preempt 200 map-slots. Instead of peempting 100
+slots each from pool1 and pool2, the bug would cause it to preempt all 200
+slots from pool2 (last started) causing it to go below fairshare. This is
+happening because the preemptTask method is not reducing the tasks left from a
+pool while preempting the tasks.
+
+The above scenario could be an extreme case but some amount of excess
+preemption would happen because of this bug.
+
+Reason: Bug
+Author: Priyo Mustafi
+Ref: CDH-2593
+---
+ .../org/apache/hadoop/mapred/FairScheduler.java    |    6 +-
+ .../apache/hadoop/mapred/TestFairScheduler.java    |   95 ++++++++++++++++++++
+ 2 files changed, 100 insertions(+), 1 deletions(-)
+
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+index e20c3fc..040f43f 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+@@ -808,7 +808,8 @@ public class FairScheduler extends TaskScheduler {
+       JobInProgress job = taskTrackerManager.getJob(jobID);
+       Pool pool = poolMgr.getPool(job);
+       PoolSchedulable sched = pool.getSchedulable(taskType);
+-      if (tasksLeft.get(pool) > sched.getFairShare()) {
++      int tasksLeftForPool = tasksLeft.get(pool);
++      if (tasksLeftForPool > sched.getFairShare()) {
+         eventLog.log("PREEMPT", status.getTaskID(),
+             status.getTaskTracker());
+         try {
+@@ -816,6 +817,9 @@ public class FairScheduler extends TaskScheduler {
+           tasksToPreempt--;
+           if (tasksToPreempt == 0)
+             break;
++
++          // reduce tasks left for pool
++          tasksLeft.put(pool, --tasksLeftForPool);
+         } catch (IOException e) {
+           LOG.error("Failed to kill task " + status.getTaskID(), e);
+         }
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+index 06709c8..8b4a4a9 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+@@ -1969,6 +1969,101 @@ public class TestFairScheduler extends TestCase {
+   }
+   
+   /**
++   * This test runs on a 3-node (6-slot) cluster to allow 3 pools with fair
++   * shares equal 2 slots to coexist (which makes the half-fair-share 
++   * of each pool equal to 1 so that fair share preemption can kick in). 
++   * 
++   * The test first starts job 1, which takes 3 map slots and 0 reduce slots,
++   * in pool 1.  We then submit job 2 in pool 2, which takes 3 map slots and zero
++   * reduce slots. Finally, we submit a third job, job 3 in pool3, which gets no slots. 
++   * At this point the fair share of each pool will be 6/3 = 2 slots. 
++   * Pool 1 and 2 will be above their fair share and pool 3 will be below half fair share. 
++   * Therefore pool 3 should preempt tasks from both pool 1 & 2 (after a timeout) but 
++   * pools 1 and 2 shouldn't. 
++   */
++  public void testFairSharePreemptionFromMultiplePools() throws Exception {
++	// Create a bigger cluster than normal (3 tasktrackers instead of 2)
++	setUpCluster(1, 3, false);
++	// Enable preemption in scheduler
++	scheduler.preemptionEnabled = true;
++	// Set up pools file with a fair share preemtion timeout of 1 minute
++	PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
++	out.println("<?xml version=\"1.0\"?>");
++	out.println("<allocations>");
++	out.println("<fairSharePreemptionTimeout>60</fairSharePreemptionTimeout>");
++	out.println("</allocations>");
++	out.close();
++	scheduler.getPoolManager().reloadAllocs();
++	 
++	// Grab pools (they'll be created even though they're not in the alloc file)
++	Pool pool1 = scheduler.getPoolManager().getPool("pool1");
++	Pool pool2 = scheduler.getPoolManager().getPool("pool2");
++	Pool pool3 = scheduler.getPoolManager().getPool("pool3");
++
++	// Submit job 1. We advance time by 100 between each task tracker
++	// assignment stage to ensure that the tasks from job1 on tt3 are the ones
++	// that are deterministically preempted first (being the latest launched
++	// tasks in an over-allocated job).
++	JobInProgress job1 = submitJob(JobStatus.RUNNING, 12, 0, "pool1");
++	advanceTime(100);
++	checkAssignment("tt1", "attempt_test_0001_m_000000_0 on tt1");
++	checkAssignment("tt1", "attempt_test_0001_m_000001_0 on tt1");
++	advanceTime(100);
++	checkAssignment("tt2", "attempt_test_0001_m_000002_0 on tt2");
++	advanceTime(100);
++	    
++	// Submit job 2. It should get the last 3 slots.
++	JobInProgress job2 = submitJob(JobStatus.RUNNING, 10, 0, "pool2");
++	advanceTime(100);
++	checkAssignment("tt2", "attempt_test_0002_m_000000_0 on tt2");
++	checkAssignment("tt3", "attempt_test_0002_m_000001_0 on tt3");
++	advanceTime(100);
++	checkAssignment("tt3", "attempt_test_0002_m_000002_0 on tt3");
++
++	advanceTime(100);
++	    
++	// Submit job 3.
++	JobInProgress job3 = submitJob(JobStatus.RUNNING, 10, 0, "pool3");
++	    
++	// Check that after 59 seconds, neither pool can preempt
++	advanceTime(59000);
++	assertEquals(0, scheduler.tasksToPreempt(pool2.getMapSchedulable(),
++			clock.getTime()));
++	assertEquals(0, scheduler.tasksToPreempt(pool2.getReduceSchedulable(),
++	        clock.getTime()));
++	assertEquals(0, scheduler.tasksToPreempt(pool3.getMapSchedulable(),
++	        clock.getTime()));
++	assertEquals(0, scheduler.tasksToPreempt(pool3.getReduceSchedulable(),
++	        clock.getTime()));
++	    
++	// Wait 2 more seconds, so that job 3 has now been in the system for 61s.
++	// Now pool 3 should be able to preempt 2 tasks (its share of 2 rounded
++	// down to its floor), but pool 1 & 2 shouldn't.
++	advanceTime(2000);
++	assertEquals(0, scheduler.tasksToPreempt(pool2.getMapSchedulable(),
++	        clock.getTime()));
++	assertEquals(0, scheduler.tasksToPreempt(pool2.getReduceSchedulable(),
++	        clock.getTime()));
++	assertEquals(2, scheduler.tasksToPreempt(pool3.getMapSchedulable(),
++	        clock.getTime()));
++	assertEquals(0, scheduler.tasksToPreempt(pool3.getReduceSchedulable(),
++	        clock.getTime()));
++	    
++	// Test that the tasks actually get preempted and we can assign new ones.
++	// This should preempt one task each from pool1 and pool2
++	scheduler.preemptTasksIfNecessary();
++	scheduler.update();
++	assertEquals(2, job2.runningMaps());  
++	assertEquals(2, job1.runningMaps());  
++	checkAssignment("tt2", "attempt_test_0003_m_000000_0 on tt2");
++	checkAssignment("tt3", "attempt_test_0003_m_000001_0 on tt3");
++	assertNull(scheduler.assignTasks(tracker("tt1")));
++	assertNull(scheduler.assignTasks(tracker("tt2")));
++	assertNull(scheduler.assignTasks(tracker("tt3")));
++  }
++  
++  
++  /**
+    * This test submits a job that takes all 4 slots, and then a second job in
+    * a pool that has both a min share of 2 slots with a 60s timeout and a
+    * fair share timeout of 60s. After 60 seconds, this pool will be starved
+-- 
+1.7.0.4
+

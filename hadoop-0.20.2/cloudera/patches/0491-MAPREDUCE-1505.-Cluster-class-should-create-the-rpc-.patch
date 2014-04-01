@@ -1,0 +1,90 @@
+From 48788d6ab1852ee1f47b56ee6f097022c30ec409 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 23 Feb 2010 17:29:15 -0800
+Subject: [PATCH 0491/1179] MAPREDUCE-1505. Cluster class should create the rpc client only when needed
+
+Patch: https://issues.apache.org/jira/secure/attachment/12436628/MAPREDUCE-1505_yhadoop20.patch
+Author: Dick King
+Ref: YDH
+---
+ src/mapred/org/apache/hadoop/mapreduce/Job.java    |   21 +++++++++++++++++++-
+ .../org/apache/hadoop/mapreduce/TestChild.java     |    4 +++
+ 2 files changed, 24 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/Job.java b/src/mapred/org/apache/hadoop/mapreduce/Job.java
+index c78ee0e..868fbce 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/Job.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/Job.java
+@@ -47,7 +47,6 @@ public class Job extends JobContext {
+ 
+   public Job(Configuration conf) throws IOException {
+     super(conf, null);
+-    jobClient = new JobClient((JobConf) getConfiguration());
+   }
+ 
+   public Job(Configuration conf, String jobName) throws IOException {
+@@ -55,11 +54,20 @@ public class Job extends JobContext {
+     setJobName(jobName);
+   }
+ 
++  JobClient getJobClient() {
++    return jobClient;
++  }
++  
+   private void ensureState(JobState state) throws IllegalStateException {
+     if (state != this.state) {
+       throw new IllegalStateException("Job in state "+ this.state + 
+                                       " instead of " + state);
+     }
++
++    if (state == JobState.RUNNING && jobClient == null) {
++      throw new IllegalStateException("Job in state " + JobState.RUNNING + 
++                                      " however jobClient is not initialized!");
++    }
+   }
+ 
+   /**
+@@ -441,12 +449,23 @@ public class Job extends JobContext {
+                               ClassNotFoundException {
+     ensureState(JobState.DEFINE);
+     setUseNewAPI();
++    
++    // Connect to the JobTracker and submit the job
++    connect();
+     info = jobClient.submitJobInternal(conf);
+     super.setJobID(info.getID());
+     state = JobState.RUNNING;
+    }
+   
+   /**
++   * Open a connection to the JobTracker
++   * @throws IOException
++   */
++  private void connect() throws IOException {
++    jobClient = new JobClient((JobConf) getConfiguration());
++  }
++  
++  /**
+    * Submit the job to the cluster and wait for it to finish.
+    * @param verbose print the progress to the user
+    * @return true if the job succeeded
+diff --git a/src/test/org/apache/hadoop/mapreduce/TestChild.java b/src/test/org/apache/hadoop/mapreduce/TestChild.java
+index 49387ae..dce45ca 100644
+--- a/src/test/org/apache/hadoop/mapreduce/TestChild.java
++++ b/src/test/org/apache/hadoop/mapreduce/TestChild.java
+@@ -112,8 +112,12 @@ public class TestChild extends HadoopTestCase {
+                 numMaps, numReds);
+     job.setMapperClass(MyMapper.class);
+     job.setReducerClass(MyReducer.class);
++    assertNull("Job.jobClient already initialized before job-submission!", 
++               job.getJobClient());
+     job.waitForCompletion(true);
+     assertTrue(job.isSuccessful());
++    assertNotNull("Job.jobClient not initialized after job-completion!", 
++                  job.getJobClient());
+ 
+     // Check output directory
+     FileSystem fs = FileSystem.get(conf);
+-- 
+1.7.0.4
+

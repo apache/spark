@@ -1,0 +1,31 @@
+From e4974cce6a221e1e4b8206145746e26c83fd9253 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 11 Mar 2010 20:17:52 -0800
+Subject: [PATCH 0553/1179] HDFS-1038. Fix bug causing NPE in nn_browsedfscontent.jsp when security is disabled
+
+Patch: https://issues.apache.org/jira/secure/attachment/12438570/HDFS-1038-y20.1.patch
+Author: Jitendra Nath Pandey
+Ref: CDH-648
+---
+ src/webapps/hdfs/nn_browsedfscontent.jsp |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
+
+diff --git a/src/webapps/hdfs/nn_browsedfscontent.jsp b/src/webapps/hdfs/nn_browsedfscontent.jsp
+index 3f6f530..0f3d363 100644
+--- a/src/webapps/hdfs/nn_browsedfscontent.jsp
++++ b/src/webapps/hdfs/nn_browsedfscontent.jsp
+@@ -41,7 +41,10 @@
+                             HttpServletResponse resp,
+                             Configuration conf
+                            ) throws IOException, InterruptedException {
+-    String tokenString = getDelegationToken(nn, request, conf);
++    String tokenString = null;
++    if (UserGroupInformation.isSecurityEnabled()) {
++      tokenString = getDelegationToken(nn, request, conf);
++    }
+     FSNamesystem fsn = nn.getNamesystem();
+     String datanode = fsn.randomDataNode();
+     String redirectLocation;
+-- 
+1.7.0.4
+

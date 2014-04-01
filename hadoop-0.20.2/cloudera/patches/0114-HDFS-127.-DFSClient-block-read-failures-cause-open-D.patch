@@ -1,0 +1,68 @@
+From 74e10e4a137b2aa60ab39186115350b5e82464fc Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:11:50 -0800
+Subject: [PATCH 0114/1179] HDFS-127. DFSClient block read failures cause open DFSInputStream to become unusable
+
+Description: We are using some Lucene indexes directly from HDFS and for quite long time we were using Hadoop version 0.15.3.
+
+<p>When tried to upgrade to Hadoop 0.19 - index searches started to fail with exceptions like:<br/>
+2008-11-13 16:50:20,314 WARN <span class="error">&#91;Listener-4&#93;</span> [] DFSClient : DFS Read: java.io.IOException: Could not obtain block: blk_5604690829708125511_15489 file=/usr/collarity/data/urls-new/part-00000/20081110-163426/_0.tis<br/>
+at org.apache.hadoop.hdfs.DFSClient$DFSInputStream.chooseDataNode(DFSClient.java:1708)<br/>
+at org.apache.hadoop.hdfs.DFSClient$DFSInputStream.blockSeekTo(DFSClient.java:1536)<br/>
+at org.apache.hadoop.hdfs.DFSClient$DFSInputStream.read(DFSClient.java:1663)<br/>
+at java.io.DataInputStream.read(DataInputStream.java:132)<br/>
+at org.apache.nutch.indexer.FsDirectory$DfsIndexInput.readInternal(FsDirectory.java:174)<br/>
+at org.apache.lucene.store.BufferedIndexInput.refill(BufferedIndexInput.java:152)<br/>
+at org.apache.lucene.store.BufferedIndexInput.readByte(BufferedIndexInput.java:38)<br/>
+at org.apache.lucene.store.IndexInput.readVInt(IndexInput.java:76)<br/>
+at org.apache.lucene.index.TermBuffer.read(TermBuffer.java:63)<br/>
+at org.apache.lucene.index.SegmentTermEnum.next(SegmentTermEnum.java:131)<br/>
+at org.apache.lucene.index.SegmentTermEnum.scanTo(SegmentTermEnum.java:162)<br/>
+at org.apache.lucene.index.TermInfosReader.scanEnum(TermInfosReader.java:223)<br/>
+at org.apache.lucene.index.TermInfosReader.get(TermInfosReader.java:217)<br/>
+at org.apache.lucene.index.SegmentTermDocs.seek(SegmentTermDocs.java:54) <br/>
+...</p>
+
+<p>The investigation showed that the root of this issue is that we exceeded # of xcievers in the data nodes and that was fixed by changing configuration settings to 2k.<br/>
+However - one thing that bothered me was that even after datanodes recovered from overload and most of client servers had been shut down - we still observed errors in the logs of running servers.<br/>
+Further investigation showed that fix for <a href="http://issues.apache.org/jira/browse/HADOOP-1911" title="infinite loop in dfs -cat command."><del>HADOOP-1911</del></a> introduced another problem - the DFSInputStream instance might become unusable once number of failures over lifetime of this instance exceeds configured threshold.</p>
+
+<p>The fix for this specific issue seems to be trivial - just reset failure counter before reading next block (patch will be attached shortly).</p>
+
+<p>This seems to be also related to HADOOP-3185, but I'm not sure I really understand necessity of keeping track of failed block accesses in the DFS client.</p>
+
+    HADOOP-4681: Also referenced
+
+    This as-yet-uncommitted patch is recommended by HBase people.
+    Applied patch "4681.patch" attached to the JIRA on 2008-11-18.
+
+Reason: Bugfix
+Author: Igor Bolotin
+Ref: UNKNOWN
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 46194c0..69d93ee 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -1633,6 +1633,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       // Connect to best DataNode for desired Block, with potential offset
+       //
+       DatanodeInfo chosenNode = null;
++      failures = 0;
+       while (s == null) {
+         DNAddrPair retval = chooseDataNode(targetBlock);
+         chosenNode = retval.info;
+@@ -1835,6 +1836,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       Socket dn = null;
+       int numAttempts = block.getLocations().length;
+       IOException ioe = null;
++      failures = 0;
+       
+       while (dn == null && numAttempts-- > 0 ) {
+         DNAddrPair retval = chooseDataNode(block);
+-- 
+1.7.0.4
+

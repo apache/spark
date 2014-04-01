@@ -1,0 +1,5 @@
+2006-10-05 Arun C Murthy <arunc@yahoo-inc.com>
+  * Initial version of libhadoop released
+
+2007-01-03 Arun C Murthy <arunc@yahoo-inc.com>
+  * Added support for lzo compression library 

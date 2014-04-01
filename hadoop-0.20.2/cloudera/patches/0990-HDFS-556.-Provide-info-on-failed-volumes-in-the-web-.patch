@@ -1,0 +1,43 @@
+From 5a995e37d6430a6790f27476680da1555fbfc031 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Mon, 9 May 2011 18:06:45 -0700
+Subject: [PATCH 0990/1179] HDFS-556. Provide info on failed volumes in the web ui.
+
+HDFS-457 provided better handling of failed volumes but did not provide a co
+rresponding view of this functionality on the web ui, such as a view of which
+datanodes have failed volumes. This would be a good feature to have.
+
+Reason: Improvement
+Author: Eli Collins
+Ref: CDH-1099
+---
+ src/webapps/hdfs/dfsnodelist.jsp |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/src/webapps/hdfs/dfsnodelist.jsp b/src/webapps/hdfs/dfsnodelist.jsp
+index a8ca0a6..42c1561 100644
+--- a/src/webapps/hdfs/dfsnodelist.jsp
++++ b/src/webapps/hdfs/dfsnodelist.jsp
+@@ -155,7 +155,8 @@ to interact with datanodes.
+ 					ServletUtil.percentageGraph( (int)Double.parseDouble(percentUsed) , 100) +
+ 					"<td align=\"right\" class=\"pcremaining`\">" + percentRemaining +
+ 					"<td title=" + "\"blocks scheduled : " + d.getBlocksScheduled() + 
+-					"\" class=\"blocks\">" + d.numBlocks() + "\n");
++					"\" class=\"blocks\">" + d.numBlocks() +
++					"<td class=\"volfails\">" + d.getVolumeFailures() + "\n");
+ }
+ 
+ 
+@@ -246,7 +247,8 @@ throws IOException {
+ 						NodeHeaderStr("pcused") + "> Used <br>(%) <th " + 
+ 						NodeHeaderStr("pcused") + "> Used <br>(%) <th " +
+ 						NodeHeaderStr("pcremaining") + "> Remaining <br>(%) <th " +
+-						NodeHeaderStr("blocks") + "> Blocks\n" );
++						NodeHeaderStr("blocks") + "> Blocks <th " +
++						NodeHeaderStr("volfails") + "> Failed Volumes\n" );
+ 
+ 				jspHelper.sortNodeList(live, sorterField, sorterOrder);
+ 				for ( int i=0; i < live.size(); i++ ) {
+-- 
+1.7.0.4
+

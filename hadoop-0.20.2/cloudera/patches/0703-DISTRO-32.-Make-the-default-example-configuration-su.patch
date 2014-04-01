@@ -1,0 +1,120 @@
+From 85565602b4cebbd91829a0d434e86edd8990fcbc Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Mon, 20 Sep 2010 22:14:32 -0700
+Subject: [PATCH 0703/1179] DISTRO-32. Make the default example configuration support Hue.
+
+Reason: Improvement
+Author: Eli Collins
+Ref: CDH-1815
+---
+ example-confs/conf.pseudo/hdfs-site.xml            |   18 ++++++++++++++++++
+ example-confs/conf.pseudo/mapred-site.xml          |   12 ++++++++++++
+ .../org/apache/hadoop/util/PluginDispatcher.java   |    7 ++++++-
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    2 +-
+ .../hadoop/hdfs/server/namenode/NameNode.java      |    4 +---
+ 5 files changed, 38 insertions(+), 5 deletions(-)
+
+diff --git a/example-confs/conf.pseudo/hdfs-site.xml b/example-confs/conf.pseudo/hdfs-site.xml
+index bf7a18b..efa7504 100644
+--- a/example-confs/conf.pseudo/hdfs-site.xml
++++ b/example-confs/conf.pseudo/hdfs-site.xml
+@@ -15,4 +15,22 @@
+      <name>dfs.name.dir</name>
+      <value>/var/lib/hadoop-0.20/cache/hadoop/dfs/name</value>
+   </property>
++
++  <!-- Enable Hue Plugins -->
++  <property>
++    <name>dfs.namenode.plugins</name>
++    <value>org.apache.hadoop.thriftfs.NamenodePlugin</value>
++    <description>Comma-separated list of namenode plug-ins to be activated.
++    </description>
++  </property>
++  <property>
++    <name>dfs.datanode.plugins</name>
++    <value>org.apache.hadoop.thriftfs.DatanodePlugin</value>
++    <description>Comma-separated list of datanode plug-ins to be activated.
++    </description>
++  </property>
++  <property>
++    <name>dfs.thrift.address</name>
++    <value>0.0.0.0:9090</value>
++  </property>
+ </configuration>
+diff --git a/example-confs/conf.pseudo/mapred-site.xml b/example-confs/conf.pseudo/mapred-site.xml
+index 4419229..5535a6d 100644
+--- a/example-confs/conf.pseudo/mapred-site.xml
++++ b/example-confs/conf.pseudo/mapred-site.xml
+@@ -6,4 +6,16 @@
+     <name>mapred.job.tracker</name>
+     <value>localhost:8021</value>
+   </property>
++
++  <!-- Enable Hue plugins -->
++  <property>
++    <name>mapred.jobtracker.plugins</name>
++    <value>org.apache.hadoop.thriftfs.ThriftJobTrackerPlugin</value>
++    <description>Comma-separated list of jobtracker plug-ins to be activated.
++    </description>
++  </property>
++  <property>
++    <name>jobtracker.thrift.address</name>
++    <value>0.0.0.0:9290</value>
++  </property>
+ </configuration>
+diff --git a/src/core/org/apache/hadoop/util/PluginDispatcher.java b/src/core/org/apache/hadoop/util/PluginDispatcher.java
+index 8dbe171..abbd8ac 100644
+--- a/src/core/org/apache/hadoop/util/PluginDispatcher.java
++++ b/src/core/org/apache/hadoop/util/PluginDispatcher.java
+@@ -54,7 +54,12 @@ public class PluginDispatcher<T extends ServicePlugin> {
+    */
+   public static <X extends ServicePlugin> PluginDispatcher<X> createFromConfiguration(
+     Configuration conf, String key, Class<X> clazz) {
+-    List<X> plugins = conf.getInstances(key, clazz);
++    List<X> plugins = new ArrayList<X>();
++    try {
++      plugins.addAll(conf.getInstances(key, clazz));
++    } catch (Throwable t) {
++      LOG.warn("Unable to load "+key+" plugins");
++    }
+     return new PluginDispatcher<X>(plugins);
+   }
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 9042200..6d1bc8c 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -464,7 +464,7 @@ public class DataNode extends Configured
+     LOG.info("dnRegistration = " + dnRegistration);
+     
+     pluginDispatcher = PluginDispatcher.createFromConfiguration(
+-      conf, "dfs.datanode.plugins", DatanodePlugin.class);
++        conf, DFSConfigKeys.DFS_DATANODE_PLUGINS_KEY, DatanodePlugin.class);
+     pluginDispatcher.dispatchStart(this);
+   }
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 5427f9c..268a528 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -46,8 +46,6 @@ import org.apache.hadoop.ipc.*;
+ import org.apache.hadoop.ipc.RPC.Server;
+ import org.apache.hadoop.conf.*;
+ import org.apache.hadoop.util.PluginDispatcher;
+-import org.apache.hadoop.util.ReflectionUtils;
+-import org.apache.hadoop.util.ServicePlugin;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.net.NetworkTopology;
+@@ -243,7 +241,7 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     startTrashEmptier(conf);
+     
+     pluginDispatcher = PluginDispatcher.createFromConfiguration(
+-      conf, "dfs.namenode.plugins", NamenodePlugin.class);
++        conf, DFSConfigKeys.DFS_NAMENODE_PLUGINS_KEY, NamenodePlugin.class);
+     pluginDispatcher.dispatchStart(this);
+   }
+ 
+-- 
+1.7.0.4
+

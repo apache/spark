@@ -1,0 +1,88 @@
+From 5bebf947cd534ee350844c3626d11dac315372ed Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 13 Apr 2010 10:39:44 -0700
+Subject: [PATCH 0603/1179] MAPREDUCE-1680. Add a metric to track number of heartbeats processed by the JobTracker
+
+Patch: https://issues.apache.org/jira/secure/attachment/12441621/mapreduce-1680--2010-04-08.patch.
+Author: Dick King
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobTracker.java       |    3 +++
+ .../hadoop/mapred/JobTrackerInstrumentation.java   |    4 +++-
+ .../hadoop/mapred/JobTrackerMetricsInst.java       |   13 +++++++++++++
+ 3 files changed, 19 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 9899e89..51b8c64 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -3417,6 +3417,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   private synchronized boolean processHeartbeat(
+                                  TaskTrackerStatus trackerStatus, 
+                                  boolean initialContact) {
++    
++    getInstrumentation().heartbeat();
++
+     String trackerName = trackerStatus.getTrackerName();
+ 
+     synchronized (taskTrackers) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTrackerInstrumentation.java b/src/mapred/org/apache/hadoop/mapred/JobTrackerInstrumentation.java
+index 1d7a9b8..64fbd29 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTrackerInstrumentation.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTrackerInstrumentation.java
+@@ -158,6 +158,8 @@ class JobTrackerInstrumentation {
+   { }
+ 
+   public void setDecommissionedTrackers(int trackers)
+-  { }  
++  { }   
+ 
++  public void heartbeat() {
++  }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java b/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java
+index ec54bcc..2a0af23 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java
+@@ -63,6 +63,10 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+   private int numTrackers = 0;
+   private int numTrackersBlackListed = 0;
+   private int numTrackersDecommissioned = 0;
++
++  // long, because 2^31 could well be only about a month's worth of
++  // heartbeats, with reasonable assumptions and JobTracker improvements.
++  private long numHeartbeats = 0L;
+   
+   public JobTrackerMetricsInst(JobTracker tracker, JobConf conf) {
+     super(tracker, conf);
+@@ -120,6 +124,8 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+       metricsRecord.setMetric("trackers_decommissioned", 
+           numTrackersDecommissioned);
+ 
++      metricsRecord.incrMetric("heartbeats", numHeartbeats);
++
+       numMapTasksLaunched = 0;
+       numMapTasksCompleted = 0;
+       numMapTasksFailed = 0;
+@@ -152,6 +158,8 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+ 
+       numTrackers = 0;
+       numTrackersBlackListed = 0;
++
++      numHeartbeats = 0L;
+     }
+     metricsRecord.update();
+   }
+@@ -399,4 +407,9 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+   {
+     numTrackersDecommissioned = trackers;
+   }  
++
++  @Override
++  public synchronized void heartbeat() {
++    ++numHeartbeats;
++  }
+ }
+-- 
+1.7.0.4
+

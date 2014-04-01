@@ -1,0 +1,81 @@
+From cab178d48ab27c74a44009b9d37e686580172794 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 3 Mar 2010 18:50:32 -0800
+Subject: [PATCH 0531/1179] MAPREDUCE-1550. UGI.doAs should not be used for getting the history file of jobs
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437835/1550-2.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12437870/1550-2.1.patch
+Author: Devaraj Das
+Ref: CDH-648
+---
+ src/mapred/org/apache/hadoop/mapred/JSPUtil.java |   25 +++++++++------------
+ 1 files changed, 11 insertions(+), 14 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+index 72e0f10..e0f7081 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
++++ b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+@@ -462,7 +462,7 @@ class JSPUtil {
+    * @throws IOException
+    */
+   static JobInfo getJobInfo(Path logFile, FileSystem fs,
+-      JobTracker jobTracker) throws IOException {
++      JobTracker jobTracker, String user) throws IOException {
+     String jobid = getJobID(logFile.getName());
+     JobInfo jobInfo = null;
+     synchronized(jobHistoryCache) {
+@@ -472,7 +472,7 @@ class JSPUtil {
+         LOG.info("Loading Job History file "+jobid + ".   Cache size is " +
+             jobHistoryCache.size());
+         DefaultJobHistoryParser.parseJobTasks(logFile.toUri().getPath(),
+-            jobInfo, logFile.getFileSystem(jobTracker.conf));
++            jobInfo, fs);
+       }
+       jobHistoryCache.put(jobid, jobInfo);
+       int CACHE_SIZE = 
+@@ -486,8 +486,14 @@ class JSPUtil {
+       }
+     }
+ 
++    UserGroupInformation currentUser;
++    if (user == null) {
++      currentUser = UserGroupInformation.getCurrentUser();
++    } else {
++      currentUser = UserGroupInformation.createRemoteUser(user);
++    }
+     jobTracker.getJobACLsManager().checkAccess(JobID.forName(jobid),
+-        UserGroupInformation.getCurrentUser(), JobACL.VIEW_JOB,
++        currentUser, JobACL.VIEW_JOB,
+         jobInfo.get(Keys.USER), jobInfo.getJobACLs().get(JobACL.VIEW_JOB));
+     return jobInfo;
+   }
+@@ -515,16 +521,7 @@ class JSPUtil {
+     JobInfo job = null;
+     if (user != null) {
+       try {
+-        final UserGroupInformation ugi =
+-            UserGroupInformation.createRemoteUser(user);
+-        job =
+-            ugi.doAs(new PrivilegedExceptionAction<JobHistory.JobInfo>() {
+-              public JobInfo run() throws IOException {
+-                // checks job view permission
+-                JobInfo jobInfo = JSPUtil.getJobInfo(logFile, fs, jobTracker);
+-                return jobInfo;
+-              }
+-            });
++        job = JSPUtil.getJobInfo(logFile, fs, jobTracker, user);
+       } catch (AccessControlException e) {
+         String errMsg =
+             String.format(
+@@ -538,7 +535,7 @@ class JSPUtil {
+       }
+     } else {
+       // no authorization needed
+-      job = JSPUtil.getJobInfo(logFile, fs, jobTracker);
++      job = JSPUtil.getJobInfo(logFile, fs, jobTracker, user);
+     }
+     return job;
+   }
+-- 
+1.7.0.4
+

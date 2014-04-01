@@ -1,0 +1,62 @@
+From e7e9812fa7a6a256652f2f6bbb269334f883c53b Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:14:43 -0800
+Subject: [PATCH 0117/1179] CLOUDERA-BUILD. Package sqoop docs w/o requiring asciidoc
+
+Author: Chad Metcalf
+Ref: UNKNOWN
+---
+ cloudera/do-release-build  |    9 +++++++++
+ cloudera/install_hadoop.sh |   12 +++++++++---
+ 2 files changed, 18 insertions(+), 3 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index 9f40293..90ee287 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -77,3 +77,12 @@ JAVA_HOME=$JAVA64_HOME \
+   -Dforrest.home=$FORREST_HOME \
+   -propertyfile cloudera/build.properties \
+   compile-core-native compile-c++ compile-c++-examples tar
++
++cd $RELEASE_DIR/src/contrib/sqoop
++
++JAVA_HOME=$JAVA64_HOME \
++  ant \
++  -Djava5.home=$JAVA5_HOME \
++  -Dforrest.home=$FORREST_HOME \
++  -propertyfile cloudera/build.properties \
++  doc
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index e8981cc..687b606 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -151,8 +151,11 @@ mkdir -p $DOC_DIR
+ cp -r ${BUILD_DIR}/../../docs/* $DOC_DIR
+ 
+ mkdir -p $DOC_DIR/sqoop
+-cp ${HADOOP_SRC_DIR}/contrib/sqoop/doc/SqoopUserGuide.html $DOC_DIR/sqoop
+-
++# TODO(csm): This .. is a hack because for some odd reason the sqoop docs
++# get built in build/contrib vs build/hadoop-.../contrib. We'll need to
++# fix this
++cp ${BUILD_DIR}/../contrib/sqoop/doc/SqoopUserGuide.html $DOC_DIR/sqoop
++               
+ # Install source
+ mkdir -p $SRC_DIR
+ cp -a ${HADOOP_SRC_DIR}/* $SRC_DIR/
+@@ -180,7 +183,10 @@ done
+ # man pages
+ mkdir -p $MAN_DIR/man1
+ cp ${CLOUDERA_SOURCE_DIR}/hadoop-$APACHE_BRANCH.1.gz $MAN_DIR/man1/
+-gzip -c ${HADOOP_SRC_DIR}/contrib/sqoop/doc/sqoop.1 > $MAN_DIR/man1/sqoop-$APACHE_BRANCH.1.gz
++# TODO(csm): This .. is a hack because for some odd reason the sqoop docs
++# get built in build/contrib vs build/hadoop-.../contrib. We'll need to
++# fix this
++cp ${BUILD_DIR}/../contrib/sqoop/doc/sqoop.1.gz $MAN_DIR/man1/sqoop-$APACHE_BRANCH.1.gz
+ 
+ ############################################################
+ # ARCH DEPENDENT STUFF
+-- 
+1.7.0.4
+

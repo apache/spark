@@ -1,0 +1,377 @@
+From 14c524cb4f78e52ee1d916fa92dfd2665a3a2527 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 7 Apr 2010 09:31:55 -0700
+Subject: [PATCH 0598/1179] HADOOP-6674. Turn off SASL checksums for RPCs. (jitendra via omalley)
+
+Patch: https://issues.apache.org/jira/secure/attachment/12442640/HADOOP-6674-y20.1.bugfix.patch
+Author: Jitendra Nath Pandey
+Reason: Performance Improvement in Secure RPC
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/ipc/RPC.java            |    4 ++
+ src/core/org/apache/hadoop/ipc/Server.java         |   42 ++++++++++++++------
+ .../apache/hadoop/security/SaslInputStream.java    |   20 +++++++++
+ .../apache/hadoop/security/SaslOutputStream.java   |   37 +++++++++++++++--
+ .../org/apache/hadoop/security/SaslRpcServer.java  |   40 ++++++++++++++++---
+ 5 files changed, 121 insertions(+), 22 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/RPC.java b/src/core/org/apache/hadoop/ipc/RPC.java
+index 50b3db9..bda3f9f 100644
+--- a/src/core/org/apache/hadoop/ipc/RPC.java
++++ b/src/core/org/apache/hadoop/ipc/RPC.java
+@@ -37,6 +37,7 @@ import javax.net.SocketFactory;
+ import org.apache.commons.logging.*;
+ 
+ import org.apache.hadoop.io.*;
++import org.apache.hadoop.security.SaslRpcServer;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.SecretManager;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+@@ -357,6 +358,9 @@ public class RPC {
+       long clientVersion, InetSocketAddress addr, UserGroupInformation ticket,
+       Configuration conf, SocketFactory factory) throws IOException {    
+ 
++    if (UserGroupInformation.isSecurityEnabled()) {
++      SaslRpcServer.init(conf);
++    }
+     VersionedProtocol proxy =
+         (VersionedProtocol) Proxy.newProxyInstance(
+             protocol.getClassLoader(), new Class[] { protocol },
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 98c5a6e..57810c3 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -779,6 +779,8 @@ public abstract class Server {
+     private final Call saslCall = new Call(SASL_CALLID, null, this);
+     private final ByteArrayOutputStream saslResponse = new ByteArrayOutputStream();
+     
++    private boolean useWrap = false;
++    
+     public Connection(SelectionKey key, SocketChannel channel, 
+                       long lastContact) {
+       this.channel = channel;
+@@ -943,10 +945,10 @@ public abstract class Server {
+               null);
+         }
+         if (saslServer.isComplete()) {
+-          if (LOG.isDebugEnabled()) {
+-            LOG.debug("SASL server context established. Negotiated QoP is "
+-                + saslServer.getNegotiatedProperty(Sasl.QOP));
+-          }
++          LOG.info("SASL server context established. Negotiated QoP is "
++              + saslServer.getNegotiatedProperty(Sasl.QOP));
++          String qop = (String) saslServer.getNegotiatedProperty(Sasl.QOP);
++          useWrap = qop != null && !"auth".equalsIgnoreCase(qop);
+           user = getAuthorizedUgi(saslServer.getAuthorizationID());
+           LOG.info("SASL server successfully authenticated client: " + user);
+           rpcMetrics.authenticationSuccesses.inc();
+@@ -957,9 +959,14 @@ public abstract class Server {
+         if (LOG.isDebugEnabled())
+           LOG.debug("Have read input token of size " + saslToken.length
+               + " for processing by saslServer.unwrap()");
+-        byte[] plaintextData = saslServer
+-            .unwrap(saslToken, 0, saslToken.length);
+-        processUnwrappedData(plaintextData);
++        
++        if (!useWrap) {
++          processOneRpc(saslToken);
++        } else {
++          byte[] plaintextData = saslServer.unwrap(saslToken, 0,
++              saslToken.length);
++          processUnwrappedData(plaintextData);
++        }
+       }
+     }
+     
+@@ -1055,9 +1062,15 @@ public abstract class Server {
+           dataLengthBuffer.flip();
+           dataLength = dataLengthBuffer.getInt();
+        
+-          if (!useSasl && dataLength == Client.PING_CALL_ID) {
+-            dataLengthBuffer.clear();
+-            return 0;  //ping message
++          if (dataLength == Client.PING_CALL_ID) {
++            if(!useWrap) { //covers the !useSasl too
++              dataLengthBuffer.clear();
++              return 0;  //ping message
++            }
++          }
++          if (dataLength < 0) {
++            LOG.warn("Unexpected data length " + dataLength + "!! from " + 
++                getHostAddress());
+           }
+           data = ByteBuffer.allocate(dataLength);
+         }
+@@ -1382,9 +1395,12 @@ public abstract class Server {
+                             Integer.toString(this.port));
+     this.tcpNoDelay = conf.getBoolean("ipc.server.tcpnodelay", false);
+ 
+-
+     // Create the responder here
+     responder = new Responder();
++    
++    if (isSecurityEnabled) {
++      SaslRpcServer.init(conf);
++    }
+   }
+ 
+   private void closeConnection(Connection connection) {
+@@ -1424,7 +1440,9 @@ public abstract class Server {
+       WritableUtils.writeString(out, errorClass);
+       WritableUtils.writeString(out, error);
+     }
+-    wrapWithSasl(response, call);
++    if (call.connection.useWrap) {
++      wrapWithSasl(response, call);
++    }
+     call.setResponse(ByteBuffer.wrap(response.toByteArray()));
+   }
+   
+diff --git a/src/core/org/apache/hadoop/security/SaslInputStream.java b/src/core/org/apache/hadoop/security/SaslInputStream.java
+index 60ddefb..5d2e21a 100644
+--- a/src/core/org/apache/hadoop/security/SaslInputStream.java
++++ b/src/core/org/apache/hadoop/security/SaslInputStream.java
+@@ -23,6 +23,7 @@ import java.io.EOFException;
+ import java.io.InputStream;
+ import java.io.IOException;
+ 
++import javax.security.sasl.Sasl;
+ import javax.security.sasl.SaslClient;
+ import javax.security.sasl.SaslException;
+ import javax.security.sasl.SaslServer;
+@@ -41,6 +42,9 @@ public class SaslInputStream extends InputStream {
+   public static final Log LOG = LogFactory.getLog(SaslInputStream.class);
+ 
+   private final DataInputStream inStream;
++  /** Should we wrap the communication channel? */
++  private final boolean useWrap;
++  
+   /*
+    * data read from the underlying input stream before being processed by SASL
+    */
+@@ -141,6 +145,8 @@ public class SaslInputStream extends InputStream {
+     this.inStream = new DataInputStream(inStream);
+     this.saslServer = saslServer;
+     this.saslClient = null;
++    String qop = (String) saslServer.getNegotiatedProperty(Sasl.QOP);
++    this.useWrap = qop != null && !"auth".equalsIgnoreCase(qop);
+   }
+ 
+   /**
+@@ -157,6 +163,8 @@ public class SaslInputStream extends InputStream {
+     this.inStream = new DataInputStream(inStream);
+     this.saslServer = null;
+     this.saslClient = saslClient;
++    String qop = (String) saslClient.getNegotiatedProperty(Sasl.QOP);
++    this.useWrap = qop != null && !"auth".equalsIgnoreCase(qop);
+   }
+ 
+   /**
+@@ -174,6 +182,9 @@ public class SaslInputStream extends InputStream {
+    *              if an I/O error occurs.
+    */
+   public int read() throws IOException {
++    if (!useWrap) {
++      return inStream.read();
++    }
+     if (ostart >= ofinish) {
+       // we loop for new data as we are blocking
+       int i = 0;
+@@ -224,6 +235,9 @@ public class SaslInputStream extends InputStream {
+    *              if an I/O error occurs.
+    */
+   public int read(byte[] b, int off, int len) throws IOException {
++    if (!useWrap) {
++      return inStream.read(b, off, len);
++    }
+     if (ostart >= ofinish) {
+       // we loop for new data as we are blocking
+       int i = 0;
+@@ -265,6 +279,9 @@ public class SaslInputStream extends InputStream {
+    *              if an I/O error occurs.
+    */
+   public long skip(long n) throws IOException {
++    if (!useWrap) {
++      return inStream.skip(n);
++    }
+     int available = ofinish - ostart;
+     if (n > available) {
+       n = available;
+@@ -288,6 +305,9 @@ public class SaslInputStream extends InputStream {
+    *              if an I/O error occurs.
+    */
+   public int available() throws IOException {
++    if (!useWrap) {
++      return inStream.available();
++    }
+     return (ofinish - ostart);
+   }
+ 
+diff --git a/src/core/org/apache/hadoop/security/SaslOutputStream.java b/src/core/org/apache/hadoop/security/SaslOutputStream.java
+index 2f2807b..58fe09d 100644
+--- a/src/core/org/apache/hadoop/security/SaslOutputStream.java
++++ b/src/core/org/apache/hadoop/security/SaslOutputStream.java
+@@ -18,10 +18,15 @@
+ 
+ package org.apache.hadoop.security;
+ 
++import java.io.BufferedOutputStream;
++import java.io.ByteArrayInputStream;
++import java.io.ByteArrayOutputStream;
++import java.io.DataInputStream;
+ import java.io.DataOutputStream;
+ import java.io.IOException;
+ import java.io.OutputStream;
+ 
++import javax.security.sasl.Sasl;
+ import javax.security.sasl.SaslClient;
+ import javax.security.sasl.SaslException;
+ import javax.security.sasl.SaslServer;
+@@ -34,7 +39,7 @@ import javax.security.sasl.SaslServer;
+  */
+ public class SaslOutputStream extends OutputStream {
+ 
+-  private final DataOutputStream outStream;
++  private final OutputStream outStream;
+   // processed data ready to be written out
+   private byte[] saslToken;
+ 
+@@ -42,6 +47,7 @@ public class SaslOutputStream extends OutputStream {
+   private final SaslServer saslServer;
+   // buffer holding one byte of incoming data
+   private final byte[] ibuffer = new byte[1];
++  private final boolean useWrap;
+ 
+   /**
+    * Constructs a SASLOutputStream from an OutputStream and a SaslServer <br>
+@@ -54,9 +60,15 @@ public class SaslOutputStream extends OutputStream {
+    *          an initialized SaslServer object
+    */
+   public SaslOutputStream(OutputStream outStream, SaslServer saslServer) {
+-    this.outStream = new DataOutputStream(outStream);
+     this.saslServer = saslServer;
+     this.saslClient = null;
++    String qop = (String) saslServer.getNegotiatedProperty(Sasl.QOP);
++    this.useWrap = qop != null && !"auth".equalsIgnoreCase(qop);
++    if (useWrap) {
++      this.outStream = new BufferedOutputStream(outStream, 64*1024);
++    } else {
++      this.outStream = outStream;
++    }
+   }
+ 
+   /**
+@@ -70,9 +82,15 @@ public class SaslOutputStream extends OutputStream {
+    *          an initialized SaslClient object
+    */
+   public SaslOutputStream(OutputStream outStream, SaslClient saslClient) {
+-    this.outStream = new DataOutputStream(outStream);
+     this.saslServer = null;
+     this.saslClient = saslClient;
++    String qop = (String) saslClient.getNegotiatedProperty(Sasl.QOP);
++    this.useWrap = qop != null && !"auth".equalsIgnoreCase(qop);
++    if (useWrap) {
++      this.outStream = new BufferedOutputStream(outStream, 64*1024);
++    } else {
++      this.outStream = outStream;
++    }
+   }
+ 
+   /**
+@@ -100,6 +118,10 @@ public class SaslOutputStream extends OutputStream {
+    *              if an I/O error occurs.
+    */
+   public void write(int b) throws IOException {
++    if (!useWrap) {
++      outStream.write(b);
++      return;
++    }
+     ibuffer[0] = (byte) b;
+     write(ibuffer, 0, 1);
+   }
+@@ -137,6 +159,10 @@ public class SaslOutputStream extends OutputStream {
+    *              if an I/O error occurs.
+    */
+   public void write(byte[] inBuf, int off, int len) throws IOException {
++    if (!useWrap) {
++      outStream.write(inBuf, off, len);
++      return;
++    }
+     try {
+       if (saslServer != null) { // using saslServer
+         saslToken = saslServer.wrap(inBuf, off, len);
+@@ -151,7 +177,10 @@ public class SaslOutputStream extends OutputStream {
+       throw se;
+     }
+     if (saslToken != null) {
+-      outStream.writeInt(saslToken.length);
++      ByteArrayOutputStream byteOut = new ByteArrayOutputStream();
++      DataOutputStream dout = new DataOutputStream(byteOut);
++      dout.writeInt(saslToken.length);
++      outStream.write(byteOut.toByteArray());
+       outStream.write(saslToken, 0, saslToken.length);
+       saslToken = null;
+     }
+diff --git a/src/core/org/apache/hadoop/security/SaslRpcServer.java b/src/core/org/apache/hadoop/security/SaslRpcServer.java
+index b349519..3d420b8 100644
+--- a/src/core/org/apache/hadoop/security/SaslRpcServer.java
++++ b/src/core/org/apache/hadoop/security/SaslRpcServer.java
+@@ -38,6 +38,7 @@ import javax.security.sasl.Sasl;
+ import org.apache.commons.codec.binary.Base64;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.ipc.Server;
+ import org.apache.hadoop.security.token.SecretManager;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+@@ -52,14 +53,41 @@ public class SaslRpcServer {
+   public static final String SASL_DEFAULT_REALM = "default";
+   public static final Map<String, String> SASL_PROPS = 
+       new TreeMap<String, String>();
+-  static {
+-    // Request authentication plus integrity protection
+-    SASL_PROPS.put(Sasl.QOP, "auth-int");
+-    // Request mutual authentication
+-    SASL_PROPS.put(Sasl.SERVER_AUTH, "true");
+-  }
++
+   public static final int SWITCH_TO_SIMPLE_AUTH = -88;
+ 
++  public static enum QualityOfProtection {
++    AUTHENTICATION("auth"),
++    INTEGRITY("auth-int"),
++    PRIVACY("auth-conf");
++    
++    public final String saslQop;
++    
++    private QualityOfProtection(String saslQop) {
++      this.saslQop = saslQop;
++    }
++    
++    public String getSaslQop() {
++      return saslQop;
++    }
++  }
++  
++  public static void init(Configuration conf) {
++    QualityOfProtection saslQOP = QualityOfProtection.AUTHENTICATION;
++    String rpcProtection = conf.get("hadoop.rpc.protection",
++        QualityOfProtection.AUTHENTICATION.name().toLowerCase());
++    if (QualityOfProtection.INTEGRITY.name().toLowerCase()
++        .equals(rpcProtection)) {
++      saslQOP = QualityOfProtection.INTEGRITY;
++    } else if (QualityOfProtection.PRIVACY.name().toLowerCase().equals(
++        rpcProtection)) {
++      saslQOP = QualityOfProtection.PRIVACY;
++    }
++    
++    SASL_PROPS.put(Sasl.QOP, saslQOP.getSaslQop());
++    SASL_PROPS.put(Sasl.SERVER_AUTH, "true");
++  }
++  
+   static String encodeIdentifier(byte[] identifier) {
+     return new String(Base64.encodeBase64(identifier));
+   }
+-- 
+1.7.0.4
+

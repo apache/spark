@@ -1,0 +1,163 @@
+From 978164b1b4e1ed07f236b21c6cc757b3a96f3ec0 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 15 Mar 2011 15:01:08 -0700
+Subject: [PATCH 0938/1179] MAPREDUCE-2364. Don't hold the rjob lock while localizing resources.
+
+Reason: TT deadlock, patch from branch 0.20-security-203
+Author: Devaraj Das
+Ref: CDH-2772
+---
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   86 ++++++++++++++++----
+ 1 files changed, 69 insertions(+), 17 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index e415d93..ab0cf70 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -408,6 +408,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+           while (true) {
+             try {
+               TaskTrackerAction action = tasksToCleanup.take();
++              checkJobStatusAndWait(action);
+               if (action instanceof KillJobAction) {
+                 purgeJob((KillJobAction) action);
+               } else if (action instanceof KillTaskAction) {
+@@ -431,6 +432,29 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     LOG.info("Received KillTaskAction for task: " + killAction.getTaskID());
+     purgeTask(tip, false);
+   }
++  
++  private void checkJobStatusAndWait(TaskTrackerAction action) 
++  throws InterruptedException {
++    JobID jobId = null;
++    if (action instanceof KillJobAction) {
++      jobId = ((KillJobAction)action).getJobID();
++    } else if (action instanceof KillTaskAction) {
++      jobId = ((KillTaskAction)action).getTaskID().getJobID();
++    } else {
++      return;
++    }
++    RunningJob rjob = null;
++    synchronized (runningJobs) {
++      rjob = runningJobs.get(jobId);
++    }
++    if (rjob != null) {
++      synchronized (rjob) {
++        while (rjob.localizing) {
++          rjob.wait();
++        }
++      }
++    }
++  }
+ 
+   public TaskController getTaskController() {
+     return taskController;
+@@ -1049,8 +1073,18 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     JobID jobId = t.getJobID();
+     RunningJob rjob = addTaskToJob(jobId, tip);
+     InetSocketAddress ttAddr = getTaskTrackerReportAddress();
+-
+-    synchronized (rjob) {
++    try {
++      synchronized (rjob) {
++        if (!rjob.localized) {
++          while (rjob.localizing) {
++            rjob.wait();
++          }
++          if (!rjob.localized) {
++            //this thread is localizing the job
++            rjob.localizing = true;
++          }
++        }
++      }
+       if (!rjob.localized) {
+         Path localJobConfPath = initializeJob(t, rjob, ttAddr);
+         JobConf localJobConf = new JobConf(localJobConfPath);
+@@ -1061,12 +1095,21 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+         resetNumTasksPerJvm(localJobConf);
+         //set the base jobconf path in rjob; all tasks will use
+         //this as the base path when they run
+-        rjob.localizedJobConf = localJobConfPath;
+-        rjob.jobConf = localJobConf;  
+-        rjob.keepJobFiles = ((localJobConf.getKeepTaskFilesPattern() != null) ||
+-                             localJobConf.getKeepFailedTaskFiles());
+- 
+-        rjob.localized = true;
++        synchronized (rjob) {
++          rjob.localizedJobConf = localJobConfPath;
++          rjob.jobConf = localJobConf;  
++          rjob.keepJobFiles = ((localJobConf.getKeepTaskFilesPattern() != null) ||
++              localJobConf.getKeepFailedTaskFiles());
++
++          rjob.localized = true;
++        }
++      } 
++    } finally {
++      synchronized (rjob) {
++        if (rjob.localizing) {
++          rjob.localizing = false;
++          rjob.notifyAll();
++        }
+       }
+     }
+     synchronized (runningJobs) {
+@@ -1103,15 +1146,17 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+ 
+     // save local copy of JobToken file
+     final String localJobTokenFile = localizeJobTokenFile(t.getUser(), jobId);
+-    rjob.ugi = UserGroupInformation.createRemoteUser(t.getUser());
++    synchronized (rjob) {
++      rjob.ugi = UserGroupInformation.createRemoteUser(t.getUser());
+ 
+-    Credentials ts = TokenCache.loadTokens(localJobTokenFile, conf);
+-    Token<JobTokenIdentifier> jt = TokenCache.getJobToken(ts);
+-    if (jt != null) { //could be null in the case of some unit tests
+-      getJobTokenSecretManager().addTokenForJob(jobId.toString(), jt);
+-    }
+-    for (Token<? extends TokenIdentifier> token : ts.getAllTokens()) {
+-      rjob.ugi.addToken(token);
++      Credentials ts = TokenCache.loadTokens(localJobTokenFile, conf);
++      Token<JobTokenIdentifier> jt = TokenCache.getJobToken(ts);
++      if (jt != null) { //could be null in the case of some unit tests
++        getJobTokenSecretManager().addTokenForJob(jobId.toString(), jt);
++      }
++      for (Token<? extends TokenIdentifier> token : ts.getAllTokens()) {
++        rjob.ugi.addToken(token);
++      }
+     }
+ 
+     FileSystem userFs = getFS(jobFile, jobId, conf);
+@@ -2452,7 +2497,9 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+         }
+         setTaskRunner(task.createRunner(TaskTracker.this, this, rjob));
+         this.runner.start();
+-        this.taskStatus.setStartTime(System.currentTimeMillis());
++        long now = System.currentTimeMillis();
++        this.taskStatus.setStartTime(now);
++        this.lastProgressReport = now;
+       } else {
+         LOG.info("Not launching task: " + task.getTaskID() + 
+             " since it's state is " + this.taskStatus.getRunState());
+@@ -3298,7 +3345,11 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     private Path localizedJobConf;
+     // keep this for later use
+     volatile Set<TaskInProgress> tasks;
++    //the 'localizing' and 'localized' fields have the following
++    //state transitions (first entry is for 'localizing')
++    //{false,false} -> {true,false} -> {false,true}
+     volatile boolean localized;
++    boolean localizing;
+     boolean keepJobFiles;
+     UserGroupInformation ugi;
+     FetchStatus f;
+@@ -3307,6 +3358,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     RunningJob(JobID jobid) {
+       this.jobid = jobid;
+       localized = false;
++      localizing = false;
+       tasks = new HashSet<TaskInProgress>();
+       keepJobFiles = false;
+     }
+-- 
+1.7.0.4
+

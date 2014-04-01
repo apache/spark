@@ -1,0 +1,112 @@
+From dd2ce99bb706ba8e7771b3382de7af687ae8467f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 16 Feb 2010 12:51:39 -0800
+Subject: [PATCH 0474/1179] HDFS-111. UnderReplicationBlocks should use generic types
+
+Patch: https://issues.apache.org/jira/secure/attachment/12436027/1026-bp20-bugfix.patch
+Author: Devaraj Das
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/ReduceTask.java       |   56 ++++++++++++--------
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    3 +-
+ 2 files changed, 36 insertions(+), 23 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/ReduceTask.java b/src/mapred/org/apache/hadoop/mapred/ReduceTask.java
+index 1b30bc6..459c1e8 100644
+--- a/src/mapred/org/apache/hadoop/mapred/ReduceTask.java
++++ b/src/mapred/org/apache/hadoop/mapred/ReduceTask.java
+@@ -1385,27 +1385,8 @@ class ReduceTask extends Task {
+         // Connect
+         URL url = mapOutputLoc.getOutputLocation();
+         URLConnection connection = url.openConnection();
+-
+-        // generate hash of the url
+-        String msgToEncode = SecureShuffleUtils.buildMsgFrom(url);
+-        String encHash = SecureShuffleUtils.hashFromString(msgToEncode, jobTokenSecret);
+-
+-        // put url hash into http header
+-        connection.addRequestProperty(
+-            SecureShuffleUtils.HTTP_HEADER_URL_HASH, encHash);
+         
+-        InputStream input = getInputStream(connection, shuffleConnectionTimeout,
+-                                           shuffleReadTimeout); 
+-
+-        // get the replyHash which is HMac of the encHash we sent to the server
+-        String replyHash = connection.getHeaderField(SecureShuffleUtils.HTTP_HEADER_REPLY_URL_HASH);
+-        if(replyHash==null) {
+-          throw new IOException("security validation of TT Map output failed");
+-        }       
+-        LOG.debug("url="+msgToEncode+";encHash="+encHash+";replyHash="+replyHash);
+-        // verify that replyHash is HMac of encHash
+-        SecureShuffleUtils.verifyReply(replyHash, encHash, jobTokenSecret);
+-        LOG.info("for url="+msgToEncode+" sent hash and receievd reply");
++        InputStream input = setupSecureConnection(mapOutputLoc, connection);
+  
+         // Validate header from map output
+         TaskAttemptID mapId = null;
+@@ -1477,6 +1458,38 @@ class ReduceTask extends Task {
+             
+         return mapOutput;
+       }
++      
++      private InputStream setupSecureConnection(MapOutputLocation mapOutputLoc, 
++          URLConnection connection) throws IOException {
++
++        // generate hash of the url
++        String msgToEncode = 
++          SecureShuffleUtils.buildMsgFrom(connection.getURL());
++        String encHash = SecureShuffleUtils.hashFromString(msgToEncode, 
++            jobTokenSecret);
++
++        // put url hash into http header
++        connection.setRequestProperty(
++            SecureShuffleUtils.HTTP_HEADER_URL_HASH, encHash);
++        
++        InputStream input = getInputStream(connection, shuffleConnectionTimeout,
++                                           shuffleReadTimeout); 
++
++        // get the replyHash which is HMac of the encHash we sent to the server
++        String replyHash = connection.getHeaderField(
++            SecureShuffleUtils.HTTP_HEADER_REPLY_URL_HASH);
++        if(replyHash==null) {
++          throw new IOException("security validation of TT Map output failed");
++        }
++        if (LOG.isDebugEnabled())
++          LOG.debug("url="+msgToEncode+";encHash="+encHash+";replyHash="
++              +replyHash);
++        // verify that replyHash is HMac of encHash
++        SecureShuffleUtils.verifyReply(replyHash, encHash, jobTokenSecret);
++        if (LOG.isDebugEnabled())
++          LOG.debug("for url="+msgToEncode+" sent hash and receievd reply");
++        return input;
++      }
+ 
+       /** 
+        * The connection establishment is attempted multiple times and is given up 
+@@ -1544,8 +1557,7 @@ class ReduceTask extends Task {
+           // Reconnect
+           try {
+             connection = mapOutputLoc.getOutputLocation().openConnection();
+-            input = getInputStream(connection, shuffleConnectionTimeout, 
+-                                   shuffleReadTimeout);
++            input = setupSecureConnection(mapOutputLoc, connection);
+           } catch (IOException ioe) {
+             LOG.info("Failed reopen connection to fetch map-output from " + 
+                      mapOutputLoc.getHost());
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 534494a..868025e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -3489,7 +3489,8 @@ public class TaskTracker
+       String urlHashStr = request.getHeader(SecureShuffleUtils.HTTP_HEADER_URL_HASH);
+       if(urlHashStr == null) {
+         response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+-        throw new IOException("fetcher cannot be authenticated");
++        throw new IOException("fetcher cannot be authenticated " + 
++            request.getRemoteHost());
+       }
+       int len = urlHashStr.length();
+       LOG.debug("verifying request. enc_str="+enc_str+"; hash=..."+
+-- 
+1.7.0.4
+

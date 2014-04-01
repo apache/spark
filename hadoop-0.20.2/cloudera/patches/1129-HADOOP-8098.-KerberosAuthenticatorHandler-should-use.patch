@@ -1,0 +1,126 @@
+From 2032dfdfbb2c7d72ec5a88f9bd9f9dae172d62f6 Mon Sep 17 00:00:00 2001
+From: Alejandro Abdelnur <tucu@apache.org>
+Date: Tue, 28 Feb 2012 18:26:53 +0000
+Subject: [PATCH 1129/1179] HADOOP-8098. KerberosAuthenticatorHandler should use _HOST replacement to resolve principal name (tucu)
+
+git-svn-id: https://svn.apache.org/repos/asf/hadoop/common/trunk@1294757 13f79535-47bb-0310-9956-ffa450edef68
+
+   Reason: Improve usability
+   Author: Alejandro Abdelnur
+   Ref: CDH-4552
+---
+ src/core/core-default.xml                          |    2 +-
+ src/core/org/apache/hadoop/http/HttpServer.java    |    4 ++++
+ .../security/AuthenticationFilterInitializer.java  |   15 +++++++++++++++
+ .../hadoop/security/TestAuthenticationFilter.java  |    6 +++++-
+ 4 files changed, 25 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/core-default.xml b/src/core/core-default.xml
+index 02c7d42..e17cbdc 100644
+--- a/src/core/core-default.xml
++++ b/src/core/core-default.xml
+@@ -553,7 +553,7 @@
+ 
+ <property>
+   <name>hadoop.http.authentication.kerberos.principal</name>
+-  <value>HTTP/localhost@LOCALHOST</value>
++  <value>HTTP/_HOST@LOCALHOST</value>
+   <description>
+     Indicates the Kerberos principal to be used for HTTP endpoint.
+     The principal MUST start with 'HTTP/' as per Kerberos HTTP SPNEGO specification.
+diff --git a/src/core/org/apache/hadoop/http/HttpServer.java b/src/core/org/apache/hadoop/http/HttpServer.java
+index d0a52a5..bd1b7d5 100644
+--- a/src/core/org/apache/hadoop/http/HttpServer.java
++++ b/src/core/org/apache/hadoop/http/HttpServer.java
+@@ -93,6 +93,8 @@ public class HttpServer implements FilterContainer {
+   public static final String CONF_CONTEXT_ATTRIBUTE = "hadoop.conf";
+   static final String ADMINS_ACL = "admins.acl";
+ 
++  public static final String BIND_ADDRESS = "bind.address";
++
+   private AccessControlList adminsAcl;
+   protected final Server webServer;
+   protected final Connector listener;
+@@ -181,6 +183,8 @@ public class HttpServer implements FilterContainer {
+     addGlobalFilter("safety", QuotingInputFilter.class.getName(), null);
+     final FilterInitializer[] initializers = getFilterInitializers(conf); 
+     if (initializers != null) {
++      conf = new Configuration(conf);
++      conf.set(BIND_ADDRESS, bindAddress);
+       for(FilterInitializer c : initializers) {
+         c.initFilter(this, conf);
+       }
+diff --git a/src/core/org/apache/hadoop/security/AuthenticationFilterInitializer.java b/src/core/org/apache/hadoop/security/AuthenticationFilterInitializer.java
+index 1a36b91..99572bc 100644
+--- a/src/core/org/apache/hadoop/security/AuthenticationFilterInitializer.java
++++ b/src/core/org/apache/hadoop/security/AuthenticationFilterInitializer.java
+@@ -17,10 +17,12 @@
+  */
+ package org.apache.hadoop.security;
+ 
++import org.apache.hadoop.http.HttpServer;
+ import org.apache.hadoop.security.authentication.server.AuthenticationFilter;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.http.FilterContainer;
+ import org.apache.hadoop.http.FilterInitializer;
++import org.apache.hadoop.security.authentication.server.KerberosAuthenticationHandler;
+ 
+ import java.io.FileReader;
+ import java.io.IOException;
+@@ -91,6 +93,19 @@ public class AuthenticationFilterInitializer extends FilterInitializer {
+       throw new RuntimeException("Could not read HTTP signature secret file: " + signatureSecretFile);
+     }
+ 
++    //Resolve _HOST into bind address
++    String bindAddress = conf.get(HttpServer.BIND_ADDRESS);
++    String principal = filterConfig.get(KerberosAuthenticationHandler.PRINCIPAL);
++    if (principal != null) {
++      try {
++        principal = SecurityUtil.getServerPrincipal(principal, bindAddress);
++      }
++      catch (IOException ex) {
++        throw new RuntimeException("Could not resolve Kerberos principal name: " + ex.toString(), ex);
++      }
++      filterConfig.put(KerberosAuthenticationHandler.PRINCIPAL, principal);
++    }
++
+     container.addFilter("authentication",
+                         AuthenticationFilter.class.getName(),
+                         filterConfig);
+diff --git a/src/test/org/apache/hadoop/security/TestAuthenticationFilter.java b/src/test/org/apache/hadoop/security/TestAuthenticationFilter.java
+index 2bf96fa..0387df3 100644
+--- a/src/test/org/apache/hadoop/security/TestAuthenticationFilter.java
++++ b/src/test/org/apache/hadoop/security/TestAuthenticationFilter.java
+@@ -18,9 +18,11 @@ package org.apache.hadoop.security;
+ 
+ 
+ import junit.framework.TestCase;
++import org.apache.hadoop.http.HttpServer;
+ import org.apache.hadoop.security.authentication.server.AuthenticationFilter;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.http.FilterContainer;
++import org.apache.hadoop.security.authentication.server.KerberosAuthenticationHandler;
+ import org.mockito.Mockito;
+ import org.mockito.invocation.InvocationOnMock;
+ import org.mockito.stubbing.Answer;
+@@ -47,6 +49,8 @@ public class TestAuthenticationFilter extends TestCase {
+              AuthenticationFilterInitializer.SIGNATURE_SECRET_FILE,
+              secretFile.getAbsolutePath());
+ 
++    conf.set(HttpServer.BIND_ADDRESS, "barhost");
++
+     FilterContainer container = Mockito.mock(FilterContainer.class);
+     Mockito.doAnswer(
+       new Answer() {
+@@ -66,7 +70,7 @@ public class TestAuthenticationFilter extends TestCase {
+           assertEquals("hadoop", conf.get("signature.secret"));
+           assertNull(conf.get("cookie.domain"));
+           assertEquals("true", conf.get("simple.anonymous.allowed"));
+-          assertEquals("HTTP/localhost@LOCALHOST",
++          assertEquals("HTTP/barhost@LOCALHOST",
+                        conf.get("kerberos.principal"));
+           assertEquals(System.getProperty("user.home") +
+                        "/hadoop.keytab", conf.get("kerberos.keytab"));
+-- 
+1.7.0.4
+

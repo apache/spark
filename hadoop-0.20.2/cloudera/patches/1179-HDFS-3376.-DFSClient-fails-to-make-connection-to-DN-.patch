@@ -1,0 +1,124 @@
+From 214dd731e3bdb687cb55988d3f47dd9e248c5690 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Mon, 7 May 2012 10:34:10 -0700
+Subject: [PATCH 1179/1179] HDFS-3376. DFSClient fails to make connection to DN if there are many unusable cached sockets
+
+After fixing the datanode side of keepalive to properly disconnect stale
+clients, (HDFS-3357), the client side has the following issue: when it
+connects to a DN, it first tries to use cached sockets, and will try a
+configurable number of sockets from the cache. If there are more cached
+sockets than the configured number of retries, and all of them have been
+closed by the datanode side, then the client will throw an exception and
+mark the replica node as dead.
+
+Reason: Bug
+Author: Todd Lipcon
+Ref: CDH-5622
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |    8 +++-
+ .../hadoop/hdfs/TestDataTransferKeepalive.java     |   42 +++++++++++++++++++-
+ 2 files changed, 48 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 08ef807..7ce5ccd 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -2439,7 +2439,13 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       // Allow retry since there is no way of knowing whether the cached socket
+       // is good until we actually use it.
+       for (int retries = 0; retries <= nCachedConnRetry && fromCache; ++retries) {
+-        Socket sock = socketCache.get(dnAddr);
++        Socket sock = null;
++        // Don't use the cache on the last attempt - it's possible that there
++        // are arbitrarily many unusable sockets in the cache, but we don't
++        // want to fail the read.
++        if (retries < nCachedConnRetry) {
++          sock = socketCache.get(dnAddr);
++        }
+         if (sock == null) {
+           fromCache = false;
+   
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDataTransferKeepalive.java b/src/test/org/apache/hadoop/hdfs/TestDataTransferKeepalive.java
+index 2fa2886..746eac8 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDataTransferKeepalive.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDataTransferKeepalive.java
+@@ -17,6 +17,7 @@
+  */
+ package org.apache.hadoop.hdfs;
+ 
++import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CLIENT_MAX_BLOCK_ACQUIRE_FAILURES_KEY;
+ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SOCKET_REUSE_KEEPALIVE_KEY;
+ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SOCKET_WRITE_TIMEOUT_KEY;
+ import static org.junit.Assert.*;
+@@ -24,6 +25,7 @@ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertNotNull;
+ import static org.junit.Assert.fail;
+ 
++import java.io.InputStream;
+ import java.io.PrintWriter;
+ import java.net.InetSocketAddress;
+ import java.net.Socket;
+@@ -43,6 +45,8 @@ import org.junit.After;
+ import org.junit.Before;
+ import org.junit.Test;
+ 
++import org.apache.hadoop.thirdparty.guava.common.io.NullOutputStream;
++
+ public class TestDataTransferKeepalive {
+   Configuration conf = new Configuration();
+   private MiniDFSCluster cluster;
+@@ -59,7 +63,9 @@ public class TestDataTransferKeepalive {
+   public void setup() throws Exception {
+     conf.setInt(DFS_DATANODE_SOCKET_REUSE_KEEPALIVE_KEY,
+         KEEPALIVE_TIMEOUT);
+-    
++    conf.setInt(DFS_CLIENT_MAX_BLOCK_ACQUIRE_FAILURES_KEY,
++        0);
++
+     cluster = new MiniDFSCluster(conf, 1, true, null);
+     fs = cluster.getFileSystem();
+     dfsClient = ((DistributedFileSystem)fs).dfs;
+@@ -140,6 +146,40 @@ public class TestDataTransferKeepalive {
+     }
+   }
+ 
++  @Test(timeout=30000)
++  public void testManyClosedSocketsInCache() throws Exception {
++    // Make a small file
++    DFSTestUtil.createFile(fs, TEST_FILE, 1L, (short)1, 0L);
++
++    // Insert a bunch of dead sockets in the cache, by opening
++    // many streams concurrently, reading all of the data,
++    // and then closing them.
++    InputStream[] stms = new InputStream[5];
++    try {
++      for (int i = 0; i < stms.length; i++) {
++        stms[i] = fs.open(TEST_FILE);
++      }
++      for (InputStream stm : stms) {
++        IOUtils.copyBytes(stm, new NullOutputStream(), 1024, false);
++      }
++    } finally {
++      IOUtils.cleanup(null, stms);
++    }
++    
++    DFSClient client = ((DistributedFileSystem)fs).dfs;
++    assertEquals(5, client.socketCache.size());
++    
++    // Let all the xceivers timeout
++    Thread.sleep(1500);
++    assertXceiverCount(0);
++
++    // Client side still has the sockets cached
++    assertEquals(5, client.socketCache.size());
++
++    // Reading should not throw an exception.
++    DFSTestUtil.readFile(fs, TEST_FILE);
++  }
++
+   private void assertXceiverCount(int expected) {
+     // Subtract 1, since the DataXceiverServer
+     // counts as one
+-- 
+1.7.0.4
+

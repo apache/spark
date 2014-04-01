@@ -1,0 +1,416 @@
+From 216d29555d3fb62aca7362a5611bbc5ec7846b6a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:52 -0800
+Subject: [PATCH 0847/1179] HDFS-599. Allow NameNode to have a separate port for service requests from client requests.
+
+Reason: Allows port-based QoS to prioritize DN RPCs over client RPCs, also increases fairness
+Author: Dmytro Molkov
+Ref: CDH-2622
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java |    4 +
+ .../hadoop/hdfs/server/balancer/Balancer.java      |    2 +-
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    2 +-
+ .../hadoop/hdfs/server/namenode/NameNode.java      |   70 +++++++++++++++++++-
+ .../hdfs/server/namenode/SecondaryNameNode.java    |    2 +-
+ .../hadoop/hdfs/TestDistributedFileSystem.java     |   30 +++++++--
+ .../apache/hadoop/hdfs/TestHDFSServerPorts.java    |   31 ++++++++-
+ .../org/apache/hadoop/hdfs/TestRestartDFS.java     |   27 +++++++-
+ 8 files changed, 151 insertions(+), 17 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+index dba2a80..504461a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+@@ -43,10 +43,12 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final String  DFS_NAMENODE_BACKUP_ADDRESS_DEFAULT = "localhost:50100";
+   public static final String  DFS_NAMENODE_BACKUP_HTTP_ADDRESS_KEY = "dfs.namenode.backup.http-address";
+   public static final String  DFS_NAMENODE_BACKUP_HTTP_ADDRESS_DEFAULT = "0.0.0.0:50105";
++  public static final String  DFS_NAMENODE_BACKUP_SERVICE_RPC_ADDRESS_KEY = "dfs.namenode.backup.dnrpc-address";
+   public static final String  DFS_DATANODE_BALANCE_BANDWIDTHPERSEC_KEY = "dfs.datanode.balance.bandwidthPerSec";
+   public static final long    DFS_DATANODE_BALANCE_BANDWIDTHPERSEC_DEFAULT = 1024*1024;
+   public static final String  DFS_NAMENODE_HTTP_ADDRESS_KEY = "dfs.namenode.http-address";
+   public static final String  DFS_NAMENODE_HTTP_ADDRESS_DEFAULT = "0.0.0.0:50070";
++  public static final String  DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY = "dfs.namenode.servicerpc-address";
+   public static final String  DFS_NAMENODE_MAX_OBJECTS_KEY = "dfs.namenode.max.objects";
+   public static final long    DFS_NAMENODE_MAX_OBJECTS_DEFAULT = 0;
+   public static final String  DFS_NAMENODE_SAFEMODE_EXTENSION_KEY = "dfs.namenode.safemode.extension";
+@@ -159,6 +161,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final int     DFS_NAMENODE_DECOMMISSION_NODES_PER_INTERVAL_DEFAULT = 5;
+   public static final String  DFS_NAMENODE_HANDLER_COUNT_KEY = "dfs.namenode.handler.count";
+   public static final int     DFS_NAMENODE_HANDLER_COUNT_DEFAULT = 10;
++  public static final String  DFS_NAMENODE_SERVICE_HANDLER_COUNT_KEY = "dfs.namenode.service.handler.count";
++  public static final int     DFS_NAMENODE_SERVICE_HANDLER_COUNT_DEFAULT = 10;
+   public static final String  DFS_SUPPORT_APPEND_KEY = "dfs.support.append";
+   public static final boolean DFS_SUPPORT_APPEND_DEFAULT = false;
+   public static final String  DFS_HTTPS_ENABLE_KEY = "dfs.https.enable";
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/balancer/Balancer.java b/src/hdfs/org/apache/hadoop/hdfs/server/balancer/Balancer.java
+index 1a1b1d3..78c241d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/balancer/Balancer.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/balancer/Balancer.java
+@@ -908,7 +908,7 @@ public class Balancer implements Tool {
+    * set up the retry policy */ 
+   private static NamenodeProtocol createNamenode(Configuration conf)
+     throws IOException {
+-    InetSocketAddress nameNodeAddr = NameNode.getAddress(conf);
++    InetSocketAddress nameNodeAddr = NameNode.getServiceAddress(conf, true);
+     RetryPolicy timeoutPolicy = RetryPolicies.exponentialBackoffRetry(
+         5, 200, TimeUnit.MILLISECONDS);
+     Map<Class<? extends Exception>,RetryPolicy> exceptionToPolicyMap =
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 5492de4..18e95e3 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -305,7 +305,7 @@ public class DataNode extends Configured
+                                      conf.get("dfs.datanode.dns.interface","default"),
+                                      conf.get("dfs.datanode.dns.nameserver","default"));
+     }
+-    InetSocketAddress nameNodeAddr = NameNode.getAddress(conf);
++    InetSocketAddress nameNodeAddr = NameNode.getServiceAddress(conf, true);
+     
+     this.socketTimeout =  conf.getInt("dfs.socket.timeout",
+                                       HdfsConstants.READ_TIMEOUT);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 4bf09df..eafbca4 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -116,7 +116,7 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+   }
+   
+   public long getProtocolVersion(String protocol, 
+-                                 long clientVersion) throws IOException { 
++                                 long clientVersion) throws IOException {
+     if (protocol.equals(ClientProtocol.class.getName())) {
+       return ClientProtocol.versionID; 
+     } else if (protocol.equals(DatanodeProtocol.class.getName())){
+@@ -139,8 +139,16 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+   public FSNamesystem namesystem; // TODO: This should private. Use getNamesystem() instead. 
+   /** RPC server. Package-protected for use in tests. */
+   Server server;
++  /** RPC server for HDFS Services communication.
++      BackupNode, Datanodes and all other services
++      should be connecting to this server if it is
++      configured. Clients should only go to NameNode#server
++  */
++  private Server serviceRpcServer;
+   /** RPC server address */
+   private InetSocketAddress serverAddress = null;
++  /** RPC server for DN address */
++  protected InetSocketAddress serviceRPCAddress = null;
+   /** httpServer */
+   private HttpServer httpServer;
+   /** HTTP server address */
+@@ -173,6 +181,32 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     return NetUtils.createSocketAddr(address, DEFAULT_PORT);
+   }
+ 
++  /**
++   * Set the configuration property for the service rpc address
++   * to address
++   */
++  public static void setServiceAddress(Configuration conf,
++                                           String address) {
++    LOG.info("Setting ADDRESS " + address);
++    conf.set(DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY, address);
++  }
++  
++  /**
++   * Fetches the address for services to use when connecting to namenode
++   * based on the value of fallback returns null if the special
++   * address is not specified or returns the default namenode address
++   * to be used by both clients and services.
++   * Services here are datanodes, backup node, any non client connection
++   */
++  public static InetSocketAddress getServiceAddress(Configuration conf,
++                                                    boolean fallback) {
++    String addr = conf.get(DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY);
++    if (addr == null || addr.isEmpty()) {
++      return fallback ? getAddress(conf) : null;
++    }
++    return getAddress(addr);
++  }
++
+   public static InetSocketAddress getAddress(Configuration conf) {
+     URI filesystemURI = FileSystem.getDefaultUri(conf);
+     String authority = filesystemURI.getAuthority();
+@@ -199,6 +233,25 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+   }
+ 
+   /**
++   * Given a configuration get the address of the service rpc server
++   * If the service rpc is not configured returns null
++   */
++  protected InetSocketAddress getServiceRpcServerAddress(Configuration conf)
++    throws IOException {
++    return NameNode.getServiceAddress(conf, false);
++  }
++
++ 
++  /**
++   * Modifies the configuration passed to contain the service rpc address setting
++   */
++  protected void setRpcServiceServerAddress(Configuration conf) {
++    String address = serviceRPCAddress.getHostName() + ":"
++        + serviceRPCAddress.getPort();
++    setServiceAddress(conf, address);
++  }
++
++  /**
+    * Initialize name-node.
+    * 
+    * @param conf the configuration
+@@ -218,6 +271,17 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     }
+ 
+     // create rpc server 
++    InetSocketAddress dnSocketAddr = getServiceRpcServerAddress(conf);
++    if (dnSocketAddr != null) {
++      int serviceHandlerCount =
++        conf.getInt(DFSConfigKeys.DFS_NAMENODE_SERVICE_HANDLER_COUNT_KEY,
++                    DFSConfigKeys.DFS_NAMENODE_SERVICE_HANDLER_COUNT_DEFAULT);
++      this.serviceRpcServer = RPC.getServer(this, dnSocketAddr.getHostName(), 
++          dnSocketAddr.getPort(), serviceHandlerCount,
++          false, conf, namesystem.getDelegationTokenSecretManager());
++      this.serviceRPCAddress = this.serviceRpcServer.getListenerAddress();
++      setRpcServiceServerAddress(conf);
++    }
+     this.server = RPC.getServer(this, socAddr.getHostName(),
+         socAddr.getPort(), handlerCount, false, conf, namesystem
+         .getDelegationTokenSecretManager());
+@@ -241,6 +305,9 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+ 
+     startHttpServer(conf);
+     this.server.start();  //start RPC server   
++    if (serviceRpcServer != null) {
++      serviceRpcServer.start();      
++    }
+     startTrashEmptier(conf);
+     
+     pluginDispatcher = PluginDispatcher.createFromConfiguration(
+@@ -427,6 +494,7 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     if(namesystem != null) namesystem.close();
+     if(emptier != null) emptier.interrupt();
+     if(server != null) server.stop();
++    if(serviceRpcServer != null) serviceRpcServer.stop();
+     if (myMetrics != null) {
+       myMetrics.shutdown();
+     }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index a638e0f..f84e2f9 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -159,7 +159,7 @@ public class SecondaryNameNode implements Runnable {
+     
+     // Create connection to the namenode.
+     shouldRun = true;
+-    nameNodeAddr = NameNode.getAddress(conf);
++    nameNodeAddr = NameNode.getServiceAddress(conf, true);
+ 
+     this.conf = conf;
+     this.namenode =
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDistributedFileSystem.java b/src/test/org/apache/hadoop/hdfs/TestDistributedFileSystem.java
+index 0328ede..82080d1 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDistributedFileSystem.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDistributedFileSystem.java
+@@ -43,16 +43,27 @@ import org.junit.Test;
+ public class TestDistributedFileSystem {
+   private static final Random RAN = new Random();
+ 
++  private boolean dualPortTesting = false;
++  
++  private Configuration getTestConfiguration() {
++    Configuration conf = new Configuration();
++    if (dualPortTesting) {
++      conf.set(DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY,
++              "localhost:0");
++    }
++    return conf;
++  }
++
+   @Test
+   public void testFileSystemCloseAll() throws Exception {
+-    Configuration conf = new Configuration();
++    Configuration conf = getTestConfiguration();
+     MiniDFSCluster cluster = new MiniDFSCluster(conf, 0, true, null);
+     URI address = FileSystem.getDefaultUri(conf);
+ 
+     try {
+       FileSystem.closeAll();
+ 
+-      conf = new Configuration();
++      conf = getTestConfiguration();
+       FileSystem.setDefaultUri(conf, address);
+       FileSystem.get(conf);
+       FileSystem.get(conf);
+@@ -69,7 +80,7 @@ public class TestDistributedFileSystem {
+    */
+   @Test
+   public void testDFSClose() throws Exception {
+-    Configuration conf = new Configuration();
++    Configuration conf = getTestConfiguration();
+     MiniDFSCluster cluster = new MiniDFSCluster(conf, 2, true, null);
+     FileSystem fileSys = cluster.getFileSystem();
+ 
+@@ -87,7 +98,7 @@ public class TestDistributedFileSystem {
+ 
+   @Test
+   public void testDFSClient() throws Exception {
+-    Configuration conf = new Configuration();
++    Configuration conf = getTestConfiguration();
+     MiniDFSCluster cluster = null;
+ 
+     try {
+@@ -230,7 +241,7 @@ public class TestDistributedFileSystem {
+     System.out.println("seed=" + seed);
+     RAN.setSeed(seed);
+ 
+-    final Configuration conf = new Configuration();
++    final Configuration conf = getTestConfiguration();
+     conf.set("slave.host.name", "localhost");
+ 
+     final MiniDFSCluster cluster = new MiniDFSCluster(conf, 2, true, null);
+@@ -311,4 +322,13 @@ public class TestDistributedFileSystem {
+     cluster.shutdown();
+   }
+   
++  @Test
++  public void testAllWithDualPort() throws Exception {
++    dualPortTesting = true;
++
++    testFileSystemCloseAll();
++    testDFSClose();
++    testDFSClient();
++    testFileChecksum();
++  }
+ }
+diff --git a/src/test/org/apache/hadoop/hdfs/TestHDFSServerPorts.java b/src/test/org/apache/hadoop/hdfs/TestHDFSServerPorts.java
+index 0b3e06e..9b0c438 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestHDFSServerPorts.java
++++ b/src/test/org/apache/hadoop/hdfs/TestHDFSServerPorts.java
+@@ -46,10 +46,14 @@ public class TestHDFSServerPorts extends TestCase {
+   Configuration config;
+   File hdfsDir;
+ 
++  public NameNode startNameNode() throws IOException {
++    return startNameNode(false);
++  }
++
+   /**
+    * Start the name-node.
+    */
+-  public NameNode startNameNode() throws IOException {
++  public NameNode startNameNode(boolean withService) throws IOException {
+     String dataDir = System.getProperty("test.build.data");
+     hdfsDir = new File(dataDir, "dfs");
+     if ( hdfsDir.exists() && !FileUtil.fullyDelete(hdfsDir) ) {
+@@ -58,6 +62,9 @@ public class TestHDFSServerPorts extends TestCase {
+     config = new Configuration();
+     config.set("dfs.name.dir", new File(hdfsDir, "name1").getPath());
+     FileSystem.setDefaultUri(config, "hdfs://"+NAME_NODE_HOST + "0");
++    if (withService) {
++      NameNode.setServiceAddress(config, NAME_NODE_HOST + "0");      
++    }
+     config.set("dfs.http.address", NAME_NODE_HTTP_HOST + "0");
+     NameNode.format(config);
+ 
+@@ -147,13 +154,18 @@ public class TestHDFSServerPorts extends TestCase {
+     return true;
+   }
+ 
++  public void testNameNodePorts() throws Exception {
++    runTestNameNodePorts(false);
++    runTestNameNodePorts(true);
++  }
++
+   /**
+    * Verify name-node port usage.
+    */
+-  public void testNameNodePorts() throws Exception {
++  public void runTestNameNodePorts(boolean withService) throws Exception {
+     NameNode nn = null;
+     try {
+-      nn = startNameNode();
++      nn = startNameNode(withService);
+ 
+       // start another namenode on the same port
+       Configuration conf2 = new Configuration(config);
+@@ -172,7 +184,18 @@ public class TestHDFSServerPorts extends TestCase {
+       // different http port
+       conf2.set("dfs.http.address", NAME_NODE_HTTP_HOST + "0");
+       started = canStartNameNode(conf2);
+-      assertTrue(started); // should start now
++
++      if (withService) {
++        assertFalse("Should've failed on service port", started);
++
++        // reset conf2 since NameNode modifies it
++        FileSystem.setDefaultUri(conf2, "hdfs://"+NAME_NODE_HOST + "0");
++        conf2.set(DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY, NAME_NODE_HTTP_HOST + "0");
++        // Set Service address      
++        conf2.set(DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY, NAME_NODE_HOST + "0");
++        started = canStartNameNode(conf2);        
++      }
++      assertTrue(started);
+     } finally {
+       stopNameNode(nn);
+     }
+diff --git a/src/test/org/apache/hadoop/hdfs/TestRestartDFS.java b/src/test/org/apache/hadoop/hdfs/TestRestartDFS.java
+index e016c48..dff31af 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestRestartDFS.java
++++ b/src/test/org/apache/hadoop/hdfs/TestRestartDFS.java
+@@ -29,9 +29,7 @@ import org.apache.hadoop.fs.Path;
+  * A JUnit test for checking if restarting DFS preserves integrity.
+  */
+ public class TestRestartDFS extends TestCase {
+-  /** check if DFS remains in proper condition after a restart */
+-  public void testRestartDFS() throws Exception {
+-    final Configuration conf = new Configuration();
++  public void runTests(Configuration conf, boolean serviceTest) throws Exception {
+     MiniDFSCluster cluster = null;
+     DFSTestUtil files = new DFSTestUtil("TestRestartDFS", 20, 3, 8*1024);
+ 
+@@ -44,6 +42,10 @@ public class TestRestartDFS extends TestCase {
+     FileStatus dirstatus;
+ 
+     try {
++      if (serviceTest) {
++        conf.set(DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY,
++                 "localhost:0");
++      }
+       cluster = new MiniDFSCluster(conf, 4, true, null);
+       FileSystem fs = cluster.getFileSystem();
+       files.createFiles(fs, dir);
+@@ -58,8 +60,12 @@ public class TestRestartDFS extends TestCase {
+       if (cluster != null) { cluster.shutdown(); }
+     }
+     try {
++      if (serviceTest) {
++        conf.set(DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY,
++                 "localhost:0");
++      }
+       // Here we restart the MiniDFScluster without formatting namenode
+-      cluster = new MiniDFSCluster(conf, 4, false, null);
++      cluster = new MiniDFSCluster(conf, 4, false, null); 
+       FileSystem fs = cluster.getFileSystem();
+       assertTrue("Filesystem corrupted after restart.",
+                  files.checkFiles(fs, dir));
+@@ -78,4 +84,17 @@ public class TestRestartDFS extends TestCase {
+       if (cluster != null) { cluster.shutdown(); }
+     }
+   }
++  /** check if DFS remains in proper condition after a restart */
++  public void testRestartDFS() throws Exception {
++    final Configuration conf = new Configuration();
++    runTests(conf, false);
++  }
++  
++  /** check if DFS remains in proper condition after a restart 
++   * this rerun is with 2 ports enabled for RPC in the namenode
++   */
++   public void testRestartDualPortDFS() throws Exception {
++     final Configuration conf = new Configuration();
++     runTests(conf, true);
++   }
+ }
+-- 
+1.7.0.4
+

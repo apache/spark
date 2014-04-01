@@ -1,0 +1,1022 @@
+From ac2d2869ecccd91fdacab7544eca00767f8d64a1 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 26 Feb 2010 11:28:36 -0800
+Subject: [PATCH 0508/1179] HDFS-991. Use delegation token to authenticate to the hdfs servlets.
+
+Author: Owen O'Malley
+Ref: CDH-648
+---
+ .../hadoop/hdfsproxy/ProxyFileDataServlet.java     |    4 +-
+ .../hadoop/hdfsproxy/ProxyListPathsServlet.java    |    4 +-
+ .../apache/hadoop/hdfsproxy/ProxyStreamFile.java   |   25 +----
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    1 +
+ .../server/namenode/ContentSummaryServlet.java     |    5 +-
+ .../hadoop/hdfs/server/namenode/DfsServlet.java    |   29 +----
+ .../hdfs/server/namenode/FileChecksumServlets.java |    6 +-
+ .../hdfs/server/namenode/FileDataServlet.java      |    6 +-
+ .../hadoop/hdfs/server/namenode/FsckServlet.java   |    9 +-
+ .../hadoop/hdfs/server/namenode/JspHelper.java     |  126 ++++++++++++++++++--
+ .../hdfs/server/namenode/ListPathsServlet.java     |    7 +-
+ .../hadoop/hdfs/server/namenode/StreamFile.java    |   22 +---
+ src/test/findbugsExcludeFile.xml                   |   10 ++
+ src/webapps/datanode/browseBlock.jsp               |   63 +++++++----
+ src/webapps/datanode/browseDirectory.jsp           |   30 ++++--
+ src/webapps/datanode/tail.jsp                      |   31 +++--
+ src/webapps/hdfs/nn_browsedfscontent.jsp           |   42 ++++++-
+ 17 files changed, 285 insertions(+), 135 deletions(-)
+
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
+index b07bd39..4007028 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
+@@ -23,6 +23,7 @@ import java.net.URISyntaxException;
+ 
+ import javax.servlet.http.HttpServletRequest;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+ import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
+ import org.apache.hadoop.hdfs.server.namenode.FileDataServlet;
+@@ -45,7 +46,8 @@ public class ProxyFileDataServlet extends FileDataServlet {
+ 
+   /** {@inheritDoc} */
+   @Override
+-  protected UserGroupInformation getUGI(HttpServletRequest request) {
++  protected UserGroupInformation getUGI(HttpServletRequest request,
++                                        Configuration conf) {
+     return (UserGroupInformation) request.getAttribute("authorized.ugi");
+   }
+ }
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyListPathsServlet.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyListPathsServlet.java
+index d8b516f..9cdd478 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyListPathsServlet.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyListPathsServlet.java
+@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfsproxy;
+ 
+ import javax.servlet.http.HttpServletRequest;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.server.namenode.ListPathsServlet;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+@@ -29,7 +30,8 @@ public class ProxyListPathsServlet extends ListPathsServlet {
+ 
+   /** {@inheritDoc} */
+   @Override
+-  protected UserGroupInformation getUGI(HttpServletRequest request) {
++  protected UserGroupInformation getUGI(HttpServletRequest request,
++                                        Configuration conf) {
+     return (UserGroupInformation) request.getAttribute("authorized.ugi");
+   }
+ }
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyStreamFile.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyStreamFile.java
+index b26feff..efe2c15 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyStreamFile.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyStreamFile.java
+@@ -24,10 +24,10 @@ import java.security.PrivilegedExceptionAction;
+ import javax.servlet.ServletContext;
+ import javax.servlet.http.HttpServletRequest;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.DFSClient;
+ import org.apache.hadoop.hdfs.server.namenode.StreamFile;
+ import org.apache.hadoop.security.UserGroupInformation;
+-import org.apache.hadoop.conf.Configuration;
+ 
+ /** {@inheritDoc} */
+ public class ProxyStreamFile extends StreamFile {
+@@ -36,27 +36,8 @@ public class ProxyStreamFile extends StreamFile {
+ 
+   /** {@inheritDoc} */
+   @Override
+-  protected DFSClient getDFSClient(HttpServletRequest request)
+-      throws IOException, InterruptedException {
+-    ServletContext context = getServletContext();
+-    final Configuration conf = new Configuration((Configuration) context
+-        .getAttribute("name.conf"));
+-    final InetSocketAddress nameNodeAddr = (InetSocketAddress) context
+-        .getAttribute("name.node.address");
+-    DFSClient client = 
+-              getUGI(request).doAs(new PrivilegedExceptionAction<DFSClient>() {
+-      @Override
+-      public DFSClient run() throws IOException {
+-        return new DFSClient(nameNodeAddr, conf);
+-      }
+-    });
+-
+-    return client;
+-  }
+-
+-  /** {@inheritDoc} */
+-  @Override
+-  protected UserGroupInformation getUGI(HttpServletRequest request) {
++  protected UserGroupInformation getUGI(HttpServletRequest request,
++                                        Configuration conf) {
+     return (UserGroupInformation) request.getAttribute("authorized.ugi");
+   }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 277f19f..dcb1369 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -413,6 +413,7 @@ public class DataNode extends Configured
+     this.infoServer.addInternalServlet(null, "/getFileChecksum/*",
+         FileChecksumServlets.GetServlet.class);
+     this.infoServer.setAttribute("datanode.blockScanner", blockScanner);
++    this.infoServer.setAttribute("datanode.conf", conf);
+     this.infoServer.addServlet(null, "/blockScannerReport", 
+                                DataBlockScanner.Servlet.class);
+     this.infoServer.start();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
+index 5ab2857..b70a153 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
+@@ -25,6 +25,7 @@ import javax.servlet.ServletException;
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpServletResponse;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.ContentSummary;
+ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+ import org.apache.hadoop.ipc.RemoteException;
+@@ -39,7 +40,9 @@ public class ContentSummaryServlet extends DfsServlet {
+   /** {@inheritDoc} */
+   public void doGet(final HttpServletRequest request,
+       final HttpServletResponse response) throws ServletException, IOException {
+-    final UserGroupInformation ugi = getUGI(request);
++    final Configuration conf = 
++      (Configuration) request.getAttribute("name.conf");
++    final UserGroupInformation ugi = getUGI(request, conf);
+     try {
+       ugi.doAs(new PrivilegedExceptionAction<Object>() {
+         @Override
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
+index d73061f..114a962 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
+@@ -47,31 +47,10 @@ abstract class DfsServlet extends HttpServlet {
+ 
+   /** Get {@link UserGroupInformation} from request 
+    *    * @throws IOException */
+-  protected UserGroupInformation getUGI(HttpServletRequest request) 
+-    throws IOException {
+-    UserGroupInformation u = null;
+-    if(UserGroupInformation.isSecurityEnabled()) {
+-      String user = request.getRemoteUser();
+-      if(user != null)
+-        throw new IOException("Security enabled but user not " +
+-            "authenticated by filter");
+-
+-      u = UserGroupInformation.createRemoteUser(user);
+-    } else { // Security's not on, pull from url
+-      String ugi = request.getParameter("ugi");
+-
+-      if(ugi == null) // not specified in request
+-        ugi = new Configuration().get(JspHelper.WEB_UGI_PROPERTY_NAME);
+-
+-      if(ugi == null) // not specified in conf either
+-        throw new IOException("Cannot determine UGI from request or conf");
+-
+-      u = UserGroupInformation.createRemoteUser(ugi);
+-    }
+-
+-    if(LOG.isDebugEnabled())
+-      LOG.debug("getUGI is returning: " + u.getShortUserName());
+-    return u;
++  protected UserGroupInformation getUGI(HttpServletRequest request,
++                                        Configuration conf
++					) throws IOException {
++    return JspHelper.getUGI(request, conf);
+   }
+ 
+   /**
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java
+index 6027ca0..d1dac0b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java
+@@ -52,8 +52,9 @@ public class FileChecksumServlets {
+     /** {@inheritDoc} */
+     public void doGet(HttpServletRequest request, HttpServletResponse response
+         ) throws ServletException, IOException {
+-      final UserGroupInformation ugi = getUGI(request);
+       final ServletContext context = getServletContext();
++      Configuration conf = (Configuration) context.getAttribute("name.conf");
++      final UserGroupInformation ugi = getUGI(request, conf);
+       final NameNode namenode = (NameNode)context.getAttribute("name.node");
+       final DatanodeID datanode = namenode.namesystem.getRandomDatanode();
+       try {
+@@ -86,7 +87,8 @@ public class FileChecksumServlets {
+       final SocketFactory socketFactory = NetUtils.getSocketFactory(conf, ClientProtocol.class);
+ 
+       try {
+-        ClientProtocol nnproxy = getUGI(request).doAs(new PrivilegedExceptionAction<ClientProtocol>() {
++        ClientProtocol nnproxy = getUGI(request, conf).doAs
++        (new PrivilegedExceptionAction<ClientProtocol>() {
+           @Override
+           public ClientProtocol run() throws IOException {
+             return DFSClient.createNamenode(conf);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+index 061f5b7..fb29079 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+@@ -24,6 +24,8 @@ import java.security.PrivilegedExceptionAction;
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpServletResponse;
+ 
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+ import org.apache.hadoop.hdfs.protocol.DatanodeID;
+@@ -88,7 +90,9 @@ public class FileDataServlet extends DfsServlet {
+    */
+   public void doGet(HttpServletRequest request, HttpServletResponse response)
+     throws IOException {
+-    final UserGroupInformation ugi = getUGI(request);
++    Configuration conf =
++	(Configuration) getServletContext().getAttribute("name.conf");
++    final UserGroupInformation ugi = getUGI(request, conf);
+ 
+     try {
+       final ClientProtocol nnproxy = ugi
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FsckServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FsckServlet.java
+index ae6bb21..c9d1f5a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FsckServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FsckServlet.java
+@@ -43,15 +43,14 @@ public class FsckServlet extends DfsServlet {
+     @SuppressWarnings("unchecked")
+     final Map<String,String[]> pmap = request.getParameterMap();
+     final PrintWriter out = response.getWriter();
+-
+-    final UserGroupInformation ugi = getUGI(request);
++    final ServletContext context = getServletContext();
++    final Configuration conf = 
++      (Configuration) context.getAttribute("name.conf");
++    final UserGroupInformation ugi = getUGI(request, conf);
+     try {
+       ugi.doAs(new PrivilegedExceptionAction<Object>() {
+         @Override
+         public Object run() throws Exception {
+-          final ServletContext context = getServletContext();
+-          final Configuration conf = new Configuration((Configuration) context.getAttribute("name.conf"));
+-
+           final NameNode nn = (NameNode) context.getAttribute("name.node");
+           final int totalDatanodes = nn.namesystem.getNumberOfDatanodes(DatanodeReportType.LIVE); 
+           final short minReplication = nn.namesystem.getMinReplication();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+index 986499c..6f2ecd0 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+@@ -22,6 +22,7 @@ import java.io.IOException;
+ import java.io.UnsupportedEncodingException;
+ import java.net.InetSocketAddress;
+ import java.net.Socket;
++import java.security.PrivilegedExceptionAction;
+ import java.util.ArrayList;
+ import java.util.Collections;
+ import java.util.Comparator;
+@@ -31,30 +32,39 @@ import java.util.TreeSet;
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.jsp.JspWriter;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.DFSClient;
+ import org.apache.hadoop.hdfs.protocol.DatanodeID;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+ import org.apache.hadoop.hdfs.protocol.FSConstants.UpgradeAction;
++import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants;
+ import org.apache.hadoop.hdfs.server.common.UpgradeStatusReport;
+ import org.apache.hadoop.hdfs.server.datanode.DataNode;
++import org.apache.hadoop.hdfs.server.namenode.DatanodeDescriptor;
++import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+ import org.apache.hadoop.http.HtmlQuoting;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.security.AccessControlException;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.hdfs.security.BlockAccessToken;
+ 
+ public class JspHelper {
+   final static public String WEB_UGI_PROPERTY_NAME = "dfs.web.ugi";
++  public static final String DELEGATION_PARAMETER_NAME = "delegation";
++  public static final String SET_DELEGATION = "&" + DELEGATION_PARAMETER_NAME +
++                                              "=";
++  private static final Log LOG = LogFactory.getLog(JspHelper.class);
+ 
+   static FSNamesystem fsn = null;
+   public static InetSocketAddress nameNodeAddr;
+-  public static final Configuration conf = new Configuration();
+   
+-  public static final int defaultChunkSizeToView = 
+-    conf.getInt("dfs.default.chunk.view.size", 32 * 1024);
+   static Random rand = new Random();
+ 
+   public JspHelper() {
+@@ -111,8 +121,11 @@ public class JspHelper {
+     return chosenNode;
+   }
+   public void streamBlockInAscii(InetSocketAddress addr, long blockId, 
+-                                 BlockAccessToken accessToken, long genStamp, long blockSize, 
+-                                 long offsetIntoBlock, long chunkSizeToView, JspWriter out) 
++                                 BlockAccessToken accessToken, long genStamp, 
++                                 long blockSize, 
++                                 long offsetIntoBlock, long chunkSizeToView, 
++                                 JspWriter out,
++                                 Configuration conf) 
+     throws IOException {
+     if (chunkSizeToView == 0) return;
+     Socket s = new Socket();
+@@ -325,7 +338,10 @@ public class JspHelper {
+     Collections.sort(nodes, new NodeComapare(field, order));
+   }
+ 
+-  public static void printPathWithLinks(String dir, JspWriter out, int namenodeInfoPort ) throws IOException {
++  public static void printPathWithLinks(String dir, JspWriter out, 
++                                        int namenodeInfoPort,
++                                        String tokenString
++                                       ) throws IOException {
+     try {
+       String[] parts = dir.split(Path.SEPARATOR);
+       StringBuilder tempPath = new StringBuilder(dir.length());
+@@ -337,7 +353,8 @@ public class JspHelper {
+         if (!parts[i].equals("")) {
+           tempPath.append(parts[i]);
+           out.print("<a href=\"browseDirectory.jsp" + "?dir="
+-              + tempPath.toString() + "&namenodeInfoPort=" + namenodeInfoPort);
++              + tempPath.toString() + "&namenodeInfoPort=" + namenodeInfoPort
++              + SET_DELEGATION + tokenString);
+           out.print("\">" + parts[i] + "</a>" + Path.SEPARATOR);
+           tempPath.append(Path.SEPARATOR);
+         }
+@@ -351,22 +368,113 @@ public class JspHelper {
+     }
+   }
+ 
+-  public static void printGotoForm(JspWriter out, int namenodeInfoPort, String file) throws IOException {
++  public static void printGotoForm(JspWriter out,
++                                   int namenodeInfoPort,
++                                   String tokenString,
++                                   String file) throws IOException {
+     out.print("<form action=\"browseDirectory.jsp\" method=\"get\" name=\"goto\">");
+     out.print("Goto : ");
+     out.print("<input name=\"dir\" type=\"text\" width=\"50\" id\"dir\" value=\""+ file+"\">");
+     out.print("<input name=\"go\" type=\"submit\" value=\"go\">");
+     out.print("<input name=\"namenodeInfoPort\" type=\"hidden\" "
+         + "value=\"" + namenodeInfoPort  + "\">");
++    out.print("<input name=\"" + DELEGATION_PARAMETER_NAME +
++              "\" type=\"hidden\" value=\"" + tokenString + "\">");
+     out.print("</form>");
+   }
+   
+   public static void createTitle(JspWriter out, 
+-      HttpServletRequest req, String  file) throws IOException{
++                                 HttpServletRequest req, 
++                                 String  file) throws IOException{
+     if(file == null) file = "";
+     int start = Math.max(0,file.length() - 100);
+     if(start != 0)
+       file = "..." + file.substring(start, file.length());
+     out.print("<title>HDFS:" + file + "</title>");
+   }
++
++  
++  /**
++   * If security is turned off, what is the default web user?
++   * @param conf the configuration to look in
++   * @return the remote user that was configuration
++   */
++  public static UserGroupInformation getDefaultWebUser(Configuration conf
++                                                       ) throws IOException {
++    String[] strings = conf.getStrings(JspHelper.WEB_UGI_PROPERTY_NAME);
++    if (strings == null || strings.length == 0) {
++      throw new IOException("Cannot determine UGI from request or conf");
++    }
++    return UserGroupInformation.createRemoteUser(strings[0]);
++  }
++
++  /**
++   * Get {@link UserGroupInformation} and possibly the delegation token out of
++   * the request.
++   * @param request the http request
++   * @return a new user from the request
++   * @throws AccessControlException if the request has no token
++   */
++  public static UserGroupInformation getUGI(HttpServletRequest request,
++                                            Configuration conf
++                                           ) throws IOException {
++    UserGroupInformation ugi = null;
++    if(UserGroupInformation.isSecurityEnabled()) {
++      String user = request.getRemoteUser();
++      String tokenString = request.getParameter(DELEGATION_PARAMETER_NAME);
++      if (tokenString != null) {
++        Token<DelegationTokenIdentifier> token = 
++          new Token<DelegationTokenIdentifier>();
++        token.decodeFromUrlString(tokenString);
++        ugi = UserGroupInformation.createRemoteUser(user);
++        ugi.addToken(token);        
++      } else {
++        if(user == null) {
++          throw new IOException("Security enabled but user not " +
++                                "authenticated by filter");
++        }
++        ugi = UserGroupInformation.createRemoteUser(user);
++      }
++    } else { // Security's not on, pull from url
++      String user = request.getParameter("ugi");
++      
++      if(user == null) { // not specified in request
++        ugi = getDefaultWebUser(conf);
++      } else {
++        ugi = UserGroupInformation.createRemoteUser(user);
++      }
++    }
++    
++    if(LOG.isDebugEnabled())
++      LOG.debug("getUGI is returning: " + ugi.getShortUserName());
++    return ugi;
++  }
++
++  public static DFSClient getDFSClient(final UserGroupInformation user,
++                                       final InetSocketAddress addr,
++                                       final Configuration conf
++                                       ) throws IOException,
++                                                InterruptedException {
++    return
++      user.doAs(new PrivilegedExceptionAction<DFSClient>() {
++        public DFSClient run() throws IOException {
++          return new DFSClient(addr, conf);
++        }
++      });
++  }
++
++   /** Convert a String to chunk-size-to-view. */
++   public static int string2ChunkSizeToView(String s, int defaultValue) {
++     int n = s == null? 0: Integer.parseInt(s);
++     return n > 0? n: defaultValue;
++   }
++
++  /**
++   * Get the default chunk size.
++   * @param conf the configuration
++   * @return the number of bytes to chunk in
++   */
++  public static int getDefaultChunkSize(Configuration conf) {
++    return conf.getInt("dfs.default.chunk.view.size", 32 * 1024);
++  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
+index c1157be..b62294a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
+@@ -17,6 +17,7 @@
+  */
+ package org.apache.hadoop.hdfs.server.namenode;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.HftpFileSystem;
+ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+@@ -134,9 +135,11 @@ public class ListPathsServlet extends DfsServlet {
+       final boolean recur = "yes".equals(root.get("recursive"));
+       final Pattern filter = Pattern.compile(root.get("filter"));
+       final Pattern exclude = Pattern.compile(root.get("exclude"));
++      final Configuration conf = 
++        (Configuration) request.getAttribute("name.conf");
+       
+-      ClientProtocol nnproxy = 
+-        getUGI(request).doAs(new PrivilegedExceptionAction<ClientProtocol>() {
++      ClientProtocol nnproxy = getUGI(request, conf).doAs
++        (new PrivilegedExceptionAction<ClientProtocol>() {
+         @Override
+         public ClientProtocol run() throws IOException {
+           return createNameNodeProxy();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
+index d960196..8739e36 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
+@@ -31,31 +31,16 @@ import org.apache.hadoop.conf.*;
+ public class StreamFile extends DfsServlet {
+   static InetSocketAddress nameNodeAddr;
+   static DataNode datanode = null;
+-  private static final Configuration masterConf = new Configuration();
+   static {
+     if ((datanode = DataNode.getDataNode()) != null) {
+       nameNodeAddr = datanode.getNameNodeAddr();
+     }
+   }
+   
+-  /** getting a client for connecting to dfs */
+-  protected DFSClient getDFSClient(HttpServletRequest request)
+-      throws IOException, InterruptedException {
+-    final Configuration conf = new Configuration(masterConf);
+-
+-    DFSClient client = 
+-      getUGI(request).doAs(new PrivilegedExceptionAction<DFSClient>() {
+-      @Override
+-      public DFSClient run() throws IOException {
+-        return new DFSClient(nameNodeAddr, conf);
+-      }
+-    });
+-
+-    return client;
+-  }
+-  
+   public void doGet(HttpServletRequest request, HttpServletResponse response)
+     throws ServletException, IOException {
++    Configuration conf = 
++      (Configuration) getServletContext().getAttribute("name.conf");
+     String filename = request.getParameter("filename");
+     if (filename == null || filename.length() == 0) {
+       response.setContentType("text/plain");
+@@ -65,8 +50,9 @@ public class StreamFile extends DfsServlet {
+     }
+     
+     DFSClient dfs;
++    UserGroupInformation ugi = getUGI(request, conf);
+     try {
+-      dfs = getDFSClient(request);
++	dfs = JspHelper.getDFSClient(ugi, nameNodeAddr, conf);
+     } catch (InterruptedException e) {
+       response.sendError(400, e.getMessage());
+       return;
+diff --git a/src/test/findbugsExcludeFile.xml b/src/test/findbugsExcludeFile.xml
+index 2e652b0..d01c8b4 100644
+--- a/src/test/findbugsExcludeFile.xml
++++ b/src/test/findbugsExcludeFile.xml
+@@ -33,6 +33,16 @@
+        <Bug pattern="IS2_INCONSISTENT_SYNC" />
+      </Match>
+      <!-- 
++       Ignore Cross Scripting Vulnerabilities
++       We have an input quoting filter that protects us.
++     -->
++     <Match>
++       <Bug code="XSS" />
++     </Match>
++     <Match>
++       <Bug code="HRS" />
++     </Match>
++     <!-- 
+        Accesses to Client.Connection.saslRpcClient are in fact
+        synchronized (inside synchronized methods).
+      --> 
+diff --git a/src/webapps/datanode/browseBlock.jsp b/src/webapps/datanode/browseBlock.jsp
+index 2e10e34..b99c85a 100644
+--- a/src/webapps/datanode/browseBlock.jsp
++++ b/src/webapps/datanode/browseBlock.jsp
+@@ -8,12 +8,14 @@
+   import="org.apache.hadoop.hdfs.*"
+   import="org.apache.hadoop.hdfs.server.namenode.*"
+   import="org.apache.hadoop.hdfs.server.datanode.*"
++  import="org.apache.hadoop.hdfs.server.common.*"
+   import="org.apache.hadoop.hdfs.protocol.*"
+   import="org.apache.hadoop.io.*"
+   import="org.apache.hadoop.conf.*"
+   import="org.apache.hadoop.net.DNS"
+   import="org.apache.hadoop.hdfs.security.BlockAccessToken"
+   import="org.apache.hadoop.hdfs.security.AccessTokenHandler"
++  import="org.apache.hadoop.security.UserGroupInformation"
+   import="org.apache.hadoop.util.*"
+   import="java.text.DateFormat"
+ %>
+@@ -21,8 +23,9 @@
+ <%!
+   static JspHelper jspHelper = new JspHelper();
+ 
+-  public void generateFileDetails(JspWriter out, HttpServletRequest req) 
+-    throws IOException {
++  public void generateFileDetails(JspWriter out, HttpServletRequest req,
++                                  Configuration conf
++                                 ) throws IOException, InterruptedException {
+ 
+     int chunkSizeToView = 0;
+     long startOffset = 0;
+@@ -50,9 +53,12 @@
+       namenodeInfoPort = Integer.parseInt(namenodeInfoPortStr);
+ 
+     String chunkSizeToViewStr = req.getParameter("chunkSizeToView");
+-    if (chunkSizeToViewStr != null && Integer.parseInt(chunkSizeToViewStr) > 0)
+-      chunkSizeToView = Integer.parseInt(chunkSizeToViewStr);
+-    else chunkSizeToView = jspHelper.defaultChunkSizeToView;
++    if (chunkSizeToViewStr != null && 
++        Integer.parseInt(chunkSizeToViewStr) > 0) {
++     chunkSizeToView = Integer.parseInt(chunkSizeToViewStr);
++    } else {
++     chunkSizeToView = JspHelper.getDefaultChunkSize(conf);
++    }
+ 
+     String startOffsetStr = req.getParameter("startOffset");
+     if (startOffsetStr == null || Long.parseLong(startOffsetStr) < 0)
+@@ -73,14 +79,17 @@
+     } 
+     blockSize = Long.parseLong(blockSizeStr);
+ 
+-    DFSClient dfs = new DFSClient(jspHelper.nameNodeAddr, jspHelper.conf);
++    String tokenString = req.getParameter(JspHelper.DELEGATION_PARAMETER_NAME);
++    UserGroupInformation ugi = JspHelper.getUGI(req, conf);
++    DFSClient dfs = JspHelper.getDFSClient(ugi, jspHelper.nameNodeAddr, conf);
+     List<LocatedBlock> blocks = 
+       dfs.namenode.getBlockLocations(filename, 0, Long.MAX_VALUE).getLocatedBlocks();
+     //Add the various links for looking at the file contents
+     //URL for downloading the full file
+     String downloadUrl = "http://" + req.getServerName() + ":" +
+-                         + req.getServerPort() + "/streamFile?" + "filename=" +
+-                         URLEncoder.encode(filename, "UTF-8");
++                         + req.getServerPort() + "/streamFile?" + "filename="
++                         + URLEncoder.encode(filename, "UTF-8")
++                         + JspHelper.SET_DELEGATION + tokenString;
+     out.print("<a name=\"viewOptions\"></a>");
+     out.print("<a href=\"" + downloadUrl + "\">Download this file</a><br>");
+     
+@@ -104,7 +113,8 @@
+                  "&chunkSizeToView=" + chunkSizeToView +
+                  "&referrer=" + 
+           URLEncoder.encode(req.getRequestURL() + "?" + req.getQueryString(),
+-                            "UTF-8");
++                            "UTF-8") +
++                 JspHelper.SET_DELEGATION + tokenString;
+     out.print("<a href=\"" + tailUrl + "\">Tail this file</a><br>");
+ 
+     out.print("<form action=\"/browseBlock.jsp\" method=GET>");
+@@ -166,8 +176,9 @@
+     dfs.close();
+   }
+ 
+-  public void generateFileChunks(JspWriter out, HttpServletRequest req) 
+-    throws IOException {
++  public void generateFileChunks(JspWriter out, HttpServletRequest req,
++                                 Configuration conf
++                                ) throws IOException, InterruptedException {
+     long startOffset = 0;
+     int datanodePort = 0; 
+     int chunkSizeToView = 0;
+@@ -192,11 +203,13 @@
+     }
+     blockId = Long.parseLong(blockIdStr);
+ 
+-    final DFSClient dfs = new DFSClient(jspHelper.nameNodeAddr, jspHelper.conf);
++    String tokenString = req.getParameter(JspHelper.DELEGATION_PARAMETER_NAME);
++    UserGroupInformation ugi = JspHelper.getUGI(req, conf);
++    final DFSClient dfs = JspHelper.getDFSClient(ugi, jspHelper.nameNodeAddr,
++                                                 conf);
+     
+     BlockAccessToken accessToken = BlockAccessToken.DUMMY_TOKEN;
+-    if (JspHelper.conf
+-        .getBoolean(AccessTokenHandler.STRING_ENABLE_ACCESS_TOKEN, false)) {
++    if (conf.getBoolean(AccessTokenHandler.STRING_ENABLE_ACCESS_TOKEN, false)){
+       List<LocatedBlock> blks = dfs.namenode.getBlockLocations(filename, 0,
+           Long.MAX_VALUE).getLocatedBlocks();
+       if (blks == null || blks.size() == 0) {
+@@ -233,7 +246,7 @@
+     String chunkSizeToViewStr = req.getParameter("chunkSizeToView");
+     if (chunkSizeToViewStr != null && Integer.parseInt(chunkSizeToViewStr) > 0)
+       chunkSizeToView = Integer.parseInt(chunkSizeToViewStr);
+-    else chunkSizeToView = jspHelper.defaultChunkSizeToView;
++    else chunkSizeToView = JspHelper.getDefaultChunkSize(conf);
+ 
+     String startOffsetStr = req.getParameter("startOffset");
+     if (startOffsetStr == null || Long.parseLong(startOffsetStr) < 0)
+@@ -247,10 +260,11 @@
+     }
+     datanodePort = Integer.parseInt(datanodePortStr);
+     out.print("<h3>File: ");
+-    JspHelper.printPathWithLinks(filename, out, namenodeInfoPort);
++    JspHelper.printPathWithLinks(filename, out, namenodeInfoPort,
++                                 tokenString);
+     out.print("</h3><hr>");
+     String parent = new File(filename).getParent();
+-    JspHelper.printGotoForm(out, namenodeInfoPort, parent);
++    JspHelper.printGotoForm(out, namenodeInfoPort, tokenString, parent);
+     out.print("<hr>");
+     out.print("<a href=\"http://" + req.getServerName() + ":" + 
+               req.getServerPort() + 
+@@ -312,7 +326,8 @@
+                 "&filename=" + URLEncoder.encode(filename, "UTF-8") +
+                 "&chunkSizeToView=" + chunkSizeToView + 
+                 "&datanodePort=" + nextDatanodePort +
+-                "&namenodeInfoPort=" + namenodeInfoPort;
++                "&namenodeInfoPort=" + namenodeInfoPort +
++                JspHelper.SET_DELEGATION + tokenString;
+       out.print("<a href=\"" + nextUrl + "\">View Next chunk</a>&nbsp;&nbsp;");        
+     }
+     //determine data for the prev link
+@@ -368,7 +383,8 @@
+                 "&chunkSizeToView=" + chunkSizeToView +
+                 "&genstamp=" + prevGenStamp +
+                 "&datanodePort=" + prevDatanodePort +
+-                "&namenodeInfoPort=" + namenodeInfoPort;
++                "&namenodeInfoPort=" + namenodeInfoPort +
++                JspHelper.SET_DELEGATION + tokenString;
+       out.print("<a href=\"" + prevUrl + "\">View Prev chunk</a>&nbsp;&nbsp;");
+     }
+     out.print("<hr>");
+@@ -376,7 +392,8 @@
+     try {
+     jspHelper.streamBlockInAscii(
+             new InetSocketAddress(req.getServerName(), datanodePort), blockId, 
+-            accessToken, genStamp, blockSize, startOffset, chunkSizeToView, out);
++            accessToken, genStamp, blockSize, startOffset, chunkSizeToView, 
++            out, conf);
+     } catch (Exception e){
+         out.print(e);
+     }
+@@ -393,11 +410,13 @@
+ </head>
+ <body onload="document.goto.dir.focus()">
+ <% 
+-   generateFileChunks(out,request);
++   Configuration conf = 
++     (Configuration) getServletContext().getAttribute("datanode.conf");
++   generateFileChunks(out, request, conf);
+ %>
+ <hr>
+ <% 
+-   generateFileDetails(out,request);
++   generateFileDetails(out, request, conf);
+ %>
+ 
+ <h2>Local logs</h2>
+diff --git a/src/webapps/datanode/browseDirectory.jsp b/src/webapps/datanode/browseDirectory.jsp
+index 5b0376b..09f8722 100644
+--- a/src/webapps/datanode/browseDirectory.jsp
++++ b/src/webapps/datanode/browseDirectory.jsp
+@@ -5,14 +5,17 @@
+   import="java.io.*"
+   import="java.util.*"
+   import="java.net.*"
++  import="org.apache.hadoop.conf.Configuration"
+   import="org.apache.hadoop.fs.*"
+   import="org.apache.hadoop.hdfs.*"
+   import="org.apache.hadoop.hdfs.server.namenode.*"
+   import="org.apache.hadoop.hdfs.server.datanode.*"
++  import="org.apache.hadoop.hdfs.server.common.*"
+   import="org.apache.hadoop.hdfs.protocol.*"
+   import="org.apache.hadoop.io.*"
+   import="org.apache.hadoop.conf.*"
+   import="org.apache.hadoop.net.DNS"
++  import="org.apache.hadoop.security.UserGroupInformation"
+   import="org.apache.hadoop.util.*"
+   import="java.text.DateFormat"
+ %>
+@@ -21,24 +24,29 @@
+   
+   public void generateDirectoryStructure( JspWriter out, 
+                                           HttpServletRequest req,
+-                                          HttpServletResponse resp) 
+-    throws IOException {
++                                          HttpServletResponse resp,
++                                          Configuration conf
++                                         ) throws IOException, 
++                                                  InterruptedException {
+     String dir = req.getParameter("dir");
+     if (dir == null || dir.length() == 0) {
+       out.print("Invalid input");
+       return;
+     }
+     
++    String tokenString = req.getParameter(JspHelper.DELEGATION_PARAMETER_NAME);
++    UserGroupInformation ugi = JspHelper.getUGI(req, conf);
+     String namenodeInfoPortStr = req.getParameter("namenodeInfoPort");
+     int namenodeInfoPort = -1;
+     if (namenodeInfoPortStr != null)
+       namenodeInfoPort = Integer.parseInt(namenodeInfoPortStr);
+     
+-    DFSClient dfs = new DFSClient(jspHelper.nameNodeAddr, jspHelper.conf);
++    DFSClient dfs = JspHelper.getDFSClient(ugi, jspHelper.nameNodeAddr, 
++                                           conf);
+     String target = dir;
+     if (!dfs.exists(target)) {
+       out.print("<h3>File or directory : " + target + " does not exist</h3>");
+-      JspHelper.printGotoForm(out, namenodeInfoPort, target);
++      JspHelper.printGotoForm(out, namenodeInfoPort, tokenString, target);
+     }
+     else {
+       if( !dfs.isDirectory(target) ) { // a file
+@@ -69,8 +77,9 @@
+             "&blockSize=" + firstBlock.getBlock().getNumBytes() +
+             "&genstamp=" + firstBlock.getBlock().getGenerationStamp() +
+             "&filename=" + URLEncoder.encode(dir, "UTF-8") + 
+-            "&datanodePort=" + datanodePort + 
+-            "&namenodeInfoPort=" + namenodeInfoPort;
++            "&datanodePort="
++            + datanodePort + "&namenodeInfoPort=" + namenodeInfoPort
++            + JspHelper.SET_DELEGATION + tokenString;
+           resp.sendRedirect(redirectLocation);
+         }
+         return;
+@@ -82,9 +91,9 @@
+                               "Block Size", "Modification Time",
+                               "Permission", "Owner", "Group" };
+       out.print("<h3>Contents of directory ");
+-      JspHelper.printPathWithLinks(dir, out, namenodeInfoPort);
++      JspHelper.printPathWithLinks(dir, out, namenodeInfoPort, tokenString);
+       out.print("</h3><hr>");
+-      JspHelper.printGotoForm(out, namenodeInfoPort, dir);
++      JspHelper.printGotoForm(out, namenodeInfoPort, tokenString, dir);
+       out.print("<hr>");
+ 	
+       File f = new File(dir);
+@@ -92,6 +101,7 @@
+       if ((parent = f.getParent()) != null)
+         out.print("<a href=\"" + req.getRequestURL() + "?dir=" + parent +
+                   "&namenodeInfoPort=" + namenodeInfoPort +
++                  JspHelper.SET_DELEGATION + tokenString +
+                   "\">Go to parent directory</a><br>");
+ 	
+       if (files == null || files.length == 0) {
+@@ -151,8 +161,10 @@
+ 
+ <body onload="document.goto.dir.focus()">
+ <% 
++  Configuration conf = 
++    (Configuration) getServletContext().getAttribute("datanode.conf");
+   try {
+-    generateDirectoryStructure(out,request,response);
++    generateDirectoryStructure(out,request,response,conf);
+   }
+   catch(IOException ioe) {
+     String msg = ioe.getLocalizedMessage();
+diff --git a/src/webapps/datanode/tail.jsp b/src/webapps/datanode/tail.jsp
+index a64f161..deb3318 100644
+--- a/src/webapps/datanode/tail.jsp
++++ b/src/webapps/datanode/tail.jsp
+@@ -8,6 +8,7 @@
+   import="org.apache.hadoop.hdfs.*"
+   import="org.apache.hadoop.hdfs.server.namenode.*"
+   import="org.apache.hadoop.hdfs.server.datanode.*"
++  import="org.apache.hadoop.hdfs.server.common.*"
+   import="org.apache.hadoop.hdfs.protocol.*"
+   import="org.apache.hadoop.io.*"
+   import="org.apache.hadoop.conf.*"
+@@ -15,18 +16,20 @@
+   import="org.apache.hadoop.hdfs.security.BlockAccessToken"
+   import="org.apache.hadoop.util.*"
+   import="org.apache.hadoop.net.NetUtils"
++  import="org.apache.hadoop.security.UserGroupInformation"
+   import="java.text.DateFormat"
+ %>
+ 
+ <%!
+-  static JspHelper jspHelper = new JspHelper();
++  JspHelper jspHelper = new JspHelper();
+ 
+-  public void generateFileChunks(JspWriter out, HttpServletRequest req) 
+-    throws IOException {
++  public void generateFileChunks(JspWriter out, HttpServletRequest req,
++                                 Configuration conf
++                                ) throws IOException, InterruptedException {
+     long startOffset = 0;
+     
+     int chunkSizeToView = 0;
+-
++    String tokenString = req.getParameter(JspHelper.DELEGATION_PARAMETER_NAME);
+     String referrer = req.getParameter("referrer");
+     boolean noLink = false;
+     if (referrer == null) {
+@@ -47,11 +50,12 @@
+     String chunkSizeToViewStr = req.getParameter("chunkSizeToView");
+     if (chunkSizeToViewStr != null && Integer.parseInt(chunkSizeToViewStr) > 0)
+       chunkSizeToView = Integer.parseInt(chunkSizeToViewStr);
+-    else chunkSizeToView = jspHelper.defaultChunkSizeToView;
++    else chunkSizeToView = JspHelper.getDefaultChunkSize(conf);
+ 
+     if (!noLink) {
+       out.print("<h3>Tail of File: ");
+-      JspHelper.printPathWithLinks(filename, out, namenodeInfoPort);
++      JspHelper.printPathWithLinks(filename, out, namenodeInfoPort, 
++                                   tokenString);
+ 	    out.print("</h3><hr>");
+       out.print("<a href=\"" + referrer + "\">Go Back to File View</a><hr>");
+     }
+@@ -71,10 +75,11 @@
+                 referrer+ "\">");
+ 
+     //fetch the block from the datanode that has the last block for this file
+-    DFSClient dfs = new DFSClient(jspHelper.nameNodeAddr, 
+-                                         jspHelper.conf);
++    UserGroupInformation ugi = JspHelper.getUGI(req, conf);
++    DFSClient dfs = JspHelper.getDFSClient(ugi, jspHelper.nameNodeAddr, conf);
+     List<LocatedBlock> blocks = 
+-      dfs.namenode.getBlockLocations(filename, 0, Long.MAX_VALUE).getLocatedBlocks();
++      dfs.namenode.getBlockLocations(filename, 0, Long.MAX_VALUE
++                                     ).getLocatedBlocks();
+     if (blocks == null || blocks.size() == 0) {
+       out.print("No datanodes contain blocks of file "+filename);
+       dfs.close();
+@@ -100,7 +105,9 @@
+     else startOffset = 0;
+ 
+     out.print("<textarea cols=\"100\" rows=\"25\" wrap=\"virtual\" style=\"width:100%\" READONLY>");
+-    jspHelper.streamBlockInAscii(addr, blockId, accessToken, genStamp, blockSize, startOffset, chunkSizeToView, out);
++    jspHelper.streamBlockInAscii(addr, blockId, accessToken, genStamp, 
++                                 blockSize, startOffset, chunkSizeToView, 
++                                 out, conf);
+     out.print("</textarea>");
+     dfs.close();
+   }
+@@ -118,7 +125,9 @@
+ <body>
+ <form action="/tail.jsp" method="GET">
+ <% 
+-   generateFileChunks(out,request);
++   Configuration conf = 
++     (Configuration) application.getAttribute("datanode.conf");
++   generateFileChunks(out, request, conf);
+ %>
+ </form>
+ <hr>
+diff --git a/src/webapps/hdfs/nn_browsedfscontent.jsp b/src/webapps/hdfs/nn_browsedfscontent.jsp
+index 31deb42..50cd410 100644
+--- a/src/webapps/hdfs/nn_browsedfscontent.jsp
++++ b/src/webapps/hdfs/nn_browsedfscontent.jsp
+@@ -1,29 +1,56 @@
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+-  import="javax.servlet.*"
+-  import="javax.servlet.http.*"
+   import="java.io.*"
++  import="java.security.PrivilegedExceptionAction"
+   import="java.util.*"
++  import="javax.servlet.*"
++  import="javax.servlet.http.*"
++  import="org.apache.hadoop.conf.Configuration"
+   import="org.apache.hadoop.hdfs.*"
+   import="org.apache.hadoop.hdfs.server.namenode.*"
+   import="org.apache.hadoop.hdfs.server.datanode.*"
+   import="org.apache.hadoop.hdfs.protocol.*"
++  import="org.apache.hadoop.hdfs.security.token.delegation.*"
++  import="org.apache.hadoop.io.Text"
++  import="org.apache.hadoop.security.UserGroupInformation"
++  import="org.apache.hadoop.security.token.Token"
+   import="org.apache.hadoop.util.*"
+   import="java.text.DateFormat"
+   import="java.net.InetAddress"
+   import="java.net.URLEncoder"
+ %>
+ <%!
++  static String getDelegationToken(final NameNode nn, final String user
++                                   ) throws IOException, InterruptedException {
++    if (user == null) {
++      return null;
++    }
++    UserGroupInformation ugi = UserGroupInformation.createRemoteUser(user);
++    Token<DelegationTokenIdentifier> token =
++      ugi.doAs(
++              new PrivilegedExceptionAction<Token<DelegationTokenIdentifier>>()
++          {
++            public Token<DelegationTokenIdentifier> run() throws IOException {
++              return nn.getDelegationToken(new Text(user));
++            }
++          });
++    return token.encodeToUrlString();
++  }
++
+   public void redirectToRandomDataNode(
+                             NameNode nn, 
+-                            HttpServletResponse resp) throws IOException {
++                            HttpServletRequest request,
++                            HttpServletResponse resp
++                           ) throws IOException, InterruptedException {
++    String tokenString = getDelegationToken(nn, request.getRemoteUser());
+     FSNamesystem fsn = nn.getNamesystem();
+     String datanode = fsn.randomDataNode();
+     String redirectLocation;
+     String nodeToRedirect;
+     int redirectPort;
+     if (datanode != null) {
+-      redirectPort = Integer.parseInt(datanode.substring(datanode.indexOf(':') + 1));
++      redirectPort = Integer.parseInt(datanode.substring(datanode.indexOf(':')
++                     + 1));
+       nodeToRedirect = datanode.substring(0, datanode.indexOf(':'));
+     }
+     else {
+@@ -34,7 +61,9 @@
+     redirectLocation = "http://" + fqdn + ":" + redirectPort + 
+                        "/browseDirectory.jsp?namenodeInfoPort=" + 
+                        nn.getHttpAddress().getPort() +
+-                       "&dir=" + URLEncoder.encode("/", "UTF-8");
++                       "&dir=/" + 
++                       (tokenString == null ? "" :
++                        JspHelper.SET_DELEGATION + tokenString);
+     resp.sendRedirect(redirectLocation);
+   }
+ %>
+@@ -46,7 +75,8 @@
+ <body>
+ <% 
+   NameNode nn = (NameNode)application.getAttribute("name.node");
+-  redirectToRandomDataNode(nn, response); 
++  Configuration conf = (Configuration) application.getAttribute("name.conf");
++  redirectToRandomDataNode(nn, request, response); 
+ %>
+ <hr>
+ 
+-- 
+1.7.0.4
+

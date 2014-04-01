@@ -1,0 +1,164 @@
+<?xml version="1.0"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!DOCTYPE document PUBLIC "-//APACHE//DTD Documentation V2.0//EN" "http://forrest.apache.org/dtd/document-v20.dtd">
+
+<document>
+
+<header>
+  <title>Gridmix</title>
+</header>
+
+<body>
+
+  <section>
+  <title>Overview</title>
+
+  <p>Gridmix is a benchmark for live clusters. It submits a mix of synthetic
+  jobs, modeling a profile mined from production loads.</p>
+
+  <p>There exist three versions of the Gridmix tool. This document discusses
+  the third (checked into contrib), distinct from the two checked into the
+  benchmarks subdirectory. While the first two versions of the tool included
+  stripped-down versions of common jobs, both were principally saturation
+  tools for stressing the framework at scale. In support of a broader range of
+  deployments and finer-tuned job mixes, this version of the tool will attempt
+  to model the resource profiles of production jobs to identify bottlenecks,
+  guide development, and serve as a replacement for the existing gridmix
+  benchmarks.</p>
+
+  </section>
+
+  <section id="usage">
+
+  <title>Usage</title>
+
+  <p>To run Gridmix, one requires a job trace describing the job mix for a
+  given cluster. Such traces are typically genenerated by Rumen (see related
+  documentation). Gridmix also requires input data from which the synthetic
+  jobs will draw bytes. The input data need not be in any particular format,
+  as the synthetic jobs are currently binary readers. If one is running on a
+  new cluster, an optional step generating input data may precede the run.</p>
+
+  <p>Basic command line usage:</p>
+<source>
+
+bin/mapred org.apache.hadoop.mapred.gridmix.Gridmix [-generate &lt;MiB&gt;] &lt;iopath&gt; &lt;trace&gt;
+</source>
+
+  <p>The <code>-generate</code> parameter accepts standard units, e.g.
+  <code>100g</code> will generate 100 * 2<sup>30</sup> bytes. The
+  &lt;iopath&gt; parameter is the destination directory for generated and/or
+  the directory from which input data will be read. The &lt;trace&gt;
+  parameter is a path to a job trace. The following configuration parameters
+  are also accepted in the standard idiom, before other Gridmix
+  parameters.</p>
+
+  <section>
+  <title>Configuration parameters</title>
+  <p></p>
+  <table>
+    <tr><th> Parameter </th><th> Description </th><th> Notes </th></tr>
+    <tr><td><code>gridmix.output.directory</code></td>
+        <td>The directory into which output will be written. If specified, the
+        <code>iopath</code> will be relative to this parameter.</td>
+        <td>The submitting user must have read/write access to this
+        directory. The user should also be mindful of any quota issues that
+        may arise during a run.</td></tr>
+    <tr><td><code>gridmix.client.submit.threads</code></td>
+        <td>The number of threads submitting jobs to the cluster. This also
+        controls how many splits will be loaded into memory at a given time,
+        pending the submit time in the trace.</td>
+        <td>Splits are pregenerated to hit submission deadlines, so
+        particularly dense traces may want more submitting threads. However,
+        storing splits in memory is reasonably expensive, so one should raise
+        this cautiously.</td></tr>
+    <tr><td><code>gridmix.client.pending.queue.depth</code></td>
+        <td>The depth of the queue of job descriptions awaiting split
+        generation.</td>
+        <td>The jobs read from the trace occupy a queue of this depth before
+        being processed by the submission threads. It is unusual to configure
+        this.</td></tr>
+    <tr><td><code>gridmix.min.key.length</code></td>
+        <td>The key size for jobs submitted to the cluster.</td>
+        <td>While this is clearly a job-specific, even task-specific property,
+        no data on key length is currently available. Since the intermediate
+        data are random, memcomparable data, not even the sort is likely
+        affected. It exists as a tunable as no default value is appropriate,
+        but future versions will likely replace it with trace data.</td></tr>
+  </table>
+
+  </section>
+</section>
+
+<section id="assumptions">
+
+  <title>Simplifying Assumptions</title>
+
+  <p>Gridmix will be developed in stages, incorporating feedback and patches
+  from the community. Currently, its intent is to evaluate Map/Reduce and HDFS
+  performance and not the layers on top of them (i.e. the extensive lib and
+  subproject space). Given these two limitations, the following
+  characteristics of job load are not currently captured in job traces and
+  cannot be accurately reproduced in Gridmix.</p>
+
+  <table>
+  <tr><th>Property</th><th>Notes</th></tr>
+  <tr><td>CPU usage</td><td>We have no data for per-task CPU usage, so we
+  cannot attempt even an approximation. Gridmix tasks are never CPU bound
+  independent of I/O, though this surely happens in practice.</td></tr>
+  <tr><td>Filesystem properties</td><td>No attempt is made to match block
+  sizes, namespace hierarchies, or any property of input, intermediate, or
+  output data other than the bytes/records consumed and emitted from a given
+  task. This implies that some of the most heavily used parts of the system-
+  the compression libraries, text processing, streaming, etc.- cannot be
+  meaningfully tested with the current implementation.</td></tr>
+  <tr><td>I/O rates</td><td>The rate at which records are consumed/emitted is
+  assumed to be limited only by the speed of the reader/writer and constant
+  throughout the task.</td></tr>
+  <tr><td>Memory profile</td><td>No data on tasks' memory usage over time is
+  available, though the max heap size is retained.</td></tr>
+  <tr><td>Skew</td><td>The records consumed and emitted to/from a given task
+  are assumed to follow observed averages, i.e. records will be more regular
+  than may be seen in the wild. Each map also generates a proportional
+  percentage of data for each reduce, so a job with unbalanced input will be
+  flattened.</td></tr>
+  <tr><td>Job failure</td><td>User code is assumed to be correct.</td></tr>
+  <tr><td>Job independence</td><td>The output or outcome of one job does not
+  affect when or whether a subsequent job will run.</td></tr>
+  </table>
+
+</section>
+
+<section>
+
+  <title>Appendix</title>
+
+  <p>Issues tracking the implementations of <a
+  href="https://issues.apache.org/jira/browse/HADOOP-2369">gridmix1</a>, <a
+  href="https://issues.apache.org/jira/browse/HADOOP-3770">gridmix2</a>, and
+  <a href="https://issues.apache.org/jira/browse/MAPREDUCE-776">gridmix3</a>.
+  Other issues tracking the development of Gridmix can be found by searching
+  the Map/Reduce <a
+  href="https://issues.apache.org/jira/browse/MAPREDUCE">JIRA</a></p>
+
+</section>
+
+</body>
+
+</document>

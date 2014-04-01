@@ -1,0 +1,43 @@
+From 6ef50ae8cebf1b974e3fd4da6c18e2b7ff12dc52 Mon Sep 17 00:00:00 2001
+From: Ahmed Radwan <ahmed@cloudera.com>
+Date: Fri, 11 Nov 2011 15:38:00 -0800
+Subject: [PATCH 1069/1179] HDFS-94. The "Heap Size" in HDFS web ui may not be accurate.
+
+Reason: Bug
+Author: Dmytro Molkov
+Ref: CDH-3681
+---
+ .../hadoop/hdfs/server/namenode/JspHelper.java     |   10 ++++++++--
+ 1 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+index 413ee37..c93c237 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+@@ -22,6 +22,9 @@ import java.io.ByteArrayInputStream;
+ import java.io.DataInputStream;
+ import java.io.IOException;
+ import java.io.UnsupportedEncodingException;
++import java.lang.management.ManagementFactory;
++import java.lang.management.MemoryMXBean;
++import java.lang.management.MemoryUsage;
+ import java.net.InetSocketAddress;
+ import java.net.Socket;
+ import java.security.PrivilegedExceptionAction;
+@@ -217,8 +220,11 @@ public class JspHelper {
+     long inodes = fsn.dir.totalInodes();
+     long blocks = fsn.getBlocksTotal();
+     long maxobjects = fsn.getMaxObjects();
+-    long totalMemory = Runtime.getRuntime().totalMemory();   
+-    long maxMemory = Runtime.getRuntime().maxMemory();   
++
++    MemoryMXBean mem = ManagementFactory.getMemoryMXBean();
++    MemoryUsage heap = mem.getHeapMemoryUsage();
++    long totalMemory = heap.getUsed();
++    long maxMemory = heap.getMax();
+ 
+     long used = (totalMemory * 100)/maxMemory;
+  
+-- 
+1.7.0.4
+

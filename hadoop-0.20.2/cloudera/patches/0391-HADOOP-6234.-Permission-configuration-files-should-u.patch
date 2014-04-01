@@ -1,0 +1,643 @@
+From 9d9e86678faa54e23c3ac41c1b8fdb6b379e9b5d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 20 Nov 2009 17:01:21 -0800
+Subject: [PATCH 0391/1179] HADOOP-6234. Permission configuration files should use octal and symbolic
+
+Patch: https://issues.apache.org/jira/secure/attachment/12425635/COMMON-6234.rel20.1.patch
+Author: Jakob Homan
+Ref: YDH
+---
+ .../org/apache/hadoop/fs/FsShellPermissions.java   |  138 ++--------------
+ .../apache/hadoop/fs/permission/ChmodParser.java   |   51 ++++++
+ .../apache/hadoop/fs/permission/FsPermission.java  |   34 +++-
+ .../hadoop/fs/permission/PermissionParser.java     |  178 ++++++++++++++++++++
+ .../apache/hadoop/fs/permission/UmaskParser.java   |   43 +++++
+ .../content/xdocs/hdfs_permissions_guide.xml       |    4 +-
+ .../hadoop/fs/permission/TestFsPermission.java     |   60 +++++++
+ 7 files changed, 375 insertions(+), 133 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/fs/permission/ChmodParser.java
+ create mode 100644 src/core/org/apache/hadoop/fs/permission/PermissionParser.java
+ create mode 100644 src/core/org/apache/hadoop/fs/permission/UmaskParser.java
+
+diff --git a/src/core/org/apache/hadoop/fs/FsShellPermissions.java b/src/core/org/apache/hadoop/fs/FsShellPermissions.java
+index fcdebb9..da6fd86 100644
+--- a/src/core/org/apache/hadoop/fs/FsShellPermissions.java
++++ b/src/core/org/apache/hadoop/fs/FsShellPermissions.java
+@@ -23,6 +23,7 @@ import java.util.regex.Pattern;
+ 
+ import org.apache.hadoop.fs.FsShell.CmdHandler;
+ import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.fs.permission.ChmodParser;
+ 
+ 
+ /**
+@@ -37,146 +38,33 @@ class FsShellPermissions {
+    * chmod shell command. The main restriction is that we recognize only rwxX.
+    * To reduce errors we also enforce 3 digits for octal mode.
+    */  
+-  private static Pattern chmodNormalPattern = 
+-             Pattern.compile("\\G\\s*([ugoa]*)([+=-]+)([rwxX]+)([,\\s]*)\\s*");
+-  private static Pattern chmodOctalPattern =
+-            Pattern.compile("^\\s*[+]?([0-7]{3})\\s*$");
+   
+   static String CHMOD_USAGE = 
+                             "-chmod [-R] <MODE[,MODE]... | OCTALMODE> PATH...";
+ 
++  private static  ChmodParser pp;
++  
+   private static class ChmodHandler extends CmdHandler {
+ 
+-    private short userMode, groupMode, othersMode;
+-    private char userType = '+', groupType = '+', othersType='+';
+-
+-    private void applyNormalPattern(String modeStr, Matcher matcher)
+-                                    throws IOException {
+-      boolean commaSeperated = false;
+-
+-      for(int i=0; i < 1 || matcher.end() < modeStr.length(); i++) {
+-        if (i>0 && (!commaSeperated || !matcher.find())) {
+-          patternError(modeStr);
+-        }
+-
+-        /* groups : 1 : [ugoa]*
+-         *          2 : [+-=]
+-         *          3 : [rwxX]+
+-         *          4 : [,\s]*
+-         */
+-
+-        String str = matcher.group(2);
+-        char type = str.charAt(str.length() - 1);
+-
+-        boolean user, group, others;
+-        user = group = others = false;
+-
+-        for(char c : matcher.group(1).toCharArray()) {
+-          switch (c) {
+-          case 'u' : user = true; break;
+-          case 'g' : group = true; break;
+-          case 'o' : others = true; break;
+-          case 'a' : break;
+-          default  : throw new RuntimeException("Unexpected");          
+-          }
+-        }
+-
+-        if (!(user || group || others)) { // same as specifying 'a'
+-          user = group = others = true;
+-        }
+-
+-        short  mode = 0;
+-        for(char c : matcher.group(3).toCharArray()) {
+-          switch (c) {
+-          case 'r' : mode |= 4; break;
+-          case 'w' : mode |= 2; break;
+-          case 'x' : mode |= 1; break;
+-          case 'X' : mode |= 8; break;
+-          default  : throw new RuntimeException("Unexpected");
+-          }
+-        }
+-
+-        if ( user ) {
+-          userMode = mode;
+-          userType = type;
+-        }
+-
+-        if ( group ) {
+-          groupMode = mode;
+-          groupType = type;
+-        }
+-
+-        if ( others ) {
+-          othersMode = mode;
+-          othersType = type;
+-        }
+-
+-        commaSeperated = matcher.group(4).contains(",");
+-      }
+-    }
+-
+-    private void applyOctalPattern(String modeStr, Matcher matcher) {
+-      userType = groupType = othersType = '=';
+-      String str = matcher.group(1);
+-      userMode = Short.valueOf(str.substring(0, 1));
+-      groupMode = Short.valueOf(str.substring(1, 2));
+-      othersMode = Short.valueOf(str.substring(2, 3));      
+-    }
+-
+-    private void patternError(String mode) throws IOException {
+-      throw new IOException("chmod : mode '" + mode + 
+-                            "' does not match the expected pattern.");      
+-    }
+-
+     ChmodHandler(FileSystem fs, String modeStr) throws IOException {
+       super("chmod", fs);
+-      Matcher matcher = null;
+-
+-      if ((matcher = chmodNormalPattern.matcher(modeStr)).find()) {
+-        applyNormalPattern(modeStr, matcher);
+-      } else if ((matcher = chmodOctalPattern.matcher(modeStr)).matches()) {
+-        applyOctalPattern(modeStr, matcher);
+-      } else {
+-        patternError(modeStr);
++      try {
++        pp = new ChmodParser(modeStr);
++      } catch(IllegalArgumentException iea) {
++        patternError(iea.getMessage());
+       }
+     }
+ 
+-    private int applyChmod(char type, int mode, int existing, boolean exeOk) {
+-      boolean capX = false;
+-
+-      if ((mode&8) != 0) { // convert X to x;
+-        capX = true;
+-        mode &= ~8;
+-        mode |= 1;
+-      }
+-
+-      switch (type) {
+-      case '+' : mode = mode | existing; break;
+-      case '-' : mode = (~mode) & existing; break;
+-      case '=' : break;
+-      default  : throw new RuntimeException("Unexpected");      
+-      }
+-
+-      // if X is specified add 'x' only if exeOk or x was already set.
+-      if (capX && !exeOk && (mode&1) != 0 && (existing&1) == 0) {
+-        mode &= ~1; // remove x
+-      }
+-
+-      return mode;
++    private void patternError(String mode) throws IOException {
++     throw new IOException("chmod : mode '" + mode + 
++         "' does not match the expected pattern.");      
+     }
+-
++    
+     @Override
+     public void run(FileStatus file, FileSystem srcFs) throws IOException {
+-      FsPermission perms = file.getPermission();
+-      int existing = perms.toShort();
+-      boolean exeOk = file.isDir() || (existing & 0111) != 0;
+-      int newperms = ( applyChmod(userType, userMode, 
+-                                  (existing>>>6)&7, exeOk) << 6 |
+-                       applyChmod(groupType, groupMode, 
+-                                  (existing>>>3)&7, exeOk) << 3 |
+-                       applyChmod(othersType, othersMode, existing&7, exeOk) );
++      int newperms = pp.applyNewPermission(file);
+ 
+-      if (existing != newperms) {
++      if (file.getPermission().toShort() != newperms) {
+         try {
+           srcFs.setPermission(file.getPath(), 
+                                 new FsPermission((short)newperms));
+diff --git a/src/core/org/apache/hadoop/fs/permission/ChmodParser.java b/src/core/org/apache/hadoop/fs/permission/ChmodParser.java
+new file mode 100644
+index 0000000..b8ca668
+--- /dev/null
++++ b/src/core/org/apache/hadoop/fs/permission/ChmodParser.java
+@@ -0,0 +1,51 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.fs.permission;
++
++import java.util.regex.Pattern;
++
++import org.apache.hadoop.fs.FileStatus;
++
++/**
++ * Parse a permission mode passed in from a chmod command and apply that
++ * mode against an existing file.
++ */
++public class ChmodParser extends PermissionParser {
++  private static Pattern chmodOctalPattern =
++    Pattern.compile("^\\s*[+]?([0-7]{3})\\s*$");
++  private static Pattern chmodNormalPattern =
++    Pattern.compile("\\G\\s*([ugoa]*)([+=-]+)([rwxX]+)([,\\s]*)\\s*");
++  
++  public ChmodParser(String modeStr) throws IllegalArgumentException {
++    super(modeStr, chmodNormalPattern, chmodOctalPattern);
++  }
++
++  /**
++   * Apply permission against specified file and determine what the
++   * new mode would be
++   * @param file File against which to apply mode
++   * @return File's new mode if applied.
++   */
++  public short applyNewPermission(FileStatus file) {
++    FsPermission perms = file.getPermission();
++    int existing = perms.toShort();
++    boolean exeOk = file.isDir() || (existing & 0111) != 0;
++    
++    return (short)combineModes(existing, exeOk);
++  }
++}
+diff --git a/src/core/org/apache/hadoop/fs/permission/FsPermission.java b/src/core/org/apache/hadoop/fs/permission/FsPermission.java
+index d395a20..fdb2616 100644
+--- a/src/core/org/apache/hadoop/fs/permission/FsPermission.java
++++ b/src/core/org/apache/hadoop/fs/permission/FsPermission.java
+@@ -17,17 +17,23 @@
+  */
+ package org.apache.hadoop.fs.permission;
+ 
+-import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.io.*;
+-
+ import java.io.DataInput;
+ import java.io.DataOutput;
+ import java.io.IOException;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.io.WritableFactories;
++import org.apache.hadoop.io.WritableFactory;
++
+ /**
+  * A class for file/directory permissions.
+  */
+ public class FsPermission implements Writable {
++  private static final Log LOG = LogFactory.getLog(FsPermission.class);
++  
+   static final WritableFactory FACTORY = new WritableFactory() {
+     public Writable newInstance() { return new FsPermission(); }
+   };
+@@ -154,15 +160,31 @@ public class FsPermission implements Writable {
+   }
+ 
+   /** umask property label */
+-  public static final String UMASK_LABEL = "dfs.umask";
++  public static final String DEPRECATED_UMASK_LABEL = "dfs.umask"; 
++  public static final String UMASK_LABEL = "dfs.umaskmode";
+   public static final int DEFAULT_UMASK = 0022;
+ 
+   /** Get the user file creation mask (umask) */
+   public static FsPermission getUMask(Configuration conf) {
+     int umask = DEFAULT_UMASK;
+-    if (conf != null) {
+-      umask = conf.getInt(UMASK_LABEL, DEFAULT_UMASK);
++    
++    // Attempt to pull value from configuration, trying new key first and then
++    // deprecated key, along with a warning, if not present
++    if(conf != null) {
++      String confUmask = conf.get(UMASK_LABEL);
++      if(confUmask != null) { // UMASK_LABEL is set
++        umask = new UmaskParser(confUmask).getUMask();
++      } else { // check for deprecated key label
++        int oldStyleValue = conf.getInt(DEPRECATED_UMASK_LABEL, Integer.MIN_VALUE);
++        if(oldStyleValue != Integer.MIN_VALUE) { // Property was set with old key
++          LOG.warn(DEPRECATED_UMASK_LABEL + " configuration key is deprecated. " +
++              "Convert to " + UMASK_LABEL + ", using octal or symbolic umask " +
++              "specifications.");
++          umask = oldStyleValue;
++        }
++      }
+     }
++    
+     return new FsPermission((short)umask);
+   }
+   /** Set the user file creation mask (umask) */
+diff --git a/src/core/org/apache/hadoop/fs/permission/PermissionParser.java b/src/core/org/apache/hadoop/fs/permission/PermissionParser.java
+new file mode 100644
+index 0000000..a4c5245
+--- /dev/null
++++ b/src/core/org/apache/hadoop/fs/permission/PermissionParser.java
+@@ -0,0 +1,178 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.fs.permission;
++
++import java.util.regex.Matcher;
++import java.util.regex.Pattern;
++
++/**
++ * Base class for parsing either chmod permissions or umask permissions.
++ * Includes common code needed by either operation as implemented in
++ * UmaskParser and ChmodParser classes.
++ */
++class PermissionParser {
++  protected short userMode;
++  protected short groupMode;
++  protected short othersMode;
++  protected char userType = '+';
++  protected char groupType = '+';
++  protected char othersType = '+';
++  
++  /**
++   * Begin parsing permission stored in modeStr
++   * 
++   * @param modeStr Permission mode, either octal or symbolic
++   * @param symbolic Use-case specific symbolic pattern to match against
++   * @throws IllegalArgumentException if unable to parse modeStr
++   */
++  public PermissionParser(String modeStr, Pattern symbolic, Pattern octal) 
++       throws IllegalArgumentException {
++    Matcher matcher = null;
++
++    if ((matcher = symbolic.matcher(modeStr)).find()) {
++      applyNormalPattern(modeStr, matcher);
++    } else if ((matcher = octal.matcher(modeStr)).matches()) {
++      applyOctalPattern(modeStr, matcher);
++    } else {
++      throw new IllegalArgumentException(modeStr);
++    }
++  }
++
++  private void applyNormalPattern(String modeStr, Matcher matcher) {
++    // Are there multiple permissions stored in one chmod?
++    boolean commaSeperated = false;
++
++    for (int i = 0; i < 1 || matcher.end() < modeStr.length(); i++) {
++      if (i > 0 && (!commaSeperated || !matcher.find())) {
++        throw new IllegalArgumentException(modeStr);
++      }
++
++      /*
++       * groups : 1 : [ugoa]* 2 : [+-=] 3 : [rwxX]+ 4 : [,\s]*
++       */
++
++      String str = matcher.group(2);
++      char type = str.charAt(str.length() - 1);
++
++      boolean user, group, others;
++      user = group = others = false;
++
++      for (char c : matcher.group(1).toCharArray()) {
++        switch (c) {
++        case 'u':
++          user = true;
++          break;
++        case 'g':
++          group = true;
++          break;
++        case 'o':
++          others = true;
++          break;
++        case 'a':
++          break;
++        default:
++          throw new RuntimeException("Unexpected");
++        }
++      }
++
++      if (!(user || group || others)) { // same as specifying 'a'
++        user = group = others = true;
++      }
++
++      short mode = 0;
++
++      for (char c : matcher.group(3).toCharArray()) {
++        switch (c) {
++        case 'r':
++          mode |= 4;
++          break;
++        case 'w':
++          mode |= 2;
++          break;
++        case 'x':
++          mode |= 1;
++          break;
++        case 'X':
++          mode |= 8;
++          break;
++        default:
++          throw new RuntimeException("Unexpected");
++        }
++      }
++
++      if (user) {
++        userMode = mode;
++        userType = type;
++      }
++
++      if (group) {
++        groupMode = mode;
++        groupType = type;
++      }
++
++      if (others) {
++        othersMode = mode;
++        othersType = type;
++      }
++
++      commaSeperated = matcher.group(4).contains(",");
++    }
++  }
++
++  private void applyOctalPattern(String modeStr, Matcher matcher) {
++    userType = groupType = othersType = '=';
++
++    String str = matcher.group(1);
++    userMode = Short.valueOf(str.substring(0, 1));
++    groupMode = Short.valueOf(str.substring(1, 2));
++    othersMode = Short.valueOf(str.substring(2, 3));
++  }
++
++  protected int combineModes(int existing, boolean exeOk) {
++    return   combineModeSegments(userType, userMode,
++                (existing>>>6)&7, exeOk) << 6 |
++             combineModeSegments(groupType, groupMode,
++                (existing>>>3)&7, exeOk) << 3 |
++             combineModeSegments(othersType, othersMode, existing&7, exeOk);
++  }
++  
++  protected int combineModeSegments(char type, int mode, 
++                                    int existing, boolean exeOk) {
++    boolean capX = false;
++
++    if ((mode&8) != 0) { // convert X to x;
++      capX = true;
++      mode &= ~8;
++      mode |= 1;
++    }
++
++    switch (type) {
++    case '+' : mode = mode | existing; break;
++    case '-' : mode = (~mode) & existing; break;
++    case '=' : break;
++    default  : throw new RuntimeException("Unexpected");      
++    }
++
++    // if X is specified add 'x' only if exeOk or x was already set.
++    if (capX && !exeOk && (mode&1) != 0 && (existing&1) == 0) {
++      mode &= ~1; // remove x
++    }
++
++    return mode;
++  }
++}
+diff --git a/src/core/org/apache/hadoop/fs/permission/UmaskParser.java b/src/core/org/apache/hadoop/fs/permission/UmaskParser.java
+new file mode 100644
+index 0000000..ea894c5
+--- /dev/null
++++ b/src/core/org/apache/hadoop/fs/permission/UmaskParser.java
+@@ -0,0 +1,43 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.fs.permission;
++
++import java.util.regex.Pattern;
++
++/**
++ * Parse umask value provided as a string, either in octal or symbolic
++ * format and return it as a short value. Umask values are slightly
++ * different from standard modes as they cannot specify X.
++ */
++class UmaskParser extends PermissionParser {
++  private static Pattern chmodOctalPattern =
++    Pattern.compile("^\\s*[+]?([0-7]{3})\\s*$");
++  private static Pattern umaskSymbolicPattern =    /* not allow X */
++    Pattern.compile("\\G\\s*([ugoa]*)([+=-]+)([rwx]+)([,\\s]*)\\s*");
++  final short umaskMode;
++  
++  public UmaskParser(String modeStr) throws IllegalArgumentException {
++    super(modeStr, umaskSymbolicPattern, chmodOctalPattern);
++
++    umaskMode = (short)combineModes(0, false);
++  }
++
++  public short getUMask() {
++    return umaskMode;
++  }
++}
+diff --git a/src/docs/src/documentation/content/xdocs/hdfs_permissions_guide.xml b/src/docs/src/documentation/content/xdocs/hdfs_permissions_guide.xml
+index 3e00ebb..8899c37 100644
+--- a/src/docs/src/documentation/content/xdocs/hdfs_permissions_guide.xml
++++ b/src/docs/src/documentation/content/xdocs/hdfs_permissions_guide.xml
+@@ -177,9 +177,9 @@ If a cluster starts with a version 0.15 data set (<code>fsimage</code>), all fil
+ 	<dd>
+ 		The choice of initial mode during upgrade. The <em>x</em> permission is <em>never</em> set for files. For configuration files, the decimal value <em>511<sub>10</sub></em> may be used.
+ 	</dd>
+-	<dt><code>dfs.umask = 022</code></dt>
++	<dt><code>dfs.umaskmode = 022</code></dt>
+ 	<dd>
+-		The <code>umask</code> used when creating files and directories. For configuration files, the decimal value <em>18<sub>10</sub></em> may be used.
++		The <code>umask</code> used when creating files and directories. May be specified either via three octal digits or symbolic values, with the same constraints as the dfs chmod command.
+ 	</dd>
+ </dl>
+ </section>
+diff --git a/src/test/org/apache/hadoop/fs/permission/TestFsPermission.java b/src/test/org/apache/hadoop/fs/permission/TestFsPermission.java
+index a563740..8107efe 100644
+--- a/src/test/org/apache/hadoop/fs/permission/TestFsPermission.java
++++ b/src/test/org/apache/hadoop/fs/permission/TestFsPermission.java
+@@ -17,6 +17,10 @@
+  */
+ package org.apache.hadoop.fs.permission;
+ 
++import java.io.IOException;
++
++import org.apache.hadoop.conf.Configuration;
++
+ import junit.framework.TestCase;
+ 
+ import static org.apache.hadoop.fs.permission.FsAction.*;
+@@ -67,4 +71,60 @@ public class TestFsPermission extends TestCase {
+       assertEquals(i, FsPermission.valueOf(b.toString()).toShort());
+     }
+   }
++
++  public void testUMaskParser() throws IOException {
++    Configuration conf = new Configuration();
++    
++    // Ensure that we get the right octal values back for all legal values
++    for(FsAction u : FsAction.values()) {
++      for(FsAction g : FsAction.values()) {
++        for(FsAction o : FsAction.values()) {
++          FsPermission f = new FsPermission(u, g, o);
++          String asOctal = String.format("%1$03o", f.toShort());
++          conf.set(FsPermission.UMASK_LABEL, asOctal);
++          FsPermission fromConf = FsPermission.getUMask(conf);
++          assertEquals(f, fromConf);
++        }
++      }
++    }
++  }
++
++  public void TestSymbolicUmasks() {
++    Configuration conf = new Configuration();
++    
++    // Test some symbolic settings       Setting       Octal result
++    String [] symbolic = new String [] { "a+rw",        "666",
++                                         "u=x,g=r,o=w", "142",
++                                         "u=x",         "100" };
++    
++    for(int i = 0; i < symbolic.length; i += 2) {
++      conf.set(FsPermission.UMASK_LABEL, symbolic[i]);
++      short val = Short.valueOf(symbolic[i + 1], 8);
++      assertEquals(val, FsPermission.getUMask(conf).toShort());
++    }
++  }
++
++  public void testBadUmasks() {
++    Configuration conf = new Configuration();
++    
++    for(String b : new String [] {"1777", "22", "99", "foo", ""}) {
++      conf.set(FsPermission.UMASK_LABEL, b); 
++      try {
++        FsPermission.getUMask(conf);
++        fail("Shouldn't have been able to parse bad umask");
++      } catch(IllegalArgumentException iae) {
++        assertEquals(iae.getMessage(), b);
++      }
++    }
++  }
++  
++  // Ensure that when the deprecated decimal umask key is used, it is correctly
++  // parsed as such and converted correctly to an FsPermission value
++  public void testDeprecatedUmask() {
++    Configuration conf = new Configuration();
++    conf.set(FsPermission.DEPRECATED_UMASK_LABEL, "302"); // 302 = 0456
++    FsPermission umask = FsPermission.getUMask(conf);
++
++    assertEquals(0456, umask.toShort());
++  }
+ }
+-- 
+1.7.0.4
+

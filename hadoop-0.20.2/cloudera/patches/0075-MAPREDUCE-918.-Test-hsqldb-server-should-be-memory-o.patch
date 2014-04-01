@@ -1,0 +1,100 @@
+From 61d4ef5175dca1859a1320f9e7cad1caeab5d982 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:54:49 -0800
+Subject: [PATCH 0075/1179] MAPREDUCE-918. Test hsqldb server should be memory-only.
+
+Description: Sqoop launches a standalone hsqldb server for unit tests, but it currently writes its database to disk and uses a connect string of <tt>//localhost</tt>. If multiple test instances are running concurrently, one test server may serve to the other instance of the unit tests, causing race conditions.
+Reason: Bugfix in test harness
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../sqoop/manager/DefaultManagerFactory.java       |   25 ++++++++++++++++---
+ .../hadoop/sqoop/testutil/HsqldbTestServer.java    |   12 +++------
+ 2 files changed, 25 insertions(+), 12 deletions(-)
+
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/DefaultManagerFactory.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/DefaultManagerFactory.java
+index a9a5650..28b6bfd 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/DefaultManagerFactory.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/DefaultManagerFactory.java
+@@ -41,12 +41,27 @@ public final class DefaultManagerFactory implements ManagerFactory {
+ 
+     String connectStr = options.getConnectString();
+ 
++    // java.net.URL follows RFC-2396 literally, which does not allow a ':'
++    // character in the scheme component (section 3.1). JDBC connect strings,
++    // however, commonly have a multi-scheme addressing system. e.g.,
++    // jdbc:mysql://...; so we cannot parse the scheme component via URL
++    // objects. Instead, attempt to pull out the scheme as best as we can.
++
++    // First, see if this is of the form [scheme://hostname-and-etc..]
+     int schemeStopIdx = connectStr.indexOf("//");
+     if (-1 == schemeStopIdx) {
+-      // no scheme component?
+-      LOG.warn("Could not parse connect string: [" + connectStr
+-          + "]; this may be malformed.");
+-      return null;
++      // If no hostname start marker ("//"), then look for the right-most ':'
++      // character.
++      schemeStopIdx = connectStr.lastIndexOf(':');
++      if (-1 == schemeStopIdx) {
++        // Warn that this is nonstandard. But we should be as permissive
++        // as possible here and let the ConnectionManagers themselves throw
++        // out the connect string if it doesn't make sense to them.
++        LOG.warn("Could not determine scheme component of connect string");
++
++        // Use the whole string.
++        schemeStopIdx = connectStr.length();
++      }
+     }
+ 
+     String scheme = connectStr.substring(0, schemeStopIdx);
+@@ -58,6 +73,8 @@ public final class DefaultManagerFactory implements ManagerFactory {
+       return null;
+     }
+ 
++    LOG.debug("Trying with scheme: " + scheme);
++
+     if (scheme.equals("jdbc:mysql:")) {
+       if (options.isDirect()) {
+         return new LocalMySQLManager(options);
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/HsqldbTestServer.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/HsqldbTestServer.java
+index a3d1a71..b1197fc 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/HsqldbTestServer.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/HsqldbTestServer.java
+@@ -45,9 +45,6 @@ public class HsqldbTestServer {
+   // singleton server instance.
+   private static Server server;
+ 
+-  // When we create databases in HSqlDb, where do we put the files?
+-  private static final String DATABASE_DATA_DIR = "./hsqldb-data";
+-
+   private static final String DATABASE_NAME = "db1";
+ 
+   // hsqldb always capitalizes table and column names
+@@ -56,7 +53,7 @@ public class HsqldbTestServer {
+ 
+   private static final String EMPLOYEE_TABLE_NAME = "EMPLOYEES";
+ 
+-  private static final String DB_URL = "jdbc:hsqldb:hsql://localhost/" + DATABASE_NAME;
++  private static final String DB_URL = "jdbc:hsqldb:mem:" + DATABASE_NAME;
+   private static final String DRIVER_CLASS = "org.hsqldb.jdbcDriver";
+ 
+   // all user-created HSQLDB tables are in the "PUBLIC" schema when connected to a database.
+@@ -87,11 +84,10 @@ public class HsqldbTestServer {
+    */
+   public void start() {
+     if (null == server) {
+-      LOG.info("Starting new hsqldb server; database=" + DATABASE_NAME + "; dir="
+-          + DATABASE_DATA_DIR);
++      LOG.info("Starting new hsqldb server; database=" + DATABASE_NAME);
+       server = new Server();
+-      server.setDatabasePath(0, DATABASE_DATA_DIR);
+-      server.setDatabaseName(0, DATABASE_NAME);
++      server.putPropertiesFromString("database.0=mem:" + DATABASE_NAME
++          + ";no_system_exit=true");
+       server.start();
+     }
+   }
+-- 
+1.7.0.4
+

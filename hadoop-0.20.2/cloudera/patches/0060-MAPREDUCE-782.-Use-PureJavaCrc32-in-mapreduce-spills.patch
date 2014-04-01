@@ -1,0 +1,54 @@
+From 2d0a97cefa559ab9059d976bda66f9dbcf051e79 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:49:28 -0800
+Subject: [PATCH 0060/1179] MAPREDUCE-782. Use PureJavaCrc32 in mapreduce spills
+
+Description: <a href="http://issues.apache.org/jira/browse/HADOOP-6148" title="Implement a pure Java CRC32 calculator"><del>HADOOP-6148</del></a> implemented a Pure Java implementation of CRC32 which performs better than the built-in one. This issue is to make use of it in the mapred package
+Reason: Performance improvement
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/mapred/SpillRecord.java      |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/SpillRecord.java b/src/mapred/org/apache/hadoop/mapred/SpillRecord.java
+index 7595898..261c7fe 100644
+--- a/src/mapred/org/apache/hadoop/mapred/SpillRecord.java
++++ b/src/mapred/org/apache/hadoop/mapred/SpillRecord.java
+@@ -20,7 +20,6 @@ package org.apache.hadoop.mapred;
+ import java.io.IOException;
+ import java.nio.ByteBuffer;
+ import java.nio.LongBuffer;
+-import java.util.zip.CRC32;
+ import java.util.zip.CheckedInputStream;
+ import java.util.zip.CheckedOutputStream;
+ import java.util.zip.Checksum;
+@@ -31,6 +30,7 @@ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.IOUtils;
++import org.apache.hadoop.util.PureJavaCrc32;
+ 
+ import static org.apache.hadoop.mapred.MapTask.MAP_OUTPUT_INDEX_RECORD_LENGTH;
+ 
+@@ -48,7 +48,7 @@ class SpillRecord {
+   }
+ 
+   public SpillRecord(Path indexFileName, JobConf job) throws IOException {
+-    this(indexFileName, job, new CRC32());
++    this(indexFileName, job, new PureJavaCrc32());
+   }
+ 
+   public SpillRecord(Path indexFileName, JobConf job, Checksum crc)
+@@ -110,7 +110,7 @@ class SpillRecord {
+    */
+   public void writeToFile(Path loc, JobConf job)
+       throws IOException {
+-    writeToFile(loc, job, new CRC32());
++    writeToFile(loc, job, new PureJavaCrc32());
+   }
+ 
+   public void writeToFile(Path loc, JobConf job, Checksum crc)
+-- 
+1.7.0.4
+

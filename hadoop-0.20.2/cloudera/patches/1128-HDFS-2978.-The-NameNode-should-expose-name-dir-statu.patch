@@ -1,0 +1,159 @@
+From 2179e0103e981dacea6ebcf8c8b6bb42ad9a5857 Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Sat, 25 Feb 2012 15:13:18 -0800
+Subject: [PATCH 1128/1179] HDFS-2978. The NameNode should expose name dir statuses via JMX
+
+Reason: New Feature
+Author: Aaron T. Myers
+Ref: CDH-3682
+---
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   26 +++++++++++
+ .../hdfs/server/namenode/NameNodeMXBean.java       |    8 ++++
+ .../hdfs/server/namenode/TestNameNodeMXBean.java   |   45 ++++++++++++++++++++
+ 3 files changed, 79 insertions(+), 0 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index a632eae..d6bea5a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -29,6 +29,8 @@ import org.apache.hadoop.hdfs.security.token.block.ExportedBlockKeys;
+ import org.apache.hadoop.hdfs.server.common.GenerationStamp;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants.StartupOption;
++import org.apache.hadoop.hdfs.server.common.Storage.StorageDirType;
++import org.apache.hadoop.hdfs.server.common.Storage.StorageDirectory;
+ import org.apache.hadoop.hdfs.server.common.Storage;
+ import org.apache.hadoop.hdfs.server.common.UpgradeStatusReport;
+ import org.apache.hadoop.hdfs.server.namenode.BlocksMap.BlockInfo;
+@@ -5794,6 +5796,30 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean,
+     return JSON.toString(info);
+   }
+ 
++  @Override  // NameNodeMXBean
++  public String getNameDirStatuses() {
++    Map<String, Map<File, StorageDirType>> statusMap =
++      new HashMap<String, Map<File, StorageDirType>>();
++    
++    Map<File, StorageDirType> activeDirs = new HashMap<File, StorageDirType>();
++    for (Iterator<StorageDirectory> it
++        = getFSImage().dirIterator(); it.hasNext();) {
++      StorageDirectory st = it.next();
++      activeDirs.put(st.getRoot(), st.getStorageDirType());
++    }
++    statusMap.put("active", activeDirs);
++    
++    List<Storage.StorageDirectory> removedStorageDirs
++        = getFSImage().getRemovedStorageDirs();
++    Map<File, StorageDirType> failedDirs = new HashMap<File, StorageDirType>();
++    for (StorageDirectory st : removedStorageDirs) {
++      failedDirs.put(st.getRoot(), st.getStorageDirType());
++    }
++    statusMap.put("failed", failedDirs);
++    
++    return JSON.toString(statusMap);
++  }
++
+   private long getLastContact(DatanodeDescriptor alivenode) {
+     return (System.currentTimeMillis() - alivenode.getLastUpdate())/1000;
+   }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeMXBean.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeMXBean.java
+index 40d0573..1331e8e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeMXBean.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeMXBean.java
+@@ -135,4 +135,12 @@ public interface NameNodeMXBean {
+    * @return the decommissioning node information
+    */
+   public String getDecomNodes();
++
++  /**
++   * Get status information about the directories storing image and edits logs
++   * of the NN.
++   * 
++   * @return the name dir status information, as a JSON string.
++   */
++  public String getNameDirStatuses();
+ }
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeMXBean.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeMXBean.java
+index 022e384..7a4320a 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeMXBean.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeMXBean.java
+@@ -17,22 +17,31 @@
+  */
+ package org.apache.hadoop.hdfs.server.namenode;
+ 
++import static org.junit.Assert.*;
++
++import java.io.File;
+ import java.lang.management.ManagementFactory;
++import java.util.Collection;
++import java.util.Map;
+ 
+ import javax.management.MBeanServer;
+ import javax.management.ObjectName;
+ 
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+ 
+ import org.junit.Test;
++import org.mortbay.util.ajax.JSON;
++
+ import junit.framework.Assert;
+ 
+ /**
+  * Class for testing {@link NameNodeMXBean} implementation
+  */
+ public class TestNameNodeMXBean {
++  @SuppressWarnings({ "unchecked", "deprecation" })
+   @Test
+   public void testNameNodeMXBeanInfo() throws Exception {
+     Configuration conf = new Configuration();
+@@ -81,8 +90,44 @@ public class TestNameNodeMXBean {
+       String deadnodeinfo = (String) (mbs.getAttribute(mxbeanName,
+           "DeadNodes"));
+       Assert.assertEquals(fsn.getDeadNodes(), deadnodeinfo);
++      // get attribute NameDirStatuses
++      String nameDirStatuses = (String) (mbs.getAttribute(mxbeanName,
++          "NameDirStatuses"));
++      Assert.assertEquals(fsn.getNameDirStatuses(), nameDirStatuses);
++      Map<String, Map<String, String>> statusMap =
++        (Map<String, Map<String, String>>) JSON.parse(nameDirStatuses);
++      Collection<File> nameDirs = cluster.getNameDirs();
++      for (File nameDir : nameDirs) {
++        System.out.println("Checking for the presence of " + nameDir +
++            " in active name dirs.");
++        assertTrue(statusMap.get("active").containsKey(nameDir.getAbsolutePath()));
++      }
++      assertEquals(2, statusMap.get("active").size());
++      assertEquals(0, statusMap.get("failed").size());
++      
++      // This will cause the first dir to fail.
++      File failedNameDir = nameDirs.toArray(new File[0])[0];
++      assertEquals(0, FileUtil.chmod(failedNameDir.getAbsolutePath(), "000"));
++      cluster.getNameNode().rollEditLog();
++      
++      nameDirStatuses = (String) (mbs.getAttribute(mxbeanName,
++          "NameDirStatuses"));
++      statusMap = (Map<String, Map<String, String>>) JSON.parse(nameDirStatuses);
++      for (File nameDir : nameDirs) {
++        String expectedStatus =
++            nameDir.equals(failedNameDir) ? "failed" : "active";
++        System.out.println("Checking for the presence of " + nameDir +
++            " in " + expectedStatus + " name dirs.");
++        assertTrue(statusMap.get(expectedStatus).containsKey(
++            nameDir.getAbsolutePath()));
++      }
++      assertEquals(1, statusMap.get("active").size());
++      assertEquals(1, statusMap.get("failed").size());
+     } finally {
+       if (cluster != null) {
++        for (File dir : cluster.getNameDirs()) {
++          FileUtil.chmod(dir.toString(), "700");
++        }
+         cluster.shutdown();
+       }
+     }
+-- 
+1.7.0.4
+

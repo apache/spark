@@ -1,0 +1,45 @@
+From b5c5941d73cf037dc03ee5c8848708da6f6d5566 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 5 Jul 2011 17:52:35 -0700
+Subject: [PATCH 1013/1179] HDFS-1628. AccessControlException should display the full path.
+
+org.apache.hadoop.security.AccessControlException should display the
+full path for which the access is denied.
+
+Reason: Improvement
+Author: John George
+Ref: CDH-2765
+---
+ .../apache/hadoop/hdfs/server/namenode/INode.java  |   14 +++++++++++++-
+ 1 files changed, 13 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INode.java
+index 02c9dbc..0a159c1 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INode.java
+@@ -246,9 +246,21 @@ abstract class INode implements Comparable<byte[]> {
+     this.name = name;
+   }
+ 
++  public String getFullPathName() {
++    // Get the full path name of this inode.
++    return FSDirectory.getFullPathName(this);
++  }
++
+   /** {@inheritDoc} */
+   public String toString() {
+-    return "\"" + getLocalName() + "\":" + getPermissionStatus();
++    String fullPath = getFullPathName();
++
++    if (fullPath.length() == 0) {
++      fullPath = "/";
++    }
++    return "\"" + fullPath + "\":"
++      + getUserName() + ":" + getGroupName() + ":"
++      + (isDirectory() ? "d": "-") + getFsPermission();
+   }
+ 
+   /**
+-- 
+1.7.0.4
+

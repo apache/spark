@@ -1,0 +1,555 @@
+From ebb508c5a286dc3939d960fbf44ca18b34f1c12f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 30 Jul 2009 17:40:22 -0700
+Subject: [PATCH 0333/1179] HADOOP-5419. Provide a way for users to find out what operations they can do on which M/R queues
+
+Reason: Security
+Author: Rahul K Singh
+Ref: CDH-648
+---
+ .../content/xdocs/commands_manual.xml              |    8 +-
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |    8 +
+ .../org/apache/hadoop/mapred/JobQueueClient.java   |   38 ++++-
+ .../hadoop/mapred/JobSubmissionProtocol.java       |   11 +-
+ .../org/apache/hadoop/mapred/JobTracker.java       |   10 +-
+ .../org/apache/hadoop/mapred/LocalJobRunner.java   |    4 +
+ .../org/apache/hadoop/mapred/QueueAclsInfo.java    |   80 +++++++++
+ .../org/apache/hadoop/mapred/QueueManager.java     |   40 +++++-
+ .../hadoop/mapred/TestQueueAclsForCurrentUser.java |  174 ++++++++++++++++++++
+ 9 files changed, 367 insertions(+), 6 deletions(-)
+ create mode 100644 src/mapred/org/apache/hadoop/mapred/QueueAclsInfo.java
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestQueueAclsForCurrentUser.java
+
+diff --git a/src/docs/src/documentation/content/xdocs/commands_manual.xml b/src/docs/src/documentation/content/xdocs/commands_manual.xml
+index d66bf75..139a7c7 100644
+--- a/src/docs/src/documentation/content/xdocs/commands_manual.xml
++++ b/src/docs/src/documentation/content/xdocs/commands_manual.xml
+@@ -360,7 +360,7 @@
+           command to interact and view Job Queue information
+         </p>
+         <p>
+-          <code>Usage : hadoop queue [-list] | [-info &lt;job-queue-name&gt; [-showJobs]]</code>
++          <code>Usage : hadoop queue [-list] | [-info &lt;job-queue-name&gt; [-showJobs]] | [-showacls]</code>
+         </p>
+         <table>
+         <tr>
+@@ -380,6 +380,12 @@
+            queue is displayed. 
+           </td>
+         </tr>
++        <tr>
++          <td><code>-showacls</code></td>
++          <td>Displays the queue name and associated queue operations allowed for the current user.
++          The list consists of only those queues to which the user has access.
++          </td>
++          </tr>
+         </table>
+       </section>  	
+ 			<section>
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index d682ebc..1975cfc 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -1989,6 +1989,14 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     return jobSubmitClient.getQueueInfo(queueName);
+   }
+   
++  /**
++   * Gets the Queue ACLs for current user
++   * @return array of QueueAclsInfo object for current user.
++   * @throws IOException
++   */
++  public QueueAclsInfo[] getQueueAclsForCurrentUser() throws IOException {
++    return jobSubmitClient.getQueueAclsForCurrentUser();
++  }
+ 
+   /**
+    */
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobQueueClient.java b/src/mapred/org/apache/hadoop/mapred/JobQueueClient.java
+index 586440c..898aa7b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobQueueClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobQueueClient.java
+@@ -20,6 +20,7 @@ package org.apache.hadoop.mapred;
+ import java.io.IOException;
+ 
+ import org.apache.hadoop.conf.Configured;
++import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.util.Tool;
+ import org.apache.hadoop.util.ToolRunner;
+ /**
+@@ -34,7 +35,6 @@ import org.apache.hadoop.util.ToolRunner;
+ class JobQueueClient extends Configured implements  Tool {
+   
+   JobClient jc;
+-
+   
+   public JobQueueClient() {
+   }
+@@ -60,9 +60,12 @@ class JobQueueClient extends Configured implements  Tool {
+     boolean displayQueueList = false;
+     boolean displayQueueInfoWithJobs = false;
+     boolean displayQueueInfoWithoutJobs = false;
++    boolean displayQueueAclsInfoForCurrentUser = false;
+     
+     if("-list".equals(cmd)){
+       displayQueueList = true;
++    }else if("-showacls".equals(cmd)) {
++      displayQueueAclsInfoForCurrentUser = true;
+     }else if("-info".equals(cmd)){
+       if(argv.length == 2 && !(argv[1].equals("-showJobs"))) {
+         displayQueueInfoWithoutJobs = true;
+@@ -92,6 +95,9 @@ class JobQueueClient extends Configured implements  Tool {
+     } else if (displayQueueInfoWithJobs) {
+       displayQueueInfo(argv[1],true);
+       exitcode = 0;
++    }else if (displayQueueAclsInfoForCurrentUser) {
++      this.displayQueueAclsInfoForCurrentUser();
++      exitcode = 0;
+     }
+     
+     return exitcode;
+@@ -140,6 +146,33 @@ class JobQueueClient extends Configured implements  Tool {
+     }
+   }
+ 
++  private void displayQueueAclsInfoForCurrentUser() throws IOException {
++    QueueAclsInfo[] queueAclsInfoList = jc.getQueueAclsForCurrentUser();
++    UserGroupInformation ugi = UserGroupInformation.readFrom(getConf());
++    if (queueAclsInfoList.length > 0) {
++      System.out.println("Queue acls for user :  "
++              + ugi.getUserName());
++      System.out.println("\nQueue  Operations");
++      System.out.println("=====================");
++      for (QueueAclsInfo queueInfo : queueAclsInfoList) {
++        System.out.print(queueInfo.getQueueName() + "  ");
++        String[] ops = queueInfo.getOperations();
++        int max = ops.length - 1;
++        for (int j = 0; j < ops.length; j++) {
++          System.out.print(ops[j].replaceFirst("acl-", ""));
++          if (j < max) {
++            System.out.print(",");
++          }
++        }
++        System.out.println();
++      }
++    } else {
++      System.out.println("User " +
++              ugi.getUserName() +
++              " does not have access to any queue. \n");
++    }
++  }
++  
+   private void displayUsage(String cmd) {
+     String prefix = "Usage: JobQueueClient ";
+     if ("-queueinfo".equals(cmd)){
+@@ -147,7 +180,8 @@ class JobQueueClient extends Configured implements  Tool {
+     }else {
+       System.err.printf(prefix + "<command> <args>\n");
+       System.err.printf("\t[-list]\n");
+-      System.err.printf("\t[-info <job-queue-name> [-showJobs]]\n\n");
++      System.err.printf("\t[-info <job-queue-name> [-showJobs]]\n");
++      System.err.printf("\t[-showacls] \n\n");
+       ToolRunner.printGenericCommandUsage(System.out);
+     }
+   }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+index c543544..50d47f2 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+@@ -58,8 +58,10 @@ interface JobSubmissionProtocol extends VersionedProtocol {
+    *             for HADOOP-4807
+    * Version 20: Modified ClusterStatus to have the tasktracker expiry
+    *             interval for HADOOP-4939                     
++   * Version 21: Added method getQueueAclsForCurrentUser to get queue acls info
++   *             for a user
+    */
+-  public static final long versionID = 20L;
++  public static final long versionID = 21L;
+ 
+   /**
+    * Allocate a name for the job.
+@@ -212,4 +214,11 @@ interface JobSubmissionProtocol extends VersionedProtocol {
+    * @throws IOException
+    */
+   public JobStatus[] getJobsFromQueue(String queue) throws IOException;
++  
++  /**
++   * Gets the Queue ACLs for current user
++   * @return array of QueueAclsInfo object for current user.
++   * @throws IOException
++   */
++  public QueueAclsInfo[] getQueueAclsForCurrentUser() throws IOException;
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 13b4dac..b199993 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -3273,7 +3273,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       throw new AccessControlException("User " 
+                             + ugi.getUserName() 
+                             + " cannot perform "
+-                            + "operation " + oper + " on queue " + queue);
++                            + "operation " + oper + " on queue " + queue +
++                            ".\n Please run \"hadoop queue -showacls\" " +
++                            "command to find the queues you have access" +
++                            " to .");
+     }
+   }
+ 
+@@ -3948,6 +3951,11 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     return getJobStatus(jips,false);
+   }
+   
++  @Override
++  public QueueAclsInfo[] getQueueAclsForCurrentUser() throws IOException{
++    return queueManager.getQueueAcls(
++            UserGroupInformation.getCurrentUGI());
++  }
+   private synchronized JobStatus[] getJobStatus(Collection<JobInProgress> jips,
+       boolean toComplete) {
+     if(jips == null || jips.isEmpty()) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java b/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
+index cc31fb4..d44fd92 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
+@@ -475,4 +475,8 @@ class LocalJobRunner implements JobSubmissionProtocol {
+     return null;
+   }
+ 
++  @Override
++  public QueueAclsInfo[] getQueueAclsForCurrentUser() throws IOException{
++    return null;
++}
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/QueueAclsInfo.java b/src/mapred/org/apache/hadoop/mapred/QueueAclsInfo.java
+new file mode 100644
+index 0000000..f9056e1
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapred/QueueAclsInfo.java
+@@ -0,0 +1,80 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.io.WritableUtils;
++
++/**
++ *  Class to encapsulate Queue ACLs for a particular
++ *  user.
++ * 
++ */
++class QueueAclsInfo implements Writable {
++
++  private String queueName;
++  private String[] operations;
++  /**
++   * Default constructor for QueueAclsInfo.
++   * 
++   */
++  QueueAclsInfo() {
++    
++  }
++
++  /**
++   * Construct a new QueueAclsInfo object using the queue name and the
++   * queue operations array
++   * 
++   * @param queueName Name of the job queue
++   * @param queue operations
++   * 
++   */
++  QueueAclsInfo(String queueName, String[] operations) {
++    this.queueName = queueName;
++    this.operations = operations;    
++  }
++
++  String getQueueName() {
++    return queueName;
++  }
++
++  void setQueueName(String queueName) {
++    this.queueName = queueName;
++  }
++
++  String[] getOperations() {
++    return operations;
++  }
++
++  @Override
++  public void readFields(DataInput in) throws IOException {
++    queueName = Text.readString(in);
++    operations = WritableUtils.readStringArray(in);
++  }
++
++  @Override
++  public void write(DataOutput out) throws IOException {
++    Text.writeString(out, queueName);
++    WritableUtils.writeStringArray(out, operations);
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapred/QueueManager.java b/src/mapred/org/apache/hadoop/mapred/QueueManager.java
+index 40268b0..eec6d0c 100644
+--- a/src/mapred/org/apache/hadoop/mapred/QueueManager.java
++++ b/src/mapred/org/apache/hadoop/mapred/QueueManager.java
+@@ -25,6 +25,7 @@ import java.util.ArrayList;
+ import java.util.HashMap;
+ import java.util.Set;
+ import java.util.TreeSet;
++import java.io.IOException;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -174,7 +175,7 @@ class QueueManager {
+     }
+     
+     if (oper.isJobOwnerAllowed()) {
+-      if (job.getJobConf().getUser().equals(ugi.getUserName())) {
++      if (job != null && job.getJobConf().getUser().equals(ugi.getUserName())) {
+         return true;
+       }
+     }
+@@ -328,4 +329,41 @@ class QueueManager {
+       return new JobQueueInfo(queue,null);
+     }
+   }
++
++  /**
++   * Generates the array of QueueAclsInfo object. The array consists of only those queues
++   * for which user <ugi.getUserName()> has acls
++   *
++   * @return QueueAclsInfo[]
++   * @throws java.io.IOException
++   */
++  synchronized QueueAclsInfo[] getQueueAcls(UserGroupInformation
++          ugi) throws IOException {
++    //List of all QueueAclsInfo objects , this list is returned
++    ArrayList<QueueAclsInfo> queueAclsInfolist =
++            new ArrayList<QueueAclsInfo>();
++    QueueOperation[] operations = QueueOperation.values();
++    for (String queueName : queueNames) {
++      QueueAclsInfo queueAclsInfo = null;
++      ArrayList<String> operationsAllowed = null;
++      for (QueueOperation operation : operations) {
++        if (hasAccess(queueName, operation, ugi)) {
++          if (operationsAllowed == null) {
++            operationsAllowed = new ArrayList<String>();
++          }
++          operationsAllowed.add(operation.getAclName());
++        }
++      }
++      if (operationsAllowed != null) {
++        //There is atleast 1 operation supported for queue <queueName>
++        //, hence initialize queueAclsInfo
++        queueAclsInfo = new QueueAclsInfo(queueName, operationsAllowed.toArray
++                (new String[operationsAllowed.size()]));
++        queueAclsInfolist.add(queueAclsInfo);
++      }
++    }
++    return queueAclsInfolist.toArray(new QueueAclsInfo[
++            queueAclsInfolist.size()]);
++  }
++
+ }
+diff --git a/src/test/org/apache/hadoop/mapred/TestQueueAclsForCurrentUser.java b/src/test/org/apache/hadoop/mapred/TestQueueAclsForCurrentUser.java
+new file mode 100644
+index 0000000..add876a
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestQueueAclsForCurrentUser.java
+@@ -0,0 +1,174 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred;
++
++import java.io.IOException;
++import javax.security.auth.login.LoginException;
++import junit.framework.TestCase;
++import org.apache.hadoop.security.UnixUserGroupInformation;
++import org.apache.hadoop.security.UserGroupInformation;
++
++/**
++ * Unit test class to test queue acls
++ *
++ */
++public class TestQueueAclsForCurrentUser extends TestCase {
++
++  private QueueManager queueManager;
++  private JobConf conf = null;
++  UserGroupInformation currentUGI = null;
++  String submitAcl = QueueManager.QueueOperation.SUBMIT_JOB.getAclName();
++  String adminAcl  = QueueManager.QueueOperation.ADMINISTER_JOBS.getAclName();
++
++  private void setupConfForNoAccess() throws IOException,LoginException {
++    currentUGI = UnixUserGroupInformation.login();
++    String userName = currentUGI.getUserName();
++    conf = new JobConf();
++
++    conf.setBoolean("mapred.acls.enabled",true);
++
++    conf.set("mapred.queue.names", "qu1,qu2");
++    //Only user u1 has access
++    conf.set("mapred.queue.qu1.acl-submit-job", "u1");
++    conf.set("mapred.queue.qu1.acl-administer-jobs", "u1");
++    //q2 only group g2 has acls for the queues
++    conf.set("mapred.queue.qu2.acl-submit-job", " g2");
++    conf.set("mapred.queue.qu2.acl-administer-jobs", " g2");
++    queueManager = new QueueManager(conf);
++
++  }
++
++  /**
++   *  sets up configuration for acls test.
++   * @return
++   */
++  private void setupConf(boolean aclSwitch) throws IOException,LoginException{
++    currentUGI = UnixUserGroupInformation.login();
++    String userName = currentUGI.getUserName();
++    conf = new JobConf();
++
++    conf.setBoolean("mapred.acls.enabled", aclSwitch);
++
++    conf.set("mapred.queue.names", "qu1,qu2,qu3,qu4,qu5,qu6,qu7");
++    //q1 Has acls for all the users, supports both submit and administer
++    conf.set("mapred.queue.qu1.acl-submit-job", "*");
++    conf.set("mapred.queue.qu1-acl-administer-jobs", "*");
++    //q2 only u2 has acls for the queues
++    conf.set("mapred.queue.qu2.acl-submit-job", "u2");
++    conf.set("mapred.queue.qu2.acl-administer-jobs", "u2");
++    //q3  Only u2 has submit operation access rest all have administer access
++    conf.set("mapred.queue.qu3.acl-submit-job", "u2");
++    conf.set("mapred.queue.qu3.acl-administer-jobs", "*");
++    //q4 Only u2 has administer access , anyone can do submit
++    conf.set("mapred.queue.qu4.acl-submit-job", "*");
++    conf.set("mapred.queue.qu4.acl-administer-jobs", "u2");
++    //qu6 only current user has submit access
++    conf.set("mapred.queue.qu6.acl-submit-job",userName);
++    conf.set("mapred.queue.qu6.acl-administrator-jobs","u2");
++    //qu7 only current user has administrator access
++    conf.set("mapred.queue.qu7.acl-submit-job","u2");
++    conf.set("mapred.queue.qu7.acl-administrator-jobs",userName);
++    //qu8 only current group has access
++    StringBuilder groupNames = new StringBuilder("");
++    String[] ugiGroupNames = currentUGI.getGroupNames();
++    int max = ugiGroupNames.length-1;
++    for(int j=0;j< ugiGroupNames.length;j++) {
++      groupNames.append(ugiGroupNames[j]);
++      if(j<max) {
++        groupNames.append(",");
++      }
++    }
++    conf.set("mapred.queue.qu5.acl-submit-job"," "+groupNames.toString());
++    conf.set("mapred.queue.qu5.acl-administrator-jobs"," "
++            +groupNames.toString());
++
++    queueManager = new QueueManager(conf);
++  }
++
++  public void testQueueAclsForCurrentuser() throws IOException,LoginException {
++    setupConf(true);
++    QueueAclsInfo[] queueAclsInfoList =
++            queueManager.getQueueAcls(currentUGI);
++    checkQueueAclsInfo(queueAclsInfoList);
++  }
++
++  public void testQueueAclsForCurrentUserAclsDisabled() throws IOException,
++          LoginException {
++    setupConf(false);
++    //fetch the acls info for current user.
++    QueueAclsInfo[] queueAclsInfoList = queueManager.
++            getQueueAcls(currentUGI);
++    checkQueueAclsInfo(queueAclsInfoList);
++  }
++
++  public void testQueueAclsForNoAccess() throws IOException,LoginException {
++    setupConfForNoAccess();
++    QueueAclsInfo[] queueAclsInfoList = queueManager.
++            getQueueAcls(currentUGI);
++    assertTrue(queueAclsInfoList.length == 0);
++  }
++
++  private void checkQueueAclsInfo(QueueAclsInfo[] queueAclsInfoList)
++          throws IOException {
++    if (conf.get("mapred.acls.enabled").equalsIgnoreCase("true")) {
++      for (int i = 0; i < queueAclsInfoList.length; i++) {
++        QueueAclsInfo acls = queueAclsInfoList[i];
++        String queueName = acls.getQueueName();
++        assertFalse(queueName.contains("qu2"));
++        if (queueName.equals("qu1")) {
++          assertTrue(acls.getOperations().length == 2);
++          assertTrue(checkAll(acls.getOperations()));
++        } else if (queueName.equals("qu3")) {
++          assertTrue(acls.getOperations().length == 1);
++          assertTrue(acls.getOperations()[0].equalsIgnoreCase(adminAcl));
++        } else if (queueName.equals("qu4")) {
++          assertTrue(acls.getOperations().length == 1);
++          assertTrue(acls.getOperations()[0].equalsIgnoreCase(submitAcl));
++        } else if (queueName.equals("qu5")) {
++          assertTrue(acls.getOperations().length == 2);
++          assertTrue(checkAll(acls.getOperations()));
++        } else if(queueName.equals("qu6")) {
++          assertTrue(acls.getOperations()[0].equals(submitAcl));
++        } else if(queueName.equals("qu7")) {
++          assertTrue(acls.getOperations()[0].equals(adminAcl));
++        } 
++      }
++    } else {
++      for (int i = 0; i < queueAclsInfoList.length; i++) {
++        QueueAclsInfo acls = queueAclsInfoList[i];
++        String queueName = acls.getQueueName();
++        assertTrue(acls.getOperations().length == 2);
++        assertTrue(checkAll(acls.getOperations()));
++      }
++    }
++  }
++
++  private boolean checkAll(String[] operations){
++    boolean submit = false;
++    boolean admin = false;
++
++    for(String val: operations){
++      if(val.equalsIgnoreCase(submitAcl))
++        submit = true;
++      else if(val.equalsIgnoreCase(adminAcl))
++        admin = true;
++    }
++    if(submit && admin) return true;
++    return false;
++  }
++}
+-- 
+1.7.0.4
+

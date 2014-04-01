@@ -1,0 +1,65 @@
+From 12a5778288de7628dfa2a27fd344e83a8ce6cdc2 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 5 Jul 2011 19:44:20 -0700
+Subject: [PATCH 1015/1179] MAPREDUCE-2447. Fix Child.java to set Task.jvmContext sooner to avoid corner cases in error handling.
+
+Reason: Fix possible NPE if TaskLogs.syncLogs fails in child
+Author: Siddharth Seth
+Ref: CDH-3132
+---
+ src/mapred/org/apache/hadoop/mapred/Child.java     |    2 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    4 ++++
+ .../hadoop/mapred/TaskUmbilicalProtocol.java       |    2 +-
+ 3 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/Child.java b/src/mapred/org/apache/hadoop/mapred/Child.java
+index 9b8184b..78f8ee6 100644
+--- a/src/mapred/org/apache/hadoop/mapred/Child.java
++++ b/src/mapred/org/apache/hadoop/mapred/Child.java
+@@ -205,6 +205,7 @@ class Child {
+         }
+         idleLoopCount = 0;
+         task = myTask.getTask();
++        task.setJvmContext(jvmContext);
+         taskid = task.getTaskID();
+ 
+         // Create the JobConf and determine if this job gets segmented task logs
+@@ -260,7 +261,6 @@ class Child {
+         
+         // Create a final reference to the task for the doAs block
+         final Task taskFinal = task;
+-        taskFinal.setJvmContext(jvmContext);
+         childUGI.doAs(new PrivilegedExceptionAction<Object>() {
+           @Override
+           public Object run() throws Exception {
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index d1aa5fb..71f0757 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -3077,6 +3077,10 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+   }
+  
+   private void validateJVM(TaskInProgress tip, JvmContext jvmContext, TaskAttemptID taskid) throws IOException {
++    if (jvmContext == null) {
++      LOG.warn("Null jvmContext. Cannot verify Jvm. validateJvm throwing exception");
++      throw new IOException("JvmValidate Failed. JvmContext is null - cannot validate JVM");
++    }
+     if (!jvmManager.validateTipToJvm(tip, jvmContext.jvmId)) {
+       throw new IOException("JvmValidate Failed. Ignoring request from task: " + taskid + ", with JvmId: " + jvmContext.jvmId);
+     }
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskUmbilicalProtocol.java b/src/mapred/org/apache/hadoop/mapred/TaskUmbilicalProtocol.java
+index f83a0e8..82c446b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskUmbilicalProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskUmbilicalProtocol.java
+@@ -84,7 +84,7 @@ public interface TaskUmbilicalProtocol extends VersionedProtocol {
+    * @return True if the task is known
+    */
+   boolean statusUpdate(TaskAttemptID taskId, TaskStatus taskStatus,
+-      JvmContext context) throws IOException, InterruptedException;
++      JvmContext jvmContext) throws IOException, InterruptedException;
+   
+   /** Report error messages back to parent.  Calls should be sparing, since all
+    *  such messages are held in the job tracker.
+-- 
+1.7.0.4
+

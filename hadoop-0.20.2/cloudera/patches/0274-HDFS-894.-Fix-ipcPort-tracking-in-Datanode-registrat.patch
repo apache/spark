@@ -1,0 +1,30 @@
+From fddb2bd057e88506a1bb94232426053d1640a34b Mon Sep 17 00:00:00 2001
+From: todd <todd@monster01.sf.cloudera.com>
+Date: Sun, 21 Mar 2010 03:36:29 -0700
+Subject: [PATCH 0274/1179] HDFS-894. Fix ipcPort tracking in Datanode registration. TODO: add the test case from JIRA
+
+Description: Fixes the NameNode to properly reregister datanodes when they
+             crash and restart with a different IPC port (eg when IPC port
+             is configured to be ephemeral)
+Reason: Fixes errors on clusters with ephemeral ports.
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ .../apache/hadoop/hdfs/protocol/DatanodeID.java    |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/DatanodeID.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/DatanodeID.java
+index 6f6505d..c0640f2 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/DatanodeID.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/DatanodeID.java
+@@ -153,6 +153,7 @@ public class DatanodeID implements WritableComparable<DatanodeID> {
+   public void updateRegInfo(DatanodeID nodeReg) {
+     name = nodeReg.getName();
+     infoPort = nodeReg.getInfoPort();
++    ipcPort = nodeReg.getIpcPort();
+     // update any more fields added in future.
+   }
+     
+-- 
+1.7.0.4
+

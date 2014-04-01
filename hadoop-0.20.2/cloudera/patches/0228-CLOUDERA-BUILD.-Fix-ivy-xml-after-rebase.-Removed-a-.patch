@@ -1,0 +1,25 @@
+From cfc3233ece0769b11af9add328261295aaf4d1ad Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:56:30 -0800
+Subject: [PATCH 0228/1179] CLOUDERA-BUILD. Fix ivy xml after rebase. Removed a redundant </dependencies> closing tag.
+
+Author: Matt Massie
+---
+ ivy.xml |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
+
+diff --git a/ivy.xml b/ivy.xml
+index 8bd265e..99a6203 100644
+--- a/ivy.xml
++++ b/ivy.xml
+@@ -260,7 +260,6 @@
+       name="mockito-all"
+       rev="${mockito-all.version}"
+       conf="common->master"/>
+-    </dependencies>
+     <dependency org="org.codehaus.jackson"
+       name="jackson-mapper-asl"
+       rev="1.0.1"
+-- 
+1.7.0.4
+

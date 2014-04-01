@@ -1,0 +1,23 @@
+From 8d289f97d6b66cd435f755a4acae9f138de934d6 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:34:43 -0800
+Subject: [PATCH 0182/1179] CLOUDERA-BUILD. Update cloud script version to cdh-0.20.1
+
+Author: Tom White
+---
+ src/contrib/cloud/src/py/hadoop/cloud/__init__.py |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/contrib/cloud/src/py/hadoop/cloud/__init__.py b/src/contrib/cloud/src/py/hadoop/cloud/__init__.py
+index 7025626..c5a77b8 100644
+--- a/src/contrib/cloud/src/py/hadoop/cloud/__init__.py
++++ b/src/contrib/cloud/src/py/hadoop/cloud/__init__.py
+@@ -12,4 +12,4 @@
+ # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
+-VERSION="cdh-0.21.0"
++VERSION="cdh-0.20.1"
+-- 
+1.7.0.4
+

@@ -1,0 +1,395 @@
+From 132ef7c852847e9d2c1e7879f2fca26652bb77ef Mon Sep 17 00:00:00 2001
+From: Dhruba Borthakur <dhruba@apache.org>
+Date: Fri, 4 Jun 2010 07:20:10 +0000
+Subject: [PATCH 0268/1179] HDFS-200. Support append and sync for hadoop 0.20 branch.
+
+Description: Provides basic support for append and sync on 0.20
+Reason: Append and sync required for durable HBase and many other
+        applications.
+Author: Dhruba Borthakur
+Ref: CDH-659
+---
+ src/core/org/apache/hadoop/io/SequenceFile.java    |    7 ++
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |   37 +++++++++-
+ .../hdfs/protocol/ClientDatanodeProtocol.java      |   10 +++-
+ .../apache/hadoop/hdfs/protocol/LocatedBlocks.java |    7 ++
+ .../hadoop/hdfs/server/datanode/BlockReceiver.java |    2 +-
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    6 ++
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |    6 +-
+ .../hdfs/server/namenode/DatanodeDescriptor.java   |   18 +++++
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   76 ++++++++++++++-----
+ 9 files changed, 143 insertions(+), 26 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/io/SequenceFile.java b/src/core/org/apache/hadoop/io/SequenceFile.java
+index a744605..d86c830 100644
+--- a/src/core/org/apache/hadoop/io/SequenceFile.java
++++ b/src/core/org/apache/hadoop/io/SequenceFile.java
+@@ -938,6 +938,13 @@ public class SequenceFile {
+       }
+     }
+ 
++    /** flush all currently written data to the file system */
++    public void syncFs() throws IOException {
++      if (out != null) {
++        out.sync();                               // flush contents to file system
++      }
++    }
++
+     /** Returns the configuration of this file. */
+     Configuration getConf() { return conf; }
+     
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index b595ff6..7d81118 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -1489,7 +1489,10 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         throw new IOException("Cannot open filename " + src);
+       }
+ 
+-      if (locatedBlocks != null) {
++      // I think this check is not correct. A file could have been appended to
++      // between two calls to openInfo().
++      if (locatedBlocks != null && !locatedBlocks.isUnderConstruction() &&
++          !newInfo.isUnderConstruction()) {
+         Iterator<LocatedBlock> oldIter = locatedBlocks.getLocatedBlocks().iterator();
+         Iterator<LocatedBlock> newIter = newInfo.getLocatedBlocks().iterator();
+         while (oldIter.hasNext() && newIter.hasNext()) {
+@@ -1498,6 +1501,38 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+           }
+         }
+       }
++
++      // if the file is under construction, then fetch size of last block
++      // from datanode.
++      if (newInfo.isUnderConstruction() && newInfo.locatedBlockCount() > 0) {
++        LocatedBlock last = newInfo.get(newInfo.locatedBlockCount()-1);
++        boolean lastBlockInFile = (last.getStartOffset() + 
++                                   last.getBlockSize() == 
++                                   newInfo.getFileLength()); 
++        if (lastBlockInFile && last.getLocations().length > 0) {
++          ClientDatanodeProtocol primary =  null;
++          DatanodeInfo primaryNode = last.getLocations()[0];
++          try {
++            primary = createClientDatanodeProtocolProxy(primaryNode, conf);
++            Block newBlock = primary.getBlockInfo(last.getBlock());
++            long newBlockSize = newBlock.getNumBytes();
++            long delta = newBlockSize - last.getBlockSize();
++            // if the size of the block on the datanode is different
++            // from what the NN knows about, the datanode wins!
++            last.getBlock().setNumBytes(newBlockSize);
++            long newlength = newInfo.getFileLength() + delta;
++            newInfo.setFileLength(newlength);
++            LOG.debug("DFSClient setting last block " + last + 
++                      " to length " + newBlockSize +
++                      " filesize is now " + newInfo.getFileLength());
++          } catch (IOException e) {
++            LOG.debug("DFSClient file " + src + 
++                      " is being concurrently append to" +
++                      " but datanode " + primaryNode.getHostName() +
++                      " probably does not have block " + last.getBlock());
++          }
++        }
++      }
+       this.locatedBlocks = newInfo;
+       this.currentNode = null;
+     }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientDatanodeProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientDatanodeProtocol.java
+index 6f49d84..96833a7 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientDatanodeProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientDatanodeProtocol.java
+@@ -29,7 +29,7 @@ public interface ClientDatanodeProtocol extends VersionedProtocol {
+   public static final Log LOG = LogFactory.getLog(ClientDatanodeProtocol.class);
+ 
+   /**
+-   * 3: add keepLength parameter.
++   *4: added getBlockInfo
+    */
+   public static final long versionID = 3L;
+ 
+@@ -44,4 +44,12 @@ public interface ClientDatanodeProtocol extends VersionedProtocol {
+    */
+   LocatedBlock recoverBlock(Block block, boolean keepLength,
+       DatanodeInfo[] targets) throws IOException;
++
++  /** Returns a block object that contains the specified block object
++   * from the specified Datanode.
++   * @param block the specified block
++   * @return the Block object from the specified Datanode
++   * @throws IOException if the block does not exist
++   */
++  Block getBlockInfo(Block block) throws IOException;
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/LocatedBlocks.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/LocatedBlocks.java
+index f165aae..86d99c9 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/LocatedBlocks.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/LocatedBlocks.java
+@@ -85,6 +85,13 @@ public class LocatedBlocks implements Writable {
+   public boolean isUnderConstruction() {
+     return underConstruction;
+   }
++
++  /**
++   * Sets the file length of the file.
++   */
++  public void setFileLength(long length) {
++    this.fileLength = length;
++  }
+   
+   /**
+    * Find block containing specified offset.
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
+index 17f7dcd..348cf0d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
+@@ -96,7 +96,7 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+       // Open local disk out
+       //
+       streams = datanode.data.writeToBlock(block, isRecovery);
+-      this.finalized = datanode.data.isValidBlock(block);
++      this.finalized = false;
+       if (streams != null) {
+         this.out = streams.dataOut;
+         this.checksumOut = new DataOutputStream(new BufferedOutputStream(
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 1f50a9e..2018345 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -1637,6 +1637,12 @@ public class DataNode extends Configured
+     return recoverBlock(block, keepLength, targets, false);
+   }
+ 
++  /** {@inheritDoc} */
++  public Block getBlockInfo(Block block) throws IOException {
++    Block stored = data.getStoredBlock(block.getBlockId());
++    return stored;
++  }
++
+   private static void logRecoverBlock(String who,
+       Block block, DatanodeID[] targets) {
+     StringBuilder msg = new StringBuilder(targets[0].getName());
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index 3d911ef..0ecbf0c 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -1106,12 +1106,12 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+         v = volumes.getNextVolume(blockSize);
+         // create temporary file to hold block in the designated volume
+         f = createTmpFile(v, b);
+-        volumeMap.put(b, new DatanodeBlockInfo(v));
++        volumeMap.put(b, new DatanodeBlockInfo(v, f));
+       } else if (f != null) {
+         DataNode.LOG.info("Reopen already-open Block for append " + b);
+         // create or reuse temporary file to hold block in the designated volume
+         v = volumeMap.get(b).getVolume();
+-        volumeMap.put(b, new DatanodeBlockInfo(v));
++        volumeMap.put(b, new DatanodeBlockInfo(v, f));
+       } else {
+         // reopening block for appending to it.
+         DataNode.LOG.info("Reopen Block for append " + b);
+@@ -1142,7 +1142,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+                                   " to tmp dir " + f);
+           }
+         }
+-        volumeMap.put(b, new DatanodeBlockInfo(v));
++        volumeMap.put(b, new DatanodeBlockInfo(v, f));
+       }
+       if (f == null) {
+         DataNode.LOG.warn("Block " + b + " reopen failed " +
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DatanodeDescriptor.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DatanodeDescriptor.java
+index 454524d..bc5b480 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DatanodeDescriptor.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DatanodeDescriptor.java
+@@ -25,6 +25,7 @@ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.BlockListAsLongs;
+ import org.apache.hadoop.hdfs.protocol.DatanodeID;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
++import org.apache.hadoop.hdfs.server.common.GenerationStamp;
+ import org.apache.hadoop.hdfs.server.namenode.BlocksMap.BlockInfo;
+ import org.apache.hadoop.hdfs.server.protocol.BlockCommand;
+ import org.apache.hadoop.hdfs.server.protocol.DatanodeProtocol;
+@@ -377,11 +378,28 @@ public class DatanodeDescriptor extends DatanodeInfo {
+     // Note we are taking special precaution to limit tmp blocks allocated
+     // as part this block report - which why block list is stored as longs
+     Block iblk = new Block(); // a fixed new'ed block to be reused with index i
++    Block oblk = new Block(); // for fixing genstamps
+     for (int i = 0; i < newReport.getNumberOfBlocks(); ++i) {
+       iblk.set(newReport.getBlockId(i), newReport.getBlockLen(i), 
+                newReport.getBlockGenStamp(i));
+       BlockInfo storedBlock = blocksMap.getStoredBlock(iblk);
+       if(storedBlock == null) {
++        // if the block with a WILDCARD generation stamp matches 
++        // then accept this block.
++        // This block has a diferent generation stamp on the datanode 
++        // because of a lease-recovery-attempt.
++        oblk.set(newReport.getBlockId(i), newReport.getBlockLen(i),
++                 GenerationStamp.WILDCARD_STAMP);
++        storedBlock = blocksMap.getStoredBlock(oblk);
++        if (storedBlock != null && storedBlock.getINode() != null &&
++            (storedBlock.getGenerationStamp() <= iblk.getGenerationStamp() ||
++             storedBlock.getINode().isUnderConstruction())) {
++          // accept block. It wil be cleaned up on cluster restart.
++        } else {
++          storedBlock = null;
++        }
++      }
++      if(storedBlock == null) {
+         // If block is not in blocksMap it does not belong to any file
+         toInvalidate.add(new Block(iblk));
+         continue;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 6828f31..80be318 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -1043,10 +1043,13 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+         // holder is trying to recreate this file. This should never occur.
+         //
+         if (lease != null) {
+-          throw new AlreadyBeingCreatedException(
++          Lease leaseFile = leaseManager.getLeaseByPath(src);
++          if (leaseFile != null && leaseFile.equals(lease)) { 
++            throw new AlreadyBeingCreatedException(
+                                                  "failed to create file " + src + " for " + holder +
+                                                  " on client " + clientMachine + 
+                                                  " because current leaseholder is trying to recreate file.");
++          }
+         }
+         //
+         // Find the original holder.
+@@ -1830,11 +1833,30 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   }
+ 
+   /**
++   * This is invoked when a lease expires. On lease expiry, 
++   * all the files that were written from that dfsclient should be
++   * recovered.
++   */
++  void internalReleaseLease(Lease lease, String src) throws IOException {
++    if (lease.hasPath()) {
++      // make a copy of the paths because internalReleaseLeaseOne removes
++      // pathnames from the lease record.
++      String[] leasePaths = new String[lease.getPaths().size()];
++      lease.getPaths().toArray(leasePaths);
++      for (String p: leasePaths) {
++        internalReleaseLeaseOne(lease, p);
++      }
++    } else {
++      internalReleaseLeaseOne(lease, src);
++    }
++  }
++
++  /**
+    * Move a file that is being written to be immutable.
+    * @param src The filename
+    * @param lease The lease for the client creating the file
+    */
+-  void internalReleaseLease(Lease lease, String src) throws IOException {
++  void internalReleaseLeaseOne(Lease lease, String src) throws IOException {
+     LOG.info("Recovering lease=" + lease + ", src=" + src);
+ 
+     INodeFile iFile = dir.getFileINode(src);
+@@ -1942,20 +1964,11 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+         descriptors = new DatanodeDescriptor[newtargets.length];
+         for(int i = 0; i < newtargets.length; i++) {
+           descriptors[i] = getDatanode(newtargets[i]);
+-        }
+-      }
+-      if (closeFile) {
+-        // the file is getting closed. Insert block locations into blocksMap.
+-        // Otherwise fsck will report these blocks as MISSING, especially if the
+-        // blocksReceived from Datanodes take a long time to arrive.
+-        for (int i = 0; i < descriptors.length; i++) {
+           descriptors[i].addBlock(newblockinfo);
+         }
+-        pendingFile.setLastBlock(newblockinfo, null);
+-      } else {
+-        // add locations into the INodeUnderConstruction
+-        pendingFile.setLastBlock(newblockinfo, descriptors);
+       }
++      // add locations into the INodeUnderConstruction
++      pendingFile.setLastBlock(newblockinfo, descriptors);
+     }
+ 
+     // If this commit does not want to close the file, persist
+@@ -2344,9 +2357,11 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+           LOG.warn("ReplicationMonitor thread received InterruptedException." + ie);
+           break;
+         } catch (IOException ie) {
+-          LOG.warn("ReplicationMonitor thread received exception. " + ie);
++          LOG.warn("ReplicationMonitor thread received exception. " + ie +  " " +
++                   StringUtils.stringifyException(ie));
+         } catch (Throwable t) {
+-          LOG.warn("ReplicationMonitor thread received Runtime exception. " + t);
++          LOG.warn("ReplicationMonitor thread received Runtime exception. " + t + " " +
++                   StringUtils.stringifyException(t));
+           Runtime.getRuntime().exit(-1);
+         }
+       }
+@@ -2952,6 +2967,24 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+                                     DatanodeDescriptor node,
+                                     DatanodeDescriptor delNodeHint) {
+     BlockInfo storedBlock = blocksMap.getStoredBlock(block);
++    if (storedBlock == null) {
++      // if the block with a WILDCARD generation stamp matches and the
++      // corresponding file is under construction, then accept this block.
++      // This block has a diferent generation stamp on the datanode 
++      // because of a lease-recovery-attempt.
++      Block nblk = new Block(block.getBlockId());
++      storedBlock = blocksMap.getStoredBlock(nblk);
++      if (storedBlock != null && storedBlock.getINode() != null &&
++          (storedBlock.getGenerationStamp() <= block.getGenerationStamp() ||
++           storedBlock.getINode().isUnderConstruction())) {
++        NameNode.stateChangeLog.info("BLOCK* NameSystem.addStoredBlock: "
++          + "addStoredBlock request received for " + block + " on "
++          + node.getName() + " size " + block.getNumBytes()
++          + " and it belongs to a file under construction. ");
++      } else {
++        storedBlock = null;
++      }
++    }
+     if(storedBlock == null || storedBlock.getINode() == null) {
+       // If this block does not belong to anyfile, then we are done.
+       NameNode.stateChangeLog.info("BLOCK* NameSystem.addStoredBlock: "
+@@ -2972,6 +3005,8 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     if (block != storedBlock) {
+       if (block.getNumBytes() >= 0) {
+         long cursize = storedBlock.getNumBytes();
++        INodeFile file = (storedBlock != null) ? storedBlock.getINode() : null;
++        boolean underConstruction = (file == null ? false : file.isUnderConstruction());
+         if (cursize == 0) {
+           storedBlock.setNumBytes(block.getNumBytes());
+         } else if (cursize != block.getNumBytes()) {
+@@ -2983,9 +3018,11 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+             if (cursize > block.getNumBytes()) {
+               // new replica is smaller in size than existing block.
+               // Mark the new replica as corrupt.
+-              LOG.warn("Mark new replica " + block + " from " + node.getName() + 
+-                  "as corrupt because its length is shorter than existing ones");
+-              markBlockAsCorrupt(block, node);
++              if (!underConstruction) {
++                LOG.warn("Mark new replica " + block + " from " + node.getName() + 
++                    "as corrupt because its length is shorter than existing ones");
++                markBlockAsCorrupt(block, node);
++              }
+             } else {
+               // new replica is larger in size than existing block.
+               // Mark pre-existing replicas as corrupt.
+@@ -2999,7 +3036,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+                   nodes[count++] = dd;
+                 }
+               }
+-              for (int j = 0; j < count; j++) {
++              for (int j = 0; j < count && !underConstruction; j++) {
+                 LOG.warn("Mark existing replica " + block + " from " + node.getName() + 
+                 " as corrupt because its length is shorter than the new one");
+                 markBlockAsCorrupt(block, nodes[j]);
+@@ -3022,7 +3059,6 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+         }
+         
+         //Updated space consumed if required.
+-        INodeFile file = (storedBlock != null) ? storedBlock.getINode() : null;
+         long diff = (file == null) ? 0 :
+                     (file.getPreferredBlockSize() - storedBlock.getNumBytes());
+         
+-- 
+1.7.0.4
+

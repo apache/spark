@@ -1,0 +1,124 @@
+From f7d0a20e0d74f1aac1fb96f3c08ce31e9b9ca5d9 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:20:25 -0800
+Subject: [PATCH 0002/1179] CLOUDERA-BUILD. Remove redundant code in build.xml between package and bin-package
+
+---
+ build.xml |   72 ++----------------------------------------------------------
+ 1 files changed, 3 insertions(+), 69 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index 8588f83..5631712 100644
+--- a/build.xml
++++ b/build.xml
+@@ -1056,85 +1056,18 @@
+   <!-- ================================================================== -->
+   <!--                                                                    -->
+   <!-- ================================================================== -->
+-  <target name="package" depends="compile, jar, javadoc, docs, cn-docs, api-report, examples, tools-jar, jar-test, ant-tasks, package-librecordio,cloudera.hooks"
++  <target name="package" depends="bin-package, javadoc, docs, cn-docs, api-report"
+ 	  description="Build distribution">
+-    <mkdir dir="${dist.dir}"/>
+-    <mkdir dir="${dist.dir}/lib"/>
+-    <mkdir dir="${dist.dir}/contrib"/>
+-    <mkdir dir="${dist.dir}/bin"/>
+     <mkdir dir="${dist.dir}/docs"/>
+     <mkdir dir="${dist.dir}/docs/api"/>
+     <mkdir dir="${dist.dir}/docs/jdiff"/>
+ 
+-    <copy todir="${dist.dir}/lib" includeEmptyDirs="false" flatten="true">
+-      <fileset dir="${common.ivy.lib.dir}"/>
+-    </copy>
+-
+-    <copy todir="${dist.dir}/lib" includeEmptyDirs="false">
+-      <fileset dir="lib">
+-        <exclude name="**/native/**"/>
+-      </fileset>
+-    </copy>
+-
+-  	<exec dir="${dist.dir}" executable="sh" failonerror="true">
+-	  <env key="BASE_NATIVE_LIB_DIR" value="${lib.dir}/native"/>
+-	  <env key="BUILD_NATIVE_DIR" value="${build.dir}/native"/>
+-	  <env key="DIST_LIB_DIR" value="${dist.dir}/lib/native"/>
+-	  <arg line="${native.src.dir}/packageNativeHadoop.sh"/>
+-    </exec>
+-
+-    <subant target="package">
+-      <!--Pass down the version in case its needed again and the target
+-      distribution directory so contribs know where to install to.-->
+-      <property name="version" value="${version}"/>
+-      <property name="dist.dir" value="${dist.dir}"/>
+-      <fileset file="${contrib.dir}/build.xml"/>
+-    </subant>  	
+-
+-    <copy todir="${dist.dir}/webapps">
+-      <fileset dir="${build.webapps}"/>
+-    </copy>
+-
+-    <copy todir="${dist.dir}"> 
+-      <fileset file="${build.dir}/${final.name}-*.jar"/>
+-    </copy>
+-    
+-    <copy todir="${dist.dir}/bin">
+-      <fileset dir="bin"/>
+-    </copy>
+-
+-    <copy todir="${dist.dir}/conf">
+-      <fileset dir="${conf.dir}" excludes="**/*.template"/>
+-    </copy>
+-
+-    <copy todir="${dist.dir}/docs">
+-      <fileset dir="${build.docs}"/>
+-    </copy>
+-
+-    <copy file="ivy.xml" tofile="${dist.dir}/ivy.xml"/>
+-
+-    <copy todir="${dist.dir}/ivy">
+-      <fileset dir="ivy"/>
+-    </copy>
+-
+-    <copy todir="${dist.dir}">
+-      <fileset dir=".">
+-        <include name="*.txt" />
+-      </fileset>
+-    </copy>
+-
+     <copy todir="${dist.dir}/src" includeEmptyDirs="true">
+       <fileset dir="src" excludes="**/*.template **/docs/build/**/*"/>
+     </copy>
+   	
+-    <copy todir="${dist.dir}/c++" includeEmptyDirs="false">
+-      <fileset dir="${build.dir}/c++"/>
+-    </copy>
+-
+-    <copy todir="${dist.dir}/" file="build.xml"/>
+ 
+     <chmod perm="ugo+x" type="file" parallel="false">
+-        <fileset dir="${dist.dir}/bin"/>
+         <fileset dir="${dist.dir}/src/contrib/">
+           <include name="*/bin/*" />
+         </fileset>
+@@ -1171,11 +1104,11 @@
+ 
+   <target name="bin-package" depends="compile, jar, examples, tools-jar, jar-test, ant-tasks, package-librecordio" 
+ 		description="assembles artifacts for binary target">
++
+     <mkdir dir="${dist.dir}"/>
+     <mkdir dir="${dist.dir}/lib"/>
+     <mkdir dir="${dist.dir}/contrib"/>
+     <mkdir dir="${dist.dir}/bin"/>
+-
+     <copy todir="${dist.dir}/lib" includeEmptyDirs="false" flatten="true">
+       <fileset dir="${common.ivy.lib.dir}"/>
+     </copy>
+@@ -1238,6 +1171,7 @@
+     <chmod perm="ugo+x" type="file" parallel="false">
+         <fileset dir="${dist.dir}/bin"/>
+     </chmod>
++
+   </target>
+ 
+   <target name="binary" depends="bin-package" description="Make tarball without source and documentation">
+-- 
+1.7.0.4
+

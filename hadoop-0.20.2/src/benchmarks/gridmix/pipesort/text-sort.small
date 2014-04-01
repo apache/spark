@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+GRID_DIR=`dirname "$0"`
+GRID_DIR=`cd "$GRID_DIR"; pwd`
+source $GRID_DIR/../gridmix-env
+
+NUM_OF_REDUCERS=$NUM_OF_REDUCERS_FOR_SMALL_JOB
+INDIR="${VARINFLTEXT}/{part-00000,part-00001,part-00002}"
+Date=`date +%F-%H-%M-%S-%N`
+
+OUTDIR=perf-out/pipe-out-dir-small_$Date
+${HADOOP_HOME}/bin/hadoop dfs -rmr $OUTDIR
+
+
+${HADOOP_HOME}/bin/hadoop pipes -input $INDIR -output $OUTDIR -inputformat org.apache.hadoop.mapred.KeyValueTextInputFormat -program ${GRID_MIX_PROG}/pipes-sort -reduces $NUM_OF_REDUCERS -jobconf mapred.output.key.class=org.apache.hadoop.io.Text,mapred.output.value.class=org.apache.hadoop.io.Text -writer org.apache.hadoop.mapred.TextOutputFormat
+

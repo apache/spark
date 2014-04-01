@@ -1,0 +1,50 @@
+From 2b54843a4f2fb1d85c4a2cc4a4ad981f961e6a77 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 9 Dec 2011 20:25:09 -0800
+Subject: [PATCH 1106/1179] HDFS-2653. DFSClient should cache whether addrs are non-local when
+ short-circuiting is enabled.
+
+Reason: Performance
+Author: Eli Collins
+Ref: CDH-3850
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java |   14 +++++++-------
+ 1 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 1e622bd..23028f9 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -362,12 +362,14 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     }
+   }
+   
+-  private static Set<String> localIpAddresses = Collections
+-      .synchronizedSet(new HashSet<String>());
+-  
++  // Cache whether an address is local or not
++  private static Map<String, Boolean> localAddrMap = Collections
++      .synchronizedMap(new HashMap<String, Boolean>());
++
+   private static boolean isLocalAddress(InetSocketAddress targetAddr) {
+     InetAddress addr = targetAddr.getAddress();
+-    if (localIpAddresses.contains(addr.getHostAddress())) {
++    Boolean cached = localAddrMap.get(addr.getHostAddress());
++    if (cached != null && cached) {
+       if (LOG.isTraceEnabled()) {
+         LOG.trace("Address " + targetAddr + " is local");
+       }
+@@ -388,9 +390,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     if (LOG.isTraceEnabled()) {
+       LOG.trace("Address " + targetAddr + " is local");
+     }
+-    if (local == true) {
+-      localIpAddresses.add(addr.getHostAddress());
+-    }
++    localAddrMap.put(addr.getHostAddress(), local);
+     return local;
+   }
+ 
+-- 
+1.7.0.4
+

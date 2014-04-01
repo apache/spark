@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+GRID_DIR=`dirname "$0"`
+GRID_DIR=`cd "$GRID_DIR"; pwd`
+source $GRID_DIR/../gridmix-env
+PROCESSES=""
+
+for ((i=0; i < $NUM_OF_SMALL_JOBS_PER_CLASS; i++))
+do
+    echo $i
+    $GRID_MIX_HOME/monsterQuery/monster_query.small  2>&1 > monster_query.small.$i.out &
+    PROCESSES="${PROCESSES} $!"
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done
+    
+for ((i=0; i < $NUM_OF_MEDIUM_JOBS_PER_CLASS; i++))
+do
+    echo $i
+    $GRID_MIX_HOME/monsterQuery/monster_query.medium  2>&1 > monster_query.medium.$i.out &
+    PROCESSES="${PROCESSES} $!"
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done
+
+for ((i=0; i < $NUM_OF_LARGE_JOBS_PER_CLASS; i++))
+do
+    echo $i
+    $GRID_MIX_HOME/monsterQuery/monster_query.large  2>&1 > monster_query.large.$i.out &
+    PROCESSES="${PROCESSES} $!"
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done
+    
+for APROC in ${PROCESSES}; do
+  wait ${APROC}
+done

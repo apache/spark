@@ -1,0 +1,36 @@
+From 9321b18352e55d4d37c25335b578151b18f938f2 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:57:32 -0800
+Subject: [PATCH 0086/1179] MAPREDUCE-923. Sqoop's ORM uses URLDecoder on a file, which replaces plus signs in a jar file name with spaces
+
+Description: In findThisJar, sqoop runs URLDecoder.decode on the resulting jar, which has the effect of replacing any + signs in the path with a space.  This obviously breaks the classpath variable that it's trying to set, and the sqoop-generated code fails to compile.  Ironically, Cloudera's hadoop distro is the one that puts + characters in jar files, and so exhibits the bug.  Here is an example from running sqoop with log4j at debug level.  Note the space in the very last term, which should read hadoop-0.20.0+61-sqoop.jar rather than hadoop-0.20.0 61-sqoop.jar.
+
+<p>09/08/27 18:00:07 DEBUG orm.CompilationManager: Invoking javac with args: -sourcepath ./ -d /tmp/sqoop/compile/ -classpath /usr/lib/hadoop-0.20/conf:/usr/java/jdk1.6.0_06/lib/tools.jar:/usr/lib/hadoop-0.20:/usr/lib/hadoop-0.20/hadoop-0.20.0+61-core.jar:/usr/lib/hadoop-0.20/lib/commons-cli-2.0-SNAPSHOT.jar:/usr/lib/hadoop-0.20/lib/commons-codec-1.3.jar:/usr/lib/hadoop-0.20/lib/commons-el-1.0.jar:/usr/lib/hadoop-0.20/lib/commons-httpclient-3.0.1.jar:/usr/lib/hadoop-0.20/lib/commons-logging-1.0.4.jar:/usr/lib/hadoop-0.20/lib/commons-logging-api-1.0.4.jar:/usr/lib/hadoop-0.20/lib/commons-net-1.4.1.jar:/usr/lib/hadoop-0.20/lib/core-3.1.1.jar:/usr/lib/hadoop-0.20/lib/hadoop-0.20.0+61-fairscheduler.jar:/usr/lib/hadoop-0.20/lib/hadoop-0.20.0+61-scribe-log4j.jar:/usr/lib/hadoop-0.20/lib/hsqldb-1.8.0.10.jar:/usr/lib/hadoop-0.20/lib/hsqldb.jar:/usr/lib/hadoop-0.20/lib/jasper-compiler-5.5.12.jar:/usr/lib/hadoop-0.20/lib/jasper-runtime-5.5.12.jar:/usr/lib/hadoop-0.20/lib/jets3t-0.6.1.jar:/usr/lib/hadoop-0.20/lib/jetty-6.1.14.jar:/usr/lib/hadoop-0.20/lib/jetty-util-6.1.14.jar:/usr/lib/hadoop-0.20/lib/junit-3.8.1.jar:/usr/lib/hadoop-0.20/lib/junit-4.5.jar:/usr/lib/hadoop-0.20/lib/kfs-0.2.2.jar:/usr/lib/hadoop-0.20/lib/libfb303.jar:/usr/lib/hadoop-0.20/lib/libthrift.jar:/usr/lib/hadoop-0.20/lib/log4j-1.2.15.jar:/usr/lib/hadoop-0.20/lib/mysql-connector-java-5.0.8-bin.jar:/usr/lib/hadoop-0.20/lib/oro-2.0.8.jar:/usr/lib/hadoop-0.20/lib/servlet-api-2.5-6.1.14.jar:/usr/lib/hadoop-0.20/lib/slf4j-api-1.4.3.jar:/usr/lib/hadoop-0.20/lib/slf4j-log4j12-1.4.3.jar:/usr/lib/hadoop-0.20/lib/xmlenc-0.52.jar:/usr/lib/hadoop-0.20/lib/jsp-2.1/jsp-2.1.jar:/usr/lib/hadoop-0.20/lib/jsp-2.1/jsp-api-2.1.jar:/usr/local/hadoop/lib/hadoop-gpl-compression.jar:/usr/lib/hadoop-0.20/hadoop-0.20.0+61-core.jar:/usr/lib/hadoop-0.20/contrib/sqoop/hadoop-0.20.0 61-sqoop.jar</p>
+Reason: Bugfix
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../hadoop/sqoop/orm/CompilationManager.java       |    7 +++++++
+ 1 files changed, 7 insertions(+), 0 deletions(-)
+
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/CompilationManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/CompilationManager.java
+index 90a1572..c8fd152 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/CompilationManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/CompilationManager.java
+@@ -339,6 +339,13 @@ public class CompilationManager {
+           if (toReturn.startsWith("file:")) {
+             toReturn = toReturn.substring("file:".length());
+           }
++          // URLDecoder is a misnamed class, since it actually decodes
++          // x-www-form-urlencoded MIME type rather than actual
++          // URL encoding (which the file path has). Therefore it would
++          // decode +s to ' 's which is incorrect (spaces are actually
++          // either unencoded or encoded as "%20"). Replace +s first, so
++          // that they are kept sacred during the decoding process.
++          toReturn = toReturn.replaceAll("\\+", "%2B");
+           toReturn = URLDecoder.decode(toReturn, "UTF-8");
+           return toReturn.replaceAll("!.*$", "");
+         }
+-- 
+1.7.0.4
+

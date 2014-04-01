@@ -1,0 +1,158 @@
+From b2cfa8caaa27a75a4452d9e26d3f3a169e13730e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:52 -0800
+Subject: [PATCH 0841/1179] HDFS-1085. HFTP read may fail silently on the client side if there is an exception on the server side.
+
+Author: Tsz Wo (Nicholas) Sze
+Ref: CDH-2622
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |    2 +-
+ .../org/apache/hadoop/hdfs/HftpFileSystem.java     |   26 ++++++++++++--
+ .../hadoop/hdfs/server/namenode/StreamFile.java    |   38 ++++++++++++++-----
+ 3 files changed, 52 insertions(+), 14 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 547aaa5..7ade82b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -1529,7 +1529,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+    * DFSInputStream provides bytes from a named file.  It handles 
+    * negotiation of the namenode and various datanodes as necessary.
+    ****************************************************************/
+-  class DFSInputStream extends FSInputStream {
++  public class DFSInputStream extends FSInputStream {
+     private Socket s = null;
+     private boolean closed = false;
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+index b7bd7e5..5ad1800 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+@@ -31,7 +31,6 @@ import java.security.PrivilegedExceptionAction;
+ import java.text.ParseException;
+ import java.text.SimpleDateFormat;
+ import java.util.ArrayList;
+-import java.util.Collection;
+ import java.util.TimeZone;
+ import java.util.concurrent.DelayQueue;
+ import java.util.concurrent.Delayed;
+@@ -51,6 +50,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
+ import org.apache.hadoop.hdfs.server.namenode.JspHelper;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
++import org.apache.hadoop.hdfs.server.namenode.StreamFile;
+ import org.apache.hadoop.hdfs.tools.DelegationTokenFetcher;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.ipc.RemoteException;
+@@ -267,13 +267,33 @@ public class HftpFileSystem extends FileSystem {
+         "ugi=" + getUgiParameter());
+     connection.setRequestMethod("GET");
+     connection.connect();
++    final String cl = connection.getHeaderField(StreamFile.CONTENT_LENGTH);
++    final long filelength = cl == null? -1: Long.parseLong(cl);
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("filelength = " + filelength);
++    }
+     final InputStream in = connection.getInputStream();
+     return new FSDataInputStream(new FSInputStream() {
++        long currentPos = 0;
++
++        private void update(final boolean isEOF, final int n
++            ) throws IOException {
++          if (!isEOF) {
++            currentPos += n;
++          } else if (currentPos < filelength) {
++            throw new IOException("Got EOF but byteread = " + currentPos
++                + " < filelength = " + filelength);
++          }
++        }
+         public int read() throws IOException {
+-          return in.read();
++          final int b = in.read();
++          update(b == -1, 1);
++          return b;
+         }
+         public int read(byte[] b, int off, int len) throws IOException {
+-          return in.read(b, off, len);
++          final int n = in.read(b, off, len);
++          update(n == -1, n);
++          return n;
+         }
+ 
+         public void close() throws IOException {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
+index 11fd32d..b8a2a65 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
+@@ -17,18 +17,27 @@
+  */
+ package org.apache.hadoop.hdfs.server.namenode;
+ 
+-import javax.servlet.*;
+-import javax.servlet.http.*;
+-import java.io.*;
+-import java.net.*;
+-import java.security.PrivilegedExceptionAction;
+-import org.apache.hadoop.fs.*;
++import java.io.IOException;
++import java.io.OutputStream;
++import java.io.PrintWriter;
++import java.net.InetSocketAddress;
++
++import javax.servlet.ServletException;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.DFSClient;
+ import org.apache.hadoop.hdfs.server.datanode.DataNode;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.conf.*;
+ 
+ public class StreamFile extends DfsServlet {
++  /** for java.io.Serializable */
++  private static final long serialVersionUID = 1L;
++
++  public static final String CONTENT_LENGTH = "Content-Length";
++
+   static InetSocketAddress nameNodeAddr;
+   static DataNode datanode = null;
+   static {
+@@ -66,21 +75,30 @@ public class StreamFile extends DfsServlet {
+       return;
+     }
+     
+-    FSInputStream in = dfs.open(filename);
++    final DFSClient.DFSInputStream in = dfs.open(filename);
+     OutputStream os = response.getOutputStream();
+     response.setHeader("Content-Disposition", "attachment; filename=\"" + 
+                        filename + "\"");
+     response.setContentType("application/octet-stream");
++    response.setHeader(CONTENT_LENGTH, "" + in.getFileLength());
+     byte buf[] = new byte[4096];
+     try {
+       int bytesRead;
+       while ((bytesRead = in.read(buf)) != -1) {
+         os.write(buf, 0, bytesRead);
+       }
++    } catch(IOException e) {
++      if (LOG.isDebugEnabled()) {
++        LOG.debug("response.isCommitted()=" + response.isCommitted(), e);
++      }
++      throw e;
+     } finally {
+-      in.close();
+-      os.close();
+-      dfs.close();
++      try {
++        in.close();
++        os.close();
++      } finally {
++        dfs.close();
++      }
+     }
+   }
+ }
+-- 
+1.7.0.4
+

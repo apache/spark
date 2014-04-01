@@ -1,0 +1,31 @@
+From a7c507d6d763fd6f8868198959f2759749841426 Mon Sep 17 00:00:00 2001
+From: Konstantin Boudnik <cos@apache.org>
+Date: Mon, 2 May 2011 14:43:35 -0700
+Subject: [PATCH 0955/1179] MAPREDUCE-1614. TestDFSIO should allow to configure output directory
+
+Reason: Fixing bug in the test
+Author: Konstantin Boudnik
+Ref: CDH-3123
+---
+ src/test/org/apache/hadoop/fs/TestDFSIO.java |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/fs/TestDFSIO.java b/src/test/org/apache/hadoop/fs/TestDFSIO.java
+index 820d9a0..f7d559b 100644
+--- a/src/test/org/apache/hadoop/fs/TestDFSIO.java
++++ b/src/test/org/apache/hadoop/fs/TestDFSIO.java
+@@ -137,7 +137,10 @@ public class TestDFSIO extends Configured implements Tool {
+   }
+ 
+   public TestDFSIO() {
+-    this.config = new Configuration();
++    Configuration conf = new Configuration();
++    conf.set("test.build.data",
++        System.getProperty("test.build.data", "/benchmarks/TestDFSIO"));
++    this.config = conf;
+   }
+ 
+   private static String getBaseDir(Configuration conf) {
+-- 
+1.7.0.4
+

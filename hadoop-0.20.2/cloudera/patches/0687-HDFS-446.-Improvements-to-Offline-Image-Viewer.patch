@@ -1,0 +1,514 @@
+From cdb501c28dcdeec73ccf92a886bf943f665a5693 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 3 Sep 2010 17:09:58 -0700
+Subject: [PATCH 0687/1179] HDFS-446. Improvements to Offline Image Viewer.
+
+Author: Jakob Homan
+Ref: CDH-2106
+---
+ .../offlineImageViewer/DelimitedImageVisitor.java  |   40 ++++++------
+ .../hdfs/tools/offlineImageViewer/ImageLoader.java |    2 +-
+ .../offlineImageViewer/ImageLoaderCurrent.java     |   67 ++++++++++----------
+ .../tools/offlineImageViewer/ImageVisitor.java     |   60 +++++++++---------
+ .../tools/offlineImageViewer/LsImageVisitor.java   |   25 ++++----
+ .../offlineImageViewer/SpotCheckImageVisitor.java  |   12 ++--
+ .../TestDelimitedImageVisitor.java                 |   32 +++++-----
+ .../offlineImageViewer/TestOfflineImageViewer.java |    3 +-
+ 8 files changed, 120 insertions(+), 121 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/DelimitedImageVisitor.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/DelimitedImageVisitor.java
+index fea9cd6..eb6cae3 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/DelimitedImageVisitor.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/DelimitedImageVisitor.java
+@@ -57,18 +57,18 @@ class DelimitedImageVisitor extends TextWriterImageVisitor {
+     
+     // This collection determines what elements are tracked and the order
+     // in which they are output
+-    Collections.addAll(elementsToTrack,  ImageElement.INodePath,
+-                                         ImageElement.Replication,
+-                                         ImageElement.ModificationTime,
+-                                         ImageElement.AccessTime,
+-                                         ImageElement.BlockSize,
+-                                         ImageElement.NumBlocks,
+-                                         ImageElement.NumBytes,
+-                                         ImageElement.NSQuota,
+-                                         ImageElement.DSQuota,
+-                                         ImageElement.PermString,
+-                                         ImageElement.Username,
+-                                         ImageElement.GroupName);
++    Collections.addAll(elementsToTrack,  ImageElement.INODE_PATH,
++                                         ImageElement.REPLICATION,
++                                         ImageElement.MODIFICATION_TIME,
++                                         ImageElement.ACCESS_TIME,
++                                         ImageElement.BLOCK_SIZE,
++                                         ImageElement.NUM_BLOCKS,
++                                         ImageElement.NUM_BYTES,
++                                         ImageElement.NS_QUOTA,
++                                         ImageElement.DS_QUOTA,
++                                         ImageElement.PERMISSION_STRING,
++                                         ImageElement.USER_NAME,
++                                         ImageElement.GROUP_NAME);
+   }
+   
+   public DelimitedImageVisitor(String filename) throws IOException {
+@@ -104,8 +104,8 @@ class DelimitedImageVisitor extends TextWriterImageVisitor {
+     ImageElement elem = elemQ.pop();
+ 
+     // If we're done with an inode, write out our results and start over
+-    if(elem == ImageElement.Inode || 
+-       elem == ImageElement.INodeUnderConstruction) {
++    if(elem == ImageElement.INODE || 
++       elem == ImageElement.INODE_UNDER_CONSTRUCTION) {
+       writeLine();
+       write("\n");
+       reset();
+@@ -123,7 +123,7 @@ class DelimitedImageVisitor extends TextWriterImageVisitor {
+       ImageElement e = it.next();
+       
+       String v = null;
+-      if(e == ImageElement.NumBytes)
++      if(e == ImageElement.NUM_BYTES)
+         v = String.valueOf(fileSize);
+       else
+         v = elements.get(e);
+@@ -139,14 +139,14 @@ class DelimitedImageVisitor extends TextWriterImageVisitor {
+   @Override
+   void visit(ImageElement element, String value) throws IOException {
+     // Explicitly label the root path
+-    if(element == ImageElement.INodePath && value.equals(""))
++    if(element == ImageElement.INODE_PATH && value.equals(""))
+       value = "/";
+     
+     // Special case of file size, which is sum of the num bytes in each block
+-    if(element == ImageElement.NumBytes)
++    if(element == ImageElement.NUM_BYTES)
+       fileSize += Long.valueOf(value);
+     
+-    if(elements.containsKey(element) && element != ImageElement.NumBytes)
++    if(elements.containsKey(element) && element != ImageElement.NUM_BYTES)
+       elements.put(element, value);
+     
+   }
+@@ -160,8 +160,8 @@ class DelimitedImageVisitor extends TextWriterImageVisitor {
+   void visitEnclosingElement(ImageElement element, ImageElement key,
+       String value) throws IOException {
+     // Special case as numBlocks is an attribute of the blocks element
+-    if(key == ImageElement.NumBlocks 
+-        && elements.containsKey(ImageElement.NumBlocks))
++    if(key == ImageElement.NUM_BLOCKS 
++        && elements.containsKey(ImageElement.NUM_BLOCKS))
+       elements.put(key, value);
+     
+     elemQ.push(element);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageLoader.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageLoader.java
+index 1d13eb0..fa5b2de 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageLoader.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageLoader.java
+@@ -62,7 +62,7 @@ interface ImageLoader {
+      * Find an image loader capable of interpreting the specified
+      * layout version number.  If none, return null;
+      *
+-     * @param imageVersion fsimage layout version number to be processed
++     * @param version fsimage layout version number to be processed
+      * @return ImageLoader that can interpret specified version, or null
+      */
+     static public ImageLoader getLoader(int version) {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageLoaderCurrent.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageLoaderCurrent.java
+index 85656b3..aba24b7 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageLoaderCurrent.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageLoaderCurrent.java
+@@ -118,18 +118,18 @@ class ImageLoaderCurrent implements ImageLoader {
+       boolean skipBlocks) throws IOException {
+     try {
+       v.start();
+-      v.visitEnclosingElement(ImageElement.FSImage);
++      v.visitEnclosingElement(ImageElement.FS_IMAGE);
+ 
+       imageVersion = in.readInt();
+       if( !canLoadVersion(imageVersion))
+         throw new IOException("Cannot process fslayout version " + imageVersion);
+ 
+-      v.visit(ImageElement.ImageVersion, imageVersion);
+-      v.visit(ImageElement.NamespaceID, in.readInt());
++      v.visit(ImageElement.IMAGE_VERSION, imageVersion);
++      v.visit(ImageElement.NAMESPACE_ID, in.readInt());
+ 
+       long numInodes = in.readLong();
+ 
+-      v.visit(ImageElement.GenerationStamp, in.readLong());
++      v.visit(ImageElement.GENERATION_STAMP, in.readLong());
+ 
+       processINodes(in, v, numInodes, skipBlocks);
+ 
+@@ -149,31 +149,30 @@ class ImageLoaderCurrent implements ImageLoader {
+    *
+    * @param in DataInputStream to process
+    * @param v Visitor to walk over inodes
+-   * @param numINUC Number of inodes recorded in file
+    * @param skipBlocks Walk over each block?
+    */
+   private void processINodesUC(DataInputStream in, ImageVisitor v,
+       boolean skipBlocks) throws IOException {
+     int numINUC = in.readInt();
+ 
+-    v.visitEnclosingElement(ImageElement.INodesUnderConstruction,
+-                           ImageElement.NumINodesUnderConstruction, numINUC);
++    v.visitEnclosingElement(ImageElement.INODES_UNDER_CONSTRUCTION,
++                           ImageElement.NUM_INODES_UNDER_CONSTRUCTION, numINUC);
+ 
+     for(int i = 0; i < numINUC; i++) {
+-      v.visitEnclosingElement(ImageElement.INodeUnderConstruction);
++      v.visitEnclosingElement(ImageElement.INODE_UNDER_CONSTRUCTION);
+       byte [] name = FSImage.readBytes(in);
+       String n = new String(name, "UTF8");
+-      v.visit(ImageElement.INodePath, n);
+-      v.visit(ImageElement.Replication, in.readShort());
+-      v.visit(ImageElement.ModificationTime, formatDate(in.readLong()));
++      v.visit(ImageElement.INODE_PATH, n);
++      v.visit(ImageElement.REPLICATION, in.readShort());
++      v.visit(ImageElement.MODIFICATION_TIME, formatDate(in.readLong()));
+ 
+-      v.visit(ImageElement.PreferredBlockSize, in.readLong());
++      v.visit(ImageElement.PREFERRED_BLOCK_SIZE, in.readLong());
+       int numBlocks = in.readInt();
+       processBlocks(in, v, numBlocks, skipBlocks);
+ 
+       processPermission(in, v);
+-      v.visit(ImageElement.ClientName, FSImage.readString(in));
+-      v.visit(ImageElement.ClientMachine, FSImage.readString(in));
++      v.visit(ImageElement.CLIENT_NAME, FSImage.readString(in));
++      v.visit(ImageElement.CLIENT_MACHINE, FSImage.readString(in));
+ 
+       // Skip over the datanode descriptors, which are still stored in the
+       // file but are not used by the datanode or loaded into memory
+@@ -204,8 +203,8 @@ class ImageLoaderCurrent implements ImageLoader {
+    */
+   private void processBlocks(DataInputStream in, ImageVisitor v,
+       int numBlocks, boolean skipBlocks) throws IOException {
+-    v.visitEnclosingElement(ImageElement.Blocks,
+-                            ImageElement.NumBlocks, numBlocks);
++    v.visitEnclosingElement(ImageElement.BLOCKS,
++                            ImageElement.NUM_BLOCKS, numBlocks);
+     
+     if(numBlocks == -1) { // directory, no blocks to process
+       v.leaveEnclosingElement(); // Blocks
+@@ -219,10 +218,10 @@ class ImageLoaderCurrent implements ImageLoader {
+       
+     } else {
+       for(int j = 0; j < numBlocks; j++) {
+-        v.visitEnclosingElement(ImageElement.Block);
+-        v.visit(ImageElement.BlockID, in.readLong());
+-        v.visit(ImageElement.NumBytes, in.readLong());
+-        v.visit(ImageElement.GenerationStamp, in.readLong());
++        v.visitEnclosingElement(ImageElement.BLOCK);
++        v.visit(ImageElement.BLOCK_ID, in.readLong());
++        v.visit(ImageElement.NUM_BYTES, in.readLong());
++        v.visit(ImageElement.GENERATION_STAMP, in.readLong());
+         v.leaveEnclosingElement(); // Block
+       }
+     }
+@@ -237,11 +236,11 @@ class ImageLoaderCurrent implements ImageLoader {
+    */
+   private void processPermission(DataInputStream in, ImageVisitor v)
+       throws IOException {
+-    v.visitEnclosingElement(ImageElement.Permissions);
+-    v.visit(ImageElement.Username, Text.readString(in));
+-    v.visit(ImageElement.GroupName, Text.readString(in));
++    v.visitEnclosingElement(ImageElement.PERMISSIONS);
++    v.visit(ImageElement.USER_NAME, Text.readString(in));
++    v.visit(ImageElement.GROUP_NAME, Text.readString(in));
+     FsPermission fsp = new FsPermission(in.readShort());
+-    v.visit(ImageElement.PermString, fsp.toString());
++    v.visit(ImageElement.PERMISSION_STRING, fsp.toString());
+     v.leaveEnclosingElement(); // Permissions
+   }
+ 
+@@ -257,25 +256,25 @@ class ImageLoaderCurrent implements ImageLoader {
+    */
+   private void processINodes(DataInputStream in, ImageVisitor v,
+       long numInodes, boolean skipBlocks) throws IOException {
+-    v.visitEnclosingElement(ImageElement.INodes,
+-        ImageElement.NumInodes, numInodes);
++    v.visitEnclosingElement(ImageElement.INODES,
++        ImageElement.NUM_INODES, numInodes);
+ 
+     for(long i = 0; i < numInodes; i++) {
+-      v.visitEnclosingElement(ImageElement.Inode);
+-      v.visit(ImageElement.INodePath, FSImage.readString(in));
+-      v.visit(ImageElement.Replication, in.readShort());
+-      v.visit(ImageElement.ModificationTime, formatDate(in.readLong()));
++      v.visitEnclosingElement(ImageElement.INODE);
++      v.visit(ImageElement.INODE_PATH, FSImage.readString(in));
++      v.visit(ImageElement.REPLICATION, in.readShort());
++      v.visit(ImageElement.MODIFICATION_TIME, formatDate(in.readLong()));
+       if(imageVersion <= -17) // added in version -17
+-        v.visit(ImageElement.AccessTime, formatDate(in.readLong()));
+-      v.visit(ImageElement.BlockSize, in.readLong());
++        v.visit(ImageElement.ACCESS_TIME, formatDate(in.readLong()));
++      v.visit(ImageElement.BLOCK_SIZE, in.readLong());
+       int numBlocks = in.readInt();
+ 
+       processBlocks(in, v, numBlocks, skipBlocks);
+ 
+       if(numBlocks != 0) {
+-        v.visit(ImageElement.NSQuota, numBlocks <= 0 ? in.readLong() : -1);
++        v.visit(ImageElement.NS_QUOTA, numBlocks <= 0 ? in.readLong() : -1);
+         if(imageVersion <= -18) // added in version -18
+-          v.visit(ImageElement.DSQuota, numBlocks <= 0 ? in.readLong() : -1);
++          v.visit(ImageElement.DS_QUOTA, numBlocks <= 0 ? in.readLong() : -1);
+       }
+ 
+       processPermission(in, v);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageVisitor.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageVisitor.java
+index c8238e4..0bd73d1 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageVisitor.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/ImageVisitor.java
+@@ -30,36 +30,36 @@ abstract class ImageVisitor {
+    * file. ImageVisitors are able to handle processing any of these elements.
+    */
+   public enum ImageElement {
+-    FSImage,
+-    ImageVersion,
+-    NamespaceID,
+-    LayoutVersion,
+-    NumInodes,
+-    GenerationStamp,
+-    INodes,
+-    Inode,
+-    INodePath,
+-    Replication,
+-    ModificationTime,
+-    AccessTime,
+-    BlockSize,
+-    NumBlocks,
+-    Blocks,
+-    Block,
+-    BlockID,
+-    NumBytes,
+-    NSQuota,
+-    DSQuota,
+-    Permissions,
+-    NumINodesUnderConstruction,
+-    INodesUnderConstruction,
+-    INodeUnderConstruction,
+-    PreferredBlockSize,
+-    ClientName,
+-    ClientMachine,
+-    Username,
+-    GroupName,
+-    PermString
++    FS_IMAGE,
++    IMAGE_VERSION,
++    NAMESPACE_ID,
++    LAYOUT_VERSION,
++    NUM_INODES,
++    GENERATION_STAMP,
++    INODES,
++    INODE,
++    INODE_PATH,
++    REPLICATION,
++    MODIFICATION_TIME,
++    ACCESS_TIME,
++    BLOCK_SIZE,
++    NUM_BLOCKS,
++    BLOCKS,
++    BLOCK,
++    BLOCK_ID,
++    NUM_BYTES,
++    NS_QUOTA,
++    DS_QUOTA,
++    PERMISSIONS,
++    NUM_INODES_UNDER_CONSTRUCTION,
++    INODES_UNDER_CONSTRUCTION,
++    INODE_UNDER_CONSTRUCTION,
++    PREFERRED_BLOCK_SIZE,
++    CLIENT_NAME,
++    CLIENT_MACHINE,
++    USER_NAME,
++    GROUP_NAME,
++    PERMISSION_STRING
+   }
+   
+   /**
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/LsImageVisitor.java b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/LsImageVisitor.java
+index 546557d..461c767 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/LsImageVisitor.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/offlineImageViewer/LsImageVisitor.java
+@@ -72,7 +72,6 @@ class LsImageVisitor extends TextWriterImageVisitor {
+   /**
+    * All the values have been gathered.  Print them to the console in an
+    * ls-style format.
+-   * @throws IOException
+    */
+   private final static int widthRepl = 2;  
+   private final static int widthUser = 8; 
+@@ -106,7 +105,7 @@ class LsImageVisitor extends TextWriterImageVisitor {
+ 
+   @Override
+   void finishAbnormally() throws IOException {
+-    System.out.println("Output ended unexpectedly.");
++    System.out.println("Input ended unexpectedly.");
+     super.finishAbnormally();
+   }
+ 
+@@ -114,7 +113,7 @@ class LsImageVisitor extends TextWriterImageVisitor {
+   void leaveEnclosingElement() throws IOException {
+     ImageElement elem = elemQ.pop();
+ 
+-    if(elem == ImageElement.Inode)
++    if(elem == ImageElement.INODE)
+       printLine();
+   }
+ 
+@@ -124,26 +123,26 @@ class LsImageVisitor extends TextWriterImageVisitor {
+   void visit(ImageElement element, String value) throws IOException {
+     if(inInode) {
+       switch(element) {
+-      case INodePath:
++      case INODE_PATH:
+         if(value.equals("")) path = "/";
+         else path = value;
+         break;
+-      case PermString:
++      case PERMISSION_STRING:
+         perms = value;
+         break;
+-      case Replication:
++      case REPLICATION:
+         replication = Integer.valueOf(value);
+         break;
+-      case Username:
++      case USER_NAME:
+         username = value;
+         break;
+-      case GroupName:
++      case GROUP_NAME:
+         group = value;
+         break;
+-      case NumBytes:
++      case NUM_BYTES:
+         filesize += Long.valueOf(value);
+         break;
+-      case ModificationTime:
++      case MODIFICATION_TIME:
+         modTime = value;
+         break;
+       default:
+@@ -156,7 +155,7 @@ class LsImageVisitor extends TextWriterImageVisitor {
+   @Override
+   void visitEnclosingElement(ImageElement element) throws IOException {
+     elemQ.push(element);
+-    if(element == ImageElement.Inode)
++    if(element == ImageElement.INODE)
+       newLine();
+   }
+ 
+@@ -164,9 +163,9 @@ class LsImageVisitor extends TextWriterImageVisitor {
+   void visitEnclosingElement(ImageElement element,
+       ImageElement key, String value) throws IOException {
+     elemQ.push(element);
+-    if(element == ImageElement.Inode)
++    if(element == ImageElement.INODE)
+       newLine();
+-    else if (element == ImageElement.Blocks)
++    else if (element == ImageElement.BLOCKS)
+       numBlocks = Integer.valueOf(value);
+   }
+ }
+diff --git a/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/SpotCheckImageVisitor.java b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/SpotCheckImageVisitor.java
+index b248062..0744838 100644
+--- a/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/SpotCheckImageVisitor.java
++++ b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/SpotCheckImageVisitor.java
+@@ -42,11 +42,11 @@ class SpotCheckImageVisitor extends ImageVisitor {
+   
+   @Override
+   void visit(ImageElement element, String value) throws IOException {
+-    if(element == ImageElement.NumBytes) 
++    if(element == ImageElement.NUM_BYTES) 
+       current.totalFileSize += Long.valueOf(value);
+-    else if (element == ImageElement.Replication)
++    else if (element == ImageElement.REPLICATION)
+       current.totalReplications += Long.valueOf(value);
+-    else if (element == ImageElement.INodePath)
++    else if (element == ImageElement.INODE_PATH)
+       current.pathNames.add(value);
+   }
+ 
+@@ -54,13 +54,13 @@ class SpotCheckImageVisitor extends ImageVisitor {
+   void visitEnclosingElement(ImageElement element, ImageElement key,
+       String value) throws IOException {
+     switch(element) {
+-    case INodes:
++    case INODES:
+       current = inodes;
+       break;
+-    case INodesUnderConstruction:
++    case INODES_UNDER_CONSTRUCTION:
+       current = INUCs;
+       break;
+-    case Blocks:
++    case BLOCKS:
+       current.totalNumBlocks += Long.valueOf(value);
+       break;
+       // OK to not have a default, we're skipping most of the values
+diff --git a/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestDelimitedImageVisitor.java b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestDelimitedImageVisitor.java
+index ff2bcd0..5417c53 100644
+--- a/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestDelimitedImageVisitor.java
++++ b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestDelimitedImageVisitor.java
+@@ -53,23 +53,23 @@ public class TestDelimitedImageVisitor extends TestCase {
+     try {
+       DelimitedImageVisitor div = new DelimitedImageVisitor(filename, true, delim);
+ 
+-      div.visit(ImageElement.FSImage, "Not in ouput");
+-      div.visitEnclosingElement(ImageElement.Inode);
+-      div.visit(ImageElement.LayoutVersion, "not in");
+-      div.visit(ImageElement.LayoutVersion, "the output");
++      div.visit(ImageElement.FS_IMAGE, "Not in ouput");
++      div.visitEnclosingElement(ImageElement.INODE);
++      div.visit(ImageElement.LAYOUT_VERSION, "not in");
++      div.visit(ImageElement.LAYOUT_VERSION, "the output");
+       
+-      build(div, ImageElement.INodePath,        "hartnell", sb, true);
+-      build(div, ImageElement.Replication,      "99", sb, true);
+-      build(div, ImageElement.ModificationTime, "troughton", sb, true);
+-      build(div, ImageElement.AccessTime,       "pertwee", sb, true);
+-      build(div, ImageElement.BlockSize,        "baker", sb, true);
+-      build(div, ImageElement.NumBlocks,        "davison", sb, true);
+-      build(div, ImageElement.NumBytes,         "55", sb, true);
+-      build(div, ImageElement.NSQuota,          "baker2", sb, true);
+-      build(div, ImageElement.DSQuota,          "mccoy", sb, true);
+-      build(div, ImageElement.PermString,       "eccleston", sb, true);
+-      build(div, ImageElement.Username,         "tennant", sb, true);
+-      build(div, ImageElement.GroupName,        "smith", sb, false);
++      build(div, ImageElement.INODE_PATH,        "hartnell", sb, true);
++      build(div, ImageElement.REPLICATION,       "99", sb, true);
++      build(div, ImageElement.MODIFICATION_TIME, "troughton", sb, true);
++      build(div, ImageElement.ACCESS_TIME,       "pertwee", sb, true);
++      build(div, ImageElement.BLOCK_SIZE,        "baker", sb, true);
++      build(div, ImageElement.NUM_BLOCKS,        "davison", sb, true);
++      build(div, ImageElement.NUM_BYTES,         "55", sb, true);
++      build(div, ImageElement.NS_QUOTA,          "baker2", sb, true);
++      build(div, ImageElement.DS_QUOTA,          "mccoy", sb, true);
++      build(div, ImageElement.PERMISSION_STRING, "eccleston", sb, true);
++      build(div, ImageElement.USER_NAME,         "tennant", sb, true);
++      build(div, ImageElement.GROUP_NAME,        "smith", sb, false);
+       
+       div.leaveEnclosingElement(); // INode
+       div.finish();
+diff --git a/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestOfflineImageViewer.java b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestOfflineImageViewer.java
+index 8b64a3d..993c7f7 100644
+--- a/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestOfflineImageViewer.java
++++ b/src/test/org/apache/hadoop/hdfs/tools/offlineImageViewer/TestOfflineImageViewer.java
+@@ -69,7 +69,8 @@ public class TestOfflineImageViewer extends TestCase {
+                                            = new HashMap<String, FileStatus>();
+   
+   
+-  private static String ROOT = System.getProperty("test.build.data","/tmp");
++  private static String ROOT = System.getProperty("test.build.data",
++                                                  "build/test/data");
+   
+   // Main entry point into testing.  Necessary since we only want to generate
+   // the fsimage file once and use it for multiple tests. 
+-- 
+1.7.0.4
+

@@ -1,0 +1,511 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta content="Apache Forrest" name="Generator">
+<meta name="Forrest-version" content="0.8">
+<meta name="Forrest-skin-name" content="pelt">
+<title>Service Level Authorization Guide</title>
+<link type="text/css" href="skin/basic.css" rel="stylesheet">
+<link media="screen" type="text/css" href="skin/screen.css" rel="stylesheet">
+<link media="print" type="text/css" href="skin/print.css" rel="stylesheet">
+<link type="text/css" href="skin/profile.css" rel="stylesheet">
+<script src="skin/getBlank.js" language="javascript" type="text/javascript"></script><script src="skin/getMenu.js" language="javascript" type="text/javascript"></script><script src="skin/fontsize.js" language="javascript" type="text/javascript"></script>
+<link rel="shortcut icon" href="images/favicon.ico">
+</head>
+<body onload="init()">
+<script type="text/javascript">ndeSetTextSize();</script>
+<div id="top">
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+<a href="http://www.apache.org/">Apache</a> &gt; <a href="http://hadoop.apache.org/">Hadoop</a> &gt; <a href="http://hadoop.apache.org/core/">Core</a><script src="skin/breadcrumbs.js" language="JavaScript" type="text/javascript"></script>
+</div>
+<!--+
+    |header
+    +-->
+<div class="header">
+<!--+
+    |start group logo
+    +-->
+<div class="grouplogo">
+<a href="http://hadoop.apache.org/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo.jpg" title="Apache Hadoop"></a>
+</div>
+<!--+
+    |end group logo
+    +-->
+<!--+
+    |start Project Logo
+    +-->
+<div class="projectlogo">
+<a href="http://hadoop.apache.org/core/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo-2.gif" title="Scalable Computing Platform"></a>
+</div>
+<!--+
+    |end Project Logo
+    +-->
+<!--+
+    |start Search
+    +-->
+<div class="searchbox">
+<form action="http://www.google.com/search" method="get" class="roundtopsmall">
+<input value="archive.cloudera.com" name="sitesearch" type="hidden"><input onFocus="getBlank (this, 'Search the site with google');" size="25" name="q" id="query" type="text" value="Search the site with google">&nbsp; 
+                    <input name="Search" value="Search" type="submit">
+</form>
+</div>
+<!--+
+    |end search
+    +-->
+<!--+
+    |start Tabs
+    +-->
+<ul id="tabs">
+<li>
+<a class="unselected" href="http://hadoop.apache.org/core/">Project</a>
+</li>
+<li>
+<a class="unselected" href="http://wiki.apache.org/hadoop">Wiki</a>
+</li>
+<li class="current">
+<a class="selected" href="index.html">Hadoop 0.20 Documentation</a>
+</li>
+</ul>
+<!--+
+    |end Tabs
+    +-->
+</div>
+</div>
+<div id="main">
+<div id="publishedStrip">
+<!--+
+    |start Subtabs
+    +-->
+<div id="level2tabs"></div>
+<!--+
+    |end Endtabs
+    +-->
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+
+             &nbsp;
+           </div>
+<!--+
+    |start Menu, mainarea
+    +-->
+<!--+
+    |start Menu
+    +-->
+<div id="menu">
+<div onclick="SwitchMenu('menu_1.1', 'skin/')" id="menu_1.1Title" class="menutitle">Getting Started</div>
+<div id="menu_1.1" class="menuitemgroup">
+<div class="menuitem">
+<a href="index.html">Overview</a>
+</div>
+<div class="menuitem">
+<a href="single_node_setup.html">Single Node Setup</a>
+</div>
+<div class="menuitem">
+<a href="cluster_setup.html">Cluster Setup</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.2', 'skin/')" id="menu_1.2Title" class="menutitle">Guides</div>
+<div id="menu_1.2" class="menuitemgroup">
+<div class="menuitem">
+<a href="HttpAuthentication.html">Authentication for Hadoop HTTP web-consoles</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.3', 'skin/')" id="menu_1.3Title" class="menutitle">MapReduce</div>
+<div id="menu_1.3" class="menuitemgroup">
+<div class="menuitem">
+<a href="mapred_tutorial.html">MapReduce Tutorial</a>
+</div>
+<div class="menuitem">
+<a href="streaming.html">Hadoop Streaming</a>
+</div>
+<div class="menuitem">
+<a href="commands_manual.html">Hadoop Commands</a>
+</div>
+<div class="menuitem">
+<a href="distcp.html">DistCp</a>
+</div>
+<div class="menuitem">
+<a href="vaidya.html">Vaidya</a>
+</div>
+<div class="menuitem">
+<a href="hadoop_archives.html">Hadoop Archives</a>
+</div>
+<div class="menuitem">
+<a href="gridmix.html">Gridmix</a>
+</div>
+<div class="menuitem">
+<a href="capacity_scheduler.html">Capacity Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="fair_scheduler.html">Fair Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="hod_scheduler.html">Hod Scheduler</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.4', 'skin/')" id="menu_1.4Title" class="menutitle">HDFS</div>
+<div id="menu_1.4" class="menuitemgroup">
+<div class="menuitem">
+<a href="hdfs_user_guide.html">HDFS Users </a>
+</div>
+<div class="menuitem">
+<a href="hdfs_design.html">HDFS Architecture</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_permissions_guide.html">Permissions</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_quota_admin_guide.html">Quotas</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_imageviewer.html">Offline Image Viewer Guide</a>
+</div>
+<div class="menuitem">
+<a href="SLG_user_guide.html">Synthetic Load Generator</a>
+</div>
+<div class="menuitem">
+<a href="libhdfs.html">C API libhdfs</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_selected_1.5', 'skin/')" id="menu_selected_1.5Title" class="menutitle" style="background-image: url('skin/images/chapter_open.gif');">Common</div>
+<div id="menu_selected_1.5" class="selectedmenuitemgroup" style="display: block;">
+<div class="menuitem">
+<a href="file_system_shell.html">File System Shell</a>
+</div>
+<div class="menupage">
+<div class="menupagetitle">Service Level Authorization</div>
+</div>
+<div class="menuitem">
+<a href="native_libraries.html">Native Libraries</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.6', 'skin/')" id="menu_1.6Title" class="menutitle">Miscellaneous</div>
+<div id="menu_1.6" class="menuitemgroup">
+<div class="menuitem">
+<a href="Secure_Impersonation.html">Secure Impersonation</a>
+</div>
+<div class="menuitem">
+<a href="api/index.html">API Docs</a>
+</div>
+<div class="menuitem">
+<a href="jdiff/changes.html">API Changes</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/">Wiki</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/FAQ">FAQ</a>
+</div>
+<div class="menuitem">
+<a href="releasenotes.html">Release Notes</a>
+</div>
+<div class="menuitem">
+<a href="changes.html">Change Log</a>
+</div>
+</div>
+<div id="credit"></div>
+<div id="roundbottom">
+<img style="display: none" class="corner" height="15" width="15" alt="" src="skin/images/rc-b-l-15-1body-2menu-3menu.png"></div>
+<!--+
+  |alternative credits
+  +-->
+<div id="credit2"></div>
+</div>
+<!--+
+    |end Menu
+    +-->
+<!--+
+    |start content
+    +-->
+<div id="content">
+<div title="Portable Document Format" class="pdflink">
+<a class="dida" href="service_level_auth.pdf"><img alt="PDF -icon" src="skin/images/pdfdoc.gif" class="skin"><br>
+        PDF</a>
+</div>
+<h1>Service Level Authorization Guide</h1>
+<div id="minitoc-area">
+<ul class="minitoc">
+<li>
+<a href="#Purpose">Purpose</a>
+</li>
+<li>
+<a href="#Prerequisites">Prerequisites</a>
+</li>
+<li>
+<a href="#Overview">Overview</a>
+</li>
+<li>
+<a href="#Configuration">Configuration</a>
+<ul class="minitoc">
+<li>
+<a href="#Enable+Service+Level+Authorization">Enable Service Level Authorization</a>
+</li>
+<li>
+<a href="#Hadoop+Services+and+Configuration+Properties">Hadoop Services and Configuration Properties</a>
+</li>
+<li>
+<a href="#Access+Control+Lists">Access Control Lists</a>
+</li>
+<li>
+<a href="#Refreshing+Service+Level+Authorization+Configuration">Refreshing Service Level Authorization Configuration</a>
+</li>
+<li>
+<a href="#Examples">Examples</a>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+  
+    
+<a name="N1000D"></a><a name="Purpose"></a>
+<h2 class="h3">Purpose</h2>
+<div class="section">
+<p>This document describes how to configure and manage <em>Service Level
+      Authorization</em> for Hadoop.</p>
+</div>
+    
+    
+<a name="N1001A"></a><a name="Prerequisites"></a>
+<h2 class="h3">Prerequisites</h2>
+<div class="section">
+<p>Make sure Hadoop is installed, configured and setup correctly. For more information see: </p>
+<ul>
+        
+<li>
+          
+<a href="single_node_setup.html">Single Node Setup</a> for first-time users.
+        </li>
+        
+<li>
+          
+<a href="cluster_setup.html">Cluster Setup</a> for large, distributed clusters.
+        </li>
+      
+</ul>
+</div>
+    
+    
+<a name="N10035"></a><a name="Overview"></a>
+<h2 class="h3">Overview</h2>
+<div class="section">
+<p>Service Level Authorization is the initial authorization mechanism to
+      ensure clients connecting to a particular Hadoop <em>service</em> have the
+      necessary, pre-configured, permissions and are authorized to access the given
+      service. For example, a MapReduce cluster can use this mechanism to allow a
+      configured list of users/groups to submit jobs.</p>
+<p>The <span class="codefrag">${HADOOP_CONF_DIR}/hadoop-policy.xml</span> configuration file 
+      is used to define the access control lists for various Hadoop services.</p>
+<p>Service Level Authorization is performed much before to other access 
+      control checks such as file-permission checks, access control on job queues
+      etc.</p>
+</div>
+    
+    
+<a name="N1004B"></a><a name="Configuration"></a>
+<h2 class="h3">Configuration</h2>
+<div class="section">
+<p>This section describes how to configure service-level authorization
+      via the configuration file <span class="codefrag">{HADOOP_CONF_DIR}/hadoop-policy.xml</span>.
+      </p>
+<a name="N10057"></a><a name="Enable+Service+Level+Authorization"></a>
+<h3 class="h4">Enable Service Level Authorization</h3>
+<p>By default, service-level authorization is disabled for Hadoop. To
+        enable it set the configuration property 
+        <span class="codefrag">hadoop.security.authorization</span> to <strong>true</strong>
+        in <span class="codefrag">${HADOOP_CONF_DIR}/core-site.xml</span>.</p>
+<a name="N1006A"></a><a name="Hadoop+Services+and+Configuration+Properties"></a>
+<h3 class="h4">Hadoop Services and Configuration Properties</h3>
+<p>This section lists the various Hadoop services and their configuration
+        knobs:</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+          
+<tr>
+            
+<th colspan="1" rowspan="1">Property</th>
+            <th colspan="1" rowspan="1">Service</th>
+          
+</tr>
+          
+<tr>
+            
+<td colspan="1" rowspan="1"><span class="codefrag">security.client.protocol.acl</span></td>
+            <td colspan="1" rowspan="1">ACL for ClientProtocol, which is used by user code via the 
+            DistributedFileSystem.</td>
+          
+</tr>
+          
+<tr>
+            
+<td colspan="1" rowspan="1"><span class="codefrag">security.client.datanode.protocol.acl</span></td>
+            <td colspan="1" rowspan="1">ACL for ClientDatanodeProtocol, the client-to-datanode protocol
+            for block recovery.</td>
+          
+</tr>
+          
+<tr>
+            
+<td colspan="1" rowspan="1"><span class="codefrag">security.datanode.protocol.acl</span></td>
+            <td colspan="1" rowspan="1">ACL for DatanodeProtocol, which is used by datanodes to 
+            communicate with the namenode.</td>
+          
+</tr>
+          
+<tr>
+            
+<td colspan="1" rowspan="1"><span class="codefrag">security.inter.datanode.protocol.acl</span></td>
+            <td colspan="1" rowspan="1">ACL for InterDatanodeProtocol, the inter-datanode protocol
+            for updating generation timestamp.</td>
+          
+</tr>
+          
+<tr>
+            
+<td colspan="1" rowspan="1"><span class="codefrag">security.namenode.protocol.acl</span></td>
+            <td colspan="1" rowspan="1">ACL for NamenodeProtocol, the protocol used by the secondary
+            namenode to communicate with the namenode.</td>
+          
+</tr>
+          
+<tr>
+            
+<td colspan="1" rowspan="1"><span class="codefrag">security.inter.tracker.protocol.acl</span></td>
+            <td colspan="1" rowspan="1">ACL for InterTrackerProtocol, used by the tasktrackers to 
+            communicate with the jobtracker.</td>
+          
+</tr>
+          
+<tr>
+            
+<td colspan="1" rowspan="1"><span class="codefrag">security.job.submission.protocol.acl</span></td>
+            <td colspan="1" rowspan="1">ACL for JobSubmissionProtocol, used by job clients to 
+            communciate with the jobtracker for job submission, querying job status 
+            etc.</td>
+          
+</tr>
+          
+<tr>
+            
+<td colspan="1" rowspan="1"><span class="codefrag">security.task.umbilical.protocol.acl</span></td>
+            <td colspan="1" rowspan="1">ACL for TaskUmbilicalProtocol, used by the map and reduce 
+            tasks to communicate with the parent tasktracker.</td>
+          
+</tr>
+          
+<tr>
+            
+<td colspan="1" rowspan="1"><span class="codefrag">security.refresh.policy.protocol.acl</span></td>
+            <td colspan="1" rowspan="1">ACL for RefreshAuthorizationPolicyProtocol, used by the 
+            dfsadmin and mradmin commands to refresh the security policy in-effect.
+            </td>
+          
+</tr>
+        
+</table>
+<a name="N10102"></a><a name="Access+Control+Lists"></a>
+<h3 class="h4">Access Control Lists</h3>
+<p>
+<span class="codefrag">${HADOOP_CONF_DIR}/hadoop-policy.xml</span> defines an access 
+        control list for each Hadoop service. Every access control list has a 
+        simple format:</p>
+<p>The list of users and groups are both comma separated list of names. 
+        The two lists are separated by a space.</p>
+<p>Example: <span class="codefrag">user1,user2 group1,group2</span>.</p>
+<p>Add a blank at the beginning of the line if only a list of groups
+        is to be provided, equivalently a comman-separated list of users followed
+        by a space or nothing implies only a set of given users.</p>
+<p>A special value of <strong>*</strong> implies that all users are
+        allowed to access the service.</p>
+<a name="N10120"></a><a name="Refreshing+Service+Level+Authorization+Configuration"></a>
+<h3 class="h4">Refreshing Service Level Authorization Configuration</h3>
+<p>The service-level authorization configuration for the NameNode and 
+        JobTracker can be changed without restarting either of the Hadoop master
+        daemons. The cluster administrator can change 
+        <span class="codefrag">${HADOOP_CONF_DIR}/hadoop-policy.xml</span> on the master nodes and 
+        instruct the NameNode and JobTracker to reload their respective 
+        configurations via the <em>-refreshServiceAcl</em> switch to 
+        <em>dfsadmin</em> and <em>mradmin</em> commands respectively.</p>
+<p>Refresh the service-level authorization configuration for the
+        NameNode:</p>
+<p>
+          
+<span class="codefrag">$ bin/hadoop dfsadmin -refreshServiceAcl</span>
+        
+</p>
+<p>Refresh the service-level authorization configuration for the 
+        JobTracker:</p>
+<p>  
+          
+<span class="codefrag">$ bin/hadoop mradmin -refreshServiceAcl</span>
+        
+</p>
+<p>Of course, one can use the 
+        <span class="codefrag">security.refresh.policy.protocol.acl</span> property in 
+        <span class="codefrag">${HADOOP_CONF_DIR}/hadoop-policy.xml</span> to restrict access to
+        the ability to refresh the service-level authorization configuration to
+        certain users/groups.</p>
+<a name="N10151"></a><a name="Examples"></a>
+<h3 class="h4">Examples</h3>
+<p>Allow only users <span class="codefrag">alice</span>, <span class="codefrag">bob</span> and users in the 
+        <span class="codefrag">mapreduce</span> group to submit jobs to the MapReduce cluster:</p>
+<pre class="code">
+&lt;property&gt;
+     &lt;name&gt;security.job.submission.protocol.acl&lt;/name&gt;
+     &lt;value&gt;alice,bob mapreduce&lt;/value&gt;
+&lt;/property&gt;
+</pre>
+<p></p>
+<p>Allow only DataNodes running as the users who belong to the 
+        group <span class="codefrag">datanodes</span> to communicate with the NameNode:</p>
+<pre class="code">
+&lt;property&gt;
+     &lt;name&gt;security.datanode.protocol.acl&lt;/name&gt;
+     &lt;value&gt;datanodes&lt;/value&gt;
+&lt;/property&gt;
+</pre>
+<p></p>
+<p>Allow any user to talk to the HDFS cluster as a DFSClient:</p>
+<pre class="code">
+&lt;property&gt;
+     &lt;name&gt;security.client.protocol.acl&lt;/name&gt;
+     &lt;value&gt;*&lt;/value&gt;
+&lt;/property&gt;
+</pre>
+</div>
+    
+  
+</div>
+<!--+
+    |end content
+    +-->
+<div class="clearboth">&nbsp;</div>
+</div>
+<div id="footer">
+<!--+
+    |start bottomstrip
+    +-->
+<div class="lastmodified">
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<div class="copyright">
+        Copyright &copy;
+         2008 <a href="http://www.apache.org/licenses/">The Apache Software Foundation.</a>
+</div>
+<!--+
+    |end bottomstrip
+    +-->
+</div>
+</body>
+</html>

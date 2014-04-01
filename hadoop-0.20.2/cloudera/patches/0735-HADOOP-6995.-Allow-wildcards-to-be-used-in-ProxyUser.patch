@@ -1,0 +1,214 @@
+From 9616bfbd1f2dd2686a29f47c62fff08d955a7ac8 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@lipcon.org>
+Date: Thu, 7 Oct 2010 23:11:25 -0700
+Subject: [PATCH 0735/1179] HADOOP-6995. Allow wildcards to be used in ProxyUsers configurations
+
+Author: Todd Lipcon
+Ref: CDH-648
+---
+ .../hadoop/security/authorize/ProxyUsers.java      |   21 +++-
+ .../hadoop/security/authorize/TestProxyUsers.java  |  148 ++++++++++++++++++++
+ 2 files changed, 166 insertions(+), 3 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/security/authorize/TestProxyUsers.java
+
+diff --git a/src/core/org/apache/hadoop/security/authorize/ProxyUsers.java b/src/core/org/apache/hadoop/security/authorize/ProxyUsers.java
+index d7b3d1d..5f6946e 100644
+--- a/src/core/org/apache/hadoop/security/authorize/ProxyUsers.java
++++ b/src/core/org/apache/hadoop/security/authorize/ProxyUsers.java
+@@ -122,7 +122,9 @@ public class ProxyUsers {
+     Collection<String> allowedUserGroups = proxyGroups.get(
+         getProxySuperuserGroupConfKey(superUser.getShortUserName()));
+     
+-    if (allowedUserGroups != null && !allowedUserGroups.isEmpty()) {
++    if (isWildcardList(allowedUserGroups)) {
++      groupAuthorized = true;
++    } else if (allowedUserGroups != null && !allowedUserGroups.isEmpty()) {
+       for (String group : user.getGroupNames()) {
+         if (allowedUserGroups.contains(group)) {
+           groupAuthorized = true;
+@@ -138,8 +140,10 @@ public class ProxyUsers {
+     
+     Collection<String> ipList = proxyHosts.get(
+         getProxySuperuserIpConfKey(superUser.getShortUserName()));
+-    
+-    if (ipList != null && !ipList.isEmpty()) {
++   
++    if (isWildcardList(ipList)) {
++      ipAuthorized = true;
++    } else if (ipList != null && !ipList.isEmpty()) {
+       for (String allowedHost : ipList) {
+         InetAddress hostAddr;
+         try {
+@@ -158,4 +162,15 @@ public class ProxyUsers {
+           + superUser.getUserName() + " from IP " + remoteAddress);
+     }
+   }
++
++  /**
++   * Return true if the configuration specifies the special configuration value
++   * "*", indicating that any group or host list is allowed to use this configuration.
++   */
++  private static boolean isWildcardList(Collection<String> list) {
++    return (list != null) &&
++      (list.size() == 1) &&
++      (list.contains("*"));
++  }
++
+ }
+diff --git a/src/test/org/apache/hadoop/security/authorize/TestProxyUsers.java b/src/test/org/apache/hadoop/security/authorize/TestProxyUsers.java
+new file mode 100644
+index 0000000..5d53656
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/authorize/TestProxyUsers.java
+@@ -0,0 +1,148 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.security.authorize;
++
++import java.util.Arrays;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.util.StringUtils;
++import org.apache.hadoop.security.UserGroupInformation;
++
++import junit.framework.TestCase;
++
++public class TestProxyUsers extends TestCase {
++  private static final String REAL_USER_NAME = "proxier";
++  private static final String PROXY_USER_NAME = "proxied_user";
++  private static final String[] GROUP_NAMES =
++    new String[] { "foo_group" };
++  private static final String[] OTHER_GROUP_NAMES =
++    new String[] { "bar_group" };
++  private static final String PROXY_IP = "1.2.3.4";
++  
++  public void testProxyUsers() throws Exception {
++    Configuration conf = new Configuration();
++    conf.set(
++      ProxyUsers.getProxySuperuserGroupConfKey(REAL_USER_NAME),
++      StringUtils.join(",", Arrays.asList(GROUP_NAMES)));
++    conf.set(
++      ProxyUsers.getProxySuperuserIpConfKey(REAL_USER_NAME),
++      PROXY_IP);
++    ProxyUsers.refreshSuperUserGroupsConfiguration(conf);
++
++
++    // First try proxying a group that's allowed
++    UserGroupInformation realUserUgi = UserGroupInformation
++        .createRemoteUser(REAL_USER_NAME);
++    UserGroupInformation proxyUserUgi = UserGroupInformation.createProxyUserForTesting(
++        PROXY_USER_NAME, realUserUgi, GROUP_NAMES);
++
++    // From good IP
++    assertAuthorized(proxyUserUgi, "1.2.3.4");
++    // From bad IP
++    assertNotAuthorized(proxyUserUgi, "1.2.3.5");
++
++    // Now try proxying a group that's not allowed
++    realUserUgi = UserGroupInformation.createRemoteUser(REAL_USER_NAME);
++    proxyUserUgi = UserGroupInformation.createProxyUserForTesting(
++        PROXY_USER_NAME, realUserUgi, OTHER_GROUP_NAMES);
++    
++    // From good IP
++    assertNotAuthorized(proxyUserUgi, "1.2.3.4");
++    // From bad IP
++    assertNotAuthorized(proxyUserUgi, "1.2.3.5");
++  }
++
++  public void testWildcardGroup() {
++    Configuration conf = new Configuration();
++    conf.set(
++      ProxyUsers.getProxySuperuserGroupConfKey(REAL_USER_NAME),
++      "*");
++    conf.set(
++      ProxyUsers.getProxySuperuserIpConfKey(REAL_USER_NAME),
++      PROXY_IP);
++    ProxyUsers.refreshSuperUserGroupsConfiguration(conf);
++
++    // First try proxying a group that's allowed
++    UserGroupInformation realUserUgi = UserGroupInformation
++        .createRemoteUser(REAL_USER_NAME);
++    UserGroupInformation proxyUserUgi = UserGroupInformation.createProxyUserForTesting(
++        PROXY_USER_NAME, realUserUgi, GROUP_NAMES);
++
++    // From good IP
++    assertAuthorized(proxyUserUgi, "1.2.3.4");
++    // From bad IP
++    assertNotAuthorized(proxyUserUgi, "1.2.3.5");
++
++    // Now try proxying a different group (just to make sure we aren't getting spill over
++    // from the other test case!)
++    realUserUgi = UserGroupInformation.createRemoteUser(REAL_USER_NAME);
++    proxyUserUgi = UserGroupInformation.createProxyUserForTesting(
++        PROXY_USER_NAME, realUserUgi, OTHER_GROUP_NAMES);
++    
++    // From good IP
++    assertAuthorized(proxyUserUgi, "1.2.3.4");
++    // From bad IP
++    assertNotAuthorized(proxyUserUgi, "1.2.3.5");
++  }
++
++  public void testWildcardIP() {
++    Configuration conf = new Configuration();
++    conf.set(
++      ProxyUsers.getProxySuperuserGroupConfKey(REAL_USER_NAME),
++      StringUtils.join(",", Arrays.asList(GROUP_NAMES)));
++    conf.set(
++      ProxyUsers.getProxySuperuserIpConfKey(REAL_USER_NAME),
++      "*");
++    ProxyUsers.refreshSuperUserGroupsConfiguration(conf);
++
++    // First try proxying a group that's allowed
++    UserGroupInformation realUserUgi = UserGroupInformation
++        .createRemoteUser(REAL_USER_NAME);
++    UserGroupInformation proxyUserUgi = UserGroupInformation.createProxyUserForTesting(
++        PROXY_USER_NAME, realUserUgi, GROUP_NAMES);
++
++    // From either IP should be fine
++    assertAuthorized(proxyUserUgi, "1.2.3.4");
++    assertAuthorized(proxyUserUgi, "1.2.3.5");
++
++    // Now set up an unallowed group
++    realUserUgi = UserGroupInformation.createRemoteUser(REAL_USER_NAME);
++    proxyUserUgi = UserGroupInformation.createProxyUserForTesting(
++        PROXY_USER_NAME, realUserUgi, OTHER_GROUP_NAMES);
++    
++    // Neither IP should be OK
++    assertNotAuthorized(proxyUserUgi, "1.2.3.4");
++    assertNotAuthorized(proxyUserUgi, "1.2.3.5");
++  }
++
++  private void assertNotAuthorized(UserGroupInformation proxyUgi, String host) {
++    try {
++      ProxyUsers.authorize(proxyUgi, host, null);
++      fail("Allowed authorization of " + proxyUgi + " from " + host);
++    } catch (AuthorizationException e) {
++      // Expected
++    }
++  }
++  
++  private void assertAuthorized(UserGroupInformation proxyUgi, String host) {
++    try {
++      ProxyUsers.authorize(proxyUgi, host, null);
++    } catch (AuthorizationException e) {
++      fail("Did not allowed authorization of " + proxyUgi + " from " + host);
++    }
++  }
++}
+-- 
+1.7.0.4
+

@@ -1,0 +1,1229 @@
+From d3131417c36e68cb59ad0833d271d10bd869b27c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 22 Jan 2010 17:45:33 -0800
+Subject: [PATCH 0437/1179] MAPREDUCE-1338. Add ability to store and load security keys
+
+Patch: https://issues.apache.org/jira/secure/attachment/12431172/MAPREDUCE-1338-BP20-3.patch
+Author: Boris Shkolnik
+Ref: CDH-648
+---
+ .../apache/hadoop/util/GenericOptionsParser.java   |   25 +++
+ src/mapred/org/apache/hadoop/mapred/Child.java     |   29 +--
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |   35 +++-
+ .../org/apache/hadoop/mapred/JobInProgress.java    |   31 ++-
+ .../hadoop/mapred/JobSubmissionProtocol.java       |    6 +-
+ .../org/apache/hadoop/mapred/JobTracker.java       |   11 +-
+ .../org/apache/hadoop/mapred/LocalJobRunner.java   |    5 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    9 +-
+ .../hadoop/mapreduce/security/TokenCache.java      |  143 +++++++++++++
+ .../hadoop/mapreduce/security/TokenStorage.java    |  168 +++++++++++++++
+ .../mapred/TestMiniMRWithDFSWithDistinctUsers.java |    2 +-
+ .../org/apache/hadoop/security/TestTokenCache.java |  217 ++++++++++++++++++++
+ .../apache/hadoop/security/TestTokenStorage.java   |  110 ++++++++++
+ .../hadoop/util/TestGenericOptionsParser.java      |   90 ++++++++
+ 14 files changed, 827 insertions(+), 54 deletions(-)
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/security/TokenStorage.java
+ create mode 100644 src/test/org/apache/hadoop/security/TestTokenCache.java
+ create mode 100644 src/test/org/apache/hadoop/security/TestTokenStorage.java
+ create mode 100644 src/test/org/apache/hadoop/util/TestGenericOptionsParser.java
+
+diff --git a/src/core/org/apache/hadoop/util/GenericOptionsParser.java b/src/core/org/apache/hadoop/util/GenericOptionsParser.java
+index 55ede02..415a57d 100644
+--- a/src/core/org/apache/hadoop/util/GenericOptionsParser.java
++++ b/src/core/org/apache/hadoop/util/GenericOptionsParser.java
+@@ -222,6 +222,11 @@ public class GenericOptionsParser {
+     .withDescription("comma separated archives to be unarchived" +
+                      " on the compute machines.")
+     .create("archives");
++    // file with security tokens
++    Option tokensFile = OptionBuilder.withArgName("tokensFile")
++    .hasArg()
++    .withDescription("name of the file with the tokens")
++    .create("tokenCacheFile");
+ 
+     opts.addOption(fs);
+     opts.addOption(jt);
+@@ -230,6 +235,7 @@ public class GenericOptionsParser {
+     opts.addOption(libjars);
+     opts.addOption(files);
+     opts.addOption(archives);
++    opts.addOption(tokensFile);
+ 
+     return opts;
+   }
+@@ -288,6 +294,25 @@ public class GenericOptionsParser {
+       }
+     }
+     conf.setBoolean("mapred.used.genericoptionsparser", true);
++    
++    // tokensFile
++    if(line.hasOption("tokenCacheFile")) {
++      String fileName = line.getOptionValue("tokenCacheFile");
++      // check if the local file exists
++      try 
++      {
++        FileSystem localFs = FileSystem.getLocal(conf);
++        Path p = new Path(fileName);
++        if (!localFs.exists(p)) {
++          throw new FileNotFoundException("File "+fileName+" does not exist.");
++        }
++
++        LOG.debug("setting conf tokensFile: " + fileName);
++        conf.set("tokenCacheFile", localFs.makeQualified(p).toString());
++      } catch (IOException e) {
++        throw new RuntimeException(e);
++      }
++    }
+   }
+   
+   /**
+diff --git a/src/mapred/org/apache/hadoop/mapred/Child.java b/src/mapred/org/apache/hadoop/mapred/Child.java
+index d6651e8..f1834f0 100644
+--- a/src/mapred/org/apache/hadoop/mapred/Child.java
++++ b/src/mapred/org/apache/hadoop/mapred/Child.java
+@@ -40,6 +40,8 @@ import org.apache.hadoop.metrics.MetricsContext;
+ import org.apache.hadoop.metrics.MetricsUtil;
+ import org.apache.hadoop.metrics.jvm.JvmMetrics;
+ import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.mapreduce.security.TokenCache;
++import org.apache.hadoop.mapreduce.security.TokenStorage;
+ import org.apache.log4j.LogManager;
+ import org.apache.hadoop.util.Shell;
+ import org.apache.hadoop.util.StringUtils;
+@@ -70,9 +72,10 @@ class Child {
+ 
+     // file name is passed thru env
+     String jobTokenFile = System.getenv().get("JOB_TOKEN_FILE");
+-    FileSystem localFs = FileSystem.getLocal(defaultConf);
+-    Token<JobTokenIdentifier> jt = loadJobToken(jobTokenFile, localFs);
+-    LOG.debug("Child: got jobTokenfile=" + jobTokenFile);
++    defaultConf.set(JobContext.JOB_TOKEN_FILE, jobTokenFile);
++    TokenStorage ts = TokenCache.loadTaskTokenStorage(defaultConf);
++    LOG.debug("loading token. # keys =" +ts.numberOfSecretKeys() + 
++        "; from file=" + jobTokenFile);
+ 
+     TaskUmbilicalProtocol umbilical =
+       (TaskUmbilicalProtocol)RPC.getProxy(TaskUmbilicalProtocol.class,
+@@ -151,6 +154,8 @@ class Child {
+         TaskLog.syncLogs(firstTaskid, taskid, isCleanup);
+         JobConf job = new JobConf(task.getJobFile());
+ 
++        // set job shuffle token
++         Token<JobTokenIdentifier> jt = (Token<JobTokenIdentifier>)ts.getJobToken();
+         // set the jobTokenFile into task
+         task.setJobTokenSecret(JobTokenSecretManager.createSecretKey(jt.getPassword()));
+ 
+@@ -221,22 +226,4 @@ class Child {
+       LogManager.shutdown();
+     }
+   }
+-  
+-  /**
+-   * load job token from a file
+-   * @param jobTokenFile
+-   * @param conf
+-   * @throws IOException
+-   */
+-  private static Token<JobTokenIdentifier> loadJobToken(String jobTokenFile, FileSystem localFS) 
+-  throws IOException {
+-    Path localJobTokenFile = new Path (jobTokenFile);
+-    FSDataInputStream in = localFS.open(localJobTokenFile);
+-    Token<JobTokenIdentifier> jt = new Token<JobTokenIdentifier>();
+-    jt.readFields(in);
+-        
+-    LOG.debug("Loaded jobTokenFile from: "+localJobTokenFile.toUri().getPath());
+-    in.close();
+-    return jt;
+-  }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index 69ebc7d..548d1ca 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -19,9 +19,7 @@ package org.apache.hadoop.mapred;
+ 
+ import java.io.BufferedReader;
+ import java.io.BufferedWriter;
+-import java.io.DataInput;
+-import java.io.DataOutput;
+-import java.io.DataOutputStream;
++import java.io.File;
+ import java.io.FileNotFoundException;
+ import java.io.FileOutputStream;
+ import java.io.IOException;
+@@ -40,6 +38,7 @@ import java.util.Arrays;
+ import java.util.Collection;
+ import java.util.Comparator;
+ import java.util.List;
++import java.util.Map;
+ 
+ import javax.security.auth.login.LoginException;
+ 
+@@ -55,22 +54,16 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
+-import org.apache.hadoop.io.BytesWritable;
+-import org.apache.hadoop.io.DataOutputBuffer;
+ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.io.Text;
+-import org.apache.hadoop.io.Writable;
+-import org.apache.hadoop.io.WritableUtils;
+-import org.apache.hadoop.io.serializer.SerializationFactory;
+-import org.apache.hadoop.io.serializer.Serializer;
+ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.mapred.Counters.Counter;
+ import org.apache.hadoop.mapred.Counters.Group;
+ import org.apache.hadoop.mapreduce.InputFormat;
+ import org.apache.hadoop.mapreduce.InputSplit;
+-import org.apache.hadoop.mapreduce.Job;
+ import org.apache.hadoop.mapreduce.JobContext;
+ import org.apache.hadoop.mapreduce.JobSubmissionFiles;
++import org.apache.hadoop.mapreduce.security.TokenStorage;
+ import org.apache.hadoop.mapreduce.split.JobSplitWriter;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.UnixUserGroupInformation;
+@@ -78,6 +71,7 @@ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.Tool;
+ import org.apache.hadoop.util.ToolRunner;
++import org.codehaus.jackson.map.ObjectMapper;
+ 
+ /**
+  * <code>JobClient</code> is the primary interface for the user-job to interact
+@@ -832,11 +826,30 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+       } finally {
+         out.close();
+       }
++      
++      // create TokenStorage object with user secretKeys
++      String tokensFileName = job.get("tokenCacheFile");
++      TokenStorage tokenStorage = null;
++      if(tokensFileName != null) {
++        LOG.info("loading secret keys from " + tokensFileName);
++        String localFileName = new Path(tokensFileName).toUri().getPath();
++        tokenStorage = new TokenStorage();
++        // read JSON
++        ObjectMapper mapper = new ObjectMapper();
++        Map<String, String> nm = 
++          mapper.readValue(new File(localFileName), Map.class);
++        
++        for(Map.Entry<String, String> ent: nm.entrySet()) {
++          LOG.debug("adding secret key alias="+ent.getKey());
++          tokenStorage.addSecretKey(new Text(ent.getKey()), ent.getValue().getBytes());
++        }
++      }
+ 
+       //
+       // Now, actually submit the job (using the submit name)
+       //
+-      status = jobSubmitClient.submitJob(jobId, submitJobDir.toString());
++      status = jobSubmitClient.submitJob(
++          jobId, submitJobDir.toString(), tokenStorage);
+       if (status != null) {
+         return new NetworkedJob(status);
+       } else {
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 0b379bb..64c672a 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -42,6 +42,8 @@ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapred.JobHistory.Values;
+ import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
+ import org.apache.hadoop.mapreduce.security.SecureShuffleUtils;
++import org.apache.hadoop.mapreduce.security.TokenStorage;
++import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
+ import org.apache.hadoop.metrics.MetricsContext;
+ import org.apache.hadoop.metrics.MetricsRecord;
+ import org.apache.hadoop.metrics.MetricsUtil;
+@@ -127,6 +129,8 @@ public class JobInProgress {
+ 
+   JobPriority priority = JobPriority.NORMAL;
+   final JobTracker jobtracker;
++  
++  protected TokenStorage tokenStorage;
+ 
+   // NetworkTopology Node to the set of TIPs
+   Map<Node, List<TaskInProgress>> nonRunningMapCache;
+@@ -299,11 +303,11 @@ public class JobInProgress {
+   
+   public JobInProgress(JobID jobid, JobTracker jobtracker, 
+                        JobConf default_conf, int rCount) throws IOException {
+-    this(jobtracker, default_conf, null, rCount);
++    this(jobtracker, default_conf, null, rCount, null);
+   }
+ 
+-  JobInProgress(JobTracker jobtracker,
+-                JobConf default_conf, JobInfo jobInfo, int rCount) 
++  JobInProgress(JobTracker jobtracker, JobConf default_conf, 
++      JobInfo jobInfo, int rCount, TokenStorage ts) 
+   throws IOException {
+     this.restartCount = rCount;
+     this.jobId = JobID.downgrade(jobInfo.getJobID());
+@@ -372,6 +376,7 @@ public class JobInProgress {
+     this.nonRunningReduces = new LinkedList<TaskInProgress>();    
+     this.runningReduces = new LinkedHashSet<TaskInProgress>();
+     this.resourceEstimator = new ResourceEstimator(this);
++    this.tokenStorage = ts;
+   }
+ 
+   public boolean hasSpeculativeMaps() {
+@@ -534,7 +539,7 @@ public class JobInProgress {
+     //
+     // generate security keys needed by Tasks
+     //
+-    generateJobToken(jobtracker.getFileSystem());
++    generateAndStoreTokens();
+     
+     //
+     // read input splits and create a map per a split
+@@ -3149,20 +3154,28 @@ public class JobInProgress {
+    * generate job token and save it into the file
+    * @throws IOException
+    */
+-  private void generateJobToken(FileSystem fs) throws IOException {
++  private void generateAndStoreTokens() throws IOException {
+     Path jobDir = jobtracker.getSystemDirectoryForJob(jobId);
+     Path keysFile = new Path(jobDir, SecureShuffleUtils.JOB_TOKEN_FILENAME);
+     // we need to create this file using the jobtracker's filesystem
+-    FSDataOutputStream os = fs.create(keysFile);
++    FSDataOutputStream os = jobtracker.getFileSystem().create(keysFile);
+     //create JobToken file and write token to it
+     JobTokenIdentifier identifier = new JobTokenIdentifier(new Text(jobId
+         .toString()));
+     Token<JobTokenIdentifier> token = new Token<JobTokenIdentifier>(identifier,
+         jobtracker.getJobTokenSecretManager());
+     token.setService(identifier.getJobId());
+-    token.write(os);
++    
++    // add this token to the tokenStorage
++    if(tokenStorage == null)
++      tokenStorage = new TokenStorage();
++
++    tokenStorage.setJobToken(token);
++        
++    // write TokenStorage out
++    tokenStorage.write(os);
+     os.close();
+-    LOG.debug("jobToken generated and stored in "+ keysFile.toUri().getPath());
++    LOG.info("jobToken generated and stored with users keys in "
++        + keysFile.toUri().getPath());
+   }
+-  
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+index e0c3e15..447d4c0 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+@@ -21,6 +21,7 @@ package org.apache.hadoop.mapred;
+ import java.io.IOException;
+ 
+ import org.apache.hadoop.ipc.VersionedProtocol;
++import org.apache.hadoop.mapreduce.security.TokenStorage;
+ 
+ /** 
+  * Protocol that a JobClient and the central JobTracker use to communicate.  The
+@@ -63,8 +64,9 @@ interface JobSubmissionProtocol extends VersionedProtocol {
+    * Version 22: Job submission files are uploaded to a staging area under
+    *             user home dir. JobTracker reads the required files from the
+    *             staging area using user credentials passed via the rpc. 
++   * Version 23: Provide TokenStorage object while submitting a job
+    */
+-  public static final long versionID = 22L;
++  public static final long versionID = 23L;
+ 
+   /**
+    * Allocate a name for the job.
+@@ -78,7 +80,7 @@ interface JobSubmissionProtocol extends VersionedProtocol {
+    * that job.
+    * The job files should be submitted in <b>jobSubmitDir</b>.
+    */
+-  public JobStatus submitJob(JobID jobName, String jobSubmitDir) 
++  public JobStatus submitJob(JobID jobName, String jobSubmitDir, TokenStorage ts) 
+   throws IOException;
+ 
+   /**
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 330acb2..b77e3b1 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -108,6 +108,7 @@ import org.apache.hadoop.mapreduce.ClusterMetrics;
+ import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.hadoop.mapreduce.security.token.JobTokenSecretManager;
+ import org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker;
++import org.apache.hadoop.mapreduce.security.TokenStorage;
+ 
+ /*******************************************************
+  * JobTracker is the central location for submitting and 
+@@ -188,6 +189,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+ 
+   private MRAsyncDiskService asyncDiskService;
+   
++  private TokenStorage tokenStorage;
+   private final JobTokenSecretManager jobTokenSecretManager
+     = new JobTokenSecretManager();
+ 
+@@ -1652,7 +1654,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+            * BACKPORTED (MAPREDUCE-873)
+            */
+           job = new JobInProgress(JobTracker.this, conf, null, 
+-                                  restartCount);
++                                  restartCount, tokenStorage);
+ 
+           // 2. Check if the user has appropriate access
+           // Get the user group info for the job's owner
+@@ -3588,8 +3590,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+    * of the JobTracker.  But JobInProgress adds info that's useful for
+    * the JobTracker alone.
+    */
+-  public synchronized JobStatus submitJob(JobID jobId, String jobSubmitDir)
+-  throws IOException {
++  public synchronized JobStatus submitJob(
++      JobID jobId, String jobSubmitDir, TokenStorage ts)  throws IOException {
+     if(jobs.containsKey(jobId)) {
+       //job already running, don't start twice
+       return jobs.get(jobId).getStatus();
+@@ -3598,8 +3600,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     JobInfo jobInfo = new JobInfo(jobId, new Text(ugi.getUserName()),
+         new Path(jobSubmitDir));
+     JobInProgress job = null;
++    tokenStorage = ts;
+     try {
+-      job = new JobInProgress(this, this.conf, jobInfo, 0);
++      job = new JobInProgress(this, this.conf, jobInfo, 0, tokenStorage);
+     } catch (Exception e) {
+       throw new IOException(e);
+     }
+diff --git a/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java b/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
+index f28dbd8..e1deb54 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/LocalJobRunner.java
+@@ -41,6 +41,8 @@ import org.apache.hadoop.io.serializer.Serializer;
+ import org.apache.hadoop.mapreduce.split.SplitMetaInfoReader;
+ import org.apache.hadoop.mapreduce.split.JobSplit.TaskSplitMetaInfo;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.mapreduce.security.TokenCache;
++import org.apache.hadoop.mapreduce.security.TokenStorage;
+ 
+ /** Implements MapReduce locally, in-process, for debugging. */ 
+ class LocalJobRunner implements JobSubmissionProtocol {
+@@ -399,8 +401,9 @@ class LocalJobRunner implements JobSubmissionProtocol {
+     return new JobID("local", ++jobid);
+   }
+ 
+-  public JobStatus submitJob(JobID jobid, String jobSubmitDir) 
++  public JobStatus submitJob(JobID jobid, String jobSubmitDir, TokenStorage ts) 
+   throws IOException {
++    TokenCache.setTokenStorage(ts);
+     return new Job(jobid, jobSubmitDir).status;
+   }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 991b279..407df94 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -87,7 +87,6 @@ import org.apache.hadoop.net.DNS;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.UnixUserGroupInformation;
+-import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.ConfiguredPolicy;
+ import org.apache.hadoop.security.authorize.PolicyProvider;
+ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+@@ -102,6 +101,8 @@ import org.apache.hadoop.util.VersionInfo;
+ import org.apache.hadoop.util.DiskChecker.DiskErrorException;
+ import org.apache.hadoop.util.Shell.ShellCommandExecutor;
+ import org.apache.hadoop.util.MRAsyncDiskService;
++import org.apache.hadoop.mapreduce.security.TokenCache;
++import org.apache.hadoop.mapreduce.security.TokenStorage;
+ 
+ /*******************************************************
+  * TaskTracker is a process that starts and tracks MR Tasks
+@@ -927,10 +928,8 @@ public class TaskTracker
+                              localJobConf.getKeepFailedTaskFiles());
+         // save local copy of JobToken file
+         localizeJobTokenFile(t.getUser(), jobId, localJobConf);       
+-        FSDataInputStream in = localFs.open(new Path(
+-            rjob.jobConf.get(JobContext.JOB_TOKEN_FILE)));
+-        Token<JobTokenIdentifier> jt = new Token<JobTokenIdentifier>();
+-        jt.readFields(in); 
++        TokenStorage ts = TokenCache.loadTokens(rjob.jobConf);
++        Token<JobTokenIdentifier> jt = (Token<JobTokenIdentifier>)ts.getJobToken(); 
+         getJobTokenSecretManager().addTokenForJob(jobId.toString(), jt);
+  
+         rjob.localized = true;
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+new file mode 100644
+index 0000000..c2840ba
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+@@ -0,0 +1,143 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.security;
++
++import java.io.IOException;
++import java.util.Collection;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.fs.FSDataInputStream;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapred.JobConf;
++import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenIdentifier;
++
++/**
++ * this class keeps static references to TokenStorage object
++ * also it provides auxiliary methods for setting and getting secret keys  
++ */
++//@InterfaceStability.Evolving
++public class TokenCache {
++  
++  private static final Log LOG = LogFactory.getLog(TokenCache.class);
++
++  private static TokenStorage tokenStorage;
++  
++  /**
++   * auxiliary method to get user's secret keys..
++   * @param alias
++   * @return secret key from the storage
++   */
++  public static byte[] getSecretKey(Text alias) {
++    if(tokenStorage == null)
++      return null;
++    return tokenStorage.getSecretKey(alias);
++  }
++  
++  /**
++   * auxiliary methods to store user'  s secret keys
++   * @param alias
++   * @param key
++   */
++  public static void setSecretKey(Text alias, byte[] key) {
++    getTokenStorage().addSecretKey(alias, key);
++  }
++  
++  /**
++   * auxiliary method to add a delegation token
++   */
++  public static void addDelegationToken(
++      String namenode, Token<? extends TokenIdentifier> t) {
++    getTokenStorage().setToken(new Text(namenode), t);
++  }
++  
++  /**
++   * auxiliary method 
++   * @return all the available tokens
++   */
++  public static Collection<Token<? extends TokenIdentifier>> getAllTokens() {
++    return getTokenStorage().getAllTokens();
++  }
++  
++  /**
++   * @return TokenStore object
++   */
++  //@InterfaceAudience.Private
++  public static TokenStorage getTokenStorage() {
++    if(tokenStorage==null)
++      tokenStorage = new TokenStorage();
++    
++    return tokenStorage;
++  }
++  
++  /**
++   * sets TokenStorage
++   * @param ts
++   */
++  //@InterfaceAudience.Private
++  public static void setTokenStorage(TokenStorage ts) {
++    if(tokenStorage != null)
++      LOG.warn("Overwriting existing token storage with # keys=" + 
++          tokenStorage.numberOfSecretKeys());
++    tokenStorage = ts;
++  }
++  
++  /**
++   * load token storage and stores it
++   * @param conf
++   * @return Loaded TokenStorage object
++   * @throws IOException
++   */
++  //@InterfaceAudience.Private
++  public static TokenStorage loadTaskTokenStorage(JobConf conf)
++  throws IOException {
++    if(tokenStorage != null)
++      return tokenStorage;
++    
++    tokenStorage = loadTokens(conf);
++    
++    return tokenStorage;
++  }
++  
++  /**
++   * load job token from a file
++   * @param conf
++   * @throws IOException
++   */
++  //@InterfaceAudience.Private
++  public static TokenStorage loadTokens(JobConf conf) 
++  throws IOException {
++    String jobTokenFile = conf.get(JobContext.JOB_TOKEN_FILE);
++    Path localJobTokenFile = new Path (jobTokenFile);
++    FileSystem localFS = FileSystem.getLocal(conf);
++    FSDataInputStream in = localFS.open(localJobTokenFile);
++    
++    TokenStorage ts = new TokenStorage();
++    ts.readFields(in);
++
++    LOG.info("Task: Loaded jobTokenFile from: "+localJobTokenFile.toUri().getPath() 
++        +"; num of sec keys  = " + ts.numberOfSecretKeys());
++    in.close();
++    return ts;
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/TokenStorage.java b/src/mapred/org/apache/hadoop/mapreduce/security/TokenStorage.java
+new file mode 100644
+index 0000000..ee7e4c0
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/TokenStorage.java
+@@ -0,0 +1,168 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.security;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++import java.util.Collection;
++import java.util.HashMap;
++import java.util.Map;
++
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.io.WritableUtils;
++import org.apache.hadoop.security.token.Token;
++import org.apache.hadoop.security.token.TokenIdentifier;
++
++/**
++ * get/set, store/load security keys
++ * key's value - byte[]
++ * store/load from DataInput/DataOuptut
++ *
++ */
++//@InterfaceAudience.Private
++public class TokenStorage implements Writable {
++
++  private static final Text SHUFFLE_JOB_TOKEN = new Text("ShuffleJobToken");
++
++  private  Map<Text, byte[]> secretKeysMap = new HashMap<Text, byte[]>();
++  private  Map<Text, Token<? extends TokenIdentifier>> tokenMap = 
++    new HashMap<Text, Token<? extends TokenIdentifier>>(); 
++
++  /**
++   * returns the key value for the alias
++   * @param alias
++   * @return key for this alias
++   */
++  public byte[] getSecretKey(Text alias) {
++    return secretKeysMap.get(alias);
++  }
++  
++  /**
++   * returns the key value for the alias
++   * @param alias
++   * @return token for this alias
++   */
++  Token<? extends TokenIdentifier> getToken(Text alias) {
++    return tokenMap.get(alias);
++  }
++  
++  void setToken(Text alias, Token<? extends TokenIdentifier> t) {
++    tokenMap.put(alias, t);
++  }
++  
++  /**
++   * store job token
++   * @param t
++   */
++  //@InterfaceAudience.Private
++  public void setJobToken(Token<? extends TokenIdentifier> t) {
++    setToken(SHUFFLE_JOB_TOKEN, t);
++  }
++  
++  /**
++   * 
++   * @return job token
++   */
++  //@InterfaceAudience.Private
++  public Token<? extends TokenIdentifier> getJobToken() {
++    return getToken(SHUFFLE_JOB_TOKEN);
++  }
++  
++  /**
++   * 
++   * @return all the tokens in the storage
++   */
++  public Collection<Token<? extends TokenIdentifier>> getAllTokens() {
++    return tokenMap.values();
++  }
++  
++
++  
++  /**
++   * 
++   * @return number of keys
++   */
++  public int numberOfSecretKeys() {
++    return secretKeysMap.size();
++  }
++  
++  
++  /**
++   * set the key for an alias
++   * @param alias
++   * @param key
++   */
++  public void addSecretKey(Text alias, byte[] key) {
++    secretKeysMap.put(alias, key);
++  }
++ 
++  /**
++   * stores all the keys to DataOutput
++   * @param out
++   * @throws IOException
++   */
++  @Override
++  public void write(DataOutput out) throws IOException {
++    // write out tokens first
++    System.out.println("about to write out: token = " + tokenMap.size() + 
++        "; sec = " + secretKeysMap.size());
++    WritableUtils.writeVInt(out, tokenMap.size());
++    for(Map.Entry<Text, Token<? extends TokenIdentifier>> e: tokenMap.entrySet()) {
++      e.getKey().write(out);
++      e.getValue().write(out);
++    }
++    
++    // now write out secret keys
++    WritableUtils.writeVInt(out, secretKeysMap.size());
++    for(Map.Entry<Text, byte[]> e : secretKeysMap.entrySet()) {
++      e.getKey().write(out);
++      WritableUtils.writeCompressedByteArray(out, e.getValue());  
++    }
++  }
++  
++  /**
++   * loads all the keys
++   * @param in
++   * @throws IOException
++   */
++  @Override
++  public void readFields(DataInput in) throws IOException {
++    secretKeysMap.clear();
++    tokenMap.clear();
++    
++    int size = WritableUtils.readVInt(in);
++    for(int i=0; i<size; i++) {
++      Text alias = new Text();
++      alias.readFields(in);
++      Token<? extends TokenIdentifier> t = new Token<TokenIdentifier>();
++      t.readFields(in);
++      tokenMap.put(alias, t);
++    }
++    
++    size = WritableUtils.readVInt(in);
++    for(int i=0; i<size; i++) {
++      Text alias = new Text();
++      alias.readFields(in);
++      byte[] key = WritableUtils.readCompressedByteArray(in);
++      secretKeysMap.put(alias, key);
++    }
++  }
++}
+diff --git a/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFSWithDistinctUsers.java b/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFSWithDistinctUsers.java
+index f84abce..3eed213 100644
+--- a/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFSWithDistinctUsers.java
++++ b/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFSWithDistinctUsers.java
+@@ -72,7 +72,7 @@ public class TestMiniMRWithDFSWithDistinctUsers extends TestCase {
+     jobSubmitDir = jobSubmitDir.makeQualified(fs);
+     uploadJobFiles(JobID.downgrade(id), splits, jobSubmitDir, job);
+    
+-    jobSubmitClient.submitJob(id, jobSubmitDir.toString());
++    jobSubmitClient.submitJob(id, jobSubmitDir.toString(), null);
+    
+     JobClient jc = new JobClient(job);
+     return jc.getJob(JobID.downgrade(id));
+diff --git a/src/test/org/apache/hadoop/security/TestTokenCache.java b/src/test/org/apache/hadoop/security/TestTokenCache.java
+new file mode 100644
+index 0000000..58579e5
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/TestTokenCache.java
+@@ -0,0 +1,217 @@
++/** Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.fail;
++
++import java.io.File;
++import java.io.IOException;
++import java.security.NoSuchAlgorithmException;
++import java.util.HashMap;
++import java.util.Map;
++
++import javax.crypto.KeyGenerator;
++import javax.crypto.spec.SecretKeySpec;
++
++import org.apache.commons.codec.binary.Base64;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.io.IntWritable;
++import org.apache.hadoop.io.NullWritable;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapred.JobConf;
++import org.apache.hadoop.mapred.MiniMRCluster;
++import org.apache.hadoop.mapred.OutputCollector;
++import org.apache.hadoop.mapred.Reporter;
++import org.apache.hadoop.mapreduce.Job;
++//import org.apache.hadoop.mapreduce.SleepJob;
++import org.apache.hadoop.examples.SleepJob;
++import org.apache.hadoop.util.ToolRunner;
++import org.codehaus.jackson.map.ObjectMapper;
++import org.junit.AfterClass;
++import org.junit.BeforeClass;
++import org.junit.Test;
++import org.apache.hadoop.mapreduce.security.TokenStorage;
++import org.apache.hadoop.mapreduce.security.TokenCache;
++
++public class TestTokenCache {
++  private static final int NUM_OF_KEYS = 10;
++
++  // my sleep class - adds check for tokenCache
++  static class MySleepJob extends SleepJob {
++    /**
++     * attempts to access tokenCache as from client
++     */
++    @Override
++    public void map(IntWritable key, IntWritable value,
++        OutputCollector<IntWritable, NullWritable> output, Reporter reporter)
++        throws IOException {
++      // get token storage and a key
++      TokenStorage ts = TokenCache.getTokenStorage();
++      byte[] key1 = TokenCache.getSecretKey(new Text("alias1"));
++      
++      System.out.println("inside MAP: ts==NULL?=" + (ts==null) + 
++          "; #keys = " + (ts==null? 0:ts.numberOfSecretKeys()) + 
++          ";jobToken = " +  (ts==null? "n/a":ts.getJobToken()) +
++          "; alias1 key=" + new String(key1));
++    
++      if(key1 == null || ts == null || ts.numberOfSecretKeys() != NUM_OF_KEYS) {
++        throw new RuntimeException("tokens are not available"); // fail the test
++      } 
++      super.map(key, value, output, reporter);
++    }
++    
++    public JobConf setupJobConf(int numMapper, int numReducer, 
++        long mapSleepTime, int mapSleepCount, 
++        long reduceSleepTime, int reduceSleepCount) {
++      
++      JobConf job = super.setupJobConf(numMapper,numReducer, 
++          mapSleepTime, mapSleepCount, reduceSleepTime, reduceSleepCount);
++      
++      job.setMapperClass(MySleepJob.class);
++      
++      return job;
++    }
++  }
++  
++  private static MiniMRCluster mrCluster;
++  private static MiniDFSCluster dfsCluster;
++  private static final Path TEST_DIR = 
++    new Path(System.getProperty("test.build.data","/tmp"), "sleepTest");
++  private static final Path tokenFileName = new Path(TEST_DIR, "tokenFile.json");
++  private static int numSlaves = 1;
++  private static JobConf jConf;
++  private static ObjectMapper mapper = new ObjectMapper();
++  
++
++  @BeforeClass
++  public static void setUp() throws Exception {
++    Configuration conf = new Configuration();
++    dfsCluster = new MiniDFSCluster(conf, numSlaves, true, null);
++    jConf = new JobConf(conf);
++    mrCluster = new MiniMRCluster(0, 0, numSlaves, 
++        dfsCluster.getFileSystem().getUri().toString(), 1, null, null, null, 
++        jConf);
++    
++    createTokenFileJson();
++    verifySecretKeysInJSONFile();
++  }
++
++  @AfterClass
++  public static void tearDown() throws Exception {
++    if(mrCluster != null)
++      mrCluster.shutdown();
++    mrCluster = null;
++    if(dfsCluster != null)
++      dfsCluster.shutdown();
++    dfsCluster = null;
++  }
++
++  // create jason file and put some keys into it..
++  private static void createTokenFileJson() throws IOException {
++    Map<String, String> map = new HashMap<String, String>();
++    
++    try {
++      KeyGenerator kg = KeyGenerator.getInstance("HmacSHA1");
++      for(int i=0; i<NUM_OF_KEYS; i++) {
++        SecretKeySpec key = (SecretKeySpec) kg.generateKey();
++        byte [] enc_key = key.getEncoded();
++        map.put("alias"+i, new String(Base64.encodeBase64(enc_key)));
++
++      }
++    } catch (NoSuchAlgorithmException e) {
++      throw new IOException(e);
++    }
++    
++    System.out.println("writing secret keys into " + tokenFileName);
++    try {
++      File p  = new File(tokenFileName.getParent().toString());
++      p.mkdirs();
++      // convert to JSON and save to the file
++      mapper.writeValue(new File(tokenFileName.toString()), map);
++
++    } catch (Exception e) {
++      System.out.println("failed with :" + e.getLocalizedMessage());
++    }
++  }
++  
++  @SuppressWarnings("unchecked")
++  private static void verifySecretKeysInJSONFile() throws IOException {
++    Map<String, String> map;
++    map = mapper.readValue(new File(tokenFileName.toString()), Map.class);
++    assertEquals("didn't read JSON correctly", map.size(), NUM_OF_KEYS);
++    
++    System.out.println("file " + tokenFileName + " verified; size="+ map.size());
++  }
++  
++  /**
++   * run a distributed job and verify that TokenCache is available
++   * @throws IOException
++   */
++  @Test
++  public void testTokenCache() throws IOException {
++    
++    System.out.println("running dist job");
++    
++    // make sure JT starts
++    jConf = mrCluster.createJobConf();
++    
++    // using argument to pass the file name
++    String[] args = {
++       "-tokenCacheFile", tokenFileName.toString(), 
++        "-m", "1", "-r", "1", "-mt", "1", "-rt", "1"
++        };
++     
++    int res = -1;
++    try {
++      res = ToolRunner.run(jConf, new MySleepJob(), args);
++    } catch (Exception e) {
++      System.out.println("Job failed with" + e.getLocalizedMessage());
++      e.printStackTrace(System.out);
++      fail("Job failed");
++    }
++    assertEquals("dist job res is not 0", res, 0);
++  }
++  
++  /**
++   * run a local job and verify that TokenCache is available
++   * @throws NoSuchAlgorithmException
++   * @throws IOException
++   */
++  @Test
++  public void testLocalJobTokenCache() throws NoSuchAlgorithmException, IOException {
++    
++    System.out.println("running local job");
++    // this is local job
++    String[] args = {"-m", "1", "-r", "1", "-mt", "1", "-rt", "1"}; 
++    jConf.set("tokenCacheFile", tokenFileName.toString());
++    
++    int res = -1;
++    try {
++      res = ToolRunner.run(jConf, new MySleepJob(), args);
++    } catch (Exception e) {
++      System.out.println("Job failed with" + e.getLocalizedMessage());
++      e.printStackTrace(System.out);
++      fail("local Job failed");
++    }
++    assertEquals("local job res is not 0", res, 0);
++  }
++}
+diff --git a/src/test/org/apache/hadoop/security/TestTokenStorage.java b/src/test/org/apache/hadoop/security/TestTokenStorage.java
+new file mode 100644
+index 0000000..e649a50
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/TestTokenStorage.java
+@@ -0,0 +1,110 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++
++package org.apache.hadoop.security;
++
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.security.Key;
++import java.security.NoSuchAlgorithmException;
++import java.util.HashMap;
++import java.util.Map;
++
++import javax.crypto.KeyGenerator;
++
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
++import org.apache.hadoop.mapreduce.security.token.JobTokenSecretManager;
++import org.apache.hadoop.record.Utils;
++import org.apache.hadoop.security.token.Token;
++import org.junit.Before;
++import org.junit.Test;
++import static org.junit.Assert.*;
++import org.apache.hadoop.mapreduce.security.TokenStorage;
++
++public class TestTokenStorage {
++  private static final String DEFAULT_HMAC_ALGORITHM = "HmacSHA1";
++  private static final File tmpDir =
++    new File(System.getProperty("test.build.data", "/tmp"), "mapred");  
++    
++  @Before
++  public void setUp() {
++    tmpDir.mkdir();
++  }
++
++  @Test 
++  public void testReadWriteStorage() throws IOException, NoSuchAlgorithmException{
++    // create tokenStorage Object
++    TokenStorage ts = new TokenStorage();
++    
++    // create a token
++    JobTokenSecretManager jtSecretManager = new JobTokenSecretManager();
++    JobTokenIdentifier identifier = new JobTokenIdentifier(new Text("fakeJobId"));
++    Token<JobTokenIdentifier> jt = new Token<JobTokenIdentifier>(identifier,
++        jtSecretManager);
++    // store it
++    ts.setJobToken(jt);
++    
++    // create keys and put it in
++    final KeyGenerator kg = KeyGenerator.getInstance(DEFAULT_HMAC_ALGORITHM);
++    String alias = "alias";
++    Map<Text, byte[]> m = new HashMap<Text, byte[]>(10);
++    for(int i=0; i<10; i++) {
++      Key key = kg.generateKey();
++      m.put(new Text(alias+i), key.getEncoded());
++      ts.addSecretKey(new Text(alias+i), key.getEncoded());
++    }
++   
++    // create file to store
++    File tmpFileName = new File(tmpDir, "tokenStorageTest");
++    DataOutputStream dos = new DataOutputStream(new FileOutputStream(tmpFileName));
++    ts.write(dos);
++    dos.close();
++    
++    // open and read it back
++    DataInputStream dis = new DataInputStream(new FileInputStream(tmpFileName));    
++    ts = new TokenStorage();
++    ts.readFields(dis);
++    dis.close();
++    
++    // get the token and compare the passwords
++    byte[] tp1 = ts.getJobToken().getPassword();
++    byte[] tp2 = jt.getPassword();
++    int comp = Utils.compareBytes(tp1, 0, tp1.length, tp2, 0, tp2.length);
++    assertTrue("shuffleToken doesn't match", comp==0);
++    
++    // compare secret keys
++    int mapLen = m.size();
++    assertEquals("wrong number of keys in the Storage", mapLen, ts.numberOfSecretKeys());
++    for(Text a : m.keySet()) {
++      byte [] kTS = ts.getSecretKey(a);
++      byte [] kLocal = m.get(a);
++      assertTrue("keys don't match for " + a, 
++          Utils.compareBytes(kTS, 0, kTS.length, kLocal, 0, kLocal.length)==0);
++    }  
++    
++    assertEquals("All tokens should return collection of size 1", 
++        ts.getAllTokens().size(), 1);
++  }
++ }
+diff --git a/src/test/org/apache/hadoop/util/TestGenericOptionsParser.java b/src/test/org/apache/hadoop/util/TestGenericOptionsParser.java
+new file mode 100644
+index 0000000..e487f51
+--- /dev/null
++++ b/src/test/org/apache/hadoop/util/TestGenericOptionsParser.java
+@@ -0,0 +1,90 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.util;
++
++import java.io.File;
++import java.io.FileNotFoundException;
++import java.io.IOException;
++import java.net.URI;
++
++import junit.framework.TestCase;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++
++public class TestGenericOptionsParser extends TestCase {
++  File testDir;
++  Configuration conf;
++  FileSystem localFs;
++      
++  @Override
++  protected void setUp() throws Exception {
++    super.setUp();
++    conf = new Configuration();
++    localFs = FileSystem.getLocal(conf);
++    testDir = new File(System.getProperty("test.build.data", "/tmp"), "generic");
++    if(testDir.exists())
++      localFs.delete(new Path(testDir.toString()), true);
++  }
++
++  @Override
++  protected void tearDown() throws Exception {
++    super.tearDown();
++    if(testDir.exists()) {
++      localFs.delete(new Path(testDir.toString()), true);
++    }
++  }
++
++  /**
++   * testing -fileCache option
++   * @throws IOException
++   */
++  public void testTokenCacheOption() throws IOException {
++    FileSystem localFs = FileSystem.getLocal(conf);
++    
++    File tmpFile = new File(testDir, "tokenCacheFile");
++    if(tmpFile.exists()) {
++      tmpFile.delete();
++    }
++    String[] args = new String[2];
++    // pass a files option 
++    args[0] = "-tokenCacheFile";
++    args[1] = tmpFile.toString();
++    
++    // test non existing file
++    Throwable th = null;
++    try {
++      new GenericOptionsParser(conf, args);
++    } catch (Exception e) {
++      th = e;
++    }
++    assertNotNull(th);
++    
++    // create file
++    Path tmpPath = new Path(tmpFile.toString());
++    localFs.create(tmpPath);
++    new GenericOptionsParser(conf, args);
++    String fileName = conf.get("tokenCacheFile");
++    assertNotNull("files is null", fileName);
++    assertEquals("files option does not match",
++      localFs.makeQualified(tmpPath).toString(), fileName);
++    
++    localFs.delete(new Path(testDir.getAbsolutePath()), true);
++  }
++}
+-- 
+1.7.0.4
+

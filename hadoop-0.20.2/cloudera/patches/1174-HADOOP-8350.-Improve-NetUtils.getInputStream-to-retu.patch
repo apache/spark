@@ -1,0 +1,494 @@
+From 388992866494519d32ddc9e793125c54692f6900 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 3 May 2012 16:13:17 -0700
+Subject: [PATCH 1174/1179] HADOOP-8350. Improve NetUtils.getInputStream to return a stream which has a tunable timeout.
+
+Reason: necessary for HDFS-3357
+Author: Todd Lipcon
+Ref: CDH-5622
+---
+ src/core/org/apache/hadoop/net/NetUtils.java       |   47 ++++------
+ .../org/apache/hadoop/net/SocketIOWithTimeout.java |    4 +
+ .../org/apache/hadoop/net/SocketInputStream.java   |    4 +
+ .../org/apache/hadoop/net/SocketInputWrapper.java  |   85 ++++++++++++++++++
+ src/test/org/apache/hadoop/net/TestNetUtils.java   |   88 +++++++++++++++++++-
+ .../apache/hadoop/net/TestSocketIOWithTimeout.java |   91 ++++++++++++-------
+ 6 files changed, 256 insertions(+), 63 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/net/SocketInputWrapper.java
+
+diff --git a/src/core/org/apache/hadoop/net/NetUtils.java b/src/core/org/apache/hadoop/net/NetUtils.java
+index d056972..e48eda1 100644
+--- a/src/core/org/apache/hadoop/net/NetUtils.java
++++ b/src/core/org/apache/hadoop/net/NetUtils.java
+@@ -280,24 +280,10 @@ public class NetUtils {
+   }
+   
+   /**
+-   * Same as getInputStream(socket, socket.getSoTimeout()).<br><br>
++   * Same as <code>getInputStream(socket, socket.getSoTimeout()).</code>
++   * <br><br>
+    * 
+-   * From documentation for {@link #getInputStream(Socket, long)}:<br>
+-   * Returns InputStream for the socket. If the socket has an associated
+-   * SocketChannel then it returns a 
+-   * {@link SocketInputStream} with the given timeout. If the socket does not
+-   * have a channel, {@link Socket#getInputStream()} is returned. In the later
+-   * case, the timeout argument is ignored and the timeout set with 
+-   * {@link Socket#setSoTimeout(int)} applies for reads.<br><br>
+-   *
+-   * Any socket created using socket factories returned by {@link #NetUtils},
+-   * must use this interface instead of {@link Socket#getInputStream()}.
+-   *     
+    * @see #getInputStream(Socket, long)
+-   * 
+-   * @param socket
+-   * @return InputStream for reading from the socket.
+-   * @throws IOException
+    */
+   public static InputStream getInputStream(Socket socket) 
+                                            throws IOException {
+@@ -305,28 +291,33 @@ public class NetUtils {
+   }
+   
+   /**
+-   * Returns InputStream for the socket. If the socket has an associated
+-   * SocketChannel then it returns a 
+-   * {@link SocketInputStream} with the given timeout. If the socket does not
+-   * have a channel, {@link Socket#getInputStream()} is returned. In the later
+-   * case, the timeout argument is ignored and the timeout set with 
+-   * {@link Socket#setSoTimeout(int)} applies for reads.<br><br>
++   * Return a {@link SocketInputWrapper} for the socket and set the given
++   * timeout. If the socket does not have an associated channel, then its socket
++   * timeout will be set to the specified value. Otherwise, a
++   * {@link SocketInputStream} will be created which reads with the configured
++   * timeout.
+    * 
+    * Any socket created using socket factories returned by {@link #NetUtils},
+    * must use this interface instead of {@link Socket#getInputStream()}.
++   *
++   * In general, this should be called only once on each socket: see the note
++   * in {@link SocketInputWrapper#setTimeout(long)} for more information.
+    *     
+    * @see Socket#getChannel()
+    * 
+    * @param socket
+-   * @param timeout timeout in milliseconds. This may not always apply. zero
+-   *        for waiting as long as necessary.
+-   * @return InputStream for reading from the socket.
++   * @param timeout timeout in milliseconds. zero for waiting as
++   *                long as necessary.
++   * @return SocketInputWrapper for reading from the socket.
+    * @throws IOException
+    */
+-  public static InputStream getInputStream(Socket socket, long timeout) 
++  public static SocketInputWrapper getInputStream(Socket socket, long timeout) 
+                                            throws IOException {
+-    return (socket.getChannel() == null) ? 
+-          socket.getInputStream() : new SocketInputStream(socket, timeout);
++    InputStream stm = (socket.getChannel() == null) ? 
++          socket.getInputStream() : new SocketInputStream(socket);
++    SocketInputWrapper w = new SocketInputWrapper(socket, stm);
++    w.setTimeout(timeout);
++    return w;
+   }
+   
+   /**
+diff --git a/src/core/org/apache/hadoop/net/SocketIOWithTimeout.java b/src/core/org/apache/hadoop/net/SocketIOWithTimeout.java
+index f48d2d2..07ae012 100644
+--- a/src/core/org/apache/hadoop/net/SocketIOWithTimeout.java
++++ b/src/core/org/apache/hadoop/net/SocketIOWithTimeout.java
+@@ -247,6 +247,10 @@ abstract class SocketIOWithTimeout {
+                                                               ops)); 
+     }
+   }
++
++  public void setTimeout(long timeoutMs) {
++    this.timeout = timeoutMs;
++  }
+     
+   private static String timeoutExceptionString(SelectableChannel channel,
+                                                long timeout, int ops) {
+diff --git a/src/core/org/apache/hadoop/net/SocketInputStream.java b/src/core/org/apache/hadoop/net/SocketInputStream.java
+index 2568ba9..49a58a9 100644
+--- a/src/core/org/apache/hadoop/net/SocketInputStream.java
++++ b/src/core/org/apache/hadoop/net/SocketInputStream.java
+@@ -167,4 +167,8 @@ public class SocketInputStream extends InputStream
+   public void waitForReadable() throws IOException {
+     reader.waitForIO(SelectionKey.OP_READ);
+   }
++
++  public void setTimeout(long timeoutMs) {
++    reader.setTimeout(timeoutMs);
++  }
+ }
+diff --git a/src/core/org/apache/hadoop/net/SocketInputWrapper.java b/src/core/org/apache/hadoop/net/SocketInputWrapper.java
+new file mode 100644
+index 0000000..3a170ee
+--- /dev/null
++++ b/src/core/org/apache/hadoop/net/SocketInputWrapper.java
+@@ -0,0 +1,85 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.net;
++
++import java.io.FilterInputStream;
++
++import java.io.InputStream;
++import java.net.Socket;
++import java.net.SocketException;
++import java.nio.channels.ReadableByteChannel;
++
++import org.apache.hadoop.thirdparty.guava.common.base.Preconditions;
++
++/**
++ * A wrapper stream around a socket which allows setting of its timeout. If the
++ * socket has a channel, this uses non-blocking IO via the package-private
++ * {@link SocketInputStream} implementation. Otherwise, timeouts are managed by
++ * setting the underlying socket timeout itself.
++ */
++//@InterfaceAudience.LimitedPrivate("HDFS")
++//@InterfaceStability.Unstable
++public class SocketInputWrapper extends FilterInputStream {
++  private final Socket socket;
++  private final boolean hasChannel;
++
++  SocketInputWrapper(Socket s, InputStream is) {
++    super(is);
++    this.socket = s;
++    this.hasChannel = s.getChannel() != null;
++    if (hasChannel) {
++      Preconditions.checkArgument(is instanceof SocketInputStream,
++          "Expected a SocketInputStream when there is a channel. " +
++          "Got: %s", is);
++    }
++  }
++
++  /**
++   * Set the timeout for reads from this stream.
++   * 
++   * Note: the behavior here can differ subtly depending on whether the
++   * underlying socket has an associated Channel. In particular, if there is no
++   * channel, then this call will affect the socket timeout for <em>all</em>
++   * readers of this socket. If there is a channel, then this call will affect
++   * the timeout only for <em>this</em> stream. As such, it is recommended to
++   * only create one {@link SocketInputWrapper} instance per socket.
++   * 
++   * @param timeoutMs
++   *          the new timeout, 0 for no timeout
++   * @throws SocketException
++   *           if the timeout cannot be set
++   */
++  public void setTimeout(long timeoutMs) throws SocketException {
++    if (hasChannel) {
++      ((SocketInputStream)in).setTimeout(timeoutMs);
++    } else {
++      socket.setSoTimeout((int)timeoutMs);
++    }
++  }
++
++  /**
++   * @return an underlying ReadableByteChannel implementation.
++   * @throws IllegalStateException if this socket does not have a channel
++   */
++  public ReadableByteChannel getReadableByteChannel() {
++    Preconditions.checkState(hasChannel,
++        "Socket %s does not have a channel",
++        this.socket);
++    return (SocketInputStream)in;
++  }
++}
+diff --git a/src/test/org/apache/hadoop/net/TestNetUtils.java b/src/test/org/apache/hadoop/net/TestNetUtils.java
+index 52fb209..bf56104 100644
+--- a/src/test/org/apache/hadoop/net/TestNetUtils.java
++++ b/src/test/org/apache/hadoop/net/TestNetUtils.java
+@@ -17,17 +17,31 @@
+  */
+ package org.apache.hadoop.net;
+ 
++import org.junit.Assume;
+ import org.junit.Test;
+ import static org.junit.Assert.*;
+ 
++import java.io.IOException;
++import java.net.ServerSocket;
+ import java.net.Socket;
++import java.net.SocketTimeoutException;
+ import java.net.ConnectException;
+ import java.net.InetSocketAddress;
++import java.util.concurrent.TimeUnit;
++
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.IOUtils;
+ 
+ public class TestNetUtils {
+ 
+   /**
++   * Some slop around expected times when making sure timeouts behave
++   * as expected. We assume that they will be accurate to within
++   * this threshold.
++   */
++  static final long TIME_FUDGE_MILLIS = 200;
++
++  /**
+    * Test that we can't accidentally connect back to the connecting socket due
+    * to a quirk in the TCP spec.
+    *
+@@ -53,4 +67,76 @@ public class TestNetUtils {
+       assertTrue(ce.getMessage().contains("resulted in a loopback"));
+     }
+   }
+-}
++
++  @Test
++  public void testSocketReadTimeoutWithChannel() throws Exception {
++    doSocketReadTimeoutTest(true);
++  }
++  
++  @Test
++  public void testSocketReadTimeoutWithoutChannel() throws Exception {
++    doSocketReadTimeoutTest(false);
++  }
++  
++  private void doSocketReadTimeoutTest(boolean withChannel)
++      throws IOException {
++    // Binding a ServerSocket is enough to accept connections.
++    // Rely on the backlog to accept for us.
++    ServerSocket ss = new ServerSocket(0);
++    
++    Socket s;
++    if (withChannel) {
++      s = NetUtils.getDefaultSocketFactory(new Configuration())
++          .createSocket();
++      Assume.assumeNotNull(s.getChannel());
++    } else {
++      s = new Socket();
++      assertNull(s.getChannel());
++    }
++    
++    SocketInputWrapper stm = null;
++    try {
++      NetUtils.connect(s, ss.getLocalSocketAddress(), 1000);
++
++      stm = NetUtils.getInputStream(s, 1000);
++      assertReadTimeout(stm, 1000);
++
++      // Change timeout, make sure it applies.
++      stm.setTimeout(1);
++      assertReadTimeout(stm, 1);
++      
++      // If there is a channel, then setting the socket timeout
++      // should not matter. If there is not a channel, it will
++      // take effect.
++      s.setSoTimeout(1000);
++      if (withChannel) {
++        assertReadTimeout(stm, 1);
++      } else {
++        assertReadTimeout(stm, 1000);        
++      }
++    } finally {
++      IOUtils.closeStream(stm);
++      IOUtils.closeSocket(s);
++      ss.close();
++    }
++  }
++  
++  private void assertReadTimeout(SocketInputWrapper stm, int timeoutMillis)
++      throws IOException {
++    long st = System.nanoTime();
++    try {
++      stm.read();
++      fail("Didn't time out");
++    } catch (SocketTimeoutException ste) {
++      assertTimeSince(st, timeoutMillis);
++    }
++  }
++
++  private void assertTimeSince(long startNanos, int expectedMillis) {
++    long durationNano = System.nanoTime() - startNanos;
++    long millis = TimeUnit.MILLISECONDS.convert(
++        durationNano, TimeUnit.NANOSECONDS);
++    assertTrue("Expected " + expectedMillis + "ms, but took " + millis,
++        Math.abs(millis - expectedMillis) < TIME_FUDGE_MILLIS);
++  }
++} 
+diff --git a/src/test/org/apache/hadoop/net/TestSocketIOWithTimeout.java b/src/test/org/apache/hadoop/net/TestSocketIOWithTimeout.java
+index 53f3209..cc1b0f5 100644
+--- a/src/test/org/apache/hadoop/net/TestSocketIOWithTimeout.java
++++ b/src/test/org/apache/hadoop/net/TestSocketIOWithTimeout.java
+@@ -19,6 +19,7 @@ package org.apache.hadoop.net;
+ 
+ import java.io.IOException;
+ import java.io.InputStream;
++import java.io.InterruptedIOException;
+ import java.io.OutputStream;
+ import java.net.SocketTimeoutException;
+ import java.nio.channels.Pipe;
+@@ -27,7 +28,8 @@ import java.util.Arrays;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ 
+-import junit.framework.TestCase;
++import org.junit.Test;
++import static org.junit.Assert.*;
+ 
+ /**
+  * This tests timout out from SocketInputStream and
+@@ -36,14 +38,15 @@ import junit.framework.TestCase;
+  * Normal read and write using these streams are tested by pretty much
+  * every DFS unit test.
+  */
+-public class TestSocketIOWithTimeout extends TestCase {
++public class TestSocketIOWithTimeout {
+ 
+   static Log LOG = LogFactory.getLog(TestSocketIOWithTimeout.class);
+   
+   private static int TIMEOUT = 1*1000; 
+   private static String TEST_STRING = "1234567890";
+-  
+-  private void doIO(InputStream in, OutputStream out) throws IOException {
++
++  private void doIO(InputStream in, OutputStream out,
++      int expectedTimeout) throws IOException {
+     /* Keep on writing or reading until we get SocketTimeoutException.
+      * It expects this exception to occur within 100 millis of TIMEOUT.
+      */
+@@ -61,34 +64,41 @@ public class TestSocketIOWithTimeout extends TestCase {
+         long diff = System.currentTimeMillis() - start;
+         LOG.info("Got SocketTimeoutException as expected after " + 
+                  diff + " millis : " + e.getMessage());
+-        assertTrue(Math.abs(TIMEOUT - diff) <= 200);
++        assertTrue(Math.abs(expectedTimeout - diff) <=
++          TestNetUtils.TIME_FUDGE_MILLIS);
+         break;
+       }
+     }
+   }
+-  
++
+   /**
+    * Just reads one byte from the input stream.
+    */
+-  static class ReadRunnable implements Runnable {
++  static class ReadThread extends Thread {
+     private InputStream in;
++    private volatile Throwable thrown = null;
+ 
+-    public ReadRunnable(InputStream in) {
++    public ReadThread(InputStream in) {
+       this.in = in;
+     }
+     public void run() {
+       try {
+-        in.read();
+-      } catch (IOException e) {
+-        LOG.info("Got expection while reading as expected : " + 
+-                 e.getMessage());
+-        return;
++        try {
++          in.read();
++        } catch (IOException e) {
++          LOG.info("Got expection while reading as expected : " + 
++                   e.getMessage());
++          return;
++        }
++        assertTrue(false);
++      } catch (Throwable t) {
++        thrown = t;
+       }
+-      assertTrue(false);
+     }
+   }
+-  
+-  public void testSocketIOWithTimeout() throws IOException {
++
++  @Test
++  public void testSocketIOWithTimeout() throws Exception {
+     
+     // first open pipe:
+     Pipe pipe = Pipe.open();
+@@ -103,36 +113,49 @@ public class TestSocketIOWithTimeout extends TestCase {
+       byte[] readBytes = new byte[writeBytes.length];
+       
+       out.write(writeBytes);
+-      doIO(null, out);
++      doIO(null, out, TIMEOUT);
+       
+       in.read(readBytes);
+       assertTrue(Arrays.equals(writeBytes, readBytes));
+-      doIO(in, null);
++      doIO(in, null, TIMEOUT);
++
++      // Change timeout on the read side.
++      ((SocketInputStream)in).setTimeout(TIMEOUT * 2);
++      doIO(in, null, TIMEOUT * 2);
+       
+       /*
+-       * Verify that it handles interrupted threads properly.
+-       * Use a large timeout and expect the thread to return quickly.
++       * Use a large timeout and expect the thread to return quickly
++       * upon interruption.
+        */
+-      in = new SocketInputStream(source, 0);
+-      Thread thread = new Thread(new ReadRunnable(in));
++      ((SocketInputStream)in).setTimeout(0);
++      ReadThread thread = new ReadThread(in);
+       thread.start();
+-      
+-      try {
+-        Thread.sleep(1000);
+-      } catch (InterruptedException ignored) {}
+-      
++      // If the thread is interrupted before it calls read()
++      // then it throws ClosedByInterruptException due to
++      // some Java quirk. Waiting for it to call read()
++      // gets it into select(), so we get the expected
++      // InterruptedIOException.
++      Thread.sleep(1000);
+       thread.interrupt();
+-      
+-      try {
+-        thread.join();
+-      } catch (InterruptedException e) {
+-        throw new IOException("Unexpected InterruptedException : " + e);
++      thread.join();
++      if (thread.thrown != null) {
++        throw new RuntimeException(thread.thrown);
+       }
+-      
++
+       //make sure the channels are still open
+       assertTrue(source.isOpen());
+       assertTrue(sink.isOpen());
+-
++      
++      // Nevertheless, the output stream is closed, because
++      // a partial write may have succeeded (see comment in
++      // SocketOutputStream#write(byte[]), int, int)
++      try {
++        out.write(1);
++        fail("Did not throw");
++      } catch (IOException ioe) {
++        assertTrue(ioe.getMessage().contains("stream is closed"));
++      }
++      
+       out.close();
+       assertFalse(sink.isOpen());
+       
+-- 
+1.7.0.4
+

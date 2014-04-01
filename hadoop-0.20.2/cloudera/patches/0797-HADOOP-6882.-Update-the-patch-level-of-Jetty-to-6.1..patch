@@ -1,0 +1,85 @@
+From f6ffedb4441ec43ef7d81fe483807115e98aca41 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 26 Jan 2011 13:31:56 -0800
+Subject: [PATCH 0797/1179] HADOOP-6882. Update the patch level of Jetty to 6.1.26
+
+Reason: Address XSS and many other upstream bugs
+Author: Owen O'Malley
+Ref: CDH-2564
+---
+ ivy/libraries.properties          |    4 ++--
+ src/contrib/fairscheduler/ivy.xml |    4 ++++
+ src/contrib/gridmix/ivy.xml       |    4 ++--
+ 3 files changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/ivy/libraries.properties b/ivy/libraries.properties
+index c8d84d6..9fbdddb 100644
+--- a/ivy/libraries.properties
++++ b/ivy/libraries.properties
+@@ -51,8 +51,8 @@ jasper.version=5.5.12
+ jsp.version=2.1
+ jsp-api.version=5.5.12
+ jets3t.version=0.6.1
+-jetty.version=6.1.14
+-jetty-util.version=6.1.14
++jetty.version=6.1.26
++jetty-util.version=6.1.26
+ junit.version=4.5
+ jdiff.version=1.0.9
+ json.version=1.0
+diff --git a/src/contrib/fairscheduler/ivy.xml b/src/contrib/fairscheduler/ivy.xml
+index 0e694bc..16a0c60 100644
+--- a/src/contrib/fairscheduler/ivy.xml
++++ b/src/contrib/fairscheduler/ivy.xml
+@@ -31,10 +31,12 @@
+       name="log4j"
+       rev="${log4j.version}"
+       conf="common->master"/>
++     <!-- resolved from lib
+     <dependency org="org.mortbay.jetty"
+       name="servlet-api-2.5"
+       rev="${servlet-api-2.5.version}"
+       conf="common->default"/> 
++     -->
+    <dependency org="junit"
+       name="junit"
+       rev="${junit.version}"
+@@ -47,6 +49,7 @@
+       name="jetty"
+       rev="${jetty.version}"
+       conf="common->master"/>
++    <!--  this is resolved locally from the lib folder
+     <dependency org="org.mortbay.jetty"
+       name="jsp-api-2.1"
+       rev="${jetty.version}"
+@@ -55,5 +58,6 @@
+       name="jsp-2.1"
+       rev="${jetty.version}"
+       conf="common->master"/>
++      -->
+   </dependencies>
+ </ivy-module>
+diff --git a/src/contrib/gridmix/ivy.xml b/src/contrib/gridmix/ivy.xml
+index 32b3940..43dc5de 100644
+--- a/src/contrib/gridmix/ivy.xml
++++ b/src/contrib/gridmix/ivy.xml
+@@ -70,14 +70,14 @@
+       name="jetty-util"
+       rev="${jetty-util.version}"
+       conf="common->master"/>
+-    <dependency org="org.mortbay.jetty"
++    <!-- <dependency org="org.mortbay.jetty"
+       name="jsp-api-2.1"
+       rev="${jetty.version}"
+       conf="common->master"/>
+     <dependency org="org.mortbay.jetty"
+       name="jsp-2.1"
+       rev="${jetty.version}"
+-      conf="common->master"/>
++      conf="common->master"/> -->
+     <dependency org="org.mortbay.jetty"
+       name="servlet-api-2.5"
+       rev="${servlet-api-2.5.version}"
+-- 
+1.7.0.4
+

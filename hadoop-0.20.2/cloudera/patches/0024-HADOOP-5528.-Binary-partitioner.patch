@@ -1,0 +1,348 @@
+From 1f11b63a42ae441eb8d0693ed0e4e01aca553e42 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:33:09 -0800
+Subject: [PATCH 0024/1179] HADOOP-5528. Binary partitioner
+
+Description: It would be useful to have a <tt>BinaryPartitioner</tt> that partitions <tt>BinaryComparable</tt> keys by hashing a configurable part of the bytes array corresponding to each key.
+Reason: New feature
+Author: Klaas Bosteels
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/io/WritableComparator.java   |    9 +-
+ .../hadoop/mapred/lib/BinaryPartitioner.java       |   43 ++++++
+ .../mapreduce/lib/partition/BinaryPartitioner.java |  138 ++++++++++++++++++++
+ .../lib/partition/TestBinaryPartitioner.java       |  103 +++++++++++++++
+ 4 files changed, 291 insertions(+), 2 deletions(-)
+ create mode 100644 src/mapred/org/apache/hadoop/mapred/lib/BinaryPartitioner.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/lib/partition/BinaryPartitioner.java
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/lib/partition/TestBinaryPartitioner.java
+
+diff --git a/src/core/org/apache/hadoop/io/WritableComparator.java b/src/core/org/apache/hadoop/io/WritableComparator.java
+index 568f93a..b0b08b4 100644
+--- a/src/core/org/apache/hadoop/io/WritableComparator.java
++++ b/src/core/org/apache/hadoop/io/WritableComparator.java
+@@ -135,12 +135,17 @@ public class WritableComparator implements RawComparator {
+   }
+ 
+   /** Compute hash for binary data. */
+-  public static int hashBytes(byte[] bytes, int length) {
++  public static int hashBytes(byte[] bytes, int offset, int length) {
+     int hash = 1;
+-    for (int i = 0; i < length; i++)
++    for (int i = offset; i < offset + length; i++)
+       hash = (31 * hash) + (int)bytes[i];
+     return hash;
+   }
++  
++  /** Compute hash for binary data. */
++  public static int hashBytes(byte[] bytes, int length) {
++    return hashBytes(bytes, 0, length);
++  }
+ 
+   /** Parse an unsigned short from a byte array. */
+   public static int readUnsignedShort(byte[] bytes, int start) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/BinaryPartitioner.java b/src/mapred/org/apache/hadoop/mapred/lib/BinaryPartitioner.java
+new file mode 100644
+index 0000000..2c81338
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapred/lib/BinaryPartitioner.java
+@@ -0,0 +1,43 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred.lib;
++
++import org.apache.hadoop.io.BinaryComparable;
++import org.apache.hadoop.mapred.JobConf;
++import org.apache.hadoop.mapred.Partitioner;
++
++/**
++ * Partition {@link BinaryComparable} keys using a configurable part of 
++ * the bytes array returned by {@link BinaryComparable#getBytes()}. 
++ * 
++ * @see org.apache.hadoop.mapreduce.lib.partition.BinaryPartitioner
++ * @deprecated Use
++ *   {@link org.apache.hadoop.mapreduce.lib.partition.BinaryPartitioner}
++ *   instead.
++ */
++@Deprecated
++public class BinaryPartitioner<V>  
++  extends org.apache.hadoop.mapreduce.lib.partition.BinaryPartitioner<V>
++  implements Partitioner<BinaryComparable, V> {
++  
++  public void configure(JobConf job) {
++    super.setConf(job);
++  }
++  
++}
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/partition/BinaryPartitioner.java b/src/mapred/org/apache/hadoop/mapreduce/lib/partition/BinaryPartitioner.java
+new file mode 100644
+index 0000000..122ecbb
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/partition/BinaryPartitioner.java
+@@ -0,0 +1,138 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.partition;
++
++import org.apache.hadoop.conf.Configurable;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.BinaryComparable;
++import org.apache.hadoop.io.WritableComparator;
++import org.apache.hadoop.mapreduce.Partitioner;
++
++/**
++ * <p>Partition {@link BinaryComparable} keys using a configurable part of 
++ * the bytes array returned by {@link BinaryComparable#getBytes()}.</p>
++ * 
++ * <p>The subarray to be used for the partitioning can be defined by means
++ * of the following properties:
++ * <ul>
++ *   <li>
++ *     <i>mapred.binary.partitioner.left.offset</i>:
++ *     left offset in array (0 by default)
++ *   </li>
++ *   <li>
++ *     <i>mapred.binary.partitioner.right.offset</i>: 
++ *     right offset in array (-1 by default)
++ *   </li>
++ * </ul>
++ * Like in Python, both negative and positive offsets are allowed, but
++ * the meaning is slightly different. In case of an array of length 5,
++ * for instance, the possible offsets are:
++ * <pre><code>
++ *  +---+---+---+---+---+
++ *  | B | B | B | B | B |
++ *  +---+---+---+---+---+
++ *    0   1   2   3   4
++ *   -5  -4  -3  -2  -1
++ * </code></pre>
++ * The first row of numbers gives the position of the offsets 0...5 in 
++ * the array; the second row gives the corresponding negative offsets. 
++ * Contrary to Python, the specified subarray has byte <code>i</code> 
++ * and <code>j</code> as first and last element, repectively, when 
++ * <code>i</code> and <code>j</code> are the left and right offset.
++ * 
++ * <p>For Hadoop programs written in Java, it is advisable to use one of 
++ * the following static convenience methods for setting the offsets:
++ * <ul>
++ *   <li>{@link #setOffsets}</li>
++ *   <li>{@link #setLeftOffset}</li>
++ *   <li>{@link #setRightOffset}</li>
++ * </ul></p>
++ */
++public class BinaryPartitioner<V> extends Partitioner<BinaryComparable, V> 
++  implements Configurable {
++
++  private static final String LEFT_OFFSET_PROPERTY_NAME = 
++    "mapred.binary.partitioner.left.offset";
++  private static final String RIGHT_OFFSET_PROPERTY_NAME = 
++    "mapred.binary.partitioner.right.offset";
++  
++  /**
++   * Set the subarray to be used for partitioning to 
++   * <code>bytes[left:(right+1)]</code> in Python syntax.
++   * 
++   * @param conf configuration object
++   * @param left left Python-style offset
++   * @param right right Python-style offset
++   */
++  public static void setOffsets(Configuration conf, int left, int right) {
++    conf.setInt(LEFT_OFFSET_PROPERTY_NAME, left);
++    conf.setInt(RIGHT_OFFSET_PROPERTY_NAME, right);
++  }
++  
++  /**
++   * Set the subarray to be used for partitioning to 
++   * <code>bytes[offset:]</code> in Python syntax.
++   * 
++   * @param conf configuration object
++   * @param offset left Python-style offset
++   */
++  public static void setLeftOffset(Configuration conf, int offset) {
++    conf.setInt(LEFT_OFFSET_PROPERTY_NAME, offset);
++  }
++  
++  /**
++   * Set the subarray to be used for partitioning to 
++   * <code>bytes[:(offset+1)]</code> in Python syntax.
++   * 
++   * @param conf configuration object
++   * @param offset right Python-style offset
++   */
++  public static void setRightOffset(Configuration conf, int offset) {
++    conf.setInt(RIGHT_OFFSET_PROPERTY_NAME, offset);
++  }
++  
++  
++  private Configuration conf;
++  private int leftOffset, rightOffset;
++  
++  public void setConf(Configuration conf) {
++    this.conf = conf;
++    leftOffset = conf.getInt(LEFT_OFFSET_PROPERTY_NAME, 0);
++    rightOffset = conf.getInt(RIGHT_OFFSET_PROPERTY_NAME, -1);
++  }
++  
++  public Configuration getConf() {
++    return conf;
++  }
++  
++  /** 
++   * Use (the specified slice of the array returned by) 
++   * {@link BinaryComparable#getBytes()} to partition. 
++   */
++  @Override
++  public int getPartition(BinaryComparable key, V value, int numPartitions) {
++    int length = key.getLength();
++    int leftIndex = (leftOffset + length) % length;
++    int rightIndex = (rightOffset + length) % length;
++    int hash = WritableComparator.hashBytes(key.getBytes(), 
++      leftIndex, rightIndex - leftIndex + 1);
++    return (hash & Integer.MAX_VALUE) % numPartitions;
++  }
++  
++}
+diff --git a/src/test/org/apache/hadoop/mapreduce/lib/partition/TestBinaryPartitioner.java b/src/test/org/apache/hadoop/mapreduce/lib/partition/TestBinaryPartitioner.java
+new file mode 100644
+index 0000000..7be538e
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/lib/partition/TestBinaryPartitioner.java
+@@ -0,0 +1,103 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.partition;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.BinaryComparable;
++import org.apache.hadoop.io.BytesWritable;
++import org.apache.hadoop.util.ReflectionUtils;
++
++import junit.framework.TestCase;
++
++public class TestBinaryPartitioner extends TestCase {
++
++  public void testDefaultOffsets() {
++    Configuration conf = new Configuration();
++    BinaryPartitioner<?> partitioner = 
++      ReflectionUtils.newInstance(BinaryPartitioner.class, conf);
++    
++    BinaryComparable key1 = new BytesWritable(new byte[] { 1, 2, 3, 4, 5 }); 
++    BinaryComparable key2 = new BytesWritable(new byte[] { 1, 2, 3, 4, 5 });
++    int partition1 = partitioner.getPartition(key1, null, 10);
++    int partition2 = partitioner.getPartition(key2, null, 10);
++    assertEquals(partition1, partition2);
++    
++    key1 = new BytesWritable(new byte[] { 1, 2, 3, 4, 5 }); 
++    key2 = new BytesWritable(new byte[] { 6, 2, 3, 4, 5 });
++    partition1 = partitioner.getPartition(key1, null, 10);
++    partition2 = partitioner.getPartition(key2, null, 10);
++    assertTrue(partition1 != partition2);
++    
++    key1 = new BytesWritable(new byte[] { 1, 2, 3, 4, 5 }); 
++    key2 = new BytesWritable(new byte[] { 1, 2, 3, 4, 6 });
++    partition1 = partitioner.getPartition(key1, null, 10);
++    partition2 = partitioner.getPartition(key2, null, 10);
++    assertTrue(partition1 != partition2);
++  }
++  
++  public void testCustomOffsets() {
++    Configuration conf = new Configuration();
++    BinaryComparable key1 = new BytesWritable(new byte[] { 1, 2, 3, 4, 5 }); 
++    BinaryComparable key2 = new BytesWritable(new byte[] { 6, 2, 3, 7, 8 });
++    
++    BinaryPartitioner.setOffsets(conf, 1, -3);
++    BinaryPartitioner<?> partitioner = 
++      ReflectionUtils.newInstance(BinaryPartitioner.class, conf);
++    int partition1 = partitioner.getPartition(key1, null, 10);
++    int partition2 = partitioner.getPartition(key2, null, 10);
++    assertEquals(partition1, partition2);
++    
++    BinaryPartitioner.setOffsets(conf, 1, 2);
++    partitioner = ReflectionUtils.newInstance(BinaryPartitioner.class, conf);
++    partition1 = partitioner.getPartition(key1, null, 10);
++    partition2 = partitioner.getPartition(key2, null, 10);
++    assertEquals(partition1, partition2);
++    
++    BinaryPartitioner.setOffsets(conf, -4, -3);
++    partitioner = ReflectionUtils.newInstance(BinaryPartitioner.class, conf);
++    partition1 = partitioner.getPartition(key1, null, 10);
++    partition2 = partitioner.getPartition(key2, null, 10);
++    assertEquals(partition1, partition2);
++  }
++  
++  public void testLowerBound() {
++    Configuration conf = new Configuration();
++    BinaryPartitioner.setLeftOffset(conf, 0);
++    BinaryPartitioner<?> partitioner = 
++      ReflectionUtils.newInstance(BinaryPartitioner.class, conf);
++    BinaryComparable key1 = new BytesWritable(new byte[] { 1, 2, 3, 4, 5 }); 
++    BinaryComparable key2 = new BytesWritable(new byte[] { 6, 2, 3, 4, 5 });
++    int partition1 = partitioner.getPartition(key1, null, 10);
++    int partition2 = partitioner.getPartition(key2, null, 10);
++    assertTrue(partition1 != partition2);
++  }
++  
++  public void testUpperBound() {
++    Configuration conf = new Configuration();
++    BinaryPartitioner.setRightOffset(conf, 4);
++    BinaryPartitioner<?> partitioner = 
++      ReflectionUtils.newInstance(BinaryPartitioner.class, conf);
++    BinaryComparable key1 = new BytesWritable(new byte[] { 1, 2, 3, 4, 5 }); 
++    BinaryComparable key2 = new BytesWritable(new byte[] { 1, 2, 3, 4, 6 });
++    int partition1 = partitioner.getPartition(key1, null, 10);
++    int partition2 = partitioner.getPartition(key2, null, 10);
++    assertTrue(partition1 != partition2);
++  }
++  
++}
+-- 
+1.7.0.4
+

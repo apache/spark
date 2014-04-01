@@ -1,0 +1,40 @@
+From 061eb38e4b442cf3f97fcb45a3059384fd74d036 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 15 Feb 2011 10:17:37 -0800
+Subject: [PATCH 0878/1179] CLOUDERA-BUILD. Fix a bug where HADOOP_DAEMON_DETACHED leaked into the environment of children
+
+This fixes a problem reported on the cdh-user list where tasks that forked out to
+call bin/hadoop ended up only catching the first 10 lines of output.
+
+Tested by writing a streaming script that catted a large text file off HDFS - verified
+bug is fixed.
+
+Author: Todd Lipcon
+Ref: CDH-2661
+---
+ bin/hadoop |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index 04a9da1..0b27157 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -415,6 +415,7 @@ case "$_HADOOP_RUN_MODE" in
+       touch $log_path
+       tail -f $log_path &
+     fi
++    unset _HADOOP_DAEMON_DETACHED
+ 
+     exec "$_JSVC_PATH" -Dproc_$COMMAND \
+                        $_JSVC_FLAGS \
+@@ -433,6 +434,7 @@ case "$_HADOOP_RUN_MODE" in
+     fi
+ 
+     if [ "$_HADOOP_DAEMON_DETACHED" = "true" ]; then
++      unset _HADOOP_DAEMON_DETACHED
+       touch $_HADOOP_DAEMON_OUT
+       nohup $_JAVA_EXEC -Dproc_$COMMAND $JAVA_HEAP_MAX $HADOOP_OPTS -classpath "$CLASSPATH" $CLASS "$@" > "$_HADOOP_DAEMON_OUT" 2>&1 < /dev/null &
+       if [ "$EUID" == "0" ]; then
+-- 
+1.7.0.4
+

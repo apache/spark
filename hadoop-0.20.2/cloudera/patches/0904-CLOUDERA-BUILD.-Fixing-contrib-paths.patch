@@ -1,0 +1,39 @@
+From bd69a6ea66f4aa6905a7347a94e6cc351bfb235a Mon Sep 17 00:00:00 2001
+From: Andrew Bayer <andrew.bayer@gmail.com>
+Date: Mon, 7 Mar 2011 15:57:15 -0800
+Subject: [PATCH 0904/1179] CLOUDERA-BUILD. Fixing contrib paths.
+
+---
+ cloudera/maven-packaging/hadoop-mrunit/pom.xml    |    2 +-
+ cloudera/maven-packaging/hadoop-streaming/pom.xml |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/cloudera/maven-packaging/hadoop-mrunit/pom.xml b/cloudera/maven-packaging/hadoop-mrunit/pom.xml
+index f967a6c..fa67199 100644
+--- a/cloudera/maven-packaging/hadoop-mrunit/pom.xml
++++ b/cloudera/maven-packaging/hadoop-mrunit/pom.xml
+@@ -63,7 +63,7 @@
+             <configuration>
+               <artifacts>
+                 <artifact>
+-                  <file>${basedir}/../../../build/contrib/hadoop-mrunit-${project.version}.jar</file>
++                  <file>${basedir}/../../../build/contrib/mrunit/hadoop-mrunit-${project.version}.jar</file>
+                   <type>jar</type>
+                 </artifact>
+                 <artifact>
+diff --git a/cloudera/maven-packaging/hadoop-streaming/pom.xml b/cloudera/maven-packaging/hadoop-streaming/pom.xml
+index ce01540..069962d 100644
+--- a/cloudera/maven-packaging/hadoop-streaming/pom.xml
++++ b/cloudera/maven-packaging/hadoop-streaming/pom.xml
+@@ -63,7 +63,7 @@
+             <configuration>
+               <artifacts>
+                 <artifact>
+-                  <file>${basedir}/../../../build/contrib/hadoop-streaming-${project.version}.jar</file>
++                  <file>${basedir}/../../../build/contrib/streaming/hadoop-streaming-${project.version}.jar</file>
+                   <type>jar</type>
+                 </artifact>
+                 <artifact>
+-- 
+1.7.0.4
+

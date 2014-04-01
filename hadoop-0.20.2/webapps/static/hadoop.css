@@ -1,0 +1,185 @@
+/*
+* Licensed to the Apache Software Foundation (ASF) under one or more
+* contributor license agreements.  See the NOTICE file distributed with
+* this work for additional information regarding copyright ownership.
+* The ASF licenses this file to You under the Apache License, Version 2.0
+* (the "License"); you may not use this file except in compliance with
+* the License.  You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/
+
+body {
+  background-color : #ffffff;
+  font-family : sans-serif;
+}
+
+.small {
+  font-size : smaller;
+}
+
+div#dfsnodetable tr#row1, div#dfstable td#col1 {
+	font-weight : bolder;
+}
+
+div#dfstable td#col1 {
+	vertical-align : top;
+}
+
+div#dfstable td#col3 {
+	text-align : right;
+}
+
+div#dfsnodetable caption {
+	text-align : left;
+}
+
+div#dfsnodetable a#title {
+	font-size : larger;
+	font-weight : bolder;
+}
+
+div#dfsnodetable td, th {
+	border-bottom-style : none;
+        padding-bottom : 4px;
+        padding-top : 4px;       
+}
+
+div#dfsnodetable A:link, A:visited {
+	text-decoration : none;       
+}
+
+div#dfsnodetable th.header, th.headerASC, th.headerDSC {
+        padding-bottom : 8px;
+        padding-top : 8px;       
+}
+div#dfsnodetable th.header:hover, th.headerASC:hover, th.headerDSC:hover,
+                 td.name:hover {
+        text-decoration : underline;
+	cursor : pointer;
+}
+
+div#dfsnodetable td.blocks, td.size, td.pcused, td.adminstate, td.lastcontact {
+	text-align : right;
+}
+
+div#dfsnodetable .rowNormal .header {
+	background-color : #ffffff;
+}
+div#dfsnodetable .rowAlt, .headerASC, .headerDSC {
+	background-color : lightyellow;
+}
+
+.warning {
+        font-weight : bolder;
+        color : red;	
+}
+
+div#dfstable table {
+	white-space : pre;
+}
+
+div#dfsnodetable td, div#dfsnodetable th, div#dfstable td {
+	padding-left : 10px;
+	padding-right : 10px;
+}
+
+td.perc_filled {
+  background-color:#AAAAFF;
+}
+
+td.perc_nonfilled {
+  background-color:#FFFFFF;
+}
+
+line.taskgraphline {
+  stroke-width:1;stroke-linecap:round;  
+}
+
+#quicklinks {
+	margin: 0;
+	padding: 2px 4px;
+	position: fixed;
+	top: 0;
+	right: 0;
+	text-align: right;
+	background-color: #eee;
+	font-weight: bold;
+}
+
+#quicklinks ul {
+	margin: 0;
+	padding: 0;
+	list-style-type: none;
+	font-weight: normal;
+}
+
+#quicklinks ul {
+	display: none;
+}
+
+#quicklinks a {
+	font-size: smaller;
+	text-decoration: none;
+}
+
+#quicklinks ul a {
+	text-decoration: underline;
+}
+
+/**
+ * Style additions by Cloudera
+ */
+
+body {
+  background-color : #fff;
+  font-family : sans-serif;
+  font-size:11px;
+  line-height:17px;
+}
+
+table td, table th {
+  font-size: 12px;
+}
+
+a { 
+  color: #04f !important; 
+  text-decoration:none !important;
+}
+
+a:hover {
+  text-decoration:underline;
+}
+
+hr {
+  border:1px solid #ddd;
+  border-top:0px;
+}
+
+table.datatable td, table.datatable th{
+  border: 1px solid #666;
+  padding: 5px;
+  margin: 2px;
+}
+
+table.nnbrowse td {
+  font-family: courier,sans-serif;
+}
+
+table.datatable tbody tr:nth-child(even) { background: #cacaff; }
+table.datatable {
+  font-size: 10px;
+}
+
+table {
+  border-collapse: collapse;
+}
+table td {
+  border: 1px solid #666;
+}

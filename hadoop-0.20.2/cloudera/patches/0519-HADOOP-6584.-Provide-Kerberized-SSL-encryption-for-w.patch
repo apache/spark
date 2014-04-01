@@ -1,0 +1,518 @@
+From 40c1a9177db24c0fd589ad8312a31a715f4cf8ad Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sat, 27 Feb 2010 03:19:02 -0800
+Subject: [PATCH 0519/1179] HADOOP-6584. Provide Kerberized SSL encryption for webservices
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437337/HADOOP-6584-Y20-4.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12437337/HADOOP-6584-Y20-4.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12437768/HADOOP-6584-FixJavadoc-Y20.patch
+Author: Jakob Homan
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/http/HttpServer.java    |   57 +++++-
+ .../security/Krb5AndCertsSslSocketConnector.java   |  228 ++++++++++++++++++++
+ src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java |    1 +
+ .../hadoop/hdfs/server/namenode/NameNode.java      |  116 ++++++----
+ 4 files changed, 354 insertions(+), 48 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/security/Krb5AndCertsSslSocketConnector.java
+
+diff --git a/src/core/org/apache/hadoop/http/HttpServer.java b/src/core/org/apache/hadoop/http/HttpServer.java
+index bc4dd00..249a48a 100644
+--- a/src/core/org/apache/hadoop/http/HttpServer.java
++++ b/src/core/org/apache/hadoop/http/HttpServer.java
+@@ -45,7 +45,9 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.log.LogLevel;
+ import org.apache.hadoop.metrics.MetricsServlet;
++import org.apache.hadoop.security.Krb5AndCertsSslSocketConnector;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.Krb5AndCertsSslSocketConnector.MODE;
+ import org.apache.hadoop.security.authorize.AccessControlList;
+ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.fs.CommonConfigurationKeys;
+@@ -256,7 +258,7 @@ public class HttpServer implements FilterContainer {
+    */
+   public void addServlet(String name, String pathSpec,
+       Class<? extends HttpServlet> clazz) {
+-    addInternalServlet(name, pathSpec, clazz);
++    addInternalServlet(name, pathSpec, clazz, false);
+     addFilterPathMapping(pathSpec, webAppContext);
+   }
+ 
+@@ -270,11 +272,38 @@ public class HttpServer implements FilterContainer {
+   @Deprecated
+   public void addInternalServlet(String name, String pathSpec,
+       Class<? extends HttpServlet> clazz) {
++    addInternalServlet(name, pathSpec, clazz, false);
++  }
++
++  /**
++   * Add an internal servlet in the server, specifying whether or not to
++   * protect with Kerberos authentication. 
++   * Note: This method is to be used for adding servlets that facilitate
++   * internal communication and not for user facing functionality. For
++   * servlets added using this method, filters (except internal Kerberized
++   * filters) are not enabled. 
++   * 
++   * @param name The name of the servlet (can be passed as null)
++   * @param pathSpec The path spec for the servlet
++   * @param clazz The servlet class
++   */
++  public void addInternalServlet(String name, String pathSpec, 
++      Class<? extends HttpServlet> clazz, boolean requireAuth) {
+     ServletHolder holder = new ServletHolder(clazz);
+     if (name != null) {
+       holder.setName(name);
+     }
+     webAppContext.addServlet(holder, pathSpec);
++    
++    if(requireAuth && UserGroupInformation.isSecurityEnabled()) {
++       LOG.info("Adding Kerberos filter to " + name);
++       ServletHandler handler = webAppContext.getServletHandler();
++       FilterMapping fmap = new FilterMapping();
++       fmap.setPathSpec(pathSpec);
++       fmap.setFilterName("krb5Filter");
++       fmap.setDispatches(Handler.ALL);
++       handler.addFilterMapping(fmap);
++    }
+   }
+ 
+   /** {@inheritDoc} */
+@@ -412,10 +441,22 @@ public class HttpServer implements FilterContainer {
+    */
+   public void addSslListener(InetSocketAddress addr, Configuration sslConf,
+       boolean needClientAuth) throws IOException {
++    addSslListener(addr, sslConf, needClientAuth, false);
++  }
++
++  /**
++   * Configure an ssl listener on the server.
++   * @param addr address to listen on
++   * @param sslConf conf to retrieve ssl options
++   * @param needCertsAuth whether x509 certificate authentication is required
++   * @param needKrbAuth whether to allow kerberos auth
++   */
++  public void addSslListener(InetSocketAddress addr, Configuration sslConf,
++      boolean needCertsAuth, boolean needKrbAuth) throws IOException {
+     if (webServer.isStarted()) {
+       throw new IOException("Failed to add ssl listener");
+     }
+-    if (needClientAuth) {
++    if (needCertsAuth) {
+       // setting up SSL truststore for authenticating clients
+       System.setProperty("javax.net.ssl.trustStore", sslConf.get(
+           "ssl.server.truststore.location", ""));
+@@ -424,14 +465,22 @@ public class HttpServer implements FilterContainer {
+       System.setProperty("javax.net.ssl.trustStoreType", sslConf.get(
+           "ssl.server.truststore.type", "jks"));
+     }
+-    SslSocketConnector sslListener = new SslSocketConnector();
++    Krb5AndCertsSslSocketConnector.MODE mode;
++    if(needCertsAuth && needKrbAuth)
++      mode = MODE.BOTH;
++    else if (!needCertsAuth && needKrbAuth)
++      mode = MODE.KRB;
++    else // Default to certificates
++      mode = MODE.CERTS;
++
++    SslSocketConnector sslListener = new Krb5AndCertsSslSocketConnector(mode);
+     sslListener.setHost(addr.getHostName());
+     sslListener.setPort(addr.getPort());
+     sslListener.setKeystore(sslConf.get("ssl.server.keystore.location"));
+     sslListener.setPassword(sslConf.get("ssl.server.keystore.password", ""));
+     sslListener.setKeyPassword(sslConf.get("ssl.server.keystore.keypassword", ""));
+     sslListener.setKeystoreType(sslConf.get("ssl.server.keystore.type", "jks"));
+-    sslListener.setNeedClientAuth(needClientAuth);
++    sslListener.setNeedClientAuth(needCertsAuth);
+     webServer.addConnector(sslListener);
+   }
+ 
+diff --git a/src/core/org/apache/hadoop/security/Krb5AndCertsSslSocketConnector.java b/src/core/org/apache/hadoop/security/Krb5AndCertsSslSocketConnector.java
+new file mode 100644
+index 0000000..ad9ea81
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/Krb5AndCertsSslSocketConnector.java
+@@ -0,0 +1,228 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one or more
++ * contributor license agreements. See the NOTICE file distributed with this
++ * work for additional information regarding copyright ownership. The ASF
++ * licenses this file to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ * 
++ * http://www.apache.org/licenses/LICENSE-2.0
++ * 
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
++ * License for the specific language governing permissions and limitations under
++ * the License.
++ */
++package org.apache.hadoop.security;
++
++import java.io.IOException;
++import java.net.InetAddress;
++import java.net.ServerSocket;
++import java.security.Principal;
++import java.util.Random;
++
++import javax.net.ssl.SSLContext;
++import javax.net.ssl.SSLServerSocket;
++import javax.net.ssl.SSLServerSocketFactory;
++import javax.net.ssl.SSLSocket;
++import javax.security.auth.kerberos.KerberosPrincipal;
++import javax.servlet.Filter;
++import javax.servlet.FilterChain;
++import javax.servlet.FilterConfig;
++import javax.servlet.ServletException;
++import javax.servlet.ServletRequest;
++import javax.servlet.ServletResponse;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletRequestWrapper;
++import javax.servlet.http.HttpServletResponse;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.mortbay.io.EndPoint;
++import org.mortbay.jetty.HttpSchemes;
++import org.mortbay.jetty.Request;
++import org.mortbay.jetty.security.ServletSSL;
++import org.mortbay.jetty.security.SslSocketConnector;
++
++/**
++ * Extend Jetty's {@link SslSocketConnector} to optionally also provide 
++ * Kerberos5ized SSL sockets.  The only change in behavior from superclass
++ * is that we no longer honor requests to turn off NeedAuthentication when
++ * running with Kerberos support.
++ */
++public class Krb5AndCertsSslSocketConnector extends SslSocketConnector {
++  public static final String[] KRB5_CIPHER_SUITES = 
++    new String [] {"TLS_KRB5_WITH_3DES_EDE_CBC_SHA"};
++  static {
++    System.setProperty("https.cipherSuites", KRB5_CIPHER_SUITES[0]);
++  }
++  
++  private static final Log LOG = LogFactory
++      .getLog(Krb5AndCertsSslSocketConnector.class);
++
++  private static final String REMOTE_PRINCIPAL = "remote_principal";
++
++  public enum MODE {KRB, CERTS, BOTH} // Support Kerberos, certificates or both?
++
++  private final boolean useKrb;
++  private final boolean useCerts;
++
++  public Krb5AndCertsSslSocketConnector() {
++    super();
++    useKrb = true;
++    useCerts = false;
++    
++    setPasswords();
++  }
++  
++  public Krb5AndCertsSslSocketConnector(MODE mode) {
++    super();
++    useKrb = mode == MODE.KRB || mode == MODE.BOTH;
++    useCerts = mode == MODE.CERTS || mode == MODE.BOTH;
++    setPasswords();
++    logIfDebug("useKerb = " + useKrb + ", useCerts = " + useCerts);
++  }
++
++  // If not using Certs, set passwords to random gibberish or else
++  // Jetty will actually prompt the user for some.
++  private void setPasswords() {
++   if(!useCerts) {
++     Random r = new Random();
++     System.setProperty("jetty.ssl.password", String.valueOf(r.nextLong()));
++     System.setProperty("jetty.ssl.keypassword", String.valueOf(r.nextLong()));
++   }
++  }
++  
++  @Override
++  protected SSLServerSocketFactory createFactory() throws Exception {
++    if(useCerts)
++      return super.createFactory();
++    
++    SSLContext context = super.getProvider()==null
++       ? SSLContext.getInstance(super.getProtocol())
++        :SSLContext.getInstance(super.getProtocol(), super.getProvider());
++    context.init(null, null, null);
++    
++    return context.getServerSocketFactory();
++  }
++  
++  /* (non-Javadoc)
++   * @see org.mortbay.jetty.security.SslSocketConnector#newServerSocket(java.lang.String, int, int)
++   */
++  @Override
++  protected ServerSocket newServerSocket(String host, int port, int backlog)
++      throws IOException {
++    logIfDebug("Creating new KrbServerSocket for: " + host);
++    SSLServerSocket ss = null;
++    
++    if(useCerts) // Get the server socket from the SSL super impl
++      ss = (SSLServerSocket)super.newServerSocket(host, port, backlog);
++    else { // Create a default server socket
++      try {
++        ss = (SSLServerSocket)(host == null 
++         ? createFactory().createServerSocket(port, backlog) :
++           createFactory().createServerSocket(port, backlog, InetAddress.getByName(host)));
++      } catch (Exception e)
++      {
++        LOG.warn("Could not create KRB5 Listener", e);
++        throw new IOException("Could not create KRB5 Listener: " + e.toString());
++      }
++    }
++    
++    // Add Kerberos ciphers to this socket server if needed.
++    if(useKrb) {
++      ss.setNeedClientAuth(true);
++      String [] combined;
++      if(useCerts) { // combine the cipher suites
++        String[] certs = ss.getEnabledCipherSuites();
++        combined = new String[certs.length + KRB5_CIPHER_SUITES.length];
++        System.arraycopy(certs, 0, combined, 0, certs.length);
++        System.arraycopy(KRB5_CIPHER_SUITES, 0, combined, certs.length, KRB5_CIPHER_SUITES.length);
++      } else { // Just enable Kerberos auth
++        combined = KRB5_CIPHER_SUITES;
++      }
++      
++      ss.setEnabledCipherSuites(combined);
++    }
++    
++    return ss;
++  };
++
++  @Override
++  public void customize(EndPoint endpoint, Request request) throws IOException {
++    if(useKrb) { // Add Kerberos-specific info
++      SSLSocket sslSocket = (SSLSocket)endpoint.getTransport();
++      Principal remotePrincipal = sslSocket.getSession().getPeerPrincipal();
++      logIfDebug("Remote principal = " + remotePrincipal);
++      request.setScheme(HttpSchemes.HTTPS);
++      request.setAttribute(REMOTE_PRINCIPAL, remotePrincipal);
++      
++      if(!useCerts) { // Add extra info that would have been added by super
++        String cipherSuite = sslSocket.getSession().getCipherSuite();
++        Integer keySize = Integer.valueOf(ServletSSL.deduceKeyLength(cipherSuite));;
++        
++        request.setAttribute("javax.servlet.request.cipher_suite", cipherSuite);
++        request.setAttribute("javax.servlet.request.key_size", keySize);
++      } 
++    }
++    
++    if(useCerts) super.customize(endpoint, request);
++  }
++  
++  private void logIfDebug(String s) {
++    if(LOG.isDebugEnabled())
++      LOG.debug(s);
++  }
++  
++  /**
++   * Filter that takes the Kerberos principal identified in the 
++   * {@link Krb5AndCertsSslSocketConnector} and provides it the to the servlet
++   * at runtime, setting the principal and short name.
++   */
++  public static class Krb5SslFilter implements Filter {
++    @Override
++    public void doFilter(ServletRequest req, ServletResponse resp,
++        FilterChain chain) throws IOException, ServletException {
++      final Principal princ = 
++        (Principal)req.getAttribute(Krb5AndCertsSslSocketConnector.REMOTE_PRINCIPAL);
++      
++      if(princ == null || !(princ instanceof KerberosPrincipal)) {
++        // Should never actually get here, since should be rejected at socket
++        // level.
++        LOG.warn("User not authenticated via kerberos from " + req.getRemoteAddr());
++        ((HttpServletResponse)resp).sendError(HttpServletResponse.SC_FORBIDDEN, 
++            "User not authenticated via Kerberos");
++        return;
++      }
++      
++      // Provide principal information for servlet at runtime
++      ServletRequest wrapper = 
++            new HttpServletRequestWrapper((HttpServletRequest) req) {
++        @Override
++        public Principal getUserPrincipal() {
++          return princ;
++        }
++        
++        /* 
++         * Return the full name of this remote user.
++         * @see javax.servlet.http.HttpServletRequestWrapper#getRemoteUser()
++         */
++        @Override 
++        public String getRemoteUser() {
++          return princ.getName();
++        }
++      };
++      
++      chain.doFilter(wrapper, resp);
++    }
++
++    @Override
++    public void init(FilterConfig arg0) throws ServletException {
++      /* Nothing to do here */
++    }
++
++    @Override
++    public void destroy() { /* Nothing to do here */ }
++  }
++}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+index 7a52d32..d885ad9 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+@@ -194,4 +194,5 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final String  DFS_DATANODE_USER_NAME_KEY = "dfs.datanode.user.name.key";
+   public static final String  DFS_NAMENODE_KEYTAB_FILE_KEY = "dfs.namenode.keytab.file";
+   public static final String  DFS_NAMENODE_USER_NAME_KEY = "dfs.namenode.user.name.key";
++  public static final String  DFS_NAMENODE_KRB_HTTPS_USER_NAME_KEY = "dfs.namenode.krb.https.user.name.key";
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index d2d4214..4f21505 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.Trash;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.fs.permission.PermissionStatus;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.hdfs.DFSUtil;
+ import org.apache.hadoop.hdfs.HDFSPolicyProvider;
+ import org.apache.hadoop.hdfs.protocol.*;
+@@ -67,6 +68,7 @@ import org.apache.hadoop.security.RefreshUserToGroupMappingsProtocol;
+ 
+ import java.io.*;
+ import java.net.*;
++import java.security.PrivilegedExceptionAction;
+ import java.util.Collection;
+ import java.util.Arrays;
+ import java.util.ArrayList;
+@@ -249,51 +251,77 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     this.emptier.start();
+   }
+ 
+-  private void startHttpServer(Configuration conf) throws IOException {
+-    String infoAddr = 
+-      NetUtils.getServerAddress(conf, "dfs.info.bindAddress", 
+-                                "dfs.info.port", "dfs.http.address");
+-    InetSocketAddress infoSocAddr = NetUtils.createSocketAddr(infoAddr);
+-    String infoHost = infoSocAddr.getHostName();
+-    int infoPort = infoSocAddr.getPort();
+-    this.httpServer = new HttpServer("hdfs", infoHost, infoPort, 
+-        infoPort == 0, conf);
+-    if (conf.getBoolean("dfs.https.enable", false)) {
+-      boolean needClientAuth = conf.getBoolean("dfs.https.need.client.auth", false);
+-      InetSocketAddress secInfoSocAddr = NetUtils.createSocketAddr(conf.get(
+-          "dfs.https.address", infoHost + ":" + 0));
+-      Configuration sslConf = new Configuration(false);
+-      sslConf.addResource(conf.get("dfs.https.server.keystore.resource",
+-          "ssl-server.xml"));
+-      this.httpServer.addSslListener(secInfoSocAddr, sslConf, needClientAuth);
+-      // assume same ssl port for all datanodes
+-      InetSocketAddress datanodeSslPort = NetUtils.createSocketAddr(conf.get(
+-          "dfs.datanode.https.address", infoHost + ":" + 50475));
+-      this.httpServer.setAttribute("datanode.https.port", datanodeSslPort
+-          .getPort());
++  private void startHttpServer(final Configuration conf) throws IOException {
++    // Kerberized SSL servers must be run from the host principal...
++    DFSUtil.login(conf, DFSConfigKeys.DFS_NAMENODE_KEYTAB_FILE_KEY, 
++        DFSConfigKeys.DFS_NAMENODE_KRB_HTTPS_USER_NAME_KEY);
++    UserGroupInformation ugi = UserGroupInformation.getLoginUser();
++    try {
++      this.httpServer = ugi.doAs(new PrivilegedExceptionAction<HttpServer>() {
++        @Override
++        public HttpServer run() throws IOException, InterruptedException {
++          String infoAddr = 
++            NetUtils.getServerAddress(conf, "dfs.info.bindAddress", 
++                                      "dfs.info.port", "dfs.http.address");
++          InetSocketAddress infoSocAddr = NetUtils.createSocketAddr(infoAddr);
++          String infoHost = infoSocAddr.getHostName();
++          int infoPort = infoSocAddr.getPort();
++          httpServer = new HttpServer("hdfs", infoHost, infoPort, 
++              infoPort == 0, conf);
++          
++          boolean certSSL = conf.getBoolean("dfs.https.enable", false);
++          boolean useKrb = UserGroupInformation.isSecurityEnabled();
++          if (certSSL || useKrb) {
++            boolean needClientAuth = conf.getBoolean("dfs.https.need.client.auth", false);
++            InetSocketAddress secInfoSocAddr = NetUtils.createSocketAddr(infoHost + ":"+ conf.get(
++                                "dfs.https.port", infoHost + ":" + 0));
++            Configuration sslConf = new Configuration(false);
++            if(certSSL) {
++              sslConf.addResource(conf.get("dfs.https.server.keystore.resource",
++                  "ssl-server.xml"));
++            }
++            httpServer.addSslListener(secInfoSocAddr, sslConf, needClientAuth, useKrb);
++            // assume same ssl port for all datanodes
++            InetSocketAddress datanodeSslPort = NetUtils.createSocketAddr(conf.get(
++                "dfs.datanode.https.address", infoHost + ":" + 50475));
++            httpServer.setAttribute("datanode.https.port", datanodeSslPort
++                .getPort());
++          }
++          httpServer.setAttribute("name.node", NameNode.this);
++          httpServer.setAttribute("name.node.address", getNameNodeAddress());
++          httpServer.setAttribute("name.system.image", getFSImage());
++          httpServer.setAttribute("name.conf", conf);
++          httpServer.addInternalServlet("getDelegationToken", 
++              DelegationTokenServlet.PATH_SPEC, DelegationTokenServlet.class, true);
++          httpServer.addInternalServlet("fsck", "/fsck", FsckServlet.class, true);
++          httpServer.addInternalServlet("getimage", "/getimage", 
++              GetImageServlet.class, true);
++          httpServer.addInternalServlet("listPaths", "/listPaths/*", 
++              ListPathsServlet.class, true);
++          httpServer.addInternalServlet("data", "/data/*", 
++              FileDataServlet.class, true);
++          httpServer.addInternalServlet("checksum", "/fileChecksum/*",
++              FileChecksumServlets.RedirectServlet.class, true);
++          httpServer.addInternalServlet("contentSummary", "/contentSummary/*",
++              ContentSummaryServlet.class, true);
++          httpServer.start();
++      
++          // The web-server port can be ephemeral... ensure we have the correct info
++          infoPort = httpServer.getPort();
++          httpAddress = new InetSocketAddress(infoHost, infoPort);
++          conf.set("dfs.http.address", infoHost + ":" + infoPort);
++          LOG.info("Web-server up at: " + infoHost + ":" + infoPort);
++          return httpServer;
++        }
++      });
++    } catch (InterruptedException e) {
++      throw new IOException(e);
++    } finally {
++      // Go back to being the correct Namenode principal
++      DFSUtil.login(conf, DFSConfigKeys.DFS_NAMENODE_KEYTAB_FILE_KEY,
++          DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY);
+     }
+-    this.httpServer.setAttribute("name.node", this);
+-    this.httpServer.setAttribute("name.node.address", getNameNodeAddress());
+-    this.httpServer.setAttribute("name.system.image", getFSImage());
+-    this.httpServer.setAttribute("name.conf", conf);
+-    this.httpServer.addInternalServlet("getDelegationToken", 
+-        DelegationTokenServlet.PATH_SPEC, DelegationTokenServlet.class);
+-    this.httpServer.addInternalServlet("fsck", "/fsck", FsckServlet.class);
+-    this.httpServer.addInternalServlet("getimage", "/getimage", GetImageServlet.class);
+-    this.httpServer.addInternalServlet("listPaths", "/listPaths/*", ListPathsServlet.class);
+-    this.httpServer.addInternalServlet("data", "/data/*", FileDataServlet.class);
+-    this.httpServer.addInternalServlet("checksum", "/fileChecksum/*",
+-        FileChecksumServlets.RedirectServlet.class);
+-    this.httpServer.addInternalServlet("contentSummary", "/contentSummary/*",
+-        ContentSummaryServlet.class);
+-    this.httpServer.start();
+-
+-    // The web-server port can be ephemeral... ensure we have the correct info
+-    infoPort = this.httpServer.getPort();
+-    this.httpAddress = new InetSocketAddress(infoHost, infoPort);
+-    conf.set("dfs.http.address", infoHost + ":" + infoPort);
+-    LOG.info("Web-server up at: " + infoHost + ":" + infoPort);
+-  }
++ }
+ 
+   private final static String KEYTAB_FILE_KEY = "dfs.namenode.keytab.file";
+   private final static String USER_NAME_KEY = "dfs.namenode.user.name.key";
+-- 
+1.7.0.4
+

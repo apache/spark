@@ -1,0 +1,65 @@
+From b96019898f7c4cba702371a7ef238977ddc88b0e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 12 May 2011 15:05:11 -0700
+Subject: [PATCH 0959/1179] HADOOP-7189. Add ability to enable JAAS debug option with an environment variable.
+
+Adds the HADOOP_JAAS_DEBUG environment variable, which, when set to "true", dumps
+extra debugging information out of JAAS.
+
+Reason: aids debugging of security issues like "Failure to login"
+Author: Ted Yu
+Ref: CDH-3183
+---
+ .../hadoop/security/UserGroupInformation.java      |   15 +++++++++++++--
+ 1 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 86565af..df2bf31 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -352,15 +352,24 @@ public class UserGroupInformation {
+       "hadoop-user-kerberos";
+     private static final String KEYTAB_KERBEROS_CONFIG_NAME = 
+       "hadoop-keytab-kerberos";
++
++    private static final Map<String, String> BASIC_JAAS_OPTIONS =
++      new HashMap<String,String>();
++    static {
++      String jaasEnvVar = System.getenv("HADOOP_JAAS_DEBUG");
++      if (jaasEnvVar != null && "true".equalsIgnoreCase(jaasEnvVar)) {
++        BASIC_JAAS_OPTIONS.put("debug", "true");
++      }
++    }
+     
+     private static final AppConfigurationEntry OS_SPECIFIC_LOGIN =
+       new AppConfigurationEntry(OS_LOGIN_MODULE_NAME,
+                                 LoginModuleControlFlag.REQUIRED,
+-                                new HashMap<String,String>());
++                                BASIC_JAAS_OPTIONS);
+     private static final AppConfigurationEntry HADOOP_LOGIN =
+       new AppConfigurationEntry(HadoopLoginModule.class.getName(),
+                                 LoginModuleControlFlag.REQUIRED,
+-                                new HashMap<String,String>());
++                                BASIC_JAAS_OPTIONS);
+     private static final Map<String,String> USER_KERBEROS_OPTIONS = 
+       new HashMap<String,String>();
+     static {
+@@ -371,6 +380,7 @@ public class UserGroupInformation {
+       if (ticketCache != null) {
+         USER_KERBEROS_OPTIONS.put("ticketCache", ticketCache);
+       }
++      USER_KERBEROS_OPTIONS.putAll(BASIC_JAAS_OPTIONS);
+     }
+     private static final AppConfigurationEntry USER_KERBEROS_LOGIN =
+       new AppConfigurationEntry(Krb5LoginModule.class.getName(),
+@@ -382,6 +392,7 @@ public class UserGroupInformation {
+       KEYTAB_KERBEROS_OPTIONS.put("doNotPrompt", "true");
+       KEYTAB_KERBEROS_OPTIONS.put("useKeyTab", "true");
+       KEYTAB_KERBEROS_OPTIONS.put("storeKey", "true");
++      KEYTAB_KERBEROS_OPTIONS.putAll(BASIC_JAAS_OPTIONS);      
+     }
+     private static final AppConfigurationEntry KEYTAB_KERBEROS_LOGIN =
+       new AppConfigurationEntry(Krb5LoginModule.class.getName(),
+-- 
+1.7.0.4
+

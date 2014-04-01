@@ -1,0 +1,91 @@
+From a1e25ec70e677db322b2cce43c6381f865eb3f79 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:36:42 -0800
+Subject: [PATCH 0186/1179] HDFS-464. Memory leaks in libhdfs
+
+Description: hdfsExists does not call destroyLocalReference for jPath anytime,<br/>
+hdfsDelete does not call it when it fails, and<br/>
+hdfsRename does not call it for jOldPath and jNewPath when it fails
+Reason: bugfix
+Author: Christian Kunz
+Ref: UNKNOWN
+---
+ src/c++/libhdfs/hdfs.c          |   15 ++++++++++-----
+ src/c++/libhdfs/hdfsJniHelper.c |    1 +
+ 2 files changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/src/c++/libhdfs/hdfs.c b/src/c++/libhdfs/hdfs.c
+index 6e5eab2..64168d5 100644
+--- a/src/c++/libhdfs/hdfs.c
++++ b/src/c++/libhdfs/hdfs.c
+@@ -261,12 +261,14 @@ hdfsFS hdfsConnectAsUser(const char* host, tPort port, const char *user , const
+           destroyLocalReference(env, jGroups);
+         }          
+         destroyLocalReference(env, jUgi);
++        destroyLocalReference(env, jAttrString);
+         return NULL;
+       }
+ 
+       destroyLocalReference(env, jUserString);
+       destroyLocalReference(env, jGroups);
+       destroyLocalReference(env, jUgi);
++      destroyLocalReference(env, jAttrString);
+     }
+ #else
+     
+@@ -447,12 +449,14 @@ hdfsFS hdfsConnectAsUserNewInstance(const char* host, tPort port, const char *us
+           destroyLocalReference(env, jGroups);
+         }          
+         destroyLocalReference(env, jUgi);
++        destroyLocalReference(env, jAttrString);
+         return NULL;
+       }
+ 
+       destroyLocalReference(env, jUserString);
+       destroyLocalReference(env, jGroups);
+       destroyLocalReference(env, jUgi);
++      destroyLocalReference(env, jAttrString);
+     }
+ #else
+     
+@@ -731,12 +735,12 @@ hdfsFile hdfsOpenFile(hdfsFS fs, const char* path, int flags,
+     file = malloc(sizeof(struct hdfsFile_internal));
+     if (!file) {
+         errno = ENOMEM;
+-        return NULL;
+-    }
+-    file->file = (*env)->NewGlobalRef(env, jVal.l);
+-    file->type = (((flags & O_WRONLY) == 0) ? INPUT : OUTPUT);
++    } else {
++        file->file = (*env)->NewGlobalRef(env, jVal.l);
++        file->type = (((flags & O_WRONLY) == 0) ? INPUT : OUTPUT);
+ 
+-    destroyLocalReference(env, jVal.l);
++        destroyLocalReference(env, jVal.l);
++    }
+ 
+     done:
+ 
+@@ -1654,6 +1658,7 @@ int hdfsChmod(hdfsFS fs, const char* path, short mode)
+     //Create an object of org.apache.hadoop.fs.Path
+     jobject jPath = constructNewObjectOfPath(env, path);
+     if (jPath == NULL) {
++      destroyLocalReference(env, jPermObj);
+       return -3;
+     }
+ 
+diff --git a/src/c++/libhdfs/hdfsJniHelper.c b/src/c++/libhdfs/hdfsJniHelper.c
+index ea0fa88..f5ab81b 100644
+--- a/src/c++/libhdfs/hdfsJniHelper.c
++++ b/src/c++/libhdfs/hdfsJniHelper.c
+@@ -242,6 +242,7 @@ jarray constructNewArrayString(JNIEnv *env, Exc *exc, const char **elements, int
+       fprintf(stderr, "ERROR: jelem == NULL\n");
+     }
+     (*env)->SetObjectArrayElement(env, result, i, jelem);
++    (*env)->DeleteLocalRef(env, jelem);
+   }
+   return result;
+ }
+-- 
+1.7.0.4
+

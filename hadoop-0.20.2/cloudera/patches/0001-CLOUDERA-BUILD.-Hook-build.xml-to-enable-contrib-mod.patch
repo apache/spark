@@ -1,0 +1,52 @@
+From 0fa65091ecd9dd150d6afb93845d3fb10d80e115 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:16:59 -0800
+Subject: [PATCH 0001/1179] CLOUDERA-BUILD. Hook build.xml to enable contrib modules
+
+---
+ build.xml |   22 +++++++++++++++++++++-
+ 1 files changed, 21 insertions(+), 1 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index 602fcfe..8588f83 100644
+--- a/build.xml
++++ b/build.xml
+@@ -1056,7 +1056,7 @@
+   <!-- ================================================================== -->
+   <!--                                                                    -->
+   <!-- ================================================================== -->
+-  <target name="package" depends="compile, jar, javadoc, docs, cn-docs, api-report, examples, tools-jar, jar-test, ant-tasks, package-librecordio"
++  <target name="package" depends="compile, jar, javadoc, docs, cn-docs, api-report, examples, tools-jar, jar-test, ant-tasks, package-librecordio,cloudera.hooks"
+ 	  description="Build distribution">
+     <mkdir dir="${dist.dir}"/>
+     <mkdir dir="${dist.dir}/lib"/>
+@@ -1285,6 +1285,26 @@
+         <fileset file="src/contrib/build.xml"/>
+      </subant>  	
+   </target>
++
++  <!-- ================================================================== -->
++  <!-- Cloudera hooks                                                     -->
++  <!-- ================================================================== -->
++  <target name="cloudera.hooks" depends="cloudera.enable-contrib,cloudera.copy-cloudera-dir">
++  </target>
++
++  <target name="cloudera.enable-contrib" description="enable contrib projects">
++    <copy todir="${dist.dir}/lib">
++      <fileset dir="${build.dir}/contrib/fairscheduler" includes="*.jar"/>
++      <fileset dir="${build.dir}/contrib/scribe-log4j" includes="*.jar"/>
++      <fileset dir="src/contrib/scribe-log4j/lib" includes="*.jar"/>
++    </copy>
++  </target>
++
++  <target name="cloudera.copy-cloudera-dir" description="copy the cloudera/ dir into dist">
++    <copy todir="${dist.dir}/cloudera">
++      <fileset dir="cloudera" />
++    </copy>
++  </target>
+ 	
+  <target name="test-c++-libhdfs" depends="compile-c++-libhdfs, compile-core" if="islibhdfs">
+     <delete dir="${test.libhdfs.dir}"/>
+-- 
+1.7.0.4
+

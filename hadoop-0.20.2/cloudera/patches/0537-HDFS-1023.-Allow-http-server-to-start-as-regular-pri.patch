@@ -1,0 +1,63 @@
+From e5a03085722a84a8ee0419ba8d91cd022023c0a0 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 4 Mar 2010 19:05:52 -0800
+Subject: [PATCH 0537/1179] HDFS-1023. Allow http server to start as regular principal if https principal not defined.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437962/HADOOP-1023-Y20-1.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12437962/HADOOP-1023-Y20-1.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12438241/HDFS-1023-Y20-Update-2.patch
+Author: Jakob Homan
+Ref: CDH-648
+---
+ .../hadoop/hdfs/server/namenode/NameNode.java      |   28 +++++++++++++++----
+ 1 files changed, 22 insertions(+), 6 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 1841d64..82b446d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -251,9 +251,20 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+   }
+ 
+   private void startHttpServer(final Configuration conf) throws IOException {
+-    // Kerberized SSL servers must be run from the host principal...
+-    DFSUtil.login(conf, DFSConfigKeys.DFS_NAMENODE_KEYTAB_FILE_KEY, 
+-        DFSConfigKeys.DFS_NAMENODE_KRB_HTTPS_USER_NAME_KEY);
++    if(UserGroupInformation.isSecurityEnabled()) {
++      String httpsUser = conf.get(DFSConfigKeys.DFS_NAMENODE_KRB_HTTPS_USER_NAME_KEY);
++      if(httpsUser == null) {
++        LOG.warn(DFSConfigKeys.DFS_NAMENODE_KRB_HTTPS_USER_NAME_KEY + 
++            " not defined in config. Starting http server as " 
++            + conf.get(DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY)
++        	  +	": Kerberized SSL may be not function correctly.");
++      } else {
++        // Kerberized SSL servers must be run from the host principal...
++        LOG.info("Logging in as " + httpsUser + " to start http server.");
++        DFSUtil.login(conf, DFSConfigKeys.DFS_NAMENODE_KEYTAB_FILE_KEY, 
++            DFSConfigKeys.DFS_NAMENODE_KRB_HTTPS_USER_NAME_KEY);
++        }
++    }
+     UserGroupInformation ugi = UserGroupInformation.getLoginUser();
+     try {
+       this.httpServer = ugi.doAs(new PrivilegedExceptionAction<HttpServer>() {
+@@ -316,9 +327,14 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     } catch (InterruptedException e) {
+       throw new IOException(e);
+     } finally {
+-      // Go back to being the correct Namenode principal
+-      DFSUtil.login(conf, DFSConfigKeys.DFS_NAMENODE_KEYTAB_FILE_KEY,
+-          DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY);
++      if(UserGroupInformation.isSecurityEnabled() && 
++          conf.get(DFSConfigKeys.DFS_NAMENODE_KRB_HTTPS_USER_NAME_KEY) != null) {
++        // Go back to being the correct Namenode principal
++        LOG.info("Logging back in as " + conf.get(DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY)
++            + " following http server start.");
++        DFSUtil.login(conf, DFSConfigKeys.DFS_NAMENODE_KEYTAB_FILE_KEY,
++            DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY);
++      }
+     }
+  }
+ 
+-- 
+1.7.0.4
+

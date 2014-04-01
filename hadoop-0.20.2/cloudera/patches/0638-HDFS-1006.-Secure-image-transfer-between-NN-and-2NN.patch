@@ -1,0 +1,68 @@
+From 781ae842245a6fb948de72d39658b28eab7c2cfe Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 5 May 2010 14:09:32 -0700
+Subject: [PATCH 0638/1179] HDFS-1006. Secure image transfer between NN and 2NN
+
+Patch: https://issues.apache.org/jira/secure/attachment/12443766/hdfs-1006-bugfix-1.patch
+Author: Boris Shkolnik
+Reason: Security
+Ref: CDH-648
+---
+ .../hdfs/server/namenode/SecondaryNameNode.java    |   28 ++++++-------------
+ 1 files changed, 9 insertions(+), 19 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index 116278b..56c13c9 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -181,20 +181,19 @@ public class SecondaryNameNode implements Runnable {
+ 
+     // initialize the webserver for uploading files.
+     // Kerberized SSL servers must be run from the host principal...
+-    if (UserGroupInformation.isSecurityEnabled()) {
+-      SecurityUtil.login(conf,
+-          DFSConfigKeys.DFS_SECONDARY_NAMENODE_KEYTAB_FILE_KEY,
+-          DFSConfigKeys.DFS_SECONDARY_NAMENODE_KRB_HTTPS_USER_NAME_KEY,
+-          infoBindAddress);
+-    }
+-    UserGroupInformation ugi = UserGroupInformation.getLoginUser();
++    UserGroupInformation httpUGI = 
++      UserGroupInformation.loginUserFromKeytabAndReturnUGI(
++          SecurityUtil.getServerPrincipal(conf
++        .get(DFSConfigKeys.DFS_SECONDARY_NAMENODE_KRB_HTTPS_USER_NAME_KEY), 
++        infoBindAddress), 
++        conf.get(DFSConfigKeys.DFS_SECONDARY_NAMENODE_KEYTAB_FILE_KEY));
+     try {
+-      infoServer = ugi.doAs(new PrivilegedExceptionAction<HttpServer>() {
++      infoServer = httpUGI.doAs(new PrivilegedExceptionAction<HttpServer>() {
+ 
+         @Override
+         public HttpServer run() throws IOException, InterruptedException {
+           LOG.info("Starting web server as: " +
+-              UserGroupInformation.getLoginUser().getUserName());
++              UserGroupInformation.getCurrentUser().getUserName());
+ 
+           int tmpInfoPort = infoSocAddr.getPort();
+           infoServer = new HttpServer("secondary", infoBindAddress, tmpInfoPort,
+@@ -220,17 +219,8 @@ public class SecondaryNameNode implements Runnable {
+       });
+     } catch (InterruptedException e) {
+       throw new RuntimeException(e);
+-    } finally {
+-      if (UserGroupInformation.isSecurityEnabled()) {
+-        // Go back to being the correct Namenode principal
+-        SecurityUtil.login(conf, 
+-            DFSConfigKeys.DFS_SECONDARY_NAMENODE_KEYTAB_FILE_KEY,
+-            DFSConfigKeys.DFS_SECONDARY_NAMENODE_USER_NAME_KEY,
+-            infoBindAddress);
+-        LOG.info("Web server init done, returning to: " + 
+-            UserGroupInformation.getLoginUser().getUserName());
+-      }
+     }
++    LOG.info("Web server init done");
+     // The web-server port can be ephemeral... ensure we have the correct info
+     
+     infoPort = infoServer.getPort();
+-- 
+1.7.0.4
+

@@ -1,0 +1,28 @@
+From b8e54791e990328db983f070e9a04952301eda35 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:40:04 -0800
+Subject: [PATCH 0035/1179] MAPREDUCE-692. Make Hudson run Sqoop unit tests
+
+Description: Running 'ant test-contrib' didn't test Sqoop because it wasn't explicitly listed in the build.xml file in src/contrib/
+Reason: Test coverage
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ src/contrib/build.xml |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/src/contrib/build.xml b/src/contrib/build.xml
+index 3455900..81d189c 100644
+--- a/src/contrib/build.xml
++++ b/src/contrib/build.xml
+@@ -51,6 +51,7 @@
+       <fileset dir="." includes="fairscheduler/build.xml"/>
+       <fileset dir="." includes="capacity-scheduler/build.xml"/>
+       <fileset dir="." includes="mrunit/build.xml"/>
++      <fileset dir="." includes="sqoop/build.xml"/>
+     </subant>
+   </target>
+   
+-- 
+1.7.0.4
+

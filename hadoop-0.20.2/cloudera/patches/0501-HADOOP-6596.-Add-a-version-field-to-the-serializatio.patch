@@ -1,0 +1,46 @@
+From 6e62f0d9c2d57096e4dfa937ebeab8c76b354e63 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 25 Feb 2010 10:37:41 -0800
+Subject: [PATCH 0501/1179] HADOOP-6596. Add a version field to the serialization of the AbstractDelegationTokenIdentifier.
+
+Author: Owen O'Malley
+Ref: CDH-648
+---
+ .../AbstractDelegationTokenIdentifier.java         |    7 +++++++
+ 1 files changed, 7 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenIdentifier.java b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenIdentifier.java
+index ad3e6a7..04321bf 100644
+--- a/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenIdentifier.java
++++ b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenIdentifier.java
+@@ -34,6 +34,7 @@ import org.apache.hadoop.security.token.TokenIdentifier;
+ //@InterfaceAudience.LimitedPrivate({HDFS, MAPREDUCE})
+ public abstract class AbstractDelegationTokenIdentifier 
+ extends TokenIdentifier {
++  private static final byte VERSION = 0;
+ 
+   private Text owner;
+   private Text renewer;
+@@ -145,6 +146,11 @@ extends TokenIdentifier {
+   }
+   
+   public void readFields(DataInput in) throws IOException {
++    byte version = in.readByte();
++    if (version != VERSION) {
++	throw new IOException("Unknown version of delegation token " + 
++                              version);
++    }
+     owner.readFields(in);
+     renewer.readFields(in);
+     realUser.readFields(in);
+@@ -155,6 +161,7 @@ extends TokenIdentifier {
+   }
+ 
+   public void write(DataOutput out) throws IOException {
++    out.writeByte(VERSION);
+     owner.write(out);
+     renewer.write(out);
+     realUser.write(out);
+-- 
+1.7.0.4
+

@@ -1,0 +1,123 @@
+From a3dcabc6542035a0943648bdace5702192c7187c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 5 Apr 2011 22:47:40 -0700
+Subject: [PATCH 0985/1179] Amend HADOOP-6762 to fix potential deadlock.
+
+This fixes a deadlock that occurs if the writing of the call parameters
+throws an IOException after the timeout ping time has elapsed.
+
+Author: Todd Lipcon
+Ref: DISTRO-120
+---
+ src/core/org/apache/hadoop/ipc/Client.java  |   17 ++++++-------
+ src/test/org/apache/hadoop/ipc/TestIPC.java |   34 +++++++++++++++++++++++++++
+ 2 files changed, 42 insertions(+), 9 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index efe2439..ef6fc1c 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -752,8 +752,8 @@ public class Client {
+           public void run() {
+             DataOutputBuffer d = null;
+ 
+-            synchronized (Connection.this.out) {
+-              try {
++            try {
++              synchronized (Connection.this.out) {
+                 if (shouldCloseConnection.get()) {
+                   return;
+                 }
+@@ -771,14 +771,13 @@ public class Client {
+                 out.writeInt(dataLength);      //first put the data length
+                 out.write(data, 0, dataLength);//write the data
+                 out.flush();
+-
+-              } catch (IOException e) {
+-                markClosed(e);
+-              } finally {
+-                //the buffer is just an in-memory buffer, but it is still polite to
+-                // close early
+-                IOUtils.closeStream(d);
+               }
++            } catch (IOException e) {
++              markClosed(e);
++            } finally {
++              //the buffer is just an in-memory buffer, but it is still polite to
++              // close early
++              IOUtils.closeStream(d);
+             }
+           }
+         });
+diff --git a/src/test/org/apache/hadoop/ipc/TestIPC.java b/src/test/org/apache/hadoop/ipc/TestIPC.java
+index 08bf9b5..aae677a 100644
+--- a/src/test/org/apache/hadoop/ipc/TestIPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestIPC.java
+@@ -55,6 +55,7 @@ public class TestIPC {
+    * of the various writables.
+    **/
+   static boolean WRITABLE_FAULTS_ENABLED = true;
++  static int WRITABLE_FAULTS_SLEEP = 0;
+ 
+   static {
+     Client.setPingInterval(conf, PING_INTERVAL);
+@@ -267,16 +268,27 @@ public class TestIPC {
+ 
+   static void maybeThrowIOE() throws IOException {
+     if (WRITABLE_FAULTS_ENABLED) {
++      maybeSleep();
+       throw new IOException("Injected fault");
+     }
+   }
+ 
+   static void maybeThrowRTE() {
+     if (WRITABLE_FAULTS_ENABLED) {
++      maybeSleep();
+       throw new RuntimeException("Injected fault");
+     }
+   }
+ 
++  private static void maybeSleep() {
++    if (WRITABLE_FAULTS_SLEEP > 0) {
++      try {
++        Thread.sleep(WRITABLE_FAULTS_SLEEP);
++      } catch (InterruptedException ie) {
++      }
++    }
++  }
++
+   @SuppressWarnings("unused")
+   private static class IOEOnReadWritable extends LongWritable {
+     public IOEOnReadWritable() {}
+@@ -426,6 +438,28 @@ public class TestIPC {
+         LongWritable.class,
+         RTEOnReadWritable.class);
+   }
++
++  /**
++   * Test case that fails a write, but only after taking enough time
++   * that a ping should have been sent. This is a reproducer for a
++   * deadlock seen in one iteration of HADOOP-6762.
++   */
++  @Test
++  public void testIOEOnWriteAfterPingClient() throws Exception {
++    // start server
++    Client.setPingInterval(conf, 100);
++
++    try {
++      WRITABLE_FAULTS_SLEEP = 1000;
++      doErrorTest(IOEOnWriteWritable.class,
++          LongWritable.class,
++          LongWritable.class,
++          LongWritable.class);
++    } finally {
++      WRITABLE_FAULTS_SLEEP = 0;
++    }
++  }
++
+   
+   private static void assertExceptionContains(
+       Throwable t, String substring) {
+-- 
+1.7.0.4
+

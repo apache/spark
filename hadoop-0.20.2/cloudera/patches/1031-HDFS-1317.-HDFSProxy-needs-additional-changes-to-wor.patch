@@ -1,0 +1,50 @@
+From d46071c27b19c7a691005882260967d62cda6dfd Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Wed, 3 Aug 2011 13:48:23 -0700
+Subject: [PATCH 1031/1179] HDFS-1317. HDFSProxy needs additional changes to work after changes to
+ streamFile servlet in HDFS-1109.
+
+Reason: Bug
+Author: Rohini Palaniswamy
+Ref: CDH-3304
+---
+ .../hadoop/hdfsproxy/AuthorizationFilter.java      |   14 --------------
+ 1 files changed, 0 insertions(+), 14 deletions(-)
+
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/AuthorizationFilter.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/AuthorizationFilter.java
+index bb3950f..2c86b64 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/AuthorizationFilter.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/AuthorizationFilter.java
+@@ -43,14 +43,6 @@ public class AuthorizationFilter implements Filter {
+   protected static final Pattern HFTP_PATTERN = Pattern
+       .compile("^(/listPaths|/data|/streamFile|/file)$");
+ 
+-  /**
+-   * Pattern for a filter to find out if an HFTP/HSFTP request stores its file
+-   * path in the extra path information associated with the URL; if not, the
+-   * file path is stored in request parameter "filename"
+-   */
+-  protected static final Pattern FILEPATH_PATTERN = Pattern
+-      .compile("^(/listPaths|/data|/file)$");
+-
+   protected String contextPath;
+ 
+   protected String namenode;
+@@ -116,14 +108,8 @@ public class AuthorizationFilter implements Filter {
+     // check request path
+     String servletPath = rqst.getServletPath();
+     if (HFTP_PATTERN.matcher(servletPath).matches()) {
+-      // request is an HSFTP request
+-      if (FILEPATH_PATTERN.matcher(servletPath).matches()) {
+         // file path as part of the URL
+         filePath = rqst.getPathInfo() != null ? rqst.getPathInfo() : "/";
+-      } else {
+-        // file path is stored in "filename" parameter
+-        filePath = rqst.getParameter("filename");
+-      }
+     }
+     return filePath;
+   }
+-- 
+1.7.0.4
+

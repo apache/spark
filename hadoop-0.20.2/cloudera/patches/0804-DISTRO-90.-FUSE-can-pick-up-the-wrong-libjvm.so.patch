@@ -1,0 +1,99 @@
+From 5dcc0777f30ae030e20e5e1e3512a0ed6a90e7fc Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 6 Feb 2011 13:22:31 -0800
+Subject: [PATCH 0804/1179] DISTRO-90. FUSE can pick up the wrong libjvm.so.
+
+Reason: Bug
+Author: Eli Collins
+Ref: DISTRO-90
+---
+ cloudera-pom.xml                 |   11 -----------
+ cloudera/install_hadoop.sh       |   16 +++++++++-------
+ cloudera/maven-packaging/pom.xml |   13 +++++++++----
+ 3 files changed, 18 insertions(+), 22 deletions(-)
+
+diff --git a/cloudera-pom.xml b/cloudera-pom.xml
+index f537a93..fca3ddb 100644
+--- a/cloudera-pom.xml
++++ b/cloudera-pom.xml
+@@ -209,17 +209,6 @@ NOTE - This POM is used for Cloudera's build and packaging process.
+         
+         <executions>
+           <execution>
+-            <id>libraries.properties</id>
+-            <configuration>
+-              <templateFile>${basedir}/cloudera/maven-packaging/templates/libraries.template</templateFile>
+-              <targetFile>${basedir}/ivy/libraries.properties</targetFile>
+-            </configuration>
+-            <goals>
+-              <goal>generate</goal>
+-            </goals>
+-            <phase>process-resources</phase>
+-          </execution>
+-          <execution>
+             <id>build.properties</id>
+             <configuration>
+               <templateFile>${basedir}/cloudera/maven-packaging/templates/build.template</templateFile>
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index e9858b6..41728a7 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -223,20 +223,22 @@ if [ ! -z "$NATIVE_BUILD_STRING" ]; then
+ export HADOOP_HOME=$INSTALLED_LIB_DIR
+ 
+ if [ -f /etc/default/hadoop-0.20-fuse ] 
+-	then . /etc/default/hadoop-0.20-fuse
++  then . /etc/default/hadoop-0.20-fuse
+ fi
+ 
+ if [ -f \$HADOOP_HOME/bin/hadoop-config.sh ] 
+-	then . \$HADOOP_HOME/bin/hadoop-config.sh  
++  then . \$HADOOP_HOME/bin/hadoop-config.sh
+ fi
+ 
+-if [ "\$LD_LIBRARY_PATH" = "" ]
+-	then JVM_LIB=\`find \${JAVA_HOME}/jre/lib -name libjvm.so |tail -n 1\`
+-        export LD_LIBRARY_PATH=\`dirname \$JVM_LIB\`:/usr/lib/
+-
++if [ "\${LD_LIBRARY_PATH}" = "" ]; then
++  export LD_LIBRARY_PATH=/usr/lib
++  for f in \`find \${JAVA_HOME}/jre/lib -name client -prune -o -name libjvm.so -exec dirname {} \;\`; do
++    export LD_LIBRARY_PATH=\$f:\${LD_LIBRARY_PATH}
++  done
+ fi
++
+ for i in \${HADOOP_HOME}/*.jar \${HADOOP_HOME}/lib/*.jar
+-        do CLASSPATH+=\$i:
++  do CLASSPATH+=\$i:
+ done
+ 
+ export PATH=\$PATH:\${HADOOP_HOME}/bin/
+diff --git a/cloudera/maven-packaging/pom.xml b/cloudera/maven-packaging/pom.xml
+index afeaee5..a1bcaed 100644
+--- a/cloudera/maven-packaging/pom.xml
++++ b/cloudera/maven-packaging/pom.xml
+@@ -84,12 +84,17 @@
+     </profile>
+   </profiles>
+       
+-        
+-      
+-  
+   <build>
+     <plugins>
+-      
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-jar-plugin</artifactId>
++        <configuration>
++          <archive>
++            <manifestFile>target/classes/META-INF/MANIFEST.MF</manifestFile>
++          </archive>
++        </configuration>
++      </plugin>
+     </plugins>
+   </build>
+   
+-- 
+1.7.0.4
+

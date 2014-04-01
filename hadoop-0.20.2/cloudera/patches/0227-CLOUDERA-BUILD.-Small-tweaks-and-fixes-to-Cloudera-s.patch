@@ -1,0 +1,42 @@
+From 54e1aefdd7a25a539831cac2c9b1bc3597f119ea Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:56:07 -0800
+Subject: [PATCH 0227/1179] CLOUDERA-BUILD. Small tweaks and fixes to Cloudera styling:
+
+Description:
+    - Fixes trivial CSS bug for missing table cell borders in Chrome
+    - Fixes footer to read "Distribution for Hadoop" instead of "Distribution of Hadoop"
+
+Author: Todd Lipcon
+---
+ src/core/org/apache/hadoop/util/ServletUtil.java |    2 +-
+ src/webapps/static/hadoop.css                    |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/util/ServletUtil.java b/src/core/org/apache/hadoop/util/ServletUtil.java
+index 0a5eedf..c3fef5f 100644
+--- a/src/core/org/apache/hadoop/util/ServletUtil.java
++++ b/src/core/org/apache/hadoop/util/ServletUtil.java
+@@ -53,7 +53,7 @@ public class ServletUtil {
+ 
+   public static final String HTML_TAIL = "<hr />\n"
+     + "<a href=\"http://www.cloudera.com/hadoop/\">Cloudera's Distribution"
+-    + " of Hadoop</a>, " + 
++    + " for Hadoop</a>, " + 
+     + Calendar.getInstance().get(Calendar.YEAR) + ".\n"
+     + "</body></html>";
+   
+diff --git a/src/webapps/static/hadoop.css b/src/webapps/static/hadoop.css
+index ea2160d..0ccdee2 100644
+--- a/src/webapps/static/hadoop.css
++++ b/src/webapps/static/hadoop.css
+@@ -181,5 +181,5 @@ table {
+   border-collapse: collapse;
+ }
+ table td {
+-  border: 1px;
++  border: 1px solid #666;
+ }
+-- 
+1.7.0.4
+

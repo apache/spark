@@ -1,0 +1,50 @@
+From 5838b15e3232608c1358887b8910638b1497043f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 19 Feb 2010 23:55:25 -0800
+Subject: [PATCH 0479/1179] HADOOP-6572. RPC responses may be out-of-order with respect to SASL
+
+Patch: https://issues.apache.org/jira/secure/attachment/12436421/6572-bp20.patch
+Author: Kan Zhang
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/ipc/Server.java |   20 +++++++++++++-------
+ 1 files changed, 13 insertions(+), 7 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 3f9e4d0..d930c17 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -1195,17 +1195,23 @@ public abstract class Server {
+             error = StringUtils.stringifyException(e);
+           }
+           CurCall.set(null);
+-          setupResponse(buf, call, 
++          synchronized (call.connection.responseQueue) {
++            // setupResponse() needs to be sync'ed together with 
++            // responder.doResponse() since setupResponse may use
++            // SASL to encrypt response data and SASL enforces
++            // its own message ordering.
++            setupResponse(buf, call, 
+                         (error == null) ? Status.SUCCESS : Status.ERROR, 
+                         value, errorClass, error);
+-          // Discard the large buf and reset it back to 
+-          // smaller size to freeup heap
+-          if (buf.size() > MAX_RESP_BUF_SIZE) {
+-            LOG.warn("Large response size " + buf.size() + " for call " + 
++            // Discard the large buf and reset it back to 
++            // smaller size to freeup heap
++            if (buf.size() > MAX_RESP_BUF_SIZE) {
++              LOG.warn("Large response size " + buf.size() + " for call " + 
+                 call.toString());
+-            buf = new ByteArrayOutputStream(INITIAL_RESP_BUF_SIZE);
++              buf = new ByteArrayOutputStream(INITIAL_RESP_BUF_SIZE);
++            }
++            responder.doRespond(call);
+           }
+-          responder.doRespond(call);
+         } catch (InterruptedException e) {
+           if (running) {                          // unexpected -- log it
+             LOG.info(getName() + " caught: " +
+-- 
+1.7.0.4
+

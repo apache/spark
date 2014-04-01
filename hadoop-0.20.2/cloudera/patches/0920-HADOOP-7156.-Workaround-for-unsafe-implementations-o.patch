@@ -1,0 +1,179 @@
+From 69fc8b16f4f098ad215582fdfc3efea26e54464f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 8 Mar 2011 11:52:33 -0800
+Subject: [PATCH 0920/1179] HADOOP-7156. Workaround for unsafe implementations of getpwuid_r
+
+Adds a new configuration hadoop.work.around.non.threadsafe.getpwuid
+which can be used to enable a mutex around this call to workaround
+the thread-unsafe behavior.
+
+Reason: RHEL 6.0 and some other systems have thread-unsafe implementations
+        of this libc call. This causes JVM crashes during the shuffle
+        where this call is made frequently from many threads.
+Author: Todd Lipcon
+Ref: CDH-2725
+---
+ src/core/core-default.xml                          |   15 +++++
+ .../org/apache/hadoop/io/nativeio/NativeIO.java    |   10 ++++
+ .../src/org/apache/hadoop/io/nativeio/NativeIO.c   |   55 ++++++++++++++++++++
+ 3 files changed, 80 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/core-default.xml b/src/core/core-default.xml
+index bd1554d..6d25263 100644
+--- a/src/core/core-default.xml
++++ b/src/core/core-default.xml
+@@ -61,6 +61,21 @@
+ </property>
+ -->
+ 
++<property>
++  <name>hadoop.workaround.non.threadsafe.getpwuid</name>
++  <value>false</value>
++  <description>Some operating systems or authentication modules are known to
++  have broken implementations of getpwuid_r and getpwgid_r, such that these
++  calls are not thread-safe. Symptoms of this problem include JVM crashes
++  with a stack trace inside these functions. If your system exhibits this
++  issue, enable this configuration parameter to include a lock around the
++  calls as a workaround.
++
++  An incomplete list of some systems known to have this issue is available
++  at http://wiki.apache.org/hadoop/KnownBrokenPwuidImplementations
++  </description>
++</property>
++
+ <!--- logging properties -->
+ 
+ <property>
+diff --git a/src/core/org/apache/hadoop/io/nativeio/NativeIO.java b/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
+index ba2301b..143551c 100644
+--- a/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
++++ b/src/core/org/apache/hadoop/io/nativeio/NativeIO.java
+@@ -51,10 +51,20 @@ public class NativeIO {
+   private static final Log LOG = LogFactory.getLog(NativeIO.class);
+ 
+   private static boolean nativeLoaded = false;
++  private static boolean workaroundNonThreadSafePasswdCalls = false;
++
++  static final String WORKAROUND_NON_THREADSAFE_CALLS_KEY =
++    "hadoop.workaround.non.threadsafe.getpwuid";
++  static final boolean WORKAROUND_NON_THREADSAFE_CALLS_DEFAULT = false;
+ 
+   static {
+     if (NativeCodeLoader.isNativeCodeLoaded()) {
+       try {
++        Configuration conf = new Configuration();
++        workaroundNonThreadSafePasswdCalls = conf.getBoolean(
++          WORKAROUND_NON_THREADSAFE_CALLS_KEY,
++          WORKAROUND_NON_THREADSAFE_CALLS_DEFAULT);
++
+         initNative();
+         nativeLoaded = true;
+       } catch (Throwable t) {
+diff --git a/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c b/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c
+index 18d4162..5593e6d 100644
+--- a/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c
++++ b/src/native/src/org/apache/hadoop/io/nativeio/NativeIO.c
+@@ -38,10 +38,51 @@
+ static jclass nioe_clazz;
+ static jmethodID nioe_ctor;
+ 
++// the monitor used for working around a bug on RHEL 6:
++// HADOOP-7156
++static jobject pw_lock_object;
++
+ // Internal functions
+ static void throw_ioe(JNIEnv* env, int errnum);
+ static ssize_t get_pw_buflen();
+ 
++/**
++ * Returns non-zero if the user has specified that the system
++ * has non-threadsafe implementations of getpwuid_r or getgrgid_r.
++ **/
++static int workaround_non_threadsafe_calls(JNIEnv *env, jclass clazz) {
++  jfieldID needs_workaround_field = (*env)->GetStaticFieldID(env, clazz,
++    "workaroundNonThreadSafePasswdCalls", "Z");
++  PASS_EXCEPTIONS_RET(env, 0);
++  assert(needs_workaround_field);
++
++  jboolean result = (*env)->GetStaticBooleanField(
++    env, clazz, needs_workaround_field);
++  return result;
++}
++
++static void threadsafe_workaround_init(JNIEnv *env, jclass nativeio_class) {
++  jclass obj_class = (*env)->FindClass(env, "java/lang/Object");
++  assert(obj_class != NULL);
++  jmethodID  obj_ctor = (*env)->GetMethodID(env, obj_class,
++    "<init>", "()V");
++  assert(obj_ctor != NULL);
++
++  if (workaround_non_threadsafe_calls(env, nativeio_class)) {
++    pw_lock_object = (*env)->NewObject(env, obj_class, obj_ctor);
++    PASS_EXCEPTIONS(env);
++    pw_lock_object = (*env)->NewGlobalRef(env, pw_lock_object);
++    PASS_EXCEPTIONS(env);
++  }
++}
++
++static void threadsafe_workaround_deinit(JNIEnv *env) {
++  if (pw_lock_object != NULL) {
++    (*env)->DeleteGlobalRef(env, pw_lock_object);
++    pw_lock_object = NULL;
++  }
++}
++
+ static void nioe_init(JNIEnv *env) {
+   // Init NativeIOException
+   nioe_clazz = (*env)->FindClass(
+@@ -78,6 +119,8 @@ Java_org_apache_hadoop_io_nativeio_NativeIO_initNative(
+   PASS_EXCEPTIONS_GOTO(env, error);
+   errno_enum_init(env);
+   PASS_EXCEPTIONS_GOTO(env, error);
++  threadsafe_workaround_init(env, clazz);
++  PASS_EXCEPTIONS_GOTO(env, error);
+   return;
+ error:
+   // these are all idempodent and safe to call even if the
+@@ -85,6 +128,7 @@ error:
+   nioe_deinit(env);
+   fd_deinit(env);
+   errno_enum_deinit(env);
++  threadsafe_workaround_deinit(env);
+ }
+ 
+ 
+@@ -169,6 +213,7 @@ Java_org_apache_hadoop_io_nativeio_NativeIO_getUserName(JNIEnv *env,
+ jclass clazz, jlong uid) {
+    
+   char *pw_buf = NULL;
++  int pw_lock_locked = 0;
+   int rc;
+   size_t pw_buflen = get_pw_buflen();
+   if ((pw_buf = malloc(pw_buflen)) == NULL) {
+@@ -176,6 +221,13 @@ jclass clazz, jlong uid) {
+     goto cleanup;
+   }
+ 
++  if (pw_lock_object != NULL) {
++    if ((*env)->MonitorEnter(env, pw_lock_object) != JNI_OK) {
++      goto cleanup;
++    }
++    pw_lock_locked = 1;
++  }
++
+   // Grab username
+   struct passwd pwd, *pwdp;
+   while ((rc = getpwuid_r((uid_t)uid, &pwd, pw_buf, pw_buflen, &pwdp)) != 0) {
+@@ -199,6 +251,9 @@ jclass clazz, jlong uid) {
+ 
+ cleanup:
+   if (pw_buf != NULL) free(pw_buf);
++  if (pw_lock_locked) {
++    (*env)->MonitorExit(env, pw_lock_object);
++  }
+   return jstr_username;
+ }
+ 
+-- 
+1.7.0.4
+

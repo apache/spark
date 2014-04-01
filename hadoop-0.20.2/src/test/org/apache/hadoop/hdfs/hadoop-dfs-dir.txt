@@ -1,0 +1,67 @@
+#
+# This is a readme for hadoop-version-dfs-dir.tgz and hadoop-dfs-dir.txt.
+#
+# See HADOOP-1629 for more info if needed.
+# These two files are used by unit test TestDFSUpgradeFromImage.java 
+# 
+# hadoop-14-dfs-dir.tgz : 
+# ---------------------
+# This file contains the HDFS directory structure for one namenode and 4 datanodes.
+# The structure is setup similar to the structure used in MiniDFSCluster.
+# The directory was created with Hadoo-0.14.x.
+#
+# In the test, this directory is unpacked and MiniDFSCluster is run with 
+# "-upgrade" option. The test waits for the upgrade to complete 
+# (leave safe mode) and then all the files are read. The test checks that the
+# directory structure and file checksums exactly match the information
+# in this file.
+#
+# hadoop-dfs-dir.txt :
+# ---------------------
+# Along with this description this file contains the expected files and 
+# checksums or the files in the upgraded DFS.
+# 
+# The original DFS directory was created with various types of files and with
+# some recoverable errors (i.e. corrupt or missing .crc files).
+#
+# A similar set of files exist in two different DFS directories. 
+# For e.g. "top-dir-1Mb-512" contains files created with dfs.block.size of 1Mb 
+# and io.bytes.per.checksum of 512.
+#
+# In the future, when Hadoop project no longer supports upgrade from
+# Hadoop-0.12, then a new DFS directory image must be created.
+#
+# To generate checksum info for new files :
+# ---------------------------------------
+# Uncomment the last coment (starts with "printChecksums") and run the 
+# test again. When the test sees this line, it prints the checksum
+# information that should replace the checksum information in 
+# this file. When run in this mode, the test will fail with a descriptive IOException.
+#
+# Next, extract the checksum info from the test log like this:
+#  sed -n 's/.*CRC info for reference file : //p' test-log.txt >> this_file
+# This will append a new list of files and checksums to this file.  Be sure to remove the existing checksum info.
+#
+# For your reference, the format of the checksum info below is "filename whitespace*\twhitespace* checksum\n"
+#
+# Uncomment the following line to produce checksum info for a new DFS image.
+#printChecksums
+
+/1kb-multiple-checksum-blocks-64-16 	 191893480
+/top-dir-120000-60/1Mb-file 	 4079112547
+/top-dir-120000-60/4k-file 	 3716287280
+/top-dir-120000-60/5Mb-file 	 2563834633
+/top-dir-120000-60/directory1/500thousand-file 	 3036538664
+/top-dir-120000-60/directory1/file-with-corrupt-crc 	 1984689737
+/top-dir-120000-60/directory1/file-with-no-crc 	 4004594475
+/top-dir-120000-60/directory1/zero1 	 0
+/top-dir-120000-60/zerolen 	 0
+/top-dir-1Mb-512/1Mb-file 	 4079112547
+/top-dir-1Mb-512/4k-file 	 3716287280
+/top-dir-1Mb-512/5Mb-file 	 2563834633
+/top-dir-1Mb-512/directory1/500thousand-file 	 3036538664
+/top-dir-1Mb-512/directory1/file-with-corrupt-crc 	 1984689737
+/top-dir-1Mb-512/directory1/file-with-no-crc 	 4004594475
+/top-dir-1Mb-512/directory1/zero1 	 0
+/top-dir-1Mb-512/zerolen 	 0
+overallCRC 	 1419480698

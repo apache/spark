@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+GRID_DIR=`dirname "$0"`
+GRID_DIR=`cd "$GRID_DIR"; pwd`
+source $GRID_DIR/../gridmix-env
+
+INDIR=${VARINFLTEXT}
+
+Date=`date +%F-%H-%M-%S-%N`
+OUTDIR=perf-out/sort-out-dir-large_$Date
+${HADOOP_HOME}/bin/hadoop dfs -rmr $OUTDIR
+
+${HADOOP_HOME}/bin/hadoop jar ${EXAMPLE_JAR} sort -m 1 -r $NUM_OF_REDUCERS_FOR_LARGE_JOB -inFormat org.apache.hadoop.mapred.KeyValueTextInputFormat -outFormat org.apache.hadoop.mapred.TextOutputFormat -outKey org.apache.hadoop.io.Text -outValue org.apache.hadoop.io.Text $INDIR $OUTDIR
+

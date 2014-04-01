@@ -1,0 +1,377 @@
+From 671085620586a21d4c4e3a35476e823d237045c9 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Thu, 30 Jun 2011 01:21:10 -0700
+Subject: [PATCH 0997/1179] HDFS-1592. Datanode startup doesn't honor volumes.tolerated.
+
+Reason: Bug
+Author: Bharath Mundlapudi
+Ref: CDH-3064
+---
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   38 ++++----
+ .../hadoop/hdfs/server/datanode/DataStorage.java   |   13 ++-
+ .../hadoop/hdfs/server/datanode/DataXceiver.java   |    2 +-
+ .../hdfs/server/datanode/DataXceiverServer.java    |   16 +--
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |   18 +++-
+ .../org/apache/hadoop/hdfs/MiniDFSCluster.java     |    1 +
+ .../TestDataNodeVolumeFailureToleration.java       |   99 +++++++++++++++----
+ 7 files changed, 125 insertions(+), 62 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index cb18976..f210d38 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -545,14 +545,9 @@ public class DataNode extends Configured
+       errorMsg = "Incompatible build versions: namenode BV = " 
+         + nsInfo.getBuildVersion() + "; datanode BV = "
+         + Storage.getBuildVersion();
+-      LOG.fatal( errorMsg );
+-      try {
+-        namenode.errorReport( dnRegistration,
+-                              DatanodeProtocol.NOTIFY, errorMsg );
+-      } catch( SocketTimeoutException e ) {  // namenode is busy
+-        LOG.info("Problem connecting to server: " + getNameNodeAddr());
+-      }
+-      throw new IOException( errorMsg );
++      LOG.fatal(errorMsg);
++      notifyNamenode(DatanodeProtocol.NOTIFY, errorMsg);
++      throw new IOException(errorMsg);
+     }
+     assert FSConstants.LAYOUT_VERSION == nsInfo.getLayoutVersion() :
+       "Data-node and name-node layout versions must be the same."
+@@ -829,10 +824,7 @@ public class DataNode extends Configured
+     int dpError = hasEnoughResources ? DatanodeProtocol.DISK_ERROR  
+                                      : DatanodeProtocol.FATAL_DISK_ERROR; 
+     myMetrics.volumeFailures.inc(1);
+-    try {
+-      namenode.errorReport(dnRegistration, dpError, errMsgr);
+-    } catch(IOException ignored) {
+-    }
++    notifyNamenode(dpError, errMsgr);
+     
+     if (hasEnoughResources) {
+       scheduleBlockReport(0);
+@@ -1135,6 +1127,15 @@ public class DataNode extends Configured
+     return;
+   }
+ 
++  private void notifyNamenode(int dpCode, String msg) {
++    try {
++      namenode.errorReport(dnRegistration, dpCode, msg);
++    } catch (SocketTimeoutException e) {
++      LOG.warn("Problem connecting to " + getNameNodeAddr());
++    } catch (IOException ignored) {
++    }
++  }
++
+   private void transferBlock( Block block, 
+                               DatanodeInfo xferTargets[] 
+                               ) throws IOException {
+@@ -1142,9 +1143,7 @@ public class DataNode extends Configured
+       // block does not exist or is under-construction
+       String errStr = "Can't send invalid block " + block;
+       LOG.info(errStr);
+-      namenode.errorReport(dnRegistration, 
+-                           DatanodeProtocol.INVALID_BLOCK, 
+-                           errStr);
++      notifyNamenode(DatanodeProtocol.INVALID_BLOCK, errStr);
+       return;
+     }
+ 
+@@ -1530,13 +1529,14 @@ public class DataNode extends Configured
+       try {
+         DiskChecker.checkDir(localFS, new Path(dir), dataDirPermission);
+         dirs.add(new File(dir));
+-      } catch (IOException e) {
+-        LOG.warn("Invalid directory in " + DATA_DIR_KEY +  ": " + 
+-                 e.getMessage());
++      } catch (IOException ioe) {
++        LOG.warn("Invalid "+ DATA_DIR_KEY +" directory " + dir +  ": "
++            + ioe.getMessage());
+       }
+     }
+-    if (dirs.size() > 0) 
++    if (dirs.size() > 0) {
+       return new DataNode(conf, dirs, resources);
++    }
+     LOG.error("All directories in " + DATA_DIR_KEY + " are invalid.");
+     return null;
+   }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataStorage.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataStorage.java
+index 261ef51..c1e1be5 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataStorage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataStorage.java
+@@ -41,6 +41,7 @@ import org.apache.hadoop.hdfs.server.common.Storage;
+ import org.apache.hadoop.hdfs.server.common.StorageInfo;
+ import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
+ import org.apache.hadoop.util.Daemon;
++import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.fs.FileUtil.HardLink;
+ import org.apache.hadoop.io.IOUtils;
+ 
+@@ -129,16 +130,20 @@ public class DataStorage extends Storage {
+         }
+       } catch (IOException ioe) {
+         sd.unlock();
+-        throw ioe;
++        LOG.warn("Ignoring storage directory " + dataDir +
++            " due to exception: " + StringUtils.stringifyException(ioe));
++        // Continue with other good dirs
++        continue;
+       }
+       // add to the storage list
+       addStorageDir(sd);
+       dataDirStates.add(curState);
+     }
+ 
+-    if (dataDirs.size() == 0)  // none of the data dirs exist
+-      throw new IOException(
+-                            "All specified directories are not accessible or do not exist.");
++    if (dataDirs.size() == 0 || dataDirStates.size() == 0) {
++      throw new IOException("All specified directories are not "
++        +"accessible or do not exist.");
++    }
+ 
+     // 2. Do transitions
+     // Each storage directory is treated individually.
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+index 2ab1780..846534d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+@@ -86,7 +86,7 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+   }
+ 
+   /**
+-   * Read/write data from/to the DataXceiveServer.
++   * Read/write data from/to the DataXceiverServer.
+    */
+   public void run() {
+     DataInputStream in=null; 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiverServer.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiverServer.java
+index 6b27807..a2752f6 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiverServer.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiverServer.java
+@@ -21,7 +21,6 @@ import java.io.IOException;
+ import java.net.ServerSocket;
+ import java.net.Socket;
+ import java.net.SocketTimeoutException;
+-import java.nio.channels.AsynchronousCloseException;
+ import java.util.Collections;
+ import java.util.HashMap;
+ import java.util.Iterator;
+@@ -31,7 +30,6 @@ import org.apache.commons.logging.Log;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.protocol.FSConstants;
+ import org.apache.hadoop.hdfs.server.balancer.Balancer;
+-import org.apache.hadoop.util.Daemon;
+ import org.apache.hadoop.util.StringUtils;
+ 
+ /**
+@@ -133,15 +131,11 @@ class DataXceiverServer implements Runnable, FSConstants {
+         new DataXceiver(s, datanode, this).start();
+       } catch (SocketTimeoutException ignored) {
+         // wake up to see if should continue to run
+-      } catch (AsynchronousCloseException ace) {
+-          LOG.warn(datanode.dnRegistration + ":DataXceiveServer:"
+-                  + StringUtils.stringifyException(ace));
+-          datanode.shouldRun = false;
+       } catch (IOException ie) {
+-        LOG.warn(datanode.dnRegistration + ":DataXceiveServer: IOException due to:"
++        LOG.warn(datanode.dnRegistration + ":DataXceiverServer: IOException due to:"
+                                  + StringUtils.stringifyException(ie));
+       } catch (Throwable te) {
+-        LOG.error(datanode.dnRegistration + ":DataXceiveServer: Exiting due to:" 
++        LOG.error(datanode.dnRegistration + ":DataXceiverServer: Exiting due to:" 
+                                  + StringUtils.stringifyException(te));
+         datanode.shouldRun = false;
+       }
+@@ -149,10 +143,10 @@ class DataXceiverServer implements Runnable, FSConstants {
+     try {
+       ss.close();
+     } catch (IOException ie) {
+-      LOG.warn(datanode.dnRegistration + ":DataXceiveServer: Close exception due to: "
++      LOG.warn(datanode.dnRegistration + ":DataXceiverServer: Close exception due to: "
+                                + StringUtils.stringifyException(ie));
+     }
+-    LOG.info("Exiting DataXceiveServer");
++    LOG.info("Exiting DataXceiverServer");
+   }
+   
+   void kill() {
+@@ -161,7 +155,7 @@ class DataXceiverServer implements Runnable, FSConstants {
+     try {
+       this.ss.close();
+     } catch (IOException ie) {
+-      LOG.warn(datanode.dnRegistration + ":DataXceiveServer.kill(): " 
++      LOG.warn(datanode.dnRegistration + ":DataXceiverServer.kill(): "
+                               + StringUtils.stringifyException(ie));
+     }
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index 72f39bf..9a8d181 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -896,12 +896,18 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+     // of volumes minus the number of failed volumes we can tolerate.
+     final int volFailuresTolerated =
+       conf.getInt("dfs.datanode.failed.volumes.tolerated", 0);
+-    this.validVolsRequired = storage.getNumStorageDirs() - volFailuresTolerated; 
+-    if (validVolsRequired < 1 ||
+-        validVolsRequired > storage.getNumStorageDirs()) {
+-      DataNode.LOG.error("Invalid value " + volFailuresTolerated + " for " +
+-          "dfs.datanode.failed.volumes.tolerated");
+-    }  
++    String[] dataDirs = conf.getTrimmedStrings(DataNode.DATA_DIR_KEY);
++    int volsConfigured = (dataDirs == null) ? 0 : dataDirs.length;
++    validVolsRequired = volsConfigured - volFailuresTolerated;
++
++    if (validVolsRequired < 1
++        || validVolsRequired > storage.getNumStorageDirs()) {
++      throw new DiskErrorException("Too many failed volumes - "
++        + "current valid volumes: " + storage.getNumStorageDirs()
++        + ", volumes configured: " + volsConfigured
++        + ", volume failures tolerated: " + volFailuresTolerated);
++    }
++
+     FSVolume[] volArray = new FSVolume[storage.getNumStorageDirs()];
+     for (int idx = 0; idx < storage.getNumStorageDirs(); idx++) {
+       volArray[idx] = new FSVolume(storage.getStorageDir(idx).getCurrentDir(), conf);
+diff --git a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+index 48d3132..d28f2a4 100644
+--- a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
++++ b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+@@ -393,6 +393,7 @@ public class MiniDFSCluster {
+                                 + i + ": " + dir1 + " or " + dir2);
+         }
+         dnConf.set(DataNode.DATA_DIR_KEY, dir1.getPath() + "," + dir2.getPath());
++        conf.set(DataNode.DATA_DIR_KEY, dnConf.get(DataNode.DATA_DIR_KEY));
+       }
+       if (simulatedCapacities != null) {
+         dnConf.setBoolean("dfs.datanode.simulateddatastorage", true);
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVolumeFailureToleration.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVolumeFailureToleration.java
+index 99b80c1..91d5f76 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVolumeFailureToleration.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVolumeFailureToleration.java
+@@ -18,9 +18,11 @@
+ package org.apache.hadoop.hdfs.server.datanode;
+ 
+ import java.io.File;
++import java.io.IOException;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.DFSTestUtil;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+@@ -129,31 +131,86 @@ public class TestDataNodeVolumeFailureToleration {
+   }
+ 
+   /**
+-   * Test invalid DFS_DATANODE_FAILED_VOLUMES_TOLERATED_KEY values.
++   * Restart the datanodes in the cluster with a new volume tolerated value.
++   * @param volTolerated
++   * @param manageDfsDirs
++   * @throws IOException
++   */
++  private void restartDatanodes(int volTolerated, boolean manageDfsDirs)
++      throws IOException {
++    cluster.shutdownDataNodes();
++    conf.setInt("dfs.datanode.failed.volumes.tolerated", volTolerated);
++    cluster.startDataNodes(conf, 1, manageDfsDirs, null, null);
++    cluster.waitActive();
++  }
++
++  /**
++   * Test for different combination of volume configs and volumes
++   * tolerated values.
+    */
+   @Test
+   public void testInvalidFailedVolumesConfig() throws Exception {
+     assumeTrue(!System.getProperty("os.name").startsWith("Windows"));
+ 
+-    /*
+-     * Bring up another datanode that has an invalid value set.
+-     * We should still be able to create a file with two replicas
+-     * since the minimum valid volume parameter is only checked
+-     * when we experience a disk error.
+-     */
+-    conf.setInt("dfs.datanode.failed.volumes.tolerated", -1);
+-    cluster.startDataNodes(conf, 1, true, null, null);
+-    cluster.waitActive();
+-    Path file1 = new Path("/test1");
+-    DFSTestUtil.createFile(fs, file1, 1024, (short)2, 1L);
+-    DFSTestUtil.waitReplication(fs, file1, (short)2);
++    // Check if DN exits for an invalid conf value.
++    testVolumeConfig(-1, 0, false, true);
+ 
+-    // Ditto if the value is too big.
+-    conf.setInt("dfs.datanode.failed.volumes.tolerated", 100);
+-    cluster.startDataNodes(conf, 1, true, null, null);
+-    cluster.waitActive();
+-    Path file2 = new Path("/test1");
+-    DFSTestUtil.createFile(fs, file2, 1024, (short)2, 1L);
+-    DFSTestUtil.waitReplication(fs, file2, (short)2);
++    testVolumeConfig(100, 0, false, true);
++
++    // Test for one failed volume
++    testVolumeConfig(0, 1, false, false);
++
++    // Test for one failed volume with 1 tolerable volume
++    testVolumeConfig(1, 1, true, false);
++
++    // Test all good volumes
++    testVolumeConfig(0, 0, true, false);
++
++    // Test all failed volumes
++    testVolumeConfig(0, 2, false, false);
++  }
++
++  /**
++   * Tests for a given volumes to be tolerated and volumes failed.
++   */
++  private void testVolumeConfig(int volumesTolerated, int volumesFailed,
++      boolean expectDnUp, boolean manageDfsDirs)
++      throws IOException, InterruptedException {
++    File dir0 = new File(dataDir, "data1");
++    File dir1 = new File(dataDir, "data2");
++
++    // Fail the current directory since invalid storage directory perms
++    // get fixed up automatically on datanode startup.
++    File[] currDirs = { new File(dir0, "/current"),
++                        new File(dir1, "/current") };
++    
++    try {
++      for (int i = 0; i < volumesFailed; i++) {
++        prepareDirToFail(currDirs[i]);
++      }
++      try {
++        restartDatanodes(volumesTolerated, manageDfsDirs);
++        assertEquals(expectDnUp, cluster.getDataNodes().get(0).isDatanodeUp());
++      } catch (IOException ioe) {
++        assertFalse("Expected successful restart but got " + ioe, expectDnUp);
++      }
++    } finally {
++      for (File dir : currDirs) {
++        FileUtil.chmod(dir.toString(), "755");
++      }
++    }
++  }
++
++  /**
++   * Prepare directories for a failure, set dir permission to 000
++   * @param dir
++   * @throws IOException
++   * @throws InterruptedException
++   */
++  private void prepareDirToFail(File dir) throws IOException,
++      InterruptedException {
++    dir.mkdirs();
++    assertEquals("Couldn't chmod local vol", 0,
++        FileUtil.chmod(dir.toString(), "000"));
+   }
+-}
++}
+\ No newline at end of file
+-- 
+1.7.0.4
+

@@ -1,0 +1,30 @@
+From 0f37bc72df436c30fbb3a1c826b2040f8118570b Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 17 Mar 2010 14:13:39 -0700
+Subject: [PATCH 0565/1179] HDFS-6603. Clarify a comment in SecurityUtil
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439078/fix_comment_y20.patch
+Author: Jakob Homan
+Ref: CDH-648
+---
+ .../org/apache/hadoop/security/SecurityUtil.java   |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/SecurityUtil.java b/src/core/org/apache/hadoop/security/SecurityUtil.java
+index d1e5ff1..fadf18e 100644
+--- a/src/core/org/apache/hadoop/security/SecurityUtil.java
++++ b/src/core/org/apache/hadoop/security/SecurityUtil.java
+@@ -73,7 +73,9 @@ public class SecurityUtil {
+    * to ensure that in a cross-realm environment the remote host will be 
+    * successfully authenticated.  
+    * 
+-   * This method will be removed when the Java behavior is changed.
++   * This method is internal to Hadoop and should not be used by other 
++   * applications.  This method should not be considered stable or open: 
++   * it will be removed when the Java behavior is changed.
+    * 
+    * @param remoteHost Target URL the krb-https client will access
+    */
+-- 
+1.7.0.4
+

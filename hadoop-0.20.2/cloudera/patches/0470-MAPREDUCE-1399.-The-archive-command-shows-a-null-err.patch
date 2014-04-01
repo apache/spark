@@ -1,0 +1,48 @@
+From 7260de34b087c442e5054410e038f7bc2214e077 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 11 Feb 2010 19:35:40 +0000
+Subject: [PATCH 0470/1179] MAPREDUCE-1399. The archive command shows a null error message
+
+Patch: http://issues.apache.org/jira/secure/attachment/12435380/m1399_20100205trunk2_y0.20.patch
+Author: Tsz Wo (Nicholas), SZE
+Ref: YDH
+---
+ .../org/apache/hadoop/tools/HadoopArchives.java    |   15 +++++++++++----
+ 1 files changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/src/tools/org/apache/hadoop/tools/HadoopArchives.java b/src/tools/org/apache/hadoop/tools/HadoopArchives.java
+index 3bf98e3..7d2aeb0 100644
+--- a/src/tools/org/apache/hadoop/tools/HadoopArchives.java
++++ b/src/tools/org/apache/hadoop/tools/HadoopArchives.java
+@@ -742,8 +742,10 @@ public class HadoopArchives implements Tool {
+       for (Path p: srcPaths) {
+         FileSystem fs = p.getFileSystem(getConf());
+         FileStatus[] statuses = fs.globStatus(p);
+-        for (FileStatus status: statuses) {
+-          globPaths.add(fs.makeQualified(status.getPath()));
++        if (statuses != null) {
++          for (FileStatus status: statuses) {
++            globPaths.add(fs.makeQualified(status.getPath()));
++          }
+         }
+       }
+       archive(parentPath, globPaths, archiveName, destPath);
+@@ -764,8 +766,13 @@ public class HadoopArchives implements Tool {
+       ret = ToolRunner.run(harchives, args);
+     } catch(Exception e) {
+       LOG.debug("Exception in archives  ", e);
+-      System.err.println("Exception in archives");
+-      System.err.println(e.getLocalizedMessage());
++      System.err.println(e.getClass().getSimpleName() + " in archives");
++      final String s = e.getLocalizedMessage();
++      if (s != null) {
++        System.err.println(s);
++      } else {
++        e.printStackTrace(System.err);
++      }
+       System.exit(1);
+     }
+     System.exit(ret);
+-- 
+1.7.0.4
+

@@ -1,0 +1,30 @@
+From df540fdaa94d96a2a1bc2685774ae44b145bfa98 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Feb 2011 10:56:52 -0800
+Subject: [PATCH 0865/1179] Amend MAPREDUCE-1493. Fix a typo in HTML markup on jobdetailshistory
+
+(typo made in original backport, not upstream)
+
+Reason: fix invalid HTML
+Author: Todd Lipcon
+Ref: CDH-2622
+---
+ src/webapps/job/jobdetailshistory.jsp |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/webapps/job/jobdetailshistory.jsp b/src/webapps/job/jobdetailshistory.jsp
+index bd42df2..d8eb8ff 100644
+--- a/src/webapps/job/jobdetailshistory.jsp
++++ b/src/webapps/job/jobdetailshistory.jsp
+@@ -159,7 +159,7 @@ Hadoop Job <%=jobid %> on History Viewer
+ </tr>
+ <tr>
+ <th>Setup</th>
+-    <th><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.SETUP.name() %>&status=all">
++    <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.SETUP.name() %>&status=all">
+         <%=totalSetups%></a></td>
+     <td><a href="jobtaskshistory.jsp?logFile=<%=encodedLogFileName%>&taskType=<%=Values.SETUP.name() %>&status=<%=Values.SUCCESS %>">
+         <%=numFinishedSetups%></a></td>
+-- 
+1.7.0.4
+

@@ -1,0 +1,558 @@
+From 9817a9bd9bf215c4f66268e8d5e9f87cd8a417b4 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 18 Dec 2011 13:28:21 -0800
+Subject: [PATCH 1111/1179] Ammend HADOOP-4885. Cleanup.
+
+Author: Eli Collins
+Ref: CDH-3921
+---
+ .../apache/hadoop/hdfs/server/common/Storage.java  |   15 +--
+ .../hadoop/hdfs/server/namenode/FSDirectory.java   |    2 +-
+ .../hadoop/hdfs/server/namenode/FSEditLog.java     |   23 ++--
+ .../hadoop/hdfs/server/namenode/FSImage.java       |   62 ++++-----
+ .../hdfs/server/namenode/TestStorageRestore.java   |  143 +++++--------------
+ 5 files changed, 75 insertions(+), 170 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/common/Storage.java b/src/hdfs/org/apache/hadoop/hdfs/server/common/Storage.java
+index dc7b42a..7f6bb1d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/common/Storage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/common/Storage.java
+@@ -75,7 +75,7 @@ public abstract class Storage extends StorageInfo {
+   
+   private   static final String STORAGE_FILE_LOCK     = "in_use.lock";
+   protected static final String STORAGE_FILE_VERSION  = "VERSION";
+-  public static final String STORAGE_DIR_CURRENT   = "current";
++  public    static final String STORAGE_DIR_CURRENT   = "current";
+   private   static final String STORAGE_DIR_PREVIOUS  = "previous";
+   private   static final String STORAGE_TMP_REMOVED   = "removed.tmp";
+   private   static final String STORAGE_TMP_PREVIOUS  = "previous.tmp";
+@@ -172,18 +172,7 @@ public abstract class Storage extends StorageInfo {
+   public Iterator<StorageDirectory> dirIterator(StorageDirType dirType) {
+     return new DirIterator(dirType);
+   }
+-  
+-  /**
+-   * generate storage list (debug line)
+-   */
+-  public String listStorageDirectories() {
+-    StringBuffer buf = new StringBuffer();
+-    for (StorageDirectory sd : storageDirs) {
+-      buf.append(sd.getRoot() + "(" + sd.getStorageDirType() + ");");
+-    }
+-    return buf.toString();
+-  }
+-  
++
+   /**
+    * One of the storage directories.
+    */
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
+index e181f8a..cb9e8b8 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
+@@ -59,7 +59,7 @@ class FSDirectory implements FSConstants, Closeable {
+   /** Access an existing dfs name directory. */
+   FSDirectory(FSNamesystem ns, Configuration conf) {
+     this(new FSImage(), ns, conf);
+-    if(conf.getBoolean("dfs.name.dir.restore", false)) {
++    if (conf.getBoolean("dfs.name.dir.restore", false)) {
+       NameNode.LOG.info("set FSImage.restoreFailedStorage");
+       fsImage.setRestoreFailedStorage(true);
+     }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+index 2338bfb..6fda911 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+@@ -397,8 +397,6 @@ public class FSEditLog {
+         eStream.flush();
+         eStream.close();
+       } catch (IOException e) {
+-        FSNamesystem.LOG.warn("FSEditLog:close - failed to close stream " 
+-            + eStream.getName());
+         processIOError(idx);
+         idx--;
+       }
+@@ -420,15 +418,17 @@ public class FSEditLog {
+     assert(index < getNumStorageDirs());
+     assert(getNumStorageDirs() == editStreams.size());
+     
+-    EditLogFileOutputStream eStream = (EditLogFileOutputStream)editStreams.get(index);
++    EditLogFileOutputStream eStream = 
++        (EditLogFileOutputStream)editStreams.get(index);
+     File parentStorageDir = ((EditLogFileOutputStream)editStreams
+                                       .get(index)).getFile()
+                                       .getParentFile().getParentFile();
+-    
+     try {
+       eStream.close();
+-    } catch (Exception e) {}
+-    
++    } catch (Exception e) {
++      // Ignore
++    }
++
+     editStreams.remove(index);
+     //
+     // Invoke the ioerror routine of the fsimage
+@@ -953,7 +953,6 @@ public class FSEditLog {
+       try {
+         eStream.write(op, writables);
+       } catch (IOException ie) {
+-        FSImage.LOG.warn("logEdit: removing "+ eStream.getName(), ie);
+         processIOError(idx);         
+         // processIOError will remove the idx's stream 
+         // from the editStreams collection, so we need to update idx
+@@ -1300,9 +1299,7 @@ public class FSEditLog {
+         long curSize = es.length();
+         assert (size == 0 || size == curSize) : "All streams must be the same";
+         size = curSize;
+-      } catch (IOException e) {
+-        FSImage.LOG.warn("getEditLogSize: editstream.length failed. removing editlog (" +
+-            idx + ") " + es.getName());
++      } catch (IOException ioe) {
+         processIOError(idx);
+       }
+     }
+@@ -1333,7 +1330,6 @@ public class FSEditLog {
+ 
+     close();                     // close existing edit log
+ 
+-    // check if any of failed storage is now available and put it back
+     fsimage.attemptRestoreRemovedStorage();
+     
+     //
+@@ -1351,14 +1347,14 @@ public class FSEditLog {
+       } catch (IOException e) {
+         failedSd = true;
+         // remove stream and this storage directory from list
+-        FSImage.LOG.warn("rollEdidLog: removing storage " + sd.getRoot().getPath());
+         sd.unlock();
+         fsimage.removedStorageDirs.add(sd);
+         it.remove();
+       }
+     }
+-    if(failedSd)
++    if (failedSd) {
+       fsimage.incrementCheckpointTime();  // update time for the valid ones
++    }
+   }
+ 
+   /**
+@@ -1389,7 +1385,6 @@ public class FSEditLog {
+         getEditFile(sd).delete();
+         if (!getEditNewFile(sd).renameTo(getEditFile(sd))) {
+           // Should we also remove from edits
+-          NameNode.LOG.warn("purgeEditLog: removing failed storage " + sd.getRoot().getPath());
+           fsimage.removedStorageDirs.add(sd);
+           it.remove(); 
+         }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+index 6a7c157..5f74fc9 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+@@ -116,15 +116,12 @@ public class FSImage extends Storage {
+   FSEditLog editLog = null;
+   private boolean isUpgradeFinalized = false;
+ 
+-  /**
+-   * flag that controls if we try to restore failed storages
+-   */
+   private boolean restoreFailedStorage = false;
++
+   public void setRestoreFailedStorage(boolean val) {
+-    LOG.info("enabled failed storage replicas restore");
+     restoreFailedStorage=val;
+   }
+-  
++
+   public boolean getRestoreFailedStorage() {
+     return restoreFailedStorage;
+   }
+@@ -634,12 +631,11 @@ public class FSImage extends Storage {
+         writeCheckpointTime(sd);
+       } catch(IOException e) {
+         // Close any edits stream associated with this dir and remove directory
+-        LOG.warn("incrementCheckpointTime failed on " + sd.getRoot().getPath() + ";type="+sd.getStorageDirType());
+         if (sd.getStorageDirType().isOfType(NameNodeDirType.EDITS)) {
+           editLog.processIOError(sd);
+         }
+ 
+-        //add storage to the removed list
++        // Add storage to the removed list
+         removedStorageDirs.add(sd);
+         it.remove();
+       }
+@@ -655,11 +651,11 @@ public class FSImage extends Storage {
+       dirIterator(); it.hasNext();) {
+       StorageDirectory sd = it.next();
+       if (sd.getRoot().getPath().equals(dirName.getPath())) {
+-        //add storage to the removed list
+-        LOG.warn("FSImage:processIOError: removing storage: " + dirName.getPath());
+         try {
+-          sd.unlock(); //try to unlock before removing (in case it is restored)
+-        } catch (Exception e) {}
++          sd.unlock(); // Try to unlock before removing (in case it is restored)
++        } catch (Exception e) {
++          // Ignore
++        }
+         removedStorageDirs.add(sd);
+         it.remove();
+       }
+@@ -1471,7 +1467,7 @@ public class FSImage extends Storage {
+       }
+     }
+     editLog.purgeEditLog(); // renamed edits.new to edits
+-    LOG.debug("rollFSImage after purgeEditLog: storageList=" + listStorageDirectories());
++
+     //
+     // Renames new image
+     //
+@@ -1482,13 +1478,9 @@ public class FSImage extends Storage {
+       File curFile = getImageFile(sd, NameNodeFile.IMAGE);
+       // renameTo fails on Windows if the destination file 
+       // already exists.
+-      LOG.debug("renaming  " + ckpt.getAbsolutePath() + " to "  + curFile.getAbsolutePath());
+       if (!ckpt.renameTo(curFile)) {
+         curFile.delete();
+         if (!ckpt.renameTo(curFile)) {
+-          LOG.warn("renaming  " + ckpt.getAbsolutePath() + " to "  + 
+-              curFile.getAbsolutePath() + " FAILED");
+-          
+           // Close edit stream, if this directory is also used for edits
+           if (sd.getStorageDirType().isOfType(NameNodeDirType.EDITS))
+             editLog.processIOError(sd);
+@@ -1591,35 +1583,31 @@ public class FSImage extends Storage {
+   }
+ 
+   /**
+-   * See if any of removed storages iw "writable" again, and can be returned 
+-   * into service
++   * See if any of the removed storages dirs are writable and can be restored.
+    */
+-  void attemptRestoreRemovedStorage() {   
+-    // if directory is "alive" - copy the images there...
+-    if(!restoreFailedStorage || removedStorageDirs.size() == 0) 
+-      return; //nothing to restore
+-    
+-    LOG.info("FSImage.attemptRestoreRemovedStorage: check removed(failed) " +
+-    		"storarge. removedStorages size = " + removedStorageDirs.size());
+-    for(Iterator<StorageDirectory> it = this.removedStorageDirs.iterator(); it.hasNext();) {
++  void attemptRestoreRemovedStorage() {
++    if (!restoreFailedStorage || removedStorageDirs.size() == 0) {
++      return;
++    }
++
++    Iterator<StorageDirectory> it = removedStorageDirs.iterator();
++    while (it.hasNext()) {
+       StorageDirectory sd = it.next();
+       File root = sd.getRoot();
+-      LOG.info("currently disabled dir " + root.getAbsolutePath() + 
+-          "; type="+sd.getStorageDirType() + ";canwrite="+root.canWrite());
++      LOG.info("Restore " + root.getAbsolutePath() + " type=" +
++          sd.getStorageDirType() + " canwrite=" + root.canWrite());
+       try {
+-        
+-        if(root.exists() && root.canWrite()) { 
+-          // when we try to restore we just need to remove all the data
+-          // without saving current in-memory state (which could've changed).
++        if (root.exists() && root.canWrite()) { 
++          // Remove all the data with saving current in-memory state
++          // which could have changed.
+           sd.clearDirectory();
+-          LOG.info("restoring dir " + sd.getRoot().getAbsolutePath());
+-          this.addStorageDir(sd); // restore
++          addStorageDir(sd);
+           it.remove();
+         }
+-      } catch(IOException e) {
+-        LOG.warn("failed to restore " + sd.getRoot().getAbsolutePath(), e);
++      } catch (IOException ioe) {
++        LOG.warn("Failed to restore " + sd.getRoot().getAbsolutePath(), ioe);
+       }
+-    }    
++    }
+   }
+   
+   public File getFsEditName() throws IOException {
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageRestore.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageRestore.java
+index b1ed701..e81a70c 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageRestore.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageRestore.java
+@@ -17,16 +17,12 @@
+  */
+ package org.apache.hadoop.hdfs.server.namenode;
+ 
+-
+ import static org.junit.Assert.assertTrue;
+ 
+ import java.io.File;
+ import java.io.IOException;
+-import java.util.Iterator;
+ import java.util.Random;
+ 
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileSystem;
+@@ -34,23 +30,17 @@ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.hdfs.server.common.Storage;
+-import org.apache.hadoop.hdfs.server.common.Storage.StorageDirectory;
+-import org.apache.hadoop.hdfs.server.namenode.FSImage.NameNodeDirType;
+ import org.apache.hadoop.hdfs.server.namenode.FSImage.NameNodeFile;
+ import org.junit.After;
+ import org.junit.Before;
+ import org.junit.Test;
+ 
+-
+ /**
+- * Startup and checkpoint tests
+- * 
++ * Test restoring failed storage directories on checkpoint.
+  */
+ public class TestStorageRestore {
+   public static final String NAME_NODE_HOST = "localhost:";
+   public static final String NAME_NODE_HTTP_HOST = "0.0.0.0:";
+-  private static final Log LOG =
+-    LogFactory.getLog(TestStorageRestore.class.getName());
+   private Configuration config;
+   private File hdfsDir=null;
+   static final long seed = 0xAAAAEEFL;
+@@ -60,7 +50,7 @@ public class TestStorageRestore {
+   private MiniDFSCluster cluster;
+ 
+   private void writeFile(FileSystem fileSys, Path name, int repl)
+-  throws IOException {
++      throws IOException {
+     FSDataOutputStream stm = fileSys.create(name, true,
+         fileSys.getConf().getInt("io.file.buffer.size", 4096),
+         (short)repl, (long)blockSize);
+@@ -77,8 +67,8 @@ public class TestStorageRestore {
+     String baseDir = System.getProperty("test.build.data", "/tmp");
+     
+     hdfsDir = new File(baseDir, "dfs");
+-    if ( hdfsDir.exists() && !FileUtil.fullyDelete(hdfsDir) ) {
+-      throw new IOException("Could not delete hdfs directory '" + hdfsDir + "'");
++    if (hdfsDir.exists()) {
++      FileUtil.fullyDelete(hdfsDir);
+     }
+     
+     hdfsDir.mkdir();
+@@ -86,95 +76,57 @@ public class TestStorageRestore {
+     path2 = new File(hdfsDir, "name2");
+     path3 = new File(hdfsDir, "name3");
+     
+-    path1.mkdir(); path2.mkdir(); path3.mkdir();
+-    if(!path2.exists() ||  !path3.exists() || !path1.exists()) {
+-      throw new IOException("Couldn't create dfs.name dirs");
+-    }
+-    
+-    String dfs_name_dir = new String(path1.getPath() + "," + path2.getPath());
+-    System.out.println("configuring hdfsdir is " + hdfsDir.getAbsolutePath() + 
+-        "; dfs_name_dir = "+ dfs_name_dir + ";dfs_name_edits_dir(only)=" + path3.getPath());
+-    
+-    config.set("dfs.name.dir", dfs_name_dir);
+-    config.set("dfs.name.edits.dir", dfs_name_dir + "," + path3.getPath());
++    path1.mkdir();
++    path2.mkdir();
++    path3.mkdir();
+ 
++    String nameDir = new String(path1.getPath() + "," + path2.getPath());
++    config.set("dfs.name.dir", nameDir);
++    config.set("dfs.name.edits.dir", nameDir + "," + path3.getPath());
+     config.set("fs.checkpoint.dir",new File(hdfsDir, "secondary").getPath());
+  
+     FileSystem.setDefaultUri(config, "hdfs://"+NAME_NODE_HOST + "0");
+-    
+     config.set("dfs.secondary.http.address", "0.0.0.0:0");
+-    
+-    // set the restore feature on
+     config.setBoolean("dfs.name.dir.restore", true);
+   }
+ 
+-  /**
+-   * clean up
+-   */
+   @After
+   public void cleanUpNameDirs() throws Exception {
+-    if (hdfsDir.exists() && !FileUtil.fullyDelete(hdfsDir) ) {
+-      throw new IOException("Could not delete hdfs directory in tearDown '" + hdfsDir + "'");
+-    } 
++    if (hdfsDir.exists()) {
++      FileUtil.fullyDelete(hdfsDir);
++    }
+   }
+   
+   /**
+-   * invalidate storage by removing current directories
++   * Remove edits and storage directories.
+    */
+   public void invalidateStorage(FSImage fi) throws IOException {
+-    fi.getEditLog().processIOError(2); //name3
++    fi.getEditLog().processIOError(2); // name3
+     fi.getEditLog().processIOError(1); // name2
+   }
+   
+   /**
+-   * test
++   * Check the lengths of the image and edits files.
+    */
+-  public void printStorages(FSImage fs) {
+-    LOG.info("current storages and corresponding sizes:");
+-    for(Iterator<StorageDirectory> it = fs.dirIterator(); it.hasNext(); ) {
+-      StorageDirectory sd = it.next();
+-      
+-      if(sd.getStorageDirType().isOfType(NameNodeDirType.IMAGE)) {
+-        File imf = FSImage.getImageFile(sd, NameNodeFile.IMAGE);
+-        LOG.info("  image file " + imf.getAbsolutePath() + "; len = " + imf.length());  
+-      }
+-      if(sd.getStorageDirType().isOfType(NameNodeDirType.EDITS)) {
+-        File edf = FSImage.getImageFile(sd, NameNodeFile.EDITS);
+-        LOG.info("  edits file " + edf.getAbsolutePath() + "; len = " + edf.length()); 
+-      }
+-    }
+-  }
+-  
+-  /**
+-   *  check if files exist/not exist
+-   */
+-  public void checkFiles(boolean valid) {
+-    //look at the valid storage
+-    File fsImg1 = new File(path1, Storage.STORAGE_DIR_CURRENT + "/" + NameNodeFile.IMAGE.getName());
+-    File fsImg2 = new File(path2, Storage.STORAGE_DIR_CURRENT + "/" + NameNodeFile.IMAGE.getName());
+-    File fsImg3 = new File(path3, Storage.STORAGE_DIR_CURRENT + "/" + NameNodeFile.IMAGE.getName());
++  public void checkFiles(boolean expectValid) {
++    final String imgName = 
++      Storage.STORAGE_DIR_CURRENT + "/" + NameNodeFile.IMAGE.getName();
++    final String editsName = 
++      Storage.STORAGE_DIR_CURRENT + "/" + NameNodeFile.EDITS.getName();
+ 
+-    File fsEdits1 = new File(path1, Storage.STORAGE_DIR_CURRENT + "/" + NameNodeFile.EDITS.getName());
+-    File fsEdits2 = new File(path2, Storage.STORAGE_DIR_CURRENT + "/" + NameNodeFile.EDITS.getName());
+-    File fsEdits3 = new File(path3, Storage.STORAGE_DIR_CURRENT + "/" + NameNodeFile.EDITS.getName());
++    File fsImg1 = new File(path1, imgName);
++    File fsImg2 = new File(path2, imgName);
++    File fsImg3 = new File(path3, imgName);
++    File fsEdits1 = new File(path1, editsName);
++    File fsEdits2 = new File(path2, editsName);
++    File fsEdits3 = new File(path3, editsName);
+ 
+-    this.printStorages(cluster.getNameNode().getFSImage());
+-    
+-    LOG.info("++++ image files = "+fsImg1.getAbsolutePath() + "," + fsImg2.getAbsolutePath() + ","+ fsImg3.getAbsolutePath());
+-    LOG.info("++++ edits files = "+fsEdits1.getAbsolutePath() + "," + fsEdits2.getAbsolutePath() + ","+ fsEdits3.getAbsolutePath());
+-    LOG.info("checkFiles compares lengths: img1=" + fsImg1.length()  + ",img2=" + fsImg2.length()  + ",img3=" + fsImg3.length());
+-    LOG.info("checkFiles compares lengths: edits1=" + fsEdits1.length()  + ",edits2=" + fsEdits2.length()  + ",edits3=" + fsEdits3.length());
+-    
+-    if(valid) {
+-      // should be the same
++    if (expectValid) {
+       assertTrue(fsImg1.length() == fsImg2.length());
+-      assertTrue(0 == fsImg3.length()); //shouldn't be created
++      assertTrue(0 == fsImg3.length()); // Shouldn't be created
+       assertTrue(fsEdits1.length() == fsEdits2.length());
+       assertTrue(fsEdits1.length() == fsEdits3.length());
+     } else {
+-      // should be different
+-      //assertTrue(fsImg1.length() != fsImg2.length());
+-      //assertTrue(fsImg1.length() != fsImg3.length());
+       assertTrue(fsEdits1.length() != fsEdits2.length());
+       assertTrue(fsEdits1.length() != fsEdits3.length());
+     }
+@@ -195,37 +147,26 @@ public class TestStorageRestore {
+   @Test
+   public void testStorageRestore() throws Exception {
+     int numDatanodes = 2;
+-    //Collection<String> dirs = config.getStringCollection("dfs.name.dir");
+-    cluster = new MiniDFSCluster(0, config, numDatanodes, true, false, true,  null, null, null, null);
++    cluster = new MiniDFSCluster(0, config, numDatanodes, true, 
++        false, true,  null, null, null, null);
+     cluster.waitActive();
+     
+     SecondaryNameNode secondary = new SecondaryNameNode(config);
+-    System.out.println("****testStorageRestore: Cluster and SNN started");
+-    printStorages(cluster.getNameNode().getFSImage());
+     
+     FileSystem fs = cluster.getFileSystem();
+     Path path = new Path("/", "test");
+     writeFile(fs, path, 2);
+     
+-    System.out.println("****testStorageRestore: file test written, invalidating storage...");
+-  
+     invalidateStorage(cluster.getNameNode().getFSImage());
+-    //secondary.doCheckpoint(); // this will cause storages to be removed.
+-    printStorages(cluster.getNameNode().getFSImage());
+-    System.out.println("****testStorageRestore: storage invalidated + doCheckpoint");
+ 
+     path = new Path("/", "test1");
+     writeFile(fs, path, 2);
+-    System.out.println("****testStorageRestore: file test1 written");
+     
+-    checkFiles(false); // SHOULD BE FALSE
++    checkFiles(false);
+     
+-    System.out.println("****testStorageRestore: checkfiles(false) run");
+-    
+-    secondary.doCheckpoint();  ///should enable storage..
++    secondary.doCheckpoint();
+     
+     checkFiles(true);
+-    System.out.println("****testStorageRestore: second Checkpoint done and checkFiles(true) run");
+     secondary.shutdown();
+     cluster.shutdown();
+   }
+@@ -241,38 +182,30 @@ public class TestStorageRestore {
+   public void testCheckpointWithRestoredDirectory() throws IOException {
+     SecondaryNameNode secondary = null;
+     try {
+-      cluster = new MiniDFSCluster(0, config, 1, true, false, true,  null, null,
+-          null, null);
++      cluster = new MiniDFSCluster(0, config, 1, true, false, true,
++          null, null, null, null);
+       cluster.waitActive();
+       
+       secondary = new SecondaryNameNode(config);
+       FSImage fsImage = cluster.getNameNode().getFSImage();
+-      printStorages(fsImage);
+-      
++
+       FileSystem fs = cluster.getFileSystem();
+       Path path1 = new Path("/", "test");
+       writeFile(fs, path1, 2);
+-      
+-      printStorages(fsImage);
+   
+       // Take name3 offline
+-      System.out.println("causing IO error on " + fsImage.getStorageDir(2).getRoot());
+       fsImage.getEditLog().processIOError(2);
+       
+       // Simulate a 2NN beginning a checkpoint, but not finishing. This will
+       // cause name3 to be restored.
+       cluster.getNameNode().rollEditLog();
+       
+-      printStorages(fsImage);
+-      
+       // Now another 2NN comes along to do a full checkpoint.
+       secondary.doCheckpoint();
+       
+-      printStorages(fsImage);
+-      
+       // The created file should still exist in the in-memory FS state after the
+       // checkpoint.
+-      assertTrue("path exists before restart", fs.exists(path1));
++      assertTrue("File missing after checkpoint", fs.exists(path1));
+       
+       secondary.shutdown();
+       
+@@ -290,4 +223,4 @@ public class TestStorageRestore {
+       }
+     }
+   }
+-}
++}
+\ No newline at end of file
+-- 
+1.7.0.4
+

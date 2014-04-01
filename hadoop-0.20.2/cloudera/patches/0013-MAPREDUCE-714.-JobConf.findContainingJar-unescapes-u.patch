@@ -1,0 +1,41 @@
+From b33265ff77c71af61899a4b3add1e82cc195fdb7 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:23:53 -0800
+Subject: [PATCH 0013/1179] MAPREDUCE-714. JobConf.findContainingJar unescapes unnecessarily on Linux
+
+Description: In JobConf.findContainingJar, the path name is decoded using URLDecoder.decode(...). This was done by Doug in r381794 (commit msg "Un-escape containing jar's path, which is URL-encoded.  This fixes things primarily on Windows, where paths are likely to contain spaces.") Unfortunately, jar paths do not appear to be URL encoded on Linux. If you try to use "hadoop jar" on a jar with a "+" in it, this function decodes it to a space and then the job cannot be submitted.
+Reason: Cloudera-based packages include a '+' in the filename; Hadoop's URL escaper will not
+properly handle jar filenames with a '+' without this patch.
+Author: Todd Lipcon
+Ref: UNKNOWN
+
+commit d9767d2cefab288e581732f71779f3ce8e3267e4
+Author: Todd Lipcon <todd@cloudera.com>
+Date:   Mon Jul 6 19:36:11 2009 -0700
+
+    MAPREDUCE-714: Fix JobConf.findContainingJars to work with jars with + in the name
+---
+ src/mapred/org/apache/hadoop/mapred/JobConf.java |    7 +++++++
+ 1 files changed, 7 insertions(+), 0 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobConf.java b/src/mapred/org/apache/hadoop/mapred/JobConf.java
+index 22797fa..8801073 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobConf.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobConf.java
+@@ -1549,6 +1549,13 @@ public class JobConf extends Configuration {
+           if (toReturn.startsWith("file:")) {
+             toReturn = toReturn.substring("file:".length());
+           }
++          // URLDecoder is a misnamed class, since it actually decodes
++          // x-www-form-urlencoded MIME type rather than actual
++          // URL encoding (which the file path has). Therefore it would
++          // decode +s to ' 's which is incorrect (spaces are actually
++          // either unencoded or encoded as "%20"). Replace +s first, so
++          // that they are kept sacred during the decoding process.
++          toReturn = toReturn.replaceAll("\\+", "%2B");
+           toReturn = URLDecoder.decode(toReturn, "UTF-8");
+           return toReturn.replaceAll("!.*$", "");
+         }
+-- 
+1.7.0.4
+

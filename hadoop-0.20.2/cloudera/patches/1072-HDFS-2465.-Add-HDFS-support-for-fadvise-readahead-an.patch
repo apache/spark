@@ -1,0 +1,399 @@
+From 11a4341b9a7cddce9f86b1a47219c64a09cd0c8f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Nov 2011 14:39:43 -0800
+Subject: [PATCH 1072/1179] HDFS-2465. Add HDFS support for fadvise readahead and drop-behind.
+
+The DataNode now can pass IO advice down to the operating system to improve
+performance. The new behavior defaults off and can be enabled with the
+following configs:
+- dfs.datanode.readahead.bytes (number of bytes to readahead)
+- dfs.datanode.drop.cache.behind.writes (boolean)
+- dfs.datanode.sync.behind.writes (boolean)
+- dfs.datanode.drop.cache.behind.reads (boolean)
+
+Reason: low-risk performance improvements
+Author: Todd Lipcon
+Ref: CDH-3818
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java |    9 ++
+ .../hadoop/hdfs/server/datanode/BlockReceiver.java |   43 +++++++++
+ .../hadoop/hdfs/server/datanode/BlockSender.java   |   97 +++++++++++++++++++-
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   33 +++++++
+ 4 files changed, 180 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+index c1cc3b4..17a7404 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+@@ -45,6 +45,15 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final String  DFS_NAMENODE_BACKUP_SERVICE_RPC_ADDRESS_KEY = "dfs.namenode.backup.dnrpc-address";
+   public static final String  DFS_DATANODE_BALANCE_BANDWIDTHPERSEC_KEY = "dfs.datanode.balance.bandwidthPerSec";
+   public static final long    DFS_DATANODE_BALANCE_BANDWIDTHPERSEC_DEFAULT = 1024*1024;
++  public static final String  DFS_DATANODE_READAHEAD_BYTES_KEY = "dfs.datanode.readahead.bytes";
++  public static final long    DFS_DATANODE_READAHEAD_BYTES_DEFAULT = 0;
++  public static final String  DFS_DATANODE_DROP_CACHE_BEHIND_WRITES_KEY = "dfs.datanode.drop.cache.behind.writes";
++  public static final boolean DFS_DATANODE_DROP_CACHE_BEHIND_WRITES_DEFAULT = false;
++  public static final String  DFS_DATANODE_SYNC_BEHIND_WRITES_KEY = "dfs.datanode.sync.behind.writes";
++  public static final boolean DFS_DATANODE_SYNC_BEHIND_WRITES_DEFAULT = false;
++  public static final String  DFS_DATANODE_DROP_CACHE_BEHIND_READS_KEY = "dfs.datanode.drop.cache.behind.reads";
++  public static final boolean DFS_DATANODE_DROP_CACHE_BEHIND_READS_DEFAULT = false;
++
+   public static final String  DFS_NAMENODE_HTTP_ADDRESS_KEY = "dfs.namenode.http-address";
+   public static final String  DFS_NAMENODE_HTTP_ADDRESS_DEFAULT = "0.0.0.0:50070";
+   public static final String  DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY = "dfs.namenode.servicerpc-address";
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
+index 9427e8c..b848ed1 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
+@@ -21,6 +21,8 @@ import java.io.BufferedOutputStream;
+ import java.io.DataInputStream;
+ import java.io.DataOutputStream;
+ import java.io.EOFException;
++import java.io.FileDescriptor;
++import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.io.OutputStream;
+ import java.nio.ByteBuffer;
+@@ -37,6 +39,7 @@ import org.apache.hadoop.hdfs.protocol.FSConstants;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+ import org.apache.hadoop.hdfs.protocol.DataTransferProtocol.PipelineAck;
+ import org.apache.hadoop.io.IOUtils;
++import org.apache.hadoop.io.nativeio.NativeIO;
+ import org.apache.hadoop.util.Daemon;
+ import org.apache.hadoop.util.DataChecksum;
+ import org.apache.hadoop.util.PureJavaCrc32;
+@@ -50,12 +53,15 @@ import static org.apache.hadoop.hdfs.server.datanode.DataNode.DN_CLIENTTRACE_FOR
+ class BlockReceiver implements java.io.Closeable, FSConstants {
+   public static final Log LOG = DataNode.LOG;
+   static final Log ClientTraceLog = DataNode.ClientTraceLog;
++
++  private static final long CACHE_DROP_LAG_BYTES = 8 * 1024 * 1024;
+   
+   private Block block; // the block to receive
+   protected boolean finalized;
+   private DataInputStream in = null; // from where data are read
+   private DataChecksum checksum; // from where chunks of a block can be read
+   private OutputStream out = null; // to block file at local disk
++  private FileDescriptor outFd;
+   private DataOutputStream checksumOut = null; // to crc file at local disk
+   private int bytesPerChecksum;
+   private int checksumSize;
+@@ -77,6 +83,11 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+   private DataNode datanode = null;
+   volatile private boolean mirrorError;
+ 
++  // Cache management state
++  private boolean dropCacheBehindWrites;
++  private boolean syncBehindWrites;
++  private long lastCacheDropOffset = 0;
++
+   BlockReceiver(Block block, DataInputStream in, String inAddr,
+                 String myAddr, boolean isRecovery, String clientName, 
+                 DatanodeInfo srcDataNode, DataNode datanode) throws IOException {
+@@ -93,6 +104,9 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+       this.checksum = DataChecksum.newDataChecksum(in);
+       this.bytesPerChecksum = checksum.getBytesPerChecksum();
+       this.checksumSize = checksum.getChecksumSize();
++      this.dropCacheBehindWrites = datanode.shouldDropCacheBehindWrites();
++      this.syncBehindWrites = datanode.shouldSyncBehindWrites();
++      
+       //
+       // Open local disk out
+       //
+@@ -101,6 +115,12 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+       this.finalized = false;
+       if (streams != null) {
+         this.out = streams.dataOut;
++        if (out instanceof FileOutputStream) {
++          this.outFd = ((FileOutputStream)out).getFD();
++        } else {
++          LOG.warn("Could not get file descriptor for outputstream of class " +
++              out.getClass());
++        }
+         this.checksumOut = new DataOutputStream(new BufferedOutputStream(
+                                                   streams.checksumOut, 
+                                                   SMALL_BUFFER_SIZE));
+@@ -485,6 +505,7 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+     
+     // update length only after flush to disk
+     datanode.data.setVisibleLength(block, offsetInBlock);
++    dropOsCacheBehindWriter();
+     
+     // put in queue for pending acks
+     if (responder != null) {
+@@ -499,6 +520,28 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+     return payloadLen;
+   }
+ 
++  private void dropOsCacheBehindWriter() throws IOException {
++    try {
++      if (outFd != null &&
++          offsetInBlock > lastCacheDropOffset + CACHE_DROP_LAG_BYTES) {
++        long twoWindowsAgo = lastCacheDropOffset - CACHE_DROP_LAG_BYTES;
++        if (twoWindowsAgo > 0 && dropCacheBehindWrites) {
++          NativeIO.posixFadviseIfPossible(outFd, 0, lastCacheDropOffset,
++              NativeIO.POSIX_FADV_DONTNEED);
++        }
++        
++        if (syncBehindWrites) {
++          NativeIO.syncFileRangeIfPossible(outFd, lastCacheDropOffset, CACHE_DROP_LAG_BYTES,
++              NativeIO.SYNC_FILE_RANGE_WRITE);
++        }
++        
++        lastCacheDropOffset += CACHE_DROP_LAG_BYTES;
++      }
++    } catch (Throwable t) {
++      LOG.warn("Couldn't drop os cache behind writer for " + block, t);
++    }
++  }
++
+   void writeChecksumHeader(DataOutputStream mirrorOut) throws IOException {
+     checksum.writeHeader(mirrorOut);
+   }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java
+index 239b20f..97c8ae5 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java
+@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.datanode;
+ import java.io.BufferedInputStream;
+ import java.io.DataInputStream;
+ import java.io.DataOutputStream;
++import java.io.FileDescriptor;
+ import java.io.FileInputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
+@@ -34,6 +35,9 @@ import org.apache.hadoop.fs.ChecksumException;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.FSConstants;
+ import org.apache.hadoop.io.IOUtils;
++import org.apache.hadoop.io.ReadaheadPool;
++import org.apache.hadoop.io.ReadaheadPool.ReadaheadRequest;
++import org.apache.hadoop.io.nativeio.NativeIO;
+ import org.apache.hadoop.net.SocketOutputStream;
+ import org.apache.hadoop.util.ChecksumUtil;
+ import org.apache.hadoop.util.DataChecksum;
+@@ -51,7 +55,8 @@ class BlockSender implements java.io.Closeable, FSConstants {
+   private long blockInPosition = -1; // updated while using transferTo().
+   private DataInputStream checksumIn; // checksum datastream
+   private DataChecksum checksum; // checksum stream
+-  private long offset; // starting position to read
++  private long initialOffset; // starting position
++  private long offset; // current position to read
+   private long endOffset; // ending position
+   private long blockLength;
+   private int bytesPerChecksum; // chunk size
+@@ -66,6 +71,17 @@ class BlockSender implements java.io.Closeable, FSConstants {
+   private BlockTransferThrottler throttler;
+   private final String clientTraceFmt; // format of client trace log message
+   private final MemoizedBlock memoizedBlock;
++  private FileDescriptor blockInFd;
++  
++  // Cache-management related fields
++  private final long readaheadLength;
++  private final boolean shouldDropCacheBehindRead;
++  private ReadaheadRequest curReadahead;
++  private long lastCacheDropOffset;
++  private static final long CACHE_DROP_INTERVAL_BYTES = 1024 * 1024; // 1MB
++  
++  private static ReadaheadPool readaheadPool =
++    ReadaheadPool.getInstance();
+ 
+   /**
+    * Minimum buffer used while sending data to clients. Used only if
+@@ -73,6 +89,12 @@ class BlockSender implements java.io.Closeable, FSConstants {
+    * not sure if there will be much more improvement.
+    */
+   private static final int MIN_BUFFER_WITH_TRANSFERTO = 64*1024;
++  
++  /**
++   * Minimum length of read where manual cache management and readahead
++   * kicks in.
++   */
++  private static final long LONG_READ_THRESHOLD_BYTES = 256 * 1024;
+ 
+   
+   BlockSender(Block block, long startOffset, long length,
+@@ -93,6 +115,8 @@ class BlockSender implements java.io.Closeable, FSConstants {
+       this.verifyChecksum = verifyChecksum;
+       this.blockLength = datanode.data.getVisibleLength(block);
+       this.transferToAllowed = datanode.transferToAllowed;
++      this.readaheadLength = datanode.getReadaheadLength();
++      this.shouldDropCacheBehindRead = datanode.shouldDropCacheBehindReads();
+       this.clientTraceFmt = clientTraceFmt;
+ 
+       if ( !corruptChecksumOk || datanode.data.metaFileExists(block) ) {
+@@ -166,6 +190,12 @@ class BlockSender implements java.io.Closeable, FSConstants {
+       seqno = 0;
+ 
+       blockIn = datanode.data.getBlockInputStream(block, offset); // seek to offset
++      if (blockIn instanceof FileInputStream) {
++        blockInFd = ((FileInputStream)blockIn).getFD();
++      } else {
++        blockInFd = null;
++      }
++
+       memoizedBlock = new MemoizedBlock(blockIn, blockLength, datanode.data, block);
+     } catch (IOException ioe) {
+       IOUtils.closeStream(this);
+@@ -178,6 +208,20 @@ class BlockSender implements java.io.Closeable, FSConstants {
+    * close opened files.
+    */
+   public void close() throws IOException {
++    if (blockInFd != null && shouldDropCacheBehindRead) {
++      // drop the last few MB of the file from cache
++      try {
++        NativeIO.posixFadviseIfPossible(
++            blockInFd, lastCacheDropOffset, offset - lastCacheDropOffset,
++            NativeIO.POSIX_FADV_DONTNEED);
++      } catch (Exception e) {
++        LOG.warn("Unable to drop cache on file close", e);
++      }
++    }
++    if (curReadahead != null) {
++      curReadahead.cancel();
++    }
++    
+     IOException ioe = null;
+     // close checksum file
+     if(checksumIn!=null) {
+@@ -196,6 +240,7 @@ class BlockSender implements java.io.Closeable, FSConstants {
+         ioe = e;
+       }
+       blockIn = null;
++      blockInFd = null;
+     }
+     // throw IOException if there is any
+     if(ioe!= null) {
+@@ -387,10 +432,19 @@ class BlockSender implements java.io.Closeable, FSConstants {
+     }
+     this.throttler = throttler;
+ 
+-    long initialOffset = offset;
++    initialOffset = offset;
+     long totalRead = 0;
+     OutputStream streamForSendChunks = out;
+     
++    lastCacheDropOffset = initialOffset;
++    if (isLongRead() && blockInFd != null) {
++      // Advise that this file descriptor will be accessed sequentially.
++      NativeIO.posixFadviseIfPossible(blockInFd, 0, 0, NativeIO.POSIX_FADV_SEQUENTIAL);
++    }
++   
++    // Trigger readahead of beginning of file if configured.
++    manageOsCache();
++
+     final long startTime = ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0; 
+     try {
+       try {
+@@ -433,6 +487,7 @@ class BlockSender implements java.io.Closeable, FSConstants {
+       ByteBuffer pktBuf = ByteBuffer.allocate(pktSize);
+ 
+       while (endOffset > offset) {
++        manageOsCache();
+         long len = sendChunks(pktBuf, maxChunksPerPacket, 
+                               streamForSendChunks);
+         offset += len;
+@@ -465,6 +520,44 @@ class BlockSender implements java.io.Closeable, FSConstants {
+     return totalRead;
+   }
+   
++  /**
++   * Manage the OS buffer cache by performing read-ahead
++   * and drop-behind.
++   */
++  private void manageOsCache() throws IOException {
++    if (!isLongRead() || blockInFd == null) {
++      // don't manage cache manually for short-reads, like
++      // HBase random read workloads.
++      return;
++    }
++
++    // Perform readahead if necessary
++    if (readaheadLength > 0 && readaheadPool != null) {
++      curReadahead = readaheadPool.readaheadStream(
++          clientTraceFmt, blockInFd,
++          offset, readaheadLength, Long.MAX_VALUE,
++          curReadahead);
++    }
++
++    // Drop what we've just read from cache, since we aren't
++    // likely to need it again
++    long nextCacheDropOffset = lastCacheDropOffset + CACHE_DROP_INTERVAL_BYTES;
++    if (shouldDropCacheBehindRead &&
++        offset >= nextCacheDropOffset) {
++      long dropLength = offset - lastCacheDropOffset;
++      if (dropLength >= 1024) {
++        NativeIO.posixFadviseIfPossible(blockInFd,
++            lastCacheDropOffset, dropLength,
++            NativeIO.POSIX_FADV_DONTNEED);
++      }
++      lastCacheDropOffset += CACHE_DROP_INTERVAL_BYTES;
++    }
++  }
++
++  private boolean isLongRead() {
++    return (endOffset - offset) > LONG_READ_THRESHOLD_BYTES;
++  }
++
+   boolean isBlockReadFully() {
+     return blockReadFully;
+   }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index fe2730a..a225b64 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -215,6 +215,11 @@ public class DataNode extends Configured
+   int socketTimeout;
+   int socketWriteTimeout = 0;  
+   boolean transferToAllowed = true;
++  private boolean dropCacheBehindWrites = false;
++  private boolean syncBehindWrites = false;
++  private boolean dropCacheBehindReads = false;
++  private long readaheadLength = 0;
++
+   int writePacketSize = 0;
+   private boolean supportAppends;
+ 
+@@ -334,6 +339,18 @@ public class DataNode extends Configured
+     this.transferToAllowed = conf.getBoolean("dfs.datanode.transferTo.allowed", 
+                                              true);
+     this.writePacketSize = conf.getInt("dfs.write.packet.size", 64*1024);
++    this.readaheadLength = conf.getLong(
++        DFSConfigKeys.DFS_DATANODE_READAHEAD_BYTES_KEY,
++        DFSConfigKeys.DFS_DATANODE_READAHEAD_BYTES_DEFAULT);
++    this.dropCacheBehindWrites = conf.getBoolean(
++        DFSConfigKeys.DFS_DATANODE_DROP_CACHE_BEHIND_WRITES_KEY,
++        DFSConfigKeys.DFS_DATANODE_DROP_CACHE_BEHIND_WRITES_DEFAULT);
++    this.syncBehindWrites = conf.getBoolean(
++        DFSConfigKeys.DFS_DATANODE_SYNC_BEHIND_WRITES_KEY,
++        DFSConfigKeys.DFS_DATANODE_SYNC_BEHIND_WRITES_DEFAULT);
++    this.dropCacheBehindReads = conf.getBoolean(
++        DFSConfigKeys.DFS_DATANODE_DROP_CACHE_BEHIND_READS_KEY,
++        DFSConfigKeys.DFS_DATANODE_DROP_CACHE_BEHIND_READS_DEFAULT);
+ 
+     InetSocketAddress socAddr = DataNode.getStreamingAddr(conf);
+     int tmpPort = socAddr.getPort();
+@@ -2021,4 +2038,20 @@ public class DataNode extends Configured
+     }
+     return JSON.toString(info);
+   }
++
++  long getReadaheadLength() {
++    return readaheadLength;
++  }
++
++  boolean shouldDropCacheBehindWrites() {
++    return dropCacheBehindWrites;
++  }
++
++  boolean shouldDropCacheBehindReads() {
++    return dropCacheBehindReads;
++  }
++
++  boolean shouldSyncBehindWrites() {
++    return syncBehindWrites;
++  }
+ }
+-- 
+1.7.0.4
+

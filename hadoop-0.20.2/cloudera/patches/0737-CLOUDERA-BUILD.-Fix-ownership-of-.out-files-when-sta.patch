@@ -1,0 +1,29 @@
+From 98c55c28258aa6f42250569bd7fa431ac657bdbd Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 8 Oct 2010 17:07:56 -0700
+Subject: [PATCH 0737/1179] CLOUDERA-BUILD. Fix ownership of .out files when starting daemons as root
+
+Author: Todd Lipcon
+---
+ bin/hadoop |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index cb2d227..108e1a7 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -424,7 +424,11 @@ case "$_HADOOP_RUN_MODE" in
+     fi
+ 
+     if [ "$_HADOOP_DAEMON_DETACHED" = "true" ]; then
++      touch $_HADOOP_DAEMON_OUT
+       nohup $_JAVA_EXEC -Dproc_$COMMAND $JAVA_HEAP_MAX $HADOOP_OPTS -classpath "$CLASSPATH" $CLASS "$@" > "$_HADOOP_DAEMON_OUT" 2>&1 < /dev/null &
++      if [ "$EUID" == "0" ]; then
++        chown $_HADOOP_DAEMON_USER $_HADOOP_DAEMON_OUT
++      fi
+       echo $! > "$_HADOOP_DAEMON_PIDFILE"
+       sleep 1
+       head "$_HADOOP_DAEMON_OUT"
+-- 
+1.7.0.4
+

@@ -1,0 +1,72 @@
+From 1cb57487f49bd7fd14c7575a1e8f5842b3f24e35 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 9 Mar 2010 23:39:13 -0800
+Subject: [PATCH 0547/1179] HDFS-992. Re-factor block access token implementation to conform to the generic Token interface in Common
+
+Patch: https://issues.apache.org/jira/secure/attachment/12438371/h992-BK-0.20-07.1.patch
+Author: Kan Zhang
+Ref: CDH-648
+---
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   21 ++++++++++++++++---
+ .../hadoop/hdfs/TestClientBlockVerification.java   |    2 +-
+ 2 files changed, 18 insertions(+), 5 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 7be6a16..a8f40b7 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -32,6 +32,7 @@ import java.net.UnknownHostException;
+ import java.nio.channels.ServerSocketChannel;
+ import java.nio.channels.SocketChannel;
+ import java.security.NoSuchAlgorithmException;
++import java.security.PrivilegedExceptionAction;
+ import java.security.SecureRandom;
+ import java.util.AbstractList;
+ import java.util.ArrayList;
+@@ -501,14 +502,26 @@ public class DataNode extends Configured
+   } 
+ 
+   public static InterDatanodeProtocol createInterDataNodeProtocolProxy(
+-      DatanodeID datanodeid, Configuration conf) throws IOException {
+-    InetSocketAddress addr = NetUtils.createSocketAddr(
++      DatanodeID datanodeid, final Configuration conf) throws IOException {
++    final InetSocketAddress addr = NetUtils.createSocketAddr(
+         datanodeid.getHost() + ":" + datanodeid.getIpcPort());
+     if (InterDatanodeProtocol.LOG.isDebugEnabled()) {
+       InterDatanodeProtocol.LOG.info("InterDatanodeProtocol addr=" + addr);
+     }
+-    return (InterDatanodeProtocol)RPC.getProxy(InterDatanodeProtocol.class,
+-        InterDatanodeProtocol.versionID, addr, conf);
++
++    UserGroupInformation loginUgi = UserGroupInformation.getLoginUser();
++    try {
++      return loginUgi
++          .doAs(new PrivilegedExceptionAction<InterDatanodeProtocol>() {
++            public InterDatanodeProtocol run() throws IOException {
++              return (InterDatanodeProtocol) RPC.getProxy(
++                  InterDatanodeProtocol.class, InterDatanodeProtocol.versionID,
++                  addr, conf);
++            }
++          });
++    } catch (InterruptedException ie) {
++      throw new IOException(ie.getMessage());
++    }
+   }
+ 
+   public InetSocketAddress getNameNodeAddr() {
+diff --git a/src/test/org/apache/hadoop/hdfs/TestClientBlockVerification.java b/src/test/org/apache/hadoop/hdfs/TestClientBlockVerification.java
+index e5cd3ff..08e75ea 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestClientBlockVerification.java
++++ b/src/test/org/apache/hadoop/hdfs/TestClientBlockVerification.java
+@@ -94,7 +94,7 @@ public class TestClientBlockVerification {
+     return DFSClient.BlockReader.newBlockReader(
+       s, targetAddr.toString()+ ":" + block.getBlockId(),
+       block.getBlockId(),
+-      testBlock.getAccessToken(),
++      testBlock.getBlockToken(),
+       block.getGenerationStamp(),
+       offset, lenToRead,
+       conf.getInt("io.file.buffer.size", 4096));
+-- 
+1.7.0.4
+

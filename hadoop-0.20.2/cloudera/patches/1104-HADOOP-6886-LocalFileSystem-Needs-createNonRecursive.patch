@@ -1,0 +1,132 @@
+From ae79e854209b90fcf5e574a8c927cde3bdd3eb9c Mon Sep 17 00:00:00 2001
+From: Jonathan Hsieh <jon@cloudera.com>
+Date: Tue, 6 Dec 2011 08:08:25 -0800
+Subject: [PATCH 1104/1179] HADOOP-6886 LocalFileSystem Needs createNonRecursive API
+
+Reason: Bug (HBase data loss)
+Author: Jitendra Nath Pandey and Nicholas Spiegelberg
+Ref: CDH-3816
+---
+ .../org/apache/hadoop/fs/ChecksumFileSystem.java   |   26 +++++++++++++++-
+ src/core/org/apache/hadoop/fs/FileSystem.java      |    3 +-
+ .../org/apache/hadoop/fs/RawLocalFileSystem.java   |   31 ++++++++++++++++++--
+ 3 files changed, 54 insertions(+), 6 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/ChecksumFileSystem.java b/src/core/org/apache/hadoop/fs/ChecksumFileSystem.java
+index 6f9701e..c2de713 100644
+--- a/src/core/org/apache/hadoop/fs/ChecksumFileSystem.java
++++ b/src/core/org/apache/hadoop/fs/ChecksumFileSystem.java
+@@ -362,9 +362,22 @@ public abstract class ChecksumFileSystem extends FilterFileSystem {
+   public FSDataOutputStream create(Path f, FsPermission permission,
+       boolean overwrite, int bufferSize, short replication, long blockSize,
+       Progressable progress) throws IOException {
++    return create(f, permission, overwrite, true, bufferSize, 
++        replication, blockSize, progress);
++  }
++
++  private FSDataOutputStream create(Path f, FsPermission permission,
++      boolean overwrite, boolean createParent, int bufferSize, 
++      short replication, long blockSize,
++      Progressable progress) throws IOException {
+     Path parent = f.getParent();
+-    if (parent != null && !mkdirs(parent)) {
+-      throw new IOException("Mkdirs failed to create " + parent);
++    if (parent != null) {
++      if (!createParent && !exists(parent)) {
++        throw new FileNotFoundException("Parent directory doesn't exist: "
++            + parent);
++      } else if (!mkdirs(parent)) {
++        throw new IOException("Mkdirs failed to create " + parent);
++      }
+     }
+     final FSDataOutputStream out = new FSDataOutputStream(
+         new ChecksumFSOutputSummer(this, f, overwrite, bufferSize, replication,
+@@ -375,6 +388,15 @@ public abstract class ChecksumFileSystem extends FilterFileSystem {
+     return out;
+   }
+ 
++  /** {@inheritDoc} */
++  @Override
++  public FSDataOutputStream createNonRecursive(Path f, FsPermission permission,
++      boolean overwrite, int bufferSize, short replication, long blockSize,
++      Progressable progress) throws IOException {
++    return create(f, permission, overwrite, false, bufferSize, replication, 
++        blockSize, progress);
++  }
++
+   /**
+    * Set replication for an existing file.
+    * Implement the abstract <tt>setReplication</tt> of <tt>FileSystem</tt>
+diff --git a/src/core/org/apache/hadoop/fs/FileSystem.java b/src/core/org/apache/hadoop/fs/FileSystem.java
+index f8d5fed..6cc3961 100644
+--- a/src/core/org/apache/hadoop/fs/FileSystem.java
++++ b/src/core/org/apache/hadoop/fs/FileSystem.java
+@@ -652,7 +652,8 @@ public abstract class FileSystem extends Configured implements Closeable {
+       boolean overwrite,
+       int bufferSize, short replication, long blockSize,
+       Progressable progress) throws IOException {
+-    throw new IOException("createNonRecursive unsupported for this filesystem");
++    throw new IOException("createNonRecursive unsupported for this filesystem "
++        + this.getClass());
+   }
+ 
+   /**
+diff --git a/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java b/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java
+index cb9c020..74f0d83 100644
+--- a/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java
++++ b/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java
+@@ -230,15 +230,28 @@ public class RawLocalFileSystem extends FileSystem {
+   }
+ 
+   /** {@inheritDoc} */
++  @Override
+   public FSDataOutputStream create(Path f, boolean overwrite, int bufferSize,
+                                    short replication, long blockSize, Progressable progress)
++  throws IOException {
++    return create(f, overwrite, true, bufferSize, replication, blockSize, progress);
++  }
++
++  private FSDataOutputStream create(Path f, boolean overwrite, 
++      boolean createParent, int bufferSize,
++      short replication, long blockSize, Progressable progress)
+     throws IOException {
+     if (exists(f) && !overwrite) {
+       throw new IOException("File already exists:"+f);
+     }
+     Path parent = f.getParent();
+-    if (parent != null && !mkdirs(parent)) {
+-      throw new IOException("Mkdirs failed to create " + parent.toString());
++    if (parent != null) {
++      if (!createParent && !exists(parent)) {
++        throw new FileNotFoundException("Parent directory doesn't exist: "
++            + parent);
++      } else if (!mkdirs(parent)) {
++        throw new IOException("Mkdirs failed to create " + parent);
++      }
+     }
+     return new FSDataOutputStream(new BufferedOutputStream(
+         new LocalFSFileOutputStream(f, false), bufferSize), statistics);
+@@ -254,7 +267,19 @@ public class RawLocalFileSystem extends FileSystem {
+     setPermission(f, permission);
+     return out;
+   }
+-  
++
++  /** {@inheritDoc} */
++  @Override
++  public FSDataOutputStream createNonRecursive(Path f, FsPermission permission,
++      boolean overwrite,
++      int bufferSize, short replication, long blockSize,
++      Progressable progress) throws IOException {
++    FSDataOutputStream out = create(f,
++        overwrite, false, bufferSize, replication, blockSize, progress);
++    setPermission(f, permission);
++    return out;
++  }
++
+   public boolean rename(Path src, Path dst) throws IOException {
+     if (pathToFile(src).renameTo(pathToFile(dst))) {
+       return true;
+-- 
+1.7.0.4
+

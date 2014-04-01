@@ -1,0 +1,54 @@
+From e81e1a34349a1d6a35faddeed4d7ff2087a6a48c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 17 May 2010 10:56:25 -0700
+Subject: [PATCH 0657/1179] HDFS-1157. Modifications introduced by HDFS-1150 are breaking aspect's bindings
+
+Patch: https://issues.apache.org/jira/secure/attachment/12444716/hdfs-1157.patch
+Author: Konstantin Boudnik
+Ref: YDH
+---
+ .../hadoop/hdfs/server/datanode/DataNodeAspect.aj  |   15 +++++++++------
+ 1 files changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/src/test/system/aop/org/apache/hadoop/hdfs/server/datanode/DataNodeAspect.aj b/src/test/system/aop/org/apache/hadoop/hdfs/server/datanode/DataNodeAspect.aj
+index 7f47e64..e2f3ec3 100644
+--- a/src/test/system/aop/org/apache/hadoop/hdfs/server/datanode/DataNodeAspect.aj
++++ b/src/test/system/aop/org/apache/hadoop/hdfs/server/datanode/DataNodeAspect.aj
+@@ -26,6 +26,7 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.test.system.DNProtocol;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.test.system.DaemonProtocol;
++import org.apache.hadoop.hdfs.server.datanode.SecureDataNodeStarter.SecureResources;
+ 
+ public privileged aspect DataNodeAspect {
+   declare parents : DataNode implements DNProtocol;
+@@ -34,18 +35,20 @@ public privileged aspect DataNodeAspect {
+     return super.getConf();
+   }
+ 
+-  pointcut dnConstructorPointcut(Configuration conf, AbstractList<File> dirs) :
+-    call(DataNode.new(Configuration, AbstractList<File>))
+-    && args(conf, dirs);
++  pointcut dnConstructorPointcut(Configuration conf, AbstractList<File> dirs,
++      SecureResources resources) :
++    call(DataNode.new(Configuration, AbstractList<File>, SecureResources))
++    && args(conf, dirs, resources);
+ 
+-  after(Configuration conf, AbstractList<File> dirs) returning (DataNode datanode):
+-    dnConstructorPointcut(conf, dirs) {
++  after(Configuration conf, AbstractList<File> dirs, SecureResources resources)
++    returning (DataNode datanode):
++    dnConstructorPointcut(conf, dirs, resources) {
+     try {
+       UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+       datanode.setUser(ugi.getShortUserName());
+     } catch (IOException e) {
+       datanode.LOG.warn("Unable to get the user information for the " +
+-          "Jobtracker");
++          "DataNode");
+     }
+     datanode.setReady(true);
+   }
+-- 
+1.7.0.4
+

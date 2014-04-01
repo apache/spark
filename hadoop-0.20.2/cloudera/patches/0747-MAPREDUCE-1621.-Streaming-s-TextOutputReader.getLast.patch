@@ -1,0 +1,80 @@
+From 43fb37a6b9693003cc9ea1161bc080e5309b1973 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Thu, 9 Dec 2010 08:54:22 -0800
+Subject: [PATCH 0747/1179] MAPREDUCE-1621. Streaming's TextOutputReader.getLastOutput throws NPE if it has
+ never read any output.
+
+If TextOutputReader.readKeyValue() has never successfully read a line,
+then its bytes member will be left null. Thus when logging a task
+failure, PipeMapRed.getContext() can trigger an NPE when it calls
+outReader_.getLastOutput().
+
+Reason: Bug
+Author: Amareshwari Sriramadasu
+Ref: CDH-855
+---
+ .../hadoop/streaming/io/RawBytesOutputReader.java  |    6 +++++-
+ .../hadoop/streaming/io/TextOutputReader.java      |   12 ++++++++----
+ .../streaming/io/TypedBytesOutputReader.java       |    6 +++++-
+ 3 files changed, 18 insertions(+), 6 deletions(-)
+
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/io/RawBytesOutputReader.java b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/io/RawBytesOutputReader.java
+index 3242fc9..2ffb62c 100644
+--- a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/io/RawBytesOutputReader.java
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/io/RawBytesOutputReader.java
+@@ -68,7 +68,11 @@ public class RawBytesOutputReader
+ 
+   @Override
+   public String getLastOutput() {
+-    return new BytesWritable(bytes).toString();
++    if (bytes != null) {
++      return new BytesWritable(bytes).toString();
++    } else {
++      return null;
++    }
+   }
+ 
+   private int readLength() throws IOException {
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/io/TextOutputReader.java b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/io/TextOutputReader.java
+index b8d7ca2..06c05bc 100644
+--- a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/io/TextOutputReader.java
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/io/TextOutputReader.java
+@@ -83,10 +83,14 @@ public class TextOutputReader extends OutputReader<Text, Text> {
+ 
+   @Override
+   public String getLastOutput() {
+-    try {
+-      return new String(bytes, "UTF-8");
+-    } catch (UnsupportedEncodingException e) {
+-      return "<undecodable>";
++    if (bytes != null) {
++      try {
++        return new String(bytes, "UTF-8");
++      } catch (UnsupportedEncodingException e) {
++        return "<undecodable>";
++      }
++    } else {
++      return null;
+     }
+   }
+ 
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/io/TypedBytesOutputReader.java b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/io/TypedBytesOutputReader.java
+index a032579..e5526ef 100644
+--- a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/io/TypedBytesOutputReader.java
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/io/TypedBytesOutputReader.java
+@@ -70,7 +70,11 @@ public class TypedBytesOutputReader extends
+ 
+   @Override
+   public String getLastOutput() {
+-    return new TypedBytesWritable(bytes).toString();
++    if (bytes != null) {
++      return new TypedBytesWritable(bytes).toString();
++    } else {
++      return null;
++    }
+   }
+ 
+ }
+-- 
+1.7.0.4
+

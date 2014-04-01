@@ -1,0 +1,41 @@
+From 4bd437c9d70f2c0d68047e0376a7af21cc4a70e0 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:13:17 -0800
+Subject: [PATCH 0115/1179] HADOOP-5891. If dfs.http.address is default, SecondaryNameNode can't find NameNode
+
+Description: As detailed in this blog post:<br/>
+<span class="nobr"><a href="http://www.cloudera.com/blog/2009/02/10/multi-host-secondarynamenode-configuration/">http://www.cloudera.com/blog/2009/02/10/multi-host-secondarynamenode-configuration/<sup><img class="rendericon" src="https://issues.apache.org/jira/images/icons/linkext7.gif" height="7" width="7" align="absmiddle" alt="" border="0"/></sup></a></span><br/>
+if dfs.http.address is not configured, and the 2NN is a different machine from the NN, the 2NN fails to connect.
+
+<p>In SecondaryNameNode.getInfoServer, the 2NN should notice a "0.0.0.0" dfs.http.address and, in that case, pull the hostname out of fs.default.name. This would fix the default configuration to work properly for most users.</p>
+Reason: Configuration improvement
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ .../hdfs/server/namenode/SecondaryNameNode.java    |    9 ++++++++-
+ 1 files changed, 8 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index 1a93e64..f42f13a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -288,8 +288,15 @@ public class SecondaryNameNode implements Runnable {
+     if (!"hdfs".equals(fsName.getScheme())) {
+       throw new IOException("This is not a DFS");
+     }
+-    return NetUtils.getServerAddress(conf, "dfs.info.bindAddress", 
++
++    String configuredAddress = NetUtils.getServerAddress(conf, "dfs.info.bindAddress", 
+                                      "dfs.info.port", "dfs.http.address");
++    InetSocketAddress sockAddr = NetUtils.createSocketAddr(configuredAddress);
++    if (sockAddr.getAddress().isAnyLocalAddress()) {
++      return fsName.getHost() + ":" + sockAddr.getPort();
++    } else {
++      return configuredAddress;
++    }
+   }
+ 
+   /**
+-- 
+1.7.0.4
+

@@ -1,0 +1,1256 @@
+From e3f8dc3926d119ce3b765325114e5b8ada01120f Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Wed, 10 Aug 2011 17:12:27 -0700
+Subject: [PATCH 1035/1179] MAPREDUCE-1943. Implement limits on per-job JobConf, Counters, StatusReport, Split-Sizes
+
+Reason: Improvement
+Author: Mahadev konar
+Ref: CDH-1794
+---
+ src/mapred/mapred-default.xml                      |    7 +
+ .../hadoop/mapred/CompletedJobStatusStore.java     |    7 +-
+ src/mapred/org/apache/hadoop/mapred/Counters.java  |  125 +++++++++++---
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |    8 +-
+ .../org/apache/hadoop/mapred/JobInProgress.java    |  104 +++++++++---
+ .../org/apache/hadoop/mapred/JobTracker.java       |   22 ++-
+ src/mapred/org/apache/hadoop/mapred/Task.java      |    8 +
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   20 ++
+ .../apache/hadoop/mapreduce/split/JobSplit.java    |    1 +
+ .../hadoop/mapreduce/split/JobSplitWriter.java     |   34 +++-
+ .../mapreduce/split/SplitMetaInfoReader.java       |    7 +
+ .../org/apache/hadoop/mapred/TestJobHistory.java   |    9 +-
+ .../hadoop/mapred/TestUserDefinedCounters.java     |   57 ++++++-
+ .../hadoop/mapreduce/split/TestBlockLimits.java    |  185 ++++++++++++++++++++
+ .../hadoop/mapreduce/split/TestJobSplitWriter.java |  138 +++++++++++++++
+ src/webapps/job/jobdetails.jsp                     |   15 ++-
+ 16 files changed, 675 insertions(+), 72 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/split/TestBlockLimits.java
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/split/TestJobSplitWriter.java
+
+diff --git a/src/mapred/mapred-default.xml b/src/mapred/mapred-default.xml
+index fda9779..a1dfa62 100644
+--- a/src/mapred/mapred-default.xml
++++ b/src/mapred/mapred-default.xml
+@@ -1211,6 +1211,13 @@
+   </description>
+ </property>
+ 
++<property>
++  <name>mapreduce.job.counters.limit</name>
++  <value>120</value>
++  <description>Limit on the number of counters allowed per job.
++  </description>
++</property>
++
+ <!--  end of node health script variables -->
+ 
+ </configuration>
+diff --git a/src/mapred/org/apache/hadoop/mapred/CompletedJobStatusStore.java b/src/mapred/org/apache/hadoop/mapred/CompletedJobStatusStore.java
+index ad63f73..c297d7c 100644
+--- a/src/mapred/org/apache/hadoop/mapred/CompletedJobStatusStore.java
++++ b/src/mapred/org/apache/hadoop/mapred/CompletedJobStatusStore.java
+@@ -178,8 +178,11 @@ class CompletedJobStatusStore implements Runnable {
+         job.getStatus().write(dataOut);
+ 
+         job.getProfile().write(dataOut);
+-
+-        job.getCounters().write(dataOut);
++        
++        Counters counters = new Counters();
++        boolean isFine = job.getCounters(counters);
++        counters = (isFine? counters: new Counters());
++        counters.write(dataOut);
+ 
+         TaskCompletionEvent[] events = 
+                 job.getTaskCompletionEvents(0, Integer.MAX_VALUE);
+diff --git a/src/mapred/org/apache/hadoop/mapred/Counters.java b/src/mapred/org/apache/hadoop/mapred/Counters.java
+index 04a0f8e..c036850 100644
+--- a/src/mapred/org/apache/hadoop/mapred/Counters.java
++++ b/src/mapred/org/apache/hadoop/mapred/Counters.java
+@@ -59,7 +59,22 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+   private static char[] charsToEscape =  {GROUP_OPEN, GROUP_CLOSE, 
+                                           COUNTER_OPEN, COUNTER_CLOSE, 
+                                           UNIT_OPEN, UNIT_CLOSE};
++  /** limit on the size of the name of the group **/
++  private static final int GROUP_NAME_LIMIT = 128;
++  /** limit on the size of the counter name **/
++  private static final int COUNTER_NAME_LIMIT = 64;
+   
++  private static final JobConf conf = new JobConf();
++  /** limit on counters **/
++  public static int MAX_COUNTER_LIMIT = 
++    conf.getInt("mapreduce.job.counters.limit", 120);
++
++  /** the max groups allowed **/
++  static final int MAX_GROUP_LIMIT = 50;
++  
++  /** the number of current counters**/
++  private int numCounters = 0;
++
+   //private static Log log = LogFactory.getLog("Counters.class");
+   
+   /**
+@@ -138,7 +153,7 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+    *  <p><code>Group</code>handles localization of the class name and the 
+    *  counter names.</p>
+    */
+-  public static class Group implements Writable, Iterable<Counter> {
++  public class Group implements Writable, Iterable<Counter> {
+     private String groupName;
+     private String displayName;
+     private Map<String, Counter> subcounters = new HashMap<String, Counter>();
+@@ -159,16 +174,7 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+                (bundle == null ? "nothing" : "bundle"));
+       }
+     }
+-    
+-    /**
+-     * Returns the specified resource bundle, or throws an exception.
+-     * @throws MissingResourceException if the bundle isn't found
+-     */
+-    private static ResourceBundle getResourceBundle(String enumClassName) {
+-      String bundleName = enumClassName.replace('$','_');
+-      return ResourceBundle.getBundle(bundleName);
+-    }
+-    
++        
+     /**
+      * Returns raw name of the group.  This is the name of the enum class
+      * for this group of counters.
+@@ -295,13 +301,20 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+      * @return the counter
+      */
+     public synchronized Counter getCounterForName(String name) {
+-      Counter result = subcounters.get(name);
++      String shortName = getShortName(name, COUNTER_NAME_LIMIT);
++      Counter result = subcounters.get(shortName);
+       if (result == null) {
+         if (LOG.isDebugEnabled()) {
+-          LOG.debug("Adding " + name);
++          LOG.debug("Adding " + shortName);
+         }
+-        result = new Counter(name, localize(name + ".name", name), 0L);
+-        subcounters.put(name, result);
++        numCounters = (numCounters == 0) ? Counters.this.size(): numCounters; 
++        if (numCounters >= MAX_COUNTER_LIMIT) {
++          throw new CountersExceededException("Error: Exceeded limits on number of counters - " 
++              + "Counters=" + numCounters + " Limit=" + MAX_COUNTER_LIMIT);
++        }
++        result = new Counter(shortName, localize(shortName + ".name", shortName), 0L);
++        subcounters.put(shortName, result);
++        numCounters++;
+       }
+       return result;
+     }
+@@ -362,7 +375,16 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+    * typical usage.
+    */
+   private Map<Enum, Counter> cache = new IdentityHashMap<Enum, Counter>();
+-  
++
++  /**
++   * Returns the specified resource bundle, or throws an exception.
++   * @throws MissingResourceException if the bundle isn't found
++   */
++  private static ResourceBundle getResourceBundle(String enumClassName) {
++    String bundleName = enumClassName.replace('$','_');
++    return ResourceBundle.getBundle(bundleName);
++  }
++
+   /**
+    * Returns the names of all counter classes.
+    * @return Set of counter names.
+@@ -380,13 +402,20 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+    * with the specified name.
+    */
+   public synchronized Group getGroup(String groupName) {
+-    Group result = counters.get(groupName);
++    String shortGroupName = getShortName(groupName, GROUP_NAME_LIMIT);
++    Group result = counters.get(shortGroupName);
+     if (result == null) {
+-      result = new Group(groupName);
+-      counters.put(groupName, result);
++      /** check if we have exceeded the max number on groups **/
++      if (counters.size() > MAX_GROUP_LIMIT) {
++        throw new RuntimeException(
++            "Error: Exceeded limits on number of groups in counters - " +
++            "Groups=" + counters.size() +" Limit=" + MAX_GROUP_LIMIT);
++      }
++      result = new Group(shortGroupName);
++      counters.put(shortGroupName, result);
+     }
+     return result;
+-  }
++  } 
+ 
+   /**
+    * Find the counter for the given enum. The same enum will always return the
+@@ -398,8 +427,10 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+     Counter counter = cache.get(key);
+     if (counter == null) {
+       Group group = getGroup(key.getDeclaringClass().getName());
+-      counter = group.getCounterForName(key.toString());
+-      cache.put(key, counter);
++      if (group != null) {
++        counter = group.getCounterForName(key.toString());
++        if (counter != null)  cache.put(key, counter);
++      }
+     }
+     return counter;    
+   }
+@@ -411,10 +442,11 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+    * @return the counter for that name
+    */
+   public synchronized Counter findCounter(String group, String name) {
+-    return getGroup(group).getCounterForName(name);
++    Group retGroup = getGroup(group);
++    return (retGroup == null) ? null: retGroup.getCounterForName(name);
+   }
+ 
+-  /**
++  /** 
+    * Find a counter by using strings
+    * @param group the name of the group
+    * @param id the id of the counter within the group (0 to N-1)
+@@ -424,7 +456,8 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+    */
+   @Deprecated
+   public synchronized Counter findCounter(String group, int id, String name) {
+-    return getGroup(group).getCounterForName(name);
++    Group retGroup = getGroup(group);
++    return (retGroup == null) ? null: retGroup.getCounterForName(name);
+   }
+ 
+   /**
+@@ -445,7 +478,13 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+    * @param amount amount by which counter is to be incremented
+    */
+   public synchronized void incrCounter(String group, String counter, long amount) {
+-    getGroup(group).getCounterForName(counter).increment(amount);
++    Group retGroup = getGroup(group);
++    if (retGroup != null) {
++      Counter retCounter = retGroup.getCounterForName(counter);
++      if (retCounter != null ) {
++        retCounter.increment(amount);
++      }
++    }
+   }
+   
+   /**
+@@ -453,7 +492,8 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+    * does not exist.
+    */
+   public synchronized long getCounter(Enum key) {
+-    return findCounter(key).getValue();
++    Counter retCounter = findCounter(key);
++    return (retCounter == null) ? 0 : retCounter.getValue();
+   }
+   
+   /**
+@@ -464,9 +504,15 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+   public synchronized void incrAllCounters(Counters other) {
+     for (Group otherGroup: other) {
+       Group group = getGroup(otherGroup.getName());
++      if (group == null) {
++        continue;
++      }
+       group.displayName = otherGroup.displayName;
+       for (Counter otherCounter : otherGroup) {
+         Counter counter = group.getCounterForName(otherCounter.getName());
++        if (counter == null) {
++          continue;
++        }
+         counter.setDisplayName(otherCounter.getDisplayName());
+         counter.increment(otherCounter.getValue());
+       }
+@@ -611,6 +657,18 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+     }
+     return builder.toString();
+   }
++  
++  /**
++   * return the short name of a counter/group name
++   * truncates from beginning.
++   * @param name the name of a group or counter
++   * @param limit the limit of characters
++   * @return the short name
++   */
++  static String getShortName(String name, int limit) {
++    return (name.length() > limit ?
++          name.substring(name.length() - limit, name.length()): name);
++  }
+ 
+   // Extracts a block (data enclosed within delimeters) ignoring escape 
+   // sequences. Throws ParseException if an incomplete block is found else 
+@@ -742,4 +800,17 @@ public class Counters implements Writable, Iterable<Counters.Group> {
+     }
+     return isEqual;
+   }
++  
++  /**
++   * Counter exception thrown when the number of counters exceed 
++   * the limit
++   */
++  public static class CountersExceededException extends RuntimeException {
++  
++    private static final long serialVersionUID = 1L;
++
++    public CountersExceededException(String msg) {
++      super(msg);
++    }
++  }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index 2613ddc..c3bcf19 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -1375,7 +1375,13 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+       }
+     }
+     LOG.info("Job complete: " + jobId);
+-    Counters counters = job.getCounters();
++    Counters counters = null;
++    try{
++       counters = job.getCounters();
++    } catch(IOException ie) {
++      counters = null;
++      LOG.info(ie.getMessage());
++    }
+     if (counters != null) {
+       counters.log(LOG);
+     }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 1efde3b..14fca03 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -36,7 +36,6 @@ import java.util.SortedSet;
+ import java.util.TreeMap;
+ import java.util.TreeSet;
+ import java.util.Vector;
+-import java.util.concurrent.atomic.AtomicBoolean;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -45,8 +44,10 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.LocalFileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.Text;
+-import org.apache.hadoop.mapred.CleanupQueue.PathDeletionContext;
+ import org.apache.hadoop.mapred.AuditLogger;
++import org.apache.hadoop.mapred.CleanupQueue.PathDeletionContext;
++import org.apache.hadoop.mapred.Counters.CountersExceededException;
++import org.apache.hadoop.mapred.Counters.Group;
+ import org.apache.hadoop.mapred.JobHistory.Values;
+ import org.apache.hadoop.mapreduce.JobContext;
+ import org.apache.hadoop.mapreduce.JobSubmissionFiles;
+@@ -120,7 +121,7 @@ public class JobInProgress {
+   long reduce_input_limit = -1L;
+   private static float DEFAULT_COMPLETED_MAPS_PERCENT_FOR_REDUCE_SLOWSTART = 0.05f;
+   int completedMapsForReduceSlowstart = 0;
+-  
++    
+   // runningMapTasks include speculative tasks, so we need to capture 
+   // speculative tasks separately 
+   int speculativeMapTasks = 0;
+@@ -504,7 +505,9 @@ public class JobInProgress {
+    * this job.
+    */
+   public void updateMetrics() {
+-    Counters counters = getCounters();
++    Counters counters = new Counters();
++    boolean isFine = getCounters(counters);
++    counters = (isFine? counters: new Counters());
+     for (Counters.Group group : counters) {
+       jobMetrics.setTag("group", group.getDisplayName());
+       for (Counters.Counter counter : group) {
+@@ -812,7 +815,8 @@ public class JobInProgress {
+   TaskSplitMetaInfo[] createSplits(org.apache.hadoop.mapreduce.JobID jobId)
+   throws IOException {
+     TaskSplitMetaInfo[] allTaskSplitMetaInfo =
+-      SplitMetaInfoReader.readSplitMetaInfo(jobId, fs, conf, jobSubmitDir);
++      SplitMetaInfoReader.readSplitMetaInfo(jobId, fs, jobtracker.getConf(),
++          jobSubmitDir);
+     return allTaskSplitMetaInfo;
+   }
+ 
+@@ -1048,6 +1052,7 @@ public class JobInProgress {
+     }
+     return results;
+   }
++  
+ 
+   ////////////////////////////////////////////////////
+   // Status update methods
+@@ -1252,27 +1257,47 @@ public class JobInProgress {
+   
+   /**
+    *  Returns map phase counters by summing over all map tasks in progress.
++   *  This method returns true if counters are within limit or false.
+    */
+-  public synchronized Counters getMapCounters() {
+-    return incrementTaskCounters(new Counters(), maps);
++  public synchronized boolean getMapCounters(Counters counters) {
++    try {
++      counters = incrementTaskCounters(counters, maps);
++    } catch(CountersExceededException ce) {
++      LOG.info("Counters Exceeded for Job: " + jobId, ce);
++      return false;
++    }
++    return true;
+   }
+     
+   /**
+    *  Returns map phase counters by summing over all map tasks in progress.
++   *  This method returns true if counters are within limits and false otherwise.
+    */
+-  public synchronized Counters getReduceCounters() {
+-    return incrementTaskCounters(new Counters(), reduces);
++  public synchronized boolean getReduceCounters(Counters counters) {
++    try {
++      counters = incrementTaskCounters(counters, reduces);
++    } catch(CountersExceededException ce) {
++      LOG.info("Counters Exceeded for Job: " + jobId, ce);
++      return false;
++    }
++    return true;
+   }
+     
+   /**
+    *  Returns the total job counters, by adding together the job, 
+-   *  the map and the reduce counters.
++   *  the map and the reduce counters. This method returns true if
++   *  counters are within limits and false otherwise.
+    */
+-  public synchronized Counters getCounters() {
+-    Counters result = new Counters();
+-    result.incrAllCounters(getJobCounters());
+-    incrementTaskCounters(result, maps);
+-    return incrementTaskCounters(result, reduces);
++  public synchronized boolean getCounters(Counters result) {
++    try {
++      result.incrAllCounters(getJobCounters());
++      incrementTaskCounters(result, maps);
++      incrementTaskCounters(result, reduces);
++    } catch(CountersExceededException ce) {
++      LOG.info("Counters Exceeded for Job: " + jobId, ce);
++      return false;
++    }
++    return true;
+   }
+     
+   /**
+@@ -2580,6 +2605,9 @@ public class JobInProgress {
+       retireMap(tip);
+       if ((finishedMapTasks + failedMapTIPs) == (numMapTasks)) {
+         this.status.setMapProgress(1.0f);
++        if (canLaunchJobCleanupTask()) {
++          checkCounterLimitsAndFail();
++        }
+       }
+     } else {
+       runningReduceTasks -= 1;
+@@ -2592,12 +2620,33 @@ public class JobInProgress {
+       retireReduce(tip);
+       if ((finishedReduceTasks + failedReduceTIPs) == (numReduceTasks)) {
+         this.status.setReduceProgress(1.0f);
++        if (canLaunchJobCleanupTask()) {
++          checkCounterLimitsAndFail();
++        }
+       }
+     }
+-    
+     return true;
+   }
+-
++  
++  /**
++   * add up the counters and fail the job
++   * if it exceeds the counters. Make sure we do not
++   * recalculate the coutners after we fail the job. Currently
++   * this is taken care by terminateJob() since it does not 
++   * calculate the counters.
++   */
++  private void checkCounterLimitsAndFail() {
++    boolean mapIsFine, reduceIsFine, jobIsFine = true;
++    mapIsFine = getMapCounters(new Counters());
++    reduceIsFine = getReduceCounters(new Counters());
++    jobIsFine = getCounters(new Counters());
++    if (!(mapIsFine && reduceIsFine && jobIsFine)) {
++      status.setFailureInfo("Counters Exceeded: Limit: " + 
++          Counters.MAX_COUNTER_LIMIT);
++      jobtracker.failJob(this);
++    }
++  }
++  
+   /**
+    * Job state change must happen thru this call
+    */
+@@ -2641,20 +2690,33 @@ public class JobInProgress {
+       if (reduces.length == 0) {
+         this.status.setReduceProgress(1.0f);
+       }
++     
+       this.finishTime = jobtracker.getClock().getTime();
+       LOG.info("Job " + this.status.getJobID() + 
+-               " has completed successfully.");
+-      
++      " has completed successfully.");
++
+       // Log the job summary (this should be done prior to logging to 
+       // job-history to ensure job-counters are in-sync 
+       JobSummary.logJobSummary(this, jobtracker.getClusterStatus(false));
+       
++      Counters mapCounters = new Counters();
++      boolean isFine = getMapCounters(mapCounters);
++      mapCounters = (isFine ? mapCounters: new Counters());
++      Counters reduceCounters = new Counters();
++      isFine = getReduceCounters(reduceCounters);;
++      reduceCounters = (isFine ? reduceCounters: new Counters());
++      Counters jobCounters = new Counters();
++      isFine = getCounters(jobCounters);
++      jobCounters = (isFine? jobCounters: new Counters());
++      
+       // Log job-history
+       JobHistory.JobInfo.logFinished(this.status.getJobID(), finishTime, 
+                                      this.finishedMapTasks, 
+                                      this.finishedReduceTasks, failedMapTasks, 
+-                                     failedReduceTasks, getMapCounters(),
+-                                     getReduceCounters(), getCounters());
++                                     failedReduceTasks, mapCounters,
++                                     reduceCounters, jobCounters);
++      
++      
+       // Note that finalize will close the job history handles which garbage collect
+       // might try to finalize
+       garbageCollect();
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index d0b9889..3196325 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -75,6 +75,7 @@ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.ipc.Server;
+ import org.apache.hadoop.ipc.RPC.VersionMismatch;
+ import org.apache.hadoop.mapred.AuditLogger.Constants;
++import org.apache.hadoop.mapred.Counters.CountersExceededException;
+ import org.apache.hadoop.mapred.JobHistory.Keys;
+ import org.apache.hadoop.mapred.JobHistory.Listener;
+ import org.apache.hadoop.mapred.JobHistory.Values;
+@@ -134,7 +135,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   static long TASKTRACKER_EXPIRY_INTERVAL = 10 * 60 * 1000;
+   static long RETIRE_JOB_INTERVAL;
+   static long RETIRE_JOB_CHECK_INTERVAL;
+-
++  
+   private final long DELEGATION_TOKEN_GC_INTERVAL = 3600000; // 1 hour
+   private final DelegationTokenSecretManager secretManager;
+ 
+@@ -560,7 +561,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     }
+ 
+     synchronized void addToCache(JobInProgress job) {
+-      RetireJobInfo info = new RetireJobInfo(job.getCounters(), job.getStatus(),
++      Counters counters = new Counters();
++      boolean isFine = job.getCounters(counters);
++      counters = (isFine? counters: new Counters());
++      RetireJobInfo info = new RetireJobInfo(counters, job.getStatus(),
+           job.getProfile(), job.getFinishTime(), job.getHistoryFile());
+       jobRetireInfoQ.add(info);
+       jobIDStatusMap.put(info.status.getJobID(), info);
+@@ -4142,8 +4146,18 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+ 
+         // check the job-access
+         aclsManager.checkAccess(job, callerUGI, Operation.VIEW_JOB_COUNTERS);
+-
+-        return isJobInited(job) ? job.getCounters() : EMPTY_COUNTERS;
++        Counters counters = new Counters();
++        if (isJobInited(job)) {
++          boolean isFine = job.getCounters(counters);
++          if (!isFine) {
++            throw new IOException("Counters Exceeded limit: " + 
++                Counters.MAX_COUNTER_LIMIT);
++          }
++          return counters;
++        }
++        else {
++          return EMPTY_COUNTERS;
++        }
+       } else {
+         RetireJobInfo info = retireJobs.get(jobid);
+         if (info != null) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/Task.java b/src/mapred/org/apache/hadoop/mapred/Task.java
+index 4bcff3b..0696d0c 100644
+--- a/src/mapred/org/apache/hadoop/mapred/Task.java
++++ b/src/mapred/org/apache/hadoop/mapred/Task.java
+@@ -524,6 +524,8 @@ abstract public class Task implements Writable, Configurable {
+     private Progress taskProgress;
+     private JvmContext jvmContext;
+     private Thread pingThread = null;
++    private static final int PROGRESS_STATUS_LEN_LIMIT = 512;
++    
+     /**
+      * flag that indicates whether progress update needs to be sent to parent.
+      * If true, it has been set. If false, it has been reset. 
+@@ -545,6 +547,12 @@ abstract public class Task implements Writable, Configurable {
+       return progressFlag.getAndSet(false);
+     }
+     public void setStatus(String status) {
++      //Check to see if the status string 
++      // is too long and just concatenate it
++      // to progress limit characters.
++      if (status.length() > PROGRESS_STATUS_LEN_LIMIT) {
++        status = status.substring(0, PROGRESS_STATUS_LEN_LIMIT);
++      }
+       taskProgress.setStatus(status);
+       // indicate that progress update needs to be sent
+       setProgressFlag();
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 642f358..009ec4d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -2561,6 +2561,26 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+         return;
+       }
+       
++      /** check for counter limits and fail the task in case limits are exceeded **/
++      Counters taskCounters = taskStatus.getCounters();
++      if (taskCounters.size() > Counters.MAX_COUNTER_LIMIT ||
++          taskCounters.getGroupNames().size() > Counters.MAX_GROUP_LIMIT) {
++        LOG.warn("Killing task " + task.getTaskID() + ": " +
++        		"Exceeded limit on counters.");
++        try { 
++          reportDiagnosticInfo("Error: Exceeded counter limits - " +
++          		"Counters=" + taskCounters.size() + " Limit=" 
++              + Counters.MAX_COUNTER_LIMIT  + ". " + 
++              "Groups=" + taskCounters.getGroupNames().size() + " Limit=" +
++              Counters.MAX_GROUP_LIMIT);
++          kill(true);
++        } catch(IOException ie) {
++          LOG.error("Error killing task " + task.getTaskID(), ie);
++        } catch (InterruptedException e) {
++          LOG.error("Error killing task " + task.getTaskID(), e);
++        }
++      }
++      
+       this.taskStatus.statusUpdate(taskStatus);
+       this.lastProgressReport = System.currentTimeMillis();
+     }
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/split/JobSplit.java b/src/mapred/org/apache/hadoop/mapreduce/split/JobSplit.java
+index 30777ec..7a36a8b 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/split/JobSplit.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/split/JobSplit.java
+@@ -44,6 +44,7 @@ import org.apache.hadoop.mapreduce.InputSplit;
+ public class JobSplit {
+   static final int META_SPLIT_VERSION = 1;
+   static final byte[] META_SPLIT_FILE_HEADER;
++  
+   static {
+     try {
+       META_SPLIT_FILE_HEADER = "META-SPL".getBytes("UTF-8");
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/split/JobSplitWriter.java b/src/mapred/org/apache/hadoop/mapreduce/split/JobSplitWriter.java
+index 9b2327c..d2aa3d8 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/split/JobSplitWriter.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/split/JobSplitWriter.java
+@@ -20,6 +20,7 @@ package org.apache.hadoop.mapreduce.split;
+ 
+ import java.io.IOException;
+ import java.io.UnsupportedEncodingException;
++import java.util.Arrays;
+ import java.util.List;
+ 
+ import org.apache.hadoop.conf.Configuration;
+@@ -32,18 +33,23 @@ import org.apache.hadoop.io.WritableUtils;
+ import org.apache.hadoop.io.serializer.SerializationFactory;
+ import org.apache.hadoop.io.serializer.Serializer;
+ import org.apache.hadoop.mapreduce.InputSplit;
+-import org.apache.hadoop.mapreduce.Job;
+ import org.apache.hadoop.mapreduce.JobSubmissionFiles;
+ import org.apache.hadoop.mapreduce.split.JobSplit.SplitMetaInfo;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
+ /**
+  * The class that is used by the Job clients to write splits (both the meta
+  * and the raw bytes parts)
+  */
+ public class JobSplitWriter {
+ 
++  private static final Log LOG = LogFactory.getLog(JobSplitWriter.class);
+   private static final int splitVersion = JobSplit.META_SPLIT_VERSION;
+   private static final byte[] SPLIT_FILE_HEADER;
++  static final String MAX_SPLIT_LOCATIONS = "mapreduce.job.max.split.locations";
++  
+   static {
+     try {
+       SPLIT_FILE_HEADER = "SPL".getBytes("UTF-8");
+@@ -73,12 +79,12 @@ public class JobSplitWriter {
+   }
+   
+   public static void createSplitFiles(Path jobSubmitDir, 
+-      Configuration conf, FileSystem fs, 
++      Configuration conf, FileSystem   fs, 
+       org.apache.hadoop.mapred.InputSplit[] splits) 
+   throws IOException {
+     FSDataOutputStream out = createFile(fs, 
+         JobSubmissionFiles.getJobSplitFile(jobSubmitDir), conf);
+-    SplitMetaInfo[] info = writeOldSplits(splits, out);
++    SplitMetaInfo[] info = writeOldSplits(splits, out, conf);
+     out.close();
+     writeJobSplitMetaInfo(fs,JobSubmissionFiles.getJobSplitMetaFile(jobSubmitDir), 
+         new FsPermission(JobSubmissionFiles.JOB_FILE_PERMISSION), splitVersion,
+@@ -119,9 +125,17 @@ public class JobSplitWriter {
+         serializer.open(out);
+         serializer.serialize(split);
+         int currCount = out.size();
++        String[] locations = split.getLocations();
++        final int max_loc = conf.getInt(MAX_SPLIT_LOCATIONS, 10);
++        if (locations.length > max_loc) {
++          LOG.warn("Max block location exceeded for split: "
++              + split + " splitsize: " + locations.length +
++              " maxsize: " + max_loc);
++          locations = Arrays.copyOf(locations, max_loc);
++        }
+         info[i++] = 
+           new JobSplit.SplitMetaInfo( 
+-              split.getLocations(), offset,
++              locations, offset,
+               split.getLength());
+         offset += currCount - prevCount;
+       }
+@@ -131,7 +145,7 @@ public class JobSplitWriter {
+   
+   private static SplitMetaInfo[] writeOldSplits(
+       org.apache.hadoop.mapred.InputSplit[] splits,
+-      FSDataOutputStream out) throws IOException {
++      FSDataOutputStream out, Configuration conf) throws IOException {
+     SplitMetaInfo[] info = new SplitMetaInfo[splits.length];
+     if (splits.length != 0) {
+       int i = 0;
+@@ -141,8 +155,16 @@ public class JobSplitWriter {
+         Text.writeString(out, split.getClass().getName());
+         split.write(out);
+         int currLen = out.size();
++        String[] locations = split.getLocations();
++        final int max_loc = conf.getInt(MAX_SPLIT_LOCATIONS, 10);
++        if (locations.length > max_loc) {
++          LOG.warn("Max block location exceeded for split: "
++              + split + " splitsize: " + locations.length +
++              " maxsize: " + max_loc);
++          locations = Arrays.copyOf(locations, max_loc);
++        }
+         info[i++] = new JobSplit.SplitMetaInfo( 
+-            split.getLocations(), offset,
++            locations, offset,
+             split.getLength());
+         offset += currLen - prevLen;
+       }
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/split/SplitMetaInfoReader.java b/src/mapred/org/apache/hadoop/mapreduce/split/SplitMetaInfoReader.java
+index 09e5cd4..700ee4b 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/split/SplitMetaInfoReader.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/split/SplitMetaInfoReader.java
+@@ -62,9 +62,16 @@ public class SplitMetaInfoReader {
+     int numSplits = WritableUtils.readVInt(in); //TODO: check for insane values
+     JobSplit.TaskSplitMetaInfo[] allSplitMetaInfo = 
+       new JobSplit.TaskSplitMetaInfo[numSplits];
++    final int maxLocations =
++      conf.getInt(JobSplitWriter.MAX_SPLIT_LOCATIONS, Integer.MAX_VALUE);
+     for (int i = 0; i < numSplits; i++) {
+       JobSplit.SplitMetaInfo splitMetaInfo = new JobSplit.SplitMetaInfo();
+       splitMetaInfo.readFields(in);
++      final int numLocations = splitMetaInfo.getLocations().length;
++      if (numLocations > maxLocations) {
++        throw new IOException("Max block location exceeded for split: #"  + i +
++              " splitsize: " + numLocations + " maxsize: " + maxLocations);
++      }
+       JobSplit.TaskSplitIndex splitIndex = new JobSplit.TaskSplitIndex(
+           JobSubmissionFiles.getJobSplitFile(jobSubmitDir).toString(), 
+           splitMetaInfo.getStartOffset());
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobHistory.java b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+index 202f17a..efa6e7f 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobHistory.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+@@ -555,15 +555,18 @@ public class TestJobHistory extends TestCase {
+                values.get(Keys.USER)));
+ 
+     // Validate job counters
+-    Counters c = jip.getCounters();
++    Counters c = new Counters();
++    jip.getCounters(c);
+     assertTrue("Counters of job obtained from history file did not " +
+                "match the expected value",
+                c.makeEscapedCompactString().equals(values.get(Keys.COUNTERS)));
+-    Counters m = jip.getMapCounters();
++    Counters m = new Counters();
++    jip.getMapCounters(m);
+     assertTrue("Map Counters of job obtained from history file did not " +
+                "match the expected value", m.makeEscapedCompactString().
+                equals(values.get(Keys.MAP_COUNTERS)));
+-    Counters r = jip.getReduceCounters();
++    Counters r = new Counters();
++    jip.getReduceCounters(r);
+     assertTrue("Reduce Counters of job obtained from history file did not " +
+                "match the expected value", r.makeEscapedCompactString().
+                equals(values.get(Keys.REDUCE_COUNTERS)));
+diff --git a/src/test/org/apache/hadoop/mapred/TestUserDefinedCounters.java b/src/test/org/apache/hadoop/mapred/TestUserDefinedCounters.java
+index 9c7737a..44d96cc 100644
+--- a/src/test/org/apache/hadoop/mapred/TestUserDefinedCounters.java
++++ b/src/test/org/apache/hadoop/mapred/TestUserDefinedCounters.java
+@@ -24,28 +24,57 @@ import java.io.InputStreamReader;
+ import java.io.OutputStream;
+ import java.io.OutputStreamWriter;
+ import java.io.Writer;
++import java.util.Iterator;
++import java.util.Properties;
+ 
+ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.LongWritable;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapred.Counters.Counter;
+ import org.apache.hadoop.mapred.lib.IdentityMapper;
+ import org.apache.hadoop.mapred.lib.IdentityReducer;
++import org.apache.hadoop.util.StringUtils;
++import org.hsqldb.lib.StringUtil;
+ 
+ public class TestUserDefinedCounters extends ClusterMapReduceTestCase {
++  protected void setUp() throws Exception {
++    super.setUp();
++    Properties prop = new Properties();
++    prop.put("mapred.job.tracker.persist.jobstatus.active", "true");
++    prop.put("mapred.job.tracker.persist.jobstatus.hours", "1");
++    startCluster(true, prop);
++  }
+   
+   enum EnumCounter { MAP_RECORDS }
+   
+   static class CountingMapper<K, V> extends IdentityMapper<K, V> {
+-
++    private JobConf jconf;
++    boolean generateUniqueCounters = false;
++    
++    @Override
++    public void configure(JobConf jconf) {
++      this.jconf = jconf;
++      this.generateUniqueCounters = 
++        jconf.getBoolean("task.generate.unique.counters", false);
++    }
++    
+     public void map(K key, V value,
+         OutputCollector<K, V> output, Reporter reporter)
+         throws IOException {
+       output.collect(key, value);
+       reporter.incrCounter(EnumCounter.MAP_RECORDS, 1);
+       reporter.incrCounter("StringCounter", "MapRecords", 1);
++      for (int i =0; i < 50; i++) {
++        if (generateUniqueCounters) {
++          reporter.incrCounter("StringCounter", "countername_" + 
++              jconf.get("mapred.task.id") + "_"+ i, 1);
++        } else {
++          reporter.incrCounter("StringCounter", "countername_" + 
++              i, 1);
++        }
++      }    
+     }
+-
+   }
+   
+   public void testMapReduceJob() throws Exception {
+@@ -94,12 +123,32 @@ public class TestUserDefinedCounters extends ClusterMapReduceTestCase {
+       reader.close();
+       assertEquals(4, counter);
+     }
+-    
++
+     assertEquals(4,
+         runningJob.getCounters().getCounter(EnumCounter.MAP_RECORDS));
++    Counters counters = runningJob.getCounters();
+     assertEquals(4,
+         runningJob.getCounters().getGroup("StringCounter")
+         .getCounter("MapRecords"));
++    assertTrue(counters.getGroupNames().size() <= 51);
++    int i = 0;
++    while (counters.size() < Counters.MAX_COUNTER_LIMIT) {
++      counters.incrCounter("IncrCounter", "limit " + i, 2);
++      i++;
++    }
++    try {
++      counters.incrCounter("IncrCountertest", "test", 2);
++      assertTrue(false);
++    } catch(RuntimeException re) {
++      System.out.println("Exceeded counter " + 
++          StringUtils.stringifyException(re));
++    }
++    conf.setBoolean("task.generate.unique.counters", true);
++    FileOutputFormat.setOutputPath(conf, new Path("output-fail"));
++    try {
++      runningJob = JobClient.runJob(conf);
++    } catch(Exception ie) {
++      System.out.println(StringUtils.stringifyException(ie));
++    }
+   }
+-
+ }
+diff --git a/src/test/org/apache/hadoop/mapreduce/split/TestBlockLimits.java b/src/test/org/apache/hadoop/mapreduce/split/TestBlockLimits.java
+new file mode 100644
+index 0000000..0b932e1
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/split/TestBlockLimits.java
+@@ -0,0 +1,185 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapreduce.split;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.DataOutputStream;
++import java.io.File;
++import java.io.IOException;
++import java.util.Arrays;
++import java.util.Iterator;
++
++import junit.framework.TestCase;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.io.WritableComparable;
++import org.apache.hadoop.io.WritableUtils;
++import org.apache.hadoop.mapred.*;
++import org.apache.hadoop.util.Progressable;
++import org.apache.hadoop.util.StringUtils;
++
++/**
++ * A JUnit test to test limits on block locations
++ */
++public class TestBlockLimits extends TestCase {
++  private static String TEST_ROOT_DIR =
++    new File(System.getProperty("test.build.data","/tmp"))
++    .toURI().toString().replace(' ', '+');
++    
++  public void testWithLimits()
++      throws IOException, InterruptedException, ClassNotFoundException {
++    MiniMRCluster mr = null;
++    try {
++      mr = new MiniMRCluster(2, "file:///", 3);
++      Configuration conf = new Configuration();
++      conf.setInt(JobSplitWriter.MAX_SPLIT_LOCATIONS, 10);
++      mr = new MiniMRCluster(2, "file:///", 3, null, null, new JobConf(conf));
++      runCustomFormat(mr);
++    } finally {
++      if (mr != null) { mr.shutdown(); }
++    }
++  }
++  
++  private void runCustomFormat(MiniMRCluster mr) throws IOException {
++    JobConf job = new JobConf(mr.createJobConf());
++    job.setInt(JobSplitWriter.MAX_SPLIT_LOCATIONS, 100);
++    FileSystem fileSys = FileSystem.get(job);
++    Path testDir = new Path(TEST_ROOT_DIR + "/test_mini_mr_local");
++    Path outDir = new Path(testDir, "out");
++    System.out.println("testDir= " + testDir);
++    fileSys.delete(testDir, true);
++    job.setInputFormat(MyInputFormat.class);
++    job.setOutputFormat(MyOutputFormat.class);
++    job.setOutputKeyClass(Text.class);
++    job.setOutputValueClass(Text.class);
++    
++    job.setMapperClass(MyMapper.class);        
++    job.setNumReduceTasks(0);
++    job.set("non.std.out", outDir.toString());
++    try {
++      JobClient.runJob(job);
++      fail("JobTracker neglected to fail misconfigured job");
++    } catch(IOException ie) {
++      System.out.println("Failed job " + StringUtils.stringifyException(ie));
++    } finally {
++      fileSys.delete(testDir, true);
++    }
++    
++  }
++  
++  static class MyMapper extends MapReduceBase
++    implements Mapper<WritableComparable, Writable,
++                    WritableComparable, Writable> {
++
++    public void map(WritableComparable key, Writable value,
++                  OutputCollector<WritableComparable, Writable> out,
++                  Reporter reporter) throws IOException {
++    }
++  }
++
++  private static class MyInputFormat
++    implements InputFormat<Text, Text> {
++    
++    private static class MySplit implements InputSplit {
++      int first;
++      int length;
++
++      public MySplit() { }
++
++      public MySplit(int first, int length) {
++        this.first = first;
++        this.length = length;
++      }
++
++      public String[] getLocations() {
++        final String[] ret = new String[200];
++        Arrays.fill(ret, "SPLIT");
++        return ret;
++      }
++
++      public long getLength() {
++        return length;
++      }
++
++      public void write(DataOutput out) throws IOException {
++        WritableUtils.writeVInt(out, first);
++        WritableUtils.writeVInt(out, length);
++      }
++
++      public void readFields(DataInput in) throws IOException {
++        first = WritableUtils.readVInt(in);
++        length = WritableUtils.readVInt(in);
++      }
++    }
++    
++    public InputSplit[] getSplits(JobConf job, 
++                                  int numSplits) throws IOException {
++      return new MySplit[]{new MySplit(0, 1), new MySplit(1, 3),
++                           new MySplit(4, 2)};
++    }
++
++    public RecordReader<Text, Text> getRecordReader(InputSplit split,
++                                                           JobConf job, 
++                                                           Reporter reporter)
++                                                           throws IOException {
++      MySplit sp = (MySplit) split;
++      return new RecordReader<Text,Text>() {
++        @Override public boolean next(Text key, Text value) { return false; }
++        @Override public Text createKey() { return new Text(); }
++        @Override public Text createValue() { return new Text(); }
++        @Override public long getPos() throws IOException { return 0; }
++        @Override public void close() throws IOException { }
++        @Override public float getProgress() throws IOException { return 1.0f; }
++      };
++    }
++    
++  }
++  
++
++  static class MyOutputFormat implements OutputFormat {
++    static class MyRecordWriter implements RecordWriter<Object, Object> {
++      private DataOutputStream out;
++      
++      public MyRecordWriter(Path outputFile, JobConf job) throws IOException {
++      }
++      
++      public void write(Object key, Object value) throws IOException {
++        return;
++      }
++
++      public void close(Reporter reporter) throws IOException {
++      }
++    }
++    
++    public RecordWriter getRecordWriter(FileSystem ignored, JobConf job, 
++                                        String name,
++                                        Progressable progress
++                                        ) throws IOException {
++      return new MyRecordWriter(new Path(job.get("non.std.out")), job);
++    }
++
++    public void checkOutputSpecs(FileSystem ignored, 
++                                 JobConf job) throws IOException {
++    }
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/mapreduce/split/TestJobSplitWriter.java b/src/test/org/apache/hadoop/mapreduce/split/TestJobSplitWriter.java
+new file mode 100644
+index 0000000..2d3fd48
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/split/TestJobSplitWriter.java
+@@ -0,0 +1,138 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapreduce.split;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++import java.util.Arrays;
++import java.util.Collections;
++import java.util.List;
++
++import org.junit.AfterClass;
++import org.junit.BeforeClass;
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.mapreduce.InputSplit;
++
++public class TestJobSplitWriter {
++
++  static final String TEST_ROOT = System.getProperty("test.build.data", "/tmp");
++  static final Path TEST_DIR =
++    new Path(TEST_ROOT, TestJobSplitWriter.class.getSimpleName());
++
++  @AfterClass
++  public static void cleanup() throws IOException {
++    final FileSystem fs = FileSystem.getLocal(new Configuration()).getRaw();
++    fs.delete(TEST_DIR, true);
++  }
++
++  static abstract class NewSplit extends InputSplit implements Writable {
++    @Override public long getLength() { return 42L; }
++    @Override public void readFields(DataInput in) throws IOException { }
++    @Override public void write(DataOutput in) throws IOException { }
++  }
++
++  @Test
++  public void testSplitLocationLimit()
++      throws IOException, InterruptedException  {
++    final int SPLITS = 5;
++    final int MAX_LOC = 10;
++    final Path outdir = new Path(TEST_DIR, "testSplitLocationLimit");
++    final String[] locs = getLoc(MAX_LOC + 5);
++    final Configuration conf = new Configuration();
++    final FileSystem rfs = FileSystem.getLocal(conf).getRaw();
++    final InputSplit split = new NewSplit() {
++      @Override public String[] getLocations() { return locs; }
++    };
++    List<InputSplit> splits = Collections.nCopies(SPLITS, split);
++
++    conf.setInt(JobSplitWriter.MAX_SPLIT_LOCATIONS, MAX_LOC);
++    JobSplitWriter.createSplitFiles(outdir, conf,
++        FileSystem.getLocal(conf).getRaw(), splits);
++
++    checkMeta(MAX_LOC,
++        SplitMetaInfoReader.readSplitMetaInfo(null, rfs, conf, outdir),
++        Arrays.copyOf(locs, MAX_LOC));
++
++    conf.setInt(JobSplitWriter.MAX_SPLIT_LOCATIONS, MAX_LOC / 2);
++    try {
++      SplitMetaInfoReader.readSplitMetaInfo(null, rfs, conf, outdir);
++      fail("Reader failed to detect location limit");
++    } catch (IOException e) { }
++  }
++
++  static abstract class OldSplit
++      implements org.apache.hadoop.mapred.InputSplit {
++    @Override public long getLength() { return 42L; }
++    @Override public void readFields(DataInput in) throws IOException { }
++    @Override public void write(DataOutput in) throws IOException { }
++  }
++
++  @Test
++  public void testSplitLocationLimitOldApi() throws IOException {
++    final int SPLITS = 5;
++    final int MAX_LOC = 10;
++    final Path outdir = new Path(TEST_DIR, "testSplitLocationLimitOldApi");
++    final String[] locs = getLoc(MAX_LOC + 5);
++    final Configuration conf = new Configuration();
++    final FileSystem rfs = FileSystem.getLocal(conf).getRaw();
++    final org.apache.hadoop.mapred.InputSplit split = new OldSplit() {
++      @Override public String[] getLocations() { return locs; }
++    };
++    org.apache.hadoop.mapred.InputSplit[] splits =
++      new org.apache.hadoop.mapred.InputSplit[SPLITS];
++    Arrays.fill(splits, split);
++
++    conf.setInt(JobSplitWriter.MAX_SPLIT_LOCATIONS, MAX_LOC);
++    JobSplitWriter.createSplitFiles(outdir, conf,
++        FileSystem.getLocal(conf).getRaw(), splits);
++    checkMeta(MAX_LOC,
++        SplitMetaInfoReader.readSplitMetaInfo(null, rfs, conf, outdir),
++        Arrays.copyOf(locs, MAX_LOC));
++
++    conf.setInt(JobSplitWriter.MAX_SPLIT_LOCATIONS, MAX_LOC / 2);
++    try {
++      SplitMetaInfoReader.readSplitMetaInfo(null, rfs, conf, outdir);
++      fail("Reader failed to detect location limit");
++    } catch (IOException e) { }
++  }
++
++  private static void checkMeta(int MAX_LOC,
++      JobSplit.TaskSplitMetaInfo[] metaSplits, String[] chk_locs) {
++    for (JobSplit.TaskSplitMetaInfo meta : metaSplits) {
++      final String[] meta_locs = meta.getLocations();
++      assertEquals(MAX_LOC, meta_locs.length);
++      assertArrayEquals(chk_locs, meta_locs);
++    }
++  }
++
++  private static String[] getLoc(int locations) {
++    final String ret[] = new String[locations];
++    for (int i = 0; i < locations; ++i) {
++      ret[i] = "LOC" + i;
++    }
++    return ret;
++  }
++
++}
+diff --git a/src/webapps/job/jobdetails.jsp b/src/webapps/job/jobdetails.jsp
+index b89077f..50ae596 100644
+--- a/src/webapps/job/jobdetails.jsp
++++ b/src/webapps/job/jobdetails.jsp
+@@ -365,10 +365,17 @@
+       <th>Total</th>
+     </tr>
+     <%
+-    Counters mapCounters = job.getMapCounters();
+-    Counters reduceCounters = job.getReduceCounters();
+-    Counters totalCounters = job.getCounters();
+-    
++    boolean isFine = true;
++    Counters mapCounters = new Counters();
++    isFine = job.getMapCounters(mapCounters);
++    mapCounters = (isFine? mapCounters: new Counters());
++    Counters reduceCounters = new Counters();
++    isFine = job.getReduceCounters(reduceCounters);
++    reduceCounters = (isFine? reduceCounters: new Counters());
++    Counters totalCounters = new Counters();
++    isFine = job.getCounters(totalCounters);
++    totalCounters = (isFine? totalCounters: new Counters());
++        
+     for (String groupName : totalCounters.getGroupNames()) {
+       Counters.Group totalGroup = totalCounters.getGroup(groupName);
+       Counters.Group mapGroup = mapCounters.getGroup(groupName);
+-- 
+1.7.0.4
+

@@ -1,0 +1,129 @@
+From c7996c5e2fbb9260740fec369550551d6320762a Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:23:51 -0800
+Subject: [PATCH 0144/1179] HDFS-423. Unbreak FUSE build and fuse_dfs_wrapper.sh
+
+Description: fuse-dfs depends on libhdfs, and fuse-dfs build.xml still points to the libhfds/libhdfs.so location but libhdfs now is build in a different location <br/>
+please take a look at this bug for the location details
+
+<p><span class="nobr"><a href="https://issues.apache.org/jira/browse/HADOOP-3344">https://issues.apache.org/jira/browse/HADOOP-3344<sup><img class="rendericon" src="https://issues.apache.org/jira/images/icons/linkext7.gif" height="7" width="7" align="absmiddle" alt="" border="0"/></sup></a></span></p>
+
+<p>Thanks,<br/>
+Giri</p>
+Reason: Build system bugfix
+Author: Eli Collins
+Ref: UNKNOWN
+---
+ build.xml                                    |    2 ++
+ src/contrib/build-contrib.xml                |    3 +++
+ src/contrib/fuse-dfs/build.xml               |    6 +++---
+ src/contrib/fuse-dfs/src/Makefile.am         |    3 +--
+ src/contrib/fuse-dfs/src/fuse_dfs_wrapper.sh |   21 ++++++++++++++-------
+ 5 files changed, 23 insertions(+), 12 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index 01fb274..a857e2b 100644
+--- a/build.xml
++++ b/build.xml
+@@ -1462,6 +1462,8 @@
+       <env key="JVM_ARCH" value="${jvm.arch}"/>
+       <arg value="install"/>
+     </exec>
++    <!-- Create a build platform-agnostic link to c++ libs -->
++    <symlink overwrite="true" link="${build.dir}/c++/lib" resource="${install.c++}/lib"/>
+   </target>
+ 
+ 
+diff --git a/src/contrib/build-contrib.xml b/src/contrib/build-contrib.xml
+index 16504d6..52784b5 100644
+--- a/src/contrib/build-contrib.xml
++++ b/src/contrib/build-contrib.xml
+@@ -44,6 +44,9 @@
+   <property name="test.timeout" value="900000"/>
+   <property name="build.dir" location="${hadoop.root}/build/contrib/${name}"/>
+   <property name="build.classes" location="${build.dir}/classes"/>
++  <!-- NB: sun.arch.data.model is not supported on all platforms -->
++  <property name="build.platform"
++            value="${os.name}-${os.arch}-${sun.arch.data.model}"/>
+   <property name="build.test" location="${build.dir}/test"/>
+   <property name="build.examples" location="${build.dir}/examples"/>
+   <property name="hadoop.log.dir" location="${build.dir}/test/logs"/>
+diff --git a/src/contrib/fuse-dfs/build.xml b/src/contrib/fuse-dfs/build.xml
+index 6388fdd..e8ab8d3 100644
+--- a/src/contrib/fuse-dfs/build.xml
++++ b/src/contrib/fuse-dfs/build.xml
+@@ -32,9 +32,9 @@
+ 
+ 
+   <target name="check-libhdfs-exists" if="fusedfs">
+-  <property name="libhdfs.lib" value="${hadoop.root}/build/libhdfs/libhdfs.so"/>
++  <property name="libhdfs.lib" value="${hadoop.root}/build/c++/${build.platform}/lib/libhdfs.so"/>
+         <available file="${libhdfs.lib}" property="libhdfs-exists"/>
+-    <fail message="libhdfs.so does not exist: ${libhdfs.lib}. Please check flags -Dlibhdfs=1 -Dfusedfs=1 are set or first try ant compile-libhdfs -Dlibhdfs=1">
++    <fail message="libhdfs.so does not exist: ${libhdfs.lib}. Please check flags -Dlibhdfs=1 -Dfusedfs=1 are set or first try ant compile -Dcompile.c++=true -Dlibhdfs=true">
+          <condition>
+             <not><isset property="libhdfs-exists"/></not>
+           </condition>
+@@ -59,7 +59,7 @@
+       <env key="OS_ARCH" value="${os.arch}"/>
+       <env key="HADOOP_HOME" value="${hadoop.root}"/>
+       <env key="PACKAGE_VERSION" value="0.1.0"/>
+-
++      <env key="BUILD_PLATFORM" value="${build.platform}" />
+       <env key="PERMS" value="${perms}"/>
+     </exec>
+     <mkdir dir="${build.dir}"/>
+diff --git a/src/contrib/fuse-dfs/src/Makefile.am b/src/contrib/fuse-dfs/src/Makefile.am
+index 512a474..7ac454c 100644
+--- a/src/contrib/fuse-dfs/src/Makefile.am
++++ b/src/contrib/fuse-dfs/src/Makefile.am
+@@ -16,5 +16,4 @@
+ bin_PROGRAMS = fuse_dfs
+ fuse_dfs_SOURCES = fuse_dfs.c fuse_options.c fuse_trash.c fuse_stat_struct.c fuse_users.c fuse_init.c fuse_connect.c fuse_impls_access.c fuse_impls_chmod.c  fuse_impls_chown.c  fuse_impls_create.c  fuse_impls_flush.c fuse_impls_getattr.c  fuse_impls_mkdir.c  fuse_impls_mknod.c  fuse_impls_open.c fuse_impls_read.c fuse_impls_release.c fuse_impls_readdir.c fuse_impls_rename.c fuse_impls_rmdir.c fuse_impls_statfs.c fuse_impls_symlink.c fuse_impls_truncate.c fuse_impls_utimens.c  fuse_impls_unlink.c fuse_impls_write.c
+ AM_CPPFLAGS= -DPERMS=$(PERMS) -D_FILE_OFFSET_BITS=64 -I$(JAVA_HOME)/include -I$(HADOOP_HOME)/src/c++/libhdfs/ -I$(JAVA_HOME)/include/linux/ -D_FUSE_DFS_VERSION=\"$(PACKAGE_VERSION)\" -DPROTECTED_PATHS=\"$(PROTECTED_PATHS)\" -I$(FUSE_HOME)/include
+-AM_LDFLAGS= -L$(HADOOP_HOME)/build/libhdfs -lhdfs -L$(FUSE_HOME)/lib -lfuse -L$(JAVA_HOME)/jre/lib/$(OS_ARCH)/server -ljvm
+-
++AM_LDFLAGS= -L$(HADOOP_HOME)/build/c++/$(BUILD_PLATFORM)/lib -lhdfs -L$(FUSE_HOME)/lib -lfuse -L$(JAVA_HOME)/jre/lib/$(OS_ARCH)/server -ljvm
+diff --git a/src/contrib/fuse-dfs/src/fuse_dfs_wrapper.sh b/src/contrib/fuse-dfs/src/fuse_dfs_wrapper.sh
+index 9a45eea..0169ec8 100755
+--- a/src/contrib/fuse-dfs/src/fuse_dfs_wrapper.sh
++++ b/src/contrib/fuse-dfs/src/fuse_dfs_wrapper.sh
+@@ -1,3 +1,4 @@
++#!/usr/bin/env bash
+ #
+ # Copyright 2005 The Apache Software Foundation
+ #
+@@ -18,12 +19,6 @@ if [ "$HADOOP_HOME" = "" ]; then
+ export HADOOP_HOME=/usr/local/share/hadoop
+ fi
+ 
+-export PATH=$HADOOP_HOME/contrib/fuse_dfs:$PATH
+-
+-for f in ls $HADOOP_HOME/lib/*.jar $HADOOP_HOME/*.jar ; do
+-export  CLASSPATH=$CLASSPATH:$f
+-done
+-
+ if [ "$OS_ARCH" = "" ]; then
+ export OS_ARCH=amd64
+ fi
+@@ -36,4 +31,16 @@ if [ "$LD_LIBRARY_PATH" = "" ]; then
+ export LD_LIBRARY_PATH=$JAVA_HOME/jre/lib/$OS_ARCH/server:/usr/local/share/hdfs/libhdfs/:/usr/local/lib
+ fi
+ 
+-./fuse_dfs $@
++# If dev build set paths accordingly
++if [ -d $HADOOP_HOME/build ]; then
++  for f in ${HADOOP_HOME}/build/*.jar ; do
++    export CLASSPATH=$CLASSPATH:$f
++  done
++  for f in $HADOOP_HOME/build/ivy/lib/Hadoop/common/*.jar ; do
++    export CLASSPATH=$CLASSPATH:$f
++  done
++  export PATH=$HADOOP_HOME/build/contrib/fuse-dfs:$PATH
++  export LD_LIBRARY_PATH=$HADOOP_HOME/build/c++/lib:$JAVA_HOME/jre/lib/$OS_ARCH/server
++fi
++
++fuse_dfs $@
+-- 
+1.7.0.4
+

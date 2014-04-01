@@ -1,0 +1,33 @@
+From 8f374b1eff2a54fd05590b935c3179c9b686fc0b Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 27 Aug 2010 09:30:42 -0700
+Subject: [PATCH 0677/1179] HADOOP-6928. Fix BooleanWritable comparator in 0.20.
+
+Description: The RawComparator for BooleanWritable was fixed as part of
+HADOOP-5699 in 0.21 and trunk. The fix should be pushed back into 0.20.
+
+Reason: Bug
+Author: Owen O'Malley
+Ref: CDH-2063
+---
+ src/core/org/apache/hadoop/io/BooleanWritable.java |    4 +---
+ 1 files changed, 1 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/io/BooleanWritable.java b/src/core/org/apache/hadoop/io/BooleanWritable.java
+index fc45f04..1ef1a29 100644
+--- a/src/core/org/apache/hadoop/io/BooleanWritable.java
++++ b/src/core/org/apache/hadoop/io/BooleanWritable.java
+@@ -100,9 +100,7 @@ public class BooleanWritable implements WritableComparable {
+ 
+     public int compare(byte[] b1, int s1, int l1,
+                        byte[] b2, int s2, int l2) {
+-      boolean a = (readInt(b1, s1) == 1) ? true : false;
+-      boolean b = (readInt(b2, s2) == 1) ? true : false;
+-      return ((a == b) ? 0 : (a == false) ? -1 : 1);
++      return compareBytes(b1, s1, l1, b2, s2, l2);
+     }
+   }
+ 
+-- 
+1.7.0.4
+

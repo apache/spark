@@ -1,0 +1,37 @@
+From 2943513d74b4a8c1763eccab854b96a57caec7f4 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 23 Feb 2010 18:04:41 -0800
+Subject: [PATCH 0493/1179] MAPREDUCE-1520. TestMiniMRLocalFS fails on trunk
+
+Patch: https://issues.apache.org/jira/secure/attachment/12436695/patch-1520-20S.txt
+Author: Amareshwari Sriramadasu
+Ref: CDH-648
+---
+ src/mapred/org/apache/hadoop/mapred/Child.java |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/Child.java b/src/mapred/org/apache/hadoop/mapred/Child.java
+index 99250b1..f7e5418 100644
+--- a/src/mapred/org/apache/hadoop/mapred/Child.java
++++ b/src/mapred/org/apache/hadoop/mapred/Child.java
+@@ -193,8 +193,6 @@ class Child {
+ 
+         // Initiate Java VM metrics
+         JvmMetrics.init(task.getPhase().toString(), job.getSessionId());
+-        // use job-specified working directory
+-        FileSystem.get(job).setWorkingDirectory(job.getWorkingDirectory());
+         LOG.debug("Creating remote user to execute task: " + job.get("user.name"));
+         childUGI = UserGroupInformation.createRemoteUser(job.get("user.name"));
+         // Add tokens to new user so that it may execute its task correctly.
+@@ -208,6 +206,8 @@ class Child {
+           @Override
+           public Object run() throws Exception {
+             try {
++              // use job-specified working directory
++              FileSystem.get(job).setWorkingDirectory(job.getWorkingDirectory());
+               taskFinal.run(job, umbilical);             // run the task
+             } finally {
+               TaskLog.syncLogs(firstTaskid, taskid, isCleanup);
+-- 
+1.7.0.4
+

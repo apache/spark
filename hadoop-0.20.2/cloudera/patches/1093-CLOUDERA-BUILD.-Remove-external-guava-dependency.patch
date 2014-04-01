@@ -1,0 +1,151 @@
+From ade43c9a6eee7eec2f237edcadb370f07c72a176 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Mon, 28 Nov 2011 10:47:17 -0800
+Subject: [PATCH 1093/1179] CLOUDERA-BUILD. Remove external guava dependency.
+
+Remove the guava-r09 external dependency by rebasing the r09 jar on
+o.a.h.thirdparty.guava and bundling the rebased jar in our lib dir.
+
+Author: Eli Collins
+Ref: CDH-3833
+---
+ .eclipse.templates/.classpath                      |    2 +-
+ cloudera/maven-packaging/hadoop-core/pom.xml       |    5 +++++
+ ivy.xml                                            |    5 ++---
+ ivy/ivysettings.xml                                |   10 +++++++++-
+ .../org/apache/hadoop/io/FastByteComparisons.java  |    6 +++---
+ src/core/org/apache/hadoop/io/ReadaheadPool.java   |    4 ++--
+ src/hdfs/org/apache/hadoop/hdfs/SocketCache.java   |    4 ++--
+ 7 files changed, 24 insertions(+), 12 deletions(-)
+
+diff --git a/.eclipse.templates/.classpath b/.eclipse.templates/.classpath
+index df8b90f..fd02b11 100644
+--- a/.eclipse.templates/.classpath
++++ b/.eclipse.templates/.classpath
+@@ -27,7 +27,7 @@
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/commons-logging-1.0.4.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/commons-logging-api-1.0.4.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/commons-net-1.4.1.jar"/>
+-	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/guava-r09.jar"/>
++	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/guava-r09-jarjar.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/jets3t-0.6.1.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/junit-4.5.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/log4j-1.2.15.jar"/>
+diff --git a/cloudera/maven-packaging/hadoop-core/pom.xml b/cloudera/maven-packaging/hadoop-core/pom.xml
+index fe03c66..96d5949 100644
+--- a/cloudera/maven-packaging/hadoop-core/pom.xml
++++ b/cloudera/maven-packaging/hadoop-core/pom.xml
+@@ -50,6 +50,11 @@
+       <artifactId>xmlenc</artifactId>
+     </dependency>
+     <dependency>
++      <groupId>org.apache.hadoop.thirdparty.guava</groupId>
++      <artifactId>guava</artifactId>
++      <version>r09-jarjar</version>
++    </dependency>
++    <dependency>
+       <groupId>commons-httpclient</groupId>
+       <artifactId>commons-httpclient</artifactId>
+     </dependency>
+diff --git a/ivy.xml b/ivy.xml
+index ecfc258..37eb23e 100644
+--- a/ivy.xml
++++ b/ivy.xml
+@@ -104,12 +104,11 @@
+       rev="${xmlenc.version}"
+       conf="server->default"/>
+ 
+-    <dependency org="com.google.guava"
++    <dependency org="org.apache.hadoop.thirdparty.guava"
+       name="guava"
+-      rev="r09"
++      rev="r09-jarjar"
+       conf="client->default" />
+ 
+-
+     <!--Configuration: httpclient-->
+ 
+     <!--
+diff --git a/ivy/ivysettings.xml b/ivy/ivysettings.xml
+index 3d06c76..e8d6625 100644
+--- a/ivy/ivysettings.xml
++++ b/ivy/ivysettings.xml
+@@ -42,7 +42,10 @@
+   <property name="cdh.releases"
+             value="https://repository.cloudera.com/artifactory/cdh-releases-rcs/"
+             override="false" />
+-  
++  <property name="ext.releases"
++            value="http://repository.cloudera.com/artifactory/ext-release-local/"
++            override="false" />
++
+   <!-- pull in the local repository -->
+   <include url="${ivy.default.conf.dir}/ivyconf-local.xml"/>
+   <settings defaultResolver="default"/>
+@@ -66,6 +69,11 @@
+       pattern="${maven2.pattern.ext}"
+       m2compatible="true"
+       />
++    <ibiblio name="ext-releases"
++      root="${ext.releases}"
++      pattern="${maven2.pattern.ext}"
++      m2compatible="true"
++      />
+     <chain name="default" dual="true">
+       <resolver ref="local"/>
+       <resolver ref="maven2"/>
+diff --git a/src/core/org/apache/hadoop/io/FastByteComparisons.java b/src/core/org/apache/hadoop/io/FastByteComparisons.java
+index 3f5881b..264fb7c 100644
+--- a/src/core/org/apache/hadoop/io/FastByteComparisons.java
++++ b/src/core/org/apache/hadoop/io/FastByteComparisons.java
+@@ -24,8 +24,8 @@ import java.security.PrivilegedAction;
+ 
+ import sun.misc.Unsafe;
+ 
+-import com.google.common.primitives.Longs;
+-import com.google.common.primitives.UnsignedBytes;
++import org.apache.hadoop.thirdparty.guava.common.primitives.Longs;
++import org.apache.hadoop.thirdparty.guava.common.primitives.UnsignedBytes;
+ 
+ /**
+  * Utility code to do optimized byte-array comparison.
+@@ -234,4 +234,4 @@ abstract class FastByteComparisons {
+       }
+     }
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/src/core/org/apache/hadoop/io/ReadaheadPool.java b/src/core/org/apache/hadoop/io/ReadaheadPool.java
+index 753fc92..bbafb19 100644
+--- a/src/core/org/apache/hadoop/io/ReadaheadPool.java
++++ b/src/core/org/apache/hadoop/io/ReadaheadPool.java
+@@ -27,8 +27,8 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.io.nativeio.NativeIO;
+ 
+-import com.google.common.base.Preconditions;
+-import com.google.common.util.concurrent.ThreadFactoryBuilder;
++import org.apache.hadoop.thirdparty.guava.common.base.Preconditions;
++import org.apache.hadoop.thirdparty.guava.common.util.concurrent.ThreadFactoryBuilder;
+ 
+ /**
+  * Manages a pool of threads which can issue readahead requests on file descriptors.
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/SocketCache.java b/src/hdfs/org/apache/hadoop/hdfs/SocketCache.java
+index 508ec61..f25dddf 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/SocketCache.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/SocketCache.java
+@@ -25,8 +25,8 @@ import java.util.Iterator;
+ import java.util.List;
+ import java.util.Map.Entry;
+ 
+-import com.google.common.base.Preconditions;
+-import com.google.common.collect.LinkedListMultimap;
++import org.apache.hadoop.thirdparty.guava.common.base.Preconditions;
++import org.apache.hadoop.thirdparty.guava.common.collect.LinkedListMultimap;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.io.IOUtils;
+-- 
+1.7.0.4
+

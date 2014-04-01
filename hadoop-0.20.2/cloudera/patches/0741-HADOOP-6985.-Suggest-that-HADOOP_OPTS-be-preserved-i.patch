@@ -1,0 +1,28 @@
+From f8b9f2f2e062b33c752c53e5aa3f871f08fa359c Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Wed, 10 Nov 2010 14:58:26 -0800
+Subject: [PATCH 0741/1179] HADOOP-6985. Suggest that HADOOP_OPTS be preserved in hadoop-env.sh.template.
+
+Reason: Improvement
+Author: Ramkumar Vadali
+Ref: CDH-2271
+---
+ conf/hadoop-env.sh.template |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/conf/hadoop-env.sh.template b/conf/hadoop-env.sh.template
+index eea9ecd..5dfaa20 100644
+--- a/conf/hadoop-env.sh.template
++++ b/conf/hadoop-env.sh.template
+@@ -15,7 +15,7 @@
+ # export HADOOP_HEAPSIZE=2000
+ 
+ # Extra Java runtime options.  Empty by default.
+-# export HADOOP_OPTS=-server
++# if [ "$HADOOP_OPTS" == "" ]; then export HADOOP_OPTS=-server; else HADOOP_OPTS+=" -server"; fi
+ 
+ # Command specific options appended to HADOOP_OPTS when specified
+ export HADOOP_NAMENODE_OPTS="-Dcom.sun.management.jmxremote $HADOOP_NAMENODE_OPTS"
+-- 
+1.7.0.4
+

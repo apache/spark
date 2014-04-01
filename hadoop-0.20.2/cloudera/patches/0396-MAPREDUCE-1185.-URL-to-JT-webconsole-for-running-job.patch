@@ -1,0 +1,254 @@
+From 96ee0a0a723e65ca3dbcbbdaece44e3a752256f0 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 8 Dec 2009 11:27:55 +0530
+Subject: [PATCH 0396/1179] MAPREDUCE-1185. URL to JT webconsole for running job and job history should be the same
+
+Patch: https://issues.apache.org/jira/secure/attachment/12426630/patch-1185-3-ydist.txt
+Author: Amareshwari Sriramadasu
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobHistory.java       |   47 ++++++++
+ src/test/findbugsExcludeFile.xml                   |    4 +
+ .../org/apache/hadoop/mapred/TestJobRetire.java    |  111 ++++++++++++++++++++
+ src/webapps/job/jobdetails.jsp                     |    9 ++-
+ 4 files changed, 170 insertions(+), 1 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestJobRetire.java
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobHistory.java b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+index 2fa0023..255dd57 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobHistory.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+@@ -29,10 +29,14 @@ import java.io.UnsupportedEncodingException;
+ import java.net.URLDecoder;
+ import java.net.URLEncoder;
+ import java.util.ArrayList;
++import java.util.Collections;
+ import java.util.HashMap;
++import java.util.Iterator;
++import java.util.LinkedHashMap;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.TreeMap;
++import java.util.Map.Entry;
+ import java.util.concurrent.ConcurrentHashMap;
+ import java.util.concurrent.LinkedBlockingQueue;
+ import java.util.concurrent.ThreadPoolExecutor;
+@@ -119,6 +123,30 @@ public class JobHistory {
+     }
+   };
+ 
++  private static Map<JobID, MovedFileInfo> jobHistoryFileMap =
++    Collections.<JobID,MovedFileInfo>synchronizedMap(
++        new LinkedHashMap<JobID, MovedFileInfo>());
++
++  private static class MovedFileInfo {
++    private final String historyFile;
++    private final long timestamp;
++    public MovedFileInfo(String historyFile, long timestamp) {
++      this.historyFile = historyFile;
++      this.timestamp = timestamp;
++    }
++  }
++
++  /**
++   * Given the job id, return the history file path from the cache
++   */
++  public static String getHistoryFilePath(JobID jobId) {
++    MovedFileInfo info = jobHistoryFileMap.get(jobId);
++    if (info == null) {
++      return null;
++    }
++    return info.historyFile;
++  }
++
+   /**
+    * A class that manages all the files related to a job. For now 
+    *   - writers : list of open files
+@@ -238,6 +266,9 @@ public class JobHistory {
+             historyFileDonePath = new Path(DONE, 
+                 historyFile.getName()).toString();
+           }
++
++          jobHistoryFileMap.put(id, new MovedFileInfo(historyFileDonePath,
++              System.currentTimeMillis()));
+           jobTracker.historyFileCopied(id, historyFileDonePath);
+           
+           //purge the job from the cache
+@@ -2038,6 +2069,22 @@ public class JobHistory {
+             }
+           }
+         }
++
++        //walking over the map to purge entries from jobHistoryFileMap
++        synchronized (jobHistoryFileMap) {
++          Iterator<Entry<JobID, MovedFileInfo>> it =
++            jobHistoryFileMap.entrySet().iterator();
++          while (it.hasNext()) {
++            MovedFileInfo info = it.next().getValue();
++            if (now - info.timestamp > THIRTY_DAYS_IN_MS) {
++              it.remove();
++            } else {
++              //since entries are in sorted timestamp order, no more entries
++              //are required to be checked
++              break;
++            }
++          }
++        }
+       } catch (IOException ie) {
+         LOG.info("Error cleaning up history directory" + 
+                  StringUtils.stringifyException(ie));
+diff --git a/src/test/findbugsExcludeFile.xml b/src/test/findbugsExcludeFile.xml
+index 0f76bd5..35f1665 100644
+--- a/src/test/findbugsExcludeFile.xml
++++ b/src/test/findbugsExcludeFile.xml
+@@ -16,6 +16,10 @@
+        <Bug pattern="DLS_DEAD_LOCAL_STORE" />
+      </Match>
+      <Match>
++       <Class name="org.apache.hadoop.mapred.jobdetails_jsp"/>
++       <Bug pattern="HRS_REQUEST_PARAMETER_TO_HTTP_HEADER"/>
++     </Match>
++     <Match>
+        <Field name="_jspx_dependants" />
+        <Bug pattern="UWF_UNWRITTEN_FIELD" />
+      </Match>
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobRetire.java b/src/test/org/apache/hadoop/mapred/TestJobRetire.java
+new file mode 100644
+index 0000000..b2a879d
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestJobRetire.java
+@@ -0,0 +1,111 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.File;
++import java.io.IOException;
++import java.net.HttpURLConnection;
++import java.net.URL;
++
++import junit.framework.TestCase;
++
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.mapred.JobTracker.RetireJobInfo;
++
++/**
++ * Test if the job retire works fine.
++ */
++public class TestJobRetire extends TestCase {
++  static final Path testDir =
++    new Path(System.getProperty("test.build.data","/tmp"),
++             "job-expiry-testing");
++
++  public void testJobRetire() throws Exception {
++    MiniMRCluster mr = null;
++    try {
++      JobConf conf = new JobConf();
++
++      conf.setLong("mapred.job.tracker.retiredjobs.cache.size", 1);
++      conf.setLong("mapred.jobtracker.retirejob.interval", 0);
++      conf.setLong("mapred.jobtracker.retirejob.check", 0);
++      conf.getLong("mapred.jobtracker.completeuserjobs.maximum", 0);
++      mr = new MiniMRCluster(0, 0, 1, "file:///", 1, null, null, null, conf, 0);
++      JobConf jobConf = mr.createJobConf();
++      JobTracker jobtracker = mr.getJobTrackerRunner().getJobTracker();
++
++      Path inDir = new Path(testDir, "input1");
++      Path outDir = new Path(testDir, "output1");
++
++      JobID id1 = validateJobRetire(jobConf, inDir, outDir, jobtracker);
++
++      outDir = new Path(testDir, "output2");
++      JobID id2 = validateJobRetire(jobConf, inDir, outDir, jobtracker);
++
++      assertNull("Job not removed from cache", jobtracker.getJobStatus(id1));
++
++      assertEquals("Total job in cache not correct",
++          1, jobtracker.getAllJobs().length);
++    } finally {
++      if (mr != null) { mr.shutdown();}
++    }
++  }
++
++  private JobID validateJobRetire(JobConf jobConf, Path inDir, Path outDir,
++      JobTracker jobtracker) throws IOException {
++
++    RunningJob rj = UtilsForTests.runJob(jobConf, inDir, outDir, 0, 0);
++    rj.waitForCompletion();
++    assertTrue(rj.isSuccessful());
++    JobID id = rj.getID();
++
++    JobInProgress job = jobtracker.getJob(id);
++    //wait for job to get retired
++    for (int i = 0; i < 10 && job != null; i++) {
++      UtilsForTests.waitFor(1000);
++      job = jobtracker.getJob(id);
++    }
++    assertNull("Job did not retire", job);
++    RetireJobInfo retired = jobtracker.retireJobs.get(id);
++    assertTrue("History url not set", retired.getHistoryFile() != null &&
++      retired.getHistoryFile().length() > 0);
++    assertNotNull("Job is not in cache", jobtracker.getJobStatus(id));
++
++    // get the job conf filename
++    String name = jobtracker.getLocalJobFilePath(id);
++    File file = new File(name);
++
++    assertFalse("JobConf file not deleted", file.exists());
++    //test redirection
++    URL jobUrl = new URL(rj.getTrackingURL());
++    HttpURLConnection conn = (HttpURLConnection) jobUrl.openConnection();
++    conn.setInstanceFollowRedirects(false);
++    conn.connect();
++    assertEquals(HttpURLConnection.HTTP_MOVED_TEMP, conn.getResponseCode());
++    conn.disconnect();
++
++    URL redirectedUrl = new URL(conn.getHeaderField("Location"));
++    conn = (HttpURLConnection) redirectedUrl.openConnection();
++    conn.connect();
++    assertEquals(HttpURLConnection.HTTP_OK, conn.getResponseCode());
++    conn.disconnect();
++
++    return id;
++  }
++
++}
+diff --git a/src/webapps/job/jobdetails.jsp b/src/webapps/job/jobdetails.jsp
+index 60ab0ac..ef0c868 100644
+--- a/src/webapps/job/jobdetails.jsp
++++ b/src/webapps/job/jobdetails.jsp
+@@ -201,7 +201,14 @@
+ 
+ <% 
+     if (job == null) {
+-      out.print("<b>Job " + jobId + " not found.</b><br>\n");
++      String historyFile = JobHistory.getHistoryFilePath(jobIdObj);
++      if (historyFile == null) {
++        out.println("<h2>Job " + jobId + " not known!</h2>");
++        return;
++      }
++      String historyUrl = "/jobdetailshistory.jsp?jobid=" + jobId +
++      "&logFile=" + JobHistory.JobInfo.encodeJobHistoryFilePath(historyFile);
++      response.sendRedirect(response.encodeRedirectURL(historyUrl));
+       return;
+     }
+     JobProfile profile = job.getProfile();
+-- 
+1.7.0.4
+

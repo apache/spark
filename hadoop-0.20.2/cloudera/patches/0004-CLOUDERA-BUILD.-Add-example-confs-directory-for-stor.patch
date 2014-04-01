@@ -1,0 +1,108 @@
+From 77ac6923ad6e63874a429e7dd13c4a084b6a9556 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:20:52 -0800
+Subject: [PATCH 0004/1179] CLOUDERA-BUILD. Add example-confs directory for storing configuration of conf.pseudo
+
+---
+ build.xml                                 |    4 ++++
+ example-confs/conf.pseudo/README          |    7 +++++++
+ example-confs/conf.pseudo/core-site.xml   |   14 ++++++++++++++
+ example-confs/conf.pseudo/hdfs-site.xml   |   18 ++++++++++++++++++
+ example-confs/conf.pseudo/mapred-site.xml |    9 +++++++++
+ 5 files changed, 52 insertions(+), 0 deletions(-)
+ create mode 100644 example-confs/conf.pseudo/README
+ create mode 100644 example-confs/conf.pseudo/core-site.xml
+ create mode 100644 example-confs/conf.pseudo/hdfs-site.xml
+ create mode 100644 example-confs/conf.pseudo/mapred-site.xml
+
+diff --git a/build.xml b/build.xml
+index 5631712..9371663 100644
+--- a/build.xml
++++ b/build.xml
+@@ -1150,6 +1150,10 @@
+       <fileset dir="${conf.dir}" excludes="**/*.template"/>
+     </copy>
+ 
++    <copy todir="${dist.dir}/example-confs">
++      <fileset dir="example-confs"/>
++    </copy>
++
+     <copy file="ivy.xml" tofile="${dist.dir}/ivy.xml"/>
+ 
+     <copy todir="${dist.dir}/ivy">
+diff --git a/example-confs/conf.pseudo/README b/example-confs/conf.pseudo/README
+new file mode 100644
+index 0000000..170b677
+--- /dev/null
++++ b/example-confs/conf.pseudo/README
+@@ -0,0 +1,7 @@
++The conf.pseudo example configuration is for a psuedo-distributed cluster.
++
++A pseudo-distributed cluster is one in which all of the Hadoop daemons
++run separately, but on a single node.
++
++This is a good mode for developers to install on their own machines to
++ensure that their jobs will operate correctly on a real cluster.
+\ No newline at end of file
+diff --git a/example-confs/conf.pseudo/core-site.xml b/example-confs/conf.pseudo/core-site.xml
+new file mode 100644
+index 0000000..60482de
+--- /dev/null
++++ b/example-confs/conf.pseudo/core-site.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0"?>
++<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
++
++<configuration>
++  <property>
++    <name>fs.default.name</name>
++    <value>hdfs://localhost:8020</value>
++  </property>
++
++  <property>
++     <name>hadoop.tmp.dir</name>
++     <value>/var/lib/hadoop/cache/${user.name}</value>
++  </property>
++</configuration>
+diff --git a/example-confs/conf.pseudo/hdfs-site.xml b/example-confs/conf.pseudo/hdfs-site.xml
+new file mode 100644
+index 0000000..934b87b
+--- /dev/null
++++ b/example-confs/conf.pseudo/hdfs-site.xml
+@@ -0,0 +1,18 @@
++<?xml version="1.0"?>
++<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
++
++<configuration>
++  <property>
++    <name>dfs.replication</name>
++    <value>1</value>
++  </property>
++  <property>
++     <name>dfs.permissions</name>
++     <value>false</value>
++  </property>
++  <property>
++     <!-- specify this so that running 'hadoop namenode -format' formats the right dir -->
++     <name>dfs.name.dir</name>
++     <value>/var/lib/hadoop/cache/hadoop/dfs/name</value>
++  </property>
++</configuration>
+diff --git a/example-confs/conf.pseudo/mapred-site.xml b/example-confs/conf.pseudo/mapred-site.xml
+new file mode 100644
+index 0000000..4419229
+--- /dev/null
++++ b/example-confs/conf.pseudo/mapred-site.xml
+@@ -0,0 +1,9 @@
++<?xml version="1.0"?>
++<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
++
++<configuration>
++  <property>
++    <name>mapred.job.tracker</name>
++    <value>localhost:8021</value>
++  </property>
++</configuration>
+-- 
+1.7.0.4
+

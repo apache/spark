@@ -1,0 +1,45 @@
+From 50329213ff9f712bc07922a212c0931d20a31de6 Mon Sep 17 00:00:00 2001
+From: Konstantin Boudnik <cos@apache.org>
+Date: Fri, 11 Feb 2011 17:59:15 -0800
+Subject: [PATCH 0870/1179] HADOOP-6879. Provide SSH based (Jsch) remote execution API for system tests
+
+Reason: missing dependency breaks system tests build
+Author: Konstantin Boudnik
+Ref: CDH-2622
+---
+ ivy.xml                  |    6 ++++++
+ ivy/libraries.properties |    1 +
+ 2 files changed, 7 insertions(+), 0 deletions(-)
+
+diff --git a/ivy.xml b/ivy.xml
+index dcaa589..4b4dabd 100644
+--- a/ivy.xml
++++ b/ivy.xml
+@@ -164,6 +164,12 @@
+       name="commons-daemon" 
+       rev="${commons-daemon.version}"
+       conf="server->default" /> 
++
++    <dependency org="com.jcraft"
++      name="jsch"
++      rev="${jsch.version}"
++      conf="common->master">
++    </dependency>
+     
+     <!--Configuration: commons-logging -->
+ 
+diff --git a/ivy/libraries.properties b/ivy/libraries.properties
+index 095b699..1b6e447 100644
+--- a/ivy/libraries.properties
++++ b/ivy/libraries.properties
+@@ -21,6 +21,7 @@ aspectj.version=1.6.5
+ 
+ checkstyle.version=4.2
+ 
++jsch.version=0.1.42
+ commons-cli.version=1.2
+ commons-codec.version=1.4
+ commons-collections.version=3.1
+-- 
+1.7.0.4
+

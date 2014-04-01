@@ -1,0 +1,125 @@
+From 15660507606b32c3c6c2878f8ed69fe106119bc9 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:10:51 -0800
+Subject: [PATCH 0112/1179] MAPREDUCE-967. TaskTracker does not need to fully unjar job jars
+
+Description: In practice we have seen some users submitting job jars that consist of 10,000+ classes. Unpacking these jars into mapred.local.dir and then cleaning up after them has a significant cost (both in wall clock and in unnecessary heavy disk utilization). This cost can be easily avoided
+Reason: Performance improvement
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ src/core/org/apache/hadoop/util/RunJar.java        |   31 +++++++++++++++++++-
+ .../org/apache/hadoop/mapred/TaskRunner.java       |    2 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   14 +++++++-
+ 3 files changed, 43 insertions(+), 4 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/util/RunJar.java b/src/core/org/apache/hadoop/util/RunJar.java
+index a7a8c95..af65afd 100644
+--- a/src/core/org/apache/hadoop/util/RunJar.java
++++ b/src/core/org/apache/hadoop/util/RunJar.java
+@@ -33,12 +33,21 @@ public class RunJar {
+ 
+   /** Unpack a jar file into a directory. */
+   public static void unJar(File jarFile, File toDir) throws IOException {
++    unJar(jarFile, toDir, JarEntryFilter.ACCEPT_ALL);
++  }
++
++  /**
++   * Unpack entries inside a jar file that match a certain filter
++   * into a directory.
++   */
++  public static void unJar(File jarFile, File toDir, JarEntryFilter filter)
++    throws IOException {
+     JarFile jar = new JarFile(jarFile);
+     try {
+       Enumeration entries = jar.entries();
+       while (entries.hasMoreElements()) {
+         JarEntry entry = (JarEntry)entries.nextElement();
+-        if (!entry.isDirectory()) {
++        if (!entry.isDirectory() && filter.accept(entry)) {
+           InputStream in = jar.getInputStream(entry);
+           try {
+             File file = new File(toDir, entry.getName());
+@@ -68,6 +77,26 @@ public class RunJar {
+     }
+   }
+ 
++  /**
++   * Simple "Predicate" interface to filter the entries inside a jar
++   * that are to be extracted.
++   */
++  public interface JarEntryFilter {
++    /**
++     * Implementations should return true if the entry should be unpacked.
++     * Note that directories are only unpacked implicitly by the files inside
++     * them, so this will only be called on file entries.
++     */
++    public boolean accept(JarEntry entry);
++
++    /** Unpacks all files */
++    public static final JarEntryFilter ACCEPT_ALL = new JarEntryFilter() {
++        public final boolean accept(JarEntry entry) {
++          return true;
++        }
++      };
++  }
++
+   /** Run a Hadoop job jar.  If the main class is not in the jar's manifest,
+    * then it must be provided on the command line. */
+   public static void main(String[] args) throws Throwable {
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index f83bd46..c5e71cb 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -220,7 +220,7 @@ abstract class TaskRunner extends Thread {
+         classPath.append(sep);
+         classPath.append(new File(jobCacheDir, "classes"));
+         classPath.append(sep);
+-        classPath.append(jobCacheDir);
++        classPath.append(new File(jobCacheDir, "job.jar"));
+        
+       }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 69d8645..66495b2 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -40,6 +40,7 @@ import java.util.TreeMap;
+ import java.util.Vector;
+ import java.util.concurrent.BlockingQueue;
+ import java.util.concurrent.LinkedBlockingQueue;
++import java.util.jar.JarEntry;
+ import java.util.regex.Pattern;
+ 
+ import javax.servlet.ServletContext;
+@@ -83,6 +84,7 @@ import org.apache.hadoop.util.MemoryCalculatorPlugin;
+ import org.apache.hadoop.util.ProcfsBasedProcessTree;
+ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.util.RunJar;
++import org.apache.hadoop.util.RunJar.JarEntryFilter;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.VersionInfo;
+ import org.apache.hadoop.util.DiskChecker.DiskErrorException;
+@@ -811,9 +813,17 @@ public class TaskTracker
+           } finally {
+             out.close();
+           }
+-          // also unjar the job.jar files 
++          // also unjar parts of the job.jar that need to be added
++          // to the classpath
++          JarEntryFilter filter = new JarEntryFilter() {
++              public boolean accept(JarEntry entry) {
++                return (entry.getName().startsWith("classes/") ||
++                        entry.getName().startsWith("lib/"));
++              }
++            };
+           RunJar.unJar(new File(localJarFile.toString()),
+-                       new File(localJarFile.getParent().toString()));
++                       new File(localJarFile.getParent().toString()),
++                       filter);
+         }
+         rjob.keepJobFiles = ((localJobConf.getKeepTaskFilesPattern() != null) ||
+                              localJobConf.getKeepFailedTaskFiles());
+-- 
+1.7.0.4
+

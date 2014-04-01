@@ -1,0 +1,108 @@
+<?xml version="1.0"?>
+<!--
+  Copyright 2002-2004 The Apache Software Foundation
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!DOCTYPE document PUBLIC "-//APACHE//DTD Documentation V2.0//EN"
+          "http://forrest.apache.org/dtd/document-v20.dtd">
+
+
+<document>
+
+  <header>
+    <title> 
+      Secure Impersonation using UserGroupInformation.doAs
+    </title>
+  </header>
+
+  <body>
+    <section>
+      <title> Introduction </title>
+      <p>
+        This document describes how a superuser can submit jobs or access hdfs on behalf of another user in a secured way.
+      </p>
+    </section>
+
+    <section> 
+      <title> Use Case  </title>
+        <p>
+          The code example described in the next section is applicable for the following use case.
+        </p>
+        <p>
+          A superuser oozie wants to submit job and access hdfs on behalf of a user joe. The superuser has kerberos credentials but user joe doesn't have any. The tasks are required to run as user joe and any file accesses on namenode are required to be done as user joe. It is required that user joe can connect to the namenode or job tracker on a connection authenticated with oozie's kerberos credentials. In other words oozie is impersonating the user joe.
+       </p>
+     </section>
+
+ 
+      <section> 
+        <title> Code example  </title>
+        <p>
+             In this example oozie's kerberos credentials are used for login and a proxy user ugi object is created for joe. The operations are performed within the doAs method of this proxy user ugi object.
+        </p>
+        <source>
+             ...
+             UserGroupInformation ugi = 
+                     UserGroupInformation.createProxyUser(user, UserGroupInformation.getLoginUser());
+             ugi.doAs(new PrivilegedExceptionAction&lt;Void&gt;() {
+               public Void run() throws Exception {
+                 //Submit a job
+                 JobClient jc = new JobClient(conf);
+                 jc.submitJob(conf);
+                 //OR access hdfs
+                 FileSystem fs = FileSystem.get(conf);
+                 fs.mkdir(someFilePath); 
+               }
+             }
+        </source>
+      </section>
+
+      <section> 
+        <title> Configurations </title>
+        <p>
+           The superuser must be configured on namenode and jobtracker to be allowed to impersonate another user. Following configurations are required.
+        </p>
+           <source>
+             &lt;property&gt;
+               &lt;name&gt;hadoop.proxyuser.oozie.groups&lt;/name&gt;
+               &lt;value&gt;group1,group2&lt;/value&gt;
+               &lt;description&gt;Allow the superuser oozie to impersonate any members of the group group1 and group2&lt;/description&gt;
+             &lt;/property&gt;
+             &lt;property&gt;
+               &lt;name&gt;hadoop.proxyuser.oozie.hosts&lt;/name&gt;
+               &lt;value&gt;host1,host2&lt;/value&gt;
+               &lt;description&gt;The superuser can connect only from host1 and host2 to impersonate a user&lt;/description&gt;
+             &lt;/property&gt;
+           </source>
+        <p>
+           If these configurations are not present, impersonation will not be allowed and connection will fail.
+        </p>
+        <p>
+          If more lax security is preferred, the wildcard value <code>*</code> may be used to allow impersonation from any host or of any user.
+        </p>
+      </section>
+
+ 
+      <section> 
+        <title> Caveats </title>
+        <p>
+           The superuser must have kerberos credentials to be able to impersonate another user. It cannot use delegation tokens for this feature. It would be wrong if superuser adds its own delegation token to the proxy user ugi, as it will allow the proxy user to connect to the service with the privileges of the superuser. 
+        </p>
+        <p>
+           However, if the superuser does want to give a delegation token to joe, it must first impersonate joe and get a delegation token for joe, in the same way as the code example above, and add it to the ugi of joe. In this way the delegation token will have the owner as joe.
+        </p>
+      </section>
+  </body>
+</document>
+

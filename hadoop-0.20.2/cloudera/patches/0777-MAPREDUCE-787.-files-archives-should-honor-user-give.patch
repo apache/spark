@@ -1,0 +1,680 @@
+From eb118d65f792dd3947b886ea7f2c971556d496cf Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Tue, 18 Jan 2011 13:35:06 -0800
+Subject: [PATCH 0777/1179] MAPREDUCE-787. -files, -archives should honor user given symlink path
+
+Reason: bug fix
+Author: Amareshwari Sriramadasu
+Ref: CDH-2538
+---
+ src/core/org/apache/hadoop/fs/Path.java            |   37 ++++++--
+ .../apache/hadoop/util/GenericOptionsParser.java   |   90 +++++++++++---------
+ .../content/xdocs/mapred_tutorial.xml              |   29 +++++-
+ .../src/documentation/content/xdocs/streaming.xml  |    8 ++
+ .../filecache/TaskDistributedCacheManager.java     |    4 +-
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |   37 +++++++--
+ src/test/org/apache/hadoop/fs/TestPath.java        |   31 +++++++-
+ .../mapred/TestCommandLineJobSubmission.java       |   54 +++++++++++-
+ .../hadoop/util/TestGenericOptionsParser.java      |   44 ++++++++++
+ src/test/testshell/ExternalMapReduce.java          |   11 ++-
+ 10 files changed, 277 insertions(+), 68 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/Path.java b/src/core/org/apache/hadoop/fs/Path.java
+index cf96bf2..85588a7 100644
+--- a/src/core/org/apache/hadoop/fs/Path.java
++++ b/src/core/org/apache/hadoop/fs/Path.java
+@@ -63,13 +63,13 @@ public class Path implements Comparable {
+     if (!(parentPath.equals("/") || parentPath.equals("")))
+       try {
+         parentUri = new URI(parentUri.getScheme(), parentUri.getAuthority(),
+-                            parentUri.getPath()+"/", null, null);
++                      parentUri.getPath()+"/", null, parentUri.getFragment());
+       } catch (URISyntaxException e) {
+         throw new IllegalArgumentException(e);
+       }
+     URI resolved = parentUri.resolve(child.uri);
+     initialize(resolved.getScheme(), resolved.getAuthority(),
+-               normalizePath(resolved.getPath()));
++               normalizePath(resolved.getPath()), resolved.getFragment());
+   }
+ 
+   private void checkPathArg( String path ) {
+@@ -123,18 +123,26 @@ public class Path implements Comparable {
+     // uri path is the rest of the string -- query & fragment not supported
+     String path = pathString.substring(start, pathString.length());
+ 
+-    initialize(scheme, authority, path);
++    initialize(scheme, authority, path, null);
+   }
+ 
+   /** Construct a Path from components. */
+   public Path(String scheme, String authority, String path) {
+     checkPathArg( path );
+-    initialize(scheme, authority, path);
++    initialize(scheme, authority, path, null);
+   }
+ 
+-  private void initialize(String scheme, String authority, String path) {
++  /**
++   * Construct a path from a URI
++   */
++  public Path(URI aUri) {
++    uri = aUri;
++  }
++  
++  private void initialize(String scheme, String authority, String path,
++      String fragment) {
+     try {
+-      this.uri = new URI(scheme, authority, normalizePath(path), null, null)
++      this.uri = new URI(scheme, authority, normalizePath(path), null, fragment)
+         .normalize();
+     } catch (URISyntaxException e) {
+       throw new IllegalArgumentException(e);
+@@ -233,6 +241,10 @@ public class Path implements Comparable {
+         path = path.substring(1);                 // remove slash before drive
+       buffer.append(path);
+     }
++    if (uri.getFragment() != null) {
++      buffer.append("#");
++      buffer.append(uri.getFragment());
++    }
+     return buffer.toString();
+   }
+ 
+@@ -277,7 +289,7 @@ public class Path implements Comparable {
+       
+     String scheme = pathUri.getScheme();
+     String authority = pathUri.getAuthority();
+-
++    String fragment = pathUri.getFragment();
+     if (scheme != null &&
+         (authority != null || fsUri.getAuthority() == null))
+       return path;
+@@ -292,7 +304,14 @@ public class Path implements Comparable {
+         authority = "";
+       }
+     }
+-
+-    return new Path(scheme+":"+"//"+authority + pathUri.getPath());
++    
++    URI newUri = null;
++    try {
++      newUri = new URI(scheme, authority , 
++        normalizePath(pathUri.getPath()), null, fragment);
++    } catch (URISyntaxException e) {
++      throw new IllegalArgumentException(e);
++    }
++    return new Path(newUri);
+   }
+ }
+diff --git a/src/core/org/apache/hadoop/util/GenericOptionsParser.java b/src/core/org/apache/hadoop/util/GenericOptionsParser.java
+index cc70082..d2a55e2 100644
+--- a/src/core/org/apache/hadoop/util/GenericOptionsParser.java
++++ b/src/core/org/apache/hadoop/util/GenericOptionsParser.java
+@@ -21,8 +21,11 @@ import java.io.FileNotFoundException;
+ import java.io.IOException;
+ import java.io.PrintStream;
+ import java.net.URI;
++import java.net.URISyntaxException;
+ import java.net.URL;
+ import java.net.URLClassLoader;
++import java.util.ArrayList;
++import java.util.List;
+ 
+ import org.apache.commons.cli.CommandLine;
+ import org.apache.commons.cli.CommandLineParser;
+@@ -111,16 +114,20 @@ public class GenericOptionsParser {
+    * Create an options parser with the given options to parse the args.
+    * @param opts the options
+    * @param args the command line arguments
++   * @throws IOException 
+    */
+-  public GenericOptionsParser(Options opts, String[] args) {
++  public GenericOptionsParser(Options opts, String[] args) 
++      throws IOException {
+     this(new Configuration(), new Options(), args);
+   }
+ 
+   /**
+    * Create an options parser to parse the args.
+    * @param args the command line arguments
++   * @throws IOException 
+    */
+-  public GenericOptionsParser(String[] args) {
++  public GenericOptionsParser(String[] args) 
++      throws IOException {
+     this(new Configuration(), new Options(), args);
+   }
+   
+@@ -133,8 +140,10 @@ public class GenericOptionsParser {
+    * 
+    * @param conf the <code>Configuration</code> to modify.
+    * @param args command-line arguments.
++   * @throws IOException 
+    */
+-  public GenericOptionsParser(Configuration conf, String[] args) {
++  public GenericOptionsParser(Configuration conf, String[] args) 
++      throws IOException {
+     this(conf, new Options(), args); 
+   }
+ 
+@@ -148,8 +157,10 @@ public class GenericOptionsParser {
+    * @param conf the configuration to modify  
+    * @param options options built by the caller 
+    * @param args User-specified arguments
++   * @throws IOException 
+    */
+-  public GenericOptionsParser(Configuration conf, Options options, String[] args) {
++  public GenericOptionsParser(Configuration conf,
++      Options options, String[] args) throws IOException {
+     parseGeneralOptions(options, conf, args);
+     this.conf = conf;
+   }
+@@ -246,7 +257,7 @@ public class GenericOptionsParser {
+    * @param line User-specified generic options
+    */
+   private void processGeneralOptions(Configuration conf,
+-      CommandLine line) {
++      CommandLine line) throws IOException {
+     if (line.hasOption("fs")) {
+       FileSystem.setDefaultUri(conf, line.getOptionValue("fs"));
+     }
+@@ -260,29 +271,25 @@ public class GenericOptionsParser {
+         conf.addResource(new Path(value));
+       }
+     }
+-    try {
+-      if (line.hasOption("libjars")) {
+-        conf.set("tmpjars", 
+-                 validateFiles(line.getOptionValue("libjars"), conf));
+-        //setting libjars in client classpath
+-        URL[] libjars = getLibJars(conf);
+-        if(libjars!=null && libjars.length>0) {
+-          conf.setClassLoader(new URLClassLoader(libjars, conf.getClassLoader()));
+-          Thread.currentThread().setContextClassLoader(
+-              new URLClassLoader(libjars, 
+-                  Thread.currentThread().getContextClassLoader()));
+-        }
+-      }
+-      if (line.hasOption("files")) {
+-        conf.set("tmpfiles", 
+-                 validateFiles(line.getOptionValue("files"), conf));
+-      }
+-      if (line.hasOption("archives")) {
+-        conf.set("tmparchives", 
+-                  validateFiles(line.getOptionValue("archives"), conf));
++    if (line.hasOption("libjars")) {
++      conf.set("tmpjars", 
++               validateFiles(line.getOptionValue("libjars"), conf));
++      //setting libjars in client classpath
++      URL[] libjars = getLibJars(conf);
++      if(libjars!=null && libjars.length>0) {
++        conf.setClassLoader(new URLClassLoader(libjars, conf.getClassLoader()));
++        Thread.currentThread().setContextClassLoader(
++            new URLClassLoader(libjars, 
++                Thread.currentThread().getContextClassLoader()));
+       }
+-    } catch (IOException ioe) {
+-      System.err.println(StringUtils.stringifyException(ioe));
++    }
++    if (line.hasOption("files")) {
++      conf.set("tmpfiles", 
++               validateFiles(line.getOptionValue("files"), conf));
++    }
++    if (line.hasOption("archives")) {
++      conf.set("tmparchives", 
++                validateFiles(line.getOptionValue("archives"), conf));
+     }
+     if (line.hasOption('D')) {
+       String[] property = line.getOptionValues('D');
+@@ -328,12 +335,14 @@ public class GenericOptionsParser {
+       return null;
+     }
+     String[] files = jars.split(",");
+-    URL[] cp = new URL[files.length];
+-    for (int i=0;i<cp.length;i++) {
+-      Path tmp = new Path(files[i]);
+-      cp[i] = FileSystem.getLocal(conf).pathToFile(tmp).toURI().toURL();
++    List<URL> cp = new ArrayList<URL>();
++    for (String file : files) {
++      Path tmp = new Path(file);
++      if (tmp.getFileSystem(conf).equals(FileSystem.getLocal(conf))) {
++        cp.add(FileSystem.getLocal(conf).pathToFile(tmp).toURI().toURL());
++      }
+     }
+-    return cp;
++    return cp.toArray(new URL[0]);
+   }
+ 
+   /**
+@@ -346,7 +355,8 @@ public class GenericOptionsParser {
+    * @param files
+    * @return
+    */
+-  private String validateFiles(String files, Configuration conf) throws IOException  {
++  private String validateFiles(String files, Configuration conf) 
++      throws IOException  {
+     if (files == null) 
+       return null;
+     String[] fileArr = files.split(",");
+@@ -354,8 +364,13 @@ public class GenericOptionsParser {
+     for (int i =0; i < fileArr.length; i++) {
+       String tmp = fileArr[i];
+       String finalPath;
+-      Path path = new Path(tmp);
+-      URI pathURI =  path.toUri();
++      URI pathURI;
++      try {
++        pathURI = new URI(tmp);
++      } catch (URISyntaxException e) {
++        throw new IllegalArgumentException(e);
++      }
++      Path path = new Path(pathURI);
+       FileSystem localFs = FileSystem.getLocal(conf);
+       if (pathURI.getScheme() == null) {
+         //default to the local file system
+@@ -375,9 +390,6 @@ public class GenericOptionsParser {
+           throw new FileNotFoundException("File " + tmp + " does not exist.");
+         }
+         finalPath = path.makeQualified(fs).toString();
+-        try {
+-          fs.close();
+-        } catch(IOException e){};
+       }
+       finalArr[i] = finalPath;
+     }
+@@ -393,7 +405,7 @@ public class GenericOptionsParser {
+    * @return Command-specific arguments
+    */
+   private String[] parseGeneralOptions(Options opts, Configuration conf, 
+-      String[] args) {
++      String[] args) throws IOException {
+     opts = buildGeneralOptions(opts);
+     CommandLineParser parser = new GnuParser();
+     try {
+diff --git a/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml b/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
+index d67a7f6..fabf8a4 100644
+--- a/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
++++ b/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
+@@ -604,17 +604,36 @@
+         would be present in the current working directory of the task 
+         using the option <code>-files</code>. The <code>-libjars</code>
+         option allows applications to add jars to the classpaths of the maps
+-        and reduces. The <code>-archives</code> allows them to pass archives
+-        as arguments that are unzipped/unjarred and a link with name of the
+-        jar/zip are created in the current working directory of tasks. More
++        and reduces. The option <code>-archives</code> allows them to pass 
++        comma separated list of archives as arguments. These archives are 
++        unarchived and a link with name of the archive is created in 
++        the current working directory of tasks. More
+         details about the command line options are available at 
+         <a href="commands_manual.html">Commands Guide.</a></p>
+         
+         <p>Running <code>wordcount</code> example with 
+-        <code>-libjars</code> and <code>-files</code>:<br/>
++        <code>-libjars</code>, <code>-files</code> and <code>-archives</code>:
++        <br/>
+         <code> hadoop jar hadoop-examples.jar wordcount -files cachefile.txt 
+-        -libjars mylib.jar input output </code> 
++        -libjars mylib.jar -archives myarchive.zip input output </code> 
++         Here, myarchive.zip will be placed and unzipped into a directory 
++         by the name "myarchive.zip".
+         </p>
++        
++        <p> Users can specify a different symbolic name for 
++        files and archives passed through -files and -archives option, using #.
++        </p>
++        
++        <p> For example,
++        <code> hadoop jar hadoop-examples.jar wordcount 
++        -files dir1/dict.txt#dict1,dir2/dict.txt#dict2 
++        -archives mytar.tgz#tgzdir input output </code>
++        Here, the files dir1/dict.txt and dir2/dict.txt can be accessed by 
++        tasks using the symbolic names dict1 and dict2 respectively.
++        The archive mytar.tgz will be placed and unarchived into a 
++        directory by the name "tgzdir".
++        </p> 
++ 
+       </section>
+       
+       <section>
+diff --git a/src/docs/src/documentation/content/xdocs/streaming.xml b/src/docs/src/documentation/content/xdocs/streaming.xml
+index 86f600c..7f31ef0 100644
+--- a/src/docs/src/documentation/content/xdocs/streaming.xml
++++ b/src/docs/src/documentation/content/xdocs/streaming.xml
+@@ -317,6 +317,10 @@ This symlink points to the local copy of testfile.txt.
+  <source>
+ -files hdfs://host:fs_port/user/testfile.txt
+  </source>
++ <p> User can specify a different symlink name for -files using #. </p>
++<source>
++-files hdfs://host:fs_port/user/testfile.txt#testfile
++</source>
+  <p>
+ Multiple entries can be specified like this:
+  </p>
+@@ -337,6 +341,10 @@ The -archives option allows you to copy jars locally to the current working dire
+ <source>
+ -archives hdfs://host:fs_port/user/testfile.jar
+ </source>
++<p> User can specify a different symlink name for -archives using #. </p>
++<source>
++-archives hdfs://host:fs_port/user/testfile.tgz#tgzdir
++</source>
+  
+ <p>
+ In this example, the input.txt file has two lines specifying the names of the two files: cachedir.jar/cache.txt and cachedir.jar/cache2.txt. 
+diff --git a/src/mapred/org/apache/hadoop/filecache/TaskDistributedCacheManager.java b/src/mapred/org/apache/hadoop/filecache/TaskDistributedCacheManager.java
+index c809464..b014170 100644
+--- a/src/mapred/org/apache/hadoop/filecache/TaskDistributedCacheManager.java
++++ b/src/mapred/org/apache/hadoop/filecache/TaskDistributedCacheManager.java
+@@ -104,8 +104,8 @@ public class TaskDistributedCacheManager {
+         Map<String, Path> classPaths = new HashMap<String, Path>();
+         if (paths != null) {
+           for (Path p : paths) {
+-            classPaths.put(p.toString(), p);
+-          }
++            classPaths.put(p.toUri().getPath().toString(), p);
++            }
+         }
+         for (int i = 0; i < uris.length; ++i) {
+           URI u = uris[i];
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index 286fc05..5552d4e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -596,6 +596,19 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     return newPath;
+   }
+  
++  private URI getPathURI(Path destPath, String fragment)
++      throws URISyntaxException {
++    URI pathURI = destPath.toUri();
++    if (pathURI.getFragment() == null) {
++      if (fragment == null) {
++        pathURI = new URI(pathURI.toString() + "#" + destPath.getName());
++      } else {
++        pathURI = new URI(pathURI.toString() + "#" + fragment);
++      }
++    }
++    return pathURI;
++  }
++
+   /**
+    * configure the jobconf of the user with the command line options of 
+    * -libjars, -files, -archives
+@@ -658,14 +671,20 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+       FileSystem.mkdirs(fs, filesDir, mapredSysPerms);
+       String[] fileArr = files.split(",");
+       for (String tmpFile: fileArr) {
+-        Path tmp = new Path(tmpFile);
++        URI tmpURI;
++        try {
++          tmpURI = new URI(tmpFile);
++        } catch (URISyntaxException e) {
++          throw new IllegalArgumentException(e);
++        }
++        Path tmp = new Path(tmpURI);
+         Path newPath = copyRemoteFiles(fs,filesDir, tmp, job, replication);
+         try {
+-          URI pathURI = new URI(newPath.toUri().toString() + "#" + newPath.getName());
++          URI pathURI = getPathURI(newPath, tmpURI.getFragment());
+           DistributedCache.addCacheFile(pathURI, job);
+         } catch(URISyntaxException ue) {
+           //should not throw a uri exception 
+-          throw new IOException("Failed to create uri for " + tmpFile);
++          throw new IOException("Failed to create uri for " + tmpFile, ue);
+         }
+         DistributedCache.createSymlink(job);
+       }
+@@ -687,14 +706,20 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+      FileSystem.mkdirs(fs, archivesDir, mapredSysPerms); 
+      String[] archivesArr = archives.split(",");
+      for (String tmpArchives: archivesArr) {
+-       Path tmp = new Path(tmpArchives);
++       URI tmpURI;
++       try {
++         tmpURI = new URI(tmpArchives);
++       } catch (URISyntaxException e) {
++         throw new IllegalArgumentException(e);
++       }
++       Path tmp = new Path(tmpURI);
+        Path newPath = copyRemoteFiles(fs, archivesDir, tmp, job, replication);
+        try {
+-         URI pathURI = new URI(newPath.toUri().toString() + "#" + newPath.getName());
++         URI pathURI = getPathURI(newPath, tmpURI.getFragment());
+          DistributedCache.addCacheArchive(pathURI, job);
+        } catch(URISyntaxException ue) {
+          //should not throw an uri excpetion
+-         throw new IOException("Failed to create uri for " + tmpArchives);
++         throw new IOException("Failed to create uri for " + tmpArchives, ue);
+        }
+        DistributedCache.createSymlink(job);
+      }
+diff --git a/src/test/org/apache/hadoop/fs/TestPath.java b/src/test/org/apache/hadoop/fs/TestPath.java
+index 4fa28bc..62042fc 100644
+--- a/src/test/org/apache/hadoop/fs/TestPath.java
++++ b/src/test/org/apache/hadoop/fs/TestPath.java
+@@ -18,7 +18,12 @@
+ 
+ package org.apache.hadoop.fs;
+ 
+-import java.util.*;
++import java.io.IOException;
++import java.net.URI;
++import java.net.URISyntaxException;
++
++import org.apache.hadoop.conf.Configuration;
++
+ import junit.framework.TestCase;
+ 
+ public class TestPath extends TestCase {
+@@ -28,6 +33,8 @@ public class TestPath extends TestCase {
+     toStringTest("/foo/bar");
+     toStringTest("foo");
+     toStringTest("foo/bar");
++    toStringTest("/foo/bar#boo");
++    toStringTest("foo/bar#boo");
+     boolean emptyException = false;
+     try {
+       toStringTest("");
+@@ -43,6 +50,8 @@ public class TestPath extends TestCase {
+       toStringTest("c:foo/bar");
+       toStringTest("c:foo/bar");
+       toStringTest("c:/foo/bar");
++      toStringTest("C:/foo/bar#boo");
++      toStringTest("C:foo/bar#boo");
+     }
+   }
+ 
+@@ -148,5 +157,25 @@ public class TestPath extends TestCase {
+     assertEquals("foo://bar/baz", new Path("foo://bar/","/baz").toString()); 
+   }
+ 
++  public void testURI() throws URISyntaxException, IOException {
++    URI uri = new URI("file:///bar#baz");
++    Path path = new Path(uri);
++    assertTrue(uri.equals(new URI(path.toString())));
++    
++    FileSystem fs = path.getFileSystem(new Configuration());
++    assertTrue(uri.equals(new URI(fs.makeQualified(path).toString())));
++    
++    // uri without hash
++    URI uri2 = new URI("file:///bar/baz");
++    assertTrue(
++      uri2.equals(new URI(fs.makeQualified(new Path(uri2)).toString())));
++    assertEquals("foo://bar/baz#boo", new Path("foo://bar/", new Path(new URI(
++        "/baz#boo"))).toString());
++    assertEquals("foo://bar/baz/fud#boo", new Path(new Path(new URI(
++        "foo://bar/baz#bud")), new Path(new URI("fud#boo"))).toString());
++    // if the child uri is absolute path
++    assertEquals("foo://bar/fud#boo", new Path(new Path(new URI(
++        "foo://bar/baz#bud")), new Path(new URI("/fud#boo"))).toString());
++ }
+ 
+ }
+diff --git a/src/test/org/apache/hadoop/mapred/TestCommandLineJobSubmission.java b/src/test/org/apache/hadoop/mapred/TestCommandLineJobSubmission.java
+index 7b4fdcd..14f8b96 100644
+--- a/src/test/org/apache/hadoop/mapred/TestCommandLineJobSubmission.java
++++ b/src/test/org/apache/hadoop/mapred/TestCommandLineJobSubmission.java
+@@ -18,12 +18,14 @@ package org.apache.hadoop.mapred;
+ 
+ import java.io.File;
+ import java.io.FileOutputStream;
++import java.io.IOException;
+ 
+ import junit.framework.TestCase;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.filecache.DistributedCache;
+ import org.apache.hadoop.fs.*;
++import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.ToolRunner;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ 
+@@ -60,15 +62,57 @@ public class TestCommandLineJobSubmission extends TestCase {
+       FileOutputStream fstream = new FileOutputStream(f);
+       fstream.write("somestrings".getBytes());
+       fstream.close();
+-      String[] args = new String[6];
++      File f1 = new File(thisbuildDir, "files_tmp1");
++      fstream = new FileOutputStream(f1);
++      fstream.write("somestrings".getBytes());
++      fstream.close();
++      
++      // copy files to dfs
++      Path cachePath = new Path("/cacheDir");
++      if (!fs.mkdirs(cachePath)) {
++        throw new IOException(
++            "Mkdirs failed to create " + cachePath.toString());
++      }
++      Path localCachePath = new Path(System.getProperty("test.cache.data"));
++      Path txtPath = new Path(localCachePath, new Path("test.txt"));
++      Path jarPath = new Path(localCachePath, new Path("test.jar"));
++      Path zipPath = new Path(localCachePath, new Path("test.zip"));
++      Path tarPath = new Path(localCachePath, new Path("test.tar"));
++      Path tgzPath = new Path(localCachePath, new Path("test.tgz"));
++      fs.copyFromLocalFile(txtPath, cachePath);
++      fs.copyFromLocalFile(jarPath, cachePath);
++      fs.copyFromLocalFile(zipPath, cachePath);
++
++      // construct options for -files
++      String[] files = new String[3];
++      files[0] = f.toString();
++      files[1] = f1.toString() + "#localfilelink";
++      files[2] = 
++        fs.getUri().resolve(cachePath + "/test.txt#dfsfilelink").toString();
++
++      // construct options for -libjars
++      String[] libjars = new String[2];
++      libjars[0] = "build/test/testjar/testjob.jar";
++      libjars[1] = fs.getUri().resolve(cachePath + "/test.jar").toString();
++      
++      // construct options for -archives
++      String[] archives = new String[3];
++      archives[0] = tgzPath.toString();
++      archives[1] = tarPath + "#tarlink";
++      archives[2] = 
++        fs.getUri().resolve(cachePath + "/test.zip#ziplink").toString();
++      
++      String[] args = new String[8];
+       args[0] = "-files";
+-      args[1] = f.toString();
++      args[1] = StringUtils.arrayToString(files);
+       args[2] = "-libjars";
+       // the testjob.jar as a temporary jar file 
+       // rather than creating its own
+-      args[3] = "build/test/testjar/testjob.jar";
+-      args[4] = input.toString();
+-      args[5] = output.toString();
++      args[3] = StringUtils.arrayToString(libjars);
++      args[4] = "-archives";
++      args[5] = StringUtils.arrayToString(archives);
++      args[6] = input.toString();
++      args[7] = output.toString();
+       
+       JobConf jobConf = mr.createJobConf();
+       //before running the job, verify that libjar is not in client classpath
+diff --git a/src/test/org/apache/hadoop/util/TestGenericOptionsParser.java b/src/test/org/apache/hadoop/util/TestGenericOptionsParser.java
+index a4fccff..d94f76d 100644
+--- a/src/test/org/apache/hadoop/util/TestGenericOptionsParser.java
++++ b/src/test/org/apache/hadoop/util/TestGenericOptionsParser.java
+@@ -87,4 +87,48 @@ public class TestGenericOptionsParser extends TestCase {
+     
+     localFs.delete(new Path(testDir.getAbsolutePath()), true);
+   }
++  
++  public void testFilesOption() throws Exception {
++    File tmpFile = new File(testDir, "tmpfile");
++    Path tmpPath = new Path(tmpFile.toString());
++    localFs.create(tmpPath);
++    String[] args = new String[2];
++    // pass a files option 
++    args[0] = "-files";
++    args[1] = tmpFile.toString();
++    new GenericOptionsParser(conf, args);
++    String files = conf.get("tmpfiles");
++    assertNotNull("files is null", files);
++    assertEquals("files option does not match",
++      localFs.makeQualified(tmpPath).toString(), files);
++    
++    // pass file as uri
++    Configuration conf1 = new Configuration();
++    URI tmpURI = new URI(tmpFile.toString() + "#link");
++    args[0] = "-files";
++    args[1] = tmpURI.toString();
++    new GenericOptionsParser(conf1, args);
++    files = conf1.get("tmpfiles");
++    assertNotNull("files is null", files);
++    assertEquals("files option does not match", 
++      localFs.makeQualified(new Path(tmpURI)).toString(), files);
++   
++    // pass a file that does not exist.
++    // GenericOptionParser should throw exception
++    Configuration conf2 = new Configuration();
++    args[0] = "-files";
++    args[1] = "file:///xyz.txt";
++    Throwable th = null;
++    try {
++      new GenericOptionsParser(conf2, args);
++    } catch (Exception e) {
++      th = e;
++    }
++    assertNotNull("throwable is null", th);
++    assertTrue("FileNotFoundException is not thrown",
++      th instanceof FileNotFoundException);
++    files = conf2.get("tmpfiles");
++    assertNull("files is not null", files);
++  }
++
+ }
+diff --git a/src/test/testshell/ExternalMapReduce.java b/src/test/testshell/ExternalMapReduce.java
+index 8f890e2..5b8647e 100644
+--- a/src/test/testshell/ExternalMapReduce.java
++++ b/src/test/testshell/ExternalMapReduce.java
+@@ -66,12 +66,21 @@ public class ExternalMapReduce extends Configured implements Tool {
+       if (classpath.indexOf("testjob.jar") == -1) {
+         throw new IOException("failed to find in the library " + classpath);
+       }
++      if (classpath.indexOf("test.jar") == -1) {
++        throw new IOException("failed to find the library test.jar in" 
++            + classpath);
++      }
+       //fork off ls to see if the file exists.
+       // java file.exists() will not work on 
+       // cygwin since it is a symlink
+-      String[] argv = new String[2];
++      String[] argv = new String[7];
+       argv[0] = "ls";
+       argv[1] = "files_tmp";
++      argv[2] = "localfilelink";
++      argv[3] = "dfsfilelink";
++      argv[4] = "tarlink";
++      argv[5] = "ziplink";
++      argv[6] = "test.tgz";
+       Process p = Runtime.getRuntime().exec(argv);
+       int ret = -1;
+       try {
+-- 
+1.7.0.4
+

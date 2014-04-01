@@ -1,0 +1,43 @@
+From abe5bf1c3ef82f90c356695fc16eb615293a56df Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sat, 19 Nov 2011 23:15:06 -0800
+Subject: [PATCH 1085/1179] MAPREDUCE-2555. Avoid spurious logging from completed tasks.
+
+Author: Thomas Graves
+Ref: CDH-3855
+---
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   11 +++++++++--
+ 1 files changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 46b8e13..8dcc5c5 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -3314,7 +3314,12 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     ensureAuthorizedJVM(taskid.getJobID());
+     TaskInProgress tip = tasks.get(taskid);
+     if (tip != null) {
+-      validateJVM(tip, jvmContext, taskid);
++      try {
++        validateJVM(tip, jvmContext, taskid);
++      } catch (IOException ie) {
++        LOG.warn("Failed validating JVM", ie);
++        return false;
++      }
+       tip.reportProgress(taskStatus);
+       return true;
+     } else {
+@@ -3391,7 +3396,9 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+     LOG.info("Task " + taskid + " is in commit-pending," +"" +
+              " task state:" +taskStatus.getRunState());
+     // validateJVM is done in statusUpdate
+-    statusUpdate(taskid, taskStatus, jvmContext);
++    if (!statusUpdate(taskid, taskStatus, jvmContext)) {
++      throw new IOException("Task not found for taskid: " + taskid);
++    }
+     reportTaskFinished(taskid, true);
+   }
+   
+-- 
+1.7.0.4
+

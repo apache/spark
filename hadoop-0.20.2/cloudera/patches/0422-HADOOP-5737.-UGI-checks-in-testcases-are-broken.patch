@@ -1,0 +1,267 @@
+From fda013b025b050107afd17120270ec6e5cb99138 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 12 Jan 2010 22:14:37 +0530
+Subject: [PATCH 0422/1179] HADOOP-5737. UGI checks in testcases are broken
+
+Patch: https://issues.apache.org/jira/secure/attachment/12430029/HADOOP-5737-y20.patch
+Author: Amar Kamat
+Ref: CDH-648
+---
+ .../org/apache/hadoop/mapred/CleanupQueue.java     |   31 +++++++++----------
+ .../org/apache/hadoop/mapred/JobInProgress.java    |    9 ++---
+ .../org/apache/hadoop/mapred/JobTracker.java       |   30 +++++++++++++++++--
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   11 ++++---
+ 4 files changed, 52 insertions(+), 29 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/CleanupQueue.java b/src/mapred/org/apache/hadoop/mapred/CleanupQueue.java
+index c8aba4b..be32c34 100644
+--- a/src/mapred/org/apache/hadoop/mapred/CleanupQueue.java
++++ b/src/mapred/org/apache/hadoop/mapred/CleanupQueue.java
+@@ -39,7 +39,7 @@ class CleanupQueue {
+    * paths(directories/files) in a separate thread. This constructor creates a
+    * clean-up thread and also starts it as a daemon. Callers can instantiate one
+    * CleanupQueue per JVM and can use it for deleting paths. Use
+-   * {@link CleanupQueue#addToQueue(JobConf, Path...)} to add paths for
++   * {@link CleanupQueue#addToQueue(FileSystem, Path...)} to add paths for
+    * deletion.
+    */
+   public CleanupQueue() {
+@@ -50,22 +50,22 @@ class CleanupQueue {
+     }
+   }
+   
+-  public void addToQueue(JobConf conf, Path...paths) {
+-    cleanupThread.addToQueue(conf,paths);
++  public void addToQueue(FileSystem fs, Path...paths) {
++    cleanupThread.addToQueue(fs, paths);
+   }
+ 
+   private static class PathCleanupThread extends Thread {
+ 
+-    static class PathAndConf {
+-      JobConf conf;
++    static class PathAndFS {
++      FileSystem fs;
+       Path path;
+-      PathAndConf(JobConf conf, Path path) {
+-        this.conf = conf;
++      PathAndFS(FileSystem fs, Path path) {
++        this.fs = fs;
+         this.path = path;
+       }
+     }
+     // cleanup queue which deletes files/directories of the paths queued up.
+-    private LinkedBlockingQueue<PathAndConf> queue = new LinkedBlockingQueue<PathAndConf>();
++    private LinkedBlockingQueue<PathAndFS> queue = new LinkedBlockingQueue<PathAndFS>();
+ 
+     public PathCleanupThread() {
+       setName("Directory/File cleanup thread");
+@@ -73,28 +73,27 @@ class CleanupQueue {
+       start();
+     }
+ 
+-    public void addToQueue(JobConf conf,Path... paths) {
++    public void addToQueue(FileSystem fs, Path... paths) {
+       for (Path p : paths) {
+         try {
+-          queue.put(new PathAndConf(conf,p));
++          queue.put(new PathAndFS(fs, p));
+         } catch (InterruptedException ie) {}
+       }
+     }
+ 
+     public void run() {
+       LOG.debug(getName() + " started.");
+-      PathAndConf pathAndConf = null;
++      PathAndFS pathAndFS = null;
+       while (true) {
+         try {
+-          pathAndConf = queue.take();
++          pathAndFS = queue.take();
+           // delete the path.
+-          FileSystem fs = pathAndConf.path.getFileSystem(pathAndConf.conf);
+-          fs.delete(pathAndConf.path, true);
+-          LOG.debug("DELETED " + pathAndConf.path);
++          pathAndFS.fs.delete(pathAndFS.path, true);
++          LOG.debug("DELETED " + pathAndFS.path);
+         } catch (InterruptedException t) {
+           return;
+         } catch (Exception e) {
+-          LOG.warn("Error deleting path" + pathAndConf.path);
++          LOG.warn("Error deleting path" + pathAndFS.path);
+         } 
+       }
+     }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index a4be681..d8550d0 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -199,6 +199,7 @@ public class JobInProgress {
+   private JobInitKillStatus jobInitKillStatus = new JobInitKillStatus();
+ 
+   private LocalFileSystem localFs;
++  private FileSystem fs;
+   private JobID jobId;
+   private boolean hasSpeculativeMaps;
+   private boolean hasSpeculativeReduces;
+@@ -306,7 +307,7 @@ public class JobInProgress {
+     this.jobtracker.getInstrumentation().addPrepJob(conf, jobid);
+     this.startTime = System.currentTimeMillis();
+     status.setStartTime(startTime);
+-    this.localFs = FileSystem.getLocal(default_conf);
++    this.localFs = jobtracker.getLocalFileSystem();
+ 
+     JobConf default_job_conf = new JobConf(default_conf);
+     this.localJobFile = default_job_conf.getLocalPath(JobTracker.SUBDIR 
+@@ -320,7 +321,7 @@ public class JobInProgress {
+     LOG.info("User : " +  this.user);
+ 
+     Path jobDir = jobtracker.getSystemDirectoryForJob(jobId);
+-    FileSystem fs = jobDir.getFileSystem(default_conf);
++    fs = jobtracker.getFileSystem(jobDir);
+     jobFile = new Path(jobDir, "job.xml");
+     fs.copyToLocalFile(jobFile, localJobFile);
+     conf = new JobConf(localJobFile);
+@@ -518,8 +519,6 @@ public class JobInProgress {
+     // log the job priority
+     setPriority(this.priority);
+     
+-    Path jobDir = jobtracker.getSystemDirectoryForJob(jobId);
+-    FileSystem fs = jobDir.getFileSystem(conf);
+     //
+     // generate security keys needed by Tasks
+     //
+@@ -2893,7 +2892,7 @@ public class JobInProgress {
+       // Delete temp dfs dirs created if any, like in case of 
+       // speculative exn of reduces.  
+       Path tempDir = jobtracker.getSystemDirectoryForJob(getJobID());
+-      new CleanupQueue().addToQueue(conf,tempDir); 
++      new CleanupQueue().addToQueue(jobtracker.getFileSystem(tempDir), tempDir); 
+     } catch (IOException e) {
+       LOG.warn("Error cleaning up "+profile.getJobID()+": "+e);
+     }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 3254f01..c646d71 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -63,6 +63,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.LocalFileSystem;
+ import org.apache.hadoop.fs.LocalDirAllocator;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
+@@ -2229,6 +2230,29 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+            : 0;
+   }
+ 
++  /**
++   * Get JobTracker's FileSystem. This is the filesystem for mapred.system.dir.
++   */
++  FileSystem getFileSystem() {
++    return fs;
++  }
++
++  /**
++   * Get the FileSystem for the given path. This can be used to resolve
++   * filesystem for job history, local job files or mapred.system.dir path.
++   */
++  FileSystem getFileSystem(Path path) throws IOException {
++    return path.getFileSystem(conf);
++  }
++
++  /**
++   * Get JobTracker's LocalFileSystem handle. This is used by jobs for 
++   * localizing job files to the local disk.
++   */
++  LocalFileSystem getLocalFileSystem() throws IOException {
++    return FileSystem.getLocal(conf);
++  }
++
+   public static Class<? extends JobTrackerInstrumentation> getInstrumentationClass(Configuration conf) {
+     return conf.getClass("mapred.jobtracker.instrumentation",
+         JobTrackerMetricsInst.class, JobTrackerInstrumentation.class);
+@@ -3598,7 +3622,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     
+     String queue = job.getProfile().getQueueName();
+     if(!(queueManager.getQueues().contains(queue))) {      
+-      new CleanupQueue().addToQueue(conf,getSystemDirectoryForJob(jobId));
++      new CleanupQueue().addToQueue(fs,getSystemDirectoryForJob(jobId));
+       job.fail();
+       if (userFileForJob != null) {
+         userFileForJob.delete();
+@@ -3616,7 +3640,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       if (userFileForJob != null) {
+         userFileForJob.delete();
+       }
+-      new CleanupQueue().addToQueue(conf, getSystemDirectoryForJob(jobId));
++      new CleanupQueue().addToQueue(fs, getSystemDirectoryForJob(jobId));
+       throw ioe;
+     }
+ 
+@@ -3625,7 +3649,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     try {
+       checkMemoryRequirements(job);
+     } catch (IOException ioe) {
+-      new CleanupQueue().addToQueue(conf, getSystemDirectoryForJob(jobId));
++      new CleanupQueue().addToQueue(fs, getSystemDirectoryForJob(jobId));
+       throw ioe;
+     }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 12b166b..be82d5f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -180,7 +180,7 @@ public class TaskTracker
+   
+   // The filesystem where job files are stored
+   FileSystem systemFS = null;
+-  
++  private FileSystem localFs = null;
+   private final HttpServer server;
+     
+   volatile boolean shuttingDown = false;
+@@ -503,6 +503,7 @@ public class TaskTracker
+   synchronized void initialize() throws IOException {
+     // use configured nameserver & interface to get local hostname
+     this.fConf = new JobConf(originalConf);
++    localFs = FileSystem.getLocal(fConf);
+     if (fConf.get("slave.host.name") != null) {
+       this.localHostname = fConf.get("slave.host.name");
+     }
+@@ -1542,7 +1543,7 @@ public class TaskTracker
+         // Delete the job directory for this  
+         // task if the job is done/failed
+         if (!rjob.keepJobFiles){
+-          directoryCleanupThread.addToQueue(fConf, getLocalFiles(fConf, 
++          directoryCleanupThread.addToQueue(localFs, getLocalFiles(fConf, 
+             getLocalJobDir(rjob.getJobID().toString())));
+         }
+         // Remove this job 
+@@ -2660,19 +2661,19 @@ public class TaskTracker
+             //might be using the dir. The JVM running the tasks would clean
+             //the workdir per a task in the task process itself.
+             if (localJobConf.getNumTasksToExecutePerJvm() == 1) {
+-              directoryCleanupThread.addToQueue(defaultJobConf,
++              directoryCleanupThread.addToQueue(localFs,
+                   getLocalFiles(defaultJobConf,
+                   taskDir));
+             }  
+             
+             else {
+-              directoryCleanupThread.addToQueue(defaultJobConf,
++              directoryCleanupThread.addToQueue(localFs,
+                   getLocalFiles(defaultJobConf,
+                 taskDir+"/job.xml"));
+             }
+           } else {
+             if (localJobConf.getNumTasksToExecutePerJvm() == 1) {
+-              directoryCleanupThread.addToQueue(defaultJobConf,
++              directoryCleanupThread.addToQueue(localFs,
+                   getLocalFiles(defaultJobConf,
+                   taskDir+"/work"));
+             }  
+-- 
+1.7.0.4
+

@@ -1,0 +1,37 @@
+From 69c028685a7aee1ef3188ec23c1c7576b5c3154e Mon Sep 17 00:00:00 2001
+From: Owen O'Malley <omalley@apache.org>
+Date: Fri, 4 Mar 2011 04:50:13 +0000
+Subject: [PATCH 1130/1179] commit 98d8043ef96dd9a67e23852b5e5caf8f0a4589db
+ Author: Krishna Ramachandran <ramach@yahoo-inc.com>
+ Date:   Thu Oct 21 12:21:50 2010 -0700
+
+    . Delete PrintWriter using iterator to fix
+        java.util.ConcurrentModificationException (dking)
+
+git-svn-id: https://svn.apache.org/repos/asf/hadoop/common/branches/branch-0.20-security-patches@1077739 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../org/apache/hadoop/mapred/JobHistory.java       |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobHistory.java b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+index 2e66d3f..92d2f40 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobHistory.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+@@ -588,11 +588,12 @@ public class JobHistory {
+     }
+     builder.append(LINE_DELIMITER_CHAR);
+     
+-    for (PrintWriter out : writers) {
++    for (Iterator<PrintWriter> iter = writers.iterator(); iter.hasNext();) {
++      PrintWriter out = iter.next();
+       out.println(builder.toString());
+       if (out.checkError() && id != null) {
+         LOG.info("Logging failed for job " + id + "removing PrintWriter from FileManager");
+-        fileManager.removeWriter(id, out);
++        iter.remove();
+       }
+     }
+   }
+-- 
+1.7.0.4
+

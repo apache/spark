@@ -1,0 +1,39 @@
+From 8b09839047997a4b5461703650b5779ec86c1844 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:45:49 -0800
+Subject: [PATCH 0050/1179] CLOUDERA-BUILD. Added Sqoop documentation to installation script
+
+Author: Todd Lipcon
+---
+ cloudera/install_hadoop.sh |    6 +++++-
+ 1 files changed, 5 insertions(+), 1 deletions(-)
+
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index 9560330..e8981cc 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -150,6 +150,9 @@ cp -a $HADOOP_SRC_DIR/examples/* $EXAMPLE_DIR/src
+ mkdir -p $DOC_DIR
+ cp -r ${BUILD_DIR}/../../docs/* $DOC_DIR
+ 
++mkdir -p $DOC_DIR/sqoop
++cp ${HADOOP_SRC_DIR}/contrib/sqoop/doc/SqoopUserGuide.html $DOC_DIR/sqoop
++
+ # Install source
+ mkdir -p $SRC_DIR
+ cp -a ${HADOOP_SRC_DIR}/* $SRC_DIR/
+@@ -174,9 +177,10 @@ for conf in conf.pseudo ; do
+   (cd ${BUILD_DIR}/../../example-confs/$conf && tar -cf - .) | (cd $ETC_DIR/$conf && tar -xf -)
+ done
+ 
+-# man page
++# man pages
+ mkdir -p $MAN_DIR/man1
+ cp ${CLOUDERA_SOURCE_DIR}/hadoop-$APACHE_BRANCH.1.gz $MAN_DIR/man1/
++gzip -c ${HADOOP_SRC_DIR}/contrib/sqoop/doc/sqoop.1 > $MAN_DIR/man1/sqoop-$APACHE_BRANCH.1.gz
+ 
+ ############################################################
+ # ARCH DEPENDENT STUFF
+-- 
+1.7.0.4
+

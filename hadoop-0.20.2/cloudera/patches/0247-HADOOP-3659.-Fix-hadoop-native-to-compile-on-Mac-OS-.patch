@@ -1,0 +1,61 @@
+From c9295d4ac2848403362e5dbaa78aa7be4ce4254e Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sat, 15 May 2010 13:39:08 -0700
+Subject: [PATCH 0247/1179] HADOOP-3659. Fix hadoop native to compile on Mac OS X.
+
+Description: This patch makes the autoconf script work on Mac OS X. LZO needs to be installed (including the optional shared libraries) for the compile to succeed. You'll want to regenerate the configure script using autoconf after applying this patch.
+
+Reason: Bug fix
+Author: Eli Collins
+Ref: CDH-825
+---
+ src/native/acinclude.m4                            |    4 +++-
+ src/native/lib/Makefile.am                         |    2 +-
+ .../org/apache/hadoop/io/compress/zlib/Makefile.am |    2 +-
+ 3 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/src/native/acinclude.m4 b/src/native/acinclude.m4
+index d63469e..48206f0 100644
+--- a/src/native/acinclude.m4
++++ b/src/native/acinclude.m4
+@@ -13,8 +13,10 @@ AC_CACHE_CHECK([Checking for the 'actual' dynamic-library for '-l$1'], ac_cv_lib
+       ac_cv_libname_$1="`objdump -p conftest | grep NEEDED | grep $1 | sed 's/\W*NEEDED\W*\(.*\)\W*$/\"\1\"/'`"
+     elif test ! -z "`which ldd | grep -v 'no ldd'`"; then
+       ac_cv_libname_$1="`ldd conftest | grep $1 | sed 's/^[[[^A-Za-z0-9]]]*\([[[A-Za-z0-9\.]]]*\)[[[^A-Za-z0-9]]]*=>.*$/\"\1\"/'`"
++    elif test ! -z "`which otool | grep -v 'no otool'`"; then
++	  ac_cv_libname_$1=\"`otool -L conftest | grep $1 | sed -e 's/^[	 ]*//' -e 's/ .*//' -e 's/.*\/\(.*\)$/\1/'`\";
+     else
+-      AC_MSG_ERROR(Can't find either 'objdump' or 'ldd' to compute the dynamic library for '-l$1')
++      AC_MSG_ERROR(Can't find either 'objdump', 'ldd' or 'otool' to compute the dynamic library for '-l$1')
+     fi
+   else
+     ac_cv_libname_$1=libnotfound.so
+diff --git a/src/native/lib/Makefile.am b/src/native/lib/Makefile.am
+index 5d51cc5..bd2ccd7 100644
+--- a/src/native/lib/Makefile.am
++++ b/src/native/lib/Makefile.am
+@@ -37,7 +37,7 @@ AM_LDFLAGS = @JNI_LDFLAGS@ -m$(JVM_DATA_MODEL)
+ lib_LTLIBRARIES = libhadoop.la
+ libhadoop_la_SOURCES = 
+ libhadoop_la_LDFLAGS = -version-info 1:0:0
+-libhadoop_la_LIBADD = $(HADOOP_OBJS) -ldl -ljvm
++libhadoop_la_LIBADD = $(HADOOP_OBJS) -ldl
+ 
+ #
+ #vim: sw=4: ts=4: noet
+diff --git a/src/native/src/org/apache/hadoop/io/compress/zlib/Makefile.am b/src/native/src/org/apache/hadoop/io/compress/zlib/Makefile.am
+index a2cb5fe..f9a326c 100644
+--- a/src/native/src/org/apache/hadoop/io/compress/zlib/Makefile.am
++++ b/src/native/src/org/apache/hadoop/io/compress/zlib/Makefile.am
+@@ -43,7 +43,7 @@ AM_CFLAGS = -g -Wall -fPIC -O2 -m$(JVM_DATA_MODEL)
+ 
+ noinst_LTLIBRARIES = libnativezlib.la
+ libnativezlib_la_SOURCES = ZlibCompressor.c ZlibDecompressor.c
+-libnativezlib_la_LIBADD = -ldl -ljvm
++libnativezlib_la_LIBADD = -ldl
+ 
+ #
+ #vim: sw=4: ts=4: noet
+-- 
+1.7.0.4
+

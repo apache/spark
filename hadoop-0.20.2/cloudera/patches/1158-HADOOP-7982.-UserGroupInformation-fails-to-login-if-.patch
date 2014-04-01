@@ -1,0 +1,41 @@
+From 093e6e83c801662fd9d8ad3925a70d1d5eeac213 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 18 Jan 2012 17:53:05 -0800
+Subject: [PATCH 1158/1179] HADOOP-7982. UserGroupInformation fails to login if thread's context classloader can't load HadoopLoginModule
+
+Reason: fixes "Failure to login" errors in some cases, particularly involving JNI/libhdfs
+Author: Todd Lipcon
+Ref: CDH-4305
+---
+ .../hadoop/security/UserGroupInformation.java      |   14 ++++++++++++--
+ 1 files changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 01f295c..b8e0907 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -466,9 +466,19 @@ public class UserGroupInformation {
+   
+   private static LoginContext
+   newLoginContext(String appName, Subject subject) throws LoginException {
+-    return new LoginContext(appName, subject, null, new HadoopConfiguration(null));
++    // Temporarily switch the thread's ContextClassLoader to match this
++    // class's classloader, so that we can properly load HadoopLoginModule
++    // from the JAAS libraries.
++    Thread t = Thread.currentThread();
++    ClassLoader oldCCL = t.getContextClassLoader();
++    t.setContextClassLoader(HadoopLoginModule.class.getClassLoader());
++    try {
++      return new LoginContext(appName, subject, null, new HadoopConfiguration(null));
++    } finally {
++      t.setContextClassLoader(oldCCL);
++    }
+   }
+-  
++
+   private LoginContext getLogin() {
+     return user.getLogin();
+   }
+-- 
+1.7.0.4
+

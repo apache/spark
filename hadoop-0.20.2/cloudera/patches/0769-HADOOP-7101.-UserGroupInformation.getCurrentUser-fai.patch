@@ -1,0 +1,81 @@
+From b48ee52a2c451a673765c67141448fa9cdc7e37a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 13 Jan 2011 11:56:04 -0800
+Subject: [PATCH 0769/1179] HADOOP-7101. UserGroupInformation.getCurrentUser() fails when called from non-Hadoop JAAS context
+
+Reason: Hadoop access fails running from within JMX-created JAAS context
+Author: Todd Lipcon
+Ref: CDH-2525
+---
+ .../hadoop/security/UserGroupInformation.java      |    6 ++++-
+ .../hadoop/security/TestUserGroupInformation.java  |   25 ++++++++++++++++----
+ 2 files changed, 25 insertions(+), 6 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index bd8eb95..441952d 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -453,7 +453,11 @@ public class UserGroupInformation {
+   public static UserGroupInformation getCurrentUser() throws IOException {
+     AccessControlContext context = AccessController.getContext();
+     Subject subject = Subject.getSubject(context);
+-    return subject == null ? getLoginUser() : new UserGroupInformation(subject);
++    if (subject == null || subject.getPrincipals(User.class).isEmpty()) {
++      return getLoginUser();
++    } else {
++      return new UserGroupInformation(subject);
++    }
+   }
+ 
+   /**
+diff --git a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+index 84aa8ab..f383912 100644
+--- a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
++++ b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+@@ -16,11 +16,7 @@
+  */
+ package org.apache.hadoop.security;
+ 
+-import static org.junit.Assert.assertArrayEquals;
+-import static org.junit.Assert.assertEquals;
+-import static org.junit.Assert.assertFalse;
+-import static org.junit.Assert.assertTrue;
+-import static org.junit.Assert.fail;
++import static org.junit.Assert.*;
+ 
+ import org.mockito.Mockito;
+ import static org.mockito.Mockito.mock;
+@@ -33,6 +29,7 @@ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.List;
+ 
++import javax.security.auth.Subject;
+ import javax.security.auth.login.AppConfigurationEntry;
+ import javax.security.auth.login.LoginContext;
+ 
+@@ -359,4 +356,22 @@ public class TestUserGroupInformation {
+     // for "foobar"
+     LoginContext login = new LoginContext("foobar-app");
+   }
++
++  /**
++   * Test for the case that UserGroupInformation.getCurrentUser()
++   * is called when the AccessControlContext has a Subject associated
++   * with it, but that Subject was not created by Hadoop (ie it has no
++   * associated User principal)
++   */
++  @Test
++  public void testUGIUnderNonHadoopContext() throws Exception {
++    Subject nonHadoopSubject = new Subject();
++    Subject.doAs(nonHadoopSubject, new PrivilegedExceptionAction<Void>() {
++        public Void run() throws IOException {
++          UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++          assertNotNull(ugi);
++          return null;
++        }
++      });
++  }
+ }
+-- 
+1.7.0.4
+

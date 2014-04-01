@@ -1,0 +1,133 @@
+From c30f419af201daea7d7131d5c50fef6b09997513 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 5 Jul 2011 12:15:41 -0700
+Subject: [PATCH 1005/1179] MAPREDUCE-2472. Extra whitespace in mapred.child.java.opts breaks JVM initialization.
+
+When creating taskjvm.sh, we split mapred.child.java.opts on " " and
+then create a quoted argument for each of those results. So, if you
+have an extra space anywhere in this configuration, you get an
+argument '' in the child command line, which the JVM interprets as an
+empty class name. This results in a ClassNotFoundException and the
+task cannot run.
+
+Reason: Bug
+Author: Aaron T. Myers
+Ref: CDH-3152
+---
+ .../org/apache/hadoop/mapred/TaskRunner.java       |   21 +++++-
+ .../hadoop/mapred/TestTaskChildOptsParsing.java    |   64 ++++++++++++++++++++
+ 2 files changed, 81 insertions(+), 4 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestTaskChildOptsParsing.java
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index 46b9a26..34441c6 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -362,6 +362,20 @@ abstract class TaskRunner extends Thread {
+   }
+ 
+   /**
++   * Parse the given string and return an array of individual java opts. Split
++   * on whitespace and replace the special string "@taskid@" with the task ID
++   * given.
++   * 
++   * @param javaOpts The string to parse
++   * @param taskid The task ID to replace the special string with
++   * @return An array of individual java opts.
++   */
++  static String[] parseChildJavaOpts(String javaOpts, TaskAttemptID taskid) {
++    javaOpts = javaOpts.replace("@taskid@", taskid.toString());
++    return javaOpts.trim().split("\\s+");
++  }
++
++  /**
+    * @param taskid
+    * @param workDir
+    * @param classPaths
+@@ -406,10 +420,9 @@ abstract class TaskRunner extends Thread {
+     //    </value>
+     //  </property>
+     //
+-    String javaOpts = getChildJavaOpts(conf, 
+-                                       JobConf.DEFAULT_MAPRED_TASK_JAVA_OPTS);
+-    javaOpts = javaOpts.replace("@taskid@", taskid.toString());
+-    String [] javaOptsSplit = javaOpts.split(" ");
++    String[] javaOptsSplit = parseChildJavaOpts(getChildJavaOpts(conf,
++                                       JobConf.DEFAULT_MAPRED_TASK_JAVA_OPTS),
++                                       taskid);
+     
+     // Add java.library.path; necessary for loading native libraries.
+     //
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskChildOptsParsing.java b/src/test/org/apache/hadoop/mapred/TestTaskChildOptsParsing.java
+new file mode 100644
+index 0000000..d952ab8
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestTaskChildOptsParsing.java
+@@ -0,0 +1,64 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred;
++
++import static org.junit.Assert.*;
++
++import org.junit.Test;
++
++public class TestTaskChildOptsParsing {
++  
++  @SuppressWarnings("deprecation")
++  private static final TaskAttemptID TASK_ID = new TaskAttemptID();
++  private static final String[] EXPECTED_RESULTS = new String[]{"-Dfoo=bar", "-Dbaz=biz"};
++  
++  private void performTest(String input) {
++    String[] result = TaskRunner.parseChildJavaOpts(input, TASK_ID);
++    assertArrayEquals(EXPECTED_RESULTS, result);
++  }
++  
++  @Test
++  public void testParseChildJavaOptsLeadingSpace() {
++    performTest(" -Dfoo=bar -Dbaz=biz");
++  }
++  
++  @Test
++  public void testParseChildJavaOptsTrailingSpace() {
++    performTest("-Dfoo=bar -Dbaz=biz ");
++  }
++  
++  @Test
++  public void testParseChildJavaOptsOneSpace() {
++    performTest("-Dfoo=bar -Dbaz=biz");
++  }
++  
++  @Test
++  public void testParseChildJavaOptsMulitpleSpaces() {
++    performTest("-Dfoo=bar  -Dbaz=biz");
++  }
++  
++  @Test
++  public void testParseChildJavaOptsOneTab() {
++    performTest("-Dfoo=bar\t-Dbaz=biz");
++  }
++  
++  @Test
++  public void testParseChildJavaOptsMultipleTabs() {
++    performTest("-Dfoo=bar\t\t-Dbaz=biz");
++  }
++}
+-- 
+1.7.0.4
+

@@ -1,0 +1,38 @@
+From df2ba14900cd081fa87eec9aedf3f75eca9c2885 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 6 Dec 2011 10:54:51 -0800
+Subject: [PATCH 1096/1179] HDFS-2637. The rpc timeout for block recovery is too low.
+
+The RPC timeout for block recovery does not take into account that it
+issues multiple RPCs itself. This can cause recovery to fail if the
+network is congested or DNs are busy.
+
+Reason: Bug
+Author: Eli Collins
+Ref: CDH-3834
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java |    7 +++++--
+ 1 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 916edc6..16591ad 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -2918,9 +2918,12 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         try {
+           // Pick the "least" datanode as the primary datanode to avoid deadlock.
+           primaryNode = Collections.min(Arrays.asList(newnodes));
++          // Set the timeout to reflect that recovery requires at most two rpcs
++          // to each DN and two rpcs to the NN.
++          int recoveryTimeout =
++            (newnodes.length * 2 + 2) * DFSClient.this.socketTimeout;
+           primary = createClientDatanodeProtocolProxy(
+-              primaryNode, conf, DFSClient.this.socketTimeout,
+-              block, accessToken);
++              primaryNode, conf, recoveryTimeout, block, accessToken);
+           newBlock = primary.recoverBlock(block, isAppend, newnodes);
+         } catch (IOException e) {
+           LOG.warn("Failed recovery attempt #" + recoveryErrorCount +
+-- 
+1.7.0.4
+

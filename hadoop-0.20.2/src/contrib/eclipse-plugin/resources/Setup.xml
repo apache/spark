@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cheatsheet title="Open Browser">
+  <intro>
+    <description>This cheat sheet launches a browser to the Hadoop website.</description>
+  </intro>  
+  <item title="Open Browser">
+     <description>
+     				Go to http://hadoop.apache.org/core/, and follow
+					links to download the latest stable distribution of
+					Hadoop.
+
+
+     Use the following embedded command to launch the Hadoop Web site 
+        in a browser</description>
+     <command serialization=
+        "org.eclipse.ui.browser.openBrowser(url=http://hadoop.apache.org/core)"/>
+  </item>
+</cheatsheet>

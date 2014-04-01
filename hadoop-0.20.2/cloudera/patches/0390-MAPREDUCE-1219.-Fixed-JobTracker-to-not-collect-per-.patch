@@ -1,0 +1,32 @@
+From c446d2df912c744705ecc72bf98f424973eb0817 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 19 Nov 2009 11:52:38 -0800
+Subject: [PATCH 0390/1179] MAPREDUCE-1219. Fixed JobTracker to not collect per-job metrics, thus easing load on it.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12425302/patch-1219-ydist.txt
+Author: Amareshwari Sriramadasu
+Ref: YDH
+---
+ .../hadoop/mapred/JobTrackerMetricsInst.java       |    6 ------
+ 1 files changed, 0 insertions(+), 6 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java b/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java
+index e5da65a..ec54bcc 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTrackerMetricsInst.java
+@@ -154,12 +154,6 @@ class JobTrackerMetricsInst extends JobTrackerInstrumentation implements Updater
+       numTrackersBlackListed = 0;
+     }
+     metricsRecord.update();
+-
+-    if (tracker != null) {
+-      for (JobInProgress jip : tracker.getRunningJobs()) {
+-        jip.updateMetrics();
+-      }
+-    }
+   }
+ 
+   @Override
+-- 
+1.7.0.4
+

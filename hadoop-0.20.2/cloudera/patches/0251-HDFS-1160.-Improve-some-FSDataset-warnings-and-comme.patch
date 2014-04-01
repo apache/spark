@@ -1,0 +1,56 @@
+From baa77bdde4fd971877418391a4fe491c2d4c2501 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Mon, 17 May 2010 19:49:44 -0700
+Subject: [PATCH 0251/1179] HDFS-1160. Improve some FSDataset warnings and comments.
+
+Description: Cleans up HDFS-547 warnings.
+
+Reason: Improvement
+Author: Eli Collins
+Ref: CDH-1080
+---
+ .../hadoop/hdfs/server/datanode/BlockReceiver.java |    4 ++--
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |    5 +++--
+ 2 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
+index 76a547a..17f7dcd 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
+@@ -835,7 +835,7 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+             try {
+               datanode.checkDiskError(e); // may throw an exception here
+             } catch (IOException ioe) {
+-              LOG.warn("DataNode.chekDiskError failed in lastDataNodeRun with: ",
++              LOG.warn("DataNode.checkDiskError failed in lastDataNodeRun with: ",
+                   ioe);
+             }
+             LOG.info("PacketResponder " + block + " " + numTargets + 
+@@ -1009,7 +1009,7 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+             try {
+               datanode.checkDiskError(e); // may throw an exception here
+             } catch (IOException ioe) {
+-              LOG.warn("DataNode.chekDiskError failed in run() with: ", ioe);
++              LOG.warn("DataNode.checkDiskError failed in run() with: ", ioe);
+             }
+             LOG.info("PacketResponder " + block + " " + numTargets + 
+                      " Exception " + StringUtils.stringifyException(e));
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index 3fbdc33..962f35e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -1489,8 +1489,9 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+         FSVolume vol = volumeMap.get(b).getVolume();
+         for(FSVolume fv: failed_vols) {
+           if(vol == fv) {
+-            DataNode.LOG.warn("removing block " + b.getBlockId() + " from vol " 
+-                + vol.dataDir.dir.getAbsolutePath());
++            DataNode.LOG.warn("Removing replica info for block " + 
++                b.getBlockId() + " on failed volume " +
++                vol.dataDir.dir.getAbsolutePath());
+             ib.remove();
+             removed_blocks++;
+             break;
+-- 
+1.7.0.4
+

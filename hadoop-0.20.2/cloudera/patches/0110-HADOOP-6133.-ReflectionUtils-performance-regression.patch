@@ -1,0 +1,78 @@
+From a61718b87c36dbeddcc6f9917438f81ebdda0214 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:10:22 -0800
+Subject: [PATCH 0110/1179] HADOOP-6133. ReflectionUtils performance regression
+
+Description: <a href="http://issues.apache.org/jira/browse/HADOOP-4187" title="Create a MapReduce-specific ReflectionUtils that handles JobConf and JobConfigurable"><del>HADOOP-4187</del></a> introduced extra calls to Class.forName in ReflectionUtils.setConf. This caused a fairly large performance regression. Attached is a microbenchmark that shows the following timings (ms) for 100M constructions of new instances:
+
+<p>Explicit construction (new Test): around ~1.6sec<br/>
+Using Test.class.newInstance: around ~2.6sec<br/>
+ReflectionUtils on 0.18.3: ~8.0sec<br/>
+ReflectionUtils on 0.20.0: ~200sec</p>
+
+<p>This illustrates the ~80x slowdown caused by <a href="http://issues.apache.org/jira/browse/HADOOP-4187" title="Create a MapReduce-specific ReflectionUtils that handles JobConf and JobConfigurable"><del>HADOOP-4187</del></a>.</p>
+Reason: Performance improvement
+Author: Todd Lipcon
+Ref: UNKNOWN
+
+commit 5e299f831420ed52569eefc5ba815359a0ebc64e
+Author: Chad Metcalf <chad@cloudera.com>
+Date:   Tue Sep 15 22:21:42 2009 -0700
+
+    HADOOP-6133: ReflectionUtils performance regression
+---
+ src/core/org/apache/hadoop/conf/Configuration.java |   24 +++++++++++++++++++-
+ 1 files changed, 23 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/conf/Configuration.java b/src/core/org/apache/hadoop/conf/Configuration.java
+index f6d1213..7194b81 100644
+--- a/src/core/org/apache/hadoop/conf/Configuration.java
++++ b/src/core/org/apache/hadoop/conf/Configuration.java
+@@ -43,6 +43,8 @@ import java.util.Set;
+ import java.util.StringTokenizer;
+ import java.util.WeakHashMap;
+ import java.util.concurrent.CopyOnWriteArrayList;
++import java.util.concurrent.ConcurrentMap;
++import java.util.concurrent.ConcurrentHashMap;
+ import java.util.regex.Matcher;
+ import java.util.regex.Pattern;
+ 
+@@ -166,6 +168,9 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+    */
+   private static final CopyOnWriteArrayList<String> defaultResources =
+     new CopyOnWriteArrayList<String>();
++
++  private static final ConcurrentMap<ClassLoader, Map<String, Class<?>>>
++    CACHE_CLASSES = new ConcurrentHashMap<ClassLoader, Map<String, Class<?>>>();
+   
+   static{
+     //print deprecation warning if hadoop-site.xml is found in classpath
+@@ -760,7 +765,24 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+    * @throws ClassNotFoundException if the class is not found.
+    */
+   public Class<?> getClassByName(String name) throws ClassNotFoundException {
+-    return Class.forName(name, true, classLoader);
++    Map<String, Class<?>> map = CACHE_CLASSES.get(classLoader);
++    if (map == null) {
++      Map<String, Class<?>> newMap = new ConcurrentHashMap<String, Class<?>>();
++      map = CACHE_CLASSES.putIfAbsent(classLoader, newMap);
++      if (map == null) {
++        map = newMap;
++      }
++    }
++
++    Class clazz = map.get(name);
++    if (clazz == null) {
++      clazz = Class.forName(name, true, classLoader);
++      if (clazz != null) {
++        map.put(name, clazz);
++      }
++    }
++
++    return clazz;
+   }
+ 
+   /** 
+-- 
+1.7.0.4
+

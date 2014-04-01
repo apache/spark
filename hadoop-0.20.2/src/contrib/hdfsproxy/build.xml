@@ -1,0 +1,512 @@
+<?xml version="1.0" ?>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<project name="hdfsproxy" default="jar" xmlns:ivy="antlib:org.apache.ivy.ant">
+  <property name="hdfsproxyVersion" value="2.0"/>
+  <property name="final.name" value="${ant.project.name}-${hdfsproxyVersion}"/>
+  <property name="javac.debug" value="on"/>
+  <property name="javac.optimize" value="on"/>
+  <import file="../build-contrib.xml"/>
+
+  <property name="bin.dir" value="${basedir}/bin"/>
+  <property name="lib.dir" value="${basedir}/lib"/>
+  <property name="hadoop.jars.dir" value="${basedir}/hadoopjars"/>
+
+  <property name="docs.dir" value="${basedir}/docs"/>
+  <property name="test.build.dir" value="${build.dir}/test"/>
+  <property name="test.build.classes" value="${test.build.dir}/classes"/>
+  <property name="src.test.resources" value="${basedir}/src/test/resources"/>
+  <property name="ssl.keystore.proxy" value="${src.test.resources}/ssl-keys/proxy.keystore"/>
+  <property name="ssl.keystore.client" value="${src.test.resources}/ssl-keys/client.keystore"/>
+  <property name="ssl.client.cert" value="${src.test.resources}/ssl-keys/test.crt"/>
+  <property name="proxy.conf.test" value="${src.test.resources}/proxy-config"/>
+  <property name="tomcat.conf.test" value="${src.test.resources}/tomcat-config"/>
+  <property name="target.dir" value="${build.dir}/target"/>
+  <property name="logs.dir" value="${target.dir}/logs"/>
+  <property name="reports.dir" value="${target.dir}/reports"/>
+  <property name="tomcatconfig.dir" value="${target.dir}/tomcat-config"/>
+  <property name="tomcat.container.id" value="tomcat5x"/>
+  <property name="cargo.logging" value="high"/>
+  <property name="cactus.formatter.type" value="xml"/>
+  <property name="cactus.warfile.name" value="test"/>
+  <!-- Used for krb5.conf which is required to run unit tests with MiniDFS -->
+  <property name="test.krb5.conf.location" location="${hadoop.root}/src/test/krb5.conf"/>
+
+  <available file="${hadoop.root}/build/classes" type="dir" property="test.available"/>
+  <property environment="env"/>
+  <!-- check if environment has been set -->
+  <condition property="proxy.conf.dir" value="${env.HDFSPROXY_CONF_DIR}" else="${basedir}/conf">
+    <and>
+      <isset property="env.HDFSPROXY_CONF_DIR"/>
+      <available file="${env.HDFSPROXY_CONF_DIR}/hdfsproxy-default.xml"/>
+    </and>
+  </condition>
+
+  <condition property="startCactus">
+    <and>
+      <or>
+        <equals arg1="${testcase}" arg2="TestProxyFilter"/>
+        <equals arg1="${testcase}" arg2="TestLdapIpDirFilter"/>
+        <equals arg1="${testcase}" arg2="TestProxyUtil"/>
+        <equals arg1="${testcase}" arg2="TestProxyForwardServlet"/>
+        <not>
+          <isset property="testcase"/>
+        </not>
+      </or>
+      <isset property="test.available"/>
+    </and>
+  </condition>
+
+  <condition property="useClover">
+    <and>
+      <isset property="clover.home"/>
+      <available file="${clover.home}/lib/clover.jar"/>
+    </and>
+  </condition>
+
+  <property name="ivy.settings.file" location="${hadoop.root}/ivy/ivysettings.xml"/>
+
+  <target name="ivy-init" depends="ivy-init-antlib">
+    <ivy:settings id="${ant.project.name}.ivy.settings"/>
+  </target>
+
+  <!-- Define the Cactus tasks -->
+  <target name="load-tasks" depends="ivy-retrieve-common">
+    <taskdef resource="cactus.tasks"
+             classpathref="cactus.classpath">
+    </taskdef>
+  </target>
+
+
+  <target name="jar" depends="compile" description="Create jar">
+    <echo>
+      Building the .jar files.
+    </echo>
+    <jar jarfile="${build.dir}/${final.name}.jar" basedir="${build.classes}"
+         includes="org/apache/hadoop/hdfsproxy/**/*.class">
+      <manifest>
+        <section name="org/apache/hadoop/hdfsproxy">
+          <attribute name="Implementation-Title" value="HdfsProxy"/>
+          <attribute name="Implementation-Version" value="${hdfsproxyVersion}"/>
+          <attribute name="Implementation-Vendor" value="Apache"/>
+        </section>
+      </manifest>
+    </jar>
+  </target>
+
+
+  <!-- ================================================================== -->
+  <!-- Make war file                                              -->
+  <!-- ================================================================== -->
+
+  <target name="war" depends="compile" description="Create war">
+    <echo>
+      Building the .war file
+    </echo>
+    <war destfile="${build.dir}/${final.name}.war" webxml="${basedir}/conf/tomcat-web.xml">
+      <lib dir="${common.ivy.lib.dir}">
+        <include name="commons-logging-${commons-logging.version}.jar"/>
+        <include name="junit-${junit.version}.jar"/>
+        <include name="log4j-${log4j.version}.jar"/>
+        <include name="slf4j-api-${slf4j-api.version}.jar"/>
+        <include name="slf4j-log4j12-${slf4j-log4j12.version}.jar"/>
+        <include name="xmlenc-${xmlenc.version}.jar"/>
+	<include name="jetty-${jetty.version}.jar"/>
+	<include name="jetty-util-${jetty-util.version}.jar"/>
+      </lib>
+      <lib dir="${hadoop.root}/lib">
+        <include name="hadoop-core-*.jar"/>
+      </lib>
+      <classes dir="${proxy.conf.dir}">
+        <include name="hdfsproxy-default.xml"/>
+        <include name="user-certs.xml"/>
+        <include name="user-permissions.xml"/>
+      </classes>
+      <classes dir="${build.classes}"/>
+      <classes dir="${hadoop.root}/build/classes"/>
+    </war>
+  </target>
+
+  <target name="forward" depends="compile" description="Create forward war">
+    <echo>
+      Building the forward war file
+    </echo>
+    <war destfile="${build.dir}/${final.name}-forward.war" webxml="${basedir}/conf/tomcat-forward-web.xml">
+      <lib dir="${common.ivy.lib.dir}">
+        <include name="commons-logging-${commons-logging.version}.jar"/>
+        <include name="junit-${junit.version}.jar"/>
+        <include name="log4j-${log4j.version}.jar"/>
+        <include name="slf4j-api-${slf4j-api.version}.jar"/>
+        <include name="slf4j-log4j12-${slf4j-log4j12.version}.jar"/>
+        <include name="xmlenc-${xmlenc.version}.jar"/>
+      </lib>
+      <lib dir="${hadoop.root}/lib">
+        <include name="hadoop-core-*.jar"/>
+      </lib>
+      <classes dir="${proxy.conf.dir}">
+        <include name="hdfsproxy-default.xml"/>
+        <include name="hdfsproxy-site.xml"/>
+        <include name="user-certs.xml"/>
+        <include name="user-permissions.xml"/>
+      </classes>
+      <classes dir="${build.classes}"/>
+      <classes dir="${hadoop.root}/build/classes"/>
+    </war>
+  </target>
+
+  <target name="testwar" depends="compile" description="Create testing war">
+    <echo>
+      Building the testing .war file
+    </echo>
+    <war destfile="${build.dir}/${final.name}-test.war" webxml="${src.test.resources}/tomcat-web.xml">
+      <lib dir="${common.ivy.lib.dir}">
+        <include name="commons-logging-${commons-logging.version}.jar"/>
+        <include name="junit-${junit.version}.jar"/>
+        <include name="log4j-${log4j.version}.jar"/>
+        <include name="slf4j-api-${slf4j-api.version}.jar"/>
+        <include name="slf4j-log4j12-${slf4j-log4j12.version}.jar"/>
+        <include name="xmlenc-${xmlenc.version}.jar"/>
+        <include name="core-${core.vesion}.jar"/>
+	<include name="jetty-${jetty.version}.jar"/>
+        <include name="jetty-util-${jetty-util.version}.jar"/>
+      </lib>
+      <lib dir="${hadoop.root}/lib">
+        <include name="hadoop-core-*.jar"/>
+      </lib>
+      <classes dir="${proxy.conf.test}" excludes="**/*.template **/*.sh"/>
+      <classes dir="${build.classes}"/>
+      <classes dir="${hadoop.root}/build/classes"/>
+    </war>
+  </target>
+
+  <target name="cactifywar" depends="testwar,load-tasks,cactifywar-pure,cactifywar-clover"
+          description="To include clover coverage test use -Dclover.home ..."/>
+
+  <target name="cactifywar-pure" depends="testwar,load-tasks" unless="useClover">
+    <mkdir dir="${target.dir}"/>
+    <echo>no clover found ...</echo>
+    <cactifywar srcfile="${build.dir}/${final.name}-test.war"
+                destfile="${target.dir}/${cactus.warfile.name}.war"
+                mergewebxml="${src.test.resources}/cactus-web.xml">
+      <servletredirector/>
+      <servletredirector name="ServletRedirectorSecure"
+                         mapping="/ServletRedirectorSecure" roles="test"/>
+      <filterredirector mapping="/test/filterRedirector.jsp"/>
+      <classes dir="${test.build.dir}"/>
+    </cactifywar>
+  </target>
+
+  <target name="cactifywar-clover" depends="testwar,load-tasks" if="useClover">
+    <mkdir dir="${target.dir}"/>
+    <echo>Including clover.jar in the war file ...</echo>
+    <cactifywar srcfile="${build.dir}/${final.name}-test.war"
+                destfile="${target.dir}/${cactus.warfile.name}.war"
+                mergewebxml="${src.test.resources}/cactus-web.xml">
+      <servletredirector/>
+      <servletredirector name="ServletRedirectorSecure"
+                         mapping="/ServletRedirectorSecure" roles="test"/>
+      <filterredirector mapping="/test/filterRedirector.jsp"/>
+      <classes dir="${test.build.dir}"/>
+      <lib dir="${clover.home}/lib">
+        <include name="clover.jar"/>
+      </lib>
+    </cactifywar>
+  </target>
+
+  <target name="test" depends="compile,compile-test,test-junit" description="Automated Test Framework"
+          if="test.available"/>
+
+  <target name="test-junit" depends="compile,compile-test" if="test.available">
+    <copy todir="${src.test.resources}/proxy-config">
+      <fileset dir="${proxy.conf.dir}" />
+    </copy>
+    <copy file="${proxy.conf.dir}/tomcat-web.xml" todir="${src.test.resources}"/>
+    <copy file="${proxy.conf.dir}/tomcat-forward-web.xml" todir="${src.test.resources}"/>
+
+    <junit fork="yes" printsummary="yes" errorProperty="tests.failed" failureProperty="tests.failed">
+      <classpath refid="test.classpath"/>
+      <sysproperty key="test.build.data" value="${build.test}/data"/>
+      <sysproperty key="build.test" value="${build.test}"/>
+      <sysproperty key="user.dir" value="${build.test}/data"/>
+      <sysproperty key="fs.default.name" value="${fs.default.name}"/>
+      <sysproperty key="hadoop.test.localoutputfile" value="${hadoop.test.localoutputfile}"/>
+      <sysproperty key="hadoop.log.dir" value="${hadoop.log.dir}"/>
+      <sysproperty key="test.src.dir" value="${test.src.dir}"/>
+      <sysproperty key="javax.net.ssl.trustStore" value="${ssl.keystore.proxy}"/>
+      <sysproperty key="javax.net.ssl.trustStorePassword" value="changeme"/>
+      <sysproperty key="javax.net.ssl.keyStore.proxy" value="${ssl.keystore.proxy}"/>
+      <sysproperty key="javax.net.ssl.keyStore" value="${ssl.keystore.client}"/>
+      <sysproperty key="javax.net.ssl.keyStorePassword" value="changeme"/>
+      <sysproperty key="javax.net.ssl.keyPassword" value="changeme"/>
+      <sysproperty key="javax.net.ssl.clientCert" value="${ssl.client.cert}"/>
+      <sysproperty key="java.security.krb5.conf" value="${test.krb5.conf.location}"/>
+      <formatter type="xml"/>
+      <batchtest todir="${test.build.dir}" unless="testcase">
+        <fileset dir="${src.test}">
+          <include name="**/TestHdfsProxy.java"/>
+          <include name="**/TestProxyUgiManager.java"/>
+        </fileset>
+      </batchtest>
+      <batchtest todir="${test.build.dir}" if="testcase">
+        <fileset dir="${src.test}">
+          <include name="**/${testcase}.java"/>
+          <exclude name="**/TestProxyFilter.java"/>
+          <exclude name="**/TestLdapIpDirFilter.java"/>
+          <exclude name="**/TestProxyUtil.java"/>
+          <exclude name="**/TestProxyForwardServlet.java"/>
+        </fileset>
+      </batchtest>
+    </junit>
+    <fail if="tests.failed">Tests failed!</fail>
+  </target>
+
+
+  <target name="test-cactus" depends="compile,compile-test,cactifywar" if="startCactus">
+    <exec executable="${env.JAVA_HOME}/bin/java" outputproperty="cargo.servlet.admin.port">
+      <arg line="-cp ${build.test} org.apache.hadoop.hdfsproxy.FindFreePort -random"/>
+    </exec>
+    <exec executable="${env.JAVA_HOME}/bin/java" outputproperty="cargo.servlet.http.port">
+      <arg line="-cp ${build.test} org.apache.hadoop.hdfsproxy.FindFreePort ${cargo.servlet.admin.port}"/>
+    </exec>
+    <exec executable="${env.JAVA_HOME}/bin/java" outputproperty="cargo.servlet.https.port">
+      <arg line="-cp ${build.test} org.apache.hadoop.hdfsproxy.FindFreePort ${cargo.servlet.http.port}"/>
+    </exec>
+
+    <echo>Free Ports: startup-${cargo.servlet.admin.port} / http-${cargo.servlet.http.port} /
+      https-${cargo.servlet.https.port}
+    </echo>
+    <echo>Please take a deep breath while Cargo gets the Tomcat for running the servlet tests...</echo>
+
+    <mkdir dir="${tomcatconfig.dir}"/>
+    <mkdir dir="${tomcatconfig.dir}/conf"/>
+    <mkdir dir="${tomcatconfig.dir}/webapps"/>
+    <mkdir dir="${tomcatconfig.dir}/temp"/>
+    <mkdir dir="${logs.dir}"/>
+    <mkdir dir="${reports.dir}"/>
+    <copy file="${tomcat.conf.test}/server.xml" tofile="${tomcatconfig.dir}/conf/server.xml" overwrite="true">
+      <filterset>
+        <filter token="ADMIN.PORT" value="${cargo.servlet.admin.port}"/>
+        <filter token="HTTP.PORT" value="${cargo.servlet.http.port}"/>
+        <filter token="HTTPS.PORT" value="${cargo.servlet.https.port}"/>
+      </filterset>
+    </copy>
+    <copy file="${tomcat.conf.test}/web.xml" tofile="${tomcatconfig.dir}/conf/web.xml"/>
+    <copy file="${tomcat.conf.test}/tomcat-users.xml" tofile="${tomcatconfig.dir}/conf/tomcat-users.xml"/>
+
+    <cactus warfile="${target.dir}/${cactus.warfile.name}.war" fork="yes" haltonfailure="no" printsummary="yes"
+            failureproperty="tests.failed">
+      <classpath>
+        <path refid="cactus.classpath"/>
+        <pathelement location="${build.classes}"/>
+        <pathelement location="${src.test.resources}"/>
+        <pathelement location="${src.test.resources}/proxy-config"/>
+      </classpath>
+      <containerset>
+        <cargo containerId="${tomcat.container.id}" timeout="30000" output="${logs.dir}/output.log"
+               log="${logs.dir}/cargo.log">
+          <zipUrlInstaller
+              installUrl="http://apache.osuosl.org/tomcat/tomcat-6/v6.0.18/bin/apache-tomcat-6.0.18.zip"
+              installDir="${target.dir}/${tomcat.container.id}"/>
+          <configuration type="existing" home="${tomcatconfig.dir}">
+            <property name="cargo.servlet.port" value="${cargo.servlet.http.port}"/>
+            <property name="cargo.logging" value="${cargo.logging}"/>
+            <property name="cactus.toDir" value="${build.test}"/>
+            <deployable type="war" file="${target.dir}/${cactus.warfile.name}.war"/>
+          </configuration>
+        </cargo>
+      </containerset>
+      <sysproperty key="test.build.data" value="${build.test}/data"/>
+      <sysproperty key="build.test" value="${build.test}"/>
+      <sysproperty key="build.target" value="${target.dir}"/>
+      <sysproperty key="javax.net.ssl.trustStore" value="${ssl.keystore.proxy}"/>
+      <sysproperty key="javax.net.ssl.trustStorePassword" value="changeme"/>
+      <sysproperty key="javax.net.ssl.keyStore.proxy" value="${ssl.keystore.proxy}"/>
+      <sysproperty key="javax.net.ssl.keyStore" value="${ssl.keystore.client}"/>
+      <sysproperty key="javax.net.ssl.keyStorePassword" value="changeme"/>
+      <sysproperty key="javax.net.ssl.keyPassword" value="changeme"/>
+      <sysproperty key="javax.net.ssl.clientCert" value="${ssl.client.cert}"/>
+      <sysproperty key="test.proxy.conf.dir" value="${proxy.conf.test}"/>
+      <sysproperty key="test.proxy.https.port" value="${cargo.servlet.https.port}"/>
+
+      <formatter type="${cactus.formatter.type}"/>
+      <batchtest todir="${reports.dir}" unless="testcase">
+        <fileset dir="${src.test}">
+          <include name="**/Test*.java"/>
+          <exclude name="**/TestHdfsProxy.java"/>
+          <exclude name="**/TestProxyUgiManager.java"/>
+        </fileset>
+      </batchtest>
+      <batchtest todir="${reports.dir}" if="testcase">
+        <fileset dir="${src.test}">
+          <include name="**/${testcase}.java"/>
+          <exclude name="**/TestHdfsProxy.java"/>
+          <exclude name="**/TestProxyUgiManager.java"/>
+        </fileset>
+      </batchtest>
+    </cactus>
+    <fail if="tests.failed">Tests failed!</fail>
+  </target>
+  <!-- ====================================================== -->
+  <!-- Macro definitions                                      -->
+  <!-- ====================================================== -->
+  <macrodef name="macro_tar" description="Worker Macro for tar">
+    <attribute name="param.destfile"/>
+    <element name="param.listofitems"/>
+    <sequential>
+      <tar compression="gzip" longfile="gnu"
+           destfile="@{param.destfile}">
+        <param.listofitems/>
+      </tar>
+    </sequential>
+  </macrodef>
+
+  <!-- ================================================================== -->
+  <!-- D I S T R I B U T I O N                                            -->
+  <!-- ================================================================== -->
+  <!--                                                                    -->
+  <!-- ================================================================== -->
+  <target name="local-package" depends="jar,war" description="Package in local build directory">
+    <mkdir dir="${build.dir}/${final.name}"/>
+    <mkdir dir="${build.dir}/${final.name}/logs"/>
+    <copy todir="${build.dir}/${final.name}" includeEmptyDirs="false">
+      <fileset dir="${build.dir}">
+        <include name="*.jar"/>
+        <include name="*.war"/>
+      </fileset>
+    </copy>
+    <copy todir="${build.dir}/${final.name}/lib" includeEmptyDirs="false">
+      <fileset dir="${common.ivy.lib.dir}">
+        <include name="commons-logging-${commons-logging.version}.jar"/>
+        <include name="commons-logging-api-${commons-logging-api.version}.jar"/>
+        <include name="junit-${junit.version}.jar"/>
+        <include name="log4j-${log4j.version}.jar"/>
+        <include name="slf4j-api-${slf4j-api.version}.jar"/>
+        <include name="slf4j-log4j12-${slf4j-log4j12.version}.jar"/>
+        <include name="xmlenc-${xmlenc.version}.jar"/>
+        <include name="jetty-util-${jetty-util.version}.jar"/>
+        <include name="jetty-${jetty.version}.jar"/>
+        <include name="servlet-api-2.5-${servlet-api-2.5.version}.jar"/>
+        <include name="core-${core.vesion}.jar"/>
+      </fileset>
+      <fileset dir="${hadoop.root}/lib/jsp-${jsp.version}">
+        <include name="jsp-${jsp.version}.jar"/>
+        <include name="jsp-api-${jsp.version}.jar"/>
+      </fileset>
+    </copy>
+
+    <copy todir="${build.dir}/${final.name}/lib" includeEmptyDirs="false">
+      <fileset dir="${hadoop.root}/build">
+        <include name="*-core.jar"/>
+        <include name="*-tools.jar"/>
+      </fileset>
+    </copy>
+
+    <copy todir="${build.dir}/${final.name}/bin">
+      <fileset dir="${bin.dir}"/>
+    </copy>
+
+
+    <copy todir="${build.dir}/${final.name}/conf">
+      <fileset dir="${proxy.conf.dir}"/>
+    </copy>
+
+
+    <copy todir="${build.dir}/${final.name}">
+      <fileset dir="${basedir}">
+        <include name="README"/>
+        <include name="build.xml"/>
+        <include name="*.txt"/>
+      </fileset>
+    </copy>
+
+    <copy todir="${build.dir}/${final.name}/src" includeEmptyDirs="true">
+      <fileset dir="${src.dir}" excludes="**/*.template **/docs/build/**/*"/>
+    </copy>
+
+    <chmod perm="ugo+x" type="file" parallel="false">
+      <fileset dir="${build.dir}/${final.name}/bin"/>
+    </chmod>
+
+  </target>
+  <target name="package" depends="local-package" description="Build distribution">
+    <mkdir dir="${dist.dir}/contrib/${name}"/>
+    <copy todir="${dist.dir}/contrib/${name}">
+      <fileset dir="${build.dir}/${final.name}">
+        <exclude name="**/lib/**"/>
+        <exclude name="**/src/**"/>
+        <exclude name="*.war"/>
+      </fileset>
+    </copy>
+    <chmod dir="${dist.dir}/contrib/${name}/bin" perm="a+x" includes="*"/>
+  </target>
+
+	<!-- ================================================================== -->
+	<!-- Make release tarball                                               -->
+	<!-- ================================================================== -->
+	<target name="tar" depends="local-package" description="Make release tarball">
+		<macro_tar param.destfile="${build.dir}/${final.name}.tar.gz">
+			<param.listofitems>
+				<tarfileset dir="${build.dir}" mode="664">
+					<exclude name="${final.name}/bin/*" />
+					<include name="${final.name}/**" />
+				</tarfileset>
+				<tarfileset dir="${build.dir}" mode="755">
+					<include name="${final.name}/bin/*" />
+				</tarfileset>
+			</param.listofitems>
+		</macro_tar>
+	</target>
+
+	<target name="binary" depends="local-package" description="Make tarball without source and documentation">
+		<macro_tar param.destfile="${build.dir}/${final.name}-bin.tar.gz">
+			<param.listofitems>
+				<tarfileset dir="${build.dir}" mode="664">
+					<exclude name="${final.name}/bin/*" />
+					<exclude name="${final.name}/src/**" />
+					<exclude name="${final.name}/docs/**" />
+					<include name="${final.name}/**" />
+				</tarfileset>
+				<tarfileset dir="${build.dir}" mode="755">
+					<include name="${final.name}/bin/*" />
+				</tarfileset>
+			</param.listofitems>
+		</macro_tar>
+	</target>
+
+
+  <!-- the unit test classpath -->
+  <path id="test.classpath">
+    <pathelement location="${proxy.conf.test}"/>
+    <pathelement location="${test.build.dir}"/>
+    <pathelement location="${hadoop.root}/build/test/classes"/>
+    <!--<pathelement location="${hadoop.root}/src/contrib/test"/>-->
+    <pathelement location="${hadoop.root}/conf"/>
+    <pathelement location="${hadoop.root}/build"/>
+    <pathelement location="${hadoop.root}/build/classes"/>
+    <pathelement location="${hadoop.root}/build/tools"/>
+    <pathelement location="${build.examples}"/>
+    <pathelement path="${clover.jar}"/>
+    <path refid="contrib-classpath"/>
+  </path>
+
+  <path id="cactus.classpath">
+    <path refid="test.classpath"/>
+  </path>
+
+</project>

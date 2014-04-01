@@ -1,0 +1,114 @@
+From 97b3aed79705201bfe0bea392ca19e3fc96cd81e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 22 Dec 2009 12:26:46 -0800
+Subject: [PATCH 0409/1179] HADOOP-5824. Remove unused OP_READ_METADATA functionality from Datanode
+
+Patch: https://issues.apache.org/jira/secure/attachment/12428759/HADOOP-5824-0_20.1.patch
+Author: Kan Zhang
+Ref: YDH
+---
+ .../hadoop/hdfs/protocol/DataTransferProtocol.java |    5 ++-
+ .../hadoop/hdfs/server/datanode/DataXceiver.java   |   42 --------------------
+ .../server/datanode/metrics/DataNodeMetrics.java   |    3 -
+ 3 files changed, 4 insertions(+), 46 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/DataTransferProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/DataTransferProtocol.java
+index eef1bab..e0f1707 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/DataTransferProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/DataTransferProtocol.java
+@@ -43,7 +43,10 @@ public interface DataTransferProtocol {
+   // Processed at datanode stream-handler
+   public static final byte OP_WRITE_BLOCK = (byte) 80;
+   public static final byte OP_READ_BLOCK = (byte) 81;
+-  public static final byte OP_READ_METADATA = (byte) 82;
++  /**
++   * @deprecated As of version 15, OP_READ_METADATA is no longer supported
++   */
++  @Deprecated public static final byte OP_READ_METADATA = (byte) 82;
+   public static final byte OP_REPLACE_BLOCK = (byte) 83;
+   public static final byte OP_COPY_BLOCK = (byte) 84;
+   public static final byte OP_BLOCK_CHECKSUM = (byte) 85;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+index ab7997f..a4c0041 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+@@ -124,10 +124,6 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+         else
+           datanode.myMetrics.writesFromRemoteClient.inc();
+         break;
+-      case DataTransferProtocol.OP_READ_METADATA:
+-        readMetadata( in );
+-        datanode.myMetrics.readMetadataOp.inc(DataNode.now() - startTime);
+-        break;
+       case DataTransferProtocol.OP_REPLACE_BLOCK: // for balancing purpose; send to a destination
+         replaceBlock(in);
+         datanode.myMetrics.replaceBlockOp.inc(DataNode.now() - startTime);
+@@ -437,44 +433,6 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+   }
+ 
+   /**
+-   * Reads the metadata and sends the data in one 'DATA_CHUNK'.
+-   * @param in
+-   */
+-  void readMetadata(DataInputStream in) throws IOException {
+-    Block block = new Block( in.readLong(), 0 , in.readLong());
+-    MetaDataInputStream checksumIn = null;
+-    DataOutputStream out = null;
+-    updateThreadName("reading metadata for block " + block);
+-    try {
+-
+-      checksumIn = datanode.data.getMetaDataInputStream(block);
+-      
+-      long fileSize = checksumIn.getLength();
+-
+-      if (fileSize >= 1L<<31 || fileSize <= 0) {
+-          throw new IOException("Unexpected size for checksumFile of block" +
+-                  block);
+-      }
+-
+-      byte [] buf = new byte[(int)fileSize];
+-      IOUtils.readFully(checksumIn, buf, 0, buf.length);
+-      
+-      out = new DataOutputStream(
+-                NetUtils.getOutputStream(s, datanode.socketWriteTimeout));
+-      
+-      out.writeByte(DataTransferProtocol.OP_STATUS_SUCCESS);
+-      out.writeInt(buf.length);
+-      out.write(buf);
+-      
+-      //last DATA_CHUNK
+-      out.writeInt(0);
+-    } finally {
+-      IOUtils.closeStream(out);
+-      IOUtils.closeStream(checksumIn);
+-    }
+-  }
+-  
+-  /**
+    * Get block checksum (MD5 of CRC32).
+    * @param in
+    */
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/metrics/DataNodeMetrics.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/metrics/DataNodeMetrics.java
+index eaffef4..c523a96 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/metrics/DataNodeMetrics.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/metrics/DataNodeMetrics.java
+@@ -78,8 +78,6 @@ public class DataNodeMetrics implements Updater {
+                 new MetricsTimeVaryingRate("readBlockOp", registry);
+   public MetricsTimeVaryingRate writeBlockOp = 
+                 new MetricsTimeVaryingRate("writeBlockOp", registry);
+-  public MetricsTimeVaryingRate readMetadataOp = 
+-                new MetricsTimeVaryingRate("readMetadataOp", registry);
+   public MetricsTimeVaryingRate blockChecksumOp = 
+                 new MetricsTimeVaryingRate("blockChecksumOp", registry);
+   public MetricsTimeVaryingRate copyBlockOp = 
+@@ -128,7 +126,6 @@ public class DataNodeMetrics implements Updater {
+   public void resetAllMinMax() {
+     readBlockOp.resetMinMax();
+     writeBlockOp.resetMinMax();
+-    readMetadataOp.resetMinMax();
+     blockChecksumOp.resetMinMax();
+     copyBlockOp.resetMinMax();
+     replaceBlockOp.resetMinMax();
+-- 
+1.7.0.4
+

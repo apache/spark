@@ -1,0 +1,238 @@
+From 2e59f4098c52600ea6fbd651ce7008cc486963b0 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@apache.org>
+Date: Sat, 31 Mar 2012 01:01:57 +0000
+Subject: [PATCH 1162/1179] HDFS-3044. fsck move should be non-destructive by default. Contributed by Colin Patrick McCabe
+
+git-svn-id: https://svn.apache.org/repos/asf/hadoop/common/branches/branch-1@1307673 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../hadoop/hdfs/server/namenode/NamenodeFsck.java  |   79 ++++++++++----------
+ .../hadoop/hdfs/server/namenode/TestFsck.java      |   38 +++++++++-
+ 2 files changed, 74 insertions(+), 43 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java
+index f3eaf97..ea07274 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NamenodeFsck.java
+@@ -56,17 +56,8 @@ import org.apache.hadoop.security.UserGroupInformation;
+  *  root path. The following abnormal conditions are detected and handled:</p>
+  * <ul>
+  * <li>files with blocks that are completely missing from all datanodes.<br/>
+- * In this case the tool can perform one of the following actions:
+- *  <ul>
+- *      <li>none ({@link #FIXING_NONE})</li>
+- *      <li>move corrupted files to /lost+found directory on DFS
+- *      ({@link #FIXING_MOVE}). Remaining data blocks are saved as a
+- *      block chains, representing longest consecutive series of valid blocks.</li>
+- *      <li>delete corrupted files ({@link #FIXING_DELETE})</li>
+- *  </ul>
+- *  </li>
+- *  <li>detect files with under-replicated or over-replicated blocks</li>
+- *  </ul>
++ * <li>files with under-replicated or over-replicated blocks</li>
++ * </ul>
+  *  Additionally, the tool collects a detailed overall DFS statistics, and
+  *  optionally can print detailed statistics on block locations and replication
+  *  factors of each file.
+@@ -80,13 +71,6 @@ public class NamenodeFsck {
+   public static final String NONEXISTENT_STATUS = "does not exist";
+   public static final String FAILURE_STATUS = "FAILED";
+   
+-  /** Don't attempt any fixing . */
+-  public static final int FIXING_NONE = 0;
+-  /** Move corrupted files to /lost+found . */
+-  public static final int FIXING_MOVE = 1;
+-  /** Delete corrupted files. */
+-  public static final int FIXING_DELETE = 2;
+-  
+   private final NameNode namenode;
+   private final NetworkTopology networktopology;
+   private final int totalDatanodes;
+@@ -101,7 +85,21 @@ public class NamenodeFsck {
+   private boolean showBlocks = false;
+   private boolean showLocations = false;
+   private boolean showRacks = false;
+-  private int fixing = FIXING_NONE;
++
++  /** 
++   * True if the user specified the -move option.
++   *
++   * Whe this option is in effect, we will copy salvaged blocks into the lost
++   * and found. */
++  private boolean doMove = false;
++
++  /** 
++   * True if the user specified the -delete option.
++   *
++   * Whe this option is in effect, we will delete corrupted files.
++   */
++  private boolean doDelete = false;
++
+   private String path = "/";
+   
+   private final Configuration conf;
+@@ -133,8 +131,8 @@ public class NamenodeFsck {
+     for (Iterator<String> it = pmap.keySet().iterator(); it.hasNext();) {
+       String key = it.next();
+       if (key.equals("path")) { this.path = pmap.get("path")[0]; }
+-      else if (key.equals("move")) { this.fixing = FIXING_MOVE; }
+-      else if (key.equals("delete")) { this.fixing = FIXING_DELETE; }
++      else if (key.equals("move")) { this.doMove = true; }
++      else if (key.equals("delete")) { this.doDelete = true; }
+       else if (key.equals("files")) { this.showFiles = true; }
+       else if (key.equals("blocks")) { this.showBlocks = true; }
+       else if (key.equals("locations")) { this.showLocations = true; }
+@@ -328,16 +326,20 @@ public class NamenodeFsck {
+             + " blocks of total size " + missize + " B.");
+       }
+       res.corruptFiles++;
+-      switch(fixing) {
+-      case FIXING_NONE:
+-        break;
+-      case FIXING_MOVE:
+-        if (!isOpen)
+-          lostFoundMove(parent, file, blocks);
+-        break;
+-      case FIXING_DELETE:
+-        if (!isOpen)
+-          namenode.delete(path, true);
++      try {
++        if (doMove) {
++          if (!isOpen) {
++            copyBlocksToLostFound(parent, file, blocks);
++          }
++        }
++        if (doDelete) {
++          if (!isOpen) {
++            LOG.warn("\n - deleting corrupted file " + path);
++            namenode.delete(path, true);
++          }
++        }
++      } catch (IOException e) {
++        LOG.error("error processing " + path + ": " + e.toString());
+       }
+     }
+     if (showFiles) {
+@@ -352,8 +354,8 @@ public class NamenodeFsck {
+     }
+   }
+   
+-  private void lostFoundMove(String parent, HdfsFileStatus file, LocatedBlocks blocks)
+-    throws IOException {
++  private void copyBlocksToLostFound(String parent, HdfsFileStatus file,
++        LocatedBlocks blocks) throws IOException {
+     final DFSClient dfs = new DFSClient(NameNode.getAddress(conf), conf);
+     try {
+     if (!lfInited) {
+@@ -386,12 +388,10 @@ public class NamenodeFsck {
+         }
+         if (fos == null) {
+           fos = dfs.create(target + "/" + chain, true);
+-          if (fos != null) chain++;
++          if (fos != null)
++            chain++;
+           else {
+-            LOG.warn(errmsg + ": could not store chain " + chain);
+-            // perhaps we should bail out here...
+-            // return;
+-            continue;
++            throw new IOException(errmsg + ": could not store chain " + chain);
+           }
+         }
+         
+@@ -408,8 +408,7 @@ public class NamenodeFsck {
+         }
+       }
+       if (fos != null) fos.close();
+-      LOG.warn("\n - moved corrupted file " + fullName + " to /lost+found");
+-      dfs.delete(fullName, true);
++      LOG.warn("\n - copied corrupted file " + fullName + " to /lost+found");
+     }  catch (Exception e) {
+       e.printStackTrace();
+       LOG.warn(errmsg + ": " + e.getMessage());
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestFsck.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestFsck.java
+index d092935..5038ca9 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestFsck.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestFsck.java
+@@ -47,6 +47,7 @@ import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+ import org.apache.hadoop.hdfs.tools.DFSck;
+ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.ToolRunner;
+ import org.apache.log4j.Level;
+ import org.apache.log4j.Logger;
+@@ -68,6 +69,17 @@ public class TestFsck extends TestCase {
+       "cmd=fsck\\ssrc=\\/\\sdst=null\\s" + 
+       "perm=null");
+   
++  static String stringJoin(String delim, String[] arr) {
++    StringBuilder bld = new StringBuilder(); 
++    for (int i = 0; i < arr.length; i++) {
++      if (i != 0) {
++        bld.append(delim);
++      }
++      bld.append(arr[i]);
++    }
++    return bld.toString();
++  }
++
+   static String runFsck(Configuration conf, int expectedErrCode, 
+                         boolean checkErrorCode,String... path) 
+                         throws Exception {
+@@ -76,6 +88,9 @@ public class TestFsck extends TestCase {
+     PrintStream newOut = new PrintStream(bStream, true);
+     System.setOut(newOut);
+     ((Log4JLogger)FSPermissionChecker.LOG).getLogger().setLevel(Level.ALL);
++    NameNode.LOG.debug("runFsck(expectedErrCode=" + expectedErrCode +
++        " ,checkErrorCode=" + checkErrorCode + ", path='" +
++        stringJoin(",", path) + "'");
+     int errCode = ToolRunner.run(new DFSck(conf), path);
+     if (checkErrorCode)
+       assertEquals(expectedErrCode, errCode);
+@@ -228,7 +243,8 @@ public class TestFsck extends TestCase {
+     }
+   }
+ 
+-  public void testFsckMove() throws Exception {
++  public void testFsckMoveAndDelete() throws Exception {
++    final int NUM_MOVE_TRIES = 3;
+     DFSTestUtil util = new DFSTestUtil("TestFsck", 5, 3, 8*1024);
+     MiniDFSCluster cluster = null;
+     FileSystem fs = null;
+@@ -248,6 +264,7 @@ public class TestFsck extends TestCase {
+       String[] fileNames = util.getFileNames(topDir);
+       DFSClient dfsClient = new DFSClient(new InetSocketAddress("localhost",
+                                           cluster.getNameNodePort()), conf);
++      String corruptFileName = fileNames[0];
+       String block = dfsClient.namenode.
+                       getBlockLocations(fileNames[0], 0, Long.MAX_VALUE).
+                       get(0).getBlock().getBlockName();
+@@ -270,8 +287,23 @@ public class TestFsck extends TestCase {
+         outStr = runFsck(conf, 1, false, "/");
+       } 
+       
+-      // Fix the filesystem by moving corrupted files to lost+found
+-      outStr = runFsck(conf, 1, true, "/", "-move");
++      // After a fsck -move, the corrupted file should still exist.
++      for (int retry = 0; retry < NUM_MOVE_TRIES; retry++) {
++        outStr = runFsck(conf, 1, true, "/", "-move" );
++        assertTrue(outStr.contains(NamenodeFsck.CORRUPT_STATUS));
++        String[] newFileNames = util.getFileNames(topDir);
++        boolean found = false;
++        for (String f : newFileNames) {
++          if (f.equals(corruptFileName)) {
++            found = true;
++            break;
++          }
++        }
++        assertTrue(found);
++      }
++
++      // Fix the filesystem by deleting corrupted files
++      outStr = runFsck(conf, 1, true, "/", "-delete");
+       assertTrue(outStr.contains(NamenodeFsck.CORRUPT_STATUS));
+       
+       // Check to make sure we have healthy filesystem
+-- 
+1.7.0.4
+

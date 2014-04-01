@@ -1,0 +1,33 @@
+From 84afb26bb0e42eda1e26b07e3aac016695f5ad87 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:31:37 -0800
+Subject: [PATCH 0170/1179] HDFS-857. Incorrect type for fuse-dfs capacity can cause "df" to return negative values on 32-bit machines
+
+Description: On sufficiently large HDFS installs, the casting of hdfsGetCapacity to a long may cause "df" to return negative values.  tOffset should be used instead.
+Reason: bugfix
+Author: Brian Bockelman
+Ref: UNKNOWN
+---
+ src/contrib/fuse-dfs/src/fuse_impls_statfs.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/contrib/fuse-dfs/src/fuse_impls_statfs.c b/src/contrib/fuse-dfs/src/fuse_impls_statfs.c
+index 4c0d462..1579903 100644
+--- a/src/contrib/fuse-dfs/src/fuse_impls_statfs.c
++++ b/src/contrib/fuse-dfs/src/fuse_impls_statfs.c
+@@ -43,9 +43,9 @@ int dfs_statfs(const char *path, struct statvfs *st)
+     return -EIO;
+   }
+ 
+-  const long cap   = hdfsGetCapacity(userFS);
+-  const long used  = hdfsGetUsed(userFS);
+-  const long bsize = hdfsGetDefaultBlockSize(userFS);
++  const tOffset cap   = hdfsGetCapacity(userFS);
++  const tOffset used  = hdfsGetUsed(userFS);
++  const tOffset bsize = hdfsGetDefaultBlockSize(userFS);
+ 
+   // fill in the statvfs structure
+ 
+-- 
+1.7.0.4
+

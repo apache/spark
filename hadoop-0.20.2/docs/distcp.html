@@ -1,0 +1,676 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta content="Apache Forrest" name="Generator">
+<meta name="Forrest-version" content="0.8">
+<meta name="Forrest-skin-name" content="pelt">
+<title>DistCp Guide</title>
+<link type="text/css" href="skin/basic.css" rel="stylesheet">
+<link media="screen" type="text/css" href="skin/screen.css" rel="stylesheet">
+<link media="print" type="text/css" href="skin/print.css" rel="stylesheet">
+<link type="text/css" href="skin/profile.css" rel="stylesheet">
+<script src="skin/getBlank.js" language="javascript" type="text/javascript"></script><script src="skin/getMenu.js" language="javascript" type="text/javascript"></script><script src="skin/fontsize.js" language="javascript" type="text/javascript"></script>
+<link rel="shortcut icon" href="images/favicon.ico">
+</head>
+<body onload="init()">
+<script type="text/javascript">ndeSetTextSize();</script>
+<div id="top">
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+<a href="http://www.apache.org/">Apache</a> &gt; <a href="http://hadoop.apache.org/">Hadoop</a> &gt; <a href="http://hadoop.apache.org/core/">Core</a><script src="skin/breadcrumbs.js" language="JavaScript" type="text/javascript"></script>
+</div>
+<!--+
+    |header
+    +-->
+<div class="header">
+<!--+
+    |start group logo
+    +-->
+<div class="grouplogo">
+<a href="http://hadoop.apache.org/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo.jpg" title="Apache Hadoop"></a>
+</div>
+<!--+
+    |end group logo
+    +-->
+<!--+
+    |start Project Logo
+    +-->
+<div class="projectlogo">
+<a href="http://hadoop.apache.org/core/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo-2.gif" title="Scalable Computing Platform"></a>
+</div>
+<!--+
+    |end Project Logo
+    +-->
+<!--+
+    |start Search
+    +-->
+<div class="searchbox">
+<form action="http://www.google.com/search" method="get" class="roundtopsmall">
+<input value="archive.cloudera.com" name="sitesearch" type="hidden"><input onFocus="getBlank (this, 'Search the site with google');" size="25" name="q" id="query" type="text" value="Search the site with google">&nbsp; 
+                    <input name="Search" value="Search" type="submit">
+</form>
+</div>
+<!--+
+    |end search
+    +-->
+<!--+
+    |start Tabs
+    +-->
+<ul id="tabs">
+<li>
+<a class="unselected" href="http://hadoop.apache.org/core/">Project</a>
+</li>
+<li>
+<a class="unselected" href="http://wiki.apache.org/hadoop">Wiki</a>
+</li>
+<li class="current">
+<a class="selected" href="index.html">Hadoop 0.20 Documentation</a>
+</li>
+</ul>
+<!--+
+    |end Tabs
+    +-->
+</div>
+</div>
+<div id="main">
+<div id="publishedStrip">
+<!--+
+    |start Subtabs
+    +-->
+<div id="level2tabs"></div>
+<!--+
+    |end Endtabs
+    +-->
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+
+             &nbsp;
+           </div>
+<!--+
+    |start Menu, mainarea
+    +-->
+<!--+
+    |start Menu
+    +-->
+<div id="menu">
+<div onclick="SwitchMenu('menu_1.1', 'skin/')" id="menu_1.1Title" class="menutitle">Getting Started</div>
+<div id="menu_1.1" class="menuitemgroup">
+<div class="menuitem">
+<a href="index.html">Overview</a>
+</div>
+<div class="menuitem">
+<a href="single_node_setup.html">Single Node Setup</a>
+</div>
+<div class="menuitem">
+<a href="cluster_setup.html">Cluster Setup</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.2', 'skin/')" id="menu_1.2Title" class="menutitle">Guides</div>
+<div id="menu_1.2" class="menuitemgroup">
+<div class="menuitem">
+<a href="HttpAuthentication.html">Authentication for Hadoop HTTP web-consoles</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_selected_1.3', 'skin/')" id="menu_selected_1.3Title" class="menutitle" style="background-image: url('skin/images/chapter_open.gif');">MapReduce</div>
+<div id="menu_selected_1.3" class="selectedmenuitemgroup" style="display: block;">
+<div class="menuitem">
+<a href="mapred_tutorial.html">MapReduce Tutorial</a>
+</div>
+<div class="menuitem">
+<a href="streaming.html">Hadoop Streaming</a>
+</div>
+<div class="menuitem">
+<a href="commands_manual.html">Hadoop Commands</a>
+</div>
+<div class="menupage">
+<div class="menupagetitle">DistCp</div>
+</div>
+<div class="menuitem">
+<a href="vaidya.html">Vaidya</a>
+</div>
+<div class="menuitem">
+<a href="hadoop_archives.html">Hadoop Archives</a>
+</div>
+<div class="menuitem">
+<a href="gridmix.html">Gridmix</a>
+</div>
+<div class="menuitem">
+<a href="capacity_scheduler.html">Capacity Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="fair_scheduler.html">Fair Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="hod_scheduler.html">Hod Scheduler</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.4', 'skin/')" id="menu_1.4Title" class="menutitle">HDFS</div>
+<div id="menu_1.4" class="menuitemgroup">
+<div class="menuitem">
+<a href="hdfs_user_guide.html">HDFS Users </a>
+</div>
+<div class="menuitem">
+<a href="hdfs_design.html">HDFS Architecture</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_permissions_guide.html">Permissions</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_quota_admin_guide.html">Quotas</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_imageviewer.html">Offline Image Viewer Guide</a>
+</div>
+<div class="menuitem">
+<a href="SLG_user_guide.html">Synthetic Load Generator</a>
+</div>
+<div class="menuitem">
+<a href="libhdfs.html">C API libhdfs</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.5', 'skin/')" id="menu_1.5Title" class="menutitle">Common</div>
+<div id="menu_1.5" class="menuitemgroup">
+<div class="menuitem">
+<a href="file_system_shell.html">File System Shell</a>
+</div>
+<div class="menuitem">
+<a href="service_level_auth.html">Service Level Authorization</a>
+</div>
+<div class="menuitem">
+<a href="native_libraries.html">Native Libraries</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.6', 'skin/')" id="menu_1.6Title" class="menutitle">Miscellaneous</div>
+<div id="menu_1.6" class="menuitemgroup">
+<div class="menuitem">
+<a href="Secure_Impersonation.html">Secure Impersonation</a>
+</div>
+<div class="menuitem">
+<a href="api/index.html">API Docs</a>
+</div>
+<div class="menuitem">
+<a href="jdiff/changes.html">API Changes</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/">Wiki</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/FAQ">FAQ</a>
+</div>
+<div class="menuitem">
+<a href="releasenotes.html">Release Notes</a>
+</div>
+<div class="menuitem">
+<a href="changes.html">Change Log</a>
+</div>
+</div>
+<div id="credit"></div>
+<div id="roundbottom">
+<img style="display: none" class="corner" height="15" width="15" alt="" src="skin/images/rc-b-l-15-1body-2menu-3menu.png"></div>
+<!--+
+  |alternative credits
+  +-->
+<div id="credit2"></div>
+</div>
+<!--+
+    |end Menu
+    +-->
+<!--+
+    |start content
+    +-->
+<div id="content">
+<div title="Portable Document Format" class="pdflink">
+<a class="dida" href="distcp.pdf"><img alt="PDF -icon" src="skin/images/pdfdoc.gif" class="skin"><br>
+        PDF</a>
+</div>
+<h1>DistCp Guide</h1>
+<div id="minitoc-area">
+<ul class="minitoc">
+<li>
+<a href="#Overview">Overview</a>
+</li>
+<li>
+<a href="#Usage">Usage</a>
+<ul class="minitoc">
+<li>
+<a href="#Basic">Basic</a>
+</li>
+<li>
+<a href="#options">Options</a>
+<ul class="minitoc">
+<li>
+<a href="#Option+Index">Option Index</a>
+</li>
+<li>
+<a href="#Symbolic-Representations">Symbolic Representations</a>
+</li>
+<li>
+<a href="#uo">Update and Overwrite</a>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<a href="#etc">Appendix</a>
+<ul class="minitoc">
+<li>
+<a href="#Map+sizing">Map sizing</a>
+</li>
+<li>
+<a href="#cpver">Copying between versions of HDFS</a>
+</li>
+<li>
+<a href="#MapReduce+and+other+side-effects">MapReduce and other side-effects</a>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+
+    
+<a name="N1000D"></a><a name="Overview"></a>
+<h2 class="h3">Overview</h2>
+<div class="section">
+<p>DistCp (distributed copy) is a tool used for large inter/intra-cluster
+      copying. It uses MapReduce to effect its distribution, error
+      handling and recovery, and reporting. It expands a list of files and
+      directories into input to map tasks, each of which will copy a partition
+      of the files specified in the source list. Its MapReduce pedigree has
+      endowed it with some quirks in both its semantics and execution. The
+      purpose of this document is to offer guidance for common tasks and to
+      elucidate its model.</p>
+</div>
+
+    
+<a name="N10017"></a><a name="Usage"></a>
+<h2 class="h3">Usage</h2>
+<div class="section">
+<a name="N1001D"></a><a name="Basic"></a>
+<h3 class="h4">Basic</h3>
+<p>The most common invocation of DistCp is an inter-cluster copy:</p>
+<p>
+<span class="codefrag">bash$ hadoop distcp hdfs://nn1:8020/foo/bar \</span>
+<br>
+           
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                 hdfs://nn2:8020/bar/foo</span>
+</p>
+<p>This will expand the namespace under <span class="codefrag">/foo/bar</span> on nn1
+        into a temporary file, partition its contents among a set of map
+        tasks, and start a copy on each TaskTracker from nn1 to nn2. Note
+        that DistCp expects absolute paths.</p>
+<p>One can also specify multiple source directories on the command
+        line:</p>
+<p>
+<span class="codefrag">bash$ hadoop distcp hdfs://nn1:8020/foo/a \</span>
+<br>
+           
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                 hdfs://nn1:8020/foo/b \</span>
+<br>
+           
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                 hdfs://nn2:8020/bar/foo</span>
+</p>
+<p>Or, equivalently, from a file using the <span class="codefrag">-f</span> option:<br>
+        
+<span class="codefrag">bash$ hadoop distcp -f hdfs://nn1:8020/srclist \</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              &nbsp;hdfs://nn2:8020/bar/foo</span>
+<br>
+</p>
+<p>Where <span class="codefrag">srclist</span> contains<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/a</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/b</span>
+</p>
+<p>When copying from multiple sources, DistCp will abort the copy with
+        an error message if two sources collide, but collisions at the
+        destination are resolved per the <a href="#options">options</a>
+        specified. By default, files already existing at the destination are
+        skipped (i.e. not replaced by the source file). A count of skipped
+        files is reported at the end of each job, but it may be inaccurate if a
+        copier failed for some subset of its files, but succeeded on a later
+        attempt (see <a href="#etc">Appendix</a>).</p>
+<p>It is important that each TaskTracker can reach and communicate with
+        both the source and destination file systems. For HDFS, both the source
+        and destination must be running the same version of the protocol or use
+        a backwards-compatible protocol (see <a href="#cpver">Copying Between
+        Versions</a>).</p>
+<p>After a copy, it is recommended that one generates and cross-checks
+        a listing of the source and destination to verify that the copy was
+        truly successful. Since DistCp employs both MapReduce and the
+        FileSystem API, issues in or between any of the three could adversely
+        and silently affect the copy. Some have had success running with
+        <span class="codefrag">-update</span> enabled to perform a second pass, but users should
+        be acquainted with its semantics before attempting this.</p>
+<p>It's also worth noting that if another client is still writing to a
+        source file, the copy will likely fail. Attempting to overwrite a file
+        being written at the destination should also fail on HDFS. If a source
+        file is (re)moved before it is copied, the copy will fail with a
+        FileNotFoundException.</p>
+<a name="N1007E"></a><a name="options"></a>
+<h3 class="h4">Options</h3>
+<a name="N10084"></a><a name="Option+Index"></a>
+<h4>Option Index</h4>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+          
+<tr>
+<th colspan="1" rowspan="1"> Flag </th><th colspan="1" rowspan="1"> Description </th><th colspan="1" rowspan="1"> Notes </th>
+</tr>
+
+          
+<tr>
+<td colspan="1" rowspan="1"><span class="codefrag">-p[rbugp]</span></td>
+              <td colspan="1" rowspan="1">Preserve<br>
+                  &nbsp;&nbsp;r: replication number<br>
+                  &nbsp;&nbsp;b: block size<br>
+                  &nbsp;&nbsp;u: user<br>
+                  &nbsp;&nbsp;g: group<br>
+                  &nbsp;&nbsp;p: permission<br>
+</td>
+              <td colspan="1" rowspan="1">Modification times are not preserved. Also, when
+              <span class="codefrag">-update</span> is specified, status updates will
+              <strong>not</strong> be synchronized unless the file sizes
+              also differ (i.e. unless the file is re-created).
+              </td>
+</tr>
+          
+<tr>
+<td colspan="1" rowspan="1"><span class="codefrag">-i</span></td>
+              <td colspan="1" rowspan="1">Ignore failures</td>
+              <td colspan="1" rowspan="1">As explained in the <a href="#etc">Appendix</a>, this option
+              will keep more accurate statistics about the copy than the
+              default case. It also preserves logs from failed copies, which
+              can be valuable for debugging. Finally, a failing map will not
+              cause the job to fail before all splits are attempted.
+              </td>
+</tr>
+          
+<tr>
+<td colspan="1" rowspan="1"><span class="codefrag">-log &lt;logdir&gt;</span></td>
+              <td colspan="1" rowspan="1">Write logs to &lt;logdir&gt;</td>
+              <td colspan="1" rowspan="1">DistCp keeps logs of each file it attempts to copy as map
+              output. If a map fails, the log output will not be retained if
+              it is re-executed.
+              </td>
+</tr>
+          
+<tr>
+<td colspan="1" rowspan="1"><span class="codefrag">-m &lt;num_maps&gt;</span></td>
+              <td colspan="1" rowspan="1">Maximum number of simultaneous copies</td>
+              <td colspan="1" rowspan="1">Specify the number of maps to copy data. Note that more maps
+              may not necessarily improve throughput.
+              </td>
+</tr>
+          
+<tr>
+<td colspan="1" rowspan="1"><span class="codefrag">-overwrite</span></td>
+              <td colspan="1" rowspan="1">Overwrite destination</td>
+              <td colspan="1" rowspan="1">If a map fails and <span class="codefrag">-i</span> is not specified, all the
+              files in the split, not only those that failed, will be recopied.
+              As discussed in the <a href="#uo">following</a>, it also changes
+              the semantics for generating destination paths, so users should
+              use this carefully.
+              </td>
+</tr>
+          
+<tr>
+<td colspan="1" rowspan="1"><span class="codefrag">-update</span></td>
+              <td colspan="1" rowspan="1">Overwrite if src size different from dst size</td>
+              <td colspan="1" rowspan="1">As noted in the preceding, this is not a "sync"
+              operation. The only criterion examined is the source and
+              destination file sizes; if they differ, the source file
+              replaces the destination file. As discussed in the
+              <a href="#uo">following</a>, it also changes the semantics for
+              generating destination paths, so users should use this carefully.
+              </td>
+</tr>
+          
+<tr>
+<td colspan="1" rowspan="1"><span class="codefrag">-f &lt;urilist_uri&gt;</span></td>
+              <td colspan="1" rowspan="1">Use list at &lt;urilist_uri&gt; as src list</td>
+              <td colspan="1" rowspan="1">This is equivalent to listing each source on the command
+              line. The <span class="codefrag">urilist_uri</span> list should be a fully
+              qualified URI.
+              </td>
+</tr>
+          
+<tr>
+<td colspan="1" rowspan="1"><span class="codefrag">-filelimit &lt;n&gt;</span></td>
+              <td colspan="1" rowspan="1">Limit the total number of files to be &lt;= n</td>
+              <td colspan="1" rowspan="1">See also <a href="#Symbolic-Representations">Symbolic
+                  Representations</a>.
+              </td>
+</tr>
+          
+<tr>
+<td colspan="1" rowspan="1"><span class="codefrag">-sizelimit &lt;n&gt;</span></td>
+              <td colspan="1" rowspan="1">Limit the total size to be &lt;= n bytes</td>
+              <td colspan="1" rowspan="1">See also <a href="#Symbolic-Representations">Symbolic
+                  Representations</a>.
+              </td>
+</tr>
+          
+<tr>
+<td colspan="1" rowspan="1"><span class="codefrag">-delete</span></td>
+              <td colspan="1" rowspan="1">Delete the files existing in the dst but not in src</td>
+              <td colspan="1" rowspan="1">The deletion is done by FS Shell.  So the trash will be used,
+                  if it is enable.
+              </td>
+</tr>
+
+        
+</table>
+<a name="N10171"></a><a name="Symbolic-Representations"></a>
+<h4>Symbolic Representations</h4>
+<p>
+        The parameter &lt;n&gt; in <span class="codefrag">-filelimit</span>
+        and <span class="codefrag">-sizelimit</span> can be specified with symbolic
+        representation.  For examples,
+        </p>
+<ul>
+          
+<li>1230k = 1230 * 1024 = 1259520</li>
+          
+<li>891g = 891 * 1024^3 = 956703965184</li>
+        
+</ul>
+<a name="N1018A"></a><a name="uo"></a>
+<h4>Update and Overwrite</h4>
+<p>It's worth giving some examples of <span class="codefrag">-update</span> and
+        <span class="codefrag">-overwrite</span>. Consider a copy from <span class="codefrag">/foo/a</span> and
+        <span class="codefrag">/foo/b</span> to <span class="codefrag">/bar/foo</span>, where the sources contain
+        the following:</p>
+<p>
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/a</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/a/aa</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/a/ab</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/b</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/b/ba</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/b/ab</span>
+</p>
+<p>If either <span class="codefrag">-update</span> or <span class="codefrag">-overwrite</span> is set,
+        then both sources will map an entry to <span class="codefrag">/bar/foo/ab</span> at the
+        destination. For both options, the contents of each source directory
+        are compared with the <strong>contents</strong> of the destination
+        directory. Rather than permit this conflict, DistCp will abort.</p>
+<p>In the default case, both <span class="codefrag">/bar/foo/a</span> and
+        <span class="codefrag">/bar/foo/b</span> will be created and neither will collide.</p>
+<p>Now consider a legal copy using <span class="codefrag">-update</span>:<br>
+        
+<span class="codefrag">distcp -update hdfs://nn1:8020/foo/a \</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              hdfs://nn1:8020/foo/b \</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              hdfs://nn2:8020/bar</span>
+</p>
+<p>With sources/sizes:</p>
+<p>
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/a</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/a/aa 32</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/a/ab 32</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/b</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/b/ba 64</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn1:8020/foo/b/bb 32</span>
+</p>
+<p>And destination/sizes:</p>
+<p>
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar/aa 32</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar/ba 32</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar/bb 64</span>
+</p>
+<p>Will effect:</p>
+<p>
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar/aa 32</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar/ab 32</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar/ba 64</span>
+<br>
+        
+<span class="codefrag">&nbsp;&nbsp;&nbsp;&nbsp;hdfs://nn2:8020/bar/bb 32</span>
+</p>
+<p>Only <span class="codefrag">aa</span> is not overwritten on nn2. If
+        <span class="codefrag">-overwrite</span> were specified, all elements would be
+        overwritten.</p>
+</div> <!-- Usage -->
+
+    
+<a name="N1023B"></a><a name="etc"></a>
+<h2 class="h3">Appendix</h2>
+<div class="section">
+<a name="N10241"></a><a name="Map+sizing"></a>
+<h3 class="h4">Map sizing</h3>
+<p>DistCp makes a faint attempt to size each map comparably so that
+          each copies roughly the same number of bytes. Note that files are the
+          finest level of granularity, so increasing the number of simultaneous
+          copiers (i.e. maps) may not always increase the number of
+          simultaneous copies nor the overall throughput.</p>
+<p>If <span class="codefrag">-m</span> is not specified, DistCp will attempt to
+          schedule work for <span class="codefrag">min (total_bytes / bytes.per.map, 20 *
+          num_task_trackers)</span> where <span class="codefrag">bytes.per.map</span> defaults
+          to 256MB.</p>
+<p>Tuning the number of maps to the size of the source and
+          destination clusters, the size of the copy, and the available
+          bandwidth is recommended for long-running and regularly run jobs.</p>
+<a name="N1025A"></a><a name="cpver"></a>
+<h3 class="h4">Copying between versions of HDFS</h3>
+<p>For copying between two different versions of Hadoop, one will
+        usually use HftpFileSystem. This is a read-only FileSystem, so DistCp
+        must be run on the destination cluster (more specifically, on
+        TaskTrackers that can write to the destination cluster). Each source is
+        specified as <span class="codefrag">hftp://&lt;dfs.http.address&gt;/&lt;path&gt;</span>
+        (the default <span class="codefrag">dfs.http.address</span> is
+        &lt;namenode&gt;:50070).</p>
+<a name="N1026A"></a><a name="MapReduce+and+other+side-effects"></a>
+<h3 class="h4">MapReduce and other side-effects</h3>
+<p>As has been mentioned in the preceding, should a map fail to copy
+        one of its inputs, there will be several side-effects.</p>
+<ul>
+
+          
+<li>Unless <span class="codefrag">-i</span> is specified, the logs generated by that
+          task attempt will be replaced by the previous attempt.</li>
+
+          
+<li>Unless <span class="codefrag">-overwrite</span> is specified, files successfully
+          copied by a previous map on a re-execution will be marked as
+          "skipped".</li>
+
+          
+<li>If a map fails <span class="codefrag">mapred.map.max.attempts</span> times, the
+          remaining map tasks will be killed (unless <span class="codefrag">-i</span> is
+          set).</li>
+
+          
+<li>If <span class="codefrag">mapred.speculative.execution</span> is set set
+          <span class="codefrag">final</span> and <span class="codefrag">true</span>, the result of the copy is
+          undefined.</li>
+
+        
+</ul>
+</div> <!-- Appendix -->
+
+  
+</div>
+<!--+
+    |end content
+    +-->
+<div class="clearboth">&nbsp;</div>
+</div>
+<div id="footer">
+<!--+
+    |start bottomstrip
+    +-->
+<div class="lastmodified">
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<div class="copyright">
+        Copyright &copy;
+         2008 <a href="http://www.apache.org/licenses/">The Apache Software Foundation.</a>
+</div>
+<!--+
+    |end bottomstrip
+    +-->
+</div>
+</body>
+</html>

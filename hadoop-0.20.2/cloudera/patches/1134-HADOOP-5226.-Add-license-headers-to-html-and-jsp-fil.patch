@@ -1,0 +1,873 @@
+From ed28400e4ba1e172f76753fcd193953e6b818396 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 11 Mar 2012 18:36:04 -0700
+Subject: [PATCH 1134/1179] HADOOP-5226. Add license headers to html and jsp files.
+
+Reason: Bug
+Author: Tsz Wo (Nicholas), SZE
+Ref: CDH-3278
+---
+ src/c++/libhdfs/docs/libhdfs_footer.html   |   16 ++++++++++++++++
+ src/core/overview.html                     |   16 ++++++++++++++++
+ src/webapps/datanode/browseBlock.jsp       |   19 +++++++++++++++++++
+ src/webapps/datanode/browseDirectory.jsp   |   19 +++++++++++++++++++
+ src/webapps/datanode/tail.jsp              |   19 +++++++++++++++++++
+ src/webapps/hdfs/dfshealth.jsp             |   19 +++++++++++++++++++
+ src/webapps/hdfs/dfsnodelist.jsp           |   19 +++++++++++++++++++
+ src/webapps/hdfs/index.html                |   17 ++++++++++++++++-
+ src/webapps/hdfs/nn_browsedfscontent.jsp   |   19 +++++++++++++++++++
+ src/webapps/job/analysejobhistory.jsp      |   19 +++++++++++++++++++
+ src/webapps/job/index.html                 |   17 ++++++++++++++++-
+ src/webapps/job/jobblacklistedtrackers.jsp |   19 +++++++++++++++++++
+ src/webapps/job/jobconf.jsp                |   19 +++++++++++++++++++
+ src/webapps/job/jobconf_history.jsp        |   19 +++++++++++++++++++
+ src/webapps/job/jobdetails.jsp             |   19 +++++++++++++++++++
+ src/webapps/job/jobdetailshistory.jsp      |   19 +++++++++++++++++++
+ src/webapps/job/jobfailures.jsp            |   19 +++++++++++++++++++
+ src/webapps/job/jobhistory.jsp             |   19 +++++++++++++++++++
+ src/webapps/job/jobqueue_details.jsp       |   19 +++++++++++++++++++
+ src/webapps/job/jobtasks.jsp               |   19 +++++++++++++++++++
+ src/webapps/job/jobtaskshistory.jsp        |   19 +++++++++++++++++++
+ src/webapps/job/jobtracker.jsp             |   19 +++++++++++++++++++
+ src/webapps/job/loadhistory.jsp            |   19 +++++++++++++++++++
+ src/webapps/job/machines.jsp               |   19 +++++++++++++++++++
+ src/webapps/job/taskdetails.jsp            |   19 +++++++++++++++++++
+ src/webapps/job/taskdetailshistory.jsp     |   19 +++++++++++++++++++
+ src/webapps/job/taskstats.jsp              |   19 +++++++++++++++++++
+ src/webapps/secondary/index.html           |   16 ++++++++++++++++
+ src/webapps/secondary/status.jsp           |   19 +++++++++++++++++++
+ src/webapps/task/index.html                |   16 ++++++++++++++++
+ src/webapps/task/tasktracker.jsp           |   19 +++++++++++++++++++
+ 31 files changed, 571 insertions(+), 2 deletions(-)
+
+diff --git a/src/c++/libhdfs/docs/libhdfs_footer.html b/src/c++/libhdfs/docs/libhdfs_footer.html
+index 9521602..cb69b63 100644
+--- a/src/c++/libhdfs/docs/libhdfs_footer.html
++++ b/src/c++/libhdfs/docs/libhdfs_footer.html
+@@ -1,4 +1,20 @@
+ <!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++<!--
+   Custom footer for libhdfs documentation.
+   Also useful for switching off default Doxygen footer and hence the timestamp.
+ -->
+diff --git a/src/core/overview.html b/src/core/overview.html
+index be75058..38b36d9 100644
+--- a/src/core/overview.html
++++ b/src/core/overview.html
+@@ -1,5 +1,21 @@
+ <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+ <html>
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
+ <head>
+    <title>Hadoop</title>
+ </head>
+diff --git a/src/webapps/datanode/browseBlock.jsp b/src/webapps/datanode/browseBlock.jsp
+index 5358231..28f4a86 100644
+--- a/src/webapps/datanode/browseBlock.jsp
++++ b/src/webapps/datanode/browseBlock.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.*"
+diff --git a/src/webapps/datanode/browseDirectory.jsp b/src/webapps/datanode/browseDirectory.jsp
+index b78f350..2ed1b00 100644
+--- a/src/webapps/datanode/browseDirectory.jsp
++++ b/src/webapps/datanode/browseDirectory.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.*"
+diff --git a/src/webapps/datanode/tail.jsp b/src/webapps/datanode/tail.jsp
+index c3c54b6..02446a7 100644
+--- a/src/webapps/datanode/tail.jsp
++++ b/src/webapps/datanode/tail.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.*"
+diff --git a/src/webapps/hdfs/dfshealth.jsp b/src/webapps/hdfs/dfshealth.jsp
+index 4d136e0..b9b418d 100644
+--- a/src/webapps/hdfs/dfshealth.jsp
++++ b/src/webapps/hdfs/dfshealth.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   isThreadSafe="false"
+diff --git a/src/webapps/hdfs/dfsnodelist.jsp b/src/webapps/hdfs/dfsnodelist.jsp
+index ca89924..74d7c3d 100644
+--- a/src/webapps/hdfs/dfsnodelist.jsp
++++ b/src/webapps/hdfs/dfsnodelist.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+     contentType="text/html; charset=UTF-8"
+     isThreadSafe="false"
+diff --git a/src/webapps/hdfs/index.html b/src/webapps/hdfs/index.html
+index b9ad742..648da4a 100644
+--- a/src/webapps/hdfs/index.html
++++ b/src/webapps/hdfs/index.html
+@@ -1,6 +1,21 @@
+ <meta HTTP-EQUIV="REFRESH" content="0;url=dfshealth.jsp"/>
+ <html>
+-
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
+ <head>
+ <title>Hadoop Administration</title>
+ </head>
+diff --git a/src/webapps/hdfs/nn_browsedfscontent.jsp b/src/webapps/hdfs/nn_browsedfscontent.jsp
+index e37e549..5403502 100644
+--- a/src/webapps/hdfs/nn_browsedfscontent.jsp
++++ b/src/webapps/hdfs/nn_browsedfscontent.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="java.io.*"
+diff --git a/src/webapps/job/analysejobhistory.jsp b/src/webapps/job/analysejobhistory.jsp
+index 47bfdcc..95ee684 100644
+--- a/src/webapps/job/analysejobhistory.jsp
++++ b/src/webapps/job/analysejobhistory.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.http.*"
+diff --git a/src/webapps/job/index.html b/src/webapps/job/index.html
+index 0cc16dc..a20a7e4 100644
+--- a/src/webapps/job/index.html
++++ b/src/webapps/job/index.html
+@@ -1,6 +1,21 @@
+ <meta HTTP-EQUIV="REFRESH" content="0;url=jobtracker.jsp"/>
+ <html>
+-
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
+ <head>
+ <title>Hadoop Administration</title>
+ </head>
+diff --git a/src/webapps/job/jobblacklistedtrackers.jsp b/src/webapps/job/jobblacklistedtrackers.jsp
+index e5b5846..33c5b8e 100644
+--- a/src/webapps/job/jobblacklistedtrackers.jsp
++++ b/src/webapps/job/jobblacklistedtrackers.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.*"
+diff --git a/src/webapps/job/jobconf.jsp b/src/webapps/job/jobconf.jsp
+index 281fce2..3d3b712 100644
+--- a/src/webapps/job/jobconf.jsp
++++ b/src/webapps/job/jobconf.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.*"
+diff --git a/src/webapps/job/jobconf_history.jsp b/src/webapps/job/jobconf_history.jsp
+index f2b4b1e..38e4a13 100644
+--- a/src/webapps/job/jobconf_history.jsp
++++ b/src/webapps/job/jobconf_history.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.*"
+diff --git a/src/webapps/job/jobdetails.jsp b/src/webapps/job/jobdetails.jsp
+index 50ae596..99c69d6 100644
+--- a/src/webapps/job/jobdetails.jsp
++++ b/src/webapps/job/jobdetails.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.*"
+diff --git a/src/webapps/job/jobdetailshistory.jsp b/src/webapps/job/jobdetailshistory.jsp
+index d8eb8ff..f64682a 100644
+--- a/src/webapps/job/jobdetailshistory.jsp
++++ b/src/webapps/job/jobdetailshistory.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.http.*"
+diff --git a/src/webapps/job/jobfailures.jsp b/src/webapps/job/jobfailures.jsp
+index 643edc2..d1de9ef 100644
+--- a/src/webapps/job/jobfailures.jsp
++++ b/src/webapps/job/jobfailures.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.*"
+diff --git a/src/webapps/job/jobhistory.jsp b/src/webapps/job/jobhistory.jsp
+index 298db88..0c2d14d 100644
+--- a/src/webapps/job/jobhistory.jsp
++++ b/src/webapps/job/jobhistory.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="java.io.*"
+diff --git a/src/webapps/job/jobqueue_details.jsp b/src/webapps/job/jobqueue_details.jsp
+index da14e54..7bda697 100644
+--- a/src/webapps/job/jobqueue_details.jsp
++++ b/src/webapps/job/jobqueue_details.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.*"
+diff --git a/src/webapps/job/jobtasks.jsp b/src/webapps/job/jobtasks.jsp
+index 0e52707..59371e5 100644
+--- a/src/webapps/job/jobtasks.jsp
++++ b/src/webapps/job/jobtasks.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.*"
+diff --git a/src/webapps/job/jobtaskshistory.jsp b/src/webapps/job/jobtaskshistory.jsp
+index a11a67a..545eb7e 100644
+--- a/src/webapps/job/jobtaskshistory.jsp
++++ b/src/webapps/job/jobtaskshistory.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.http.*"
+diff --git a/src/webapps/job/jobtracker.jsp b/src/webapps/job/jobtracker.jsp
+index c61250d..22d1220 100644
+--- a/src/webapps/job/jobtracker.jsp
++++ b/src/webapps/job/jobtracker.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.*"
+diff --git a/src/webapps/job/loadhistory.jsp b/src/webapps/job/loadhistory.jsp
+index 33a6844..f99f001 100644
+--- a/src/webapps/job/loadhistory.jsp
++++ b/src/webapps/job/loadhistory.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="java.io.*"
+diff --git a/src/webapps/job/machines.jsp b/src/webapps/job/machines.jsp
+index 5f413ec..7690bb2 100644
+--- a/src/webapps/job/machines.jsp
++++ b/src/webapps/job/machines.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.*"
+diff --git a/src/webapps/job/taskdetails.jsp b/src/webapps/job/taskdetails.jsp
+index baa1617..ac00fa4 100644
+--- a/src/webapps/job/taskdetails.jsp
++++ b/src/webapps/job/taskdetails.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.*"
+diff --git a/src/webapps/job/taskdetailshistory.jsp b/src/webapps/job/taskdetailshistory.jsp
+index 1c87757..40fc206 100644
+--- a/src/webapps/job/taskdetailshistory.jsp
++++ b/src/webapps/job/taskdetailshistory.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.http.*"
+diff --git a/src/webapps/job/taskstats.jsp b/src/webapps/job/taskstats.jsp
+index e5c1e71..833f5ee 100644
+--- a/src/webapps/job/taskstats.jsp
++++ b/src/webapps/job/taskstats.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.*"
+diff --git a/src/webapps/secondary/index.html b/src/webapps/secondary/index.html
+index 76c6804..988f03d 100644
+--- a/src/webapps/secondary/index.html
++++ b/src/webapps/secondary/index.html
+@@ -1,5 +1,21 @@
+ <meta HTTP-EQUIV="REFRESH" content="0;url=status.jsp"/>
+ <html>
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
+ <head><title>Hadoop Administration</title></head>
+ 
+ <body>
+diff --git a/src/webapps/secondary/status.jsp b/src/webapps/secondary/status.jsp
+index f1040fb..36ae411 100644
+--- a/src/webapps/secondary/status.jsp
++++ b/src/webapps/secondary/status.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="org.apache.hadoop.util.*"
+diff --git a/src/webapps/task/index.html b/src/webapps/task/index.html
+index ab3d56b..a1b4152 100644
+--- a/src/webapps/task/index.html
++++ b/src/webapps/task/index.html
+@@ -1 +1,17 @@
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
+ <meta HTTP-EQUIV="REFRESH" content="0;url=tasktracker.jsp"/>
+diff --git a/src/webapps/task/tasktracker.jsp b/src/webapps/task/tasktracker.jsp
+index 1103184..d6fb5dc 100644
+--- a/src/webapps/task/tasktracker.jsp
++++ b/src/webapps/task/tasktracker.jsp
+@@ -1,3 +1,22 @@
++<%
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
+ <%@ page
+   contentType="text/html; charset=UTF-8"
+   import="javax.servlet.*"
+-- 
+1.7.0.4
+

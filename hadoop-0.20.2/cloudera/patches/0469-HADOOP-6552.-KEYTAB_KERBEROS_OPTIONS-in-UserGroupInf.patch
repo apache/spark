@@ -1,0 +1,28 @@
+From a60877ba994c36b0d81f7d1c47a81b1111906bd2 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 9 Feb 2010 21:08:18 -0800
+Subject: [PATCH 0469/1179] HADOOP-6552. KEYTAB_KERBEROS_OPTIONS in UserGroupInformation should have options for automatic renewal of keytab based tickets
+
+Patch: https://issues.apache.org/jira/secure/attachment/12435369/6552.patch
+Author: Devaraj Das
+Ref: CDH-648
+---
+ .../hadoop/security/UserGroupInformation.java      |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index b51e540..f634fdb 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -289,6 +289,8 @@ public class UserGroupInformation {
+       KEYTAB_KERBEROS_OPTIONS.put("doNotPrompt", "true");
+       KEYTAB_KERBEROS_OPTIONS.put("useKeyTab", "true");
+       KEYTAB_KERBEROS_OPTIONS.put("storeKey", "true");
++      KEYTAB_KERBEROS_OPTIONS.put("useTicketCache", "true");
++      KEYTAB_KERBEROS_OPTIONS.put("renewTGT", "true");
+     }
+     private static final AppConfigurationEntry KEYTAB_KERBEROS_LOGIN =
+       new AppConfigurationEntry(Krb5LoginModule.class.getName(),
+-- 
+1.7.0.4
+

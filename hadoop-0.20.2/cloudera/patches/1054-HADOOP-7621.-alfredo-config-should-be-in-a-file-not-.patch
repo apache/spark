@@ -1,0 +1,139 @@
+From e6697b11c4d14cfb0832eae2ac0c496684a69f22 Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Wed, 21 Sep 2011 16:02:24 -0700
+Subject: [PATCH 1054/1179] HADOOP-7621. alfredo config should be in a file not readable by users
+
+Reason: Bug
+Author: Alejandro Abdelnur
+Ref: CDH-3608
+---
+ src/core/core-default.xml                          |    4 +-
+ .../security/AuthenticationFilterInitializer.java  |   26 +++++++++++++++++++-
+ .../content/xdocs/HttpAuthentication.xml           |   10 ++++---
+ .../hadoop/security/TestAuthenticationFilter.java  |   15 ++++++++++-
+ 4 files changed, 47 insertions(+), 8 deletions(-)
+
+diff --git a/src/core/core-default.xml b/src/core/core-default.xml
+index 9456450..02c7d42 100644
+--- a/src/core/core-default.xml
++++ b/src/core/core-default.xml
+@@ -521,8 +521,8 @@
+ </property>
+ 
+ <property>
+-  <name>hadoop.http.authentication.signature.secret</name>
+-  <value>hadoop</value>
++  <name>hadoop.http.authentication.signature.secret.file</name>
++  <value>${user.home}/hadoop-http-auth-signature-secret</value>
+   <description>
+     The signature secret for signing the authentication tokens.
+     If not set a random secret is generated at startup time.
+diff --git a/src/core/org/apache/hadoop/security/AuthenticationFilterInitializer.java b/src/core/org/apache/hadoop/security/AuthenticationFilterInitializer.java
+index cd6ab7b..1a36b91 100644
+--- a/src/core/org/apache/hadoop/security/AuthenticationFilterInitializer.java
++++ b/src/core/org/apache/hadoop/security/AuthenticationFilterInitializer.java
+@@ -22,6 +22,9 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.http.FilterContainer;
+ import org.apache.hadoop.http.FilterInitializer;
+ 
++import java.io.FileReader;
++import java.io.IOException;
++import java.io.Reader;
+ import java.util.HashMap;
+ import java.util.Map;
+ 
+@@ -40,7 +43,9 @@ import java.util.Map;
+  */
+ public class AuthenticationFilterInitializer extends FilterInitializer {
+ 
+-  private static final String PREFIX = "hadoop.http.authentication.";
++  static final String PREFIX = "hadoop.http.authentication.";
++
++  static final String SIGNATURE_SECRET_FILE = AuthenticationFilter.SIGNATURE_SECRET + ".file";
+ 
+   /**
+    * Initializes Alfredo AuthenticationFilter.
+@@ -67,6 +72,25 @@ public class AuthenticationFilterInitializer extends FilterInitializer {
+       }
+     }
+ 
++    String signatureSecretFile = filterConfig.get(SIGNATURE_SECRET_FILE);
++    if (signatureSecretFile == null) {
++      throw new RuntimeException("Undefined property: " + SIGNATURE_SECRET_FILE);
++    }
++
++    try {
++      StringBuilder secret = new StringBuilder();
++      Reader reader = new FileReader(signatureSecretFile);
++      int c = reader.read();
++      while (c > -1) {
++        secret.append((char)c);
++        c = reader.read();
++      }
++      reader.close();
++      filterConfig.put(AuthenticationFilter.SIGNATURE_SECRET, secret.toString());
++    } catch (IOException ex) {
++      throw new RuntimeException("Could not read HTTP signature secret file: " + signatureSecretFile);
++    }
++
+     container.addFilter("authentication",
+                         AuthenticationFilter.class.getName(),
+                         filterConfig);
+diff --git a/src/docs/src/documentation/content/xdocs/HttpAuthentication.xml b/src/docs/src/documentation/content/xdocs/HttpAuthentication.xml
+index 15abfbb..3b6a15f 100644
+--- a/src/docs/src/documentation/content/xdocs/HttpAuthentication.xml
++++ b/src/docs/src/documentation/content/xdocs/HttpAuthentication.xml
+@@ -82,10 +82,12 @@
+       <code>36000</code>.
+       </p>
+ 
+-      <p><code>hadoop.http.authentication.signature.secret</code>: The signature secret for  
+-      signing the authentication tokens. If not set a random secret is generated at 
+-      startup time. The same secret should be used for all nodes in the cluster, JobTracker, 
+-      NameNode, DataNode and TastTracker. The default value is a <code>hadoop</code> value.
++      <p><code>hadoop.http.authentication.signature.secret.file</code>: The signature secret
++      file for signing the authentication tokens. If not set a random secret is generated at
++      startup time. The same secret should be used for all nodes in the cluster, JobTracker,
++      NameNode, DataNode and TastTracker. The default value is
++      <code>${user.home}/hadoop-http-auth-signature-secret</code>.
++      IMPORTANT: This file should be readable only by the Unix user running the daemons.
+       </p>
+         
+       <p><code>hadoop.http.authentication.cookie.domain</code>: The domain to use for the HTTP 
+diff --git a/src/test/org/apache/hadoop/security/TestAuthenticationFilter.java b/src/test/org/apache/hadoop/security/TestAuthenticationFilter.java
+index 7a21e4c..2bf96fa 100644
+--- a/src/test/org/apache/hadoop/security/TestAuthenticationFilter.java
++++ b/src/test/org/apache/hadoop/security/TestAuthenticationFilter.java
+@@ -25,15 +25,28 @@ import org.mockito.Mockito;
+ import org.mockito.invocation.InvocationOnMock;
+ import org.mockito.stubbing.Answer;
+ 
++import java.io.File;
++import java.io.FileWriter;
++import java.io.Writer;
+ import java.util.Map;
+ 
+ public class TestAuthenticationFilter extends TestCase {
+ 
+   @SuppressWarnings("unchecked")
+-  public void testConfiguration() {
++  public void testConfiguration() throws Exception {
+     Configuration conf = new Configuration();
+     conf.set("hadoop.http.authentication.foo", "bar");
+ 
++    File testDir = new File(System.getProperty("test.build.data", "/tmp"));
++    testDir.mkdirs();
++    File secretFile = new File(testDir, "http-secret.txt");
++    Writer writer = new FileWriter(new File(testDir, "http-secret.txt"));
++    writer.write("hadoop");
++    writer.close();
++    conf.set(AuthenticationFilterInitializer.PREFIX +
++             AuthenticationFilterInitializer.SIGNATURE_SECRET_FILE,
++             secretFile.getAbsolutePath());
++
+     FilterContainer container = Mockito.mock(FilterContainer.class);
+     Mockito.doAnswer(
+       new Answer() {
+-- 
+1.7.0.4
+

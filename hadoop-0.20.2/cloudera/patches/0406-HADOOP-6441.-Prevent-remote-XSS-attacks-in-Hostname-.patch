@@ -1,0 +1,611 @@
+From 444beac7f8610cd3ec9433c8fe5e006462a2d07c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 15 Dec 2009 21:49:36 -0800
+Subject: [PATCH 0406/1179] HADOOP-6441. Prevent remote XSS attacks in Hostname and UTF-7.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12428133/h-6441.20.patch
+Author: Owen O'Malley
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/http/HtmlQuoting.java   |  207 ++++++++++++++++++++
+ src/core/org/apache/hadoop/http/HttpServer.java    |  127 ++++++++++++-
+ .../org/apache/hadoop/http/TestHtmlQuoting.java    |   65 ++++++
+ .../org/apache/hadoop/http/TestHttpServer.java     |  137 +++++++++++++
+ 4 files changed, 534 insertions(+), 2 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/http/HtmlQuoting.java
+ create mode 100644 src/test/org/apache/hadoop/http/TestHtmlQuoting.java
+ create mode 100644 src/test/org/apache/hadoop/http/TestHttpServer.java
+
+diff --git a/src/core/org/apache/hadoop/http/HtmlQuoting.java b/src/core/org/apache/hadoop/http/HtmlQuoting.java
+new file mode 100644
+index 0000000..99befee
+--- /dev/null
++++ b/src/core/org/apache/hadoop/http/HtmlQuoting.java
+@@ -0,0 +1,207 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.http;
++
++import java.io.ByteArrayOutputStream;
++import java.io.IOException;
++import java.io.OutputStream;
++
++/**
++ * This class is responsible for quoting HTML characters.
++ */
++public class HtmlQuoting {
++  private static final byte[] ampBytes = "&amp;".getBytes();
++  private static final byte[] aposBytes = "&apos;".getBytes();
++  private static final byte[] gtBytes = "&gt;".getBytes();
++  private static final byte[] ltBytes = "&lt;".getBytes();
++  private static final byte[] quotBytes = "&quot;".getBytes();
++
++  /**
++   * Does the given string need to be quoted?
++   * @param data the string to check
++   * @param off the starting position
++   * @param len the number of bytes to check
++   * @return does the string contain any of the active html characters?
++   */
++  public static boolean needsQuoting(byte[] data, int off, int len) {
++    for(int i=off; i< off+len; ++i) {
++      switch(data[i]) {
++      case '&':
++      case '<':
++      case '>':
++      case '\'':
++      case '"':
++        return true;
++      default:
++        break;
++      }
++    }
++    return false;
++  }
++
++  /**
++   * Does the given string need to be quoted?
++   * @param str the string to check
++   * @return does the string contain any of the active html characters?
++   */
++  public static boolean needsQuoting(String str) {
++    if (str == null) {
++      return false;
++    }
++    byte[] bytes = str.getBytes();
++    return needsQuoting(bytes, 0 , bytes.length);
++  }
++
++  /**
++   * Quote all of the active HTML characters in the given string as they
++   * are added to the buffer.
++   * @param output the stream to write the output to
++   * @param buffer the byte array to take the characters from
++   * @param off the index of the first byte to quote
++   * @param len the number of bytes to quote
++   */
++  public static void quoteHtmlChars(OutputStream output, byte[] buffer,
++                                    int off, int len) throws IOException {
++    for(int i=off; i < off+len; i++) {
++      switch (buffer[i]) {
++      case '&': output.write(ampBytes); break;
++      case '<': output.write(ltBytes); break;
++      case '>': output.write(gtBytes); break;
++      case '\'': output.write(aposBytes); break;
++      case '"': output.write(quotBytes); break;
++      default: output.write(buffer, i, 1);
++      }
++    }
++  }
++  
++  /**
++   * Quote the given item to make it html-safe.
++   * @param item the string to quote
++   * @return the quoted string
++   */
++  public static String quoteHtmlChars(String item) {
++    if (item == null) {
++      return null;
++    }
++    byte[] bytes = item.getBytes();
++    if (needsQuoting(bytes, 0, bytes.length)) {
++      ByteArrayOutputStream buffer = new ByteArrayOutputStream();
++      try {
++        quoteHtmlChars(buffer, bytes, 0, bytes.length);
++      } catch (IOException ioe) {
++        // Won't happen, since it is a bytearrayoutputstream
++      }
++      return buffer.toString();
++    } else {
++      return item;
++    }
++  }
++
++  /**
++   * Return an output stream that quotes all of the output.
++   * @param out the stream to write the quoted output to
++   * @return a new stream that the application show write to
++   * @throws IOException if the underlying output fails
++   */
++  public static OutputStream quoteOutputStream(final OutputStream out
++                                               ) throws IOException {
++    return new OutputStream() {
++      private byte[] data = new byte[1];
++      @Override
++      public void write(byte[] data, int off, int len) throws IOException {
++        quoteHtmlChars(out, data, off, len);
++      }
++      
++      @Override
++      public void write(int b) throws IOException {
++        data[0] = (byte) b;
++        quoteHtmlChars(out, data, 0, 1);
++      }
++      
++      @Override
++      public void flush() throws IOException {
++        out.flush();
++      }
++      
++      @Override
++      public void close() throws IOException {
++        out.close();
++      }
++    };
++  }
++
++  /**
++   * Remove HTML quoting from a string.
++   * @param item the string to unquote
++   * @return the unquoted string
++   */
++  public static String unquoteHtmlChars(String item) {
++    if (item == null) {
++      return null;
++    }
++    int next = item.indexOf('&');
++    // nothing was quoted
++    if (next == -1) {
++      return item;
++    }
++    int len = item.length();
++    int posn = 0;
++    StringBuilder buffer = new StringBuilder();
++    while (next != -1) {
++      buffer.append(item.substring(posn, next));
++      if (item.startsWith("&amp;", next)) {
++        buffer.append('&');
++        next += 5;
++      } else if (item.startsWith("&apos;", next)) {
++        buffer.append('\'');
++        next += 6;        
++      } else if (item.startsWith("&gt;", next)) {
++        buffer.append('>');
++        next += 4;
++      } else if (item.startsWith("&lt;", next)) {
++        buffer.append('<');
++        next += 4;
++      } else if (item.startsWith("&quot;", next)) {
++        buffer.append('"');
++        next += 6;
++      } else {
++        int end = item.indexOf(';', next)+1;
++        if (end == 0) {
++          end = len;
++        }
++        throw new IllegalArgumentException("Bad HTML quoting for " + 
++                                           item.substring(next,end));
++      }
++      posn = next;
++      next = item.indexOf('&', posn);
++    }
++    buffer.append(item.substring(posn, len));
++    return buffer.toString();
++  }
++  
++  public static void main(String[] args) throws Exception {
++    for(String arg:args) {
++      System.out.println("Original: " + arg);
++      String quoted = quoteHtmlChars(arg);
++      System.out.println("Quoted: "+ quoted);
++      String unquoted = unquoteHtmlChars(quoted);
++      System.out.println("Unquoted: " + unquoted);
++      System.out.println();
++    }
++  }
++}
+diff --git a/src/core/org/apache/hadoop/http/HttpServer.java b/src/core/org/apache/hadoop/http/HttpServer.java
+index 200b99b..dd57ef7 100644
+--- a/src/core/org/apache/hadoop/http/HttpServer.java
++++ b/src/core/org/apache/hadoop/http/HttpServer.java
+@@ -23,15 +23,21 @@ import java.net.BindException;
+ import java.net.InetSocketAddress;
+ import java.net.URL;
+ import java.util.ArrayList;
++import java.util.Enumeration;
+ import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Random;
+-import java.nio.channels.ServerSocketChannel;
+ 
++import javax.servlet.Filter;
++import javax.servlet.FilterChain;
++import javax.servlet.FilterConfig;
+ import javax.servlet.ServletException;
++import javax.servlet.ServletRequest;
++import javax.servlet.ServletResponse;
+ import javax.servlet.http.HttpServlet;
+ import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletRequestWrapper;
+ import javax.servlet.http.HttpServletResponse;
+ 
+ import org.apache.commons.logging.Log;
+@@ -118,6 +124,7 @@ public class HttpServer implements FilterContainer {
+ 
+     addDefaultApps(contexts, appDir);
+ 
++    addGlobalFilter("safety", QuotingInputFilter.class.getName(), null);
+     final FilterInitializer[] initializers = getFilterInitializers(conf); 
+     if (initializers != null) {
+       for(FilterInitializer c : initializers) {
+@@ -537,10 +544,126 @@ public class HttpServer implements FilterContainer {
+     public void doGet(HttpServletRequest request, HttpServletResponse response)
+       throws ServletException, IOException {
+       
+-      PrintWriter out = new PrintWriter(response.getOutputStream());
++      PrintWriter out = new PrintWriter
++                    (HtmlQuoting.quoteOutputStream(response.getOutputStream()));
+       ReflectionUtils.printThreadInfo(out, "");
+       out.close();
+       ReflectionUtils.logThreadInfo(LOG, "jsp requested", 1);      
+     }
+   }
++  
++  /**
++   * A Servlet input filter that quotes all HTML active characters in the
++   * parameter names and values. The goal is to quote the characters to make
++   * all of the servlets resistant to cross-site scripting attacks.
++   */
++  public static class QuotingInputFilter implements Filter {
++
++    public static class RequestQuoter extends HttpServletRequestWrapper {
++      private final HttpServletRequest rawRequest;
++      public RequestQuoter(HttpServletRequest rawRequest) {
++        super(rawRequest);
++        this.rawRequest = rawRequest;
++      }
++      
++      /**
++       * Return the set of parameter names, quoting each name.
++       */
++      @SuppressWarnings("unchecked")
++      @Override
++      public Enumeration<String> getParameterNames() {
++        return new Enumeration<String>() {
++          private Enumeration<String> rawIterator = 
++            rawRequest.getParameterNames();
++          @Override
++          public boolean hasMoreElements() {
++            return rawIterator.hasMoreElements();
++          }
++
++          @Override
++          public String nextElement() {
++            return HtmlQuoting.quoteHtmlChars(rawIterator.nextElement());
++          }
++        };
++      }
++      
++      /**
++       * Unquote the name and quote the value.
++       */
++      @Override
++      public String getParameter(String name) {
++        return HtmlQuoting.quoteHtmlChars(rawRequest.getParameter
++                                     (HtmlQuoting.unquoteHtmlChars(name)));
++      }
++      
++      @Override
++      public String[] getParameterValues(String name) {
++        String unquoteName = HtmlQuoting.unquoteHtmlChars(name);
++        String[] unquoteValue = rawRequest.getParameterValues(unquoteName);
++        String[] result = new String[unquoteValue.length];
++        for(int i=0; i < result.length; ++i) {
++          result[i] = HtmlQuoting.quoteHtmlChars(unquoteValue[i]);
++        }
++        return result;
++      }
++
++      @SuppressWarnings("unchecked")
++      @Override
++      public Map<String, String[]> getParameterMap() {
++        Map<String, String[]> result = new HashMap<String,String[]>();
++        Map<String, String[]> raw = rawRequest.getParameterMap();
++        for (Map.Entry<String,String[]> item: raw.entrySet()) {
++          String[] rawValue = item.getValue();
++          String[] cookedValue = new String[rawValue.length];
++          for(int i=0; i< rawValue.length; ++i) {
++            cookedValue[i] = HtmlQuoting.quoteHtmlChars(rawValue[i]);
++          }
++          result.put(HtmlQuoting.quoteHtmlChars(item.getKey()), cookedValue);
++        }
++        return result;
++      }
++      
++      /**
++       * Quote the url so that users specifying the HOST HTTP header
++       * can't inject attacks.
++       */
++      @Override
++      public StringBuffer getRequestURL(){
++        String url = rawRequest.getRequestURL().toString();
++        return new StringBuffer(HtmlQuoting.quoteHtmlChars(url));
++      }
++      
++      /**
++       * Quote the server name so that users specifying the HOST HTTP header
++       * can't inject attacks.
++       */
++      @Override
++      public String getServerName() {
++        return HtmlQuoting.quoteHtmlChars(rawRequest.getServerName());
++      }
++    }
++
++    @Override
++    public void init(FilterConfig config) throws ServletException {
++    }
++
++    @Override
++    public void destroy() {
++    }
++
++    @Override
++    public void doFilter(ServletRequest request, 
++                         ServletResponse response,
++                         FilterChain chain
++                         ) throws IOException, ServletException {
++      HttpServletRequestWrapper quoted = 
++        new RequestQuoter((HttpServletRequest) request);
++      final HttpServletResponse httpResponse = (HttpServletResponse) response;
++      // set the default to UTF-8 so that we don't need to worry about IE7
++      // choosing to interpret the special characters as UTF-7
++      httpResponse.setContentType("text/html;charset=utf-8");
++      chain.doFilter(quoted, response);
++    }
++
++  }
+ }
+diff --git a/src/test/org/apache/hadoop/http/TestHtmlQuoting.java b/src/test/org/apache/hadoop/http/TestHtmlQuoting.java
+new file mode 100644
+index 0000000..1c3663a
+--- /dev/null
++++ b/src/test/org/apache/hadoop/http/TestHtmlQuoting.java
+@@ -0,0 +1,65 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.http;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.assertTrue;
++
++import org.junit.Test;
++
++public class TestHtmlQuoting {
++
++  @Test public void testNeedsQuoting() throws Exception {
++    assertTrue(HtmlQuoting.needsQuoting("abcde>"));
++    assertTrue(HtmlQuoting.needsQuoting("<abcde"));
++    assertTrue(HtmlQuoting.needsQuoting("abc'de"));
++    assertTrue(HtmlQuoting.needsQuoting("abcde\""));
++    assertTrue(HtmlQuoting.needsQuoting("&"));
++    assertFalse(HtmlQuoting.needsQuoting(""));
++    assertFalse(HtmlQuoting.needsQuoting("ab\ncdef"));
++    assertFalse(HtmlQuoting.needsQuoting(null));
++  }
++
++  @Test public void testQuoting() throws Exception {
++    assertEquals("ab&lt;cd", HtmlQuoting.quoteHtmlChars("ab<cd"));
++    assertEquals("ab&gt;", HtmlQuoting.quoteHtmlChars("ab>"));
++    assertEquals("&amp;&amp;&amp;", HtmlQuoting.quoteHtmlChars("&&&"));
++    assertEquals(" &apos;\n", HtmlQuoting.quoteHtmlChars(" '\n"));
++    assertEquals("&quot;", HtmlQuoting.quoteHtmlChars("\""));
++    assertEquals(null, HtmlQuoting.quoteHtmlChars(null));
++  }
++
++  private void runRoundTrip(String str) throws Exception {
++    assertEquals(str, 
++                 HtmlQuoting.unquoteHtmlChars(HtmlQuoting.quoteHtmlChars(str)));
++  }
++  
++  @Test public void testRoundtrip() throws Exception {
++    runRoundTrip("");
++    runRoundTrip("<>&'\"");
++    runRoundTrip("ab>cd<ef&ghi'\"");
++    runRoundTrip("A string\n with no quotable chars in it!");
++    runRoundTrip(null);
++    StringBuilder buffer = new StringBuilder();
++    for(char ch=0; ch < 127; ++ch) {
++      buffer.append(ch);
++    }
++    runRoundTrip(buffer.toString());
++  }
++}
+diff --git a/src/test/org/apache/hadoop/http/TestHttpServer.java b/src/test/org/apache/hadoop/http/TestHttpServer.java
+new file mode 100644
+index 0000000..55cc92d
+--- /dev/null
++++ b/src/test/org/apache/hadoop/http/TestHttpServer.java
+@@ -0,0 +1,137 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.http;
++
++import static org.junit.Assert.assertEquals;
++
++import java.io.File;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.PrintStream;
++import java.net.URL;
++import java.util.Enumeration;
++import java.util.Map;
++import java.util.SortedSet;
++import java.util.TreeSet;
++
++import javax.servlet.ServletException;
++import javax.servlet.http.HttpServlet;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Test;
++
++public class TestHttpServer {
++  private HttpServer server;
++  private URL baseUrl;
++  
++  @SuppressWarnings("serial")
++  public static class EchoMapServlet extends HttpServlet {
++    @SuppressWarnings("unchecked")
++    @Override
++    public void doGet(HttpServletRequest request, 
++                      HttpServletResponse response
++                      ) throws ServletException, IOException {
++      PrintStream out = new PrintStream(response.getOutputStream());
++      Map<String, String[]> params = request.getParameterMap();
++      SortedSet<String> keys = new TreeSet(params.keySet());
++      for(String key: keys) {
++        out.print(key);
++        out.print(':');
++        String[] values = params.get(key);
++        if (values.length > 0) {
++          out.print(values[0]);
++          for(int i=1; i < values.length; ++i) {
++            out.print(',');
++            out.print(values[i]);
++          }
++        }
++        out.print('\n');
++      }
++      out.close();
++    }    
++  }
++
++  @SuppressWarnings("serial")
++  public static class EchoServlet extends HttpServlet {
++    @SuppressWarnings("unchecked")
++    @Override
++    public void doGet(HttpServletRequest request, 
++                      HttpServletResponse response
++                      ) throws ServletException, IOException {
++      PrintStream out = new PrintStream(response.getOutputStream());
++      SortedSet<String> sortedKeys = new TreeSet();
++      Enumeration<String> keys = request.getParameterNames();
++      while(keys.hasMoreElements()) {
++        sortedKeys.add(keys.nextElement());
++      }
++      for(String key: sortedKeys) {
++        out.print(key);
++        out.print(':');
++        out.print(request.getParameter(key));
++        out.print('\n');
++      }
++      out.close();
++    }    
++  }
++
++  private String readOutput(URL url) throws IOException {
++    StringBuilder out = new StringBuilder();
++    InputStream in = url.openConnection().getInputStream();
++    byte[] buffer = new byte[64 * 1024];
++    int len = in.read(buffer);
++    while (len > 0) {
++      out.append(new String(buffer, 0, len));
++      len = in.read(buffer);
++    }
++    return out.toString();
++  }
++  
++  @Before public void setup() throws Exception {
++    new File(System.getProperty("build.webapps", "build/webapps") + "/test"
++             ).mkdirs();
++    server = new HttpServer("test", "0.0.0.0", 0, true);
++    server.addServlet("echo", "/echo", EchoServlet.class);
++    server.addServlet("echomap", "/echomap", EchoMapServlet.class);
++    server.start();
++    int port = server.getPort();
++    baseUrl = new URL("http://localhost:" + port + "/");
++  }
++  
++  @After public void cleanup() throws Exception {
++    server.stop();
++  }
++
++  @Test public void testEcho() throws Exception {
++    assertEquals("a:b\nc:d\n", 
++                 readOutput(new URL(baseUrl, "/echo?a=b&c=d")));
++    assertEquals("a:b\nc&lt;:d\ne:&gt;\n", 
++                 readOutput(new URL(baseUrl, "/echo?a=b&c<=d&e=>")));    
++  }
++  
++  /** Test the echo map servlet that uses getParameterMap. */
++  @Test public void testEchoMap() throws Exception {
++    assertEquals("a:b\nc:d\n", 
++                 readOutput(new URL(baseUrl, "/echomap?a=b&c=d")));
++    assertEquals("a:b,&gt;\nc&lt;:d\n", 
++                 readOutput(new URL(baseUrl, "/echomap?a=b&c<=d&a=>")));
++  }
++
++}
+-- 
+1.7.0.4
+

@@ -1,0 +1,50 @@
+From fa6aca09466301c65d8d8e5d92c43e50f46683ad Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 7 Feb 2011 10:05:49 -0800
+Subject: [PATCH 0856/1179] Amend MAPREDUCE-2103. Reapply "task-controller permissions checks too stringent" after MAPREDUCE-2173
+
+Reason: match documentation
+Author: Todd Lipcon
+Ref: CDH-2623
+---
+ src/c++/task-controller/impl/task-controller.c |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/c++/task-controller/impl/task-controller.c b/src/c++/task-controller/impl/task-controller.c
+index a0e28ca..31f63c1 100644
+--- a/src/c++/task-controller/impl/task-controller.c
++++ b/src/c++/task-controller/impl/task-controller.c
+@@ -97,8 +97,8 @@ char* get_executable() {
+  * promisable. For this, we need task-controller binary to
+  *    * be user-owned by root
+  *    * be group-owned by a configured special group.
+- *    * others do not have any permissions
+- *    * be setuid/setgid
++ *    * others do not have write/execute permissions
++ *    * be setuid
+  */
+ int check_taskcontroller_permissions(char *executable_file) {
+ 
+@@ -136,15 +136,15 @@ int check_taskcontroller_permissions(char *executable_file) {
+   }
+ 
+   // check others do not have read/write/execute permissions
+-  if ((filestat.st_mode & S_IROTH) == S_IROTH || (filestat.st_mode & S_IWOTH)
+-      == S_IWOTH || (filestat.st_mode & S_IXOTH) == S_IXOTH) {
++  if ((filestat.st_mode & S_IWOTH) == S_IWOTH ||
++      (filestat.st_mode & S_IXOTH) == S_IXOTH) {
+     fprintf(LOGFILE,
+-            "The task-controller binary should not have read or write or"
++            "The task-controller binary should not have write or"
+             " execute for others.\n");
+     return -1;
+   }
+ 
+-  // Binary should be setuid/setgid executable
++  // Binary should be setuid executable
+   if ((filestat.st_mode & S_ISUID) == 0) {
+     fprintf(LOGFILE, "The task-controller binary should be set setuid.\n");
+     return -1;
+-- 
+1.7.0.4
+

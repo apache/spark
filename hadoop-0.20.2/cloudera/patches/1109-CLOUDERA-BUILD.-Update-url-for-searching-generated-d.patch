@@ -1,0 +1,25 @@
+From 3d21fccdb5d67426a05655377e5dc0b926479673 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 13 Dec 2011 18:46:10 -0800
+Subject: [PATCH 1109/1179] CLOUDERA-BUILD. Update url for searching generated docs.
+
+---
+ src/docs/src/documentation/skinconf.xml |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/docs/src/documentation/skinconf.xml b/src/docs/src/documentation/skinconf.xml
+index 0ce9c14..ec3a30e 100644
+--- a/src/docs/src/documentation/skinconf.xml
++++ b/src/docs/src/documentation/skinconf.xml
+@@ -30,7 +30,7 @@ which will be used to configure the chosen Forrest skin.
+     In other words google will search the @domain for the query string.
+ 
+   -->
+-  <search name="Lucene" domain="hadoop.apache.org" provider="google"/>
++  <search name="Lucene" domain="archive.cloudera.com" provider="google"/>
+ 
+   <!-- Disable the print link? If enabled, invalid HTML 4.0.1 -->
+   <disable-print-link>true</disable-print-link>  
+-- 
+1.7.0.4
+

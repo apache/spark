@@ -1,0 +1,115 @@
+From 0eeb795d156edf6f4e7c5c4b722d85737cd49736 Mon Sep 17 00:00:00 2001
+From: Roman Shaposhnik <rvs@cloudera.com>
+Date: Fri, 17 Jun 2011 10:07:31 -0700
+Subject: [PATCH 0974/1179] CLOUDERA-BUILD. Building RPMs from SRPMs in CDH needs to rebuild the projects
+
+---
+ cloudera/do-release-build         |   36 +++++++++---------------------------
+ src/contrib/fuse-dfs/bootstrap.sh |    5 ++---
+ 2 files changed, 11 insertions(+), 30 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index 97bbbef..8fe6d1e 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -6,13 +6,13 @@
+ set -e
+ 
+ if [ $(uname -s) = "SunOS" ]; then
+-if [ $(isainfo -b) != "64" ]; then
++if [ $(isainfo -b) != "64" -a -z "$SKIP_EXTRA_NATIVE" ]; then
+   echo Release build should be done on a 64-bit box to generate 1>&2
+   echo both 64 and 32 bit native libraries. 1>&2
+   exit 1
+ fi
+ else
+-if [ $(uname -m) != "x86_64" ]; then
++if [ $(uname -m) != "x86_64" -a -z "$SKIP_EXTRA_NATIVE" ]; then
+   echo Release build should be done on a 64-bit box to generate 1>&2
+   echo both 64 and 32 bit native libraries. 1>&2
+   exit 1
+@@ -22,33 +22,13 @@ fi
+ JAVA32_HOME=${JAVA32_HOME:-$JAVA_HOME}
+ JAVA64_HOME=${JAVA64_HOME:-$JAVA_HOME}
+ 
+-# Check that JVMs support the right architectures
+-# Passing -d with an architecture that's not supported results
+-# in a non-zero exit code even with -version
+-if ! $JAVA32_HOME/bin/java -d32 -version ; then
+-  echo Your jvm in $JAVA32_HOME seems like it doesnt support 32-bit mode 1>&2
+-  echo Please set JAVA32_HOME to point to a 32-bit JDK
+-  exit 1
+-fi
+-
+-if ! $JAVA64_HOME/bin/java -d64 -version ; then
+-  echo Your jvm in $JAVA64_HOME seems like it doesnt support 64-bit mode 1>&2
+-  echo Please set JAVA64_HOME to point to a 64-bit JDK
+-  exit 1
+-fi
+-
+-if ! [ -e $FORREST_HOME/bin/forrest ]; then
+-  echo No FORREST_HOME set. Forrest documentation requires Forrest to be 1>&2
+-  echo installed. 1>&2
+-  exit 1
+-fi
+-
+ # Do the build
+ BIN_DIR=$(readlink -f $(dirname $0))
+ RELEASE_DIR=$BIN_DIR/..
+ 
+ cd $RELEASE_DIR
+ 
++if [ -z "$SKIP_EXTRA_NATIVE" ]; then
+ JAVA_HOME=$JAVA32_HOME \
+   CFLAGS=-m32 \
+   CXXFLAGS=-m32 \
+@@ -56,12 +36,16 @@ JAVA_HOME=$JAVA32_HOME \
+   -Dreactor.repo=file://$HOME/.m2/repository \
+   -Dlibhdfs=true \
+   -Dcompile.native=true \
++  -Dfusedfs=true \
+   -Dcompile.c++=true \
+   -Dforrest.home=$FORREST_HOME \
+   -Dhadoop.conf.dir=/etc/hadoop-0.20/conf \
+   -propertyfile cloudera/build.properties \
+   clean task-controller package-native
+ 
++JAVA_HOME=$JAVA64_HOME
++fi
++
+ if [ -z "$SKIP_JDIFF" ]; then
+ ant \
+   -Dreactor.repo=file://$HOME/.m2/repository \
+@@ -74,13 +58,11 @@ fi
+ # Copy them into the main build directory to be included in the tarball
+ mkdir -p build/hadoop-$FULL_VERSION/docs/
+ 
+-JAVA_HOME=$JAVA64_HOME \
+-  CFLAGS=-m64 \
+-  CXXFLAGS=-m64 \
+-  ant \
++ant \
+   -Dreactor.repo=file://$HOME/.m2/repository \
+   -Dlibhdfs=true \
+   -Dcompile.native=true \
++  -Dfusedfs=true \
+   -Dcompile.c++=true \
+   -Dforrest.home=$FORREST_HOME \
+   -Dhadoop.conf.dir=/etc/hadoop-0.20/conf \
+diff --git a/src/contrib/fuse-dfs/bootstrap.sh b/src/contrib/fuse-dfs/bootstrap.sh
+index fe514bf..bf3caa5 100755
+--- a/src/contrib/fuse-dfs/bootstrap.sh
++++ b/src/contrib/fuse-dfs/bootstrap.sh
+@@ -15,7 +15,6 @@
+ #
+ #!/bin/sh
+ 
+-aclocal
+-automake -a
+-autoconf
++rm -f configure
++autoreconf -if -v
+ ./configure
+-- 
+1.7.0.4
+

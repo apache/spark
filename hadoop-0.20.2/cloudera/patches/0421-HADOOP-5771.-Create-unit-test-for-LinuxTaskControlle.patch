@@ -1,0 +1,804 @@
+From 829bb385ecbde947eeacff39ea2f3f3af703fdbe Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 12 Jan 2010 12:34:52 +0530
+Subject: [PATCH 0421/1179] HADOOP-5771. Create unit test for LinuxTaskController
+
+Patch: https://issues.apache.org/jira/secure/attachment/12429998/5771.20S.patch
+Author: Sreekanth Ramakrishnan
+Ref: CDH-648
+---
+ build.xml                                          |    2 +
+ src/contrib/build-contrib.xml                      |    2 +
+ .../streaming/TestStreamingAsDifferentUser.java    |   71 ++++++
+ .../test/org/apache/hadoop/streaming/TrApp.java    |    3 -
+ .../apache/hadoop/mapred/LinuxTaskController.java  |    7 +-
+ .../mapred/ClusterWithLinuxTaskController.java     |  241 ++++++++++++++++++++
+ .../mapred/TestJobExecutionAsDifferentUser.java    |  107 +++++++++
+ .../apache/hadoop/mapred/TestMiniMRChildTask.java  |   18 ++
+ .../org/apache/hadoop/mapred/pipes/TestPipes.java  |   75 ++++--
+ .../mapred/pipes/TestPipesAsDifferentUser.java     |   74 ++++++
+ 10 files changed, 569 insertions(+), 31 deletions(-)
+ create mode 100644 src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingAsDifferentUser.java
+ create mode 100644 src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestJobExecutionAsDifferentUser.java
+ create mode 100644 src/test/org/apache/hadoop/mapred/pipes/TestPipesAsDifferentUser.java
+
+diff --git a/build.xml b/build.xml
+index 5ad2c71..300ff58 100644
+--- a/build.xml
++++ b/build.xml
+@@ -807,6 +807,8 @@
+       <sysproperty key="test.debug.data" value="${test.debug.data}"/>
+       <sysproperty key="hadoop.log.dir" value="${test.log.dir}"/>
+       <sysproperty key="test.src.dir" value="${test.src.dir}"/>
++    	<sysproperty key="taskcontroller-path" value="${taskcontroller-path}"/>
++    	<sysproperty key="taskcontroller-user" value="${taskcontroller-user}"/>
+       <sysproperty key="test.build.extraconf" value="${test.build.extraconf}" />
+       <sysproperty key="hadoop.policy.file" value="hadoop-policy.xml"/>
+       <sysproperty key="java.library.path"
+diff --git a/src/contrib/build-contrib.xml b/src/contrib/build-contrib.xml
+index 0ad22c3..f9ab5c0 100644
+--- a/src/contrib/build-contrib.xml
++++ b/src/contrib/build-contrib.xml
+@@ -254,6 +254,8 @@
+       <sysproperty key="fs.default.name" value="${fs.default.name}"/>
+       <sysproperty key="hadoop.test.localoutputfile" value="${hadoop.test.localoutputfile}"/>
+       <sysproperty key="hadoop.log.dir" value="${hadoop.log.dir}"/> 
++      <sysproperty key="taskcontroller-path" value="${taskcontroller-path}"/>
++      <sysproperty key="taskcontroller-user" value="${taskcontroller-user}"/>
+       <classpath refid="test.classpath"/>
+       <formatter type="${test.junit.output.format}" />
+       <batchtest todir="${build.test}" unless="testcase">
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingAsDifferentUser.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingAsDifferentUser.java
+new file mode 100644
+index 0000000..8e6842e
+--- /dev/null
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingAsDifferentUser.java
+@@ -0,0 +1,71 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.streaming;
++
++import java.io.DataOutputStream;
++import java.io.IOException;
++
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.mapred.ClusterWithLinuxTaskController;
++import org.apache.hadoop.mapred.JobConf;
++
++/**
++ * Test Streaming with LinuxTaskController running the jobs as a user different
++ * from the user running the cluster. See {@link ClusterWithLinuxTaskController}
++ */
++public class TestStreamingAsDifferentUser extends
++    ClusterWithLinuxTaskController {
++
++  private Path inputPath = new Path("input");
++  private Path outputPath = new Path("output");
++  private String input = "roses.are.red\nviolets.are.blue\nbunnies.are.pink\n";
++  private String map =
++      StreamUtil.makeJavaCommand(TrApp.class, new String[] { ".", "\\n" });
++  private String reduce =
++      StreamUtil.makeJavaCommand(UniqApp.class, new String[] { "R" });
++
++  public void testStreaming()
++      throws Exception {
++    if (!shouldRun()) {
++      return;
++    }
++    startCluster();
++    JobConf myConf = getClusterConf();
++    FileSystem inFs = inputPath.getFileSystem(myConf);
++    FileSystem outFs = outputPath.getFileSystem(myConf);
++    outFs.delete(outputPath, true);
++    if (!inFs.mkdirs(inputPath)) {
++      throw new IOException("Mkdirs failed to create " + inFs.toString());
++    }
++    DataOutputStream file = inFs.create(new Path(inputPath, "part-0"));
++    file.writeBytes(input);
++    file.close();
++    String[] args =
++        new String[] { "-input", inputPath.makeQualified(inFs).toString(),
++            "-output", outputPath.makeQualified(outFs).toString(), "-mapper",
++            map, "-reducer", reduce, "-jobconf",
++            "keep.failed.task.files=true", "-jobconf",
++            "stream.tmpdir=" + System.getProperty("test.build.data", "/tmp") };
++    StreamJob streamJob = new StreamJob(args, true);
++    streamJob.setConf(myConf);
++    streamJob.go();
++    assertOwnerShip(outputPath);
++  }
++}
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TrApp.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TrApp.java
+index 1f51e56..2b96aaf 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TrApp.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TrApp.java
+@@ -41,8 +41,6 @@ public class TrApp
+     // test that some JobConf properties are exposed as expected     
+     // Note the dots translated to underscore: 
+     // property names have been escaped in PipeMapRed.safeEnvVarName()
+-    expect("mapred_job_tracker", "local");
+-    //expect("mapred_local_dir", "build/test/mapred/local");
+     expectDefined("mapred_local_dir");
+     expect("mapred_output_format_class", "org.apache.hadoop.mapred.TextOutputFormat");
+     expect("mapred_output_key_class", "org.apache.hadoop.io.Text");
+@@ -52,7 +50,6 @@ public class TrApp
+     expectDefined("mapred_task_id");
+ 
+     expectDefined("map_input_file");
+-    expect("map_input_start", "0");
+     expectDefined("map_input_length");
+ 
+     expectDefined("io_sort_factor");
+diff --git a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+index cd529ea..be47393 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+@@ -304,7 +304,7 @@ class LinuxTaskController extends TaskController {
+                                           List<String> cmdArgs, JvmEnv env) 
+                                     throws IOException {
+     String[] taskControllerCmd = new String[3 + cmdArgs.size()];
+-    taskControllerCmd[0] = taskControllerExe;
++    taskControllerCmd[0] = getTaskControllerExecutablePath();
+     taskControllerCmd[1] = userName;
+     taskControllerCmd[2] = String.valueOf(command.ordinal());
+     int i = 3;
+@@ -371,7 +371,10 @@ class LinuxTaskController extends TaskController {
+       }
+     }
+   }
+-  
++
++  protected String getTaskControllerExecutablePath() {
++    return taskControllerExe;
++  }  
+ 
+   /**
+    * Sets up the permissions of the following directories:
+diff --git a/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java b/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
+new file mode 100644
+index 0000000..521c758
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/ClusterWithLinuxTaskController.java
+@@ -0,0 +1,241 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.File;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.io.PrintWriter;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.security.UnixUserGroupInformation;
++import org.apache.hadoop.security.UserGroupInformation;
++
++import junit.framework.TestCase;
++
++/**
++ * The base class which starts up a cluster with LinuxTaskController as the task
++ * controller.
++ * 
++ * In order to run test cases utilizing LinuxTaskController please follow the
++ * following steps:
++ * <ol>
++ * <li>Build LinuxTaskController by not passing any
++ * <code>-Dhadoop.conf.dir</code></li>
++ * <li>Make the built binary to setuid executable</li>
++ * <li>Execute following targets:
++ * <code>ant test -Dcompile.c++=true -Dtaskcontroller-path=<em>path to built binary</em> 
++ * -Dtaskcontroller-user=<em>user,group</em></code></li>
++ * </ol>
++ * 
++ */
++public class ClusterWithLinuxTaskController extends TestCase {
++  private static final Log LOG =
++      LogFactory.getLog(ClusterWithLinuxTaskController.class);
++
++  /**
++   * The wrapper class around LinuxTaskController which allows modification of
++   * the custom path to task-controller which we can use for task management.
++   * 
++   **/
++  public static class MyLinuxTaskController extends LinuxTaskController {
++    String taskControllerExePath;
++
++    @Override
++    protected String getTaskControllerExecutablePath() {
++      return taskControllerExePath;
++    }
++
++    void setTaskControllerExe(String execPath) {
++      this.taskControllerExePath = execPath;
++    }
++  }
++
++  // cluster instances which sub classes can use
++  protected MiniMRCluster mrCluster = null;
++  protected MiniDFSCluster dfsCluster = null;
++
++  private JobConf clusterConf = null;
++  protected Path homeDirectory;
++
++  private static final int NUMBER_OF_NODES = 1;
++
++  private File configurationFile = null;
++
++  private UserGroupInformation taskControllerUser;
++
++  /*
++   * Utility method which subclasses use to start and configure the MR Cluster
++   * so they can directly submit a job.
++   */
++  protected void startCluster()
++      throws IOException {
++    JobConf conf = new JobConf();
++    dfsCluster = new MiniDFSCluster(conf, NUMBER_OF_NODES, true, null);
++    conf.set("mapred.task.tracker.task-controller",
++        MyLinuxTaskController.class.getName());
++    mrCluster =
++        new MiniMRCluster(NUMBER_OF_NODES, dfsCluster.getFileSystem().getUri()
++            .toString(), 1, null, null, conf);
++
++    // Get the configured taskcontroller-path
++    String path = System.getProperty("taskcontroller-path");
++    createTaskControllerConf(path);
++    String execPath = path + "/task-controller";
++    TaskTracker tracker = mrCluster.getTaskTrackerRunner(0).tt;
++    // TypeCasting the parent to our TaskController instance as we
++    // know that that would be instance which should be present in TT.
++    ((MyLinuxTaskController) tracker.getTaskController())
++        .setTaskControllerExe(execPath);
++    String ugi = System.getProperty("taskcontroller-user");
++    clusterConf = mrCluster.createJobConf();
++    String[] splits = ugi.split(",");
++    taskControllerUser = new UnixUserGroupInformation(splits);
++    clusterConf.set(UnixUserGroupInformation.UGI_PROPERTY_NAME, ugi);
++    createHomeDirectory(clusterConf);
++  }
++
++  private void createHomeDirectory(JobConf conf)
++      throws IOException {
++    FileSystem fs = dfsCluster.getFileSystem();
++    String path = "/user/" + taskControllerUser.getUserName();
++    homeDirectory = new Path(path);
++    LOG.info("Creating Home directory : " + homeDirectory);
++    fs.mkdirs(homeDirectory);
++    changePermission(conf, homeDirectory);
++  }
++
++  private void changePermission(JobConf conf, Path p)
++      throws IOException {
++    FileSystem fs = dfsCluster.getFileSystem();
++    fs.setOwner(homeDirectory, taskControllerUser.getUserName(),
++        taskControllerUser.getGroupNames()[0]);
++  }
++
++  private void createTaskControllerConf(String path)
++      throws IOException {
++    File confDirectory = new File(path, "../conf");
++    if (!confDirectory.exists()) {
++      confDirectory.mkdirs();
++    }
++    configurationFile = new File(confDirectory, "taskcontroller.cfg");
++    PrintWriter writer =
++        new PrintWriter(new FileOutputStream(configurationFile));
++
++    writer.println(String.format("mapred.local.dir=%s", mrCluster
++        .getTaskTrackerLocalDir(0)));
++
++    writer.flush();
++    writer.close();
++  }
++
++  /**
++   * Can we run the tests with LinuxTaskController?
++   * 
++   * @return boolean
++   */
++  protected boolean shouldRun() {
++    return isTaskExecPathPassed() && isUserPassed();
++  }
++
++  private boolean isTaskExecPathPassed() {
++    String path = System.getProperty("taskcontroller-path");
++    if (path == null || path.isEmpty()
++        || path.equals("${taskcontroller-path}")) {
++      return false;
++    }
++    return true;
++  }
++
++  private boolean isUserPassed() {
++    String ugi = System.getProperty("taskcontroller-user");
++    if (ugi != null && !(ugi.equals("${taskcontroller-user}"))
++        && !ugi.isEmpty()) {
++      if (ugi.indexOf(",") > 1) {
++        return true;
++      }
++      return false;
++    }
++    return false;
++  }
++
++  protected JobConf getClusterConf() {
++    return new JobConf(clusterConf);
++  }
++
++  @Override
++  protected void tearDown()
++      throws Exception {
++    if (mrCluster != null) {
++      mrCluster.shutdown();
++    }
++
++    if (dfsCluster != null) {
++      dfsCluster.shutdown();
++    }
++
++    if (configurationFile != null) {
++      configurationFile.delete();
++    }
++
++    super.tearDown();
++  }
++
++  /**
++   * Assert that the job is actually run by the specified user by verifying the
++   * permissions of the output part-files.
++   * 
++   * @param outDir
++   * @throws IOException
++   */
++  protected void assertOwnerShip(Path outDir)
++      throws IOException {
++    FileSystem fs = outDir.getFileSystem(clusterConf);
++    assertOwnerShip(outDir, fs);
++  }
++
++  /**
++   * Assert that the job is actually run by the specified user by verifying the
++   * permissions of the output part-files.
++   * 
++   * @param outDir
++   * @param fs
++   * @throws IOException
++   */
++  protected void assertOwnerShip(Path outDir, FileSystem fs)
++      throws IOException {
++    for (FileStatus status : fs.listStatus(outDir, new OutputLogFilter())) {
++      String owner = status.getOwner();
++      String group = status.getGroup();
++      LOG.info("Ownership of the file is " + status.getPath() + " is " + owner
++          + "," + group);
++      assertTrue("Output part-file's owner is not correct. Expected : "
++          + taskControllerUser.getUserName() + " Found : " + owner, owner
++          .equals(taskControllerUser.getUserName()));
++      assertTrue("Output part-file's group is not correct. Expected : "
++          + taskControllerUser.getGroupNames()[0] + " Found : " + group, group
++          .equals(taskControllerUser.getGroupNames()[0]));
++    }
++  }
++}
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobExecutionAsDifferentUser.java b/src/test/org/apache/hadoop/mapred/TestJobExecutionAsDifferentUser.java
+new file mode 100644
+index 0000000..73645b7
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestJobExecutionAsDifferentUser.java
+@@ -0,0 +1,107 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import java.io.IOException;
++
++import org.apache.hadoop.fs.FileSystem;
++import java.io.DataOutputStream;
++import java.io.IOException;
++
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.io.IntWritable;
++import org.apache.hadoop.io.Text;
++
++/**
++ * Test a java-based mapred job with LinuxTaskController running the jobs as a
++ * user different from the user running the cluster. See
++ * {@link ClusterWithLinuxTaskController}
++ */
++public class TestJobExecutionAsDifferentUser extends
++    ClusterWithLinuxTaskController {
++
++  public void testJobExecution()
++      throws Exception {
++    if (!shouldRun()) {
++      return;
++    }
++    startCluster();
++    submitWordCount(getClusterConf());
++  }
++  
++  private void submitWordCount(JobConf clientConf) throws IOException {
++    Path inDir = new Path("testing/wc/input");
++    Path outDir = new Path("testing/wc/output");
++    JobConf conf = new JobConf(clientConf);
++    FileSystem fs = FileSystem.get(conf);
++    fs.delete(outDir, true);
++    if (!fs.mkdirs(inDir)) {
++      throw new IOException("Mkdirs failed to create " + inDir.toString());
++    }
++
++    DataOutputStream file = fs.create(new Path(inDir, "part-0"));
++    file.writeBytes("a b c d e f g h");
++    file.close();
++
++    conf.setJobName("wordcount");
++    conf.setInputFormat(TextInputFormat.class);
++
++    // the keys are words (strings)
++    conf.setOutputKeyClass(Text.class);
++    // the values are counts (ints)
++    conf.setOutputValueClass(IntWritable.class);
++
++    conf.setMapperClass(WordCount.MapClass.class);
++    conf.setCombinerClass(WordCount.Reduce.class);
++    conf.setReducerClass(WordCount.Reduce.class);
++
++    FileInputFormat.setInputPaths(conf, inDir);
++    FileOutputFormat.setOutputPath(conf, outDir);
++    conf.setNumMapTasks(1);
++    conf.setNumReduceTasks(1);
++    RunningJob rj = JobClient.runJob(conf);
++    assertTrue("Job Failed", rj.isSuccessful());
++    assertOwnerShip(outDir);
++  }
++  
++  public void testEnvironment() throws IOException {
++    if (!shouldRun()) {
++      return;
++    }
++    startCluster();
++    TestMiniMRChildTask childTask = new TestMiniMRChildTask();
++    Path inDir = new Path("input1");
++    Path outDir = new Path("output1");
++    try {
++      childTask.runTestTaskEnv(getClusterConf(), inDir, outDir);
++    } catch (IOException e) {
++      fail("IOException thrown while running enviroment test."
++          + e.getMessage());
++    } finally {
++      FileSystem outFs = outDir.getFileSystem(getClusterConf());
++      if (outFs.exists(outDir)) {
++        assertOwnerShip(outDir);
++        outFs.delete(outDir, true);
++      } else {
++        fail("Output directory does not exist" + outDir.toString());
++      }
++    }
++  }
++}
+diff --git a/src/test/org/apache/hadoop/mapred/TestMiniMRChildTask.java b/src/test/org/apache/hadoop/mapred/TestMiniMRChildTask.java
+index 4a67e3a..0859960 100644
+--- a/src/test/org/apache/hadoop/mapred/TestMiniMRChildTask.java
++++ b/src/test/org/apache/hadoop/mapred/TestMiniMRChildTask.java
+@@ -294,4 +294,22 @@ public class TestMiniMRChildTask extends TestCase {
+       tearDown();
+     }
+   }
++  
++  void runTestTaskEnv(JobConf conf, Path inDir, Path outDir) throws IOException {
++    String input = "The input";
++    configure(conf, inDir, outDir, input, EnvCheckMapper.class);
++    // test 
++    //  - new SET of new var (MY_PATH)
++    //  - set of old var (HOME)
++    //  - append to an old var from modified env (LD_LIBRARY_PATH)
++    //  - append to an old var from tt's env (PATH)
++    //  - append to a new var (NEW_PATH)
++    conf.set("mapred.child.env", 
++             "MY_PATH=/tmp,HOME=/tmp,LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/tmp,"
++             + "PATH=$PATH:/tmp,NEW_PATH=$NEW_PATH:/tmp");
++    conf.set("path", System.getenv("PATH"));
++    RunningJob job = JobClient.runJob(conf);
++    assertTrue("The environment checker job failed.", job.isSuccessful());
++  }
++  
+ }
+diff --git a/src/test/org/apache/hadoop/mapred/pipes/TestPipes.java b/src/test/org/apache/hadoop/mapred/pipes/TestPipes.java
+index 604bc20..86d6524 100644
+--- a/src/test/org/apache/hadoop/mapred/pipes/TestPipes.java
++++ b/src/test/org/apache/hadoop/mapred/pipes/TestPipes.java
+@@ -32,6 +32,8 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.fs.permission.FsAction;
++import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.mapred.Counters;
+ import org.apache.hadoop.mapred.FileInputFormat;
+ import org.apache.hadoop.mapred.FileOutputFormat;
+@@ -47,7 +49,18 @@ import org.apache.hadoop.util.ToolRunner;
+ public class TestPipes extends TestCase {
+   private static final Log LOG =
+     LogFactory.getLog(TestPipes.class.getName());
+-
++  
++  private static Path cppExamples = 
++    new Path(System.getProperty("install.c++.examples"));
++  static Path wordCountSimple = 
++    new Path(cppExamples, "bin/wordcount-simple");
++  static Path wordCountPart = 
++    new Path(cppExamples, "bin/wordcount-part");
++  static Path wordCountNoPipes = 
++    new Path(cppExamples,"bin/wordcount-nopipe");
++  
++  static Path nonPipedOutDir;
++  
+   static void cleanup(FileSystem fs, Path p) throws IOException {
+     fs.delete(p, true);
+     assertFalse("output not cleaned up", fs.exists(p));
+@@ -60,7 +73,6 @@ public class TestPipes extends TestCase {
+     }
+     MiniDFSCluster dfs = null;
+     MiniMRCluster mr = null;
+-    Path cppExamples = new Path(System.getProperty("install.c++.examples"));
+     Path inputPath = new Path("/testing/in");
+     Path outputPath = new Path("/testing/out");
+     try {
+@@ -69,17 +81,15 @@ public class TestPipes extends TestCase {
+       dfs = new MiniDFSCluster(conf, numSlaves, true, null);
+       mr = new MiniMRCluster(numSlaves, dfs.getFileSystem().getName(), 1);
+       writeInputFile(dfs.getFileSystem(), inputPath);
+-      runProgram(mr, dfs, new Path(cppExamples, "bin/wordcount-simple"), 
+-                 inputPath, outputPath, 3, 2, twoSplitOutput);
++      runProgram(mr, dfs, wordCountSimple, 
++                 inputPath, outputPath, 3, 2, twoSplitOutput, null);
+       cleanup(dfs.getFileSystem(), outputPath);
+-
+-      runProgram(mr, dfs, new Path(cppExamples, "bin/wordcount-simple"), 
+-                 inputPath, outputPath, 3, 0, noSortOutput);
++      runProgram(mr, dfs, wordCountSimple, 
++                 inputPath, outputPath, 3, 0, noSortOutput, null);
+       cleanup(dfs.getFileSystem(), outputPath);
+-
+-      runProgram(mr, dfs, new Path(cppExamples, "bin/wordcount-part"),
+-                 inputPath, outputPath, 3, 2, fixedPartitionOutput);
+-      runNonPipedProgram(mr, dfs, new Path(cppExamples,"bin/wordcount-nopipe"));
++      runProgram(mr, dfs, wordCountPart,
++                 inputPath, outputPath, 3, 2, fixedPartitionOutput, null);
++      runNonPipedProgram(mr, dfs, wordCountNoPipes, null);
+       mr.waitUntilIdle();
+     } finally {
+       mr.shutdown();
+@@ -87,6 +97,7 @@ public class TestPipes extends TestCase {
+     }
+   }
+ 
++
+   final static String[] twoSplitOutput = new String[] {
+     "`and\t1\na\t1\nand\t1\nbeginning\t1\nbook\t1\nbut\t1\nby\t1\n" +
+     "conversation?'\t1\ndo:\t1\nhad\t2\nhaving\t1\nher\t2\nin\t1\nit\t1\n"+
+@@ -124,7 +135,7 @@ public class TestPipes extends TestCase {
+     ""                                                   
+   };
+   
+-  private void writeInputFile(FileSystem fs, Path dir) throws IOException {
++  static void writeInputFile(FileSystem fs, Path dir) throws IOException {
+     DataOutputStream out = fs.create(new Path(dir, "part0"));
+     out.writeBytes("Alice was beginning to get very tired of sitting by her\n");
+     out.writeBytes("sister on the bank, and of having nothing to do: once\n");
+@@ -135,12 +146,18 @@ public class TestPipes extends TestCase {
+     out.close();
+   }
+ 
+-  private void runProgram(MiniMRCluster mr, MiniDFSCluster dfs, 
++  static void runProgram(MiniMRCluster mr, MiniDFSCluster dfs, 
+                           Path program, Path inputPath, Path outputPath,
+-                          int numMaps, int numReduces, String[] expectedResults
++                          int numMaps, int numReduces, String[] expectedResults,
++                          JobConf conf
+                          ) throws IOException {
+     Path wordExec = new Path("/testing/bin/application");
+-    JobConf job = mr.createJobConf();
++    JobConf job = null;
++    if(conf == null) {
++      job = mr.createJobConf();
++    }else {
++      job = new JobConf(conf);
++    } 
+     job.setNumMapTasks(numMaps);
+     job.setNumReduceTasks(numReduces);
+     {
+@@ -199,15 +216,21 @@ public class TestPipes extends TestCase {
+    * @param program the program to run
+    * @throws IOException
+    */
+-  private void runNonPipedProgram(MiniMRCluster mr, MiniDFSCluster dfs,
+-                                  Path program) throws IOException {
+-    JobConf job = mr.createJobConf();
++  static void runNonPipedProgram(MiniMRCluster mr, MiniDFSCluster dfs,
++                                  Path program, JobConf conf) throws IOException {
++    JobConf job;
++    if(conf == null) {
++      job = mr.createJobConf();
++    }else {
++      job = new JobConf(conf);
++    }
++    
+     job.setInputFormat(WordCountInputFormat.class);
+     FileSystem local = FileSystem.getLocal(job);
+     Path testDir = new Path("file:" + System.getProperty("test.build.data"), 
+                             "pipes");
+     Path inDir = new Path(testDir, "input");
+-    Path outDir = new Path(testDir, "output");
++    nonPipedOutDir = new Path(testDir, "output");
+     Path wordExec = new Path("/testing/bin/application");
+     Path jobXml = new Path(testDir, "job.xml");
+     {
+@@ -228,21 +251,21 @@ public class TestPipes extends TestCase {
+     out.writeBytes("hall silly cats drink java\n");
+     out.writeBytes("all dogs bow wow\n");
+     out.writeBytes("hello drink java\n");
++    local.delete(nonPipedOutDir, true);
++    local.mkdirs(nonPipedOutDir, new FsPermission(FsAction.ALL, FsAction.ALL,
++        FsAction.ALL));
+     out.close();
+-    local.delete(outDir, true);
+-    local.mkdirs(outDir);
+     out = local.create(jobXml);
+     job.writeXml(out);
+     out.close();
+-    System.err.println("About to run: Submitter -conf " + jobXml + 
+-                       " -input " + inDir + " -output " + outDir + 
+-                       " -program " + 
+-                       dfs.getFileSystem().makeQualified(wordExec));
++    System.err.println("About to run: Submitter -conf " + jobXml + " -input "
++        + inDir + " -output " + nonPipedOutDir + " -program "
++        + dfs.getFileSystem().makeQualified(wordExec));
+     try {
+       int ret = ToolRunner.run(new Submitter(),
+                                new String[]{"-conf", jobXml.toString(),
+                                   "-input", inDir.toString(),
+-                                  "-output", outDir.toString(),
++                                  "-output", nonPipedOutDir.toString(),
+                                   "-program", 
+                         dfs.getFileSystem().makeQualified(wordExec).toString(),
+                                   "-reduces", "2"});
+diff --git a/src/test/org/apache/hadoop/mapred/pipes/TestPipesAsDifferentUser.java b/src/test/org/apache/hadoop/mapred/pipes/TestPipesAsDifferentUser.java
+new file mode 100644
+index 0000000..761d9e2
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/pipes/TestPipesAsDifferentUser.java
+@@ -0,0 +1,74 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred.pipes;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.mapred.ClusterWithLinuxTaskController;
++import org.apache.hadoop.mapred.JobConf;
++
++/**
++ * Test Pipes jobs with LinuxTaskController running the jobs as a user different
++ * from the user running the cluster. See {@link ClusterWithLinuxTaskController}
++ */
++public class TestPipesAsDifferentUser extends ClusterWithLinuxTaskController {
++
++  private static final Log LOG =
++      LogFactory.getLog(TestPipesAsDifferentUser.class);
++
++  public void testPipes()
++      throws Exception {
++    if (System.getProperty("compile.c++") == null) {
++      LOG.info("compile.c++ is not defined, so skipping TestPipes");
++      return;
++    }
++
++    if (!shouldRun()) {
++      return;
++    }
++
++    super.startCluster();
++    JobConf clusterConf = getClusterConf();
++    Path inputPath = new Path(homeDirectory, "in");
++    Path outputPath = new Path(homeDirectory, "out");
++
++    TestPipes.writeInputFile(FileSystem.get(clusterConf), inputPath);
++    TestPipes.runProgram(mrCluster, dfsCluster, TestPipes.wordCountSimple,
++        inputPath, outputPath, 3, 2, TestPipes.twoSplitOutput, clusterConf);
++    assertOwnerShip(outputPath);
++    TestPipes.cleanup(dfsCluster.getFileSystem(), outputPath);
++
++    TestPipes.runProgram(mrCluster, dfsCluster, TestPipes.wordCountSimple,
++        inputPath, outputPath, 3, 0, TestPipes.noSortOutput, clusterConf);
++    assertOwnerShip(outputPath);
++    TestPipes.cleanup(dfsCluster.getFileSystem(), outputPath);
++
++    TestPipes.runProgram(mrCluster, dfsCluster, TestPipes.wordCountPart,
++        inputPath, outputPath, 3, 2, TestPipes.fixedPartitionOutput,
++        clusterConf);
++    assertOwnerShip(outputPath);
++    TestPipes.cleanup(dfsCluster.getFileSystem(), outputPath);
++
++    TestPipes.runNonPipedProgram(mrCluster, dfsCluster,
++        TestPipes.wordCountNoPipes, clusterConf);
++    assertOwnerShip(TestPipes.nonPipedOutDir, FileSystem.getLocal(clusterConf));
++  }
++}
+-- 
+1.7.0.4
+

@@ -1,0 +1,112 @@
+From 4da1b0da8e176f6d7cf5bdc13786f37e254b6eda Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 10 Sep 2010 15:45:34 -0700
+Subject: [PATCH 0695/1179] HDFS-1387. Update HDFS permissions guide to reflect security
+
+Reason: documentation
+Ref: CDH-648
+Author: Todd Lipcon
+---
+ .../content/xdocs/hdfs_permissions_guide.xml       |   62 ++++++++++----------
+ 1 files changed, 31 insertions(+), 31 deletions(-)
+
+diff --git a/src/docs/src/documentation/content/xdocs/hdfs_permissions_guide.xml b/src/docs/src/documentation/content/xdocs/hdfs_permissions_guide.xml
+index de8f42f..df23001 100644
+--- a/src/docs/src/documentation/content/xdocs/hdfs_permissions_guide.xml
++++ b/src/docs/src/documentation/content/xdocs/hdfs_permissions_guide.xml
+@@ -71,26 +71,41 @@
+ 
+ <section><title>User Identity</title>
+ <p>
+-In this release of Hadoop the identity of a client process is just whatever the host operating system says it is. For Unix-like systems,
++As of CDH3, Hadoop supports two different modes of operation to determine the user's identity, specified by the
++<code>hadoop.security.authentication</code> property:
+ </p>
+-<ul>
+-<li>
+-   The user name is the equivalent of <code>`whoami`</code>;
+-</li>
+-<li>
+-   The group list is the equivalent of <code>`bash -c groups`</code>.
+-</li>
+-</ul>
++<dl>
++  <dt><code>simple</code></dt>
++  <dd>In this mode of operation, the identity of a client process is determined by the host operating system. On Unix-like systems,
++  the user name is the equivalent of <code>`whoami`</code>.</dd>
++  <dt><code>kerberos</code></dt>
++  <dd>In Kerberized operation, the identity of a client process is determined by its Kerberos credentials. For example, in a
++  Kerberized environment, a user may use the <code>kinit</code> utility to obtain a Kerberos ticket-granting-ticket (TGT) and
++  use <code>klist</code> to determine their current principal. When mapping a Kerberos principal to an HDFS username, all <em>components</em> except for the <em>primary</em> are dropped. For example, a principal <code>todd/foobar@CORP.COMPANY.COM</code> will act as the simple username <code>todd</code> on HDFS.
++  </dd>
++</dl>
++<p>
++Regardless of the mode of operation, the user identity mechanism is extrinsic to HDFS itself.
++There is no provision within HDFS for creating user identities, establishing groups, or processing user credentials.
++</p>
++</section>
+ 
++<section><title>Group Mapping</title>
++<p>
++Once a username has been determined as described above, the list of groups is determined by a <em>group mapping
++service</em>, configured by the <code>hadoop.security.group.mapping</code> property.
++The default implementation, <code>org.apache.hadoop.security.ShellBasedUnixGroupsMapping</code>, will shell out
++to the Unix <code>bash -c groups</code> command to resolve a list of groups for a user.
++</p>
+ <p>
+-In the future there will be other ways of establishing user identity (think Kerberos, LDAP, and others). There is no expectation that 
+-this first method is secure in protecting one user from impersonating another. This user identity mechanism combined with the 
+-permissions model allows a cooperative community to share file system resources in an organized fashion.
++For HDFS, the mapping of users to groups is performed on the NameNode. Thus, the host system configuration of
++the NameNode determines the group mappings for the users.
+ </p>
+ <p>
+-In any case, the user identity mechanism is extrinsic to HDFS itself. There is no provision within HDFS for creating user identities, 
+-establishing groups, or processing user credentials.
++Note that HDFS stores the user and group of a file or directory as strings; there is no conversion from user and
++group identity numbers as is conventional in Unix.
+ </p>
++
+ </section>
+ 
+ <section> <title>Understanding the Implementation</title>
+@@ -104,14 +119,6 @@ A second request made to find additional blocks may fail. On the other hand, del
+ that already knows the blocks of the file. With the addition of permissions, a client's access to a file may be withdrawn between 
+ requests. Again, changing permissions does not revoke the access of a client that already knows the file's blocks.
+ </p>
+-<p>
+-The MapReduce framework delegates the user identity by passing strings without special concern for confidentiality. The owner 
+-and group of a file or directory are stored as strings; there is no conversion from user and group identity numbers as is conventional in Unix.
+-</p>
+-<p>
+-The permissions features of this release did not require any changes to the behavior of data nodes. Blocks on the data nodes 
+-do not have any of the <em>Hadoop</em> ownership or permissions attributes associated with them.
+-</p>
+ </section>
+      
+ <section> <title>Changes to the File System API</title>
+@@ -198,19 +205,12 @@ permission parameter <em>P</em>) is used, the mode of new directory is
+ 
+ <section> <title>The Web Server</title>
+ <p>
+-The identity of the web server is a configuration parameter. That is, the name node has no notion of the identity of 
++By default, the identity of the web server is a configuration parameter. That is, the name node has no notion of the identity of 
+ the <em>real</em> user, but the web server behaves as if it has the identity (user and groups) of a user chosen 
+-by the administrator. Unless the chosen identity matches the super-user, parts of the name space may be invisible 
++by the administrator. Unless the chosen identity matches the super-user, parts of the name space may be inaccessible
+ to the web server.</p>
+ </section>
+ 
+-<section> <title>On-line Upgrade</title>
+-<p>
+-If a cluster starts with a version 0.15 data set (<code>fsimage</code>), all files and directories will have 
+-owner <em>O</em>, group <em>G</em>, and mode <em>M</em>, where <em>O</em> and <em>G</em> 
+-are the user and group identity of the super-user, and <em>M</em> is a configuration parameter. </p>
+-</section>
+-
+ <section> <title>Configuration Parameters</title>
+ <ul>
+ 	<li><code>dfs.permissions = true </code>
+-- 
+1.7.0.4
+

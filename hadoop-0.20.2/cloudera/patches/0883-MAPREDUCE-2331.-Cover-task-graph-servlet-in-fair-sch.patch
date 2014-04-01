@@ -1,0 +1,76 @@
+From 211e7bb1ea1fecc5894d53815c70be8b68c46643 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 15 Feb 2011 19:03:04 -0800
+Subject: [PATCH 0883/1179] MAPREDUCE-2331. Cover task graph servlet in fair scheduler system test
+
+Reason: improve jcarder coverage
+Author: Todd Lipcon
+Ref: CDH-2660
+---
+ .../hadoop/mapred/TestFairSchedulerSystem.java     |   38 ++++++++++++++++++++
+ 1 files changed, 38 insertions(+), 0 deletions(-)
+
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairSchedulerSystem.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairSchedulerSystem.java
+index b6c85b0..9909bcf 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairSchedulerSystem.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairSchedulerSystem.java
+@@ -100,6 +100,7 @@ public class TestFairSchedulerSystem {
+           }));
+     }
+ 
++    JobClient jc = new JobClient(mr.createJobConf(null));
+ 
+     // Wait for the tasks to finish, and visit the scheduler servlet
+     // every few seconds while waiting.
+@@ -113,6 +114,16 @@ public class TestFairSchedulerSystem {
+         }
+         checkServlet(true);
+         checkServlet(false);
++
++        JobStatus jobs[] = jc.getAllJobs();
++        if (jobs == null) {
++          System.err.println("No jobs running, not checking tasklog servlet");
++          continue;
++        }
++        for (JobStatus j : jobs) {
++          System.err.println("Checking task log for " + j.getJobID());
++          checkTaskGraphServlet(j.getJobID());
++        }
+       }
+     }
+   }
+@@ -135,4 +146,31 @@ public class TestFairSchedulerSystem {
+     String contents = slurpContents(connection);
+     assertTrue(contents.contains("Fair Scheduler Administration"));
+   }
++
++  private void checkTaskGraphServlet(JobID job) throws Exception {
++    String jtURL = "http://localhost:" +
++      mr.getJobTrackerRunner().getJobTrackerInfoPort();
++    URL url = new URL(jtURL + "/taskgraph?jobid=" + job.toString() + "&type=map");
++    HttpURLConnection connection = (HttpURLConnection)url.openConnection();
++    connection.setRequestMethod("GET");
++    connection.connect();
++    assertEquals(200, connection.getResponseCode());
++
++    // Just to be sure, slurp the content and make sure it looks like the scheduler
++    String contents = slurpContents(connection);
++    assertTrue(contents.contains("</svg>"));
++  }
++
++  private String slurpContents(HttpURLConnection connection) throws Exception {
++    BufferedReader reader = new BufferedReader(
++      new InputStreamReader(connection.getInputStream()));
++    StringBuilder sb = new StringBuilder();
++
++    String line = null;
++    while ((line = reader.readLine()) != null) {
++      sb.append(line).append('\n');
++    }
++
++    return sb.toString();
++  }
+ }
+-- 
+1.7.0.4
+

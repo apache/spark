@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<!-- 
+Before you can run these subtargets directly, you need 
+to call at top-level: ant deploy-contrib compile-core-test
+-->
+<project name="thriftfs" default="jar">
+
+  <import file="../build-contrib.xml"/>
+
+  <!-- create the list of files to add to the classpath -->
+  <fileset dir="${hadoop.root}/lib" id="class.path">
+    <include name="**/*.jar" />
+    <exclude name="**/excluded/" />
+  </fileset>
+
+  <!-- Override jar target to specify main class -->
+  <target name="jar" depends="compile">
+    <jar
+      jarfile="${build.dir}/hadoop-${name}-${version}.jar"
+      basedir="${build.classes}"      
+    >
+  	<manifest>
+	    <attribute name="Main-Class" value="org.apache.hadoop.thriftfs.HadooopThriftServer"/>
+	</manifest>
+    </jar>
+  </target>
+
+  <!-- Run only pure-Java unit tests. superdottest -->
+  <target name="test">
+   <antcall target="hadoopbuildcontrib.test"> 
+     <param name="test.exclude" value="TestStreamedMerge"/>
+   </antcall>
+  </target>  
+ 
+  <!-- Run all unit tests
+  This is not called as part of the nightly build
+  because it will only run on platforms that have standard 
+  Unix utilities available. 
+  -->
+ <target name="test-unix">
+   <antcall target="hadoopbuildcontrib.test">
+   </antcall>
+ </target>  
+
+
+</project>

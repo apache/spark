@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<!-- 
+Before you can run these subtargets directly, you need 
+to call at top-level: ant deploy-contrib compile-core-test
+-->
+<project name="datajoin" default="jar">
+
+  <import file="../build-contrib.xml"/>
+
+  <!-- Override jar target to specify main class -->
+  <target name="jar" depends="compile">
+    <jar
+      jarfile="${build.dir}/hadoop-${name}-${version}.jar"
+      basedir="${build.classes}">      
+  	<manifest>
+	    <attribute name="Main-Class" value="org.apache.hadoop.contrib.utils.join.DataJoinJob"/>
+	</manifest>
+    </jar>
+  </target>
+
+  <target name="jar-examples" depends="jar">
+   <antcall target="hadoopbuildcontrib.jar-examples">
+   </antcall>
+  </target>
+
+</project>

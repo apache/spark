@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<!--
+NOTE - This POM is used for Cloudera's build and packaging process.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  
+  <parent>
+    <groupId>com.cloudera.cdh</groupId>
+    <artifactId>hadoop-root</artifactId>
+    <version>0.20.2-cdh3u4</version>
+    <relativePath>cloudera/maven-packaging/pom.xml</relativePath>
+  </parent>
+  
+  <groupId>com.cloudera.cdh</groupId>
+  <artifactId>hadoop-ant</artifactId>
+  <version>${cdh.hadoop.version}</version>
+  <packaging>pom</packaging>
+  
+  <description>Maven wrapper for Ant Hadoop build</description>
+  <name>CDH Hadoop Maven Wrapper</name>
+
+  <profiles>
+    <!--To allow standalone project to fetch CDH artifacts -->
+    <!--Activate by default doing a negation of negation   -->
+    <!-- this trick allows CDH root to switch it off       -->
+    <profile>
+      <id>cdh.repos</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+        <property>
+          <name>use.cdh.repos</name>
+          <value>!false</value>
+        </property>
+      </activation>
+      <repositories>
+        <repository>
+          <id>cdh.releases.repo</id>
+          <url>https://repository.cloudera.com/content/groups/cdh-releases-rcs</url>
+          <name>CDH Releases Repository</name>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+        </repository>
+        <repository>
+          <id>cdh.snapshots.repo</id>
+          <url>https://repository.cloudera.com/content/repositories/snapshots</url>
+          <name>CDH Snapshots Repository</name>
+          <snapshots>
+            <enabled>true</enabled>
+          </snapshots>
+        </repository>
+      </repositories>
+    </profile>
+    <!-- Similar logic to allow us to skip compilation/tests when run -->
+    <!-- via do-release-build or packaging scripts, since we're already -->
+    <!-- compiling via direct ant calls. -->
+    <profile>
+      <id>non.release.build</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+        <property>
+          <name>not.cdh.release.build</name>
+          <value>!false</value>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <version>1.6</version>
+            <inherited>false</inherited>
+            <executions>
+              <execution>
+                <id>clean</id>
+                <configuration>
+                  <target>
+                    <exec executable="${ant.cmd}" dir="${basedir}" failonerror="true">
+                      <arg value="clean"/>
+                      <arg value="-Dcdh.maven=true"/>
+                      <arg value="-Divy.cache.dir=${ivy.cache.dir}"/>
+                    </exec>
+                  </target>
+                </configuration>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <phase>clean</phase>
+              </execution>
+              <execution>
+                <id>compile</id>
+                <configuration>
+                  <target>
+                    <exec executable="${ant.cmd}" dir="${basedir}" failonerror="true">
+                      <arg value="bin-package"/>
+                      <arg value="-Dcdh.maven=true"/>
+                      <arg value="-Divy.cache.dir=${ivy.cache.dir}"/>
+                    </exec>
+                  </target>
+                </configuration>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <phase>compile</phase>
+              </execution>
+              <execution>
+                <id>test</id>
+                <configuration>
+                  <target unless="${skipTests}">
+                    <exec executable="${ant.cmd}" dir="${basedir}" failonerror="true">
+                      <arg value="test"/>
+                      <arg value="-Dcdh.maven=true"/>
+                      <arg value="-Divy.cache.dir=${ivy.cache.dir}"/>
+                </exec>
+                  </target>
+                </configuration>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <phase>test</phase>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+        <!-- Profile that's only activated when we're calling as a release build, to run -->
+    <!-- with variables set *and* tar target -->
+    <profile>
+      <id>cdh.release.build</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+        <property>
+          <name>not.cdh.release.build</name>
+          <value>false</value>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <inherited>false</inherited>
+            <executions>
+              <execution>
+                <id>tar</id>
+                <configuration>
+                  <target if="do.full.compile">
+                    <property file="${basedir}/build.properties"/>
+                    <exec executable="/bin/bash" dir="${basedir}/cloudera" failonerror="true">
+                      <arg value="do-release-build" />
+                      <env key="SKIP_MVN_EXPLICIT" value="true" />
+                    </exec>
+                  </target>
+                </configuration>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <phase>compile</phase>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+  
+  <build>
+    <plugins>
+      
+      <plugin>
+        <groupId>com.cloudera.kitchen</groupId>
+        <artifactId>maven-deps-to-props-plugin</artifactId>
+        
+        <executions>
+          <execution>
+            <id>build.properties</id>
+            <configuration>
+              <templateFile>${basedir}/cloudera/maven-packaging/templates/build.template</templateFile>
+              <targetFile>${basedir}/build.properties</targetFile>
+            </configuration>
+            <goals>
+              <goal>generate</goal>
+            </goals>
+            <phase>process-resources</phase>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+  
+</project>

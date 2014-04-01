@@ -1,0 +1,30 @@
+From 0e6382feae06e358114932b0f5136862311cca6a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 3 Mar 2011 15:42:06 -0800
+Subject: [PATCH 0897/1179] HADOOP-6943. The GroupMappingServiceProvider interface should be public
+
+Reason: organizations may want to implement this interface for their needs
+Author: Aaron T. Myers
+Ref: CDH-2263
+---
+ .../security/GroupMappingServiceProvider.java      |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/GroupMappingServiceProvider.java b/src/core/org/apache/hadoop/security/GroupMappingServiceProvider.java
+index 6e1118e..8e6af90 100644
+--- a/src/core/org/apache/hadoop/security/GroupMappingServiceProvider.java
++++ b/src/core/org/apache/hadoop/security/GroupMappingServiceProvider.java
+@@ -24,7 +24,9 @@ import java.util.List;
+  * An interface for the implementation of a user-to-groups mapping service
+  * used by {@link Groups}.
+  */
+-interface GroupMappingServiceProvider {
++// @InterfaceAudience.Public
++// @InterfaceStability.Evolving
++public interface GroupMappingServiceProvider {
+   
+   /**
+    * Get all various group memberships of a given user.
+-- 
+1.7.0.4
+

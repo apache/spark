@@ -1,0 +1,269 @@
+From 581dfd390459c3e3b9962724330b4b33967f4559 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sat, 13 Aug 2011 19:00:43 -0700
+Subject: [PATCH 1028/1179] HDFS-2023. Backport of NPE for File.list and File.listFiles. Merged
+ ports of HADOOP-7322, HDFS-1934, HADOOP-7342, and HDFS-2019.
+
+Reason: Bug
+Author: Bharath Mundlapudi
+Ref: CDH-3307
+---
+ src/core/org/apache/hadoop/fs/FileUtil.java        |   46 ++++++++++++++++-
+ .../org/apache/hadoop/fs/RawLocalFileSystem.java   |    2 +-
+ .../apache/hadoop/util/ProcfsBasedProcessTree.java |   21 ++++---
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |   32 +++++++-----
+ src/test/org/apache/hadoop/fs/TestFileUtil.java    |   54 ++++++++++++++++++++
+ 5 files changed, 128 insertions(+), 27 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/FileUtil.java b/src/core/org/apache/hadoop/fs/FileUtil.java
+index 910679d..53bcd41 100644
+--- a/src/core/org/apache/hadoop/fs/FileUtil.java
++++ b/src/core/org/apache/hadoop/fs/FileUtil.java
+@@ -288,7 +288,7 @@ public class FileUtil {
+       if (!dstFS.mkdirs(dst)) {
+         return false;
+       }
+-      File contents[] = src.listFiles();
++      File contents[] = listFiles(src);
+       for (int i = 0; i < contents.length; i++) {
+         copy(contents[i], dstFS, new Path(dst, contents[i].getName()),
+              deleteSource, conf);
+@@ -444,8 +444,10 @@ public class FileUtil {
+     } else {
+       size = dir.length();
+       File[] allFiles = dir.listFiles();
+-      for (int i = 0; i < allFiles.length; i++) {
+-        size = size + getDU(allFiles[i]);
++      if(allFiles != null) {
++        for (int i = 0; i < allFiles.length; i++) {
++           size = size + getDU(allFiles[i]);
++        }
+       }
+       return size;
+     }
+@@ -791,4 +793,42 @@ public class FileUtil {
+       }
+     }
+   }
++
++  /**
++   * A wrapper for {@link File#listFiles()}. This java.io API returns null 
++   * when a dir is not a directory or for any I/O error. Instead of having
++   * null check everywhere File#listFiles() is used, we will add utility API
++   * to get around this problem. For the majority of cases where we prefer 
++   * an IOException to be thrown.
++   * @param dir directory for which listing should be performed
++   * @return list of files or empty list
++   * @exception IOException for invalid directory or for a bad disk.
++   */
++  public static File[] listFiles(File dir) throws IOException {
++    File[] files = dir.listFiles();
++    if(files == null) {
++      throw new IOException("Invalid directory or I/O error occurred for dir: "
++                + dir.toString());
++    }
++    return files;
++  }
++  
++  /**
++   * A wrapper for {@link File#list()}. This java.io API returns null 
++   * when a dir is not a directory or for any I/O error. Instead of having
++   * null check everywhere File#list() is used, we will add utility API
++   * to get around this problem. For the majority of cases where we prefer 
++   * an IOException to be thrown.
++   * @param dir directory for which listing should be performed
++   * @return list of file names or empty string list
++   * @exception IOException for invalid directory or for a bad disk.
++   */
++  public static String[] list(File dir) throws IOException {
++    String[] fileNames = dir.list();
++    if(fileNames == null) {
++      throw new IOException("Invalid directory or I/O error occurred for dir: "
++                + dir.toString());
++    }
++    return fileNames;
++  }  
+ }
+diff --git a/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java b/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java
+index b4e3878..cb9c020 100644
+--- a/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java
++++ b/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java
+@@ -272,7 +272,7 @@ public class RawLocalFileSystem extends FileSystem {
+     if (f.isFile()) {
+       return f.delete();
+     } else if ((!recursive) && f.isDirectory() && 
+-        (f.listFiles().length != 0)) {
++        (FileUtil.listFiles(f).length != 0)) {
+       throw new IOException("Directory " + f.toString() + " is not empty");
+     }
+     return FileUtil.fullyDelete(f);
+diff --git a/src/core/org/apache/hadoop/util/ProcfsBasedProcessTree.java b/src/core/org/apache/hadoop/util/ProcfsBasedProcessTree.java
+index fdf3b03..572704e 100644
+--- a/src/core/org/apache/hadoop/util/ProcfsBasedProcessTree.java
++++ b/src/core/org/apache/hadoop/util/ProcfsBasedProcessTree.java
+@@ -33,6 +33,7 @@ import java.util.LinkedList;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.fs.FileUtil;
+ 
+ /**
+  * A Proc file-system based ProcessTree. Works only on Linux.
+@@ -268,16 +269,18 @@ public class ProcfsBasedProcessTree extends ProcessTree {
+     String[] processDirs = (new File(procfsDir)).list();
+     List<Integer> processList = new ArrayList<Integer>();
+ 
+-    for (String dir : processDirs) {
+-      try {
+-        int pd = Integer.parseInt(dir);
+-        if ((new File(procfsDir, dir)).isDirectory()) {
+-          processList.add(Integer.valueOf(pd));
++    if (processDirs != null) {
++      for (String dir : processDirs) {
++        try {
++          int pd = Integer.parseInt(dir);
++          if ((new File(procfsDir, dir)).isDirectory()) {
++            processList.add(Integer.valueOf(pd));
++          }
++        } catch (NumberFormatException n) {
++          // skip this directory
++        } catch (SecurityException s) {
++          // skip this process
+         }
+-      } catch (NumberFormatException n) {
+-        // skip this directory
+-      } catch (SecurityException s) {
+-        // skip this process
+       }
+     }
+     return processList;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index 9a8d181..8464e9f 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -101,7 +101,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+                                 dir.toString());
+         }
+       } else {
+-        File[] files = dir.listFiles();
++        File[] files = FileUtil.listFiles(dir);
+         int numChildren = 0;
+         for (int idx = 0; idx < files.length; idx++) {
+           if (files[idx].isDirectory()) {
+@@ -221,10 +221,14 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       }
+ 
+       File blockFiles[] = dir.listFiles();
+-      for (int i = 0; i < blockFiles.length; i++) {
+-        if (Block.isBlockFilename(blockFiles[i])) {
+-          long genStamp = getGenerationStampFromFile(blockFiles, blockFiles[i]);
+-          blockSet.add(new Block(blockFiles[i], blockFiles[i].length(), genStamp));
++      if (blockFiles != null) {
++        for (int i = 0; i < blockFiles.length; i++) {
++          if (Block.isBlockFilename(blockFiles[i])) {
++            long genStamp = getGenerationStampFromFile(blockFiles,
++                blockFiles[i]);
++            blockSet.add(new Block(blockFiles[i], blockFiles[i].length(),
++                genStamp));
++          }
+         }
+       }
+     }
+@@ -259,11 +263,14 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       }
+ 
+       File blockFiles[] = dir.listFiles();
+-      for (int i = 0; i < blockFiles.length; i++) {
+-        if (Block.isBlockFilename(blockFiles[i])) {
+-          long genStamp = getGenerationStampFromFile(blockFiles, blockFiles[i]);
+-          volumeMap.put(new Block(blockFiles[i], blockFiles[i].length(), genStamp), 
+-                        new DatanodeBlockInfo(volume, blockFiles[i]));
++      if (blockFiles != null) {
++        for (int i = 0; i < blockFiles.length; i++) {
++          if (Block.isBlockFilename(blockFiles[i])) {
++            long genStamp = getGenerationStampFromFile(blockFiles,
++                blockFiles[i]);
++            volumeMap.put(new Block(blockFiles[i], blockFiles[i].length(),
++                genStamp), new DatanodeBlockInfo(volume, blockFiles[i]));
++          }
+         }
+       }
+     }
+@@ -562,10 +569,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+      */
+     private void recoverDetachedBlocks(File dataDir, File dir) 
+                                            throws IOException {
+-      File contents[] = dir.listFiles();
+-      if (contents == null) {
+-        return;
+-      }
++      File contents[] = FileUtil.listFiles(dir);
+       for (int i = 0; i < contents.length; i++) {
+         if (!contents[i].isFile()) {
+           throw new IOException ("Found " + contents[i] + " in " + dir +
+diff --git a/src/test/org/apache/hadoop/fs/TestFileUtil.java b/src/test/org/apache/hadoop/fs/TestFileUtil.java
+index 9bd3575..ca6f206 100644
+--- a/src/test/org/apache/hadoop/fs/TestFileUtil.java
++++ b/src/test/org/apache/hadoop/fs/TestFileUtil.java
+@@ -249,4 +249,58 @@ public class TestFileUtil {
+     boolean ret = FileUtil.fullyDeleteContents(new MyFile(del));
+     validateAndSetWritablePermissions(ret);
+   }
++  
++  @Test
++  public void testListFiles() throws IOException {
++    setupDirs();
++    //Test existing files case 
++    File[] files = FileUtil.listFiles(tmp);
++    Assert.assertEquals(1, files.length);
++
++    //Test existing directory with no files case 
++    File newDir = new File(tmp.getPath(),"test");
++    newDir.mkdir();
++    Assert.assertTrue("Failed to create test dir", newDir.exists());
++    files = FileUtil.listFiles(newDir);
++    Assert.assertEquals(0, files.length);
++    newDir.delete();
++    Assert.assertFalse("Failed to delete test dir", newDir.exists());
++    
++    //Test non-existing directory case, this throws 
++    //IOException
++    try {
++      files = FileUtil.listFiles(newDir);
++      Assert.fail("IOException expected on listFiles() for non-existent dir "
++          + newDir.toString());
++    } catch(IOException ioe) {
++      //Expected an IOException
++    }
++  }
++
++  @Test
++  public void testListAPI() throws IOException {
++    setupDirs();
++    //Test existing files case 
++    String[] files = FileUtil.list(tmp);
++    Assert.assertEquals(1, files.length);
++
++    //Test existing directory with no files case 
++    File newDir = new File(tmp.getPath(),"test");
++    newDir.mkdir();
++    Assert.assertTrue("Failed to create test dir", newDir.exists());
++    files = FileUtil.list(newDir);
++    Assert.assertEquals(0, files.length);
++    newDir.delete();
++    Assert.assertFalse("Failed to delete test dir", newDir.exists());
++    
++    //Test non-existing directory case, this throws 
++    //IOException
++    try {
++      files = FileUtil.list(newDir);
++      Assert.fail("IOException expected on list() for non-existent dir "
++          + newDir.toString());
++    } catch(IOException ioe) {
++      //Expected an IOException
++    }
++  }
+ }
+-- 
+1.7.0.4
+

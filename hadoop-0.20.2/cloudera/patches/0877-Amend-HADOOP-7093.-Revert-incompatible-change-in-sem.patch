@@ -1,0 +1,142 @@
+From 88e89c048d8f6f346667e64b782b7daf91d8a019 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sun, 13 Feb 2011 21:06:17 -0800
+Subject: [PATCH 0877/1179] Amend HADOOP-7093. Revert incompatible change in semantics of HttpServer
+
+The original backport pulled in part of HADOOP-6461, which changed the way the
+"webapps" directory is located on the classpath. This broke HBase's ability
+to locate its UIs. In order to avoid having to patch HBase in CDH, this
+patch reverts that part of the change and works around the issue in the tests
+a different way.
+
+Reason: Should work with upstream HBase
+Author: Todd Lipcon
+Ref: CDH-2635
+---
+ build.xml                                          |    2 +-
+ src/core/org/apache/hadoop/http/HttpServer.java    |   17 ++++-----
+ .../org/apache/hadoop/http/TestHttpServer.java     |   37 ++++++++++++++++++--
+ 3 files changed, 42 insertions(+), 14 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index e76cf7c..46bf83c 100644
+--- a/build.xml
++++ b/build.xml
+@@ -112,7 +112,7 @@
+   <property name="test.build.extraconf" value="${test.build.dir}/extraconf"/>
+   <property name="test.build.javadoc" value="${test.build.dir}/docs/api"/>
+   <property name="test.build.javadoc.dev" value="${test.build.dir}/docs/dev-api"/>
+-  <property name="test.build.webapps" value="${build.dir}/test/webapps"/>
++  <property name="test.build.webapps" value="${build.dir}/test/test-webapps"/>
+   <property name="test.include" value="Test*"/>
+   <property name="test.classpath.id" value="test.classpath"/>
+   <property name="test.output" value="no"/>
+diff --git a/src/core/org/apache/hadoop/http/HttpServer.java b/src/core/org/apache/hadoop/http/HttpServer.java
+index 4ffb0c4..d076046 100644
+--- a/src/core/org/apache/hadoop/http/HttpServer.java
++++ b/src/core/org/apache/hadoop/http/HttpServer.java
+@@ -159,7 +159,7 @@ public class HttpServer implements FilterContainer {
+ 
+     webServer.setThreadPool(new QueuedThreadPool());
+ 
+-    final String appDir = getWebAppsPath(name);
++    final String appDir = getWebAppsPath();
+     ContextHandlerCollection contexts = new ContextHandlerCollection();
+     webServer.setHandler(contexts);
+ 
+@@ -434,17 +434,14 @@ public class HttpServer implements FilterContainer {
+ 
+   /**
+    * Get the pathname to the webapps files.
+-   * @param appName eg "secondary" or "datanode"
+    * @return the pathname as a URL
+-   * @throws FileNotFoundException if 'webapps' directory cannot be found on CLASSPATH.
++   * @throws IOException if 'webapps' directory cannot be found on CLASSPATH.
+    */
+-  private String getWebAppsPath(String appName) throws FileNotFoundException {
+-    URL url = getClass().getClassLoader().getResource("webapps/" + appName);
+-    if (url == null)
+-      throw new FileNotFoundException("webapps/" + appName
+-          + " not found in CLASSPATH");
+-    String urlString = url.toString();
+-    return urlString.substring(0, urlString.lastIndexOf('/'));
++  protected String getWebAppsPath() throws IOException {
++    URL url = getClass().getClassLoader().getResource("webapps");
++    if (url == null) 
++      throw new IOException("webapps not found in CLASSPATH"); 
++    return url.toString();
+   }
+ 
+   /**
+diff --git a/src/test/org/apache/hadoop/http/TestHttpServer.java b/src/test/org/apache/hadoop/http/TestHttpServer.java
+index 3c6f974..71c07ac 100644
+--- a/src/test/org/apache/hadoop/http/TestHttpServer.java
++++ b/src/test/org/apache/hadoop/http/TestHttpServer.java
+@@ -138,7 +138,7 @@ public class TestHttpServer {
+   }
+   
+   @Before public void setup() throws Exception {
+-    server = new HttpServer("test", "0.0.0.0", 0, true);
++    server = new TestWebappHttpServer("test", "0.0.0.0", 0, true);
+     server.addServlet("echo", "/echo", EchoServlet.class);
+     server.addServlet("echomap", "/echomap", EchoMapServlet.class);
+     server.addServlet("htmlcontent", "/htmlcontent", HtmlContentServlet.class);
+@@ -236,6 +236,37 @@ public class TestHttpServer {
+   }
+ 
+   /**
++   * Subclass of HttpServer that loads the "test-webapps" directory
++   * from the classpath instead of the "webapps" directory.
++   * In trunk, HADOOP-6461 improves the HttpServer code to properly
++   * find the right webapp dir, but that patch breaks downstream
++   * implementors like HBase on 0.20.
++   */
++  static class TestWebappHttpServer extends HttpServer {
++    public TestWebappHttpServer(String name, String bindAddress, int port,
++                      boolean findPort, Configuration conf) throws IOException {
++      super(name, bindAddress, port, findPort, conf);
++    }
++    public TestWebappHttpServer(String name, String bindAddress, int port,
++                      boolean findPort) throws IOException {
++      super(name, bindAddress, port, findPort);
++    }
++    public TestWebappHttpServer(String name, String bindAddress, int port,
++      boolean findPort, Configuration conf, AccessControlList adminsAcl)
++      throws IOException {
++      super(name, bindAddress, port, findPort, conf, adminsAcl);
++    }
++
++    @Override
++    protected String getWebAppsPath() throws IOException {
++      URL url = getClass().getClassLoader().getResource("test-webapps");
++      if (url == null) 
++        throw new IOException("test-webapps not found in CLASSPATH"); 
++      return url.toString();
++    }
++  }
++
++  /**
+    * FilterInitializer that initialized the DummyFilter.
+    *
+    */
+@@ -305,7 +336,7 @@ public class TestHttpServer {
+     MyGroupsProvider.mapping.put("userA", Arrays.asList("groupA"));
+     MyGroupsProvider.mapping.put("userB", Arrays.asList("groupB"));
+ 
+-    HttpServer myServer = new HttpServer("test", "0.0.0.0", 0, true, conf);
++    HttpServer myServer = new TestWebappHttpServer("test", "0.0.0.0", 0, true, conf);
+     myServer.setAttribute(HttpServer.CONF_CONTEXT_ATTRIBUTE, conf);
+     myServer.start();
+     int port = myServer.getPort();
+@@ -343,7 +374,7 @@ public class TestHttpServer {
+     MyGroupsProvider.mapping.put("userD", Arrays.asList("groupD"));
+     MyGroupsProvider.mapping.put("userE", Arrays.asList("groupE"));
+ 
+-    HttpServer myServer = new HttpServer("test", "0.0.0.0", 0, true, conf,
++    HttpServer myServer = new TestWebappHttpServer("test", "0.0.0.0", 0, true, conf,
+         new AccessControlList("userA,userB groupC,groupD"));
+     myServer.setAttribute(HttpServer.CONF_CONTEXT_ATTRIBUTE, conf);
+     myServer.start();
+-- 
+1.7.0.4
+

@@ -1,0 +1,28 @@
+From 68d637c76db3c79df7207d5262f505c342165116 Mon Sep 17 00:00:00 2001
+From: Alejandro Abdelnur <tucu@cloudera.com>
+Date: Fri, 17 Feb 2012 14:19:29 -0800
+Subject: [PATCH 1124/1179] DISTRO-373. UserGroupInformation "JAAS Configuration already set"
+
+  Reason: A double initialization was being triggered because of HADOOP-6716
+  Author: Alejandro Abdelnur
+---
+ .../org/apache/hadoop/security/KerberosName.java   |    3 ---
+ 1 files changed, 0 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/KerberosName.java b/src/core/org/apache/hadoop/security/KerberosName.java
+index 3ceec29..ffddb91 100644
+--- a/src/core/org/apache/hadoop/security/KerberosName.java
++++ b/src/core/org/apache/hadoop/security/KerberosName.java
+@@ -80,9 +80,6 @@ public class KerberosName {
+       kerbConf = Config.getInstance();
+       defaultRealm = kerbConf.getDefaultRealm();
+     } catch (KrbException ke) {
+-      if(UserGroupInformation.isSecurityEnabled())
+-        throw new IllegalArgumentException("Can't get Kerberos configuration",ke);
+-      else 
+         defaultRealm="";
+     }
+   }
+-- 
+1.7.0.4
+

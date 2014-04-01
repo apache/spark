@@ -1,0 +1,1022 @@
+From 074e824f5d3d2f6ab862083e6eb4b0df8c881bfc Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:52:27 -0800
+Subject: [PATCH 0068/1179] MAPREDUCE-910. MRUnit should support counters
+
+Description: incrCounter() is currently a dummy stub method in MRUnit that does nothing. Would be good for the mock reporter/context implementations to support counters.
+Reason: New feature
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../java/org/apache/hadoop/mrunit/MapDriver.java   |   24 ++++-
+ .../org/apache/hadoop/mrunit/MapReduceDriver.java  |   30 +++++-
+ .../hadoop/mrunit/PipelineMapReduceDriver.java     |   25 ++++
+ .../org/apache/hadoop/mrunit/ReduceDriver.java     |   25 ++++-
+ .../apache/hadoop/mrunit/mapreduce/MapDriver.java  |   24 ++++-
+ .../hadoop/mrunit/mapreduce/MapReduceDriver.java   |   25 ++++-
+ .../hadoop/mrunit/mapreduce/ReduceDriver.java      |   24 ++++-
+ .../mapreduce/mock/MockMapContextWrapper.java      |   21 +---
+ .../mapreduce/mock/MockReduceContextWrapper.java   |   22 +---
+ .../hadoop/mrunit/mapreduce/mock/MockReporter.java |   62 +++++++++++
+ .../apache/hadoop/mrunit/mock/MockReporter.java    |   31 ++++--
+ .../test/org/apache/hadoop/mrunit/AllTests.java    |    1 +
+ .../org/apache/hadoop/mrunit/TestCounters.java     |  116 ++++++++++++++++++++
+ .../apache/hadoop/mrunit/mapreduce/AllTests.java   |    1 +
+ .../hadoop/mrunit/mapreduce/TestCounters.java      |   97 ++++++++++++++++
+ .../hadoop/mrunit/mock/TestMockReporter.java       |    4 +-
+ 16 files changed, 483 insertions(+), 49 deletions(-)
+ create mode 100644 src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReporter.java
+ create mode 100644 src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestCounters.java
+ create mode 100644 src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestCounters.java
+
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapDriver.java
+index 7c940a3..1b2bd69 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapDriver.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapDriver.java
+@@ -24,6 +24,7 @@ import java.util.List;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapred.Counters;
+ import org.apache.hadoop.mapred.Mapper;
+ import org.apache.hadoop.mrunit.mock.MockOutputCollector;
+ import org.apache.hadoop.mrunit.mock.MockReporter;
+@@ -43,12 +44,33 @@ public class MapDriver<K1, V1, K2, V2> extends MapDriverBase<K1, V1, K2, V2> {
+   public static final Log LOG = LogFactory.getLog(MapDriver.class);
+ 
+   private Mapper<K1, V1, K2, V2> myMapper;
++  private Counters counters;
+ 
+   public MapDriver(final Mapper<K1, V1, K2, V2> m) {
+     myMapper = m;
++    counters = new Counters();
+   }
+ 
+   public MapDriver() {
++    counters = new Counters();
++  }
++
++  /** @return the counters used in this test */
++  public Counters getCounters() {
++    return counters;
++  }
++
++  /** Sets the counters object to use for this test.
++   * @param ctrs The counters object to use.
++   */
++  public void setCounters(final Counters ctrs) {
++    this.counters = ctrs;
++  }
++
++  /** Sets the counters to use and returns self for fluent style */
++  public MapDriver<K1, V1, K2, V2> withCounters(final Counters ctrs) {
++    setCounters(ctrs);
++    return this;
+   }
+ 
+   /**
+@@ -165,7 +187,7 @@ public class MapDriver<K1, V1, K2, V2> extends MapDriverBase<K1, V1, K2, V2> {
+   public List<Pair<K2, V2>> run() throws IOException {
+     MockOutputCollector<K2, V2> outputCollector =
+       new MockOutputCollector<K2, V2>();
+-    MockReporter reporter = new MockReporter(MockReporter.ReporterType.Mapper);
++    MockReporter reporter = new MockReporter(MockReporter.ReporterType.Mapper, getCounters());
+ 
+     myMapper.map(inputKey, inputVal, outputCollector, reporter);
+ 
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapReduceDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapReduceDriver.java
+index affebf3..bee8db6 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapReduceDriver.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapReduceDriver.java
+@@ -29,6 +29,7 @@ import java.util.Set;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapred.Counters;
+ import org.apache.hadoop.mapred.Mapper;
+ import org.apache.hadoop.mapred.Reducer;
+ import org.apache.hadoop.mrunit.types.Pair;
+@@ -55,11 +56,13 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+   private Mapper<K1, V1, K2, V2> myMapper;
+   private Reducer<K2, V2, K3, V3> myReducer;
+   private Reducer<K2, V2, K2, V2> myCombiner;
++  private Counters counters;
+ 
+   public MapReduceDriver(final Mapper<K1, V1, K2, V2> m,
+                          final Reducer<K2, V2, K3, V3> r) {
+     myMapper = m;
+     myReducer = r;
++    counters = new Counters();
+   }
+ 
+   public MapReduceDriver(final Mapper<K1, V1, K2, V2> m,
+@@ -68,9 +71,29 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+     myMapper = m;
+     myReducer = r;
+     myCombiner = c;
++    counters = new Counters();
+   }
+ 
+   public MapReduceDriver() {
++    counters = new Counters();
++  }
++
++  /** @return the counters used in this test */
++  public Counters getCounters() {
++    return counters;
++  }
++
++  /** Sets the counters object to use for this test.
++   * @param ctrs The counters object to use.
++   */
++  public void setCounters(final Counters ctrs) {
++    this.counters = ctrs;
++  }
++
++  /** Sets the counters to use and returns self for fluent style */
++  public MapReduceDriver<K1, V1, K2, V2, K3, V3> withCounters(final Counters ctrs) {
++    setCounters(ctrs);
++    return this;
+   }
+ 
+   /** Set the Mapper instance to use with this test driver
+@@ -227,7 +250,10 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+             + sb.toString() + ")");
+ 
+         reduceOutputs.addAll(new ReduceDriver<K2, V2, OUTKEY, OUTVAL>(reducer)
+-                .withInputKey(inputKey).withInputValues(inputValues).run());
++                .withCounters(getCounters())
++                .withInputKey(inputKey)
++                .withInputValues(inputValues)
++                .run());
+       }
+ 
+       return reduceOutputs;
+@@ -243,7 +269,7 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+       LOG.debug("Mapping input " + input.toString() + ")");
+ 
+       mapOutputs.addAll(new MapDriver<K1, V1, K2, V2>(myMapper).withInput(
+-              input).run());
++              input).withCounters(getCounters()).run());
+     }
+ 
+     if (myCombiner != null) {
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/PipelineMapReduceDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/PipelineMapReduceDriver.java
+index 3dab381..3527940 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/PipelineMapReduceDriver.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/PipelineMapReduceDriver.java
+@@ -25,6 +25,7 @@ import java.util.List;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapred.Counters;
+ import org.apache.hadoop.mapred.Mapper;
+ import org.apache.hadoop.mapred.Reducer;
+ import org.apache.hadoop.mrunit.types.Pair;
+@@ -56,15 +57,18 @@ public class PipelineMapReduceDriver<K1, V1, K2, V2>
+ 
+   private List<Pair<Mapper, Reducer>> mapReducePipeline;
+   private List<Pair<K1, V1>> inputList;
++  private Counters counters;
+ 
+   public PipelineMapReduceDriver(final List<Pair<Mapper, Reducer>> pipeline) {
+     this.mapReducePipeline = copyMapReduceList(pipeline);
+     this.inputList = new ArrayList<Pair<K1, V1>>();
++    this.counters = new Counters();
+   }
+ 
+   public PipelineMapReduceDriver() {
+     this.mapReducePipeline = new ArrayList<Pair<Mapper, Reducer>>();
+     this.inputList = new ArrayList<Pair<K1, V1>>();
++    this.counters = new Counters();
+   }
+ 
+   private List<Pair<Mapper, Reducer>> copyMapReduceList(List<Pair<Mapper, Reducer>> lst) {
+@@ -77,6 +81,25 @@ public class PipelineMapReduceDriver<K1, V1, K2, V2>
+     return outList;
+   }
+ 
++  /** @return the counters used in this test */
++  public Counters getCounters() {
++    return counters;
++  }
++
++  /** Sets the counters object to use for this test.
++   * @param ctrs The counters object to use.
++   */
++  public void setCounters(final Counters ctrs) {
++    this.counters = ctrs;
++  }
++
++  /** Sets the counters to use and returns self for fluent style */
++  public PipelineMapReduceDriver<K1, V1, K2, V2> withCounters(final Counters ctrs) {
++    setCounters(ctrs);
++    return this;
++  }
++
++
+   /** Add a Mapper and Reducer instance to the pipeline to use with this test driver
+    * @param m The Mapper instance to add to the pipeline
+    * @param r The Reducer instance to add to the pipeline
+@@ -282,6 +305,8 @@ public class PipelineMapReduceDriver<K1, V1, K2, V2>
+       // Create a MapReduceDriver to run this phase of the pipeline.
+       MapReduceDriver mrDriver = new MapReduceDriver(job.getFirst(), job.getSecond());
+ 
++      mrDriver.setCounters(getCounters());
++
+       // Add the inputs from the user, or from the previous stage of the pipeline.
+       for (Object input : inputs) {
+         mrDriver.addInput((Pair) input);
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/ReduceDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/ReduceDriver.java
+index f559b7f..e017725 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/ReduceDriver.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/ReduceDriver.java
+@@ -25,6 +25,7 @@ import java.util.List;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapred.Counters;
+ import org.apache.hadoop.mapred.Reducer;
+ import org.apache.hadoop.mrunit.mock.MockOutputCollector;
+ import org.apache.hadoop.mrunit.mock.MockReporter;
+@@ -45,14 +46,36 @@ public class ReduceDriver<K1, V1, K2, V2> extends ReduceDriverBase<K1, V1, K2, V
+   public static final Log LOG = LogFactory.getLog(ReduceDriver.class);
+ 
+   private Reducer<K1, V1, K2, V2> myReducer;
++  private Counters counters;
+ 
+   public ReduceDriver(final Reducer<K1, V1, K2, V2> r) {
+     myReducer = r;
++    counters = new Counters();
+   }
+ 
+   public ReduceDriver() {
++    counters = new Counters();
+   }
+ 
++  /** @return the counters used in this test */
++  public Counters getCounters() {
++    return counters;
++  }
++
++  /** Sets the counters object to use for this test.
++   * @param ctrs The counters object to use.
++   */
++  public void setCounters(final Counters ctrs) {
++    this.counters = ctrs;
++  }
++
++  /** Sets the counters to use and returns self for fluent style */
++  public ReduceDriver<K1, V1, K2, V2> withCounters(final Counters ctrs) {
++    setCounters(ctrs);
++    return this;
++  }
++
++
+   /**
+    * Sets the reducer object to use for this test
+    *
+@@ -172,7 +195,7 @@ public class ReduceDriver<K1, V1, K2, V2> extends ReduceDriverBase<K1, V1, K2, V
+   public List<Pair<K2, V2>> run() throws IOException {
+     MockOutputCollector<K2, V2> outputCollector =
+       new MockOutputCollector<K2, V2>();
+-    MockReporter reporter = new MockReporter(MockReporter.ReporterType.Reducer);
++    MockReporter reporter = new MockReporter(MockReporter.ReporterType.Reducer, getCounters());
+ 
+     myReducer.reduce(inputKey, inputValues.iterator(), outputCollector,
+             reporter);
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapDriver.java
+index 4b88566..aefc8e9 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapDriver.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapDriver.java
+@@ -26,6 +26,7 @@ import java.util.List;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.Counters;
+ import org.apache.hadoop.mapreduce.Mapper;
+ import org.apache.hadoop.mrunit.MapDriverBase;
+ import org.apache.hadoop.mrunit.mapreduce.mock.MockMapContextWrapper;
+@@ -45,12 +46,15 @@ public class MapDriver<K1, V1, K2, V2> extends MapDriverBase<K1, V1, K2, V2> {
+   public static final Log LOG = LogFactory.getLog(MapDriver.class);
+ 
+   private Mapper<K1, V1, K2, V2> myMapper;
++  private Counters counters;
+ 
+   public MapDriver(final Mapper<K1, V1, K2, V2> m) {
+     myMapper = m;
++    counters = new Counters();
+   }
+ 
+   public MapDriver() {
++    counters = new Counters();
+   }
+ 
+ 
+@@ -76,6 +80,24 @@ public class MapDriver<K1, V1, K2, V2> extends MapDriverBase<K1, V1, K2, V2> {
+     return myMapper;
+   }
+ 
++  /** @return the counters used in this test */
++  public Counters getCounters() {
++    return counters;
++  }
++
++  /** Sets the counters object to use for this test.
++   * @param ctrs The counters object to use.
++   */
++  public void setCounters(final Counters ctrs) {
++    this.counters = ctrs;
++  }
++
++  /** Sets the counters to use and returns self for fluent style */
++  public MapDriver<K1, V1, K2, V2> withCounters(final Counters ctrs) {
++    setCounters(ctrs);
++    return this;
++  }
++
+   /**
+    * Identical to setInputKey() but with fluent programming style
+    *
+@@ -172,7 +194,7 @@ public class MapDriver<K1, V1, K2, V2> extends MapDriverBase<K1, V1, K2, V2> {
+     try {
+       MockMapContextWrapper<K1, V1, K2, V2> wrapper = new MockMapContextWrapper();
+       MockMapContextWrapper<K1, V1, K2, V2>.MockMapContext context =
+-          wrapper.getMockContext(inputs);
++          wrapper.getMockContext(inputs, getCounters());
+ 
+       myMapper.run(context);
+       return context.getOutputs();
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapReduceDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapReduceDriver.java
+index 3f0455e..769b8ad 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapReduceDriver.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapReduceDriver.java
+@@ -29,6 +29,7 @@ import java.util.Set;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.Counters;
+ import org.apache.hadoop.mapreduce.Mapper;
+ import org.apache.hadoop.mapreduce.Reducer;
+ import org.apache.hadoop.mrunit.MapReduceDriverBase;
+@@ -51,14 +52,17 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+ 
+   private Mapper<K1, V1, K2, V2> myMapper;
+   private Reducer<K2, V2, K3, V3> myReducer;
++  private Counters counters;
+ 
+   public MapReduceDriver(final Mapper<K1, V1, K2, V2> m,
+                          final Reducer<K2, V2, K3, V3> r) {
+     myMapper = m;
+     myReducer = r;
++    counters = new Counters();
+   }
+ 
+   public MapReduceDriver() {
++    counters = new Counters();
+   }
+ 
+   /** Set the Mapper instance to use with this test driver
+@@ -107,6 +111,24 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+     return myReducer;
+   }
+ 
++  /** @return the counters used in this test */
++  public Counters getCounters() {
++    return counters;
++  }
++
++  /** Sets the counters object to use for this test.
++   * @param ctrs The counters object to use.
++   */
++  public void setCounters(final Counters ctrs) {
++    this.counters = ctrs;
++  }
++
++  /** Sets the counters to use and returns self for fluent style */
++  public MapReduceDriver<K1, V1, K2, V2, K3, V3> withCounters(final Counters ctrs) {
++    setCounters(ctrs);
++    return this;
++  }
++
+   /**
+    * Identical to addInput() but returns self for fluent programming style
+    * @param key
+@@ -180,7 +202,7 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+       LOG.debug("Mapping input " + input.toString() + ")");
+ 
+       mapOutputs.addAll(new MapDriver<K1, V1, K2, V2>(myMapper).withInput(
+-              input).run());
++              input).withCounters(getCounters()).run());
+     }
+ 
+     List<Pair<K2, List<V2>>> reduceInputs = shuffle(mapOutputs);
+@@ -195,6 +217,7 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+           + sb.toString() + ")");
+ 
+       reduceOutputs.addAll(new ReduceDriver<K2, V2, K3, V3>(myReducer)
++              .withCounters(getCounters())
+               .withInputKey(inputKey).withInputValues(inputValues).run());
+     }
+ 
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/ReduceDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/ReduceDriver.java
+index 537aacd..176c9cc 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/ReduceDriver.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/ReduceDriver.java
+@@ -26,6 +26,7 @@ import java.util.List;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.Counters;
+ import org.apache.hadoop.mapreduce.Reducer;
+ import org.apache.hadoop.mrunit.ReduceDriverBase;
+ import org.apache.hadoop.mrunit.mapreduce.mock.MockReduceContextWrapper;
+@@ -46,12 +47,15 @@ public class ReduceDriver<K1, V1, K2, V2> extends ReduceDriverBase<K1, V1, K2, V
+   public static final Log LOG = LogFactory.getLog(ReduceDriver.class);
+ 
+   private Reducer<K1, V1, K2, V2> myReducer;
++  private Counters counters;
+ 
+   public ReduceDriver(final Reducer<K1, V1, K2, V2> r) {
+     myReducer = r;
++    counters = new Counters();
+   }
+ 
+   public ReduceDriver() {
++    counters = new Counters();
+   }
+ 
+   /**
+@@ -80,6 +84,24 @@ public class ReduceDriver<K1, V1, K2, V2> extends ReduceDriverBase<K1, V1, K2, V
+     return myReducer;
+   }
+ 
++  /** @return the counters used in this test */
++  public Counters getCounters() {
++    return counters;
++  }
++
++  /** Sets the counters object to use for this test.
++   * @param ctrs The counters object to use.
++   */
++  public void setCounters(final Counters ctrs) {
++    this.counters = ctrs;
++  }
++
++  /** Sets the counters to use and returns self for fluent style */
++  public ReduceDriver<K1, V1, K2, V2> withCounters(final Counters ctrs) {
++    setCounters(ctrs);
++    return this;
++  }
++
+   /**
+    * Identical to setInputKey() but with fluent programming style
+    *
+@@ -177,7 +199,7 @@ public class ReduceDriver<K1, V1, K2, V2> extends ReduceDriverBase<K1, V1, K2, V
+     try {
+       MockReduceContextWrapper<K1, V1, K2, V2> wrapper = new MockReduceContextWrapper();
+       MockReduceContextWrapper<K1, V1, K2, V2>.MockReduceContext context =
+-          wrapper.getMockContext(inputs);
++          wrapper.getMockContext(inputs, getCounters());
+ 
+       myReducer.run(context);
+       return context.getOutputs();
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockMapContextWrapper.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockMapContextWrapper.java
+index 400d2b0..59136d3 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockMapContextWrapper.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockMapContextWrapper.java
+@@ -21,7 +21,7 @@ package org.apache.hadoop.mrunit.mapreduce.mock;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.mapreduce.Counter;
++import org.apache.hadoop.mapreduce.Counters;
+ import org.apache.hadoop.mapreduce.InputSplit;
+ import org.apache.hadoop.mapreduce.Mapper;
+ import org.apache.hadoop.mapreduce.TaskAttemptID;
+@@ -56,12 +56,12 @@ public class MockMapContextWrapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
+     private Pair<KEYIN, VALUEIN> curInput;
+     private MockOutputCollector<KEYOUT, VALUEOUT> output;
+ 
+-    public MockMapContext(final List<Pair<KEYIN, VALUEIN>> in)
++    public MockMapContext(final List<Pair<KEYIN, VALUEIN>> in, final Counters counters)
+         throws IOException, InterruptedException {
+ 
+       super(new Configuration(),
+             new TaskAttemptID("mrunit-jt", 0, true, 0, 0),
+-            null, null, new MockOutputCommitter(), null, null);
++            null, null, new MockOutputCommitter(), new MockReporter(counters), null);
+       this.inputIter = in.iterator();
+       this.output = new MockOutputCollector<KEYOUT, VALUEOUT>();
+     }
+@@ -95,17 +95,6 @@ public class MockMapContextWrapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
+       output.collect(key, value);
+     }
+ 
+-    /** This method does nothing in the mock version. */
+-    public Counter getCounter(Enum<?> counterName) {
+-      return null;
+-    }
+-
+-    @Override
+-    /** This method does nothing in the mock version. */
+-    public Counter getCounter(String groupName, String counterName) {
+-      return null;
+-    }
+-
+     @Override
+     /** This method does nothing in the mock version. */
+     public void progress() {
+@@ -125,9 +114,9 @@ public class MockMapContextWrapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
+     }
+   }
+ 
+-  public MockMapContext getMockContext(List<Pair<KEYIN, VALUEIN>> inputs)
++  public MockMapContext getMockContext(List<Pair<KEYIN, VALUEIN>> inputs, Counters counters)
+       throws IOException, InterruptedException {
+-    return new MockMapContext(inputs);
++    return new MockMapContext(inputs, counters);
+   }
+ }
+ 
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java
+index 4547236..f1610a1 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java
+@@ -22,7 +22,7 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.Text;
+-import org.apache.hadoop.mapreduce.Counter;
++import org.apache.hadoop.mapreduce.Counters;
+ import org.apache.hadoop.mapreduce.Reducer;
+ import org.apache.hadoop.mapreduce.ReduceContext;
+ import org.apache.hadoop.mapreduce.TaskAttemptID;
+@@ -62,13 +62,13 @@ public class MockReduceContextWrapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
+ 
+     private MockOutputCollector<KEYOUT, VALUEOUT> output;
+ 
+-    public MockReduceContext(final List<Pair<KEYIN, List<VALUEIN>>> in)
++    public MockReduceContext(final List<Pair<KEYIN, List<VALUEIN>>> in, final Counters counters)
+         throws IOException, InterruptedException {
+ 
+       super(new Configuration(),
+             new TaskAttemptID("mrunit-jt", 0, false, 0, 0),
+             new MockRawKeyValueIterator(), null, null,
+-            new MockOutputCommitter(), null, null,
++            new MockOutputCommitter(), new MockReporter(counters), null,
+             (Class) Text.class, (Class) Text.class);
+       this.inputIter = in.iterator();
+       this.output = new MockOutputCollector<KEYOUT, VALUEOUT>();
+@@ -158,17 +158,6 @@ public class MockReduceContextWrapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
+       output.collect(key, value);
+     }
+ 
+-    /** This method does nothing in the mock version. */
+-    public Counter getCounter(Enum<?> counterName) {
+-      return null;
+-    }
+-
+-    @Override
+-    /** This method does nothing in the mock version. */
+-    public Counter getCounter(String groupName, String counterName) {
+-      return null;
+-    }
+-
+     @Override
+     /** This method does nothing in the mock version. */
+     public void progress() {
+@@ -188,9 +177,10 @@ public class MockReduceContextWrapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
+     }
+   }
+ 
+-  public MockReduceContext getMockContext(List<Pair<KEYIN, List<VALUEIN>>> inputs)
++  public MockReduceContext getMockContext(List<Pair<KEYIN, List<VALUEIN>>> inputs,
++      Counters counters)
+       throws IOException, InterruptedException {
+-    return new MockReduceContext(inputs);
++    return new MockReduceContext(inputs, counters);
+   }
+ }
+ 
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReporter.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReporter.java
+new file mode 100644
+index 0000000..cc425fe
+--- /dev/null
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReporter.java
+@@ -0,0 +1,62 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mrunit.mapreduce.mock;
++
++import org.apache.hadoop.mapreduce.Counter;
++import org.apache.hadoop.mapreduce.Counters;
++import org.apache.hadoop.mapreduce.StatusReporter;
++
++public class MockReporter extends StatusReporter {
++
++  private Counters counters;
++
++  public MockReporter(final Counters ctrs) {
++    this.counters = ctrs;
++  }
++
++  @Override
++  public void setStatus(String status) {
++    // do nothing.
++  }
++
++  @Override
++  public void progress() {
++    // do nothing.
++  }
++
++  @Override
++  public Counter getCounter(String group, String name) {
++    Counter counter = null;
++    if (counters != null) {
++      counter = counters.findCounter(group, name);
++    }
++
++    return counter;
++  }
++
++  @Override
++  public Counter getCounter(Enum key) {
++    Counter counter = null;
++    if (counters != null) {
++      counter = counters.findCounter(key);
++    }
++
++    return counter;
++  }
++}
++
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mock/MockReporter.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mock/MockReporter.java
+index ed3a9bb..1fb9fa1 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mock/MockReporter.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mock/MockReporter.java
+@@ -17,6 +17,7 @@
+  */
+ package org.apache.hadoop.mrunit.mock;
+ 
++import org.apache.hadoop.mapred.Counters;
+ import org.apache.hadoop.mapred.InputSplit;
+ import org.apache.hadoop.mapred.Reporter;
+ import org.apache.hadoop.mapred.Counters.Counter;
+@@ -24,6 +25,7 @@ import org.apache.hadoop.mapred.Counters.Counter;
+ public class MockReporter implements Reporter {
+ 
+   private MockInputSplit inputSplit = new MockInputSplit();
++  private Counters counters;
+ 
+   public enum ReporterType {
+     Mapper,
+@@ -32,8 +34,9 @@ public class MockReporter implements Reporter {
+ 
+   private ReporterType typ;
+ 
+-  public MockReporter(final ReporterType kind) {
++  public MockReporter(final ReporterType kind, final Counters ctrs) {
+     this.typ = kind;
++    this.counters = ctrs;
+   }
+ 
+   @Override
+@@ -48,12 +51,16 @@ public class MockReporter implements Reporter {
+ 
+   @Override
+   public void incrCounter(Enum key, long amount) {
+-    // do nothing.
++    if (null != counters) {
++      counters.incrCounter(key, amount);
++    }
+   }
+ 
+   @Override
+   public void incrCounter(String group, String counter, long amount) {
+-    // do nothing.
++    if (null != counters) {
++      counters.incrCounter(group, counter, amount);
++    }
+   }
+ 
+   @Override
+@@ -67,15 +74,23 @@ public class MockReporter implements Reporter {
+   }
+ 
+   @Override
+-  public Counter getCounter(String s1, String s2) {
+-    // do nothing
+-    return null;
++  public Counter getCounter(String group, String name) {
++    Counters.Counter counter = null;
++    if (counters != null) {
++      counter = counters.findCounter(group, name);
++    }
++
++    return counter;
+   }
+ 
+   @Override
+   public Counter getCounter(Enum key) {
+-    // do nothing
+-    return null;
++    Counters.Counter counter = null;
++    if (counters != null) {
++      counter = counters.findCounter(key);
++    }
++
++    return counter;
+   }
+ }
+ 
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/AllTests.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/AllTests.java
+index 265b3db..f28fc65 100644
+--- a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/AllTests.java
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/AllTests.java
+@@ -42,6 +42,7 @@ public final class AllTests  {
+     suite.addTestSuite(TestReduceDriver.class);
+     suite.addTestSuite(TestTestDriver.class);
+     suite.addTestSuite(TestExample.class);
++    suite.addTestSuite(TestCounters.class);
+ 
+     suite.addTest(org.apache.hadoop.mrunit.types.AllTests.suite());
+     suite.addTest(org.apache.hadoop.mrunit.mapreduce.AllTests.suite());
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestCounters.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestCounters.java
+new file mode 100644
+index 0000000..61f8d02
+--- /dev/null
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestCounters.java
+@@ -0,0 +1,116 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mrunit;
++
++import junit.framework.TestCase;
++
++import java.io.IOException;
++import java.util.Iterator;
++
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapred.Counters;
++import org.apache.hadoop.mapred.MapReduceBase;
++import org.apache.hadoop.mapred.Mapper;
++import org.apache.hadoop.mapred.OutputCollector;
++import org.apache.hadoop.mapred.Reducer;
++import org.apache.hadoop.mapred.Reporter;
++import org.junit.Before;
++import org.junit.Test;
++
++/**
++ * Test counters usage in various drivers.
++ */
++public class TestCounters extends TestCase {
++
++  private static final String GROUP = "GROUP";
++  private static final String ELEM = "ELEM";
++
++  private class CounterMapper extends MapReduceBase implements Mapper<Text, Text, Text, Text> {
++    public void map(Text k, Text v, OutputCollector<Text, Text> out, Reporter r)
++        throws IOException {
++
++      r.incrCounter(GROUP, ELEM, 1);
++
++      // Emit the same (k, v) pair twice.
++      out.collect(k, v);
++      out.collect(k, v);
++    }
++  }
++
++  private class CounterReducer extends MapReduceBase implements Reducer<Text, Text, Text, Text> {
++    public void reduce(Text k, Iterator<Text> vals, OutputCollector<Text, Text> out, Reporter r)
++        throws IOException {
++
++      while (vals.hasNext()) {
++        r.incrCounter(GROUP, ELEM, 1);
++        out.collect(k, vals.next());
++      }
++    }
++  }
++
++  @Test
++  public void testMapper() throws IOException {
++    Mapper<Text, Text, Text, Text> mapper = new CounterMapper();
++    MapDriver<Text, Text, Text, Text> driver = new MapDriver<Text, Text, Text, Text>(mapper);
++    driver.withInput(new Text("foo"), new Text("bar")).run();
++    assertEquals("Expected 1 counter increment", 1,
++        driver.getCounters().findCounter(GROUP, ELEM).getValue());
++  }
++
++  @Test
++  public void testReducer() throws IOException {
++    Reducer<Text, Text, Text, Text> reducer = new CounterReducer();
++    ReduceDriver<Text, Text, Text, Text> driver = new ReduceDriver<Text, Text, Text, Text>(reducer);
++    driver.withInputKey(new Text("foo"))
++          .withInputValue(new Text("bar"))
++          .run();
++    assertEquals("Expected 1 counter increment", 1,
++        driver.getCounters().findCounter(GROUP, ELEM).getValue());
++  }
++
++  @Test
++  public void testMapReduce() throws IOException {
++    Mapper<Text, Text, Text, Text> mapper = new CounterMapper();
++    Reducer<Text, Text, Text, Text> reducer = new CounterReducer();
++    MapReduceDriver<Text, Text, Text, Text, Text, Text> driver =
++        new MapReduceDriver<Text, Text, Text, Text, Text, Text>(mapper, reducer);
++
++    driver.withInput(new Text("foo"), new Text("bar"))
++          .run();
++
++    assertEquals("Expected counter=3", 3,
++        driver.getCounters().findCounter(GROUP, ELEM).getValue());
++  }
++
++  @Test
++  public void testPipeline() throws IOException {
++    Mapper<Text, Text, Text, Text> mapper = new CounterMapper();
++    Reducer<Text, Text, Text, Text> reducer = new CounterReducer();
++    PipelineMapReduceDriver<Text, Text, Text, Text> driver =
++        new PipelineMapReduceDriver<Text, Text, Text, Text>();
++
++    driver.withMapReduce(mapper, reducer)
++          .withMapReduce(mapper, reducer)
++          .withInput(new Text("foo"), new Text("bar"))
++          .run();
++
++    assertEquals("Expected counter=9", 9,
++        driver.getCounters().findCounter(GROUP, ELEM).getValue());
++  }
++}
++
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/AllTests.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/AllTests.java
+index e0cb65c..7514ee5 100644
+--- a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/AllTests.java
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/AllTests.java
+@@ -34,6 +34,7 @@ public final class AllTests  {
+     suite.addTestSuite(TestMapDriver.class);
+     suite.addTestSuite(TestReduceDriver.class);
+     suite.addTestSuite(TestMapReduceDriver.class);
++    suite.addTestSuite(TestCounters.class);
+ 
+     return suite;
+   }
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestCounters.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestCounters.java
+new file mode 100644
+index 0000000..3fc3e65
+--- /dev/null
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestCounters.java
+@@ -0,0 +1,97 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mrunit.mapreduce;
++
++import junit.framework.TestCase;
++
++import java.io.IOException;
++
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.Counters;
++import org.apache.hadoop.mapreduce.Mapper;
++import org.apache.hadoop.mapreduce.Reducer;
++import org.junit.Before;
++import org.junit.Test;
++
++/**
++ * Test counters usage in various drivers.
++ */
++public class TestCounters extends TestCase {
++
++  private static final String GROUP = "GROUP";
++  private static final String ELEM = "ELEM";
++
++  private class CounterMapper extends Mapper<Text, Text, Text, Text> {
++    public void map(Text k, Text v, Context context)
++        throws IOException, InterruptedException {
++
++      context.getCounter(GROUP, ELEM).increment(1);
++
++      // Emit the same (k, v) pair twice.
++      context.write(k, v);
++      context.write(k, v);
++    }
++  }
++
++  private class CounterReducer extends Reducer<Text, Text, Text, Text> {
++    public void reduce(Text k, Iterable<Text> vals, Context context)
++        throws IOException, InterruptedException {
++
++      for(Text val : vals) {
++        context.getCounter(GROUP, ELEM).increment(1);
++        context.write(k, val);
++      }
++    }
++  }
++
++  @Test
++  public void testMapper() throws IOException {
++    Mapper<Text, Text, Text, Text> mapper = new CounterMapper();
++    MapDriver<Text, Text, Text, Text> driver = new MapDriver<Text, Text, Text, Text>(mapper);
++    driver.withInput(new Text("foo"), new Text("bar")).run();
++    assertEquals("Expected 1 counter increment", 1,
++        driver.getCounters().findCounter(GROUP, ELEM).getValue());
++  }
++
++  @Test
++  public void testReducer() throws IOException {
++    Reducer<Text, Text, Text, Text> reducer = new CounterReducer();
++    ReduceDriver<Text, Text, Text, Text> driver = new ReduceDriver<Text, Text, Text, Text>(reducer);
++    driver.withInputKey(new Text("foo"))
++          .withInputValue(new Text("bar"))
++          .run();
++    assertEquals("Expected 1 counter increment", 1,
++        driver.getCounters().findCounter(GROUP, ELEM).getValue());
++  }
++
++  @Test
++  public void testMapReduce() throws IOException {
++    Mapper<Text, Text, Text, Text> mapper = new CounterMapper();
++    Reducer<Text, Text, Text, Text> reducer = new CounterReducer();
++    MapReduceDriver<Text, Text, Text, Text, Text, Text> driver =
++        new MapReduceDriver<Text, Text, Text, Text, Text, Text>(mapper, reducer);
++
++    driver.withInput(new Text("foo"), new Text("bar"))
++          .run();
++
++    assertEquals("Expected counter=3", 3,
++        driver.getCounters().findCounter(GROUP, ELEM).getValue());
++  }
++}
++
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mock/TestMockReporter.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mock/TestMockReporter.java
+index e340833..2ade217 100644
+--- a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mock/TestMockReporter.java
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mock/TestMockReporter.java
+@@ -27,7 +27,7 @@ public class TestMockReporter extends TestCase {
+ 
+   @Test
+   public void testGetInputSplitForMapper() {
+-    InputSplit split = new MockReporter(MockReporter.ReporterType.Mapper).getInputSplit();
++    InputSplit split = new MockReporter(MockReporter.ReporterType.Mapper, null).getInputSplit();
+     assertTrue(null != split);
+   }
+ 
+@@ -36,7 +36,7 @@ public class TestMockReporter extends TestCase {
+   @Test
+   public void testGetInputSplitForReducer() {
+     try {
+-      new MockReporter(MockReporter.ReporterType.Reducer).getInputSplit();
++      new MockReporter(MockReporter.ReporterType.Reducer, null).getInputSplit();
+       fail(); // shouldn't get here
+     } catch (UnsupportedOperationException uoe) {
+       // expected this.
+-- 
+1.7.0.4
+

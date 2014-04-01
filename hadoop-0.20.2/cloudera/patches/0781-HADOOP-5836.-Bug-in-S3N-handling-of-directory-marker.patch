@@ -1,0 +1,826 @@
+From b715fdffb59ad674e16d31db09b75884ddd2e0fa Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Mon, 24 Jan 2011 17:41:41 -0800
+Subject: [PATCH 0781/1179] HADOOP-5836. Bug in S3N handling of directory markers using an object with a trailing "/" causes jobs to fail
+
+Reason: Bug fix
+Author: Ian Nowland
+Ref: DISTRO-76
+---
+ .../fs/s3native/Jets3tNativeFileSystemStore.java   |  109 ++++------
+ .../hadoop/fs/s3native/NativeFileSystemStore.java  |    6 +-
+ .../hadoop/fs/s3native/NativeS3FileSystem.java     |  225 +++++++++++---------
+ .../fs/s3native/InMemoryNativeFileSystemStore.java |   19 +-
+ .../NativeS3FileSystemContractBaseTest.java        |   73 +++++++
+ 5 files changed, 253 insertions(+), 179 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/s3native/Jets3tNativeFileSystemStore.java b/src/core/org/apache/hadoop/fs/s3native/Jets3tNativeFileSystemStore.java
+index b24a8e0..d4a79d8 100644
+--- a/src/core/org/apache/hadoop/fs/s3native/Jets3tNativeFileSystemStore.java
++++ b/src/core/org/apache/hadoop/fs/s3native/Jets3tNativeFileSystemStore.java
+@@ -24,6 +24,7 @@ import java.io.BufferedInputStream;
+ import java.io.ByteArrayInputStream;
+ import java.io.File;
+ import java.io.FileInputStream;
++import java.io.FileNotFoundException;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.net.URI;
+@@ -53,10 +54,7 @@ class Jets3tNativeFileSystemStore implements NativeFileSystemStore {
+             s3Credentials.getSecretAccessKey());
+       this.s3Service = new RestS3Service(awsCredentials);
+     } catch (S3ServiceException e) {
+-      if (e.getCause() instanceof IOException) {
+-        throw (IOException) e.getCause();
+-      }
+-      throw new S3Exception(e);
++      handleServiceException(e);
+     }
+     bucket = new S3Bucket(uri.getHost());
+   }
+@@ -76,10 +74,7 @@ class Jets3tNativeFileSystemStore implements NativeFileSystemStore {
+       }
+       s3Service.putObject(bucket, object);
+     } catch (S3ServiceException e) {
+-      if (e.getCause() instanceof IOException) {
+-        throw (IOException) e.getCause();
+-      }
+-      throw new S3Exception(e);
++      handleServiceException(e);
+     } finally {
+       if (in != null) {
+         try {
+@@ -99,10 +94,7 @@ class Jets3tNativeFileSystemStore implements NativeFileSystemStore {
+       object.setContentLength(0);
+       s3Service.putObject(bucket, object);
+     } catch (S3ServiceException e) {
+-      if (e.getCause() instanceof IOException) {
+-        throw (IOException) e.getCause();
+-      }
+-      throw new S3Exception(e);
++      handleServiceException(e);
+     }
+   }
+   
+@@ -116,10 +108,8 @@ class Jets3tNativeFileSystemStore implements NativeFileSystemStore {
+       if (e.getMessage().contains("ResponseCode=404")) {
+         return null;
+       }
+-      if (e.getCause() instanceof IOException) {
+-        throw (IOException) e.getCause();
+-      }
+-      throw new S3Exception(e);
++      handleServiceException(e);
++      return null; //never returned - keep compiler happy
+     }
+   }
+   
+@@ -128,13 +118,8 @@ class Jets3tNativeFileSystemStore implements NativeFileSystemStore {
+       S3Object object = s3Service.getObject(bucket, key);
+       return object.getDataInputStream();
+     } catch (S3ServiceException e) {
+-      if ("NoSuchKey".equals(e.getS3ErrorCode())) {
+-        return null;
+-      }
+-      if (e.getCause() instanceof IOException) {
+-        throw (IOException) e.getCause();
+-      }
+-      throw new S3Exception(e);
++      handleServiceException(key, e);
++      return null; //never returned - keep compiler happy
+     }
+   }
+   
+@@ -145,32 +130,22 @@ class Jets3tNativeFileSystemStore implements NativeFileSystemStore {
+                                             null, byteRangeStart, null);
+       return object.getDataInputStream();
+     } catch (S3ServiceException e) {
+-      if ("NoSuchKey".equals(e.getS3ErrorCode())) {
+-        return null;
+-      }
+-      if (e.getCause() instanceof IOException) {
+-        throw (IOException) e.getCause();
+-      }
+-      throw new S3Exception(e);
++      handleServiceException(key, e);
++      return null; //never returned - keep compiler happy
+     }
+   }
+ 
+   public PartialListing list(String prefix, int maxListingLength)
+     throws IOException {
+-    return list(prefix, maxListingLength, null);
++    return list(prefix, maxListingLength, null, false);
+   }
+   
+-  public PartialListing list(String prefix, int maxListingLength,
+-      String priorLastKey) throws IOException {
++  public PartialListing list(String prefix, int maxListingLength, String priorLastKey,
++      boolean recurse) throws IOException {
+ 
+-    return list(prefix, PATH_DELIMITER, maxListingLength, priorLastKey);
++    return list(prefix, recurse ? null : PATH_DELIMITER, maxListingLength, priorLastKey);
+   }
+ 
+-  public PartialListing listAll(String prefix, int maxListingLength,
+-      String priorLastKey) throws IOException {
+-
+-    return list(prefix, null, maxListingLength, priorLastKey);
+-  }
+ 
+   private PartialListing list(String prefix, String delimiter,
+       int maxListingLength, String priorLastKey) throws IOException {
+@@ -191,10 +166,8 @@ class Jets3tNativeFileSystemStore implements NativeFileSystemStore {
+       return new PartialListing(chunk.getPriorLastKey(), fileMetadata,
+           chunk.getCommonPrefixes());
+     } catch (S3ServiceException e) {
+-      if (e.getCause() instanceof IOException) {
+-        throw (IOException) e.getCause();
+-      }
+-      throw new S3Exception(e);
++      handleServiceException(e);
++      return null; //never returned - keep compiler happy
+     }
+   }
+ 
+@@ -202,36 +175,27 @@ class Jets3tNativeFileSystemStore implements NativeFileSystemStore {
+     try {
+       s3Service.deleteObject(bucket, key);
+     } catch (S3ServiceException e) {
+-      if (e.getCause() instanceof IOException) {
+-        throw (IOException) e.getCause();
+-      }
+-      throw new S3Exception(e);
++      handleServiceException(key, e);
+     }
+   }
+   
+-  public void rename(String srcKey, String dstKey) throws IOException {
++  public void copy(String srcKey, String dstKey) throws IOException {
+     try {
+-      s3Service.moveObject(bucket.getName(), srcKey, bucket.getName(),
++      s3Service.copyObject(bucket.getName(), srcKey, bucket.getName(),
+           new S3Object(dstKey), false);
+     } catch (S3ServiceException e) {
+-      if (e.getCause() instanceof IOException) {
+-        throw (IOException) e.getCause();
+-      }
+-      throw new S3Exception(e);
++      handleServiceException(srcKey, e);
+     }
+   }
+ 
+   public void purge(String prefix) throws IOException {
+     try {
+       S3Object[] objects = s3Service.listObjects(bucket, prefix, null);
+-      for (int i = 0; i < objects.length; i++) {
+-        s3Service.deleteObject(bucket, objects[i].getKey());
++      for (S3Object object : objects) {
++        s3Service.deleteObject(bucket, object.getKey());
+       }
+     } catch (S3ServiceException e) {
+-      if (e.getCause() instanceof IOException) {
+-        throw (IOException) e.getCause();
+-      }
+-      throw new S3Exception(e);
++      handleServiceException(e);
+     }
+   }
+ 
+@@ -240,16 +204,29 @@ class Jets3tNativeFileSystemStore implements NativeFileSystemStore {
+     sb.append(bucket.getName()).append("\n");
+     try {
+       S3Object[] objects = s3Service.listObjects(bucket);
+-      for (int i = 0; i < objects.length; i++) {
+-        sb.append(objects[i].getKey()).append("\n");
++      for (S3Object object : objects) {
++        sb.append(object.getKey()).append("\n");
+       }
+     } catch (S3ServiceException e) {
+-      if (e.getCause() instanceof IOException) {
+-        throw (IOException) e.getCause();
+-      }
+-      throw new S3Exception(e);
++      handleServiceException(e);
+     }
+     System.out.println(sb);
+   }
+-  
++
++  private void handleServiceException(String key, S3ServiceException e) throws IOException {
++    if ("NoSuchKey".equals(e.getS3ErrorCode())) {
++      throw new FileNotFoundException("Key '" + key + "' does not exist in S3");
++    } else {
++      handleServiceException(e);
++    }
++  }
++
++  private void handleServiceException(S3ServiceException e) throws IOException {
++    if (e.getCause() instanceof IOException) {
++      throw (IOException) e.getCause();
++    }
++    else {
++      throw new S3Exception(e);
++    }
++  }
+ }
+diff --git a/src/core/org/apache/hadoop/fs/s3native/NativeFileSystemStore.java b/src/core/org/apache/hadoop/fs/s3native/NativeFileSystemStore.java
+index eb0a682..7ee80f2 100644
+--- a/src/core/org/apache/hadoop/fs/s3native/NativeFileSystemStore.java
++++ b/src/core/org/apache/hadoop/fs/s3native/NativeFileSystemStore.java
+@@ -42,14 +42,12 @@ interface NativeFileSystemStore {
+   InputStream retrieve(String key, long byteRangeStart) throws IOException;
+   
+   PartialListing list(String prefix, int maxListingLength) throws IOException;
+-  PartialListing list(String prefix, int maxListingLength, String priorLastKey)
++  PartialListing list(String prefix, int maxListingLength, String priorLastKey, boolean recursive)
+     throws IOException;
+-  PartialListing listAll(String prefix, int maxListingLength,
+-      String priorLastKey) throws IOException;
+   
+   void delete(String key) throws IOException;
+ 
+-  void rename(String srcKey, String dstKey) throws IOException;
++  void copy(String srcKey, String dstKey) throws IOException;
+   
+   /**
+    * Delete all keys with the given prefix. Used for testing.
+diff --git a/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java b/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java
+index 5e7fe4f..f4ea8e3 100644
+--- a/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java
++++ b/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java
+@@ -61,6 +61,17 @@ import org.apache.hadoop.util.Progressable;
+  * Unlike {@link org.apache.hadoop.fs.s3.S3FileSystem} this implementation
+  * stores files on S3 in their
+  * native form so they can be read by other S3 tools.
++ *
++ * A note about directories. S3 of course has no "native" support for them.
++ * The idiom we choose then is: for any directory created by this class,
++ * we use an empty object "#{dirpath}_$folder$" as a marker.
++ * Further, to interoperate with other S3 tools, we also accept the following:
++ *  - an object "#{dirpath}/' denoting a directory marker
++ *  - if there exists any objects with the prefix "#{dirpath}/", then the
++ *    directory is said to exist
++ *  - if both a file with the name of a directory and a marker for that
++ *    directory exists, then the *file masks the directory*, and the directory
++ *    is never returned.
+  * </p>
+  * @see org.apache.hadoop.fs.s3.S3FileSystem
+  */
+@@ -88,6 +99,7 @@ public class NativeS3FileSystem extends FileSystem {
+       this.key = key;
+     }
+     
++    @Override
+     public synchronized int read() throws IOException {
+       int result = -1;
+       try {
+@@ -105,6 +117,7 @@ public class NativeS3FileSystem extends FileSystem {
+       }
+       return result;
+     }
++    @Override
+     public synchronized int read(byte[] b, int off, int len)
+       throws IOException {
+       
+@@ -125,18 +138,23 @@ public class NativeS3FileSystem extends FileSystem {
+       return result;
+     }
+ 
++    @Override
+     public void close() throws IOException {
+       in.close();
+     }
+ 
++    @Override
+     public synchronized void seek(long pos) throws IOException {
+       in.close();
++      LOG.info("Opening key '" + key + "' for reading at position '" + pos + "'");
+       in = store.retrieve(key, pos);
+       this.pos = pos;
+     }
++    @Override
+     public synchronized long getPos() throws IOException {
+       return pos;
+     }
++    @Override
+     public boolean seekToNewSource(long targetPos) throws IOException {
+       return false;
+     }
+@@ -157,6 +175,7 @@ public class NativeS3FileSystem extends FileSystem {
+       this.conf = conf;
+       this.key = key;
+       this.backupFile = newBackupFile();
++      LOG.info("OutputStream for key '" + key + "' writing to tempfile '" + this.backupFile + "'");
+       try {
+         this.digest = MessageDigest.getInstance("MD5");
+         this.backupStream = new BufferedOutputStream(new DigestOutputStream(
+@@ -191,6 +210,7 @@ public class NativeS3FileSystem extends FileSystem {
+       }
+ 
+       backupStream.close();
++      LOG.info("OutputStream for key '" + key + "' closed. Now beginning upload");
+       
+       try {
+         byte[] md5Hash = digest == null ? null : digest.digest();
+@@ -202,7 +222,7 @@ public class NativeS3FileSystem extends FileSystem {
+         super.close();
+         closed = true;
+       } 
+-
++      LOG.info("OutputStream for key '" + key + "' upload complete");
+     }
+ 
+     @Override
+@@ -214,8 +234,6 @@ public class NativeS3FileSystem extends FileSystem {
+     public void write(byte[] b, int off, int len) throws IOException {
+       backupStream.write(b, off, len);
+     }
+-    
+-    
+   }
+   
+   private URI uri;
+@@ -259,6 +277,7 @@ public class NativeS3FileSystem extends FileSystem {
+     Map<String, RetryPolicy> methodNameToPolicyMap =
+       new HashMap<String, RetryPolicy>();
+     methodNameToPolicyMap.put("storeFile", methodPolicy);
++    methodNameToPolicyMap.put("rename", methodPolicy);
+     
+     return (NativeFileSystemStore)
+       RetryProxy.create(NativeFileSystemStore.class, store,
+@@ -274,7 +293,11 @@ public class NativeS3FileSystem extends FileSystem {
+     if (!path.isAbsolute()) {
+       throw new IllegalArgumentException("Path must be absolute: " + path);
+     }
+-    return path.toUri().getPath().substring(1); // remove initial slash
++    String ret = path.toUri().getPath().substring(1); // remove initial slash
++    if (ret.endsWith("/") && (ret.indexOf("/") != ret.length() - 1)) {
++      ret = ret.substring(0, ret.length() -1);
++  }
++    return ret;
+   }
+   
+   private static Path keyToPath(String key) {
+@@ -289,6 +312,7 @@ public class NativeS3FileSystem extends FileSystem {
+   }
+ 
+   /** This optional operation is not yet supported. */
++  @Override
+   public FSDataOutputStream append(Path f, int bufferSize,
+       Progressable progress) throws IOException {
+     throw new IOException("Not supported");
+@@ -315,27 +339,41 @@ public class NativeS3FileSystem extends FileSystem {
+   }
+ 
+   @Override
+-  public boolean delete(Path f, boolean recursive) throws IOException {
++  public boolean delete(Path f, boolean recurse) throws IOException {
+     FileStatus status;
+     try {
+       status = getFileStatus(f);
+     } catch (FileNotFoundException e) {
++      LOG.debug("Delete called for '" + f + "' but file does not exist, so returning false");
+       return false;
+     }
+     Path absolutePath = makeAbsolute(f);
+     String key = pathToKey(absolutePath);
+     if (status.isDir()) {
+-      FileStatus[] contents = listStatus(f);
+-      if (!recursive && contents.length > 0) {
+-        throw new IOException("Directory " + f.toString() + " is not empty.");
++      if (!recurse && listStatus(f).length > 0) {
++        throw new IOException("Can not delete " + f + " at is a not empty directory and recurse option is false");
+       }
+-      for (FileStatus p : contents) {
+-        if (!delete(p.getPath(), recursive)) {
+-          return false;
++
++      createParent(f);
++
++      LOG.debug("Deleting directory '" + f  + "'");
++      String priorLastKey = null;
++      do {
++        PartialListing listing = store.list(key, S3_MAX_LISTING_LENGTH, priorLastKey, true);
++        for (FileMetadata file : listing.getFiles()) {
++          store.delete(file.getKey());
+         }
++        priorLastKey = listing.getPriorLastKey();
++      } while (priorLastKey != null);
++
++      try {
++        store.delete(key + FOLDER_SUFFIX);
++      } catch (FileNotFoundException e) {
++        //this is fine, we don't require a marker
+       }
+-      store.delete(key + FOLDER_SUFFIX);
+     } else {
++      LOG.debug("Deleting file '" + f + "'");
++      createParent(f);
+       store.delete(key);
+     }
+     return true;
+@@ -343,7 +381,6 @@ public class NativeS3FileSystem extends FileSystem {
+ 
+   @Override
+   public FileStatus getFileStatus(Path f) throws IOException {
+-    
+     Path absolutePath = makeAbsolute(f);
+     String key = pathToKey(absolutePath);
+     
+@@ -351,23 +388,28 @@ public class NativeS3FileSystem extends FileSystem {
+       return newDirectory(absolutePath);
+     }
+     
++    LOG.debug("getFileStatus retrieving metadata for key '" + key + "'");
+     FileMetadata meta = store.retrieveMetadata(key);
+     if (meta != null) {
++      LOG.debug("getFileStatus returning 'file' for key '" + key + "'");
+       return newFile(meta, absolutePath);
+     }
+     if (store.retrieveMetadata(key + FOLDER_SUFFIX) != null) {
++      LOG.debug("getFileStatus returning 'directory' for key '" + key + "' as '"
++          + key + FOLDER_SUFFIX + "' exists");
+       return newDirectory(absolutePath);
+     }
+     
++    LOG.debug("getFileStatus listing key '" + key + "'");
+     PartialListing listing = store.list(key, 1);
+     if (listing.getFiles().length > 0 ||
+         listing.getCommonPrefixes().length > 0) {
++      LOG.debug("getFileStatus returning 'directory' for key '" + key + "' as it has contents");
+       return newDirectory(absolutePath);
+     }
+     
+-    throw new FileNotFoundException(absolutePath +
+-        ": No such file or directory.");
+-    
++    LOG.debug("getFileStatus could not find key '" + key + "'");
++    throw new FileNotFoundException("No such file or directory '" + absolutePath + "'");
+   }
+ 
+   @Override
+@@ -400,16 +442,20 @@ public class NativeS3FileSystem extends FileSystem {
+     Set<FileStatus> status = new TreeSet<FileStatus>();
+     String priorLastKey = null;
+     do {
+-      PartialListing listing = store.list(key, S3_MAX_LISTING_LENGTH, 
+-          priorLastKey);
++      PartialListing listing = store.list(key, S3_MAX_LISTING_LENGTH, priorLastKey, false);
+       for (FileMetadata fileMetadata : listing.getFiles()) {
+         Path subpath = keyToPath(fileMetadata.getKey());
+         String relativePath = pathUri.relativize(subpath.toUri()).getPath();
+-        if (relativePath.endsWith(FOLDER_SUFFIX)) {
+-          status.add(newDirectory(new Path(absolutePath,
+-              relativePath.substring(0,
+-                  relativePath.indexOf(FOLDER_SUFFIX)))));
+-        } else {
++
++        if (fileMetadata.getKey().equals(key + "/")) {
++          // this is just the directory we have been asked to list
++        }
++        else if (relativePath.endsWith(FOLDER_SUFFIX)) {
++          status.add(newDirectory(new Path(
++              absolutePath,
++              relativePath.substring(0, relativePath.indexOf(FOLDER_SUFFIX)))));
++        }
++        else {
+           status.add(newFile(fileMetadata, subpath));
+         }
+       }
+@@ -426,7 +472,7 @@ public class NativeS3FileSystem extends FileSystem {
+       return null;
+     }
+     
+-    return status.toArray(new FileStatus[0]);
++    return status.toArray(new FileStatus[status.size()]);
+   }
+   
+   private FileStatus newFile(FileMetadata meta, Path path) {
+@@ -459,10 +505,11 @@ public class NativeS3FileSystem extends FileSystem {
+       FileStatus fileStatus = getFileStatus(f);
+       if (!fileStatus.isDir()) {
+         throw new IOException(String.format(
+-            "Can't make directory for path %s since it is a file.", f));
++            "Can't make directory for path '%s' since it is a file.", f));
+ 
+       }
+     } catch (FileNotFoundException e) {
++      LOG.debug("Making dir '" + f + "' in S3");
+       String key = pathToKey(f) + FOLDER_SUFFIX;
+       store.storeEmptyFile(key);    
+     }
+@@ -471,9 +518,11 @@ public class NativeS3FileSystem extends FileSystem {
+ 
+   @Override
+   public FSDataInputStream open(Path f, int bufferSize) throws IOException {
+-    if (!exists(f)) {
+-      throw new FileNotFoundException(f.toString());
++    FileStatus fs = getFileStatus(f); // will throw if the file doesn't exist
++    if (fs.isDir()) {
++      throw new IOException("'" + f + "' is a directory");
+     }
++    LOG.info("Opening '" + f + "' for reading");
+     Path absolutePath = makeAbsolute(f);
+     String key = pathToKey(absolutePath);
+     return new FSDataInputStream(new BufferedFSInputStream(
+@@ -483,47 +532,16 @@ public class NativeS3FileSystem extends FileSystem {
+   // rename() and delete() use this method to ensure that the parent directory
+   // of the source does not vanish.
+   private void createParent(Path path) throws IOException {
+-      Path parent = path.getParent();
+-      if (parent != null) {
+-          String key = pathToKey(makeAbsolute(parent));
+-          if (key.length() > 0) {
+-              store.storeEmptyFile(key + FOLDER_SUFFIX);
+-          }
++    Path parent = path.getParent();
++    if (parent != null) {
++      String key = pathToKey(makeAbsolute(parent));
++      if (key.length() > 0) {
++          store.storeEmptyFile(key + FOLDER_SUFFIX);
+       }
++    }
+   }
+   
+-  private boolean existsAndIsFile(Path f) throws IOException {
+-    
+-    Path absolutePath = makeAbsolute(f);
+-    String key = pathToKey(absolutePath);
+-    
+-    if (key.length() == 0) {
+-        return false;
+-    }
+-    
+-    FileMetadata meta = store.retrieveMetadata(key);
+-    if (meta != null) {
+-        // S3 object with given key exists, so this is a file
+-        return true;
+-    }
+     
+-    if (store.retrieveMetadata(key + FOLDER_SUFFIX) != null) {
+-        // Signifies empty directory
+-        return false;
+-    }
+-    
+-    PartialListing listing = store.list(key, 1, null);
+-    if (listing.getFiles().length > 0 ||
+-        listing.getCommonPrefixes().length > 0) {
+-        // Non-empty directory
+-        return false;
+-    }
+-    
+-    throw new FileNotFoundException(absolutePath +
+-        ": No such file or directory");
+-}
+-
+-
+   @Override
+   public boolean rename(Path src, Path dst) throws IOException {
+ 
+@@ -534,60 +552,74 @@ public class NativeS3FileSystem extends FileSystem {
+       return false;
+     }
+ 
++    final String debugPreamble = "Renaming '" + src + "' to '" + dst + "' - ";
++
+     // Figure out the final destination
+     String dstKey;
+     try {
+-      boolean dstIsFile = existsAndIsFile(dst);
++      boolean dstIsFile = !getFileStatus(dst).isDir();
+       if (dstIsFile) {
+-        // Attempting to overwrite a file using rename()
++        LOG.debug(debugPreamble + "returning false as dst is an already existing file");
+         return false;
+       } else {
+-        // Move to within the existent directory
++        LOG.debug(debugPreamble + "using dst as output directory");
+         dstKey = pathToKey(makeAbsolute(new Path(dst, src.getName())));
+       }
+     } catch (FileNotFoundException e) {
+-      // dst doesn't exist, so we can proceed
++      LOG.debug(debugPreamble + "using dst as output destination");
+       dstKey = pathToKey(makeAbsolute(dst));
+       try {
+         if (!getFileStatus(dst.getParent()).isDir()) {
+-          return false; // parent dst is a file
++          LOG.debug(debugPreamble + "returning false as dst parent exists and is a file");
++          return false;
+         }
+       } catch (FileNotFoundException ex) {
+-        return false; // parent dst does not exist
++        LOG.debug(debugPreamble + "returning false as dst parent does not exist");
++        return false;
+       }
+     }
+ 
++    boolean srcIsFile;
+     try {
+-      boolean srcIsFile = existsAndIsFile(src);
+-      if (srcIsFile) {
+-        store.rename(srcKey, dstKey);
+-      } else {
+-        // Move the folder object
+-        store.delete(srcKey + FOLDER_SUFFIX);
+-        store.storeEmptyFile(dstKey + FOLDER_SUFFIX);
+-
+-        // Move everything inside the folder
+-        String priorLastKey = null;
+-        do {
+-          PartialListing listing = store.listAll(srcKey, S3_MAX_LISTING_LENGTH,
+-              priorLastKey);
+-          for (FileMetadata file : listing.getFiles()) {
+-            store.rename(file.getKey(), dstKey
+-                + file.getKey().substring(srcKey.length()));
+-          }
+-          priorLastKey = listing.getPriorLastKey();
+-        } while (priorLastKey != null);
+-      }
+-
+-      createParent(src);
+-      return true;
+-
++      srcIsFile = !getFileStatus(src).isDir();
+     } catch (FileNotFoundException e) {
+-      // Source file does not exist;
++      LOG.debug(debugPreamble + "returning false as src does not exist");
+       return false;
+     }
+-  }
++    if (srcIsFile) {
++      LOG.debug(debugPreamble + "src is file, so doing copy then delete in S3");
++      store.copy(srcKey, dstKey);
++      store.delete(srcKey);
++    } else {
++      LOG.debug(debugPreamble + "src is directory, so copying contents");
++      store.storeEmptyFile(dstKey + FOLDER_SUFFIX);
++
++      List<String> keysToDelete = new ArrayList<String>();
++      String priorLastKey = null;
++      do {
++        PartialListing listing = store.list(srcKey, S3_MAX_LISTING_LENGTH, priorLastKey, true);
++        for (FileMetadata file : listing.getFiles()) {
++          keysToDelete.add(file.getKey());
++          store.copy(file.getKey(), dstKey + file.getKey().substring(srcKey.length()));
++        }
++        priorLastKey = listing.getPriorLastKey();
++      } while (priorLastKey != null);
++
++      LOG.debug(debugPreamble + "all files in src copied, now removing src files");
++      for (String key: keysToDelete) {
++        store.delete(key);
++      }
+ 
++      try {
++        store.delete(srcKey + FOLDER_SUFFIX);
++      } catch (FileNotFoundException e) {
++        //this is fine, we don't require a marker
++      }
++      LOG.debug(debugPreamble + "done");
++    }
++
++    return true;
++  }
+ 
+   /**
+    * Set the working directory to the given directory.
+@@ -606,5 +638,4 @@ public class NativeS3FileSystem extends FileSystem {
+   public long getDefaultBlockSize() {
+     return getConf().getLong("fs.s3n.block.size", 64 * 1024 * 1024);
+   }
+-
+ }
+diff --git a/src/test/org/apache/hadoop/fs/s3native/InMemoryNativeFileSystemStore.java b/src/test/org/apache/hadoop/fs/s3native/InMemoryNativeFileSystemStore.java
+index d3086da..6b88656 100644
+--- a/src/test/org/apache/hadoop/fs/s3native/InMemoryNativeFileSystemStore.java
++++ b/src/test/org/apache/hadoop/fs/s3native/InMemoryNativeFileSystemStore.java
+@@ -19,6 +19,7 @@
+ package org.apache.hadoop.fs.s3native;
+ 
+ import static org.apache.hadoop.fs.s3native.NativeS3FileSystem.PATH_DELIMITER;
++
+ import java.io.BufferedInputStream;
+ import java.io.BufferedOutputStream;
+ import java.io.ByteArrayOutputStream;
+@@ -122,19 +123,13 @@ class InMemoryNativeFileSystemStore implements NativeFileSystemStore {
+ 
+   public PartialListing list(String prefix, int maxListingLength)
+       throws IOException {
+-    return list(prefix, maxListingLength, null);
++    return list(prefix, maxListingLength, null, false);
+   }
+ 
+   public PartialListing list(String prefix, int maxListingLength,
+-      String priorLastKey) throws IOException {
+-
+-    return list(prefix, PATH_DELIMITER, maxListingLength, priorLastKey);
+-  }
+-
+-  public PartialListing listAll(String prefix, int maxListingLength,
+-      String priorLastKey) throws IOException {
++      String priorLastKey, boolean recursive) throws IOException {
+ 
+-    return list(prefix, null, maxListingLength, priorLastKey);
++    return list(prefix, recursive ? null : PATH_DELIMITER, maxListingLength, priorLastKey);
+   }
+ 
+   private PartialListing list(String prefix, String delimiter,
+@@ -174,9 +169,9 @@ class InMemoryNativeFileSystemStore implements NativeFileSystemStore {
+     dataMap.remove(key);
+   }
+ 
+-  public void rename(String srcKey, String dstKey) throws IOException {
+-    metadataMap.put(dstKey, metadataMap.remove(srcKey));
+-    dataMap.put(dstKey, dataMap.remove(srcKey));
++  public void copy(String srcKey, String dstKey) throws IOException {
++    metadataMap.put(dstKey, metadataMap.get(srcKey));
++    dataMap.put(dstKey, dataMap.get(srcKey));
+   }
+   
+   public void purge(String prefix) throws IOException {
+diff --git a/src/test/org/apache/hadoop/fs/s3native/NativeS3FileSystemContractBaseTest.java b/src/test/org/apache/hadoop/fs/s3native/NativeS3FileSystemContractBaseTest.java
+index db11374..d77217e 100644
+--- a/src/test/org/apache/hadoop/fs/s3native/NativeS3FileSystemContractBaseTest.java
++++ b/src/test/org/apache/hadoop/fs/s3native/NativeS3FileSystemContractBaseTest.java
+@@ -75,4 +75,77 @@ public abstract class NativeS3FileSystemContractBaseTest
+     fs.getFileStatus(file).getBlockSize());
+   }
+ 
++
++  private void createTestFiles(String base) throws IOException {
++    store.storeEmptyFile(base + "/file1");
++    store.storeEmptyFile(base + "/dir/file2");
++    store.storeEmptyFile(base + "/dir/file3");
++  }
++
++  public void testDirWithDifferentMarkersWorks() throws Exception {
++
++    for (int i = 0; i < 3; i++) {
++      String base = "test/hadoop" + i;
++      Path path = path("/" + base);
++
++      createTestFiles(base);
++
++      if (i == 0 ) {
++        //do nothing, we are testing correctness with no markers
++      }
++      else if (i == 1) {
++        // test for _$folder$ marker
++        store.storeEmptyFile(base + "_$folder$");
++        store.storeEmptyFile(base + "/dir_$folder$");
++      }
++      else if (i == 2) {
++        // test the end slash file marker
++        store.storeEmptyFile(base + "/");
++        store.storeEmptyFile(base + "/dir/");
++      }
++      else if (i == 3) {
++        // test both markers
++        store.storeEmptyFile(base + "_$folder$");
++        store.storeEmptyFile(base + "/dir_$folder$");
++        store.storeEmptyFile(base + "/");
++        store.storeEmptyFile(base + "/dir/");
++      }
++
++      assertTrue(fs.getFileStatus(path).isDir());
++      assertEquals(2, fs.listStatus(path).length);
++    }
++  }
++
++  public void testDeleteWithNoMarker() throws Exception {
++    String base = "test/hadoop";
++    Path path = path("/" + base);
++
++    createTestFiles(base);
++
++    fs.delete(path, true);
++
++    path = path("/test");
++    assertTrue(fs.getFileStatus(path).isDir());
++    assertEquals(0, fs.listStatus(path).length);
++  }
++
++  public void testRenameWithNoMarker() throws Exception {
++    String base = "test/hadoop";
++    Path dest = path("/test/hadoop2");
++
++    createTestFiles(base);
++
++    fs.rename(path("/" + base), dest);
++
++    Path path = path("/test");
++    assertTrue(fs.getFileStatus(path).isDir());
++    assertEquals(1, fs.listStatus(path).length);
++    assertTrue(fs.getFileStatus(dest).isDir());
++    assertEquals(2, fs.listStatus(dest).length);
++  }
++
++  public void testEmptyFile() throws Exception {
++    store.storeEmptyFile("test/hadoop/file1");
++    fs.open(path("/test/hadoop/file1")).close();
++  }
+ }
+-- 
+1.7.0.4
+

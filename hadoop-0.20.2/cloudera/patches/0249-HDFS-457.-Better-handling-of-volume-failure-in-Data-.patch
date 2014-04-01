@@ -1,0 +1,450 @@
+From 4a925fe53a2015e504cd8c8796e0e590d22019c4 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Thu, 22 Apr 2010 14:41:08 -0700
+Subject: [PATCH 0249/1179] HDFS-457. Better handling of volume failure in Data Node storage.
+
+Description: Current implementation shuts DataNode down completely when one of the configured volumes of the storage fails. This is rather wasteful behavior because it decreases utilization (good storage becomes unavailable) and imposes extra load on the system (replication of the blocks from the good volumes). These problems will become even more prominent when we move to mixed (heterogeneous) clusters with many more volumes per Data Node.
+
+Reason: Improvement
+Author: Eli Collins
+Ref: CDH-472
+---
+ .../apache/hadoop/hdfs/protocol/FSConstants.java   |    1 +
+ .../hadoop/hdfs/server/datanode/BlockReceiver.java |   16 ++
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   47 +++++--
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |  159 ++++++++++++++++++--
+ .../hdfs/server/datanode/FSDatasetInterface.java   |    6 +
+ .../hadoop/hdfs/server/namenode/NameNode.java      |    2 +
+ .../hdfs/server/protocol/DatanodeProtocol.java     |    3 +-
+ .../hdfs/server/datanode/SimulatedFSDataset.java   |    4 +
+ 8 files changed, 213 insertions(+), 25 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/FSConstants.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/FSConstants.java
+index 044dc44..bf59c7b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/FSConstants.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/FSConstants.java
+@@ -56,6 +56,7 @@ public interface FSConstants {
+   public static final int DEFAULT_DATA_SOCKET_SIZE = 128 * 1024;
+ 
+   public static final int SIZE_OF_INTEGER = Integer.SIZE / Byte.SIZE;
++  public static final int MIN_NUM_OF_VALID_VOLUMES = 1;// for a DN to run
+ 
+   // SafeMode actions
+   public enum SafeModeAction{ SAFEMODE_LEAVE, SAFEMODE_ENTER, SAFEMODE_GET; }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
+index e3c052b..76a547a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
+@@ -116,6 +116,9 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+       
+       // check if there is a disk error
+       IOException cause = FSDataset.getCauseIfDiskError(ioe);
++      DataNode.LOG.warn("IOException in BlockReceiver constructor. Cause is ",
++          cause);
++      
+       if (cause != null) { // possible disk error
+         ioe = cause;
+         datanode.checkDiskError(ioe); // may throw an exception here
+@@ -827,7 +830,14 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+                 DataTransferProtocol.OP_STATUS_SUCCESS}).write(replyOut);
+             replyOut.flush();
+         } catch (Exception e) {
++          LOG.warn("IOException in BlockReceiver.lastNodeRun: ", e);
+           if (running) {
++            try {
++              datanode.checkDiskError(e); // may throw an exception here
++            } catch (IOException ioe) {
++              LOG.warn("DataNode.chekDiskError failed in lastDataNodeRun with: ",
++                  ioe);
++            }
+             LOG.info("PacketResponder " + block + " " + numTargets + 
+                      " Exception " + StringUtils.stringifyException(e));
+             running = false;
+@@ -994,7 +1004,13 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+               running = false;
+             }
+         } catch (IOException e) {
++          LOG.warn("IOException in BlockReceiver.run(): ", e);
+           if (running) {
++            try {
++              datanode.checkDiskError(e); // may throw an exception here
++            } catch (IOException ioe) {
++              LOG.warn("DataNode.chekDiskError failed in run() with: ", ioe);
++            }
+             LOG.info("PacketResponder " + block + " " + numTargets + 
+                      " Exception " + StringUtils.stringifyException(e));
+             running = false;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 12b8cea..4ee710e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -651,11 +651,14 @@ public class DataNode extends Configured
+   }
+   
+   
+-  /* Check if there is no space in disk or the disk is read-only
+-   *  when IOException occurs. 
+-   * If so, handle the error */
+-  protected void checkDiskError( IOException e ) throws IOException {
+-    if (e.getMessage() != null && 
++  /** Check if there is no space in disk 
++   *  @param e that caused this checkDiskError call
++   **/
++  protected void checkDiskError(Exception e ) throws IOException {
++    
++    LOG.warn("checkDiskError: exception: ", e);
++    
++    if (e.getMessage() != null &&
+         e.getMessage().startsWith("No space left on device")) {
+       throw new DiskOutOfSpaceException("No space left on device");
+     } else {
+@@ -663,8 +666,11 @@ public class DataNode extends Configured
+     }
+   }
+   
+-  /* Check if there is no disk space and if so, handle the error*/
+-  protected void checkDiskError( ) throws IOException {
++  /**
++   *  Check if there is a disk failure and if so, handle the error
++   *
++   **/
++  protected void checkDiskError( ) {
+     try {
+       data.checkDataDir();
+     } catch(DiskErrorException de) {
+@@ -673,13 +679,31 @@ public class DataNode extends Configured
+   }
+   
+   private void handleDiskError(String errMsgr) {
+-    LOG.warn("DataNode is shutting down.\n" + errMsgr);
+-    shouldRun = false;
++    boolean hasEnoughResource = data.hasEnoughResource();
++    LOG.warn("DataNode.handleDiskError: Keep Running: " + hasEnoughResource);
++    
++    //if hasEnoughtResource = true - more volumes are available, so we don't want 
++    // to shutdown DN completely and don't want NN to remove it.
++    int dp_error = DatanodeProtocol.DISK_ERROR;
++    if(hasEnoughResource == false) {
++      // DN will be shutdown and NN should remove it
++      dp_error = DatanodeProtocol.FATAL_DISK_ERROR;
++    }
++    //inform NameNode
+     try {
+       namenode.errorReport(
+-                           dnRegistration, DatanodeProtocol.DISK_ERROR, errMsgr);
++                           dnRegistration, dp_error, errMsgr);
+     } catch(IOException ignored) {              
+     }
++    
++    
++    if(hasEnoughResource) {
++      scheduleBlockReport(0);
++      return; // do not shutdown
++    }
++    
++    LOG.warn("DataNode is shutting down.\n" + errMsgr);
++    shouldRun = false; 
+   }
+     
+   /** Number of concurrent xceivers per node. */
+@@ -1180,6 +1204,9 @@ public class DataNode extends Configured
+       } catch (IOException ie) {
+         LOG.warn(dnRegistration + ":Failed to transfer " + b + " to " + targets[0].getName()
+             + " got " + StringUtils.stringifyException(ie));
++        // check if there are any disk problem
++        datanode.checkDiskError();
++        
+       } finally {
+         xmitsInProgress.getAndDecrement();
+         IOUtils.closeStream(blockSender);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index d41950f..6a324a4 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -17,24 +17,40 @@
+  */
+ package org.apache.hadoop.hdfs.server.datanode;
+ 
+-import java.io.*;
+-import java.util.*;
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.FileOutputStream;
++import java.io.FilenameFilter;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.RandomAccessFile;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.HashMap;
++import java.util.Iterator;
++import java.util.List;
++import java.util.Map;
++import java.util.Random;
++import java.util.TreeSet;
+ 
+ import javax.management.NotCompliantMBeanException;
+ import javax.management.ObjectName;
+ import javax.management.StandardMBean;
+ 
+-import org.apache.hadoop.fs.*;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.DF;
++import org.apache.hadoop.fs.DU;
++import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.hdfs.protocol.Block;
+ import org.apache.hadoop.hdfs.protocol.FSConstants;
++import org.apache.hadoop.hdfs.server.datanode.metrics.FSDatasetMBean;
++import org.apache.hadoop.hdfs.server.protocol.InterDatanodeProtocol;
+ import org.apache.hadoop.metrics.util.MBeanUtil;
+ import org.apache.hadoop.util.DataChecksum;
+ import org.apache.hadoop.util.DiskChecker;
+ import org.apache.hadoop.util.DiskChecker.DiskErrorException;
+ import org.apache.hadoop.util.DiskChecker.DiskOutOfSpaceException;
+-import org.apache.hadoop.conf.*;
+-import org.apache.hadoop.hdfs.server.datanode.metrics.FSDatasetMBean;
+-import org.apache.hadoop.hdfs.server.protocol.InterDatanodeProtocol;
++import org.mortbay.log.Log;
+ 
+ /**************************************************
+  * FSDataset manages a set of data blocks.  Each block
+@@ -485,9 +501,25 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+     FSVolumeSet(FSVolume[] volumes) {
+       this.volumes = volumes;
+     }
++    
++    private int numberOfVolumes() {
++      return volumes.length;
++    }
+       
+     synchronized FSVolume getNextVolume(long blockSize) throws IOException {
++      
++      if(volumes.length < 1) {
++        throw new DiskOutOfSpaceException("No more available volumes");
++      }
++      
++      // since volumes could've been removed because of the failure
++      // make sure we are not out of bounds
++      if(curVolume >= volumes.length) {
++        curVolume = 0;
++      }
++      
+       int startVolume = curVolume;
++      
+       while (true) {
+         FSVolume volume = volumes[curVolume];
+         curVolume = (curVolume + 1) % volumes.length;
+@@ -534,10 +566,46 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+       }
+     }
+       
+-    synchronized void checkDirs() throws DiskErrorException {
++    /**
++     * goes over all the volumes and checkDir eachone of them
++     * if one throws DiskErrorException - removes from the list of active 
++     * volumes. 
++     * @return list of all the removed volumes
++     */
++    synchronized List<FSVolume> checkDirs() {
++      
++      ArrayList<FSVolume> removed_vols = null;  
++      
+       for (int idx = 0; idx < volumes.length; idx++) {
+-        volumes[idx].checkDirs();
++        FSVolume fsv = volumes[idx];
++        try {
++          fsv.checkDirs();
++        } catch (DiskErrorException e) {
++          DataNode.LOG.warn("Removing failed volume " + fsv + ": ",e);
++          if(removed_vols == null) {
++            removed_vols = new ArrayList<FSVolume>(1);
++          }
++          removed_vols.add(volumes[idx]);
++          volumes[idx] = null; //remove the volume
++        }
++      }
++      
++      // repair array - copy non null elements
++      int removed_size = (removed_vols==null)? 0 : removed_vols.size();
++      if(removed_size > 0) {
++        FSVolume fsvs[] = new FSVolume [volumes.length-removed_size];
++        for(int idx=0,idy=0; idx<volumes.length; idx++) {
++          if(volumes[idx] != null) {
++            fsvs[idy] = volumes[idx];
++            idy++;
++          }
++        }
++        volumes = fsvs; // replace array of volumes
+       }
++      Log.info("Completed FSVolumeSet.checkDirs. Removed=" + removed_size + 
++          "volumes. List of current volumes: " +   toString());
++      
++      return removed_vols;
+     }
+       
+     public String toString() {
+@@ -700,7 +768,14 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+   public long getDfsUsed() throws IOException {
+     return volumes.getDfsUsed();
+   }
+-  
++  /**
++   * Return true - if there are still valid volumes 
++   * on the DataNode
++   */
++  public boolean hasEnoughResource(){
++    return volumes.numberOfVolumes() >= MIN_NUM_OF_VALID_VOLUMES;
++  }
++
+   /**
+    * Return total capacity, used and unused
+    */
+@@ -1226,17 +1301,32 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+    * Check whether the given block is a valid one.
+    */
+   public boolean isValidBlock(Block b) {
+-    return validateBlockFile(b) != null;
++    File f = null;;
++    try {
++      f = validateBlockFile(b);
++    } catch(IOException e) {
++      Log.warn("Block " + b + " is not valid:",e);
++    }
++    
++    return f != null;
+   }
+ 
+   /**
+    * Find the file corresponding to the block and return it if it exists.
+    */
+-  File validateBlockFile(Block b) {
++  File validateBlockFile(Block b) throws IOException {
+     //Should we check for metadata file too?
+     File f = getFile(b);
+-    if(f != null && f.exists())
+-      return f;
++    
++    if(f != null ) {
++      if(f.exists())
++        return f;
++   
++      // if file is not null, but doesn't exist - possibly disk failed
++      DataNode datanode = DataNode.getDataNode();
++      datanode.checkDiskError();
++    }
++    
+     if (InterDatanodeProtocol.LOG.isDebugEnabled()) {
+       InterDatanodeProtocol.LOG.debug("b=" + b + ", f=" + f);
+     }
+@@ -1375,10 +1465,51 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+ 
+   /**
+    * check if a data directory is healthy
++   * if some volumes failed - make sure to remove all the blocks that belong
++   * to these volumes
+    * @throws DiskErrorException
+    */
+   public void checkDataDir() throws DiskErrorException {
+-    volumes.checkDirs();
++    long total_blocks=0, removed_blocks=0;
++    List<FSVolume> failed_vols =  volumes.checkDirs();
++    
++    //if there no failed volumes return
++    if(failed_vols == null) 
++      return;
++    
++    // else 
++    // remove related blocks
++    long mlsec = System.currentTimeMillis();
++    synchronized (this) {
++      Iterator<Block> ib = volumeMap.keySet().iterator();
++      while(ib.hasNext()) {
++        Block b = ib.next();
++        total_blocks ++;
++        // check if the volume block belongs to still valid
++        FSVolume vol = volumeMap.get(b).getVolume();
++        for(FSVolume fv: failed_vols) {
++          if(vol == fv) {
++            DataNode.LOG.warn("removing block " + b.getBlockId() + " from vol " 
++                + vol.dataDir.dir.getAbsolutePath());
++            ib.remove();
++            removed_blocks++;
++            break;
++          }
++        }
++      }
++    } // end of sync
++    mlsec = System.currentTimeMillis() - mlsec;
++    DataNode.LOG.warn(">>>>>>>>>>>>Removed " + removed_blocks + " out of " + total_blocks +
++        "(took " + mlsec + " millisecs)");
++
++    // report the error
++    StringBuilder sb = new StringBuilder();
++    for(FSVolume fv : failed_vols) {
++      sb.append(fv.dataDir.dir.getAbsolutePath() + ";");
++    }
++
++    throw  new DiskErrorException("DataNode failed volumes:" + sb);
++  
+   }
+     
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetInterface.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetInterface.java
+index 56070ff..60be87a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetInterface.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetInterface.java
+@@ -264,4 +264,10 @@ public interface FSDatasetInterface extends FSDatasetMBean {
+    * @throws IOException
+    */
+   public void validateBlockMetadata(Block b) throws IOException;
++
++  /**
++   * checks how many valid storage volumes are there in the DataNode
++   * @return true if more then minimum valid volumes left in the FSDataSet
++   */
++  public boolean hasEnoughResource();
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index e281c7b..24c2879 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -790,6 +790,8 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     }
+     verifyRequest(nodeReg);
+     if (errorCode == DatanodeProtocol.DISK_ERROR) {
++      LOG.warn("Volume failed on " + dnName); 
++    } else if (errorCode == DatanodeProtocol.FATAL_DISK_ERROR) {
+       namesystem.removeDatanode(nodeReg);            
+     }
+   }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
+index 2f92a2e..0af90e6 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
+@@ -42,8 +42,9 @@ public interface DatanodeProtocol extends VersionedProtocol {
+   
+   // error code
+   final static int NOTIFY = 0;
+-  final static int DISK_ERROR = 1;
++  final static int DISK_ERROR = 1; // there are still valid volumes on DN
+   final static int INVALID_BLOCK = 2;
++  final static int FATAL_DISK_ERROR = 3; // no valid volumes left on DN
+ 
+   /**
+    * Determines actions that data node should perform 
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/SimulatedFSDataset.java b/src/test/org/apache/hadoop/hdfs/server/datanode/SimulatedFSDataset.java
+index 5207cb7..62f3a6d 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/SimulatedFSDataset.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/SimulatedFSDataset.java
+@@ -655,4 +655,8 @@ public class SimulatedFSDataset  implements FSConstants, FSDatasetInterface, Con
+   public String getStorageInfo() {
+     return "Simulated FSDataset-" + storageId;
+   }
++  
++  public boolean hasEnoughResource() {
++    return true;
++  }
+ }
+-- 
+1.7.0.4
+

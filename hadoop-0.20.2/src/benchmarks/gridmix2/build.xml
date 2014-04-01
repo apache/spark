@@ -1,0 +1,67 @@
+<?xml version="1.0" ?>
+<project default="main" basedir=".">
+    <property name="Name" value="gridmix"/>
+    <property name="version" value="0.1"/>
+    <property name="final.name" value="${name}-${version}"/>
+    <property name="year" value="2008"/>	
+	<property name="hadoop.dir" value="${basedir}/../../../"/>
+    <property name="lib.dir" value="${hadoop.dir}/lib"/>
+    <property name="src.dir" value="${basedir}/src"/>
+    <property name="conf.dir" value="${basedir}/conf"/>
+    <property name="docs.dir" value="${basedir}/docs"/>
+    <property name="build.dir" value="${basedir}/build"/>
+    <property name="dist.dir" value="${basedir}/dist"/>
+    <property name="build.classes" value="${build.dir}/classes"/>
+	
+    <target name="init">
+        <mkdir dir="${build.dir}"/>
+        <mkdir dir="${dist.dir}"/>
+    </target>
+
+    <target name="main" depends="init, compile, compress" description="Main target">
+        <echo>
+            Building the .jar files.
+        </echo>
+    </target>
+  
+    <target name="compile" depends="init" description="Compilation target">
+        <javac srcdir="src/java/" destdir="${build.dir}">
+        	<classpath refid="classpath" />
+        </javac>
+    </target>
+	
+
+	 <target name="compress" depends="compile" description="Compression target">
+  	      <jar jarfile="${build.dir}/gridmix.jar" basedir="${build.dir}" includes="**/*.class" />
+                   
+
+        <copy todir="." includeEmptyDirs="false">
+            <fileset dir="${build.dir}">
+	        <exclude name="**" />
+	        <include name="**/*.jar" />
+            </fileset>
+        </copy>
+    </target>
+
+  
+    <!-- ================================================================== -->
+    <!-- Clean.  Delete the build files, and their directories              -->
+    <!-- ================================================================== -->
+    <target name="clean" description="Clean.  Delete the build files, and their directories">
+      <delete dir="${build.dir}"/>
+      <delete dir="${dist.dir}"/>
+    </target>
+
+    <!-- the normal classpath -->
+    <path id="classpath">
+	    <pathelement location="${build.classes}"/>
+	    <fileset dir="${lib.dir}">
+	       <include name="*.jar" />
+	       <exclude name="**/excluded/" />
+	    </fileset>
+	    <fileset dir="${hadoop.dir}">
+	       <include name="**.jar" />
+           <include name="contrib/streaming/*.jar" />
+	    </fileset>
+    </path>
+</project>

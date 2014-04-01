@@ -1,0 +1,35 @@
+From 5d85605d7f324d9bb5751bf9e1733170dd97a911 Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Thu, 6 Jan 2011 12:21:40 -0800
+Subject: [PATCH 0755/1179] CLOUDERA-BUILD. Part of MAPREDUCE-157 to fix doubly-escaped job history links
+
+Reason: Bug fix
+Author: Tom White
+Ref: CDH-2283
+---
+ src/webapps/job/jobhistory.jsp |    5 +----
+ 1 files changed, 1 insertions(+), 4 deletions(-)
+
+diff --git a/src/webapps/job/jobhistory.jsp b/src/webapps/job/jobhistory.jsp
+index 58eaa18..f29e96e 100644
+--- a/src/webapps/job/jobhistory.jsp
++++ b/src/webapps/job/jobhistory.jsp
+@@ -242,14 +242,11 @@ window.location.href = url;
+         displayedJobs.add(jobId);
+       }
+       
+-      // Encode the logfile name again to cancel the decoding done by the browser
+-      String encodedJobFileName = 
+-          JobHistory.JobInfo.encodeJobHistoryFileName(jobFile.getName());
+ %>
+ <center>
+ <%	
+       printJob(trackerHostName, trackerStartTime, jobId,
+-               jobName, userName, new Path(jobFile.getParent(), encodedJobFileName), 
++               jobName, userName, jobFile, 
+                out) ; 
+ %>
+ </center> 
+-- 
+1.7.0.4
+

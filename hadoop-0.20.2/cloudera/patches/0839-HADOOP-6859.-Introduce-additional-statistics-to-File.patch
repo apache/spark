@@ -1,0 +1,106 @@
+From 807e918943e9f17d4ab7912bdb9cc90970c02ef6 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:52 -0800
+Subject: [PATCH 0839/1179] HADOOP-6859. Introduce additional statistics to FileSystem to track file system operations.
+
+Author: Suresh Srinivas
+Ref: CDH-2622
+---
+ src/core/org/apache/hadoop/fs/FileSystem.java |   59 ++++++++++++++++++++++++-
+ 1 files changed, 57 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/FileSystem.java b/src/core/org/apache/hadoop/fs/FileSystem.java
+index ee4b1ac..1859bd6 100644
+--- a/src/core/org/apache/hadoop/fs/FileSystem.java
++++ b/src/core/org/apache/hadoop/fs/FileSystem.java
+@@ -32,6 +32,7 @@ import java.util.List;
+ import java.util.Map;
+ import java.util.Set;
+ import java.util.TreeSet;
++import java.util.concurrent.atomic.AtomicInteger;
+ import java.util.concurrent.atomic.AtomicLong;
+ import java.util.regex.Pattern;
+ 
+@@ -1710,6 +1711,9 @@ public abstract class FileSystem extends Configured implements Closeable {
+     private final String scheme;
+     private AtomicLong bytesRead = new AtomicLong();
+     private AtomicLong bytesWritten = new AtomicLong();
++    private AtomicInteger readOps = new AtomicInteger();
++    private AtomicInteger largeReadOps = new AtomicInteger();
++    private AtomicInteger writeOps = new AtomicInteger();
+     
+     public Statistics(String scheme) {
+       this.scheme = scheme;
+@@ -1732,6 +1736,30 @@ public abstract class FileSystem extends Configured implements Closeable {
+     }
+     
+     /**
++     * Increment the number of read operations
++     * @param count number of read operations
++     */
++    public void incrementReadOps(int count) {
++      readOps.getAndAdd(count);
++    }
++
++    /**
++     * Increment the number of large read operations
++     * @param count number of large read operations
++     */
++    public void incrementLargeReadOps(int count) {
++      largeReadOps.getAndAdd(count);
++    }
++
++    /**
++     * Increment the number of write operations
++     * @param count number of write operations
++     */
++    public void incrementWriteOps(int count) {
++      writeOps.getAndAdd(count);
++    }
++
++    /**
+      * Get the total number of bytes read
+      * @return the number of bytes
+      */
+@@ -1747,9 +1775,36 @@ public abstract class FileSystem extends Configured implements Closeable {
+       return bytesWritten.get();
+     }
+     
++    /**
++     * Get the number of file system read operations such as list files
++     * @return number of read operations
++     */
++    public int getReadOps() {
++      return readOps.get() + largeReadOps.get();
++    }
++
++    /**
++     * Get the number of large file system read operations such as list files
++     * under a large directory
++     * @return number of large read operations
++     */
++    public int getLargeReadOps() {
++      return largeReadOps.get();
++    }
++
++    /**
++     * Get the number of file system write operations such as create, append 
++     * rename etc.
++     * @return number of write operations
++     */
++    public int getWriteOps() {
++      return writeOps.get();
++    }
++
+     public String toString() {
+-      return bytesRead + " bytes read and " + bytesWritten + 
+-             " bytes written";
++      return bytesRead + " bytes read, " + bytesWritten + " bytes written, "
++          + readOps + " read ops, " + largeReadOps + " large read ops, "
++          + writeOps + " write ops";
+     }
+     
+     /**
+-- 
+1.7.0.4
+

@@ -1,0 +1,96 @@
+From 80e7cd19dd23f552efd0bdf1f8b0509aa6b4b3d3 Mon Sep 17 00:00:00 2001
+From: Andrew Bayer <andrew.bayer@gmail.com>
+Date: Mon, 21 Feb 2011 10:32:23 -0800
+Subject: [PATCH 0889/1179] CLOUDERA-BUILD. Using local Maven repo as primary first in chain.
+
+Tweaks to pre-fetch dependencies into ~/.m2/repository before ant
+build is run, with Ivy configured to get from there before trying
+Maven Central.
+---
+ cloudera/do-release-build                         |    8 +++++++-
+ cloudera/maven-packaging/templates/build.template |    1 +
+ ivy/ivysettings.xml                               |    6 ++++++
+ 3 files changed, 14 insertions(+), 1 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index 37072c4..929c519 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -47,10 +47,13 @@ fi
+ BIN_DIR=$(readlink -f $(dirname $0))
+ RELEASE_DIR=$BIN_DIR/..
+ 
++cd $BIN_DIR/maven-packaging
++mvn dependency:tree
++
+ cd $RELEASE_DIR
+ 
+ if which aclocal-1.9 && which autoconf ; then
+-  ant -Dcompile.c++=true \
++  ant -Dreactor.repo=$HOME/.m2/repository -Dcompile.c++=true \
+     -Dcompile.native=true create-c++-configure
+ fi
+ 
+@@ -69,6 +72,7 @@ JAVA_HOME=$JAVA32_HOME \
+   CFLAGS=-m32 \
+   CXXFLAGS=-m32 \
+   ant \
++  -Dreactor.repo=$HOME/.m2/repository \
+   -Dlibhdfs=true \
+   -Dcompile.native=true \
+   -Dcompile.c++=true \
+@@ -79,6 +83,7 @@ JAVA_HOME=$JAVA32_HOME \
+ 
+ if [ -z "$SKIP_JDIFF" ]; then
+ ant \
++  -Dreactor.repo=$HOME/.m2/repository \
+   -Djdiff.stable=0.20.1 \
+   -Djdiff.build.dir=build/docs/jdiff-cloudera \
+   -propertyfile build.properties \
+@@ -92,6 +97,7 @@ JAVA_HOME=$JAVA64_HOME \
+   CFLAGS=-m64 \
+   CXXFLAGS=-m64 \
+   ant \
++  -Dreactor.repo=$HOME/.m2/repository \
+   -Dlibhdfs=true \
+   -Dcompile.native=true \
+   -Dcompile.c++=true \
+diff --git a/cloudera/maven-packaging/templates/build.template b/cloudera/maven-packaging/templates/build.template
+index f8442d2..5e2af35 100644
+--- a/cloudera/maven-packaging/templates/build.template
++++ b/cloudera/maven-packaging/templates/build.template
+@@ -1,2 +1,3 @@
+ version=org.apache.hadoop:hadoop-core.version
+ hadoop.version=org.apache.hadoop:hadoop-core.version
++reactor.repo=https://repository.cloudera.com/content/repositories/snapshots
+diff --git a/ivy/ivysettings.xml b/ivy/ivysettings.xml
+index a7fcd22..81bc7ca 100644
+--- a/ivy/ivysettings.xml
++++ b/ivy/ivysettings.xml
+@@ -39,10 +39,15 @@
+     value="[organisation]/[module]/[revision]/[module]-[revision]"/>
+   <property name="maven2.pattern.ext"
+     value="${maven2.pattern}.[ext]"/>
++
+   <!-- pull in the local repository -->
+   <include url="${ivy.default.conf.dir}/ivyconf-local.xml"/>
+   <settings defaultResolver="default"/>
+   <resolvers>
++    <!-- CDH build repo, the pattern attribute handles SNAPSHOT artifacts -->
++    <ibiblio name="reactor-repo" root="${reactor.repo}"
++             m2compatible="true"
++             checkmodified="true"/>
+     <ibiblio name="maven2"
+       root="${repo.maven.org}"
+       pattern="${maven2.pattern.ext}"
+@@ -54,6 +59,7 @@
+       m2compatible="true"
+       />
+     <chain name="default" dual="true">
++      <resolver ref="reactor-repo" />
+       <resolver ref="local"/>
+       <resolver ref="maven2"/>
+     </chain>
+-- 
+1.7.0.4
+

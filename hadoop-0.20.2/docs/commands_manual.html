@@ -1,0 +1,1329 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta content="Apache Forrest" name="Generator">
+<meta name="Forrest-version" content="0.8">
+<meta name="Forrest-skin-name" content="pelt">
+<title>Commands Guide</title>
+<link type="text/css" href="skin/basic.css" rel="stylesheet">
+<link media="screen" type="text/css" href="skin/screen.css" rel="stylesheet">
+<link media="print" type="text/css" href="skin/print.css" rel="stylesheet">
+<link type="text/css" href="skin/profile.css" rel="stylesheet">
+<script src="skin/getBlank.js" language="javascript" type="text/javascript"></script><script src="skin/getMenu.js" language="javascript" type="text/javascript"></script><script src="skin/fontsize.js" language="javascript" type="text/javascript"></script>
+<link rel="shortcut icon" href="images/favicon.ico">
+</head>
+<body onload="init()">
+<script type="text/javascript">ndeSetTextSize();</script>
+<div id="top">
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+<a href="http://www.apache.org/">Apache</a> &gt; <a href="http://hadoop.apache.org/">Hadoop</a> &gt; <a href="http://hadoop.apache.org/core/">Core</a><script src="skin/breadcrumbs.js" language="JavaScript" type="text/javascript"></script>
+</div>
+<!--+
+    |header
+    +-->
+<div class="header">
+<!--+
+    |start group logo
+    +-->
+<div class="grouplogo">
+<a href="http://hadoop.apache.org/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo.jpg" title="Apache Hadoop"></a>
+</div>
+<!--+
+    |end group logo
+    +-->
+<!--+
+    |start Project Logo
+    +-->
+<div class="projectlogo">
+<a href="http://hadoop.apache.org/core/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo-2.gif" title="Scalable Computing Platform"></a>
+</div>
+<!--+
+    |end Project Logo
+    +-->
+<!--+
+    |start Search
+    +-->
+<div class="searchbox">
+<form action="http://www.google.com/search" method="get" class="roundtopsmall">
+<input value="archive.cloudera.com" name="sitesearch" type="hidden"><input onFocus="getBlank (this, 'Search the site with google');" size="25" name="q" id="query" type="text" value="Search the site with google">&nbsp; 
+                    <input name="Search" value="Search" type="submit">
+</form>
+</div>
+<!--+
+    |end search
+    +-->
+<!--+
+    |start Tabs
+    +-->
+<ul id="tabs">
+<li>
+<a class="unselected" href="http://hadoop.apache.org/core/">Project</a>
+</li>
+<li>
+<a class="unselected" href="http://wiki.apache.org/hadoop">Wiki</a>
+</li>
+<li class="current">
+<a class="selected" href="index.html">Hadoop 0.20 Documentation</a>
+</li>
+</ul>
+<!--+
+    |end Tabs
+    +-->
+</div>
+</div>
+<div id="main">
+<div id="publishedStrip">
+<!--+
+    |start Subtabs
+    +-->
+<div id="level2tabs"></div>
+<!--+
+    |end Endtabs
+    +-->
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+
+             &nbsp;
+           </div>
+<!--+
+    |start Menu, mainarea
+    +-->
+<!--+
+    |start Menu
+    +-->
+<div id="menu">
+<div onclick="SwitchMenu('menu_1.1', 'skin/')" id="menu_1.1Title" class="menutitle">Getting Started</div>
+<div id="menu_1.1" class="menuitemgroup">
+<div class="menuitem">
+<a href="index.html">Overview</a>
+</div>
+<div class="menuitem">
+<a href="single_node_setup.html">Single Node Setup</a>
+</div>
+<div class="menuitem">
+<a href="cluster_setup.html">Cluster Setup</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.2', 'skin/')" id="menu_1.2Title" class="menutitle">Guides</div>
+<div id="menu_1.2" class="menuitemgroup">
+<div class="menuitem">
+<a href="HttpAuthentication.html">Authentication for Hadoop HTTP web-consoles</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_selected_1.3', 'skin/')" id="menu_selected_1.3Title" class="menutitle" style="background-image: url('skin/images/chapter_open.gif');">MapReduce</div>
+<div id="menu_selected_1.3" class="selectedmenuitemgroup" style="display: block;">
+<div class="menuitem">
+<a href="mapred_tutorial.html">MapReduce Tutorial</a>
+</div>
+<div class="menuitem">
+<a href="streaming.html">Hadoop Streaming</a>
+</div>
+<div class="menupage">
+<div class="menupagetitle">Hadoop Commands</div>
+</div>
+<div class="menuitem">
+<a href="distcp.html">DistCp</a>
+</div>
+<div class="menuitem">
+<a href="vaidya.html">Vaidya</a>
+</div>
+<div class="menuitem">
+<a href="hadoop_archives.html">Hadoop Archives</a>
+</div>
+<div class="menuitem">
+<a href="gridmix.html">Gridmix</a>
+</div>
+<div class="menuitem">
+<a href="capacity_scheduler.html">Capacity Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="fair_scheduler.html">Fair Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="hod_scheduler.html">Hod Scheduler</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.4', 'skin/')" id="menu_1.4Title" class="menutitle">HDFS</div>
+<div id="menu_1.4" class="menuitemgroup">
+<div class="menuitem">
+<a href="hdfs_user_guide.html">HDFS Users </a>
+</div>
+<div class="menuitem">
+<a href="hdfs_design.html">HDFS Architecture</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_permissions_guide.html">Permissions</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_quota_admin_guide.html">Quotas</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_imageviewer.html">Offline Image Viewer Guide</a>
+</div>
+<div class="menuitem">
+<a href="SLG_user_guide.html">Synthetic Load Generator</a>
+</div>
+<div class="menuitem">
+<a href="libhdfs.html">C API libhdfs</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.5', 'skin/')" id="menu_1.5Title" class="menutitle">Common</div>
+<div id="menu_1.5" class="menuitemgroup">
+<div class="menuitem">
+<a href="file_system_shell.html">File System Shell</a>
+</div>
+<div class="menuitem">
+<a href="service_level_auth.html">Service Level Authorization</a>
+</div>
+<div class="menuitem">
+<a href="native_libraries.html">Native Libraries</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.6', 'skin/')" id="menu_1.6Title" class="menutitle">Miscellaneous</div>
+<div id="menu_1.6" class="menuitemgroup">
+<div class="menuitem">
+<a href="Secure_Impersonation.html">Secure Impersonation</a>
+</div>
+<div class="menuitem">
+<a href="api/index.html">API Docs</a>
+</div>
+<div class="menuitem">
+<a href="jdiff/changes.html">API Changes</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/">Wiki</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/FAQ">FAQ</a>
+</div>
+<div class="menuitem">
+<a href="releasenotes.html">Release Notes</a>
+</div>
+<div class="menuitem">
+<a href="changes.html">Change Log</a>
+</div>
+</div>
+<div id="credit"></div>
+<div id="roundbottom">
+<img style="display: none" class="corner" height="15" width="15" alt="" src="skin/images/rc-b-l-15-1body-2menu-3menu.png"></div>
+<!--+
+  |alternative credits
+  +-->
+<div id="credit2"></div>
+</div>
+<!--+
+    |end Menu
+    +-->
+<!--+
+    |start content
+    +-->
+<div id="content">
+<div title="Portable Document Format" class="pdflink">
+<a class="dida" href="commands_manual.pdf"><img alt="PDF -icon" src="skin/images/pdfdoc.gif" class="skin"><br>
+        PDF</a>
+</div>
+<h1>Commands Guide</h1>
+<div id="minitoc-area">
+<ul class="minitoc">
+<li>
+<a href="#Overview">Overview</a>
+<ul class="minitoc">
+<li>
+<a href="#Generic+Options">Generic Options</a>
+</li>
+</ul>
+</li>
+<li>
+<a href="#User+Commands"> User Commands </a>
+<ul class="minitoc">
+<li>
+<a href="#archive"> archive </a>
+</li>
+<li>
+<a href="#distcp"> distcp </a>
+</li>
+<li>
+<a href="#fs"> fs </a>
+</li>
+<li>
+<a href="#fsck"> fsck </a>
+</li>
+<li>
+<a href="#fetchdt"> fetchdt </a>
+</li>
+<li>
+<a href="#jar"> jar </a>
+</li>
+<li>
+<a href="#job"> job </a>
+</li>
+<li>
+<a href="#pipes"> pipes </a>
+</li>
+<li>
+<a href="#queue"> queue </a>
+</li>
+<li>
+<a href="#version"> version </a>
+</li>
+<li>
+<a href="#CLASSNAME"> CLASSNAME </a>
+</li>
+<li>
+<a href="#classpath"> classpath </a>
+</li>
+</ul>
+</li>
+<li>
+<a href="#Administration+Commands"> Administration Commands </a>
+<ul class="minitoc">
+<li>
+<a href="#balancer"> balancer </a>
+</li>
+<li>
+<a href="#daemonlog"> daemonlog </a>
+</li>
+<li>
+<a href="#datanode"> datanode</a>
+</li>
+<li>
+<a href="#dfsadmin"> dfsadmin </a>
+</li>
+<li>
+<a href="#mradmin">mradmin</a>
+</li>
+<li>
+<a href="#jobtracker"> jobtracker </a>
+</li>
+<li>
+<a href="#namenode"> namenode </a>
+</li>
+<li>
+<a href="#secondarynamenode"> secondarynamenode </a>
+</li>
+<li>
+<a href="#tasktracker"> tasktracker </a>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+		
+<a name="N1000D"></a><a name="Overview"></a>
+<h2 class="h3">Overview</h2>
+<div class="section">
+<p>
+				All hadoop commands are invoked by the bin/hadoop script. Running the hadoop
+				script without any arguments prints the description for all commands.
+			</p>
+<p>
+				
+<span class="codefrag">Usage: hadoop [--config confdir] [COMMAND] [GENERIC_OPTIONS] [COMMAND_OPTIONS]</span>
+			
+</p>
+<p>
+				Hadoop has an option parsing framework that employs parsing generic options as well as running classes.
+			</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+			          
+<tr>
+<th colspan="1" rowspan="1"> COMMAND_OPTION </th><th colspan="1" rowspan="1"> Description </th>
+</tr>
+			
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">--config confdir</span></td>
+			            <td colspan="1" rowspan="1">Overwrites the default Configuration directory. Default is ${HADOOP_HOME}/conf.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">GENERIC_OPTIONS</span></td>
+			            <td colspan="1" rowspan="1">The common set of options supported by multiple commands.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">COMMAND</span>
+<br>
+<span class="codefrag">COMMAND_OPTIONS</span></td>
+			            <td colspan="1" rowspan="1">Various commands with their options are described in the following sections. The commands 
+			            have been grouped into <a href="commands_manual.html#User+Commands">User Commands</a> 
+			            and <a href="commands_manual.html#Administration+Commands">Administration Commands</a>.</td>
+			           
+</tr>
+			     
+</table>
+<a name="N10061"></a><a name="Generic+Options"></a>
+<h3 class="h4">Generic Options</h3>
+<p>
+				  The following options are supported by <a href="commands_manual.html#dfsadmin">dfsadmin</a>, 
+				  <a href="commands_manual.html#fs">fs</a>, <a href="commands_manual.html#fsck">fsck</a>, 
+				  <a href="commands_manual.html#job">job</a> and <a href="commands_manual.html#fetchdt">fetchdt</a>. 
+				  Applications should implement 
+				  <a href="api/org/apache/hadoop/util/Tool.html">Tool</a> to support
+				  <a href="api/org/apache/hadoop/util/GenericOptionsParser.html">
+				  GenericOptions</a>.
+				</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+			          
+<tr>
+<th colspan="1" rowspan="1"> GENERIC_OPTION </th><th colspan="1" rowspan="1"> Description </th>
+</tr>
+			
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-conf &lt;configuration file&gt;</span></td>
+			            <td colspan="1" rowspan="1">Specify an application configuration file.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-D &lt;property=value&gt;</span></td>
+			            <td colspan="1" rowspan="1">Use value for given property.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-fs &lt;local|namenode:port&gt;</span></td>
+			            <td colspan="1" rowspan="1">Specify a namenode.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-jt &lt;local|jobtracker:port&gt;</span></td>
+			            <td colspan="1" rowspan="1">Specify a job tracker. Applies only to <a href="commands_manual.html#job">job</a>.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-files &lt;comma separated list of files&gt;</span></td>
+			            <td colspan="1" rowspan="1">Specify comma separated files to be copied to the map reduce cluster. 
+			            Applies only to <a href="commands_manual.html#job">job</a>.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-libjars &lt;comma seperated list of jars&gt;</span></td>
+			            <td colspan="1" rowspan="1">Specify comma separated jar files to include in the classpath. 
+			            Applies only to <a href="commands_manual.html#job">job</a>.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-archives &lt;comma separated list of archives&gt;</span></td>
+			            <td colspan="1" rowspan="1">Specify comma separated archives to be unarchived on the compute machines. 
+			            Applies only to <a href="commands_manual.html#job">job</a>.</td>
+			           
+</tr>
+				
+</table>
+</div>
+		
+		
+<a name="N10107"></a><a name="User+Commands"></a>
+<h2 class="h3"> User Commands </h2>
+<div class="section">
+<p>Commands useful for users of a hadoop cluster.</p>
+<a name="N10110"></a><a name="archive"></a>
+<h3 class="h4"> archive </h3>
+<p>
+					Creates a hadoop archive. More information can be found at <a href="hadoop_archives.html">Hadoop Archives</a>.
+				</p>
+<p>
+					
+<span class="codefrag">Usage: hadoop archive -archiveName NAME &lt;src&gt;* &lt;dest&gt;</span>
+				
+</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+			          
+<tr>
+<th colspan="1" rowspan="1"> COMMAND_OPTION </th><th colspan="1" rowspan="1"> Description </th>
+</tr>
+					   
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-archiveName NAME</span></td>
+			            <td colspan="1" rowspan="1">Name of the archive to be created.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">src</span></td>
+			            <td colspan="1" rowspan="1">Filesystem pathnames which work as usual with regular expressions.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">dest</span></td>
+			            <td colspan="1" rowspan="1">Destination directory which would contain the archive.</td>
+			           
+</tr>
+			     
+</table>
+<a name="N1015B"></a><a name="distcp"></a>
+<h3 class="h4"> distcp </h3>
+<p>
+					Copy file or directories recursively. More information can be found at <a href="distcp.html">Hadoop DistCp Guide</a>.
+				</p>
+<p>
+					
+<span class="codefrag">Usage: hadoop distcp &lt;srcurl&gt; &lt;desturl&gt;</span>
+				
+</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+			          
+<tr>
+<th colspan="1" rowspan="1"> COMMAND_OPTION </th><th colspan="1" rowspan="1"> Description </th>
+</tr>
+			
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">srcurl</span></td>
+			            <td colspan="1" rowspan="1">Source Url</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">desturl</span></td>
+			            <td colspan="1" rowspan="1">Destination Url</td>
+			           
+</tr>
+			     
+</table>
+<a name="N10198"></a><a name="fs"></a>
+<h3 class="h4"> fs </h3>
+<p>
+					
+<span class="codefrag">Usage: hadoop fs [</span><a href="commands_manual.html#Generic+Options">GENERIC_OPTIONS</a><span class="codefrag">] 
+					[COMMAND_OPTIONS]</span>
+				
+</p>
+<p>
+					Runs a generic filesystem user client.
+				</p>
+<p>
+					The various COMMAND_OPTIONS can be found at <a href="file_system_shell.html">File System Shell Guide</a>.
+				</p>
+<a name="N101B4"></a><a name="fsck"></a>
+<h3 class="h4"> fsck </h3>
+<p>
+					Runs a HDFS filesystem checking utility. See <a href="hdfs_user_guide.html#Fsck">Fsck</a> for more info.
+				</p>
+<p>
+<span class="codefrag">Usage: hadoop fsck [</span><a href="commands_manual.html#Generic+Options">GENERIC_OPTIONS</a><span class="codefrag">] 
+				&lt;path&gt; [-move | -delete | -openforwrite] [-files [-blocks 
+				[-locations | -racks]]]</span>
+</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+			          
+<tr>
+<th colspan="1" rowspan="1"> COMMAND_OPTION </th><th colspan="1" rowspan="1"> Description </th>
+</tr>
+			          
+<tr>
+			            
+<td colspan="1" rowspan="1"><span class="codefrag">&lt;path&gt;</span></td>
+			            <td colspan="1" rowspan="1">Start checking from this path.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-move</span></td>
+			            <td colspan="1" rowspan="1">Move corrupted files to /lost+found</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-delete</span></td>
+			            <td colspan="1" rowspan="1">Delete corrupted files.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-openforwrite</span></td>
+			            <td colspan="1" rowspan="1">Print out files opened for write.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-files</span></td>
+			            <td colspan="1" rowspan="1">Print out files being checked.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-blocks</span></td>
+			            <td colspan="1" rowspan="1">Print out block report.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-locations</span></td>
+			            <td colspan="1" rowspan="1">Print out locations for every block.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-racks</span></td>
+			            <td colspan="1" rowspan="1">Print out network topology for data-node locations.</td>
+			           
+</tr>
+					
+</table>
+<a name="N10248"></a><a name="fetchdt"></a>
+<h3 class="h4"> fetchdt </h3>
+<p>
+                    Gets Delegation Token from a NameNode. See <a href="hdfs_user_guide.html#fetchdt">fetchdt</a> for more info.
+                </p>
+<p>
+<span class="codefrag">Usage: hadoop fetchdt [</span><a href="commands_manual.html#Generic+Options">GENERIC_OPTIONS</a><span class="codefrag">] 
+                [--webservice &lt;namenode_http_addr&gt;] &lt;path&gt; </span>
+</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+                      
+<tr>
+<th colspan="1" rowspan="1"> COMMAND_OPTION </th><th colspan="1" rowspan="1"> Description </th>
+</tr>
+                      
+<tr>
+                        
+<td colspan="1" rowspan="1"><span class="codefrag">&lt;fileName&gt;</span></td>
+                        <td colspan="1" rowspan="1">File name to store the token into.</td>
+                       
+</tr>
+                       
+<tr>
+                        
+<td colspan="1" rowspan="1"><span class="codefrag">--webservice &lt;https_address&gt;</span></td>
+                        <td colspan="1" rowspan="1">use http protocol instead of RPC</td>
+                       
+</tr>
+                    
+</table>
+<a name="N10288"></a><a name="jar"></a>
+<h3 class="h4"> jar </h3>
+<p>
+					Runs a jar file. Users can bundle their Map Reduce code in a jar file and execute it using this command.
+				</p>
+<p>
+					
+<span class="codefrag">Usage: hadoop jar &lt;jar&gt; [mainClass] args...</span>
+				
+</p>
+<p>
+					The streaming jobs are run via this command. Examples can be referred from 
+					<a href="streaming.html#More+usage+examples">Streaming examples</a>
+				
+</p>
+<p>
+					Word count example is also run using jar command. It can be referred from
+					<a href="mapred_tutorial.html#Usage">Wordcount example</a>
+				
+</p>
+<a name="N102A6"></a><a name="job"></a>
+<h3 class="h4"> job </h3>
+<p>
+					Command to interact with Map Reduce Jobs.
+				</p>
+<p>
+					
+<span class="codefrag">Usage: hadoop job [</span><a href="commands_manual.html#Generic+Options">GENERIC_OPTIONS</a><span class="codefrag">] 
+					[-submit &lt;job-file&gt;] | [-status &lt;job-id&gt;] | 
+					[-counter &lt;job-id&gt; &lt;group-name&gt; &lt;counter-name&gt;] | [-kill &lt;job-id&gt;] | 
+					[-events &lt;job-id&gt; &lt;from-event-#&gt; &lt;#-of-events&gt;] | [-history [all] &lt;jobOutputDir&gt;] |
+					[-list [all]] | [-kill-task &lt;task-id&gt;] | [-fail-task &lt;task-id&gt;] | 
+          [-set-priority &lt;job-id&gt; &lt;priority&gt;]</span>
+				
+</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+			          
+<tr>
+<th colspan="1" rowspan="1"> COMMAND_OPTION </th><th colspan="1" rowspan="1"> Description </th>
+</tr>
+			
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-submit &lt;job-file&gt;</span></td>
+			            <td colspan="1" rowspan="1">Submits the job.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-status &lt;job-id&gt;</span></td>
+			            <td colspan="1" rowspan="1">Prints the map and reduce completion percentage and all job counters.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-counter &lt;job-id&gt; &lt;group-name&gt; &lt;counter-name&gt;</span></td>
+			            <td colspan="1" rowspan="1">Prints the counter value.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-kill &lt;job-id&gt;</span></td>
+			            <td colspan="1" rowspan="1">Kills the job.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-events &lt;job-id&gt; &lt;from-event-#&gt; &lt;#-of-events&gt;</span></td>
+			            <td colspan="1" rowspan="1">Prints the events' details received by jobtracker for the given range.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-history [all] &lt;jobOutputDir&gt;</span></td>
+			            <td colspan="1" rowspan="1">-history &lt;jobOutputDir&gt; prints job details, failed and killed tip details. More details 
+			            about the job such as successful tasks and task attempts made for each task can be viewed by 
+			            specifying the [all] option. </td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-list [all]</span></td>
+			            <td colspan="1" rowspan="1">-list all displays all jobs. -list displays only jobs which are yet to complete.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-kill-task &lt;task-id&gt;</span></td>
+			            <td colspan="1" rowspan="1">Kills the task. Killed tasks are NOT counted against failed attempts.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-fail-task &lt;task-id&gt;</span></td>
+			            <td colspan="1" rowspan="1">Fails the task. Failed tasks are counted against failed attempts.</td>
+			           
+</tr>
+                 
+<tr>
+                  
+<td colspan="1" rowspan="1"><span class="codefrag">-set-priority &lt;job-id&gt; &lt;priority&gt;</span></td>
+                  <td colspan="1" rowspan="1">Changes the priority of the job. 
+                  Allowed priority values are VERY_HIGH, HIGH, NORMAL, LOW, VERY_LOW</td>
+                 
+</tr>
+					
+</table>
+<a name="N10354"></a><a name="pipes"></a>
+<h3 class="h4"> pipes </h3>
+<p>
+					Runs a pipes job.
+				</p>
+<p>
+					
+<span class="codefrag">Usage: hadoop pipes [-conf &lt;path&gt;] [-jobconf &lt;key=value&gt;, &lt;key=value&gt;, ...] 
+					[-input &lt;path&gt;] [-output &lt;path&gt;] [-jar &lt;jar file&gt;] [-inputformat &lt;class&gt;] 
+					[-map &lt;class&gt;] [-partitioner &lt;class&gt;] [-reduce &lt;class&gt;] [-writer &lt;class&gt;] 
+					[-program &lt;executable&gt;] [-reduces &lt;num&gt;] </span>
+				
+</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+			          
+<tr>
+<th colspan="1" rowspan="1"> COMMAND_OPTION </th><th colspan="1" rowspan="1"> Description </th>
+</tr>
+			
+			          
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-conf &lt;path&gt;</span></td>
+			            <td colspan="1" rowspan="1">Configuration for job</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-jobconf &lt;key=value&gt;, &lt;key=value&gt;, ...</span></td>
+			            <td colspan="1" rowspan="1">Add/override configuration for job</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-input &lt;path&gt;</span></td>
+			            <td colspan="1" rowspan="1">Input directory</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-output &lt;path&gt;</span></td>
+			            <td colspan="1" rowspan="1">Output directory</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-jar &lt;jar file&gt;</span></td>
+			            <td colspan="1" rowspan="1">Jar filename</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-inputformat &lt;class&gt;</span></td>
+			            <td colspan="1" rowspan="1">InputFormat class</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-map &lt;class&gt;</span></td>
+			            <td colspan="1" rowspan="1">Java Map class</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-partitioner &lt;class&gt;</span></td>
+			            <td colspan="1" rowspan="1">Java Partitioner</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-reduce &lt;class&gt;</span></td>
+			            <td colspan="1" rowspan="1">Java Reduce class</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-writer &lt;class&gt;</span></td>
+			            <td colspan="1" rowspan="1">Java RecordWriter</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-program &lt;executable&gt;</span></td>
+			            <td colspan="1" rowspan="1">Executable URI</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-reduces &lt;num&gt;</span></td>
+			            <td colspan="1" rowspan="1">Number of reduces</td>
+			           
+</tr>
+					
+</table>
+<a name="N10419"></a><a name="queue"></a>
+<h3 class="h4"> queue </h3>
+<p>
+          command to interact and view Job Queue information
+        </p>
+<p>
+          
+<span class="codefrag">Usage : hadoop queue [-list] | [-info &lt;job-queue-name&gt; [-showJobs]] | [-showacls]</span>
+        
+</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+        
+<tr>
+          
+<th colspan="1" rowspan="1"> COMMAND_OPTION </th><th colspan="1" rowspan="1"> Description </th>
+        
+</tr>
+        
+<tr>
+          
+<td colspan="1" rowspan="1"><span class="codefrag">-list</span> </td>
+          <td colspan="1" rowspan="1">Gets list of Job Queues configured in the system. Along with scheduling information
+          associated with the job queues.
+          </td>
+        
+</tr>
+        
+<tr>
+          
+<td colspan="1" rowspan="1"><span class="codefrag">-info &lt;job-queue-name&gt; [-showJobs]</span></td>
+          <td colspan="1" rowspan="1">
+           Displays the job queue information and associated scheduling information of particular
+           job queue. If -showJobs options is present a list of jobs submitted to the particular job
+           queue is displayed. 
+          </td>
+        
+</tr>
+        
+<tr>
+          
+<td colspan="1" rowspan="1"><span class="codefrag">-showacls</span></td>
+          <td colspan="1" rowspan="1">Displays the queue name and associated queue operations allowed for the current user.
+          The list consists of only those queues to which the user has access.
+          </td>
+          
+</tr>
+        
+</table>
+<a name="N10463"></a><a name="version"></a>
+<h3 class="h4"> version </h3>
+<p>
+					Prints the version.
+				</p>
+<p>
+					
+<span class="codefrag">Usage: hadoop version</span>
+				
+</p>
+<a name="N10473"></a><a name="CLASSNAME"></a>
+<h3 class="h4"> CLASSNAME </h3>
+<p>
+					 hadoop script can be used to invoke any class.
+				</p>
+<p>
+					
+<span class="codefrag">Usage: hadoop CLASSNAME</span>
+				
+</p>
+<p>
+					 Runs the class named CLASSNAME.
+				</p>
+<a name="N10486"></a><a name="classpath"></a>
+<h3 class="h4"> classpath </h3>
+<p>
+					Prints the class path needed to get the Hadoop jar and the required libraries.
+				</p>
+<p>
+					
+<span class="codefrag">Usage: hadoop classpath</span>
+				
+</p>
+</div>
+		
+<a name="N10497"></a><a name="Administration+Commands"></a>
+<h2 class="h3"> Administration Commands </h2>
+<div class="section">
+<p>Commands useful for administrators of a hadoop cluster.</p>
+<a name="N104A0"></a><a name="balancer"></a>
+<h3 class="h4"> balancer </h3>
+<p>
+					Runs a cluster balancing utility. An administrator can simply press Ctrl-C to stop the 
+					rebalancing process. See <a href="hdfs_user_guide.html#Rebalancer">Rebalancer</a> for more details.
+				</p>
+<p>
+					
+<span class="codefrag">Usage: hadoop balancer [-threshold &lt;threshold&gt;]</span>
+				
+</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+			          
+<tr>
+<th colspan="1" rowspan="1"> COMMAND_OPTION </th><th colspan="1" rowspan="1"> Description </th>
+</tr>
+			
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-threshold &lt;threshold&gt;</span></td>
+			            <td colspan="1" rowspan="1">Percentage of disk capacity. This overwrites the default threshold.</td>
+			           
+</tr>
+			     
+</table>
+<a name="N104CF"></a><a name="daemonlog"></a>
+<h3 class="h4"> daemonlog </h3>
+<p>
+					 Get/Set the log level for each daemon.
+				</p>
+<p>
+					
+<span class="codefrag">Usage: hadoop daemonlog  -getlevel &lt;host:port&gt; &lt;name&gt;</span>
+<br>
+					
+<span class="codefrag">Usage: hadoop daemonlog  -setlevel &lt;host:port&gt; &lt;name&gt; &lt;level&gt;</span>
+				
+</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+			          
+<tr>
+<th colspan="1" rowspan="1"> COMMAND_OPTION </th><th colspan="1" rowspan="1"> Description </th>
+</tr>
+			
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-getlevel &lt;host:port&gt; &lt;name&gt;</span></td>
+			            <td colspan="1" rowspan="1">Prints the log level of the daemon running at &lt;host:port&gt;. 
+			            This command internally connects to http://&lt;host:port&gt;/logLevel?log=&lt;name&gt;</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-setlevel &lt;host:port&gt; &lt;name&gt; &lt;level&gt;</span></td>
+			            <td colspan="1" rowspan="1">Sets the log level of the daemon running at &lt;host:port&gt;. 
+			            This command internally connects to http://&lt;host:port&gt;/logLevel?log=&lt;name&gt;</td>
+			           
+</tr>
+			     
+</table>
+<a name="N1050C"></a><a name="datanode"></a>
+<h3 class="h4"> datanode</h3>
+<p>
+					Runs a HDFS datanode.
+				</p>
+<p>
+					
+<span class="codefrag">Usage: hadoop datanode [-rollback]</span>
+				
+</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+			          
+<tr>
+<th colspan="1" rowspan="1"> COMMAND_OPTION </th><th colspan="1" rowspan="1"> Description </th>
+</tr>
+			
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-rollback</span></td>
+			            <td colspan="1" rowspan="1">Rollsback the datanode to the previous version. This should be used after stopping the datanode 
+			            and distributing the old hadoop version.</td>
+			           
+</tr>
+			     
+</table>
+<a name="N10537"></a><a name="dfsadmin"></a>
+<h3 class="h4"> dfsadmin </h3>
+<p>
+					Runs a HDFS dfsadmin client.
+				</p>
+<p>
+					
+<span class="codefrag">Usage: hadoop dfsadmin  [</span><a href="commands_manual.html#Generic+Options">GENERIC_OPTIONS</a><span class="codefrag">] [-report] [-safemode enter | leave | get | wait] [-refreshNodes]
+					 [-finalizeUpgrade] [-upgradeProgress status | details | force] [-metasave filename] 
+					 [-setQuota &lt;quota&gt; &lt;dirname&gt;...&lt;dirname&gt;] [-clrQuota &lt;dirname&gt;...&lt;dirname&gt;] 
+					 [-help [cmd]]</span>
+				
+</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+			          
+<tr>
+<th colspan="1" rowspan="1"> COMMAND_OPTION </th><th colspan="1" rowspan="1"> Description </th>
+</tr>
+			
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-report</span></td>
+			            <td colspan="1" rowspan="1">Reports basic filesystem information and statistics.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-safemode enter | leave | get | wait</span></td>
+			            <td colspan="1" rowspan="1">Safe mode maintenance command.
+                Safe mode is a Namenode state in which it <br>
+                        1.  does not accept changes to the name space (read-only) <br> 
+                        2.  does not replicate or delete blocks. <br>
+                Safe mode is entered automatically at Namenode startup, and
+                leaves safe mode automatically when the configured minimum
+                percentage of blocks satisfies the minimum replication
+                condition.  Safe mode can also be entered manually, but then
+                it can only be turned off manually as well.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-refreshNodes</span></td>
+			            <td colspan="1" rowspan="1">Re-read the hosts and exclude files to update the set
+                of Datanodes that are allowed to connect to the Namenode
+                and those that should be decommissioned or recommissioned.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-finalizeUpgrade</span></td>
+			            <td colspan="1" rowspan="1">Finalize upgrade of HDFS.
+                Datanodes delete their previous version working directories,
+                followed by Namenode doing the same.
+                This completes the upgrade process.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-upgradeProgress status | details | force</span></td>
+			            <td colspan="1" rowspan="1">Request current distributed upgrade status,
+                a detailed status or force the upgrade to proceed.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-metasave filename</span></td>
+			            <td colspan="1" rowspan="1">Save Namenode's primary data structures
+                to &lt;filename&gt; in the directory specified by hadoop.log.dir property.
+                &lt;filename&gt; will contain one line for each of the following <br>
+                        1. Datanodes heart beating with Namenode<br>
+                        2. Blocks waiting to be replicated<br>
+                        3. Blocks currrently being replicated<br>
+                        4. Blocks waiting to be deleted</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-setQuota &lt;quota&gt; &lt;dirname&gt;...&lt;dirname&gt;</span></td>
+			            <td colspan="1" rowspan="1">Set the quota &lt;quota&gt; for each directory &lt;dirname&gt;.
+                The directory quota is a long integer that puts a hard limit on the number of names in the directory tree.<br>
+                Best effort for the directory, with faults reported if<br>
+                1. N is not a positive integer, or<br>
+                2. user is not an administrator, or<br>
+                3. the directory does not exist or is a file, or<br>
+                4. the directory would immediately exceed the new quota.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-clrQuota &lt;dirname&gt;...&lt;dirname&gt;</span></td>
+			            <td colspan="1" rowspan="1">Clear the quota for each directory &lt;dirname&gt;.<br>
+                Best effort for the directory. with fault reported if<br>
+                1. the directory does not exist or is a file, or<br>
+                2. user is not an administrator.<br>
+                It does not fault if the directory has no quota.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-help [cmd]</span></td>
+			            <td colspan="1" rowspan="1"> Displays help for the given command or all commands if none
+                is specified.</td>
+			           
+</tr>
+			     
+</table>
+<a name="N105F7"></a><a name="mradmin"></a>
+<h3 class="h4">mradmin</h3>
+<p>Runs MR admin client</p>
+<p>
+<span class="codefrag">Usage: hadoop mradmin  [</span>
+        <a href="commands_manual.html#Generic+Options">GENERIC_OPTIONS</a>
+        <span class="codefrag">] [-refreshQueueAcls] </span>
+</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+        
+<tr>
+        
+<th colspan="1" rowspan="1"> COMMAND_OPTION </th><th colspan="1" rowspan="1"> Description </th>
+        
+</tr>
+        
+<tr>
+        
+<td colspan="1" rowspan="1"><span class="codefrag">-refreshQueueAcls</span></td>
+        <td colspan="1" rowspan="1"> Refresh the queue acls used by hadoop, to check access during submissions
+        and administration of the job by the user. The properties present in
+        <span class="codefrag">mapred-queue-acls.xml</span> is reloaded by the queue manager.</td>
+        
+</tr>
+        
+</table>
+<a name="N1062C"></a><a name="jobtracker"></a>
+<h3 class="h4"> jobtracker </h3>
+<p>Runs the MapReduce job Tracker node.</p>
+<p>
+<span class="codefrag">Usage: hadoop jobtracker [-dumpConfiguration]</span>
+</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+        
+<tr>
+        
+<th colspan="1" rowspan="1">COMMAND_OPTION</th><th colspan="1" rowspan="1"> Description</th>
+        
+</tr>
+        
+<tr>
+        
+<td colspan="1" rowspan="1"><span class="codefrag">-dumpConfiguration</span></td>
+        <td colspan="1" rowspan="1"> Dumps the configuration used by the JobTracker alongwith queue
+        configuration in JSON format into Standard output used by the 
+        jobtracker and exits.</td>
+        
+</tr>
+        
+</table>
+<a name="N10657"></a><a name="namenode"></a>
+<h3 class="h4"> namenode </h3>
+<p>
+					Runs the namenode. More info about the upgrade, rollback and finalize is at 
+					<a href="hdfs_user_guide.html#Upgrade+and+Rollback">Upgrade Rollback</a>
+				
+</p>
+<p>
+					
+<span class="codefrag">Usage: hadoop namenode [-format] | [-upgrade] | [-rollback] | [-finalize] | [-importCheckpoint]</span>
+				
+</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+			          
+<tr>
+<th colspan="1" rowspan="1"> COMMAND_OPTION </th><th colspan="1" rowspan="1"> Description </th>
+</tr>
+			
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-format</span></td>
+			            <td colspan="1" rowspan="1">Formats the namenode. It starts the namenode, formats it and then shut it down.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-upgrade</span></td>
+			            <td colspan="1" rowspan="1">Namenode should be started with upgrade option after the distribution of new hadoop version.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-rollback</span></td>
+			            <td colspan="1" rowspan="1">Rollsback the namenode to the previous version. This should be used after stopping the cluster 
+			            and distributing the old hadoop version.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-finalize</span></td>
+			            <td colspan="1" rowspan="1">Finalize will remove the previous state of the files system. Recent upgrade will become permanent. 
+			            Rollback option will not be available anymore. After finalization it shuts the namenode down.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-importCheckpoint</span></td>
+			            <td colspan="1" rowspan="1">Loads image from a checkpoint directory and save it into the current one. Checkpoint dir 
+			            is read from property fs.checkpoint.dir</td>
+			           
+</tr>
+			     
+</table>
+<a name="N106BE"></a><a name="secondarynamenode"></a>
+<h3 class="h4"> secondarynamenode </h3>
+<p>
+					Runs the HDFS secondary namenode. See <a href="hdfs_user_guide.html#Secondary+Namenode">Secondary Namenode</a> 
+					for more info.
+				</p>
+<p>
+					
+<span class="codefrag">Usage: hadoop secondarynamenode [-checkpoint [force]] | [-geteditsize]</span>
+				
+</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+			          
+<tr>
+<th colspan="1" rowspan="1"> COMMAND_OPTION </th><th colspan="1" rowspan="1"> Description </th>
+</tr>
+			
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-checkpoint [force]</span></td>
+			            <td colspan="1" rowspan="1">Checkpoints the Secondary namenode if EditLog size &gt;= fs.checkpoint.size. 
+			            If -force is used, checkpoint irrespective of EditLog size.</td>
+			           
+</tr>
+			           
+<tr>
+			          	
+<td colspan="1" rowspan="1"><span class="codefrag">-geteditsize</span></td>
+			            <td colspan="1" rowspan="1">Prints the EditLog size.</td>
+			           
+</tr>
+			     
+</table>
+<a name="N106FB"></a><a name="tasktracker"></a>
+<h3 class="h4"> tasktracker </h3>
+<p>
+					Runs a MapReduce task Tracker node.
+				</p>
+<p>
+					
+<span class="codefrag">Usage: hadoop tasktracker</span>
+				
+</p>
+</div>
+		
+		
+		      
+
+	
+</div>
+<!--+
+    |end content
+    +-->
+<div class="clearboth">&nbsp;</div>
+</div>
+<div id="footer">
+<!--+
+    |start bottomstrip
+    +-->
+<div class="lastmodified">
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<div class="copyright">
+        Copyright &copy;
+         2008 <a href="http://www.apache.org/licenses/">The Apache Software Foundation.</a>
+</div>
+<!--+
+    |end bottomstrip
+    +-->
+</div>
+</body>
+</html>

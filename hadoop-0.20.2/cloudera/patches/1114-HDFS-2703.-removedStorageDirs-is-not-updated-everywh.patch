@@ -1,0 +1,139 @@
+From fcab1c7f36866fdc09cb9939ff8786d690502b81 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 18 Dec 2011 14:00:58 -0800
+Subject: [PATCH 1114/1179] HDFS-2703. removedStorageDirs is not updated everywhere we remove a
+ storage dir.
+
+There are a number of places (FSEditLog#open, purgeEditLog, and
+rollEditLog) where we remove a storage directory but don't add it to the
+removedStorageDirs list. This means a storage dir may have been removed
+but we don't see it in the log or Web UI.
+
+Reason: Bug
+Author: Eli Collins
+Ref: CDH-3921
+---
+ .../hadoop/hdfs/server/namenode/FSEditLog.java     |   10 +++++-----
+ .../hadoop/hdfs/server/namenode/FSImage.java       |   20 ++++++++++++--------
+ 2 files changed, 17 insertions(+), 13 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+index f4106d5..af6934e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+@@ -367,7 +367,7 @@ public class FSEditLog {
+         EditLogOutputStream eStream = new EditLogFileOutputStream(eFile);
+         editStreams.add(eStream);
+       } catch (IOException ioe) {
+-        fsimage.removedStorageDirs.add(sd);
++        fsimage.updateRemovedDirs(sd, ioe);
+         it.remove();
+       }
+     }
+@@ -1355,7 +1355,7 @@ public class FSEditLog {
+         failedSd = true;
+         sd.unlock();
+         removeEditsForStorageDir(sd);
+-        fsimage.removedStorageDirs.add(sd);
++        fsimage.updateRemovedDirs(sd, ioe);
+         it.remove();
+       }
+     }
+@@ -1381,8 +1381,8 @@ public class FSEditLog {
+     //
+     // Delete edits and rename edits.new to edits.
+     //
+-    for (Iterator<StorageDirectory> it = 
+-           fsimage.dirIterator(NameNodeDirType.EDITS); it.hasNext();) {
++    Iterator<StorageDirectory> it = fsimage.dirIterator(NameNodeDirType.EDITS);
++    while (it.hasNext()) {
+       StorageDirectory sd = it.next();
+       if (!getEditNewFile(sd).renameTo(getEditFile(sd))) {
+         //
+@@ -1392,7 +1392,7 @@ public class FSEditLog {
+         getEditFile(sd).delete();
+         if (!getEditNewFile(sd).renameTo(getEditFile(sd))) {
+           // Should we also remove from edits
+-          fsimage.removedStorageDirs.add(sd);
++          fsimage.updateRemovedDirs(sd, null);
+           it.remove(); 
+         }
+       }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+index 03510e4..022c0e8 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+@@ -41,7 +41,6 @@ import java.util.HashMap;
+ import java.lang.Math;
+ import java.nio.ByteBuffer;
+ 
+-import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.PermissionStatus;
+ import org.apache.hadoop.fs.permission.FsPermission;
+@@ -127,9 +126,10 @@ public class FSImage extends Storage {
+   }
+   
+   /**
+-   * list of failed (and thus removed) storages
++   * List of failed (and thus removed) storages
+    */
+-  protected List<StorageDirectory> removedStorageDirs = new ArrayList<StorageDirectory>();
++  private List<StorageDirectory> removedStorageDirs 
++    = new ArrayList<StorageDirectory>();
+   
+   /**
+    * Directories for importing an image from a checkpoint.
+@@ -220,6 +220,11 @@ public class FSImage extends Storage {
+ 	  return removedStorageDirs;
+   }
+ 
++  void updateRemovedDirs(StorageDirectory sd, IOException ioe) {
++    LOG.warn("Removing storage dir " + sd.getRoot().getPath(), ioe);
++    removedStorageDirs.add(sd);
++  }
++
+   File getEditFile(StorageDirectory sd) {
+     return getImageFile(sd, NameNodeFile.EDITS);
+   }
+@@ -630,7 +635,7 @@ public class FSImage extends Storage {
+         writeCheckpointTime(sd);
+       } catch (IOException ioe) {
+         editLog.removeEditsForStorageDir(sd);
+-        removedStorageDirs.add(sd);
++        updateRemovedDirs(sd, ioe);
+         it.remove();
+       }
+     }
+@@ -649,7 +654,7 @@ public class FSImage extends Storage {
+         } catch (Exception e) {
+           // Ignore
+         }
+-        removedStorageDirs.add(sd);
++        updateRemovedDirs(sd, null);
+         it.remove();
+       }
+     }
+@@ -1475,7 +1480,7 @@ public class FSImage extends Storage {
+         curFile.delete();
+         if (!ckpt.renameTo(curFile)) {
+           editLog.removeEditsForStorageDir(sd);
+-          removedStorageDirs.add(sd);
++          updateRemovedDirs(sd, null);
+           it.remove();
+         }
+       }
+@@ -1503,9 +1508,8 @@ public class FSImage extends Storage {
+       try {
+         sd.write();
+       } catch (IOException ioe) {
+-        LOG.error("Cannot write file " + sd.getRoot(), ioe);
+         editLog.removeEditsForStorageDir(sd);
+-        removedStorageDirs.add(sd);
++        updateRemovedDirs(sd, ioe);
+         it.remove();
+       }
+     }
+-- 
+1.7.0.4
+

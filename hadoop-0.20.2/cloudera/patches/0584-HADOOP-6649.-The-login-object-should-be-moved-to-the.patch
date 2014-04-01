@@ -1,0 +1,151 @@
+From ba1b824bfccac3386041eab7dbf29f5c7d4b8662 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sat, 20 Mar 2010 15:22:59 -0700
+Subject: [PATCH 0584/1179] HADOOP-6649. The login object should be moved to the subject in the UGI.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439344/HADOOP-6649-y20.1.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12439391/HADOOP-6649-y20.1.1.patch
+Author: Jitendra Nath Pandey
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/security/User.java      |   24 ++++++++++++++++++-
+ .../hadoop/security/UserGroupInformation.java      |   23 +++++++++++++++----
+ 2 files changed, 40 insertions(+), 7 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/User.java b/src/core/org/apache/hadoop/security/User.java
+index 89fe3a1..e6e9525 100644
+--- a/src/core/org/apache/hadoop/security/User.java
++++ b/src/core/org/apache/hadoop/security/User.java
+@@ -20,6 +20,8 @@ package org.apache.hadoop.security;
+ import java.io.IOException;
+ import java.security.Principal;
+ 
++import javax.security.auth.login.LoginContext;
++
+ import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+ 
+ /**
+@@ -30,12 +32,13 @@ class User implements Principal {
+   private final String fullName;
+   private final String shortName;
+   private AuthenticationMethod authMethod = null;
++  private LoginContext login = null;
+ 
+   public User(String name) {
+-    this(name, null);
++    this(name, null, null);
+   }
+   
+-  public User(String name, AuthenticationMethod authMethod) {
++  public User(String name, AuthenticationMethod authMethod, LoginContext login) {
+     try {
+       shortName = new KerberosName(name).getShortName();
+     } catch (IOException ioe) {
+@@ -43,6 +46,7 @@ class User implements Principal {
+     }
+     fullName = name;
+     this.authMethod = authMethod;
++    this.login = login;
+   }
+ 
+   /**
+@@ -89,4 +93,20 @@ class User implements Principal {
+   public AuthenticationMethod getAuthenticationMethod() {
+     return authMethod;
+   }
++  
++  /**
++   * Returns login object
++   * @return login
++   */
++  public LoginContext getLogin() {
++    return login;
++  }
++  
++  /**
++   * Set the login object
++   * @param login
++   */
++  public void setLogin(LoginContext login) {
++    this.login = login;
++  }
+ }
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 6a9c977..05fb366 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -215,8 +215,6 @@ public class UserGroupInformation {
+ 
+   private final Subject subject;
+   
+-  private LoginContext login;
+-  
+   private static final String OS_LOGIN_MODULE_NAME;
+   private static final Class<? extends Principal> OS_PRINCIPAL_CLASS;
+   private static final boolean windows = 
+@@ -339,6 +337,19 @@ public class UserGroupInformation {
+       return null;
+     }
+   }
++  
++  private LoginContext getLogin() {
++    for (User p: subject.getPrincipals(User.class)) {
++      return p.getLogin();
++    }
++    return null;
++  }
++  
++  private void setLogin(LoginContext login) {
++    for (User p: subject.getPrincipals(User.class)) {
++      p.setLogin(login);
++    }
++  }
+ 
+   /**
+    * Create a UserGroupInformation for the given subject.
+@@ -378,7 +389,7 @@ public class UserGroupInformation {
+           login = new LoginContext(HadoopConfiguration.SIMPLE_CONFIG_NAME, subject);
+         }
+         login.login();
+-        loginUser.login = login;
++        loginUser.setLogin(login);
+         loginUser = new UserGroupInformation(login.getSubject());
+         String fileLocation = System.getenv(HADOOP_TOKEN_FILE_LOCATION);
+         if (fileLocation != null && isSecurityEnabled()) {
+@@ -420,7 +431,7 @@ public class UserGroupInformation {
+         new LoginContext(HadoopConfiguration.KEYTAB_KERBEROS_CONFIG_NAME, subject);
+       login.login();
+       loginUser = new UserGroupInformation(subject);
+-      loginUser.login = login;
++      loginUser.setLogin(login);
+     } catch (LoginException le) {
+       throw new IOException("Login failure for " + user + " from keytab " + 
+                             path, le);
+@@ -456,7 +467,7 @@ public class UserGroupInformation {
+        
+       login.login();
+       UserGroupInformation newLoginUser = new UserGroupInformation(subject);
+-      newLoginUser.login = login;
++      newLoginUser.setLogin(login);
+       
+       return newLoginUser;
+     } catch (LoginException le) {
+@@ -481,6 +492,7 @@ public class UserGroupInformation {
+   throws IOException {
+     if (!isSecurityEnabled())
+       return;
++    LoginContext login = getLogin();
+     if (login == null || keytabFile == null) {
+       throw new IOException("loginUserFromKeyTab must be done first");
+     }
+@@ -506,6 +518,7 @@ public class UserGroupInformation {
+             getSubject());
+       LOG.info("Initiating re-login for " + keytabPrincipal);
+       login.login();
++      setLogin(login);
+     } catch (LoginException le) {
+       throw new IOException("Login failure for " + keytabPrincipal + 
+           " from keytab " + keytabFile, le);
+-- 
+1.7.0.4
+

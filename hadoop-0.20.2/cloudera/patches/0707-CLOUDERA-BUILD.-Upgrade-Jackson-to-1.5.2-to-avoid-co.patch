@@ -1,0 +1,39 @@
+From a1cdd7b028bfd5aaf6bdbfe18122b9a0fb44ed12 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 17 Sep 2010 10:50:38 -0700
+Subject: [PATCH 0707/1179] CLOUDERA-BUILD. Upgrade Jackson to 1.5.2 to avoid conflicts with Avro and HBase
+
+Author: Todd Lipcon
+---
+ ivy.xml                  |    2 +-
+ ivy/libraries.properties |    1 +
+ 2 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/ivy.xml b/ivy.xml
+index cb4595c..2ba2cf9 100644
+--- a/ivy.xml
++++ b/ivy.xml
+@@ -267,7 +267,7 @@
+       conf="common->master"/>
+     <dependency org="org.codehaus.jackson"
+       name="jackson-mapper-asl"
+-      rev="1.0.1"
++      rev="${jackson.version}"
+       conf="common->default"/>
+     <dependency org="org.aspectj"
+       name="aspectjrt"
+diff --git a/ivy/libraries.properties b/ivy/libraries.properties
+index 8b3b25b..c8d84d6 100644
+--- a/ivy/libraries.properties
++++ b/ivy/libraries.properties
+@@ -44,6 +44,7 @@ hsqldb.version=1.8.0.10
+ #ivy.version=2.0.0-beta2
+ ivy.version=2.0.0-rc2
+ 
++jackson.version=1.5.2
+ jasper.version=5.5.12
+ #not able to figureout the version of jsp & jsp-api version to get it resolved throught ivy
+ # but still declared here as we are going to have a local copy from the lib folder
+-- 
+1.7.0.4
+

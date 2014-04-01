@@ -1,0 +1,947 @@
+From af12a8df06d5a9a72f2f22b2c47e71808437ac81 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 12 Aug 2011 13:28:44 -0700
+Subject: [PATCH 1032/1179] HDFS-2235. Encode servlet paths.
+ HADOOP-7531. Add servlet util methods for handling paths in requests.
+
+Reason: Bug
+Author: Eli Collins
+Ref: CDH-3304
+---
+ ivy/libraries.properties                           |    2 +-
+ .../hadoop/hdfsproxy/ProxyFileDataServlet.java     |   20 ++--
+ src/core/org/apache/hadoop/util/ServletUtil.java   |   54 +++++++
+ .../org/apache/hadoop/hdfs/HftpFileSystem.java     |   58 +++-----
+ .../org/apache/hadoop/hdfs/HsftpFileSystem.java    |   18 +--
+ .../server/namenode/ContentSummaryServlet.java     |    4 +-
+ .../hadoop/hdfs/server/namenode/DfsServlet.java    |   35 -----
+ .../hdfs/server/namenode/FileChecksumServlets.java |   43 ++++--
+ .../hdfs/server/namenode/FileDataServlet.java      |   42 +++---
+ .../hdfs/server/namenode/ListPathsServlet.java     |    7 +-
+ .../hadoop/hdfs/server/namenode/StreamFile.java    |    8 +-
+ .../org/apache/hadoop/hdfs/TestHftpFileSystem.java |  149 +++++++++++++++++---
+ .../hdfs/server/namenode/TestStreamFile.java       |   11 +-
+ src/webapps/datanode/browseBlock.jsp               |    5 +-
+ 14 files changed, 290 insertions(+), 166 deletions(-)
+
+diff --git a/ivy/libraries.properties b/ivy/libraries.properties
+index 1b6e447..afe7a92 100644
+--- a/ivy/libraries.properties
++++ b/ivy/libraries.properties
+@@ -26,7 +26,7 @@ commons-cli.version=1.2
+ commons-codec.version=1.4
+ commons-collections.version=3.1
+ commons-daemon.version=1.0.1
+-commons-httpclient.version=3.0.1
++commons-httpclient.version=3.1
+ commons-lang.version=2.4
+ commons-logging.version=1.0.4
+ commons-logging-api.version=1.0.4
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
+index dea0b7f..80bb4dc 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
+@@ -18,8 +18,7 @@
+ package org.apache.hadoop.hdfsproxy;
+ 
+ import java.io.IOException;
+-import java.net.URI;
+-import java.net.URISyntaxException;
++import java.net.URL;
+ 
+ import javax.servlet.ServletContext;
+ import javax.servlet.ServletException;
+@@ -31,6 +30,7 @@ import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
+ import org.apache.hadoop.hdfs.server.namenode.FileDataServlet;
+ import org.apache.hadoop.hdfs.server.namenode.JspHelper;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.util.ServletUtil;
+ 
+ /** {@inheritDoc} */
+ public class ProxyFileDataServlet extends FileDataServlet {
+@@ -39,18 +39,16 @@ public class ProxyFileDataServlet extends FileDataServlet {
+ 
+   /** {@inheritDoc} */
+   @Override
+-  protected URI createUri(String parent, HdfsFileStatus i, UserGroupInformation ugi,
+-      ClientProtocol nnproxy, HttpServletRequest request, String dt) throws IOException,
+-      URISyntaxException {
+-    
++  protected URL createRedirectURL(String path, String encodedPath, HdfsFileStatus status, 
++      UserGroupInformation ugi, ClientProtocol nnproxy, HttpServletRequest request, String dt)
++      throws IOException {
+     String dtParam="";
+     if (dt != null) {
+-      dtParam=JspHelper.getDelegationTokenUrlParam(dt);
++      dtParam = JspHelper.getDelegationTokenUrlParam(dt);
+     }
+-    
+-    return new URI(request.getScheme(), null, request.getServerName(), request
+-        .getServerPort(), "/streamFile" + i.getFullName(parent),
+-         "&ugi=" + ugi.getShortUserName() + dtParam, null);
++    return new URL(request.getScheme(), request.getServerName(), request.getServerPort(),
++        "/streamFile" + encodedPath + '?' +
++        "ugi=" + ServletUtil.encodeQueryValue(ugi.getShortUserName()) + dtParam);
+   }
+ 
+   /** {@inheritDoc} */
+diff --git a/src/core/org/apache/hadoop/util/ServletUtil.java b/src/core/org/apache/hadoop/util/ServletUtil.java
+index e14b97c..aa61e6c 100644
+--- a/src/core/org/apache/hadoop/util/ServletUtil.java
++++ b/src/core/org/apache/hadoop/util/ServletUtil.java
+@@ -21,6 +21,10 @@ import java.io.*;
+ import java.util.Calendar;
+ 
+ import javax.servlet.*;
++import javax.servlet.http.HttpServletRequest;
++
++import org.apache.commons.httpclient.URIException;
++import org.apache.commons.httpclient.util.URIUtil;
+ 
+ public class ServletUtil {
+   /**
+@@ -103,4 +107,54 @@ public class ServletUtil {
+   public static String percentageGraph(float perc, int width) throws IOException {
+     return percentageGraph((int)perc, width);
+   }
++
++  /**
++   * Escape and encode a string regarded as within the query component of an URI.
++   * @param value the value to encode
++   * @return encoded query, null if UTF-8 is not supported
++   */
++  public static String encodeQueryValue(final String value) {
++    try {
++      return URIUtil.encodeWithinQuery(value, "UTF-8");
++    } catch (URIException e) {
++      throw new AssertionError("JVM does not support UTF-8"); // should never happen!
++    }
++  }
++
++  /**
++   * Escape and encode a string regarded as the path component of an URI.
++   * @param path the path component to encode
++   * @return encoded path, null if UTF-8 is not supported
++   */
++  public static String encodePath(final String path) {
++    try {
++      return URIUtil.encodePath(path, "UTF-8");
++    } catch (URIException e) {
++      throw new AssertionError("JVM does not support UTF-8"); // should never happen!
++    }
++  }
++
++  /**
++   * Parse and decode the path component from the given request.
++   * @param request Http request to parse
++   * @param servletName the name of servlet that precedes the path
++   * @return decoded path component, null if UTF-8 is not supported
++   */
++  public static String getDecodedPath(final HttpServletRequest request, String servletName) {
++    try {
++      return URIUtil.decode(getRawPath(request, servletName), "UTF-8");
++    } catch (URIException e) {
++      throw new AssertionError("JVM does not support UTF-8"); // should never happen!
++    }
++  }
++
++  /**
++   * Parse the path component from the given request and return w/o decoding.
++   * @param request Http request to parse
++   * @param servletName the name of servlet that precedes the path
++   * @return path component, null if the default charset is not supported
++   */
++  public static String getRawPath(final HttpServletRequest request, String servletName) {
++    return request.getRequestURI().substring(servletName.length());
++  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+index b23bf32..a3f5ae2 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+@@ -59,6 +59,7 @@ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+ import org.apache.hadoop.util.Progressable;
++import org.apache.hadoop.util.ServletUtil;
+ import org.xml.sax.Attributes;
+ import org.xml.sax.InputSource;
+ import org.xml.sax.SAXException;
+@@ -217,11 +218,12 @@ public class HftpFileSystem extends FileSystem {
+    * 
+    * @return user_shortname,group1,group2...
+    */
+-  private String getUgiParameter() {
+-    StringBuilder ugiParamenter = new StringBuilder(ugi.getShortUserName());
++  private String getEncodedUgiParameter() {
++    StringBuilder ugiParamenter = new StringBuilder(
++        ServletUtil.encodeQueryValue(ugi.getShortUserName()));
+     for(String g: ugi.getGroupNames()) {
+       ugiParamenter.append(",");
+-      ugiParamenter.append(g);
++      ugiParamenter.append(ServletUtil.encodeQueryValue(g));
+     }
+     return ugiParamenter.toString();
+   }
+@@ -229,35 +231,18 @@ public class HftpFileSystem extends FileSystem {
+   /**
+    * Return a URL pointing to given path on the namenode.
+    *
+-   * @param p path to obtain the URL for
+-   * @return namenode URL referring to the given path
+-   * @throws IOException on error constructing the URL
+-   */
+-  URL getNamenodeFileURL(Path p) throws IOException {
+-    return getNamenodeURL("/data" + p.toUri().getPath(),
+-                          "ugi=" + getUgiParameter());
+-  }
+-
+-  /**
+-   * Return a URL pointing to given path on the namenode.
+-   *
+    * @param path to obtain the URL for
+    * @param query string to append to the path
+    * @return namenode URL referring to the given path
+    * @throws IOException on error constructing the URL
+    */
+   URL getNamenodeURL(String path, String query) throws IOException {
+-    try {
+-      query = updateQuery(query);
+-      final URL url = new URI("http", null, nnAddr.getHostName(),
+-          nnAddr.getPort(), path, query, null).toURL();
+-      if (LOG.isTraceEnabled()) {
+-        LOG.trace("url=" + url);
+-      }
+-      return url;
+-    } catch (URISyntaxException e) {
+-      throw new IOException(e);
++    final URL url = new URL("http", nnAddr.getHostName(),
++        nnAddr.getPort(), path + '?' + query);
++    if (LOG.isTraceEnabled()) {
++      LOG.trace("url=" + url);
+     }
++    return url;
+   }
+ 
+   /**
+@@ -267,6 +252,7 @@ public class HftpFileSystem extends FileSystem {
+    */
+   protected HttpURLConnection openConnection(String path, String query)
+       throws IOException {
++    query = addDelegationTokenParam(query);
+     final URL url = getNamenodeURL(path, query);
+     HttpURLConnection connection = (HttpURLConnection)url.openConnection();
+     connection.setRequestMethod("GET");
+@@ -274,22 +260,24 @@ public class HftpFileSystem extends FileSystem {
+     return connection;
+   }
+ 
+-  protected String updateQuery(String query) throws IOException {
++  protected String addDelegationTokenParam(String query) throws IOException {
+     String tokenString = null;
+     if (UserGroupInformation.isSecurityEnabled()) {
+       synchronized (this) {
+         if (delegationToken != null) {
+           tokenString = delegationToken.encodeToUrlString();
+           return (query + JspHelper.getDelegationTokenUrlParam(tokenString));
+-        } // else we are talking to an insecure cluster
++        }
+       }
+     }
+     return query;
+   }
+ 
+   @Override
+-  public FSDataInputStream open(Path p, int buffersize) throws IOException {
+-    URL u = getNamenodeFileURL(p);
++  public FSDataInputStream open(Path f, int buffersize) throws IOException {
++    String path = "/data" + ServletUtil.encodePath(f.toUri().getPath());
++    String query = addDelegationTokenParam("ugi=" + getEncodedUgiParameter());
++    URL u = getNamenodeURL(path, query);    
+     return new FSDataInputStream(new ByteRangeInputStream(u));
+   }
+ 
+@@ -338,9 +326,9 @@ public class HftpFileSystem extends FileSystem {
+       try {
+         XMLReader xr = XMLReaderFactory.createXMLReader();
+         xr.setContentHandler(this);
+-        HttpURLConnection connection = openConnection("/listPaths" + path,
+-            "ugi=" + getUgiParameter() + (recur? "&recursive=yes" : ""));
+-
++        HttpURLConnection connection = openConnection(
++            "/listPaths" + ServletUtil.encodePath(path),
++            "ugi=" + getEncodedUgiParameter() + (recur ? "&recursive=yes" : ""));
+         InputStream resp = connection.getInputStream();
+         xr.parse(new InputSource(resp));
+       } catch(SAXException e) {
+@@ -403,7 +391,8 @@ public class HftpFileSystem extends FileSystem {
+ 
+     private FileChecksum getFileChecksum(String f) throws IOException {
+       final HttpURLConnection connection = openConnection(
+-          "/fileChecksum" + f, "ugi=" + getUgiParameter());
++          "/fileChecksum" + ServletUtil.encodePath(f), 
++          "ugi=" + getEncodedUgiParameter());
+       try {
+         final XMLReader xr = XMLReaderFactory.createXMLReader();
+         xr.setContentHandler(this);
+@@ -500,7 +489,8 @@ public class HftpFileSystem extends FileSystem {
+      */
+     private ContentSummary getContentSummary(String path) throws IOException {
+       final HttpURLConnection connection = openConnection(
+-          "/contentSummary" + path, "ugi=" + getUgiParameter());
++          "/contentSummary" + ServletUtil.encodePath(path), 
++          "ugi=" + getEncodedUgiParameter());
+       InputStream in = null;
+       try {
+         in = connection.getInputStream();        
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/HsftpFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/HsftpFileSystem.java
+index 9280a09..edcb2da 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/HsftpFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/HsftpFileSystem.java
+@@ -67,17 +67,13 @@ public class HsftpFileSystem extends HftpFileSystem {
+   @Override
+   protected HttpURLConnection openConnection(String path, String query)
+       throws IOException {
+-    try {
+-      query = updateQuery(query);
+-      final URL url = new URI("https", null, nnAddr.getHostName(),
+-          nnAddr.getPort(), path, query, null).toURL();
+-      HttpsURLConnection conn = (HttpsURLConnection)url.openConnection();
+-      // bypass hostname verification
+-      conn.setHostnameVerifier(new DummyHostnameVerifier());
+-      return (HttpURLConnection)conn;
+-    } catch (URISyntaxException e) {
+-      throw (IOException)new IOException().initCause(e);
+-    }
++    query = addDelegationTokenParam(query);
++    final URL url = new URL("https", nnAddr.getHostName(), 
++        nnAddr.getPort(), path + '?' + query);
++    HttpsURLConnection conn = (HttpsURLConnection)url.openConnection();
++    // bypass hostname verification
++    conn.setHostnameVerifier(new DummyHostnameVerifier());
++    return (HttpURLConnection)conn;
+   }
+ 
+   @Override
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
+index 6215371..26e9e4b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
+@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.ContentSummary;
+ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.util.ServletUtil;
+ import org.znerd.xmlenc.XMLOutputter;
+ 
+ /** Servlets for file checksum */
+@@ -47,8 +48,7 @@ public class ContentSummaryServlet extends DfsServlet {
+       ugi.doAs(new PrivilegedExceptionAction<Void>() {
+         @Override
+         public Void run() throws Exception {
+-          final String path = request.getPathInfo();
+-
++          final String path = ServletUtil.getDecodedPath(request, "/contentSummary");
+           final PrintWriter out = response.getWriter();
+           final XMLOutputter xml = new XMLOutputter(out, "UTF-8");
+           xml.declaration();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
+index d240d0b..57767b0 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/DfsServlet.java
+@@ -19,21 +19,16 @@ package org.apache.hadoop.hdfs.server.namenode;
+ 
+ import java.io.IOException;
+ import java.net.InetSocketAddress;
+-import java.net.URI;
+-import java.net.URISyntaxException;
+ 
+ import javax.servlet.ServletContext;
+ import javax.servlet.http.HttpServlet;
+ import javax.servlet.http.HttpServletRequest;
+-import javax.servlet.http.HttpServletResponse;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.DFSClient;
+ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+-import org.apache.hadoop.hdfs.protocol.DatanodeID;
+-import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.znerd.xmlenc.XMLOutputter;
+@@ -90,34 +85,4 @@ abstract class DfsServlet extends HttpServlet {
+         (Configuration)context.getAttribute(JspHelper.CURRENT_CONF));
+     return DFSClient.createNamenode(nnAddr, conf);
+   }
+-
+-  /** Create a URI for redirecting request */
+-  protected URI createRedirectUri(
+-      String servletpath, UserGroupInformation ugi,
+-      DatanodeID host, HttpServletRequest request, 
+-      String tokenString)  throws URISyntaxException {
+-    final String hostname = host instanceof DatanodeInfo?
+-        ((DatanodeInfo)host).getHostName(): host.getHost();
+-    final String scheme = request.getScheme();
+-    final int port = "https".equals(scheme)?
+-        (Integer)getServletContext().getAttribute("datanode.https.port")
+-        : host.getInfoPort();
+-    final String filename = request.getPathInfo();
+-    String dt="";
+-    if(tokenString!=null) {
+-      dt = JspHelper.getDelegationTokenUrlParam(tokenString);
+-    }
+-    return new URI(scheme, null, hostname, port, servletpath,
+-        "filename=" + filename + "&ugi=" + ugi.getShortUserName() + dt, null);
+-  }
+-
+-  /** Get filename from the request */
+-  protected String getFilename(HttpServletRequest request,
+-      HttpServletResponse response) throws IOException {
+-    final String filename = request.getParameter("filename");
+-    if (filename == null || filename.length() == 0) {
+-      throw new IOException("Invalid filename");
+-    }
+-    return filename;
+-  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java
+index 4064603..c287bbe 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileChecksumServlets.java
+@@ -21,6 +21,7 @@ import java.io.IOException;
+ import java.io.PrintWriter;
+ import java.net.URI;
+ import java.net.URISyntaxException;
++import java.net.URL;
+ import java.security.PrivilegedExceptionAction;
+ 
+ import javax.net.SocketFactory;
+@@ -34,12 +35,12 @@ import org.apache.hadoop.fs.MD5MD5CRC32FileChecksum;
+ import org.apache.hadoop.hdfs.DFSClient;
+ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+ import org.apache.hadoop.hdfs.protocol.DatanodeID;
+-import org.apache.hadoop.hdfs.protocol.FSConstants;
++import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants;
+ import org.apache.hadoop.hdfs.server.datanode.DataNode;
+-import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.util.ServletUtil;
+ import org.znerd.xmlenc.XMLOutputter;
+ 
+ /** Servlets for file checksum */
+@@ -49,22 +50,38 @@ public class FileChecksumServlets {
+     /** For java.io.Serializable */
+     private static final long serialVersionUID = 1L;
+   
++    /** Create a redirection URL */
++    private URL createRedirectURL(UserGroupInformation ugi, DatanodeID host,
++        HttpServletRequest request, NameNode nn) throws IOException { 
++      final String hostname = host instanceof DatanodeInfo 
++          ? ((DatanodeInfo)host).getHostName() : host.getHost();
++      final String scheme = request.getScheme();
++      final int port = "https".equals(scheme)
++          ? (Integer)getServletContext().getAttribute("datanode.https.port")
++          : host.getInfoPort();
++      final String encodedPath = ServletUtil.getRawPath(request, "/fileChecksum");
++
++      String dtParam = "";
++      if (UserGroupInformation.isSecurityEnabled()) {
++        String tokenString = ugi.getTokens().iterator().next().encodeToUrlString();
++        dtParam = JspHelper.getDelegationTokenUrlParam(tokenString);
++      }
++      return new URL(scheme, hostname, port, 
++          "/getFileChecksum" + encodedPath + '?' +
++          "ugi=" + ServletUtil.encodeQueryValue(ugi.getShortUserName()) + dtParam); 
++    }
++
+     /** {@inheritDoc} */
+     public void doGet(HttpServletRequest request, HttpServletResponse response
+         ) throws ServletException, IOException {
+       final ServletContext context = getServletContext();
+       Configuration conf = (Configuration) context.getAttribute(JspHelper.CURRENT_CONF);
+       final UserGroupInformation ugi = getUGI(request, conf);
+-      String tokenString = request.getParameter(JspHelper.DELEGATION_PARAMETER_NAME);
+       final NameNode namenode = (NameNode)context.getAttribute("name.node");
+       final DatanodeID datanode = namenode.namesystem.getRandomDatanode();
+       try {
+-        final URI uri = 
+-          createRedirectUri("/getFileChecksum", ugi, datanode, request, tokenString);
+-        response.sendRedirect(uri.toURL().toString());
+-      } catch(URISyntaxException e) {
+-        throw new ServletException(e); 
+-        //response.getWriter().println(e.toString());
++        response.sendRedirect(
++            createRedirectURL(ugi, datanode, request, namenode).toString());
+       } catch (IOException e) {
+         response.sendError(400, e.getMessage());
+       }
+@@ -80,7 +97,7 @@ public class FileChecksumServlets {
+     public void doGet(HttpServletRequest request, HttpServletResponse response
+         ) throws ServletException, IOException {
+       final PrintWriter out = response.getWriter();
+-      final String filename = getFilename(request, response);
++      final String path = ServletUtil.getDecodedPath(request, "/getFileChecksum");
+       final XMLOutputter xml = new XMLOutputter(out, "UTF-8");
+       xml.declaration();
+ 
+@@ -98,12 +115,12 @@ public class FileChecksumServlets {
+         });
+         
+         final MD5MD5CRC32FileChecksum checksum = DFSClient.getFileChecksum(
+-            filename, nnproxy, socketFactory, socketTimeout);
++            path, nnproxy, socketFactory, socketTimeout);
+         MD5MD5CRC32FileChecksum.write(xml, checksum);
+       } catch(IOException ioe) {
+-        writeXml(ioe, filename, xml);
++        writeXml(ioe, path, xml);
+       } catch (InterruptedException e) {
+-        writeXml(e, filename, xml);
++        writeXml(e, path, xml);
+       }
+       xml.endDocument();
+     }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+index 04b87a0..7b1dee8 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FileDataServlet.java
+@@ -18,14 +18,13 @@
+ package org.apache.hadoop.hdfs.server.namenode;
+ 
+ import java.io.IOException;
+-import java.net.URI;
+ import java.net.URISyntaxException;
++import java.net.URL;
+ import java.security.PrivilegedExceptionAction;
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpServletResponse;
+ 
+ import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+ import org.apache.hadoop.hdfs.protocol.DatanodeID;
+@@ -33,18 +32,19 @@ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
+ import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.util.ServletUtil;
+ 
+ /** Redirect queries about the hosted filesystem to an appropriate datanode.
+  * @see org.apache.hadoop.hdfs.HftpFileSystem
+  */
+ public class FileDataServlet extends DfsServlet {
+ 
+-  /** Create a redirection URI */
+-  protected URI createUri(String parent, HdfsFileStatus i, UserGroupInformation ugi,
+-      ClientProtocol nnproxy, HttpServletRequest request, String dt)
+-      throws IOException, URISyntaxException {
++  /** Create a redirection URL */
++  protected URL createRedirectURL(String path, String encodedPath, HdfsFileStatus status, 
++      UserGroupInformation ugi, ClientProtocol nnproxy, HttpServletRequest request, String dt)
++      throws IOException {
+     String scheme = request.getScheme();
+-    final DatanodeID host = pickSrcDatanode(parent, i, nnproxy);
++    final DatanodeID host = pickSrcDatanode(path, status, nnproxy);
+     final String hostname;
+     if (host instanceof DatanodeInfo) {
+       hostname = ((DatanodeInfo)host).getHostName();
+@@ -56,13 +56,12 @@ public class FileDataServlet extends DfsServlet {
+     if (dt != null) {
+       dtParam = JspHelper.getDelegationTokenUrlParam(dt);
+     }
+-    
+-    return new URI(scheme, null, hostname,
+-        "https".equals(scheme)
+-          ? (Integer)getServletContext().getAttribute("datanode.https.port")
+-          : host.getInfoPort(),
+-        "/streamFile" + i.getFullName(parent), 
+-        "ugi=" + ugi.getShortUserName() + dtParam, null);
++    final int port = "https".equals(scheme)
++        ? (Integer)getServletContext().getAttribute("datanode.https.port")
++        : host.getInfoPort();
++    return new URL(scheme, hostname, port,
++        "/streamFile" + encodedPath + '?' +
++        "ugi=" + ServletUtil.encodeQueryValue(ugi.getShortUserName()) + dtParam);
+   }
+ 
+   private static JspHelper jspHelper = null;
+@@ -106,20 +105,15 @@ public class FileDataServlet extends DfsServlet {
+             @Override
+             public Void run() throws IOException {
+               ClientProtocol nn = createNameNodeProxy();
+-              final String path = 
+-                request.getPathInfo() != null ? request.getPathInfo() : "/";
+-              
+-              String delegationToken = 
++              final String path = ServletUtil.getDecodedPath(request, "/data");
++              final String encodedPath = ServletUtil.getRawPath(request, "/data");
++              String delegationToken =
+                 request.getParameter(JspHelper.DELEGATION_PARAMETER_NAME);
+               
+               HdfsFileStatus info = nn.getFileInfo(path);
+               if (info != null && !info.isDir()) {
+-                try {
+-                  response.sendRedirect(createUri(path, info, ugi, nn,
+-                        request, delegationToken).toURL().toString());
+-                } catch (URISyntaxException e) {
+-                  response.getWriter().println(e.toString());
+-                }
++                response.sendRedirect(createRedirectURL(path, encodedPath, 
++                    info, ugi, nn, request, delegationToken).toString());
+               } else if (info == null){
+                 response.sendError(400, "File not found " + path);
+               } else {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
+index e968ed3..24a88f4 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
+@@ -23,6 +23,7 @@ import org.apache.hadoop.hdfs.HftpFileSystem;
+ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+ import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
+ import org.apache.hadoop.hdfs.protocol.DirectoryListing;
++import org.apache.hadoop.util.ServletUtil;
+ import org.apache.hadoop.util.VersionInfo;
+ 
+ import org.znerd.xmlenc.*;
+@@ -82,8 +83,7 @@ public class ListPathsServlet extends DfsServlet {
+    */
+   protected Map<String,String> buildRoot(HttpServletRequest request,
+       XMLOutputter doc) {
+-    final String path = request.getPathInfo() != null
+-      ? request.getPathInfo() : "/";
++    final String path = ServletUtil.getDecodedPath(request, "/listPaths");
+     final String exclude = request.getParameter("exclude") != null
+       ? request.getParameter("exclude") : "\\..*\\.crc";
+     final String filter = request.getParameter("filter") != null
+@@ -131,6 +131,7 @@ public class ListPathsServlet extends DfsServlet {
+ 
+     final Map<String, String> root = buildRoot(request, doc);
+     final String path = root.get("path");
++    final String filePath = ServletUtil.getDecodedPath(request, "/listPaths");
+ 
+     try {
+       final boolean recur = "yes".equals(root.get("recursive"));
+@@ -150,7 +151,7 @@ public class ListPathsServlet extends DfsServlet {
+             doc.attribute(m.getKey(), m.getValue());
+           }
+ 
+-          HdfsFileStatus base = nn.getFileInfo(path);
++          HdfsFileStatus base = nn.getFileInfo(filePath);
+           if ((base != null) && base.isDir()) {
+             writeInfo(path, base, doc);
+           }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
+index 3b514a3..d48333e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
+@@ -35,6 +35,7 @@ import org.apache.hadoop.hdfs.DFSClient.DFSInputStream;
+ import org.apache.hadoop.hdfs.server.datanode.DataNode;
+ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.util.ServletUtil;
+ 
+ import org.mortbay.jetty.InclusiveByteRange;
+ 
+@@ -66,8 +67,9 @@ public class StreamFile extends DfsServlet {
+   @SuppressWarnings("unchecked")
+   public void doGet(HttpServletRequest request, HttpServletResponse response)
+     throws ServletException, IOException {
+-    final String filename = request.getPathInfo() != null ?
+-        request.getPathInfo() : "/";
++    final String filename = ServletUtil.getDecodedPath(request, "/streamFile");
++    final String rawFilename = ServletUtil.getRawPath(request, "/streamFile");
++
+     if (filename == null || filename.length() == 0) {
+       response.setContentType("text/plain");
+       PrintWriter out = response.getWriter();
+@@ -103,7 +105,7 @@ public class StreamFile extends DfsServlet {
+       } else {
+         // No ranges, so send entire file
+         response.setHeader("Content-Disposition", "attachment; filename=\"" + 
+-                           filename + "\"");
++                           rawFilename + "\"");
+         response.setContentType("application/octet-stream");
+         response.setHeader(CONTENT_LENGTH, "" + in.getFileLength());
+         StreamFile.copyFromOffset(in, out, 0L, fileLen);
+diff --git a/src/test/org/apache/hadoop/hdfs/TestHftpFileSystem.java b/src/test/org/apache/hadoop/hdfs/TestHftpFileSystem.java
+index a0aa829..3cfcc98 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestHftpFileSystem.java
++++ b/src/test/org/apache/hadoop/hdfs/TestHftpFileSystem.java
+@@ -19,6 +19,9 @@
+ package org.apache.hadoop.hdfs;
+ 
+ import java.io.IOException;
++import java.net.URISyntaxException;
++import java.net.URL;
++import java.net.HttpURLConnection;
+ import java.util.Random;
+ 
+ import org.junit.Test;
+@@ -26,29 +29,59 @@ import org.junit.BeforeClass;
+ import org.junit.AfterClass;
+ import static org.junit.Assert.*;
+ 
++import org.apache.commons.logging.impl.Log4JLogger;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.BlockLocation;
+ import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.server.datanode.DataNode;
++import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
++import org.apache.hadoop.util.ServletUtil;
++import org.apache.log4j.Level;
+ 
+-/**
+- * Unittest for HftpFileSystem.
+- */
+ public class TestHftpFileSystem {
+   private static final Random RAN = new Random();
+-  private static final Path TEST_FILE = new Path("/testfile1+1");
+   
+   private static Configuration config = null;
+   private static MiniDFSCluster cluster = null;
+   private static FileSystem hdfs = null;
+   private static HftpFileSystem hftpFs = null;
+-    
+-  /**
+-   * Setup hadoop mini-cluster for test.
+-   */
++
++  private static Path[] TEST_PATHS = new Path[] {
++      // URI does not encode, Request#getPathInfo returns /foo
++      new Path("/foo;bar"),
++
++      // URI does not encode, Request#getPathInfo returns verbatim
++      new Path("/foo+"),
++      new Path("/foo+bar/foo+bar"),
++      new Path("/foo=bar/foo=bar"),
++      new Path("/foo,bar/foo,bar"),
++      new Path("/foo@bar/foo@bar"),
++      new Path("/foo&bar/foo&bar"),
++      new Path("/foo$bar/foo$bar"),
++      new Path("/foo_bar/foo_bar"),
++      new Path("/foo~bar/foo~bar"),
++      new Path("/foo.bar/foo.bar"),
++      new Path("/foo../bar/foo../bar"),
++      new Path("/foo.../bar/foo.../bar"),
++      new Path("/foo'bar/foo'bar"),
++      new Path("/foo#bar/foo#bar"),
++      new Path("/foo!bar/foo!bar"),
++      // HDFS file names may not contain ":"
++
++      // URI percent encodes, Request#getPathInfo decodes
++      new Path("/foo bar/foo bar"),
++      new Path("/foo?bar/foo?bar"),
++      new Path("/foo\">bar/foo\">bar"),
++    };
++
+   @BeforeClass
+   public static void setUp() throws IOException {
++    ((Log4JLogger)HftpFileSystem.LOG).getLogger().setLevel(Level.ALL);
++
+     final long seed = RAN.nextLong();
+     System.out.println("seed=" + seed);
+     RAN.setSeed(seed);
+@@ -62,27 +95,102 @@ public class TestHftpFileSystem {
+     hftpFs = (HftpFileSystem) new Path(hftpuri).getFileSystem(config);
+   }
+   
+-  /**
+-   * Shutdown the hadoop mini-cluster.
+-   */
+   @AfterClass
+   public static void tearDown() throws IOException {
+     hdfs.close();
+     hftpFs.close();
+     cluster.shutdown();
+   }
+-  
++
++  /**
++   * Test file creation and access with file names that need encoding. 
++   */
++  @Test
++  public void testFileNameEncoding() throws IOException, URISyntaxException {
++    for (Path p : TEST_PATHS) {
++      // Create and access the path (data and streamFile servlets)
++      FSDataOutputStream out = hdfs.create(p, true);
++      out.writeBytes("0123456789");
++      out.close();
++      FSDataInputStream in = hftpFs.open(p);
++      assertEquals('0', in.read());
++
++      // Check the file status matches the path. Hftp returns a FileStatus
++      // with the entire URI, extract the path part.
++      assertEquals(p, new Path(hftpFs.getFileStatus(p).getPath().toUri().getPath()));
++
++      // Test list status (listPath servlet)
++      assertEquals(1, hftpFs.listStatus(p).length);
++
++      // Test content summary (contentSummary servlet)
++      assertNotNull("No content summary", hftpFs.getContentSummary(p));
++
++      // Test checksums (fileChecksum and getFileChecksum servlets)
++      assertNotNull("No file checksum", hftpFs.getFileChecksum(p));
++    }
++  }
++
++  private void testDataNodeRedirect(Path path) throws IOException {
++    // Create the file
++    if (hdfs.exists(path)) {
++      hdfs.delete(path, true);
++    }
++    FSDataOutputStream out = hdfs.create(path, (short)1);
++    out.writeBytes("0123456789");
++    out.close();
++
++    // Get the path's block location so we can determine
++    // if we were redirected to the right DN.
++    FileStatus status = hdfs.getFileStatus(path);
++    BlockLocation[] locations =
++        hdfs.getFileBlockLocations(status, 0, 10);
++    String locationName = locations[0].getNames()[0];
++
++    // Connect to the NN to get redirected
++    URL u = hftpFs.getNamenodeURL(
++        "/data" + ServletUtil.encodePath(path.toUri().getPath()), 
++        "ugi=userx,groupy");
++    HttpURLConnection conn = (HttpURLConnection)u.openConnection();
++    HttpURLConnection.setFollowRedirects(true);
++    conn.connect();
++    conn.getInputStream();
++
++    boolean checked = false;
++    // Find the datanode that has the block according to locations
++    // and check that the URL was redirected to this DN's info port
++    for (DataNode node : cluster.getDataNodes()) {
++      DatanodeRegistration dnR = node.dnRegistration;
++      if (dnR.getName().equals(locationName)) {
++        checked = true;
++        assertEquals(dnR.getInfoPort(), conn.getURL().getPort());
++      }
++    }
++    assertTrue("The test never checked that location of " +
++               "the block and hftp desitnation are the same", checked);
++  }
++
++  /**
++   * Test that clients are redirected to the appropriate DN.
++   */
++  @Test
++  public void testDataNodeRedirect() throws IOException {
++    for (Path p : TEST_PATHS) {
++      testDataNodeRedirect(p);
++    }
++  }
++
+   /**
+    * Tests getPos() functionality.
+    */
+   @Test
+-  public void testGetPos() throws Exception {
++  public void testGetPos() throws IOException {
++    final Path testFile = new Path("/testfile+1");
+     // Write a test file.
+-    FSDataOutputStream out = hdfs.create(TEST_FILE, true);
++    FSDataOutputStream out = hdfs.create(testFile, true);
+     out.writeBytes("0123456789");
+     out.close();
+     
+-    FSDataInputStream in = hftpFs.open(TEST_FILE);
++    FSDataInputStream in = hftpFs.open(testFile);
+     
+     // Test read().
+     for (int i = 0; i < 5; ++i) {
+@@ -107,18 +215,17 @@ public class TestHftpFileSystem {
+     assertEquals(10, in.getPos());
+     in.close();
+   }
+-  
++
+   /**
+    * Tests seek().
+    */
+   @Test
+-  public void testSeek() throws Exception {
+-    // Write a test file.
+-    FSDataOutputStream out = hdfs.create(TEST_FILE, true);
++  public void testSeek() throws IOException {
++    final Path testFile = new Path("/testfile+1");
++    FSDataOutputStream out = hdfs.create(testFile, true);
+     out.writeBytes("0123456789");
+     out.close();
+-    
+-    FSDataInputStream in = hftpFs.open(TEST_FILE);
++    FSDataInputStream in = hftpFs.open(testFile);
+     in.seek(7);
+     assertEquals('7', in.read());
+   }
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestStreamFile.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestStreamFile.java
+index e57f8a5..6bf3a24 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestStreamFile.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestStreamFile.java
+@@ -20,7 +20,6 @@ package org.apache.hadoop.hdfs.server.namenode;
+ import java.io.ByteArrayOutputStream;
+ import java.io.DataOutputStream;
+ import java.io.IOException;
+-import java.net.InetSocketAddress;
+ import java.util.Arrays;
+ import java.util.Enumeration;
+ import java.util.List;
+@@ -46,8 +45,8 @@ import org.mockito.Mockito;
+ import org.mortbay.jetty.InclusiveByteRange;
+ 
+ /*
+-  Mock input stream class that always outputs the current position of the stream
+-*/
++ * Mock input stream class that always outputs the current position of the stream. 
++ */
+ class MockFSInputStream extends FSInputStream {
+   long currentPos = 0;
+   public int read() throws IOException {
+@@ -314,7 +313,7 @@ public class TestStreamFile {
+   }
+   
+   
+-    // Test for positive scenario
++  // Test for positive scenario
+   @Test
+   public void testDoGetShouldWriteTheFileContentIntoServletOutputStream()
+       throws Exception {
+@@ -380,7 +379,9 @@ public class TestStreamFile {
+     Mockito.doReturn(CONF).when(mockServletContext).getAttribute(
+         JspHelper.CURRENT_CONF);
+     Mockito.doReturn(testFile.toString()).when(mockHttpServletRequest)
+-        .getParameter("filename");
++      .getParameter("filename");
++    Mockito.doReturn("/streamFile"+testFile.toString()).when(mockHttpServletRequest)
++      .getRequestURI();
+   }
+ 
+   static Path writeFile(FileSystem fs, Path f) throws IOException {
+diff --git a/src/webapps/datanode/browseBlock.jsp b/src/webapps/datanode/browseBlock.jsp
+index cbd69ed..89926c4 100644
+--- a/src/webapps/datanode/browseBlock.jsp
++++ b/src/webapps/datanode/browseBlock.jsp
+@@ -89,9 +89,8 @@
+     //URL for downloading the full file
+     String downloadUrl = "http://" + req.getServerName() + ":" +
+                          + req.getServerPort() + "/streamFile"
+-                         + URLEncoder.encode(filename, "UTF-8")
+-                         + "?" + JspHelper.DELEGATION_PARAMETER_NAME
+-                         + "=" + tokenString;
++                         + ServletUtil.encodePath(filename)
++                         + "?" + JspHelper.getDelegationTokenUrlParam(tokenString);
+     out.print("<a name=\"viewOptions\"></a>");
+     out.print("<a href=\"" + downloadUrl + "\">Download this file</a><br>");
+     
+-- 
+1.7.0.4
+

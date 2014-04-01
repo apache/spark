@@ -1,0 +1,62 @@
+From 9a17aaf708514474dff8be5706c798b4c1d5199f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sun, 3 Oct 2010 18:00:24 -0700
+Subject: [PATCH 0718/1179] CLOUDERA-BUILD. jsvc and task-controller should install into a platform-specific dir
+
+---
+ bin/hadoop                |    2 +-
+ build.xml                 |    4 ++--
+ cloudera/do-release-build |    2 +-
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index c496676..0679a9a 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -329,7 +329,7 @@ if [ "$starting_secure_dn" = "true" ]; then
+    HADOOP_SECURE_DN_PID="$HADOOP_PID_DIR/hadoop_secure_dn.pid"
+   fi
+ 
+-  exec "$HADOOP_HOME/bin/jsvc" -Dproc_$COMMAND -outfile "$HADOOP_LOG_DIR/jsvc.out" \
++  exec "$HADOOP_HOME/sbin/$JAVA_PLATFORM/jsvc" -Dproc_$COMMAND -outfile "$HADOOP_LOG_DIR/jsvc.out" \
+                                                -errfile "$HADOOP_LOG_DIR/jsvc.err" \
+                                                -pidfile "$HADOOP_SECURE_DN_PID" \
+                                                -nodetach \
+diff --git a/build.xml b/build.xml
+index 278f984..5ae11e7 100644
+--- a/build.xml
++++ b/build.xml
+@@ -176,7 +176,7 @@
+     value="${build.c++}/task-controller" />
+   <!-- the default install dir is build directory override it using
+    -Dtask-controller.install.dir=$HADOOP_HOME/bin -->
+-  <property name="task-controller.install.dir" value="${dist.dir}/bin" />
++  <property name="task-controller.install.dir" value="${dist.dir}/sbin/${build.platform}/" />
+   <!-- end of task-controller properties -->
+ 
+   <!-- jsvc properties set here -->
+@@ -2251,7 +2251,7 @@
+     <subant target="jsvc">
+       <property name="c++.jsvc.src" value="${c++.jsvc.src}" />
+       <property name="build.c++.jsvc" value="${build.c++}/jsvc" />
+-      <property name="jsvc.install.dir" value="${dist.dir}/bin" /> 
++      <property name="jsvc.install.dir" value="${dist.dir}/sbin/${build.platform}" /> 
+       <property name="jsvc.arch" value="${jvm.arch}" />
+       <fileset file="${c++.jsvc.src}/build.xml"/>
+     </subant>
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index 58d0f76..b9fab0c 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -82,7 +82,7 @@ JAVA_HOME=$JAVA32_HOME \
+   -Dforrest.home=$FORREST_HOME \
+   -Dhadoop.conf.dir=/etc/hadoop-0.20/conf \
+   -propertyfile cloudera/build.properties \
+-  clean package-native
++  clean task-controller package-native
+ 
+ if [ -z "$SKIP_JDIFF" ]; then
+ ant \
+-- 
+1.7.0.4
+

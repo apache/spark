@@ -1,0 +1,166 @@
+From 370c9a1e75cc5d5e93cec066006ada0485139fb8 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@lipcon.org>
+Date: Tue, 15 Jun 2010 18:48:58 -0700
+Subject: [PATCH 0287/1179] HDFS-1141. completeFile should check lease holder
+
+Description: Fixes a bug where a writer could finalize an in-progress
+             file after it had already lost its lease. This could occur
+             for example if the writer entered a GC pause after finishing
+             the last block but before finalizing the file.
+Reason: Potential dataloss bug with append/sync
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   23 ++----
+ .../org/apache/hadoop/hdfs/TestFileAppend4.java    |   83 +++++++++++++++++++-
+ 2 files changed, 91 insertions(+), 15 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index a6cf8ff..fdb3bca 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -1420,24 +1420,19 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     NameNode.stateChangeLog.debug("DIR* NameSystem.completeFile: " + src + " for " + holder);
+     if (isInSafeMode())
+       throw new SafeModeException("Cannot complete file " + src, safeMode);
+-    INode iFile = dir.getFileINode(src);
+-    INodeFileUnderConstruction pendingFile = null;
+-    Block[] fileBlocks = null;
+ 
+-    if (iFile != null && iFile.isUnderConstruction()) {
+-      pendingFile = (INodeFileUnderConstruction) iFile;
+-      fileBlocks =  dir.getFileBlocks(src);
+-    }
+-    if (fileBlocks == null ) {    
++    INodeFileUnderConstruction pendingFile  = checkLease(src, holder);
++    Block[] fileBlocks =  dir.getFileBlocks(src);
++
++    if (fileBlocks == null ) {
+       NameNode.stateChangeLog.warn("DIR* NameSystem.completeFile: "
+                                    + "failed to complete " + src
+-                                   + " because dir.getFileBlocks() is null " + 
+-                                   " and pendingFile is " + 
+-                                   ((pendingFile == null) ? "null" : 
+-                                     ("from " + pendingFile.getClientMachine()))
+-                                  );                      
++                                   + " because dir.getFileBlocks() is null,"
++                                   + " pending from " + pendingFile.getClientMachine());
+       return CompleteFileStatus.OPERATION_FAILED;
+-    } else if (!checkFileProgress(pendingFile, true)) {
++    }
++
++    if (!checkFileProgress(pendingFile, true)) {
+       return CompleteFileStatus.STILL_WAITING;
+     }
+ 
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+index c087d56..89fb4bc 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+@@ -659,7 +659,8 @@ public class TestFileAppend4 extends TestCase {
+       Throwable thrownByClose = err.get();
+       assertNotNull(thrownByClose);
+       assertTrue(thrownByClose instanceof IOException);
+-      if (!thrownByClose.getMessage().contains("Could not complete write")) {
++      if (!thrownByClose.getMessage().contains(
++        "File is not open for writing.")) {
+         throw thrownByClose;
+       }
+     } finally {
+@@ -667,6 +668,85 @@ public class TestFileAppend4 extends TestCase {
+     }
+   }
+ 
++
++  /**
++   * Test case that stops a writer after finalizing a block but
++   * before calling completeFile, recovers a file from another writer,
++   * starts writing from that writer, and then has the old lease holder
++   * call completeFile
++   */
++  public void testCompleteOtherLeaseHoldersFile() throws Throwable {
++    cluster = new MiniDFSCluster(conf, 3, true, null);
++
++    try {
++      cluster.waitActive();
++      NameNode preSpyNN = cluster.getNameNode();
++      NameNode spyNN = spy(preSpyNN);
++
++      // Delay completeFile
++      DelayAnswer delayer = new DelayAnswer();
++      doAnswer(delayer).when(spyNN).complete(anyString(), anyString());
++
++      DFSClient client = new DFSClient(null, spyNN, conf, null);
++      file1 = new Path("/testRecoverFinalized");
++      final OutputStream stm = client.create("/testRecoverFinalized", true);
++
++      // write 1/2 block
++      AppendTestUtil.write(stm, 0, 4096);
++      final AtomicReference<Throwable> err = new AtomicReference<Throwable>();
++      Thread t = new Thread() { 
++          public void run() {
++            try {
++              stm.close();
++            } catch (Throwable t) {
++              err.set(t);
++            }
++          }};
++      t.start();
++      LOG.info("Waiting for close to get to latch...");
++      delayer.waitForCall();
++
++      // At this point, the block is finalized on the DNs, but the file
++      // has not been completed in the NN.
++      // Lose the leases
++      LOG.info("Killing lease checker");
++      client.leasechecker.interruptAndJoin();
++
++      FileSystem fs1 = cluster.getFileSystem();
++      FileSystem fs2 = AppendTestUtil.createHdfsWithDifferentUsername(
++        fs1.getConf());
++
++      LOG.info("Recovering file");
++      recoverFile(fs2);
++
++      LOG.info("Opening file for append from new fs");
++      FSDataOutputStream appenderStream = fs2.append(file1);
++      
++      LOG.info("Writing some data from new appender");
++      AppendTestUtil.write(appenderStream, 0, 4096);
++      
++      LOG.info("Telling old close to proceed.");
++      delayer.proceed();
++      LOG.info("Waiting for close to finish.");
++      t.join();
++      LOG.info("Close finished.");
++
++      // We expect that close will get a "Lease mismatch"
++      // error.
++      Throwable thrownByClose = err.get();
++      assertNotNull(thrownByClose);
++      assertTrue(thrownByClose instanceof IOException);
++      if (!thrownByClose.getMessage().contains(
++            "Lease mismatch"))
++        throw thrownByClose;
++      
++      // The appender should be able to close properly
++      appenderStream.close();
++    } finally {
++      cluster.shutdown();
++    }
++  }  
++  
+   /**
+    * Test for an intermittent failure of commitBlockSynchronization.
+    * This could happen if the DN crashed between calling updateBlocks
+@@ -703,6 +783,7 @@ public class TestFileAppend4 extends TestCase {
+     LOG.info("STOP");
+   }
+ 
++  
+   /**
+    * Test that when a DN starts up with bbws from a file that got
+    * removed or finalized when it was down, the block gets deleted.
+-- 
+1.7.0.4
+

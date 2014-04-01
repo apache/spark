@@ -1,0 +1,378 @@
+From ce75318a484615dc7b161a41710884f34db50c86 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:46:34 -0800
+Subject: [PATCH 0053/1179] MAPREDUCE-716. org.apache.hadoop.mapred.lib.db.DBInputformat not working with oracle
+
+Description: <p>The out of the box implementation of the Hadoop is working properly with mysql/hsqldb, but NOT with oracle.<br/>
+Reason is DBInputformat is implemented with mysql/hsqldb specific query constructs like "LIMIT", "OFFSET".</p>
+
+<p>FIX:<br/>
+building a database provider specific logic based on the database providername (which we can get using connection).</p>
+
+Reason: Compatibility improvement
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../apache/hadoop/mapred/lib/db/DBInputFormat.java |  112 ++++++++++++++++----
+ .../hadoop/mapred/lib/db/MySQLDBRecordReader.java  |   46 ++++++++
+ .../hadoop/mapred/lib/db/OracleDBRecordReader.java |   89 ++++++++++++++++
+ 3 files changed, 227 insertions(+), 20 deletions(-)
+ create mode 100644 src/mapred/org/apache/hadoop/mapred/lib/db/MySQLDBRecordReader.java
+ create mode 100644 src/mapred/org/apache/hadoop/mapred/lib/db/OracleDBRecordReader.java
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/db/DBInputFormat.java b/src/mapred/org/apache/hadoop/mapred/lib/db/DBInputFormat.java
+index 8480f8b..f74c16d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/lib/db/DBInputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapred/lib/db/DBInputFormat.java
+@@ -22,6 +22,7 @@ import java.io.DataInput;
+ import java.io.DataOutput;
+ import java.io.IOException;
+ import java.sql.Connection;
++import java.sql.DatabaseMetaData;
+ import java.sql.PreparedStatement;
+ import java.sql.ResultSet;
+ import java.sql.SQLException;
+@@ -48,17 +49,18 @@ import org.apache.hadoop.util.ReflectionUtils;
+  */
+ public class DBInputFormat<T  extends DBWritable>
+   implements InputFormat<LongWritable, T>, JobConfigurable {
++
++   private String dbProductName = "DEFAULT";
++
+   /**
+    * A RecordReader that reads records from a SQL table.
+    * Emits LongWritables containing the record number as 
+    * key and DBWritables as value.  
+    */
+-  protected class DBRecordReader implements
++  public static class DBRecordReader<T extends DBWritable> implements
+   RecordReader<LongWritable, T> {
+     private ResultSet results;
+ 
+-    private Statement statement;
+-
+     private Class<T> inputClass;
+ 
+     private JobConf job;
+@@ -67,26 +69,51 @@ public class DBInputFormat<T  extends DBWritable>
+ 
+     private long pos = 0;
+ 
++    private PreparedStatement statement;
++
++    private Connection connection;
++
++    private DBConfiguration dbConf;
++ 
++    private String conditions;
++ 
++    private String [] fieldNames;
++ 
++    private String tableName;
++
+     /**
+      * @param split The InputSplit to read data for
+      * @throws SQLException 
+      */
+-    protected DBRecordReader(DBInputSplit split, Class<T> inputClass, JobConf job) throws SQLException {
++    protected DBRecordReader(DBInputSplit split, 
++         Class<T> inputClass, JobConf job, Connection conn, DBConfiguration dbConfig,
++         String cond, String [] fields, String table)
++         throws SQLException {
+       this.inputClass = inputClass;
+       this.split = split;
+       this.job = job;
++      this.connection = conn;
++      this.dbConf = dbConfig;
++      this.conditions = cond;
++      this.fieldNames = fields;
++      this.tableName = table;
+       
+-      statement = connection.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
++      this.results = executeQuery(getSelectQuery());
++    }
+ 
+-      //statement.setFetchSize(Integer.MIN_VALUE);
+-      results = statement.executeQuery(getSelectQuery());
++    protected ResultSet executeQuery(String query) throws SQLException {
++      this.statement = connection.prepareStatement(query,
++          ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
++      return statement.executeQuery();
+     }
+ 
++
+     /** Returns the query for selecting the records, 
+      * subclasses can override this for custom behaviour.*/
+     protected String getSelectQuery() {
+       StringBuilder query = new StringBuilder();
+       
++      // Default codepath for MySQL, HSQLDB, etc. Relies on LIMIT/OFFSET for splits.
+       if(dbConf.getInputQuery() == null) {
+         query.append("SELECT ");
+ 
+@@ -99,23 +126,23 @@ public class DBInputFormat<T  extends DBWritable>
+ 
+         query.append(" FROM ").append(tableName);
+         query.append(" AS ").append(tableName); //in hsqldb this is necessary
+-        if (conditions != null && conditions.length() > 0)
++        if (conditions != null && conditions.length() > 0) {
+           query.append(" WHERE (").append(conditions).append(")");
++        }
+         String orderBy = dbConf.getInputOrderBy();
+-        if(orderBy != null && orderBy.length() > 0) {
++        if (orderBy != null && orderBy.length() > 0) {
+           query.append(" ORDER BY ").append(orderBy);
+         }
+-      }
+-      else {
++      } else {
++        // PREBUILT QUERY
+         query.append(dbConf.getInputQuery());
+       }
+ 
+       try {
+         query.append(" LIMIT ").append(split.getLength());
+         query.append(" OFFSET ").append(split.getStart());
+-      }
+-      catch (IOException ex) {
+-        //ignore, will not throw
++      } catch (IOException ex) {
++        //ignore, will not throw.
+       }
+       return query.toString();
+     }
+@@ -123,9 +150,15 @@ public class DBInputFormat<T  extends DBWritable>
+     /** {@inheritDoc} */
+     public void close() throws IOException {
+       try {
+-        connection.commit();
+-        results.close();
+-        statement.close();
++        if (null != results) {
++          results.close();
++        }
++        if (null != statement) {
++          statement.close();
++        }
++        if (null != connection) {
++          connection.commit();
++        }
+       } catch (SQLException e) {
+         throw new IOException(e.getMessage());
+       }
+@@ -168,6 +201,30 @@ public class DBInputFormat<T  extends DBWritable>
+       }
+       return true;
+     }
++
++    protected DBInputSplit getSplit() {
++      return split;
++    }
++
++    protected String [] getFieldNames() {
++      return fieldNames;
++    }
++
++    protected String getTableName() {
++      return tableName;
++    }
++
++    protected String getConditions() {
++      return conditions;
++    }
++
++    protected DBConfiguration getDBConf() {
++      return dbConf;
++    }
++
++    protected Connection getConnection() {
++      return connection;
++    }
+   }
+ 
+   /**
+@@ -266,6 +323,9 @@ public class DBInputFormat<T  extends DBWritable>
+       this.connection = dbConf.getConnection();
+       this.connection.setAutoCommit(false);
+       connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
++
++      DatabaseMetaData dbMeta = connection.getMetaData();
++      this.dbProductName = dbMeta.getDatabaseProductName().toUpperCase();
+     }
+     catch (Exception ex) {
+       throw new RuntimeException(ex);
+@@ -283,9 +343,21 @@ public class DBInputFormat<T  extends DBWritable>
+ 
+     Class inputClass = dbConf.getInputClass();
+     try {
+-      return new DBRecordReader((DBInputSplit) split, inputClass, job);
+-    }
+-    catch (SQLException ex) {
++      // use database product name to determine appropriate record reader.
++      if (dbProductName.startsWith("ORACLE")) {
++        // use Oracle-specific db reader.
++        return new OracleDBRecordReader((DBInputSplit) split, inputClass,
++            job, connection, dbConf, conditions, fieldNames, tableName);
++      } else if (dbProductName.startsWith("MYSQL")) {
++        // use MySQL-specific db reader.
++        return new MySQLDBRecordReader((DBInputSplit) split, inputClass,
++            job, connection, dbConf, conditions, fieldNames, tableName);
++      } else {
++        // Generic reader.
++        return new DBRecordReader((DBInputSplit) split, inputClass,
++            job, connection, dbConf, conditions, fieldNames, tableName);
++      }
++    } catch (SQLException ex) {
+       throw new IOException(ex.getMessage());
+     }
+   }
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/db/MySQLDBRecordReader.java b/src/mapred/org/apache/hadoop/mapred/lib/db/MySQLDBRecordReader.java
+new file mode 100644
+index 0000000..5fe65de
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapred/lib/db/MySQLDBRecordReader.java
+@@ -0,0 +1,46 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred.lib.db;
++
++import java.sql.Connection;
++import java.sql.ResultSet;
++import java.sql.PreparedStatement;
++import java.sql.SQLException;
++
++import org.apache.hadoop.mapred.JobConf;
++
++/**
++ * A RecordReader that reads records from a MySQL table.
++ */
++public class MySQLDBRecordReader<T extends DBWritable> extends DBInputFormat.DBRecordReader<T> {
++
++  public MySQLDBRecordReader(DBInputFormat.DBInputSplit split, 
++      Class<T> inputClass, JobConf conf, Connection conn, DBConfiguration dbConfig,
++      String cond, String [] fields, String table) throws SQLException {
++    super(split, inputClass, conf, conn, dbConfig, cond, fields, table);
++  }
++
++  // Execute statements for mysql in unbuffered mode.
++  protected ResultSet executeQuery(String query) throws SQLException {
++    PreparedStatement statement = getConnection().prepareStatement(query,
++      ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
++    statement.setFetchSize(Integer.MIN_VALUE); // MySQL: read row-at-a-time.
++    return statement.executeQuery();
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapred/lib/db/OracleDBRecordReader.java b/src/mapred/org/apache/hadoop/mapred/lib/db/OracleDBRecordReader.java
+new file mode 100644
+index 0000000..5eafb0b
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapred/lib/db/OracleDBRecordReader.java
+@@ -0,0 +1,89 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred.lib.db;
++
++import java.io.IOException;
++import java.sql.Connection;
++import java.sql.ResultSet;
++import java.sql.SQLException;
++import java.sql.Statement;
++
++import org.apache.hadoop.mapred.JobConf;
++
++/**
++ * A RecordReader that reads records from an Oracle SQL table.
++ */
++public class OracleDBRecordReader<T extends DBWritable> extends DBInputFormat.DBRecordReader<T> {
++
++  public OracleDBRecordReader(DBInputFormat.DBInputSplit split, 
++      Class<T> inputClass, JobConf conf, Connection conn, DBConfiguration dbConfig,
++      String cond, String [] fields, String table) throws SQLException {
++    super(split, inputClass, conf, conn, dbConfig, cond, fields, table);
++  }
++
++  /** Returns the query for selecting the records from an Oracle DB. */
++  protected String getSelectQuery() {
++    StringBuilder query = new StringBuilder();
++    DBConfiguration dbConf = getDBConf();
++    String conditions = getConditions();
++    String tableName = getTableName();
++    String [] fieldNames = getFieldNames();
++
++    // Oracle-specific codepath to use rownum instead of LIMIT/OFFSET.
++    if(dbConf.getInputQuery() == null) {
++      query.append("SELECT ");
++  
++      for (int i = 0; i < fieldNames.length; i++) {
++        query.append(fieldNames[i]);
++        if (i != fieldNames.length -1) {
++          query.append(", ");
++        }
++      }
++  
++      query.append(" FROM ").append(tableName);
++      if (conditions != null && conditions.length() > 0)
++        query.append(" WHERE ").append(conditions);
++      String orderBy = dbConf.getInputOrderBy();
++      if (orderBy != null && orderBy.length() > 0) {
++        query.append(" ORDER BY ").append(orderBy);
++      }
++    } else {
++      //PREBUILT QUERY
++      query.append(dbConf.getInputQuery());
++    }
++        
++    try {
++      DBInputFormat.DBInputSplit split = getSplit();
++      if (split.getLength() > 0 && split.getStart() > 0){
++        String querystring = query.toString();
++
++        query = new StringBuilder();
++        query.append("SELECT * FROM (SELECT a.*,ROWNUM dbif_rno FROM ( ");
++        query.append(querystring);
++        query.append(" ) a WHERE rownum <= ").append(split.getStart());
++        query.append(" + ").append(split.getLength());
++        query.append(" ) WHERE dbif_rno >= ").append(split.getStart());
++      }
++    } catch (IOException ex) {
++      // ignore, will not throw.
++    }		      
++
++    return query.toString();
++  }
++}
+-- 
+1.7.0.4
+

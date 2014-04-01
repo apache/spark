@@ -1,0 +1,148 @@
+From f8e0599a434e1ce94158384f575e912e9f988229 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:59:40 -0800
+Subject: [PATCH 0091/1179] MAPREDUCE-461. Enable ServicePlugins for the JobTracker
+
+Description: Allow ServicePlugins (see <a href="http://issues.apache.org/jira/browse/HADOOP-5257" title="Export namenode/datanode functionality through a pluggable RPC layer"><del>HADOOP-5257</del></a>) for the JobTracker.
+(Relies on HADOOP-5640)
+Reason: API Improvement
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ src/mapred/mapred-default.xml                      |    7 +++++
+ .../org/apache/hadoop/mapred/JobInProgress.java    |    2 +-
+ .../org/apache/hadoop/mapred/JobTracker.java       |   15 +++++++++-
+ .../org/apache/hadoop/mapred/JobTrackerPlugin.java |   29 ++++++++++++++++++++
+ 4 files changed, 50 insertions(+), 3 deletions(-)
+ create mode 100644 src/mapred/org/apache/hadoop/mapred/JobTrackerPlugin.java
+
+diff --git a/src/mapred/mapred-default.xml b/src/mapred/mapred-default.xml
+index 259ee03..1f0de86 100644
+--- a/src/mapred/mapred-default.xml
++++ b/src/mapred/mapred-default.xml
+@@ -321,6 +321,13 @@
+ </property>
+ 
+ <property>
++  <name>mapred.jobtracker.plugins</name>
++  <value></value>
++  <description>Comma-separated list of jobtracker plug-ins to be activated.
++  </description>
++</property>
++
++<property>
+   <name>mapred.child.java.opts</name>
+   <value>-Xmx200m</value>
+   <description>Java opts for the task tracker child processes.  
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 17139f0..85310ee 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -53,7 +53,7 @@ import org.apache.hadoop.util.StringUtils;
+  * doing bookkeeping of its Tasks.
+  * ***********************************************************
+  */
+-class JobInProgress {
++public class JobInProgress {
+   /**
+    * Used when the a kill is issued to a job which is initializing.
+    */
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index a8e86f9..85e5b9c 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -77,6 +77,7 @@ import org.apache.hadoop.security.authorize.PolicyProvider;
+ import org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol;
+ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+ import org.apache.hadoop.util.HostsFileReader;
++import org.apache.hadoop.util.PluginDispatcher;
+ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.VersionInfo;
+@@ -158,6 +159,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   private int nextJobId = 1;
+ 
+   public static final Log LOG = LogFactory.getLog(JobTracker.class);
++  
++  private PluginDispatcher<JobTrackerPlugin> pluginDispatcher;
+     
+   /**
+    * Start the JobTracker with given configuration.
+@@ -201,7 +204,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     }
+     if (result != null) {
+       JobEndNotifier.startNotifier();
+-    }
++    }    
+     return result;
+   }
+ 
+@@ -1736,6 +1739,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+ 
+     //initializes the job status store
+     completedJobStatusStore = new CompletedJobStatusStore(conf);
++    
++    pluginDispatcher = PluginDispatcher.createFromConfiguration(
++            conf, "mapred.jobtracker.plugins", JobTrackerPlugin.class);
++    pluginDispatcher.dispatchStart(this);
+   }
+ 
+   private static SimpleDateFormat getDateFormat() {
+@@ -1802,7 +1809,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   }
+ 
+   public static InetSocketAddress getAddress(Configuration conf) {
+-    String jobTrackerStr =
++    String jobTrackerStr = 
+       conf.get("mapred.job.tracker", "localhost:8012");
+     return NetUtils.createSocketAddr(jobTrackerStr);
+   }
+@@ -1860,6 +1867,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   }
+ 
+   void close() throws IOException {
++    if (this.pluginDispatcher != null) {
++        LOG.info("Stopping pluginDispatcher");
++        pluginDispatcher.dispatchStop();
++      }
+     if (this.infoServer != null) {
+       LOG.info("Stopping infoServer");
+       try {
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTrackerPlugin.java b/src/mapred/org/apache/hadoop/mapred/JobTrackerPlugin.java
+new file mode 100644
+index 0000000..dd8c74c
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapred/JobTrackerPlugin.java
+@@ -0,0 +1,29 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred;
++
++import org.apache.hadoop.util.ServicePlugin;
++
++/**
++ * JobTrackerPlugins are found in mapred.jobtracker.plugins, and are started 
++ * and stopped by a PluginDispatcher during JobTracker start-up. 
++ */
++abstract public class JobTrackerPlugin implements ServicePlugin {
++  abstract public void start(Object service);
++  abstract public void stop();
++}
+-- 
+1.7.0.4
+

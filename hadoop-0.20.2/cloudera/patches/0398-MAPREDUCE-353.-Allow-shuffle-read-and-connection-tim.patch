@@ -1,0 +1,91 @@
+From 29334f33eee06ef864f1fed490da870050e5c7ff Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Dec 2009 09:13:53 +0530
+Subject: [PATCH 0398/1179] MAPREDUCE-353. Allow shuffle read and connection timeouts to be configurable.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12427566/patch-353-ydist.txt
+Author: Ravi Gummadi
+Ref: YDH
+---
+ src/mapred/mapred-default.xml                      |   17 +++++++++++++++++
+ .../org/apache/hadoop/mapred/ReduceTask.java       |   15 +++++++++++----
+ 2 files changed, 28 insertions(+), 4 deletions(-)
+
+diff --git a/src/mapred/mapred-default.xml b/src/mapred/mapred-default.xml
+index 579e277..987c4bf 100644
+--- a/src/mapred/mapred-default.xml
++++ b/src/mapred/mapred-default.xml
+@@ -297,6 +297,23 @@
+ </property>
+ 
+ <property>
++  <name>mapreduce.reduce.shuffle.connect.timeout</name>
++  <value>180000</value>
++  <description>Expert: The maximum amount of time (in milli seconds) a reduce
++  task spends in trying to connect to a tasktracker for getting map output.
++  </description>
++</property>
++
++<property>
++  <name>mapreduce.reduce.shuffle.read.timeout</name>
++  <value>180000</value>
++  <description>Expert: The maximum amount of time (in milli seconds) a reduce
++  task waits for map output data to be available for reading after obtaining
++  connection.
++  </description>
++</property>
++
++<property>
+   <name>mapred.task.timeout</name>
+   <value>600000</value>
+   <description>The number of milliseconds before a task will be
+diff --git a/src/mapred/org/apache/hadoop/mapred/ReduceTask.java b/src/mapred/org/apache/hadoop/mapred/ReduceTask.java
+index 42fa233..5954166 100644
+--- a/src/mapred/org/apache/hadoop/mapred/ReduceTask.java
++++ b/src/mapred/org/apache/hadoop/mapred/ReduceTask.java
+@@ -1135,6 +1135,8 @@ class ReduceTask extends Task {
+       private final static int UNIT_CONNECT_TIMEOUT = 30 * 1000;
+       // default read timeout (in milliseconds)
+       private final static int DEFAULT_READ_TIMEOUT = 3 * 60 * 1000;
++      private final int shuffleConnectionTimeout;
++      private final int shuffleReadTimeout;
+ 
+       private MapOutputLocation currentLocation = null;
+       private int id = nextMapOutputCopierId++;
+@@ -1150,6 +1152,11 @@ class ReduceTask extends Task {
+         LOG.debug(getName() + " created");
+         this.reporter = reporter;
+         
++        shuffleConnectionTimeout =
++          job.getInt("mapreduce.reduce.shuffle.connect.timeout", STALLED_COPY_TIMEOUT);
++        shuffleReadTimeout =
++          job.getInt("mapreduce.reduce.shuffle.read.timeout", DEFAULT_READ_TIMEOUT);
++        
+         if (job.getCompressMapOutput()) {
+           Class<? extends CompressionCodec> codecClass =
+             job.getMapOutputCompressorClass(DefaultCodec.class);
+@@ -1371,8 +1378,8 @@ class ReduceTask extends Task {
+         // Connect
+         URLConnection connection = 
+           mapOutputLoc.getOutputLocation().openConnection();
+-        InputStream input = getInputStream(connection, STALLED_COPY_TIMEOUT,
+-                                           DEFAULT_READ_TIMEOUT); 
++        InputStream input = getInputStream(connection, shuffleConnectionTimeout,
++                                           shuffleReadTimeout); 
+         
+         // Validate header from map output
+         TaskAttemptID mapId = null;
+@@ -1511,8 +1518,8 @@ class ReduceTask extends Task {
+           // Reconnect
+           try {
+             connection = mapOutputLoc.getOutputLocation().openConnection();
+-            input = getInputStream(connection, STALLED_COPY_TIMEOUT, 
+-                                   DEFAULT_READ_TIMEOUT);
++            input = getInputStream(connection, shuffleConnectionTimeout, 
++                                   shuffleReadTimeout);
+           } catch (IOException ioe) {
+             LOG.info("Failed reopen connection to fetch map-output from " + 
+                      mapOutputLoc.getHost());
+-- 
+1.7.0.4
+

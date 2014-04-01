@@ -1,0 +1,34 @@
+From cac73dae4df7c536f36870083840a1a8f8c44303 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Wed, 7 Sep 2011 18:19:33 -0700
+Subject: [PATCH 1043/1179] MAPREDUCE-2760. mapreduce.jobtracker.split.metainfo.maxsize typoed in
+ mapred-default.xml.
+
+The configuration mapreduce.jobtracker.split.metainfo.maxsize is
+incorrectly included in mapred-default.xml as
+mapreduce.job.split.metainfo.maxsize. It seems that jobtracker is
+correct, since this is a JT-wide property rather than a job property.
+
+Reason: Bug
+Author: Todd Lipcon
+Ref: CDH-3547
+---
+ src/mapred/mapred-default.xml |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/mapred-default.xml b/src/mapred/mapred-default.xml
+index a1dfa62..c427a61 100644
+--- a/src/mapred/mapred-default.xml
++++ b/src/mapred/mapred-default.xml
+@@ -279,7 +279,7 @@
+ </property>
+ 
+ <property>
+-  <name>mapreduce.job.split.metainfo.maxsize</name>
++  <name>mapreduce.jobtracker.split.metainfo.maxsize</name>
+   <value>10000000</value>
+   <description>The maximum permissible size of the split metainfo file.
+   The JobTracker won't attempt to read split metainfo files bigger than
+-- 
+1.7.0.4
+

@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Values used when running libhdfs unit tests. -->
+<!-- This is mostly empty, to use the default values, overriding the -->
+<!-- potentially user-editted core-site.xml in the conf/ directory.  -->
+
+<configuration>
+
+<property>
+  <name>hadoop.tmp.dir</name>
+  <value>build/test/libhdfs</value>
+  <description>A base for other temporary directories.</description>
+</property>
+
+
+<property>
+  <name>fs.default.name</name>
+  <value>localhost:23000</value>
+  <description>The name of the default file system.  Either the
+  literal string "local" or a host:port for DFS.</description>
+</property>
+
+</configuration>

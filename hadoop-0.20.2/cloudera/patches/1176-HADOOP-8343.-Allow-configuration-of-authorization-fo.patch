@@ -1,0 +1,205 @@
+From 4c2a2d5126405542d96cff0867f22e8c10956d93 Mon Sep 17 00:00:00 2001
+From: Alejandro Abdelnur <tucu@cloudera.com>
+Date: Fri, 4 May 2012 10:22:50 -0700
+Subject: [PATCH 1176/1179] HADOOP-8343. Allow configuration of authorization for JmxJsonServlet and MetricsServlet (tucu)
+
+  Reason: Required not to break CM
+  Author: Alejandro Abdelnur
+  Ref: CDH-5582
+---
+ src/core/core-default.xml                          |    9 +++++
+ src/core/org/apache/hadoop/conf/ConfServlet.java   |    4 ++
+ .../apache/hadoop/fs/CommonConfigurationKeys.java  |    3 ++
+ src/core/org/apache/hadoop/http/HttpServer.java    |   38 +++++++++++++++++--
+ src/core/org/apache/hadoop/jmx/JMXJsonServlet.java |    5 +--
+ .../org/apache/hadoop/metrics/MetricsServlet.java  |    5 +++
+ .../org/apache/hadoop/http/TestHttpServer.java     |   22 +++++++++++
+ 7 files changed, 79 insertions(+), 7 deletions(-)
+
+diff --git a/src/core/core-default.xml b/src/core/core-default.xml
+index b66a34e..c92a644 100644
+--- a/src/core/core-default.xml
++++ b/src/core/core-default.xml
+@@ -45,6 +45,15 @@
+ </property>
+ 
+ <property>
++  <name>hadoop.security.instrumentation.requires.admin</name>
++  <value>false</value>
++  <description>
++    Indicates if administrator ACLs are required to access
++    instrumentation servlets (JMX, METRICS, CONF, STACKS).
++  </description>
++</property>
++
++<property>
+   <name>hadoop.security.authentication</name>
+   <value>simple</value>
+   <description>Possible values are simple (no authentication), and kerberos
+diff --git a/src/core/org/apache/hadoop/conf/ConfServlet.java b/src/core/org/apache/hadoop/conf/ConfServlet.java
+index 09b74de..d4fc5a6 100644
+--- a/src/core/org/apache/hadoop/conf/ConfServlet.java
++++ b/src/core/org/apache/hadoop/conf/ConfServlet.java
+@@ -52,6 +52,10 @@ public class ConfServlet extends HttpServlet {
+   @Override
+   public void doGet(HttpServletRequest request, HttpServletResponse response)
+       throws ServletException, IOException {
++    if (!HttpServer.isInstrumentationAccessAllowed(getServletContext(),
++                                                   request, response)) {
++      return;
++    }
+     String format = request.getParameter(FORMAT_PARAM);
+     if (null == format) {
+       format = FORMAT_XML;
+diff --git a/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java b/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
+index db878c7..4b49b62 100644
+--- a/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
++++ b/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
+@@ -39,6 +39,9 @@ public class CommonConfigurationKeys {
+   /** See src/core/core-default.xml */
+   public static final String HADOOP_SECURITY_AUTHORIZATION =
+     "hadoop.security.authorization";
++  /** See <a href="{@docRoot}/../core-default.html">core-default.xml</a> */
++  public static final String HADOOP_SECURITY_INSTRUMENTATION_REQUIRES_ADMIN =
++    "hadoop.security.instrumentation.requires.admin";
+   /** See src/core/core-default.xml */
+   public static final String  HADOOP_SECURITY_SERVICE_USER_NAME_KEY = 
+     "hadoop.security.service.user.name.key";
+diff --git a/src/core/org/apache/hadoop/http/HttpServer.java b/src/core/org/apache/hadoop/http/HttpServer.java
+index 88a5bda..4ac51a6 100644
+--- a/src/core/org/apache/hadoop/http/HttpServer.java
++++ b/src/core/org/apache/hadoop/http/HttpServer.java
+@@ -637,6 +637,37 @@ public class HttpServer implements FilterContainer {
+   }
+ 
+   /**
++   * Checks the user has privileges to access to instrumentation servlets.
++   * <p/>
++   * If <code>hadoop.security.instrumentation.requires.admin</code> is set to FALSE
++   * (default value) it always returns TRUE.
++   * <p/>
++   * If <code>hadoop.security.instrumentation.requires.admin</code> is set to TRUE
++   * it will check that if the current user is in the admin ACLS. If the user is
++   * in the admin ACLs it returns TRUE, otherwise it returns FALSE.
++   *
++   * @param servletContext the servlet context.
++   * @param request the servlet request.
++   * @param response the servlet response.
++   * @return TRUE/FALSE based on the logic decribed above.
++   */
++  public static boolean isInstrumentationAccessAllowed(
++    ServletContext servletContext, HttpServletRequest request,
++    HttpServletResponse response) throws IOException {
++    Configuration conf =
++      (Configuration) servletContext.getAttribute(CONF_CONTEXT_ATTRIBUTE);
++
++    boolean access = true;
++    boolean adminAccess = conf.getBoolean(
++      CommonConfigurationKeys.HADOOP_SECURITY_INSTRUMENTATION_REQUIRES_ADMIN,
++      false);
++    if (adminAccess) {
++      access = hasAdministratorAccess(servletContext, request, response);
++    }
++    return access;
++  }
++
++  /**
+    * Does the user sending the HttpServletRequest has the administrator ACLs? If
+    * it isn't the case, response will be modified to send an error to the user.
+    * 
+@@ -692,12 +723,11 @@ public class HttpServer implements FilterContainer {
+     public void doGet(HttpServletRequest request, HttpServletResponse response)
+       throws ServletException, IOException {
+ 
+-      // Do the authorization
+-      if (!HttpServer.hasAdministratorAccess(getServletContext(), request,
+-          response)) {
++      if (!HttpServer.isInstrumentationAccessAllowed(getServletContext(),
++                                                     request, response)) {
+         return;
+       }
+-
++      response.setContentType("text/plain; charset=UTF-8");
+       PrintWriter out = response.getWriter();
+       ReflectionUtils.printThreadInfo(out, "");
+       out.close();
+diff --git a/src/core/org/apache/hadoop/jmx/JMXJsonServlet.java b/src/core/org/apache/hadoop/jmx/JMXJsonServlet.java
+index a427d2f..b7247c6 100644
+--- a/src/core/org/apache/hadoop/jmx/JMXJsonServlet.java
++++ b/src/core/org/apache/hadoop/jmx/JMXJsonServlet.java
+@@ -145,9 +145,8 @@ public class JMXJsonServlet extends HttpServlet {
+   @Override
+   public void doGet(HttpServletRequest request, HttpServletResponse response) {
+     try {
+-      // Do the authorization
+-      if (!HttpServer.hasAdministratorAccess(getServletContext(), request,
+-          response)) {
++      if (!HttpServer.isInstrumentationAccessAllowed(getServletContext(),
++                                                     request, response)) {
+         return;
+       }
+ 
+diff --git a/src/core/org/apache/hadoop/metrics/MetricsServlet.java b/src/core/org/apache/hadoop/metrics/MetricsServlet.java
+index 2d82139..64da132 100644
+--- a/src/core/org/apache/hadoop/metrics/MetricsServlet.java
++++ b/src/core/org/apache/hadoop/metrics/MetricsServlet.java
+@@ -30,6 +30,7 @@ import javax.servlet.http.HttpServlet;
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpServletResponse;
+ 
++import org.apache.hadoop.http.HttpServer;
+ import org.apache.hadoop.metrics.spi.OutputRecord;
+ import org.apache.hadoop.metrics.spi.AbstractMetricsContext.MetricMap;
+ import org.apache.hadoop.metrics.spi.AbstractMetricsContext.TagMap;
+@@ -100,6 +101,10 @@ public class MetricsServlet extends HttpServlet {
+   @Override
+   public void doGet(HttpServletRequest request, HttpServletResponse response)
+       throws ServletException, IOException {
++    if (!HttpServer.isInstrumentationAccessAllowed(getServletContext(),
++                                                   request, response)) {
++      return;
++    }
+     String format = request.getParameter("format");
+     Collection<MetricsContext> allContexts = 
+       ContextFactory.getFactory().getAllContexts();
+diff --git a/src/test/org/apache/hadoop/http/TestHttpServer.java b/src/test/org/apache/hadoop/http/TestHttpServer.java
+index 78ac990..6fae25c 100644
+--- a/src/test/org/apache/hadoop/http/TestHttpServer.java
++++ b/src/test/org/apache/hadoop/http/TestHttpServer.java
+@@ -365,6 +365,8 @@ public class TestHttpServer {
+     Configuration conf = new Configuration();
+     conf.setBoolean(CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION,
+         true);
++    conf.setBoolean(CommonConfigurationKeys.HADOOP_SECURITY_INSTRUMENTATION_REQUIRES_ADMIN,
++        true);
+     conf.set(HttpServer.FILTER_INITIALIZER_PROPERTY,
+         DummyFilterInitializer.class.getName());
+ 
+@@ -436,4 +438,24 @@ public class TestHttpServer {
+ 
+   }
+ 
++  @Test
++  public void testRequiresAuthorizationAccess() throws Exception {
++    Configuration conf = new Configuration();
++    ServletContext context = Mockito.mock(ServletContext.class);
++    Mockito.when(context.getAttribute(HttpServer.CONF_CONTEXT_ATTRIBUTE)).thenReturn(conf);
++    HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
++    HttpServletResponse response = Mockito.mock(HttpServletResponse.class);
++
++    //requires admin access to instrumentation, FALSE by default
++    Assert.assertTrue(HttpServer.isInstrumentationAccessAllowed(context, request, response));
++
++    //requires admin access to instrumentation, TRUE
++    conf.setBoolean(CommonConfigurationKeys.HADOOP_SECURITY_INSTRUMENTATION_REQUIRES_ADMIN, true);
++    conf.setBoolean(CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, true);
++    AccessControlList acls = Mockito.mock(AccessControlList.class);
++    Mockito.when(acls.isUserAllowed(Mockito.<UserGroupInformation>any())).thenReturn(false);
++    Mockito.when(context.getAttribute(HttpServer.ADMINS_ACL)).thenReturn(acls);
++    Assert.assertFalse(HttpServer.isInstrumentationAccessAllowed(context, request, response));
++  }
++
+ }
+-- 
+1.7.0.4
+

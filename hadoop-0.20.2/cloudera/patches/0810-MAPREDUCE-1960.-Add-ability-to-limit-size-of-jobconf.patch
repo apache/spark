@@ -1,0 +1,157 @@
+From 3ae2cde7b036603b8aa19e2ab31994dd3209eded Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 18:35:44 -0800
+Subject: [PATCH 0810/1179] MAPREDUCE-1960. Add ability to limit size of jobconf
+
+Author: Mahadev Konar
+Ref: CDH-2622
+---
+ src/mapred/mapred-default.xml                      |    7 ++++
+ .../org/apache/hadoop/mapred/JobInProgress.java    |    9 ++++++
+ .../org/apache/hadoop/mapred/JobTracker.java       |   11 ++++++-
+ .../org/apache/hadoop/mapred/TestSubmitJob.java    |   30 ++++++++++++++++++-
+ 4 files changed, 53 insertions(+), 4 deletions(-)
+
+diff --git a/src/mapred/mapred-default.xml b/src/mapred/mapred-default.xml
+index 783bf8a..665d730 100644
+--- a/src/mapred/mapred-default.xml
++++ b/src/mapred/mapred-default.xml
+@@ -643,6 +643,13 @@
+ </property>
+ 
+ <property>
++  <name>mapred.user.jobconf.limit</name>
++  <value>5242880</value>
++  <description>The maximum allowed size of the user jobconf. The 
++  default is set to 5 MB</description>
++</property>
++
++<property>
+   <name>mapred.hosts</name>
+   <value></value>
+   <description>Names a file that contains the list of nodes that may
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index db56159..8774956 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.LocalFileSystem;
+ import org.apache.hadoop.fs.Path;
+@@ -364,6 +365,14 @@ public class JobInProgress {
+         public FileSystem run() throws IOException {
+           return jobSubmitDir.getFileSystem(default_conf);
+         }});
++      
++      /** check for the size of jobconf **/
++      Path submitJobFile = JobSubmissionFiles.getJobConfPath(jobSubmitDir);
++      FileStatus fstatus = fs.getFileStatus(submitJobFile);
++      if (fstatus.getLen() > jobtracker.MAX_JOBCONF_SIZE) {
++        throw new IOException("Exceeded max jobconf size: " 
++            + fstatus.getLen() + " limit: " + jobtracker.MAX_JOBCONF_SIZE);
++      }
+       this.localJobFile = default_conf.getLocalPath(JobTracker.SUBDIR
+           +"/"+jobId + ".xml");
+       Path jobFilePath = JobSubmissionFiles.getJobConfPath(jobSubmitDir);
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 80c2402..2deedb3 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -148,7 +148,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   // tracker could be blacklisted across all jobs
+   private int MAX_BLACKLISTS_PER_TRACKER = 4;
+   
+-  //Delegation token related keys
++
++  /** the maximum allowed size of the jobconf **/
++  long MAX_JOBCONF_SIZE = 5*1024*1024L;
++  /** the config key for max user jobconf size **/
++  public static final String MAX_USER_JOBCONF_SIZE_KEY = 
++      "mapred.user.jobconf.limit";
++
++  // Delegation token related keys
+   public static final String  DELEGATION_KEY_UPDATE_INTERVAL_KEY =  
+     "mapreduce.cluster.delegation.key.update-interval";
+   public static final long    DELEGATION_KEY_UPDATE_INTERVAL_DEFAULT =  
+@@ -2054,7 +2061,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+                                        DELEGATION_TOKEN_GC_INTERVAL);
+     secretManager.startThreads();
+        
+-
++    MAX_JOBCONF_SIZE = conf.getLong(MAX_USER_JOBCONF_SIZE_KEY, MAX_JOBCONF_SIZE);
+     //
+     // Grab some static constants
+     //
+diff --git a/src/test/org/apache/hadoop/mapred/TestSubmitJob.java b/src/test/org/apache/hadoop/mapred/TestSubmitJob.java
+index a18254d..570ba44 100644
+--- a/src/test/org/apache/hadoop/mapred/TestSubmitJob.java
++++ b/src/test/org/apache/hadoop/mapred/TestSubmitJob.java
+@@ -34,6 +34,7 @@ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.ToolRunner;
+ 
+ import junit.framework.TestCase;
+@@ -71,6 +72,7 @@ public class TestSubmitJob extends TestCase {
+     jt = null;
+     fs = null;
+   }
++  
+   /**
+    * Test to verify that jobs with invalid memory requirements are killed at the
+    * JT.
+@@ -118,11 +120,36 @@ public class TestSubmitJob extends TestCase {
+     jobConf.setMemoryForReduceTask(5 * 1024L);
+     runJobAndVerifyFailure(jobConf, 1 * 1024L, 5 * 1024L,
+         "Exceeds the cluster's max-memory-limit.");
+-    
+     mrCluster.shutdown();
+     mrCluster = null;
+   }
++  
++  /** check for large jobconfs **/
++  public void testJobWithInvalidDiskReqs()
++      throws Exception {
++    JobConf jtConf = new JobConf();
++    jtConf
++        .setLong(JobTracker.MAX_USER_JOBCONF_SIZE_KEY, 1 * 1024L);
++ 
++    mrCluster = new MiniMRCluster(0, "file:///", 0, null, null, jtConf);
++
++    JobConf clusterConf = mrCluster.createJobConf();
++
++    // No map-memory configuration
++    JobConf jobConf = new JobConf(clusterConf);
++    String[] args = { "-m", "0", "-r", "0", "-mt", "0", "-rt", "0" };
++    String msg = null;
++    try {
++      ToolRunner.run(jobConf, new SleepJob(), args);
++      assertTrue(false);
++    } catch (RemoteException re) {
++      System.out.println("Exception " + StringUtils.stringifyException(re));
++    }
+ 
++    mrCluster.shutdown();
++    mrCluster = null;
++  }
++  
+   private void runJobAndVerifyFailure(JobConf jobConf, long memForMapTasks,
+       long memForReduceTasks, String expectedMsg)
+       throws Exception,
+@@ -165,7 +192,6 @@ public class TestSubmitJob extends TestCase {
+            NetUtils.getSocketFactory(conf,
+                org.apache.hadoop.hdfs.protocol.ClientProtocol.class));
+   }
+- 
+    /**
+     * Submit a job and check if the files are accessible to other users.
+     */
+-- 
+1.7.0.4
+

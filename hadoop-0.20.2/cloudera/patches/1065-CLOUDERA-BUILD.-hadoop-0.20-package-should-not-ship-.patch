@@ -1,0 +1,24 @@
+From 95a824e4005b2a94fe1c11f1ef9db4c672ba43cb Mon Sep 17 00:00:00 2001
+From: Roman Shaposhnik <rvs@cloudera.com>
+Date: Tue, 11 Oct 2011 18:00:22 -0700
+Subject: [PATCH 1065/1179] CLOUDERA-BUILD. hadoop-0.20 package should not ship a cloudera folder
+
+---
+ cloudera/install_hadoop.sh |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index 7b5ab2c..d1bef42 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -177,6 +177,7 @@ rm -rf ${HADOOP_SRC_DIR}/contrib/hod/
+ 
+ 
+ cp -a ${HADOOP_SRC_DIR}/* $SRC_DIR/
++mv -f $LIB_DIR/cloudera-pom.xml $LIB_DIR/cloudera $SRC_DIR
+ 
+ # Make the empty config
+ install -d -m 0755 $ETC_DIR/conf.empty
+-- 
+1.7.0.4
+

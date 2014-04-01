@@ -1,0 +1,38 @@
+From ece7c80048db98aae5a81603ae426b8663afb975 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 5 Jul 2011 13:16:18 -0700
+Subject: [PATCH 1007/1179] HADOOP-7053. wrong FSNamesystem Audit logging setting in conf/log4j.properties.
+
+"log4j.logger.org.apache.hadoop.fs.FSNamesystem.audit=WARN" should be
+"log4j.logger.org.apache.hadoop.hdfs.server.namenode.FSNamesystem.audit=WARN".
+
+Reason: Bug
+Author: Jingguo Yao
+Ref: CDH-3293
+---
+ conf/log4j.properties |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/conf/log4j.properties b/conf/log4j.properties
+index b341527..50a3839 100644
+--- a/conf/log4j.properties
++++ b/conf/log4j.properties
+@@ -89,13 +89,13 @@ log4j.category.SecurityLogger=${hadoop.security.logger}
+ # FSNamesystem Audit logging
+ # All audit events are logged at INFO level
+ #
+-log4j.logger.org.apache.hadoop.fs.FSNamesystem.audit=WARN
++log4j.logger.org.apache.hadoop.hdfs.server.namenode.FSNamesystem.audit=WARN
+ 
+ # Custom Logging levels
+ 
+ #log4j.logger.org.apache.hadoop.mapred.JobTracker=DEBUG
+ #log4j.logger.org.apache.hadoop.mapred.TaskTracker=DEBUG
+-#log4j.logger.org.apache.hadoop.fs.FSNamesystem=DEBUG
++#log4j.logger.org.apache.hadoop.hdfs.server.namenode.FSNamesystem.audit=DEBUG
+ 
+ # Jets3t library
+ log4j.logger.org.jets3t.service.impl.rest.httpclient.RestS3Service=ERROR
+-- 
+1.7.0.4
+

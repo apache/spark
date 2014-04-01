@@ -1,0 +1,523 @@
+From f996b8a019bffefff183d7d688ccf95b8cb73de5 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:54:15 -0800
+Subject: [PATCH 0072/1179] MAPREDUCE-750. Extensible ConnManager factory API
+
+Description: Sqoop uses the ConnFactory class to instantiate a ConnManager implementation based on the connect string and other arguments supplied by the user. This allows per-database logic to be encapsulated in different ConnManager instances, and dynamically chosen based on which database the user is actually importing from. But adding new ConnManager implementations requires modifying the source of a common ConnFactory class. An indirection layer should be used to delegate instantiation to a number of factory implementations which can be specified in the static configuration or at runtime.
+Reason: API flexibility improvement
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ src/contrib/sqoop/conf/sqoop-default.xml           |   33 +++++
+ .../java/org/apache/hadoop/sqoop/ConnFactory.java  |  101 ++++++++------
+ .../src/java/org/apache/hadoop/sqoop/Sqoop.java    |    8 +-
+ .../sqoop/manager/DefaultManagerFactory.java       |   76 +++++++++++
+ .../hadoop/sqoop/manager/ManagerFactory.java       |   33 +++++
+ .../org/apache/hadoop/sqoop/mapred/ImportJob.java  |    2 +-
+ .../src/test/org/apache/hadoop/sqoop/AllTests.java |    1 +
+ .../org/apache/hadoop/sqoop/TestConnFactory.java   |  137 ++++++++++++++++++++
+ 8 files changed, 346 insertions(+), 45 deletions(-)
+ create mode 100644 src/contrib/sqoop/conf/sqoop-default.xml
+ create mode 100644 src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/DefaultManagerFactory.java
+ create mode 100644 src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/ManagerFactory.java
+ create mode 100644 src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestConnFactory.java
+
+diff --git a/src/contrib/sqoop/conf/sqoop-default.xml b/src/contrib/sqoop/conf/sqoop-default.xml
+new file mode 100644
+index 0000000..07906dc
+--- /dev/null
++++ b/src/contrib/sqoop/conf/sqoop-default.xml
+@@ -0,0 +1,33 @@
++<?xml version="1.0"?>
++<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++
++<!-- Put Sqoop-specific properties in this file. -->
++
++<configuration>
++
++  <property>
++    <name>sqoop.connection.factories</name>
++    <value>org.apache.hadoop.sqoop.manager.DefaultManagerFactory</value>
++    <description>A comma-delimited list of ManagerFactory implementations
++      which are consulted, in order, to instantiate ConnManager instances
++      used to drive connections to databases.
++    </description>
++  </property>
++
++</configuration>
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ConnFactory.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ConnFactory.java
+index 6315444..7d3f4a8 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ConnFactory.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ConnFactory.java
+@@ -18,72 +18,87 @@
+ 
+ package org.apache.hadoop.sqoop;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.sqoop.manager.ConnManager;
+-import org.apache.hadoop.sqoop.manager.GenericJdbcManager;
+-import org.apache.hadoop.sqoop.manager.HsqldbManager;
+-import org.apache.hadoop.sqoop.manager.LocalMySQLManager;
+-import org.apache.hadoop.sqoop.manager.MySQLManager;
+-import org.apache.hadoop.sqoop.manager.OracleManager;
++import org.apache.hadoop.sqoop.manager.DefaultManagerFactory;
++import org.apache.hadoop.sqoop.manager.ManagerFactory;
++import org.apache.hadoop.util.ReflectionUtils;
+ 
+ import java.io.IOException;
++import java.util.LinkedList;
++import java.util.List;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ 
+ /**
+- * Static factory class to create the ConnManager type required
++ * Factory class to create the ConnManager type required
+  * for the current import job.
++ *
++ * This class delegates the actual responsibility for instantiating
++ * ConnManagers to one or more instances of ManagerFactory. ManagerFactories
++ * are consulted in the order specified in sqoop-site.xml (sqoop.connection.factories).
+  */
+-public final class ConnFactory {
++public class ConnFactory {
+ 
+   public static final Log LOG = LogFactory.getLog(ConnFactory.class.getName());
+ 
+-  private ConnFactory() { }
++  public ConnFactory(Configuration conf) {
++    factories = new LinkedList<ManagerFactory>();
++    instantiateFactories(conf);
++  }
+ 
+-  /**
+-   * Factory method to get a ConnManager for the given JDBC connect string
+-   * @param opts The parsed command-line options
+-   * @return a ConnManager instance for the appropriate database
+-   * @throws IOException if it cannot find a ConnManager for this schema
++  /** The sqoop-site.xml configuration property used to set the list of 
++   * available ManagerFactories.
+    */
+-  public static ConnManager getManager(ImportOptions opts) throws IOException {
+-
+-    String manualDriver = opts.getDriverClassName();
+-    if (manualDriver != null) {
+-      // User has manually specified JDBC implementation with --driver.
+-      // Just use GenericJdbcManager.
+-      return new GenericJdbcManager(manualDriver, opts);
+-    }
++  public final static String FACTORY_CLASS_NAMES_KEY = "sqoop.connection.factories";
+ 
+-    String connectStr = opts.getConnectString();
++  // The default value for sqoop.connection.factories is the name of the DefaultManagerFactory.
++  final static String DEFAULT_FACTORY_CLASS_NAMES = DefaultManagerFactory.class.getName(); 
+ 
+-    int schemeStopIdx = connectStr.indexOf("//");
+-    if (-1 == schemeStopIdx) {
+-      // no scheme component?
+-      throw new IOException("Malformed connect string: " + connectStr);
+-    }
++  /** The list of ManagerFactory instances consulted by getManager().
++   */
++  private List<ManagerFactory> factories;
+ 
+-    String scheme = connectStr.substring(0, schemeStopIdx);
++  /**
++   * Create the ManagerFactory instances that should populate
++   * the factories list.
++   */
++  private void instantiateFactories(Configuration conf) {
++    String [] classNameArray =
++        conf.getStrings(FACTORY_CLASS_NAMES_KEY, DEFAULT_FACTORY_CLASS_NAMES);
+ 
+-    if (null == scheme) {
+-      // We don't know if this is a mysql://, hsql://, etc.
+-      // Can't do anything with this.
+-      throw new IOException("Null scheme associated with connect string.");
++    for (String className : classNameArray) {
++      try {
++        className = className.trim(); // Ignore leading/trailing whitespace.
++        ManagerFactory factory = ReflectionUtils.newInstance(
++            (Class<ManagerFactory>) conf.getClassByName(className), conf);
++        LOG.debug("Loaded manager factory: " + className);
++        factories.add(factory);
++      } catch (ClassNotFoundException cnfe) {
++        LOG.error("Could not load ManagerFactory " + className + " (not found)");
++      }
+     }
++  }
+ 
+-    if (scheme.equals("jdbc:mysql:")) {
+-      if (opts.isDirect()) {
+-        return new LocalMySQLManager(opts);
+-      } else {
+-        return new MySQLManager(opts);
++  /**
++   * Factory method to get a ConnManager for the given JDBC connect string.
++   * @param opts The parsed command-line options
++   * @return a ConnManager instance for the appropriate database
++   * @throws IOException if it cannot find a ConnManager for this schema
++   */
++  public ConnManager getManager(ImportOptions opts) throws IOException {
++    // Try all the available manager factories.
++    for (ManagerFactory factory : factories) {
++      LOG.debug("Trying ManagerFactory: " + factory.getClass().getName());
++      ConnManager mgr = factory.accept(opts);
++      if (null != mgr) {
++        LOG.debug("Instantiated ConnManager.");
++        return mgr;
+       }
+-    } else if (scheme.equals("jdbc:hsqldb:hsql:")) {
+-      return new HsqldbManager(opts);
+-    } else if (scheme.startsWith("jdbc:oracle:")) {
+-      return new OracleManager(opts);
+-    } else {
+-      throw new IOException("Unknown connection scheme: " + scheme);
+     }
++
++    throw new IOException("No manager for connect string: " + opts.getConnectString());
+   }
+ }
+ 
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/Sqoop.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/Sqoop.java
+index a4a4963..89939c7 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/Sqoop.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/Sqoop.java
+@@ -22,6 +22,7 @@ import java.io.IOException;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.conf.Configured;
+ import org.apache.hadoop.util.Tool;
+ import org.apache.hadoop.util.ToolRunner;
+@@ -41,6 +42,11 @@ public class Sqoop extends Configured implements Tool {
+ 
+   public static final Log LOG = LogFactory.getLog(Sqoop.class.getName());
+ 
++  static {
++    Configuration.addDefaultResource("sqoop-default.xml");
++    Configuration.addDefaultResource("sqoop-site.xml");
++  }
++
+   private ImportOptions options;
+   private ConnManager manager;
+   private HiveImport hiveImport;
+@@ -103,7 +109,7 @@ public class Sqoop extends Configured implements Tool {
+ 
+     // Get the connection to the database
+     try {
+-      manager = ConnFactory.getManager(options);
++      manager = new ConnFactory(getConf()).getManager(options);
+     } catch (Exception e) {
+       LOG.error("Got error creating database manager: " + e.toString());
+       return 1;
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/DefaultManagerFactory.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/DefaultManagerFactory.java
+new file mode 100644
+index 0000000..a9a5650
+--- /dev/null
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/DefaultManagerFactory.java
+@@ -0,0 +1,76 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.sqoop.manager;
++
++import org.apache.hadoop.sqoop.ImportOptions;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++/**
++ * Contains instantiation code for all ConnManager implementations
++ * shipped and enabled by default in Sqoop.
++ */
++public final class DefaultManagerFactory implements ManagerFactory {
++
++  public static final Log LOG = LogFactory.getLog(DefaultManagerFactory.class.getName());
++
++  public ConnManager accept(ImportOptions options) {
++    String manualDriver = options.getDriverClassName();
++    if (manualDriver != null) {
++      // User has manually specified JDBC implementation with --driver.
++      // Just use GenericJdbcManager.
++      return new GenericJdbcManager(manualDriver, options);
++    }
++
++    String connectStr = options.getConnectString();
++
++    int schemeStopIdx = connectStr.indexOf("//");
++    if (-1 == schemeStopIdx) {
++      // no scheme component?
++      LOG.warn("Could not parse connect string: [" + connectStr
++          + "]; this may be malformed.");
++      return null;
++    }
++
++    String scheme = connectStr.substring(0, schemeStopIdx);
++
++    if (null == scheme) {
++      // We don't know if this is a mysql://, hsql://, etc.
++      // Can't do anything with this.
++      LOG.warn("Null scheme associated with connect string.");
++      return null;
++    }
++
++    if (scheme.equals("jdbc:mysql:")) {
++      if (options.isDirect()) {
++        return new LocalMySQLManager(options);
++      } else {
++        return new MySQLManager(options);
++      }
++    } else if (scheme.startsWith("jdbc:hsqldb:")) {
++      return new HsqldbManager(options);
++    } else if (scheme.startsWith("jdbc:oracle:")) {
++      return new OracleManager(options);
++    } else {
++      return null;
++    }
++  }
++}
++
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/ManagerFactory.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/ManagerFactory.java
+new file mode 100644
+index 0000000..d898a1f
+--- /dev/null
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/ManagerFactory.java
+@@ -0,0 +1,33 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.sqoop.manager;
++
++import org.apache.hadoop.sqoop.ImportOptions;
++
++/**
++ * Interface for factory classes for ConnManager implementations.
++ * ManagerFactories are instantiated by o.a.h.s.ConnFactory and
++ * stored in an ordered list. The ConnFactory.getManager() implementation
++ * calls the accept() method of each ManagerFactory, in order until
++ * one such call returns a non-null ConnManager instance.
++ */
++public interface ManagerFactory {
++  ConnManager accept(ImportOptions options);
++}
++
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapred/ImportJob.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapred/ImportJob.java
+index 050652a..b13105b 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapred/ImportJob.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapred/ImportJob.java
+@@ -117,7 +117,7 @@ public class ImportJob {
+ 
+       FileOutputFormat.setOutputPath(job, outputPath);
+ 
+-      ConnManager mgr = ConnFactory.getManager(options);
++      ConnManager mgr = new ConnFactory(conf).getManager(options);
+       String username = options.getUsername();
+       if (null == username || username.length() == 0) {
+         DBConfiguration.configureDB(job, mgr.getDriverClass(), options.getConnectString());
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/AllTests.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/AllTests.java
+index d86ae10..303bf31 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/AllTests.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/AllTests.java
+@@ -54,6 +54,7 @@ public final class AllTests  {
+     suite.addTestSuite(TestFieldFormatter.class);
+     suite.addTestSuite(TestImportOptions.class);
+     suite.addTestSuite(TestParseMethods.class);
++    suite.addTestSuite(TestConnFactory.class);
+     suite.addTest(ThirdPartyTests.suite());
+ 
+     return suite;
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestConnFactory.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestConnFactory.java
+new file mode 100644
+index 0000000..119a3ab
+--- /dev/null
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/TestConnFactory.java
+@@ -0,0 +1,137 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.sqoop;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.sqoop.manager.ConnManager;
++import org.apache.hadoop.sqoop.manager.ManagerFactory;
++
++import junit.framework.TestCase;
++
++import java.io.IOException; 
++import java.util.Map;
++import java.sql.Connection;
++import java.sql.ResultSet;
++
++/**
++ * Test the ConnFactory implementation and its ability to delegate to multiple
++ * different ManagerFactory implementations using reflection.
++ */
++public class TestConnFactory extends TestCase {
++
++  public void testCustomFactory() throws IOException {
++    Configuration conf = new Configuration();
++    conf.set(ConnFactory.FACTORY_CLASS_NAMES_KEY, AlwaysDummyFactory.class.getName());
++
++    ConnFactory factory = new ConnFactory(conf);
++    ConnManager manager = factory.getManager(new ImportOptions());
++    assertNotNull("No manager returned", manager);
++    assertTrue("Expected a DummyManager", manager instanceof DummyManager);
++  }
++
++  public void testExceptionForNoManager() {
++    Configuration conf = new Configuration();
++    conf.set(ConnFactory.FACTORY_CLASS_NAMES_KEY, EmptyFactory.class.getName());
++
++    ConnFactory factory = new ConnFactory(conf);
++    try {
++      ConnManager manager = factory.getManager(new ImportOptions());
++      fail("factory.getManager() expected to throw IOException");
++    } catch (IOException ioe) {
++      // Expected this. Test passes.
++    }
++  }
++
++  public void testMultipleManagers() throws IOException {
++    Configuration conf = new Configuration();
++    // The AlwaysDummyFactory is second in this list. Nevertheless, since
++    // we know the first factory in the list will return null, we should still
++    // get a DummyManager out.
++    String classNames = EmptyFactory.class.getName()
++        + "," + AlwaysDummyFactory.class.getName();
++    conf.set(ConnFactory.FACTORY_CLASS_NAMES_KEY, classNames);
++
++    ConnFactory factory = new ConnFactory(conf);
++    ConnManager manager = factory.getManager(new ImportOptions());
++    assertNotNull("No manager returned", manager);
++    assertTrue("Expected a DummyManager", manager instanceof DummyManager);
++  }
++
++  ////// mock classes used for test cases above //////
++
++  public static class AlwaysDummyFactory implements ManagerFactory {
++    public ConnManager accept(ImportOptions opts) {
++      // Always return a new DummyManager
++      return new DummyManager();
++    }
++  }
++
++  public static class EmptyFactory implements ManagerFactory {
++    public ConnManager accept(ImportOptions opts) {
++      // Never instantiate a proper ConnManager;
++      return null;
++    }
++  }
++
++  /**
++   * This implementation doesn't do anything special.
++   */
++  public static class DummyManager implements ConnManager {
++    public void close() {
++    }
++
++    public String [] listDatabases() {
++      return null; 
++    }
++
++    public String [] listTables() {
++      return null;
++    }
++
++    public String [] getColumnNames(String tableName) {
++      return null;
++    }
++
++    public String getPrimaryKey(String tableName) {
++      return null;
++    }
++
++    public Map<String, Integer> getColumnTypes(String tableName) {
++      return null;
++    }
++
++    public ResultSet readTable(String tableName, String [] columns) {
++      return null;
++    }
++
++    public Connection getConnection() {
++      return null;
++    }
++
++    public String getDriverClass() {
++      return null;
++    }
++
++    public void execAndPrint(String s) {
++    }
++
++    public void importTable(String tableName, String jarFile, Configuration conf) {
++    }
++  }
++}
+-- 
+1.7.0.4
+

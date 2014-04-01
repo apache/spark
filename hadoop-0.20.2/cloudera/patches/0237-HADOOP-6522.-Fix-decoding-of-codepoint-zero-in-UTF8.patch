@@ -1,0 +1,92 @@
+From 56648efe291503249fec22a242917ec4dddc6214 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 30 Mar 2010 15:17:50 -0700
+Subject: [PATCH 0237/1179] HADOOP-6522. Fix decoding of codepoint zero in UTF8.
+
+Description: TestUTF8 is actually flaky. It generates 10 random strings to run the test on. If you change this number to 100000 it fails every time. The problem is that the null character (codepoint zero) was correctly encoded but incorrectly decoded. I've attached a patch that fixes this and increases the size of the tests so that problems like this will likely be discovered sooner.
+
+Reason: Bugfix to UTF8
+Author: Eli Collins
+Ref: CDH-718
+---
+ src/core/org/apache/hadoop/io/UTF8.java     |    4 ++--
+ src/test/org/apache/hadoop/io/TestUTF8.java |   16 +++++++++++++---
+ 2 files changed, 15 insertions(+), 5 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/io/UTF8.java b/src/core/org/apache/hadoop/io/UTF8.java
+index d9f45f7..4b3e237 100644
+--- a/src/core/org/apache/hadoop/io/UTF8.java
++++ b/src/core/org/apache/hadoop/io/UTF8.java
+@@ -253,7 +253,7 @@ public class UTF8 implements WritableComparable {
+     int utf8Length = 0;
+     for (int i = 0; i < stringLength; i++) {
+       int c = string.charAt(i);
+-      if ((c >= 0x0001) && (c <= 0x007F)) {
++      if (c <= 0x007F) {
+         utf8Length++;
+       } else if (c > 0x07FF) {
+         utf8Length += 3;
+@@ -270,7 +270,7 @@ public class UTF8 implements WritableComparable {
+     final int end = start + length;
+     for (int i = start; i < end; i++) {
+       int code = s.charAt(i);
+-      if (code >= 0x01 && code <= 0x7F) {
++      if (code <= 0x7F) {
+         out.writeByte((byte)code);
+       } else if (code <= 0x07FF) {
+         out.writeByte((byte)(0xC0 | ((code >> 6) & 0x1F)));
+diff --git a/src/test/org/apache/hadoop/io/TestUTF8.java b/src/test/org/apache/hadoop/io/TestUTF8.java
+index 01c5a56..1a4ee6c 100644
+--- a/src/test/org/apache/hadoop/io/TestUTF8.java
++++ b/src/test/org/apache/hadoop/io/TestUTF8.java
+@@ -22,6 +22,7 @@ import junit.framework.TestCase;
+ import java.util.Random;
+ 
+ /** Unit tests for UTF8. */
++@SuppressWarnings("deprecation")
+ public class TestUTF8 extends TestCase {
+   public TestUTF8(String name) { super(name); }
+ 
+@@ -37,13 +38,13 @@ public class TestUTF8 extends TestCase {
+   }
+ 
+   public void testWritable() throws Exception {
+-    for (int i = 0; i < 10; i++) {
++    for (int i = 0; i < 10000; i++) {
+       TestWritable.testWritable(new UTF8(getTestString()));
+     }
+   }
+ 
+   public void testGetBytes() throws Exception {
+-    for (int i = 0; i < 10; i++) {
++    for (int i = 0; i < 10000; i++) {
+ 
+       // generate a random string
+       String before = getTestString();
+@@ -57,7 +58,7 @@ public class TestUTF8 extends TestCase {
+     DataOutputBuffer out = new DataOutputBuffer();
+     DataInputBuffer in = new DataInputBuffer();
+ 
+-    for (int i = 0; i < 10; i++) {
++    for (int i = 0; i < 10000; i++) {
+       // generate a random string
+       String before = getTestString();
+ 
+@@ -82,5 +83,14 @@ public class TestUTF8 extends TestCase {
+     }
+ 
+   }
++
++  public void testNullEncoding() throws Exception {
++    String s = new String(new char[] { 0 });
++
++    DataOutputBuffer dob = new DataOutputBuffer();
++    new UTF8(s).write(dob);
++
++    assertEquals(s, new String(dob.getData(), 2, dob.getLength()-2, "UTF-8"));
++  }
+ 	
+ }
+-- 
+1.7.0.4
+

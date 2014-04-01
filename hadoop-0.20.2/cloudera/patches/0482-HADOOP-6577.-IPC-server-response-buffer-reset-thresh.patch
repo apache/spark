@@ -1,0 +1,81 @@
+From f370a6f8f27d6bc813872a89d9dac122dd357b53 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 22 Feb 2010 14:35:53 -0800
+Subject: [PATCH 0482/1179] HADOOP-6577. IPC server response buffer reset threshold should be configurable
+
+Patch: https://issues.apache.org/jira/secure/attachment/12436399/hadoop-6577.2.rel20.patch) from yahoo-hadoop-0.20 into yahoo-hadoop-0.20.1xx
+Author: Suresh Srinivas
+Ref: YDH
+---
+ src/core/org/apache/hadoop/ipc/Server.java         |   17 +++++++++++------
+ .../apache/hadoop/ipc/TestIPCServerResponder.java  |    4 +++-
+ 2 files changed, 14 insertions(+), 7 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index d930c17..943dbff 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -106,8 +106,10 @@ public abstract class Server {
+    * Initial and max size of response buffer
+    */
+   static int INITIAL_RESP_BUF_SIZE = 10240;
+-  static int MAX_RESP_BUF_SIZE = 1024*1024;
+-    
++  static final String IPC_SERVER_RPC_MAX_RESPONSE_SIZE_KEY = 
++                        "ipc.server.max.response.size";
++  static final int IPC_SERVER_RPC_MAX_RESPONSE_SIZE_DEFAULT = 1024*1024;
++  
+   public static final Log LOG = LogFactory.getLog(Server.class);
+ 
+   private static final ThreadLocal<Server> SERVER = new ThreadLocal<Server>();
+@@ -176,6 +178,7 @@ public abstract class Server {
+   private SecretManager<TokenIdentifier> secretManager;
+ 
+   private int maxQueueSize;
++  private final int maxRespSize;
+   private int socketSendBufferSize;
+   private final boolean tcpNoDelay; // if T then disable Nagle's Algorithm
+ 
+@@ -1203,10 +1206,10 @@ public abstract class Server {
+             setupResponse(buf, call, 
+                         (error == null) ? Status.SUCCESS : Status.ERROR, 
+                         value, errorClass, error);
+-            // Discard the large buf and reset it back to 
+-            // smaller size to freeup heap
+-            if (buf.size() > MAX_RESP_BUF_SIZE) {
+-              LOG.warn("Large response size " + buf.size() + " for call " + 
++          // Discard the large buf and reset it back to 
++          // smaller size to freeup heap
++          if (buf.size() > maxRespSize) {
++            LOG.warn("Large response size " + buf.size() + " for call " + 
+                 call.toString());
+               buf = new ByteArrayOutputStream(INITIAL_RESP_BUF_SIZE);
+             }
+@@ -1253,6 +1256,8 @@ public abstract class Server {
+     this.maxQueueSize = handlerCount * conf.getInt(
+                                 IPC_SERVER_HANDLER_QUEUE_SIZE_KEY,
+                                 IPC_SERVER_HANDLER_QUEUE_SIZE_DEFAULT);
++    this.maxRespSize = conf.getInt(IPC_SERVER_RPC_MAX_RESPONSE_SIZE_KEY,
++                                   IPC_SERVER_RPC_MAX_RESPONSE_SIZE_DEFAULT);
+     this.callQueue  = new LinkedBlockingQueue<Call>(maxQueueSize); 
+     this.maxIdleTime = 2*conf.getInt("ipc.client.connection.maxidletime", 1000);
+     this.maxConnectionsToNuke = conf.getInt("ipc.client.kill.max", 10);
+diff --git a/src/test/org/apache/hadoop/ipc/TestIPCServerResponder.java b/src/test/org/apache/hadoop/ipc/TestIPCServerResponder.java
+index e1370fe..cb491d3 100644
+--- a/src/test/org/apache/hadoop/ipc/TestIPCServerResponder.java
++++ b/src/test/org/apache/hadoop/ipc/TestIPCServerResponder.java
+@@ -116,8 +116,10 @@ public class TestIPCServerResponder extends TestCase {
+ 
+   public void testResponseBuffer() throws Exception {
+     Server.INITIAL_RESP_BUF_SIZE = 1;
+-    Server.MAX_RESP_BUF_SIZE = 1;
++    conf.setInt(Server.IPC_SERVER_RPC_MAX_RESPONSE_SIZE_KEY,
++                1);
+     testServerResponder(1, true, 1, 1, 5);
++    conf = new Configuration(); // reset configuration
+   }
+ 
+   public void testServerResponder() throws Exception {
+-- 
+1.7.0.4
+

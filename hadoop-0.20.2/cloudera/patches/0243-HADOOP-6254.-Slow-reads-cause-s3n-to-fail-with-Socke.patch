@@ -1,0 +1,98 @@
+From 0ec1d6ed85a30327c657c2418932728d0e4e98df Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@lipcon.org>
+Date: Wed, 12 May 2010 21:33:45 -0700
+Subject: [PATCH 0243/1179] HADOOP-6254. Slow reads cause s3n to fail with SocketTimeoutException
+
+Reason: Bug fix for users of s3n:// file system
+Author: Andrew Hitchcock
+Ref: CDH-1035
+---
+ .../hadoop/fs/s3native/NativeS3FileSystem.java     |   28 ++++++++++++++++---
+ .../NativeS3FileSystemContractBaseTest.java        |    2 +
+ 2 files changed, 25 insertions(+), 5 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java b/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java
+index d58e61a..f7e636f 100644
+--- a/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java
++++ b/src/core/org/apache/hadoop/fs/s3native/NativeS3FileSystem.java
+@@ -74,19 +74,30 @@ public class NativeS3FileSystem extends FileSystem {
+   static final String PATH_DELIMITER = Path.SEPARATOR;
+   private static final int S3_MAX_LISTING_LENGTH = 1000;
+   
+-  private class NativeS3FsInputStream extends FSInputStream {
++  static class NativeS3FsInputStream extends FSInputStream {
+     
++    private NativeFileSystemStore store;
++    private Statistics statistics;
+     private InputStream in;
+     private final String key;
+     private long pos = 0;
+     
+-    public NativeS3FsInputStream(InputStream in, String key) {
++    public NativeS3FsInputStream(NativeFileSystemStore store, Statistics statistics, InputStream in, String key) {
++      this.store = store;
++      this.statistics = statistics;
+       this.in = in;
+       this.key = key;
+     }
+     
+     public synchronized int read() throws IOException {
+-      int result = in.read();
++      int result = -1;
++      try {
++        result = in.read();
++      } catch (IOException e) {
++        LOG.info("Received IOException while reading '" + key + "', attempting to reopen.");
++        seek(pos);
++        result = in.read();
++      } 
+       if (result != -1) {
+         pos++;
+       }
+@@ -98,7 +109,14 @@ public class NativeS3FileSystem extends FileSystem {
+     public synchronized int read(byte[] b, int off, int len)
+       throws IOException {
+       
+-      int result = in.read(b, off, len);
++      int result = -1;
++      try {
++        result = in.read(b, off, len);
++      } catch (IOException e) {
++        LOG.info("Received IOException while reading '" + key + "', attempting to reopen.");
++        seek(pos);
++        result = in.read(b, off, len);
++      }
+       if (result > 0) {
+         pos += result;
+       }
+@@ -461,7 +479,7 @@ public class NativeS3FileSystem extends FileSystem {
+     Path absolutePath = makeAbsolute(f);
+     String key = pathToKey(absolutePath);
+     return new FSDataInputStream(new BufferedFSInputStream(
+-        new NativeS3FsInputStream(store.retrieve(key), key), bufferSize));
++        new NativeS3FsInputStream(store, statistics, store.retrieve(key), key), bufferSize));
+   }
+   
+   // rename() and delete() use this method to ensure that the parent directory
+diff --git a/src/test/org/apache/hadoop/fs/s3native/NativeS3FileSystemContractBaseTest.java b/src/test/org/apache/hadoop/fs/s3native/NativeS3FileSystemContractBaseTest.java
+index be39fd0..362b52e 100644
+--- a/src/test/org/apache/hadoop/fs/s3native/NativeS3FileSystemContractBaseTest.java
++++ b/src/test/org/apache/hadoop/fs/s3native/NativeS3FileSystemContractBaseTest.java
+@@ -19,12 +19,14 @@
+ package org.apache.hadoop.fs.s3native;
+ 
+ import java.io.IOException;
++import java.io.InputStream;
+ import java.net.URI;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystemContractBaseTest;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.s3native.NativeS3FileSystem.NativeS3FsInputStream;
+ 
+ public abstract class NativeS3FileSystemContractBaseTest
+   extends FileSystemContractBaseTest {
+-- 
+1.7.0.4
+

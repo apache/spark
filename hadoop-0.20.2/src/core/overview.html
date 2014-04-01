@@ -1,0 +1,292 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<head>
+   <title>Hadoop</title>
+</head>
+<body>
+
+Hadoop is a distributed computing platform.
+
+<p>Hadoop primarily consists of the <a 
+href="org/apache/hadoop/hdfs/package-summary.html">Hadoop Distributed FileSystem 
+(HDFS)</a> and an 
+implementation of the <a href="org/apache/hadoop/mapred/package-summary.html">
+Map-Reduce</a> programming paradigm.</p>
+
+
+<p>Hadoop is a software framework that lets one easily write and run applications 
+that process vast amounts of data. Here's what makes Hadoop especially useful:</p>
+<ul>
+  <li>
+    <b>Scalable</b>: Hadoop can reliably store and process petabytes.
+  </li>
+  <li>
+    <b>Economical</b>: It distributes the data and processing across clusters 
+    of commonly available computers. These clusters can number into the thousands 
+    of nodes.
+  </li>
+  <li>
+    <b>Efficient</b>: By distributing the data, Hadoop can process it in parallel 
+    on the nodes where the data is located. This makes it extremely rapid.
+  </li>
+  <li>
+    <b>Reliable</b>: Hadoop automatically maintains multiple copies of data and 
+    automatically redeploys computing tasks based on failures.
+  </li>
+</ul>  
+
+<h2>Requirements</h2>
+
+<h3>Platforms</h3>
+
+<ul>
+  <li>
+    Hadoop was been demonstrated on GNU/Linux clusters with 2000 nodes.
+  </li>
+  <li>
+    Win32 is supported as a <i>development</i> platform. Distributed operation 
+    has not been well tested on Win32, so this is not a <i>production</i> 
+    platform.
+  </li>  
+</ul>
+  
+<h3>Requisite Software</h3>
+
+<ol>
+  <li>
+    Java 1.6.x, preferably from 
+    <a href="http://java.sun.com/javase/downloads/">Sun</a>. 
+    Set <tt>JAVA_HOME</tt> to the root of your Java installation.
+  </li>
+  <li>
+    ssh must be installed and sshd must be running to use Hadoop's
+    scripts to manage remote Hadoop daemons.
+  </li>
+  <li>
+    rsync may be installed to use Hadoop's scripts to manage remote
+    Hadoop installations.
+  </li>
+</ol>
+
+<h4>Additional requirements for Windows</h4>
+
+<ol>
+  <li>
+    <a href="http://www.cygwin.com/">Cygwin</a> - Required for shell support in 
+    addition to the required software above.
+  </li>
+</ol>
+  
+<h3>Installing Required Software</h3>
+
+<p>If your platform does not have the required software listed above, you
+will have to install it.</p>
+
+<p>For example on Ubuntu Linux:</p>
+<p><blockquote><pre>
+$ sudo apt-get install ssh<br>
+$ sudo apt-get install rsync<br>
+</pre></blockquote></p>
+
+<p>On Windows, if you did not install the required software when you
+installed cygwin, start the cygwin installer and select the packages:</p>
+<ul>
+  <li>openssh - the "Net" category</li>
+  <li>rsync - the "Net" category</li>
+</ul>
+
+<h2>Getting Started</h2>
+
+<p>First, you need to get a copy of the Hadoop code.</p>
+
+<p>Edit the file <tt>conf/hadoop-env.sh</tt> to define at least
+<tt>JAVA_HOME</tt>.</p>
+
+<p>Try the following command:</p>
+<tt>bin/hadoop</tt>
+<p>This will display the documentation for the Hadoop command script.</p>
+
+<h2>Standalone operation</h2>
+
+<p>By default, Hadoop is configured to run things in a non-distributed
+mode, as a single Java process.  This is useful for debugging, and can
+be demonstrated as follows:</p>
+<tt>
+mkdir input<br>
+cp conf/*.xml input<br>
+bin/hadoop jar hadoop-examples-*.jar grep input output 'dfs[a-z.]+'<br>
+cat output/*
+</tt>
+<p>This will display counts for each match of the <a
+href="http://java.sun.com/j2se/1.4.2/docs/api/java/util/regex/Pattern.html">
+regular expression.</a></p>
+
+<p>Note that input is specified as a <em>directory</em> containing input
+files and that output is also specified as a directory where parts are
+written.</p>
+
+<h2>Distributed operation</h2>
+
+To configure Hadoop for distributed operation you must specify the
+following:
+
+<ol>
+
+<li>The NameNode (Distributed Filesystem master) host.  This is
+specified with the configuration property <tt><a
+ href="../core-default.html#fs.default.name">fs.default.name</a></tt>.
+</li>
+
+<li>The {@link org.apache.hadoop.mapred.JobTracker} (MapReduce master)
+host and port.  This is specified with the configuration property
+<tt><a
+href="../mapred-default.html#mapred.job.tracker">mapred.job.tracker</a></tt>.
+</li>
+
+<li>A <em>slaves</em> file that lists the names of all the hosts in
+the cluster.  The default slaves file is <tt>conf/slaves</tt>.
+
+</ol>
+
+<h3>Pseudo-distributed configuration</h3>
+
+You can in fact run everything on a single host.  To run things this
+way, put the following in:
+<br/>
+<br/>
+conf/core-site.xml:
+<xmp><configuration>
+
+  <property>
+    <name>fs.default.name</name>
+    <value>hdfs://localhost/</value>
+  </property>
+
+</configuration></xmp>
+
+conf/hdfs-site.xml:
+<xmp><configuration>
+
+  <property>
+    <name>dfs.replication</name>
+    <value>1</value>
+  </property>
+
+</configuration></xmp>
+
+conf/mapred-site.xml:
+<xmp><configuration>
+
+  <property>
+    <name>mapred.job.tracker</name>
+    <value>localhost:9001</value>
+  </property>
+
+</configuration></xmp>
+
+<p>(We also set the HDFS replication level to 1 in order to
+reduce warnings when running on a single node.)</p>
+
+<p>Now check that the command <br><tt>ssh localhost</tt><br> does not
+require a password.  If it does, execute the following commands:</p>
+
+<p><tt>ssh-keygen -t dsa -P '' -f ~/.ssh/id_dsa<br>
+cat ~/.ssh/id_dsa.pub >> ~/.ssh/authorized_keys
+</tt></p>
+
+<h3>Bootstrapping</h3>
+
+<p>A new distributed filesystem must be formatted with the following
+command, run on the master node:</p>
+
+<p><tt>bin/hadoop namenode -format</tt></p>
+
+<p>The Hadoop daemons are started with the following command:</p>
+
+<p><tt>bin/start-all.sh</tt></p>
+
+<p>Daemon log output is written to the <tt>logs/</tt> directory.</p>
+
+<p>Input files are copied into the distributed filesystem as follows:</p>
+
+<p><tt>bin/hadoop fs -put input input</tt></p>
+
+<h3>Distributed execution</h3>
+
+<p>Things are run as before, but output must be copied locally to
+examine it:</p>
+
+<tt>
+bin/hadoop jar hadoop-examples-*.jar grep input output 'dfs[a-z.]+'<br>
+bin/hadoop fs -get output output
+cat output/*
+</tt>
+
+<p>When you're done, stop the daemons with:</p>
+
+<p><tt>bin/stop-all.sh</tt></p>
+
+<h3>Fully-distributed operation</h3>
+
+<p>Fully distributed operation is just like the pseudo-distributed operation
+described above, except, specify:</p>
+
+<ol>
+
+<li>The hostname or IP address of your master server in the value
+for <tt><a
+href="../core-default.html#fs.default.name">fs.default.name</a></tt>,
+  as <tt><em>hdfs://master.example.com/</em></tt> in <tt>conf/core-site.xml</tt>.</li>
+
+<li>The host and port of the your master server in the value
+of <tt><a href="../mapred-default.html#mapred.job.tracker">mapred.job.tracker</a></tt>
+as <tt><em>master.example.com</em>:<em>port</em></tt> in <tt>conf/mapred-site.xml</tt>.</li>
+
+<li>Directories for <tt><a
+href="../hdfs-default.html#dfs.name.dir">dfs.name.dir</a></tt> and
+<tt><a href="../hdfs-default.html#dfs.data.dir">dfs.data.dir</a> 
+in <tt>conf/hdfs-site.xml</tt>.
+</tt>These are local directories used to hold distributed filesystem
+data on the master node and slave nodes respectively.  Note
+that <tt>dfs.data.dir</tt> may contain a space- or comma-separated
+list of directory names, so that data may be stored on multiple local
+devices.</li>
+
+<li><tt><a href="../mapred-default.html#mapred.local.dir">mapred.local.dir</a></tt>
+  in <tt>conf/mapred-site.xml</tt>, the local directory where temporary 
+  MapReduce data is stored.  It also may be a list of directories.</li>
+
+<li><tt><a
+href="../mapred-default.html#mapred.map.tasks">mapred.map.tasks</a></tt>
+and <tt><a
+href="../mapred-default.html#mapred.reduce.tasks">mapred.reduce.tasks</a></tt> 
+in <tt>conf/mapred-site.xml</tt>.
+As a rule of thumb, use 10x the
+number of slave processors for <tt>mapred.map.tasks</tt>, and 2x the
+number of slave processors for <tt>mapred.reduce.tasks</tt>.</li>
+
+</ol>
+
+<p>Finally, list all slave hostnames or IP addresses in your
+<tt>conf/slaves</tt> file, one per line.  Then format your filesystem
+and start your cluster on your master node, as above.
+
+</body>
+</html>
+

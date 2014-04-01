@@ -1,0 +1,68 @@
+<?xml version="1.0"?>
+<!--
+  Copyright 2002-2004 The Apache Software Foundation
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!DOCTYPE document PUBLIC "-//APACHE//DTD Documentation V2.0//EN" "http://forrest.apache.org/dtd/document-v20.dtd">
+
+<document>
+  
+  <header>
+    <title>Overview</title>
+  </header>
+
+  <body>
+  
+    <section>
+   <title>Getting Started</title>
+<p>The Hadoop documentation includes the information you need to get started using Hadoop. 
+Begin with the <a href="single_node_setup.html">Single Node Setup</a> which shows you how to set up a single-node Hadoop installation. 
+Then move on to the <a href="cluster_setup.html">Cluster Setup</a> to learn how to set up a multi-node Hadoop installation. 
+</p>
+   </section>
+  
+  <section>
+   <title>MapReduce</title>
+  <p>
+  The Hadoop MapReduce Documentation provides the information you need to get started writing MapReduce applications. 
+  Begin with the <a href="mapred_tutorial.html">MapReduce Tutorial</a> which shows you how to write MapReduce applications using Java. 
+  To write MapReduce applications in languages other than Java see <a href="streaming.html">Hadoop Streaming</a>, a utility that allows you to create
+  and run jobs with any executable as the mapper or reducer.
+  </p>
+    </section>
+    
+      <section>
+   <title>HDFS</title>
+  <p>
+  The HDFS Documentation provides the information you need to get started using the Hadoop Distributed File System. 
+  Begin with the <a href="hdfs_user_guide.html">HDFS Users Guide</a> to obtain an overview of the system and then
+  move on to the <a href="hdfs_design.html">HDFS Architecture Guide</a> for more detailed information.
+  </p>
+
+</section>
+
+  <section>
+   <title>Common</title>
+  <p>
+The Common Documentation describes the common utilities and libraries that support the other Hadoop subprojects.  
+</p>
+<p>
+If you have more questions about Hadoop, you can ask on the <a href="ext:lists">Mailing Lists</a> or browse the <a href="ext:archive">Mailing List Archives</a>.
+</p>
+</section>
+    
+  </body>
+  
+</document>

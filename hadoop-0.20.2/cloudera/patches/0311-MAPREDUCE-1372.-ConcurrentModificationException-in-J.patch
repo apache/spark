@@ -1,0 +1,82 @@
+From d8dc8dad821a02619afdbfc3d1cb978b86cb071b Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 18 Jun 2010 17:24:07 -0700
+Subject: [PATCH 0311/1179] MAPREDUCE-1372. ConcurrentModificationException in JobInProgress
+
+Description: Fixes a ConcurrentModificationException in JobInProgress
+Reason: Bug
+Author: Dick King
+Ref: CDH-546
+---
+ .../org/apache/hadoop/mapred/JobTracker.java       |   46 ++++++++++++--------
+ 1 files changed, 28 insertions(+), 18 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 1ab9941..5fa2473 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -121,7 +121,15 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   private DNSToSwitchMapping dnsToSwitchMapping;
+   private NetworkTopology clusterMap = new NetworkTopology();
+   private int numTaskCacheLevels; // the max level to which we cache tasks
+-  private Set<Node> nodesAtMaxLevel = new HashSet<Node>();
++  /**
++   * {@link #nodesAtMaxLevel} is using the keySet from {@link ConcurrentHashMap}
++   * so that it can be safely written to and iterated on via 2 separate threads.
++   * Note: It can only be iterated from a single thread which is feasible since
++   *       the only iteration is done in {@link JobInProgress} under the 
++   *       {@link JobTracker} lock.
++   */
++  private Set<Node> nodesAtMaxLevel = 
++    Collections.newSetFromMap(new ConcurrentHashMap<Node, Boolean>());
+   private final TaskScheduler taskScheduler;
+   private final List<JobInProgressListener> jobInProgressListeners =
+     new CopyOnWriteArrayList<JobInProgressListener>();
+@@ -2425,25 +2433,27 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   }
+   
+   private Node addHostToNodeMapping(String host, String networkLoc) {
+-    Node node;
+-    if ((node = clusterMap.getNode(networkLoc+"/"+host)) == null) {
+-      node = new NodeBase(host, networkLoc);
+-      clusterMap.add(node);
+-      if (node.getLevel() < getNumTaskCacheLevels()) {
+-        LOG.fatal("Got a host whose level is: " + node.getLevel() + "." 
+-                  + " Should get at least a level of value: " 
+-                  + getNumTaskCacheLevels());
+-        try {
+-          stopTracker();
+-        } catch (IOException ie) {
+-          LOG.warn("Exception encountered during shutdown: " 
+-                   + StringUtils.stringifyException(ie));
+-          System.exit(-1);
++    Node node = null;
++    synchronized (nodesAtMaxLevel) {
++      if ((node = clusterMap.getNode(networkLoc+"/"+host)) == null) {
++        node = new NodeBase(host, networkLoc);
++        clusterMap.add(node);
++        if (node.getLevel() < getNumTaskCacheLevels()) {
++          LOG.fatal("Got a host whose level is: " + node.getLevel() + "." 
++              + " Should get at least a level of value: " 
++              + getNumTaskCacheLevels());
++          try {
++            stopTracker();
++          } catch (IOException ie) {
++            LOG.warn("Exception encountered during shutdown: " 
++                + StringUtils.stringifyException(ie));
++            System.exit(-1);
++          }
+         }
++        hostnameToNodeMap.put(host, node);
++        // Make an entry for the node at the max level in the cache
++        nodesAtMaxLevel.add(getParentNode(node, getNumTaskCacheLevels() - 1));
+       }
+-      hostnameToNodeMap.put(host, node);
+-      // Make an entry for the node at the max level in the cache
+-      nodesAtMaxLevel.add(getParentNode(node, getNumTaskCacheLevels() - 1));
+     }
+     return node;
+   }
+-- 
+1.7.0.4
+

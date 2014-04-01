@@ -1,0 +1,45 @@
+From 5196b9947524cc431772cca3c98d4e5b555aa70e Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 24 Feb 2012 13:32:20 -0800
+Subject: [PATCH 1127/1179] HDFS-3008. Negative caching of local addrs doesn't work.
+
+Reason: Bug
+Author: Eli Collins
+Ref: CDH-4597
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java |   10 ++++++----
+ 1 files changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index a4fdacb..7d92b10 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -369,11 +369,12 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+   private static boolean isLocalAddress(InetSocketAddress targetAddr) {
+     InetAddress addr = targetAddr.getAddress();
+     Boolean cached = localAddrMap.get(addr.getHostAddress());
+-    if (cached != null && cached) {
++    if (cached != null) {
+       if (LOG.isTraceEnabled()) {
+-        LOG.trace("Address " + targetAddr + " is local");
++        LOG.trace("Address " + targetAddr +
++                  (cached ? " is local" : " is not local"));
+       }
+-      return true;
++      return cached;
+     }
+ 
+     // Check if the address is any local or loop back
+@@ -388,7 +389,8 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       }
+     }
+     if (LOG.isTraceEnabled()) {
+-      LOG.trace("Address " + targetAddr + " is local");
++      LOG.trace("Address " + targetAddr +
++                (local ? " is local" : " is not local"));
+     }
+     localAddrMap.put(addr.getHostAddress(), local);
+     return local;
+-- 
+1.7.0.4
+

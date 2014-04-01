@@ -1,0 +1,482 @@
+From c08f94a6927f9c8b0dfaeb674835afdd3fdd1d08 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Mon, 29 Mar 2010 17:15:53 -0700
+Subject: [PATCH 0235/1179] MAPREDUCE-1569. Mock Contexts & Configurations
+
+Description: Currently the library creates a new Configuration object in the MockMapContext and
+MocKReduceContext constructors, rather than allowing the developer to configure and pass their own
+Reason: Feature improvement for MRUnit
+Author: Chris White
+Ref: CDH-838
+---
+ .../java/org/apache/hadoop/mrunit/TestDriver.java  |   19 +++++++++
+ .../apache/hadoop/mrunit/mapreduce/MapDriver.java  |   13 +++++-
+ .../hadoop/mrunit/mapreduce/MapReduceDriver.java   |   16 ++++++-
+ .../hadoop/mrunit/mapreduce/ReduceDriver.java      |   14 ++++++-
+ .../mapreduce/mock/MockMapContextWrapper.java      |   39 ++++++++++++++++--
+ .../mapreduce/mock/MockReduceContextWrapper.java   |   43 +++++++++++++++++--
+ .../hadoop/mrunit/mapreduce/TestMapDriver.java     |   29 +++++++++++++
+ .../mrunit/mapreduce/TestMapReduceDriver.java      |   25 +++++++++++
+ .../hadoop/mrunit/mapreduce/TestReduceDriver.java  |   33 +++++++++++++++
+ 9 files changed, 218 insertions(+), 13 deletions(-)
+
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/TestDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/TestDriver.java
+index 39c6cd3..3a9c9d5 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/TestDriver.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/TestDriver.java
+@@ -24,6 +24,7 @@ import java.util.List;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mrunit.types.Pair;
+ 
+@@ -32,9 +33,12 @@ public abstract class TestDriver<K1, V1, K2, V2> {
+   public static final Log LOG = LogFactory.getLog(TestDriver.class);
+ 
+   protected List<Pair<K2, V2>> expectedOutputs;
++  
++  protected Configuration configuration;
+ 
+   public TestDriver() {
+     expectedOutputs = new ArrayList<Pair<K2, V2>>();
++    configuration = new Configuration();
+   }
+ 
+   /**
+@@ -242,4 +246,19 @@ public abstract class TestDriver<K1, V1, K2, V2> {
+     sb.append(")");
+   }
+ 
++  /** 
++   * @return The configuration object that will given to the mapper and/or 
++   *         reducer associated with the driver (new API only)
++   */
++  public Configuration getConfiguration() {
++    return configuration;
++  }
++  
++  /**
++   * @param configuration The configuration object that will given to the 
++   *        mapper and/or reducer associated with the driver (new API only)
++   */
++  public void setConfiguration(Configuration configuration) {
++    this.configuration = configuration;
++  }
+ }
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapDriver.java
+index aefc8e9..601f9d1 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapDriver.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapDriver.java
+@@ -25,6 +25,7 @@ import java.util.List;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapreduce.Counters;
+ import org.apache.hadoop.mapreduce.Mapper;
+@@ -194,7 +195,7 @@ public class MapDriver<K1, V1, K2, V2> extends MapDriverBase<K1, V1, K2, V2> {
+     try {
+       MockMapContextWrapper<K1, V1, K2, V2> wrapper = new MockMapContextWrapper();
+       MockMapContextWrapper<K1, V1, K2, V2>.MockMapContext context =
+-          wrapper.getMockContext(inputs, getCounters());
++          wrapper.getMockContext(configuration, inputs, getCounters());
+ 
+       myMapper.run(context);
+       return context.getOutputs();
+@@ -207,5 +208,15 @@ public class MapDriver<K1, V1, K2, V2> extends MapDriverBase<K1, V1, K2, V2> {
+   public String toString() {
+     return "MapDriver (0.20+) (" + myMapper + ")";
+   }
++  
++  /** 
++   * @param configuration The configuration object that will given to the mapper
++   *        associated with the driver
++   * @return this object for fluent coding
++   */
++  public MapDriver<K1, V1, K2, V2> withConfiguration(Configuration configuration) {
++    setConfiguration(configuration);
++	  return this;
++  }
+ }
+ 
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapReduceDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapReduceDriver.java
+index 769b8ad..3560601 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapReduceDriver.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapReduceDriver.java
+@@ -28,6 +28,7 @@ import java.util.Set;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapreduce.Counters;
+ import org.apache.hadoop.mapreduce.Mapper;
+@@ -202,7 +203,7 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+       LOG.debug("Mapping input " + input.toString() + ")");
+ 
+       mapOutputs.addAll(new MapDriver<K1, V1, K2, V2>(myMapper).withInput(
+-              input).withCounters(getCounters()).run());
++              input).withCounters(getCounters()).withConfiguration(configuration).run());
+     }
+ 
+     List<Pair<K2, List<V2>>> reduceInputs = shuffle(mapOutputs);
+@@ -217,7 +218,7 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+           + sb.toString() + ")");
+ 
+       reduceOutputs.addAll(new ReduceDriver<K2, V2, K3, V3>(myReducer)
+-              .withCounters(getCounters())
++              .withCounters(getCounters()).withConfiguration(configuration)
+               .withInputKey(inputKey).withInputValues(inputValues).run());
+     }
+ 
+@@ -228,4 +229,15 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+   public String toString() {
+     return "MapReduceDriver (0.20+) (" + myMapper + ", " + myReducer + ")";
+   }
++  
++  /** 
++   * @param configuration The configuration object that will given to the 
++   *        mapper and reducer associated with the driver
++   * @return this driver object for fluent coding
++   */
++  public MapReduceDriver<K1, V1, K2, V2, K3, V3> withConfiguration(
++      Configuration configuration) {
++    setConfiguration(configuration);
++    return this;
++  }
+ }
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/ReduceDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/ReduceDriver.java
+index 176c9cc..7ffc5c5 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/ReduceDriver.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/ReduceDriver.java
+@@ -25,6 +25,7 @@ import java.util.List;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapreduce.Counters;
+ import org.apache.hadoop.mapreduce.Reducer;
+@@ -199,7 +200,7 @@ public class ReduceDriver<K1, V1, K2, V2> extends ReduceDriverBase<K1, V1, K2, V
+     try {
+       MockReduceContextWrapper<K1, V1, K2, V2> wrapper = new MockReduceContextWrapper();
+       MockReduceContextWrapper<K1, V1, K2, V2>.MockReduceContext context =
+-          wrapper.getMockContext(inputs, getCounters());
++          wrapper.getMockContext(configuration, inputs, getCounters());
+ 
+       myReducer.run(context);
+       return context.getOutputs();
+@@ -212,5 +213,16 @@ public class ReduceDriver<K1, V1, K2, V2> extends ReduceDriverBase<K1, V1, K2, V
+   public String toString() {
+     return "ReduceDriver (0.20+) (" + myReducer + ")";
+   }
++  
++  /** 
++   * @param configuration The configuration object that will given to the 
++   *        reducer associated with the driver
++   * @return this object for fluent coding
++   */
++  public ReduceDriver<K1, V1, K2, V2> withConfiguration(
++      Configuration configuration) {
++    setConfiguration(configuration);
++    return this;
++  }
+ }
+ 
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockMapContextWrapper.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockMapContextWrapper.java
+index 59136d3..c8a5798 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockMapContextWrapper.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockMapContextWrapper.java
+@@ -56,16 +56,40 @@ public class MockMapContextWrapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
+     private Pair<KEYIN, VALUEIN> curInput;
+     private MockOutputCollector<KEYOUT, VALUEOUT> output;
+ 
+-    public MockMapContext(final List<Pair<KEYIN, VALUEIN>> in, final Counters counters)
+-        throws IOException, InterruptedException {
++    /**
++     * Create a new instance with the passed configuration, map key/value input 
++     * pairs and counters
++     * 
++     * @param configuration Configuration for the mapper
++     * @param in input key/value pairs for the mapper
++     * @param counters pre-initialized counter values
++     */
++    public MockMapContext(final Configuration configuration,
++        final List<Pair<KEYIN, VALUEIN>> in,
++        final Counters counters) throws IOException, InterruptedException {
+ 
+-      super(new Configuration(),
++      super(configuration,
+             new TaskAttemptID("mrunit-jt", 0, true, 0, 0),
+             null, null, new MockOutputCommitter(), new MockReporter(counters), null);
+       this.inputIter = in.iterator();
+       this.output = new MockOutputCollector<KEYOUT, VALUEOUT>();
+     }
+ 
++    /**
++     * Create a new instance with the passed map key/value input pairs and
++     * counters. A new {@link Configuration} object will be created and used
++     * to configure the mapper
++     * 
++     * @param in input key/value pairs for the mapper
++     * @param counters pre-initialized counter values
++     */
++    public MockMapContext(final List<Pair<KEYIN, VALUEIN>> in,
++        final Counters counters)
++        throws IOException, InterruptedException {
++      this(new Configuration(), in, counters);
++    }
++
++
+     @Override
+     public InputSplit getInputSplit() {
+       return new MockInputSplit();
+@@ -114,7 +138,14 @@ public class MockMapContextWrapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
+     }
+   }
+ 
+-  public MockMapContext getMockContext(List<Pair<KEYIN, VALUEIN>> inputs, Counters counters)
++  public MockMapContext getMockContext(Configuration configuration,
++      List<Pair<KEYIN, VALUEIN>> inputs, Counters counters)
++      throws IOException, InterruptedException {
++    return new MockMapContext(configuration, inputs, counters);
++  }
++
++  public MockMapContext getMockContext(
++      List<Pair<KEYIN, VALUEIN>> inputs, Counters counters)
+       throws IOException, InterruptedException {
+     return new MockMapContext(inputs, counters);
+   }
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java
+index c84cf05..a09d043 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java
+@@ -62,10 +62,21 @@ public class MockReduceContextWrapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
+ 
+     private MockOutputCollector<KEYOUT, VALUEOUT> output;
+ 
+-    public MockReduceContext(final List<Pair<KEYIN, List<VALUEIN>>> in, final Counters counters)
+-        throws IOException, InterruptedException {
+-
+-      super(new Configuration(),
++    /**
++     * Create a new instance with the passed configuration, reducer key/values input 
++     * pairs and counters
++     * 
++     * @param configuration Configuration for the mapper
++     * @param in input key/value pairs for the mapper
++     * @param counters pre-initialized counter values
++     * 
++     * @throws IOException
++     * @throws InterruptedException
++     */
++    public MockReduceContext(final Configuration configuration,
++        final List<Pair<KEYIN, List<VALUEIN>>> in,
++        final Counters counters) throws IOException, InterruptedException {
++      super(configuration,
+             new TaskAttemptID("mrunit-jt", 0, false, 0, 0),
+             new MockRawKeyValueIterator(), null, null, null,
+             new MockOutputCommitter(), new MockReporter(counters), null,
+@@ -74,6 +85,20 @@ public class MockReduceContextWrapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
+       this.output = new MockOutputCollector<KEYOUT, VALUEOUT>();
+     }
+ 
++    /**
++     * Create a new instance with the passed reducer key/values input pairs and
++     * counters. A new {@link Configuration} object will be created and used
++     * to configure the reducer
++     * 
++     * @param in input key/values pairs for the reducer
++     * @param counters pre-initialized counter values
++     */
++    public MockReduceContext(final List<Pair<KEYIN, List<VALUEIN>>> in,
++        final Counters counters)
++        throws IOException, InterruptedException {
++      this(new Configuration(), in, counters);
++    }
++
+ 
+     /**
+      * A private iterable/iterator implementation that wraps around the 
+@@ -198,7 +223,15 @@ public class MockReduceContextWrapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
+     }
+   }
+ 
+-  public MockReduceContext getMockContext(List<Pair<KEYIN, List<VALUEIN>>> inputs,
++  public MockReduceContext getMockContext(Configuration configuration,
++      List<Pair<KEYIN, List<VALUEIN>>> inputs,
++      Counters counters)
++      throws IOException, InterruptedException {
++    return new MockReduceContext(configuration, inputs, counters);
++  }
++
++  public MockReduceContext getMockContext(
++      List<Pair<KEYIN, List<VALUEIN>>> inputs,
+       Counters counters)
+       throws IOException, InterruptedException {
+     return new MockReduceContext(inputs, counters);
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestMapDriver.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestMapDriver.java
+index 09182b5..ff07395 100644
+--- a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestMapDriver.java
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestMapDriver.java
+@@ -24,8 +24,11 @@ import java.io.IOException;
+ import java.util.ArrayList;
+ import java.util.List;
+ 
++import junit.framework.Assert;
+ import junit.framework.TestCase;
+ 
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.NullWritable;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapreduce.Mapper;
+ import org.apache.hadoop.mrunit.types.Pair;
+@@ -181,6 +184,32 @@ public class TestMapDriver extends TestCase {
+       // expected.
+     }
+   }
++  
++  @Test
++  public void testConfiguration() {
++	  Configuration conf = new Configuration();
++	  conf.set("TestKey", "TestValue");
++	  MapDriver<NullWritable, NullWritable, NullWritable, NullWritable> confDriver 
++	      = new MapDriver<NullWritable, NullWritable, NullWritable, NullWritable>();
++	  ConfigurationMapper<NullWritable, NullWritable, NullWritable, NullWritable> mapper 
++	      = new ConfigurationMapper<NullWritable, NullWritable, NullWritable, NullWritable>();
++	  confDriver.withMapper(mapper).withConfiguration(conf).
++	      withInput(NullWritable.get(),NullWritable.get()).
++	      withOutput(NullWritable.get(),NullWritable.get()).runTest();
++	  assertEquals(mapper.setupConfiguration.get("TestKey"), "TestValue");
++  }
+ 
++  /**
++   * Test mapper which stores the configuration object it was passed during its setup method
++   */
++  public static class ConfigurationMapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT> extends Mapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
++	public Configuration setupConfiguration;
++	
++	@Override
++	protected void setup(Context context) throws IOException,
++			InterruptedException {
++		setupConfiguration = context.getConfiguration();
++	}
++  }
+ }
+ 
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestMapReduceDriver.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestMapReduceDriver.java
+index b018d64..dc419e6 100644
+--- a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestMapReduceDriver.java
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestMapReduceDriver.java
+@@ -21,15 +21,20 @@ import static org.apache.hadoop.mrunit.testutil.ExtendedAssert.assertListEquals;
+ 
+ import java.io.IOException;
+ import java.util.ArrayList;
++import java.util.Arrays;
+ import java.util.List;
+ 
+ import junit.framework.TestCase;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.LongWritable;
++import org.apache.hadoop.io.NullWritable;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapreduce.Mapper;
+ import org.apache.hadoop.mapreduce.Reducer;
+ import org.apache.hadoop.mapreduce.lib.reduce.LongSumReducer;
++import org.apache.hadoop.mrunit.mapreduce.TestMapDriver.ConfigurationMapper;
++import org.apache.hadoop.mrunit.mapreduce.TestReduceDriver.ConfigurationReducer;
+ import org.apache.hadoop.mrunit.types.Pair;
+ import org.junit.Before;
+ import org.junit.Test;
+@@ -230,6 +235,26 @@ public class TestMapReduceDriver extends TestCase {
+ 
+     assertListEquals(expected, outputs);
+   }
++  
++  @Test
++  public void testConfiguration() {
++	  Configuration conf = new Configuration();
++	  conf.set("TestKey", "TestValue");
++	  
++	  MapReduceDriver<NullWritable, NullWritable, NullWritable, NullWritable, NullWritable, NullWritable> confDriver 
++	      = new MapReduceDriver<NullWritable, NullWritable, NullWritable, NullWritable, NullWritable, NullWritable>();
++	  
++	  ConfigurationMapper<NullWritable, NullWritable, NullWritable, NullWritable> mapper 
++	      = new ConfigurationMapper<NullWritable, NullWritable, NullWritable, NullWritable>();
++	  ConfigurationReducer<NullWritable, NullWritable, NullWritable, NullWritable> reducer 
++      = new ConfigurationReducer<NullWritable, NullWritable, NullWritable, NullWritable>();
++	  
++	  confDriver.withMapper(mapper).withReducer(reducer).withConfiguration(conf).
++	      withInput(NullWritable.get(),NullWritable.get()).
++	      withOutput(NullWritable.get(),NullWritable.get()).runTest();
++	  assertEquals(mapper.setupConfiguration.get("TestKey"), "TestValue");
++	  assertEquals(reducer.setupConfiguration.get("TestKey"), "TestValue");	  
++  }
+ 
+ }
+ 
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestReduceDriver.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestReduceDriver.java
+index e694264..bd5e38a 100644
+--- a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestReduceDriver.java
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestReduceDriver.java
+@@ -23,14 +23,20 @@ import static org.apache.hadoop.mrunit.testutil.ExtendedAssert.assertListEquals;
+ 
+ import java.io.IOException;
+ import java.util.ArrayList;
++import java.util.Arrays;
+ import java.util.List;
+ 
+ import junit.framework.TestCase;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.LongWritable;
++import org.apache.hadoop.io.NullWritable;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.Mapper;
+ import org.apache.hadoop.mapreduce.Reducer;
++import org.apache.hadoop.mapreduce.Mapper.Context;
+ import org.apache.hadoop.mapreduce.lib.reduce.LongSumReducer;
++import org.apache.hadoop.mrunit.mapreduce.TestMapDriver.ConfigurationMapper;
+ import org.apache.hadoop.mrunit.types.Pair;
+ import org.junit.Before;
+ import org.junit.Test;
+@@ -261,5 +267,32 @@ public class TestReduceDriver extends TestCase {
+         .withOutput(new Text("foo"), new LongWritable(4))
+         .runTest();
+   }
++  
++  @Test
++  public void testConfiguration() {
++	  Configuration conf = new Configuration();
++	  conf.set("TestKey", "TestValue");
++	  ReduceDriver<NullWritable, NullWritable, NullWritable, NullWritable> confDriver 
++	      = new ReduceDriver<NullWritable, NullWritable, NullWritable, NullWritable>();
++	  ConfigurationReducer<NullWritable, NullWritable, NullWritable, NullWritable> reducer 
++	      = new ConfigurationReducer<NullWritable, NullWritable, NullWritable, NullWritable>();
++	  confDriver.withReducer(reducer).withConfiguration(conf).
++	      withInput(NullWritable.get(),Arrays.asList(NullWritable.get())).
++	      withOutput(NullWritable.get(),NullWritable.get()).runTest();
++	  assertEquals(reducer.setupConfiguration.get("TestKey"), "TestValue");
++  }
++
++  /**
++   * Test reducer which stores the configuration object it was passed during its setup method
++   */
++  public static class ConfigurationReducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT> extends Reducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
++	public Configuration setupConfiguration;
++	
++	@Override
++	protected void setup(Context context) throws IOException,
++			InterruptedException {
++		setupConfiguration = context.getConfiguration();
++	}
++  }
+ }
+ 
+-- 
+1.7.0.4
+

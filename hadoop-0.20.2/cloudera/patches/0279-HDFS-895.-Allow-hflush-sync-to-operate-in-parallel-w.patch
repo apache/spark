@@ -1,0 +1,449 @@
+From 02ab12541a004d67a96428055a58a3b726c1c4b6 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 15 Apr 2010 01:04:43 -0700
+Subject: [PATCH 0279/1179] HDFS-895. Allow hflush/sync to operate in parallel with other writers
+
+Description: Modifies synchronization of the DFSOutputStream sync feature
+             such that multiple threads can sync the same stream
+             concurrently and each will wait only the minimal amount
+             of time. Also allows further writes to continue past the
+             sync point while the sync waits.
+Reason: Substantial performance improvement for durable HBase
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |  164 +++++++++---------
+ .../apache/hadoop/hdfs/TestMultiThreadedSync.java  |  179 ++++++++++++++++++++
+ 2 files changed, 264 insertions(+), 79 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/TestMultiThreadedSync.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 9820199..560e162 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -2144,6 +2144,8 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     private DataStreamer streamer = new DataStreamer();;
+     private ResponseProcessor response = null;
+     private long currentSeqno = 0;
++    private long lastQueuedSeqno = -1;
++    private long lastAckedSeqno = -1;
+     private long bytesCurBlock = 0; // bytes writen in current block
+     private int packetSize = 0; // write packet size, including the header.
+     private int chunksPerPacket = 0;
+@@ -2153,7 +2155,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     private volatile int errorIndex = 0;
+     private volatile IOException lastException = null;
+     private long artificialSlowdown = 0;
+-    private long lastFlushOffset = -1; // offset when flush was invoked
++    private long lastFlushOffset = 0; // offset when flush was invoked
+     private boolean persistBlocks = false; // persist blocks on namenode
+     private int recoveryErrorCount = 0; // number of times block recovery failed
+     private int maxRecoveryErrorCount = 5; // try block recovery 5 times
+@@ -2489,6 +2491,8 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+             }
+ 
+             synchronized (ackQueue) {
++              assert ack.getSeqno() == lastAckedSeqno + 1;
++              lastAckedSeqno = ack.getSeqno();
+               ackQueue.removeFirst();
+               ackQueue.notifyAll();
+             }
+@@ -2550,6 +2554,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       blockReplyStream = null;
+ 
+       // move packets from ack queue to front of the data queue
++      // TOOD think if we need to change around lastQueuedSeqno
+       synchronized (ackQueue) {
+         dataQueue.addAll(0, ackQueue);
+         ackQueue.clear();
+@@ -3095,11 +3100,9 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+           if (bytesCurBlock == blockSize) {
+             currentPacket.lastPacketInBlock = true;
+             bytesCurBlock = 0;
+-            lastFlushOffset = -1;
++            lastFlushOffset = 0;
+           }
+-          dataQueue.addLast(currentPacket);
+-          dataQueue.notifyAll();
+-          currentPacket = null;
++          enqueueCurrentPacket();
+  
+           // If this was the first write after reopening a file, then the above
+           // write filled up any partial chunk. Tell the summer to generate full 
+@@ -3115,53 +3118,79 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       //LOG.debug("DFSClient writeChunk done length " + len +
+       //          " checksum length " + cklen);
+     }
+-  
++
++    private synchronized void enqueueCurrentPacket() {
++      synchronized (dataQueue) {
++        if (currentPacket == null) return;
++        dataQueue.addLast(currentPacket);
++        dataQueue.notifyAll();
++        lastQueuedSeqno = currentPacket.seqno;
++        currentPacket = null;
++      }
++    }
++
+     /**
+      * All data is written out to datanodes. It is not guaranteed 
+      * that data has been flushed to persistent store on the 
+      * datanode. Block allocations are persisted on namenode.
+      */
+-    public synchronized void sync() throws IOException {
++    public void sync() throws IOException {
+       try {
+-        /* Record current blockOffset. This might be changed inside
+-         * flushBuffer() where a partial checksum chunk might be flushed.
+-         * After the flush, reset the bytesCurBlock back to its previous value,
+-         * any partial checksum chunk will be sent now and in next packet.
+-         */
+-        long saveOffset = bytesCurBlock;
+-
+-        // flush checksum buffer, but keep checksum buffer intact
+-        flushBuffer(true);
++        long toWaitFor;
++        synchronized (this) {
++          /* Record current blockOffset. This might be changed inside
++           * flushBuffer() where a partial checksum chunk might be flushed.
++           * After the flush, reset the bytesCurBlock back to its previous value,
++           * any partial checksum chunk will be sent now and in next packet.
++           */
++          long saveOffset = bytesCurBlock;
++          Packet oldCurrentPacket = currentPacket;
+ 
+-        LOG.debug("DFSClient flush() : saveOffset " + saveOffset +  
+-                  " bytesCurBlock " + bytesCurBlock +
+-                  " lastFlushOffset " + lastFlushOffset);
+-        
+-        // Flush only if we haven't already flushed till this offset.
+-        if (lastFlushOffset != bytesCurBlock) {
++          // flush checksum buffer, but keep checksum buffer intact
++          flushBuffer(true);
++          // bytesCurBlock potentially incremented if there was buffered data
+ 
+-          // record the valid offset of this flush
+-          lastFlushOffset = bytesCurBlock;
++          if (LOG.isDebugEnabled()) {
++            LOG.debug("DFSClient flush() : saveOffset " + saveOffset +  
++                      " bytesCurBlock " + bytesCurBlock +
++                      " lastFlushOffset " + lastFlushOffset);
++          }
+ 
+-          // wait for all packets to be sent and acknowledged
+-          flushInternal();
+-        } else {
+-          // just discard the current packet since it is already been sent.
+-          currentPacket = null;
++          // Flush only if we haven't already flushed till this offset.
++          if (lastFlushOffset != bytesCurBlock) {
++            assert bytesCurBlock > lastFlushOffset;
++            // record the valid offset of this flush
++            lastFlushOffset = bytesCurBlock;
++            enqueueCurrentPacket();
++          } else {
++            // just discard the current packet since it is already been sent.
++            if (oldCurrentPacket == null && currentPacket != null) {
++              // If we didn't previously have a packet queued, and now we do,
++              // but we don't plan on sending it, then we should not
++              // skip a sequence number for it!
++              currentSeqno--;
++            }
++            currentPacket = null;
++          }
++          // Restore state of stream. Record the last flush offset 
++          // of the last full chunk that was flushed.
++          //
++          bytesCurBlock = saveOffset;
++          toWaitFor = lastQueuedSeqno;
+         }
+-        
+-        // Restore state of stream. Record the last flush offset 
+-        // of the last full chunk that was flushed.
+-        //
+-        bytesCurBlock = saveOffset;
++        waitForAckedSeqno(toWaitFor);
+ 
+         // If any new blocks were allocated since the last flush, 
+         // then persist block locations on namenode. 
+         //
+-        if (persistBlocks) {
+-          namenode.fsync(src, clientName);
++        boolean willPersist;
++        synchronized (this) {
++          willPersist = persistBlocks;
+           persistBlocks = false;
+         }
++        if (willPersist) {
++          namenode.fsync(src, clientName);
++        }
+       } catch (IOException e) {
+           lastException = new IOException("IOException flush:" + e);
+           closed = true;
+@@ -3192,57 +3221,34 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+      * Waits till all existing data is flushed and confirmations 
+      * received from datanodes. 
+      */
+-    private synchronized void flushInternal() throws IOException {
+-      checkOpen();
++    private void flushInternal() throws IOException {
+       isClosed();
++      checkOpen();
+ 
+-      while (!closed) {
+-        synchronized (dataQueue) {
+-          isClosed();
+-          //
+-          // If there is data in the current buffer, send it across
+-          //
+-          if (currentPacket != null) {
+-            dataQueue.addLast(currentPacket);
+-            dataQueue.notifyAll();
+-            currentPacket = null;
+-          }
+-
+-          // wait for all buffers to be flushed to datanodes
+-          if (!closed && dataQueue.size() != 0) {
+-            try {
+-              dataQueue.wait();
+-            } catch (InterruptedException e) {
+-            }
+-            continue;
+-          }
+-        }
++      long toWaitFor;
++      synchronized (this) {
++        enqueueCurrentPacket();
++        toWaitFor = lastQueuedSeqno;
++      }
+ 
+-        // wait for all acks to be received back from datanodes
+-        synchronized (ackQueue) {
+-          if (!closed && ackQueue.size() != 0) {
+-            try {
+-              ackQueue.wait();
+-            } catch (InterruptedException e) {
+-            }
+-            continue;
+-          }
+-        }
++      waitForAckedSeqno(toWaitFor);
++    }
+ 
+-        // acquire both the locks and verify that we are
+-        // *really done*. In the case of error recovery, 
+-        // packets might move back from ackQueue to dataQueue.
+-        //
+-        synchronized (dataQueue) {
+-          synchronized (ackQueue) {
+-            if (dataQueue.size() + ackQueue.size() == 0) {
+-              break;       // we are done
+-            }
++    private void waitForAckedSeqno(long seqnumToWaitFor) throws IOException {
++      synchronized (ackQueue) {
++        while (!closed) {
++          isClosed();
++          if (lastAckedSeqno >= seqnumToWaitFor) {
++            break;
+           }
++          try {
++            ackQueue.wait();
++          } catch (InterruptedException ie) {}
+         }
+       }
++      isClosed();
+     }
+-  
++ 
+     /**
+      * Closes this output stream and releases any system 
+      * resources associated with this stream.
+diff --git a/src/test/org/apache/hadoop/hdfs/TestMultiThreadedSync.java b/src/test/org/apache/hadoop/hdfs/TestMultiThreadedSync.java
+new file mode 100644
+index 0000000..fab512c
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/TestMultiThreadedSync.java
+@@ -0,0 +1,179 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs;
++
++import org.junit.Test;
++
++import java.io.*;
++import java.util.ArrayList;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.atomic.AtomicReference;
++
++import org.apache.commons.logging.impl.Log4JLogger;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.hdfs.server.datanode.DataNode;
++import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
++import org.apache.hadoop.hdfs.server.namenode.LeaseManager;
++import org.apache.hadoop.hdfs.server.namenode.NameNode;
++import org.apache.hadoop.hdfs.server.protocol.InterDatanodeProtocol;
++import org.apache.log4j.Level;
++
++/**
++ * This class tests the building blocks that are needed to
++ * support HDFS appends.
++ */
++public class TestMultiThreadedSync {
++  static final int blockSize = 1024*1024;
++  static final int numBlocks = 10;
++  static final int fileSize = numBlocks * blockSize + 1;
++
++  private static final int NUM_THREADS = 10;
++  private static final int WRITE_SIZE = 517;
++  private static final int NUM_WRITES_PER_THREAD = 1000;
++  
++  private byte[] toWrite = null;
++
++  {
++    ((Log4JLogger)NameNode.stateChangeLog).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger)LeaseManager.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger)FSNamesystem.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger)DataNode.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger)DFSClient.LOG).getLogger().setLevel(Level.ALL);
++    ((Log4JLogger)InterDatanodeProtocol.LOG).getLogger().setLevel(Level.ALL);
++  }
++
++  /*
++   * creates a file but does not close it
++   */ 
++  private FSDataOutputStream createFile(FileSystem fileSys, Path name, int repl)
++    throws IOException {
++    FSDataOutputStream stm = fileSys.create(name, true,
++                                            fileSys.getConf().getInt("io.file.buffer.size", 4096),
++                                            (short)repl, (long)blockSize);
++    return stm;
++  }
++  
++  private void initBuffer(int size) {
++    long seed = AppendTestUtil.nextLong();
++    toWrite = AppendTestUtil.randomBytes(seed, size);
++  }
++
++  private class WriterThread extends Thread {
++    private final FSDataOutputStream stm;
++    private final AtomicReference<Throwable> thrown;
++    private final int numWrites;
++    private final CountDownLatch countdown;
++
++    public WriterThread(FSDataOutputStream stm,
++      AtomicReference<Throwable> thrown,
++      CountDownLatch countdown, int numWrites) {
++      this.stm = stm;
++      this.thrown = thrown;
++      this.numWrites = numWrites;
++      this.countdown = countdown;
++    }
++
++    public void run() {
++      try {
++        countdown.await();
++        for (int i = 0; i < numWrites && thrown.get() == null; i++) {
++          doAWrite();
++        }
++      } catch (Throwable t) {
++        thrown.compareAndSet(null, t);
++      }
++    }
++
++    private void doAWrite() throws IOException {
++      stm.write(toWrite);
++      stm.sync();
++    }
++  }
++
++
++  @Test
++  public void testMultipleSyncers() throws Exception {
++    Configuration conf = new Configuration();
++    MiniDFSCluster cluster = new MiniDFSCluster(conf, 1, true, null);
++    FileSystem fs = cluster.getFileSystem();
++    Path p = new Path("/multiple-syncers.dat");
++    try {
++      doMultithreadedWrites(conf, p, NUM_THREADS, WRITE_SIZE, NUM_WRITES_PER_THREAD);
++    } finally {
++      fs.close();
++      cluster.shutdown();
++    }
++  }
++
++  public void doMultithreadedWrites(
++    Configuration conf, Path p, int numThreads, int bufferSize, int numWrites)
++    throws Exception {
++    initBuffer(bufferSize);
++
++    // create a new file.
++    FileSystem fs = p.getFileSystem(conf);
++    FSDataOutputStream stm = createFile(fs, p, 1);
++    System.out.println("Created file simpleFlush.dat");
++
++    // TODO move this bit to another test case
++    // There have been a couple issues with flushing empty buffers, so do
++    // some empty flushes first.
++    stm.sync();
++    stm.sync();
++    stm.write(1);
++    stm.sync();
++    stm.sync();
++
++    CountDownLatch countdown = new CountDownLatch(1);
++    ArrayList<Thread> threads = new ArrayList<Thread>();
++    AtomicReference<Throwable> thrown = new AtomicReference<Throwable>();
++    for (int i = 0; i < numThreads; i++) {
++      Thread t = new WriterThread(stm, thrown, countdown, numWrites);
++      threads.add(t);
++      t.start();
++    }
++
++    // Start all the threads at the same time for maximum raciness!
++    countdown.countDown();
++    
++    for (Thread t : threads) {
++      t.join();
++    }
++    if (thrown.get() != null) {
++      
++      throw new RuntimeException("Deferred", thrown.get());
++    }
++    stm.close();
++    System.out.println("Closed file.");
++  }
++
++  public static void main(String args[]) throws Exception {
++    TestMultiThreadedSync test = new TestMultiThreadedSync();
++    Configuration conf = new Configuration();
++    Path p = new Path("/user/todd/test.dat");
++    long st = System.nanoTime();
++    test.doMultithreadedWrites(conf, p, 10, 511, 50000);
++    long et = System.nanoTime();
++
++    System.out.println("Finished in " + ((et - st) / 1000000) + "ms");
++  }
++
++}
+-- 
+1.7.0.4
+

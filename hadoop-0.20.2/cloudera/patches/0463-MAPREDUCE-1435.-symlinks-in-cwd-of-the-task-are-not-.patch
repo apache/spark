@@ -1,0 +1,381 @@
+From df2da5d463d6a2b09f11c44d1eebbf85fa73ce81 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 8 Feb 2010 20:15:15 +0530
+Subject: [PATCH 0463/1179] MAPREDUCE-1435. symlinks in cwd of the task are not handled properly after MAPREDUCE-896
+
+Patch: https://issues.apache.org/jira/secure/attachment/12435154/MR-1435-y20s.patch
+Author: Ravi Gummadi
+Ref: CDH-648
+---
+ src/c++/task-controller/task-controller.c          |    6 +-
+ src/core/org/apache/hadoop/fs/FileUtil.java        |   13 +++-
+ .../org/apache/hadoop/mapred/TaskRunner.java       |   35 +-------
+ src/test/org/apache/hadoop/fs/TestFileUtil.java    |  104 ++++++++++++++++++++
+ .../org/apache/hadoop/mapred/TestSetupWorkDir.java |   88 -----------------
+ .../hadoop/mapred/TestTaskTrackerLocalization.java |   29 +++++-
+ 6 files changed, 148 insertions(+), 127 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/fs/TestFileUtil.java
+ delete mode 100644 src/test/org/apache/hadoop/mapred/TestSetupWorkDir.java
+
+diff --git a/src/c++/task-controller/task-controller.c b/src/c++/task-controller/task-controller.c
+index b75ee75..ecabc9b 100644
+--- a/src/c++/task-controller/task-controller.c
++++ b/src/c++/task-controller/task-controller.c
+@@ -343,11 +343,13 @@ static int secure_path(const char *path, uid_t uid, gid_t gid,
+       break;
+     case FTS_SL:
+       // A symbolic link
+-      process_path = 1;
++      // We don't want to change-ownership(and set-permissions) for the file/dir
++      // pointed to by any symlink.
++      process_path = 0;
+       break;
+     case FTS_SLNONE:
+       // A symbolic link with a nonexistent target
+-      process_path = 1;
++      process_path = 0;
+       break;
+     case FTS_NS:
+       // A  file for which no stat(2) information was available
+diff --git a/src/core/org/apache/hadoop/fs/FileUtil.java b/src/core/org/apache/hadoop/fs/FileUtil.java
+index 47f58d1..64eaae4 100644
+--- a/src/core/org/apache/hadoop/fs/FileUtil.java
++++ b/src/core/org/apache/hadoop/fs/FileUtil.java
+@@ -71,6 +71,17 @@ public class FileUtil {
+    * we return false, the directory may be partially-deleted.
+    */
+   public static boolean fullyDelete(File dir) throws IOException {
++    if (!fullyDeleteContents(dir)) {
++      return false;
++    }
++    return dir.delete();
++  }
++
++  /**
++   * Delete the contents of a directory, not the directory itself.  If
++   * we return false, the directory may be partially-deleted.
++   */
++  public static boolean fullyDeleteContents(File dir) throws IOException {
+     File contents[] = dir.listFiles();
+     if (contents != null) {
+       for (int i = 0; i < contents.length; i++) {
+@@ -95,7 +106,7 @@ public class FileUtil {
+         }
+       }
+     }
+-    return dir.delete();
++    return true;
+   }
+ 
+   /**
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index 976fb2c..5f28873 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -643,39 +643,6 @@ abstract class TaskRunner extends Thread {
+   }
+    
+   /**
+-   * Sets permissions recursively and then deletes the contents of dir.
+-   * Makes dir empty directory(does not delete dir itself).
+-   */
+-  static void deleteDirContents(JobConf conf, File dir) throws IOException {
+-    FileSystem fs = FileSystem.getLocal(conf);
+-    if (fs.exists(new Path(dir.getAbsolutePath()))) {
+-      File contents[] = dir.listFiles();
+-      if (contents != null) {
+-        for (int i = 0; i < contents.length; i++) {
+-          try {
+-            int ret = 0;
+-            if ((ret = FileUtil.chmod(contents[i].getAbsolutePath(),
+-                                      "ug+rwx", true)) != 0) {
+-              LOG.warn("Unable to chmod for " + contents[i] + 
+-                  "; chmod exit status = " + ret);
+-            }
+-          } catch(InterruptedException e) {
+-            LOG.warn("Interrupted while setting permissions for contents of " +
+-                "workDir. Not deleting the remaining contents of workDir.");
+-            return;
+-          }
+-          if (!fs.delete(new Path(contents[i].getAbsolutePath()), true)) {
+-            LOG.warn("Unable to delete "+ contents[i]);
+-          }
+-        }
+-      }
+-    }
+-    else {
+-      LOG.warn(dir + " does not exist.");
+-    }
+-  }
+-  
+-  /**
+    * Creates distributed cache symlinks and tmp directory, as appropriate.
+    * Note that when we setup the distributed
+    * cache, we didn't create the symlinks. This is done on a per task basis
+@@ -692,7 +659,7 @@ abstract class TaskRunner extends Thread {
+     /** delete only the contents of workDir leaving the directory empty. We
+      * can't delete the workDir as it is the current working directory.
+      */
+-    deleteDirContents(conf, workDir);
++    FileUtil.fullyDeleteContents(workDir);
+     
+     if (DistributedCache.getSymlink(conf)) {
+       URI[] archives = DistributedCache.getCacheArchives(conf);
+diff --git a/src/test/org/apache/hadoop/fs/TestFileUtil.java b/src/test/org/apache/hadoop/fs/TestFileUtil.java
+new file mode 100644
+index 0000000..4652f1c
+--- /dev/null
++++ b/src/test/org/apache/hadoop/fs/TestFileUtil.java
+@@ -0,0 +1,104 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.fs;
++
++import java.io.File;
++import java.io.IOException;
++
++import org.junit.After;
++import org.junit.Assert;
++import org.junit.Before;
++import org.junit.Test;
++
++public class TestFileUtil {
++  final static private File TEST_DIR = new File(System.getProperty(
++      "test.build.data", "/tmp"), "fu");
++  static String FILE = "x";
++  static String LINK = "y";
++  static String DIR = "dir";
++  File del = new File(TEST_DIR, "del");
++  File tmp = new File(TEST_DIR, "tmp");
++
++  /**
++   * Creates directories del and tmp for testing.
++   * 
++   * Contents of them are
++   * dir:tmp: 
++   *   file: x
++   * dir:del:
++   *   file: x
++   *   dir: dir1 : file:x
++   *   dir: dir2 : file:x
++   *   link: y to tmp/x
++   *   link: tmpDir to tmp
++   */
++  @Before
++  public void setUp() throws IOException {
++    Assert.assertFalse(del.exists());
++    Assert.assertFalse(tmp.exists());
++    del.mkdirs();
++    tmp.mkdirs();
++    new File(del, FILE).createNewFile();
++    File tmpFile = new File(tmp, FILE);
++    tmpFile.createNewFile();
++
++    // create directories 
++    File one = new File(del, DIR + "1");
++    one.mkdirs();
++    File two = new File(del, DIR + "2");
++    two.mkdirs();
++    new File(one, FILE).createNewFile();
++    new File(two, FILE).createNewFile();
++
++    // create a symlink to file
++    File link = new File(del, LINK);
++    FileUtil.symLink(tmpFile.toString(), link.toString());
++
++    // create a symlink to dir
++    File linkDir = new File(del, "tmpDir");
++    FileUtil.symLink(tmp.toString(), linkDir.toString());
++    Assert.assertEquals(5, del.listFiles().length);
++  }
++
++  @After
++  public void tearDown() throws IOException {
++    FileUtil.fullyDelete(del);
++    FileUtil.fullyDelete(tmp);
++  }
++
++  @Test
++  public void testFullyDelete() throws IOException {
++    FileUtil.fullyDelete(del);
++    Assert.assertFalse(del.exists());
++    validateTmpDir();
++  }
++
++  @Test
++  public void testFullyDeleteContents() throws IOException {
++    FileUtil.fullyDeleteContents(del);
++    Assert.assertTrue(del.exists());
++    Assert.assertEquals(0, del.listFiles().length);
++    validateTmpDir();
++  }
++
++  private void validateTmpDir() {
++    Assert.assertTrue(tmp.exists());
++    Assert.assertEquals(1, tmp.listFiles().length);
++    Assert.assertTrue(new File(tmp, FILE).exists());
++  }
++}
+diff --git a/src/test/org/apache/hadoop/mapred/TestSetupWorkDir.java b/src/test/org/apache/hadoop/mapred/TestSetupWorkDir.java
+deleted file mode 100644
+index 607867d..0000000
+--- a/src/test/org/apache/hadoop/mapred/TestSetupWorkDir.java
++++ /dev/null
+@@ -1,88 +0,0 @@
+-/**
+- * Licensed to the Apache Software Foundation (ASF) under one
+- * or more contributor license agreements.  See the NOTICE file
+- * distributed with this work for additional information
+- * regarding copyright ownership.  The ASF licenses this file
+- * to you under the Apache License, Version 2.0 (the
+- * "License"); you may not use this file except in compliance
+- * with the License.  You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.apache.hadoop.mapred;
+-
+-import java.io.DataOutputStream;
+-import java.io.File;
+-import java.io.IOException;
+-
+-import junit.framework.TestCase;
+-
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
+-import org.apache.hadoop.fs.FileSystem;
+-import org.apache.hadoop.fs.FileUtil;
+-import org.apache.hadoop.fs.Path;
+-
+-public class TestSetupWorkDir extends TestCase {
+-  private static final Log LOG =
+-    LogFactory.getLog(TestSetupWorkDir.class);
+-
+-  /**
+-   * Create a file in the given dir and set permissions r_xr_xr_x sothat no one
+-   * can delete it directly(without doing chmod).
+-   * Creates dir/subDir and dir/subDir/file
+-   */
+-  static void createFileAndSetPermissions(JobConf jobConf, Path dir)
+-       throws IOException {
+-    Path subDir = new Path(dir, "subDir");
+-    FileSystem fs = FileSystem.getLocal(jobConf);
+-    fs.mkdirs(subDir);
+-    Path p = new Path(subDir, "file");
+-    DataOutputStream out = fs.create(p);
+-    out.writeBytes("dummy input");
+-    out.close();
+-    // no write permission for subDir and subDir/file
+-    try {
+-      int ret = 0;
+-      if((ret = FileUtil.chmod(subDir.toUri().getPath(), "a=rx", true)) != 0) {
+-        LOG.warn("chmod failed for " + subDir + ";retVal=" + ret);
+-      }
+-    } catch(InterruptedException e) {
+-      LOG.warn("Interrupted while doing chmod for " + subDir);
+-    }
+-  }
+-
+-  /**
+-   * Validates if setupWorkDir is properly cleaning up contents of workDir.
+-   */
+-  public void testSetupWorkDir() throws IOException {
+-    Path rootDir = new Path(System.getProperty("test.build.data",  "/tmp"),
+-                            "testSetupWorkDir");
+-    Path myWorkDir = new Path(rootDir, "./work");
+-    JobConf jConf = new JobConf();
+-    FileSystem fs = FileSystem.getLocal(jConf);
+-    if (fs.exists(myWorkDir)) {
+-      fs.delete(myWorkDir, true);
+-    }
+-    if (!fs.mkdirs(myWorkDir)) {
+-      throw new IOException("Unable to create workDir " + myWorkDir);
+-    }
+-
+-    // create {myWorkDir}/subDir/file and set 555 perms for subDir and file
+-    createFileAndSetPermissions(jConf, myWorkDir);
+-
+-    TaskRunner.deleteDirContents(jConf, new File(myWorkDir.toUri().getPath()));
+-    
+-    assertTrue("Contents of " + myWorkDir + " are not cleaned up properly.",
+-        fs.listStatus(myWorkDir).length == 0);
+-    
+-    // cleanup
+-    fs.delete(rootDir, true);
+-  }
+-}
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java b/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
+index b7efecf..f904046 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
++++ b/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
+@@ -569,11 +569,36 @@ public class TestTaskTrackerLocalization extends TestCase {
+   }
+ 
+   /**
++   * Create a file in the given dir and set permissions r_xr_xr_x sothat no one
++   * can delete it directly(without doing chmod).
++   * Creates dir/subDir and dir/subDir/file
++   */
++  static void createFileAndSetPermissions(JobConf jobConf, Path dir)
++       throws IOException {
++    Path subDir = new Path(dir, "subDir");
++    FileSystem fs = FileSystem.getLocal(jobConf);
++    fs.mkdirs(subDir);
++    Path p = new Path(subDir, "file");
++    java.io.DataOutputStream out = fs.create(p);
++    out.writeBytes("dummy input");
++    out.close();
++    // no write permission for subDir and subDir/file
++    try {
++      int ret = 0;
++      if((ret = FileUtil.chmod(subDir.toUri().getPath(), "a=rx", true)) != 0) {
++        LOG.warn("chmod failed for " + subDir + ";retVal=" + ret);
++      }
++    } catch(InterruptedException e) {
++      LOG.warn("Interrupted while doing chmod for " + subDir);
++    }
++  }
++
++  /**
+    * Validates the removal of $taskid and $tasid/work under mapred-local-dir
+    * in cases where those directories cannot be deleted without adding
+    * write permission to the newly created directories under $taskid and
+    * $taskid/work
+-   * Also see TestSetupWorkDir.createFileAndSetPermissions for details
++   * Also see createFileAndSetPermissions for details
+    */
+   void validateRemoveFiles(boolean needCleanup, boolean jvmReuse,
+                            TaskInProgress tip) throws IOException {
+@@ -588,7 +613,7 @@ public class TestTaskTrackerLocalization extends TestCase {
+     Path[] paths = tracker.getLocalFiles(localizedJobConf, dir);
+     for (Path p : paths) {
+       if (tracker.getLocalFileSystem().exists(p)) {
+-        TestSetupWorkDir.createFileAndSetPermissions(localizedJobConf, p);
++        createFileAndSetPermissions(localizedJobConf, p);
+       }
+     }
+ 
+-- 
+1.7.0.4
+

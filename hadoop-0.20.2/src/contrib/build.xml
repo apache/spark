@@ -1,0 +1,98 @@
+<?xml version="1.0"?>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<project name="hadoopcontrib" default="compile" basedir=".">
+  
+  <!-- In case one of the contrib subdirectories -->
+  <!-- fails the build or test targets and you cannot fix it: -->
+  <!-- Then add to fileset: excludes="badcontrib/build.xml" -->
+
+  <!-- ====================================================== -->
+  <!-- Compile contribs.                                      -->
+  <!-- ====================================================== -->
+  <target name="compile">
+    <subant target="compile">
+      <fileset dir="." includes="*/build.xml"/>
+    </subant>
+  </target>
+  
+  <!-- ====================================================== -->
+  <!-- Package contrib jars.                                  -->
+  <!-- ====================================================== -->
+  <target name="package">
+    <subant target="package">
+      <fileset dir="." includes="*/build.xml"/>
+    </subant>
+  </target>
+  
+  <!-- ====================================================== -->
+  <!-- Test all the contribs.                               -->
+  <!-- ====================================================== -->
+  <target name="test">
+     <property name="hadoop.root" location="${root}/../../../"/>
+     <property name="build.contrib.dir" location="${hadoop.root}/build/contrib"/>
+     <delete file="${build.contrib.dir}/testsfailed"/>
+    <subant target="test">
+      <property name="continueOnFailure" value="true"/>
+      <fileset dir="." includes="fuse-dfs/build.xml"/>
+      <fileset dir="." includes="hdfsproxy/build.xml"/>
+      <fileset dir="." includes="streaming/build.xml"/>
+      <fileset dir="." includes="fairscheduler/build.xml"/>
+      <fileset dir="." includes="capacity-scheduler/build.xml"/>
+      <fileset dir="." includes="mrunit/build.xml"/>
+      <fileset dir="." includes="gridmix/build.xml"/>
+    </subant>
+     <available file="${build.contrib.dir}/testsfailed" property="testsfailed"/>
+     <fail if="testsfailed">Tests failed!</fail>
+  </target>
+  
+  
+  <!-- ====================================================== -->
+  <!-- Test all the contrib system tests                     -->
+  <!-- ====================================================== -->
+  <target name="test-system-contrib">
+    <property name="hadoop.root" location="${root}/../../../"/>
+    <property name="build.contrib.dir" location="${hadoop.root}/build/contrib"/>
+    <delete file="${build.contrib.dir}/testsfailed"/>
+    <subant target="test-system">
+       <property name="continueOnFailure" value="true"/>
+       <property name="hadoop.home" value="${hadoop.home}"/>
+       <property name="hadoop.conf.dir" value="${hadoop.conf.dir}"/>
+       <property name="hadoop.conf.dir.deployed"
+           value="${hadoop.conf.dir.deployed}"/>
+       <fileset dir="." includes="hdfsproxy/build.xml"/>
+       <fileset dir="." includes="streaming/build.xml"/>
+       <fileset dir="." includes="fairscheduler/build.xml"/>
+       <fileset dir="." includes="capacity-scheduler/build.xml"/>
+       <fileset dir="." includes="gridmix/build.xml"/>
+    </subant>
+    <available file="${build.contrib.dir}/testsfailed" property="testsfailed"/>
+    <fail if="testsfailed">Tests failed!</fail>
+  </target>
+
+  <!-- ====================================================== -->
+  <!-- Clean all the contribs.                              -->
+  <!-- ====================================================== -->
+  <target name="clean">
+    <subant target="clean">
+      <fileset dir="." includes="*/build.xml"/>
+    </subant>
+  </target>
+
+</project>

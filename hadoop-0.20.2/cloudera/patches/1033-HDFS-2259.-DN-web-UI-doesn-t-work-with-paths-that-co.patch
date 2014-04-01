@@ -1,0 +1,189 @@
+From 27e22060592cee0ce920b592a43e46f84d01857b Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sat, 13 Aug 2011 13:15:21 -0700
+Subject: [PATCH 1033/1179] HDFS-2259. DN web-UI doesn't work with paths that contain html.
+
+Reason: Bug
+Author: Eli Collins
+Ref: CDH-3304
+---
+ src/webapps/datanode/browseBlock.jsp     |   18 ++++++++++--------
+ src/webapps/datanode/browseDirectory.jsp |   16 +++++++++++-----
+ src/webapps/datanode/tail.jsp            |   15 ++++++++-------
+ 3 files changed, 29 insertions(+), 20 deletions(-)
+
+diff --git a/src/webapps/datanode/browseBlock.jsp b/src/webapps/datanode/browseBlock.jsp
+index 89926c4..5358231 100644
+--- a/src/webapps/datanode/browseBlock.jsp
++++ b/src/webapps/datanode/browseBlock.jsp
+@@ -18,6 +18,7 @@
+   import="org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager"
+   import="org.apache.hadoop.security.UserGroupInformation"
+   import="org.apache.hadoop.util.*"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="java.text.DateFormat"
+ %>
+ 
+@@ -66,7 +67,7 @@
+       startOffset = 0;
+     else startOffset = Long.parseLong(startOffsetStr);
+     
+-    String filename = req.getParameter("filename");
++    String filename = HtmlQuoting.unquoteHtmlChars(req.getParameter("filename"));
+     if (filename == null || filename.length() == 0) {
+       out.print("Invalid input");
+       return;
+@@ -158,7 +159,7 @@
+                         locs[j].getInfoPort() +
+                         "/browseBlock.jsp?blockId=" + Long.toString(blockId) +
+                         "&blockSize=" + blockSize +
+-               "&filename=" + URLEncoder.encode(filename, "UTF-8")+ 
++                        "&filename=" + URLEncoder.encode(filename, "UTF-8") +
+                         "&datanodePort=" + datanodePort + 
+                         "&genstamp=" + cur.getBlock().getGenerationStamp() + 
+                         "&namenodeInfoPort=" + namenodeInfoPort +
+@@ -189,12 +190,12 @@
+     if (namenodeInfoPortStr != null)
+       namenodeInfoPort = Integer.parseInt(namenodeInfoPortStr);
+ 
+-    String filename = req.getParameter("filename");
++    String filename = HtmlQuoting.unquoteHtmlChars(req.getParameter("filename"));
+     if (filename == null) {
+       out.print("Invalid input (filename absent)");
+       return;
+     }
+-    
++
+     String blockIdStr = null;
+     long blockId = 0;
+     blockIdStr = req.getParameter("blockId");
+@@ -262,11 +263,12 @@
+     }
+     datanodePort = Integer.parseInt(datanodePortStr);
+     out.print("<h3>File: ");
+-    JspHelper.printPathWithLinks(filename, out, namenodeInfoPort,
+-                                 tokenString);
++    JspHelper.printPathWithLinks(HtmlQuoting.quoteHtmlChars(filename), 
++                                 out, namenodeInfoPort, tokenString);
+     out.print("</h3><hr>");
+     String parent = new File(filename).getParent();
+-    JspHelper.printGotoForm(out, namenodeInfoPort, tokenString, parent);
++    JspHelper.printGotoForm(out, namenodeInfoPort, tokenString, 
++                            HtmlQuoting.quoteHtmlChars(parent));
+     out.print("<hr>");
+     out.print("<a href=\"http://" + req.getServerName() + ":" + 
+               req.getServerPort() + 
+@@ -381,7 +383,7 @@
+                 "/browseBlock.jsp?blockId=" + prevBlockIdStr + 
+                 "&blockSize=" + prevBlockSize + "&startOffset=" + 
+                 prevStartOffset + 
+-                "&filename=" + URLEncoder.encode(filename, "UTF-8") + 
++                "&filename=" + URLEncoder.encode(filename, "UTF-8") +
+                 "&chunkSizeToView=" + chunkSizeToView +
+                 "&genstamp=" + prevGenStamp +
+                 "&datanodePort=" + prevDatanodePort +
+diff --git a/src/webapps/datanode/browseDirectory.jsp b/src/webapps/datanode/browseDirectory.jsp
+index c02970c..b78f350 100644
+--- a/src/webapps/datanode/browseDirectory.jsp
++++ b/src/webapps/datanode/browseDirectory.jsp
+@@ -17,6 +17,7 @@
+   import="org.apache.hadoop.net.DNS"
+   import="org.apache.hadoop.security.UserGroupInformation"
+   import="org.apache.hadoop.util.*"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="java.text.DateFormat"
+ %>
+ <%!
+@@ -28,7 +29,8 @@
+                                           Configuration conf
+                                          ) throws IOException, 
+                                                   InterruptedException {
+-    String dir = req.getParameter("dir");
++    String dir = HtmlQuoting.unquoteHtmlChars(req.getParameter("dir"));
++
+     if (dir == null || dir.length() == 0) {
+       out.print("Invalid input");
+       return;
+@@ -46,7 +48,8 @@
+     String target = dir;
+     if (!dfs.exists(target)) {
+       out.print("<h3>File or directory : " + target + " does not exist</h3>");
+-      JspHelper.printGotoForm(out, namenodeInfoPort, tokenString, target);
++      JspHelper.printGotoForm(out, namenodeInfoPort, tokenString, 
++                              HtmlQuoting.quoteHtmlChars(target));
+     }
+     else {
+       if( !dfs.isDirectory(target) ) { // a file
+@@ -90,15 +93,18 @@
+                               "Block Size", "Modification Time",
+                               "Permission", "Owner", "Group" };
+       out.print("<h3>Contents of directory ");
+-      JspHelper.printPathWithLinks(dir, out, namenodeInfoPort, tokenString);
++      JspHelper.printPathWithLinks(HtmlQuoting.quoteHtmlChars(dir), 
++                                   out, namenodeInfoPort, tokenString);
+       out.print("</h3><hr>");
+-      JspHelper.printGotoForm(out, namenodeInfoPort, tokenString, dir);
++      JspHelper.printGotoForm(out, namenodeInfoPort, tokenString, 
++                              HtmlQuoting.quoteHtmlChars(dir));
+       out.print("<hr>");
+ 	
+       File f = new File(dir);
+       String parent;
+       if ((parent = f.getParent()) != null)
+-        out.print("<a href=\"" + req.getRequestURL() + "?dir=" + parent +
++        out.print("<a href=\"" + req.getRequestURL() +
++                  "?dir=" + URLEncoder.encode(parent, "UTF-8") +
+                   "&namenodeInfoPort=" + namenodeInfoPort +
+                   JspHelper.getDelegationTokenUrlParam(tokenString) +
+                   "\">Go to parent directory</a><br>");
+diff --git a/src/webapps/datanode/tail.jsp b/src/webapps/datanode/tail.jsp
+index c5d3d3c..c3c54b6 100644
+--- a/src/webapps/datanode/tail.jsp
++++ b/src/webapps/datanode/tail.jsp
+@@ -18,6 +18,7 @@
+   import="org.apache.hadoop.util.*"
+   import="org.apache.hadoop.net.NetUtils"
+   import="org.apache.hadoop.security.UserGroupInformation"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="java.text.DateFormat"
+ %>
+ 
+@@ -37,7 +38,7 @@
+       noLink = true;
+     }
+ 
+-    String filename = req.getParameter("filename");
++    String filename = HtmlQuoting.unquoteHtmlChars(req.getParameter("filename"));
+     if (filename == null) {
+       out.print("Invalid input (file name absent)");
+       return;
+@@ -55,20 +56,20 @@
+ 
+     if (!noLink) {
+       out.print("<h3>Tail of File: ");
+-      JspHelper.printPathWithLinks(filename, out, namenodeInfoPort, 
+-                                   tokenString);
+-	    out.print("</h3><hr>");
++      JspHelper.printPathWithLinks(HtmlQuoting.quoteHtmlChars(filename),
++                                   out, namenodeInfoPort, tokenString);
++      out.print("</h3><hr>");
+       out.print("<a href=\"" + referrer + "\">Go Back to File View</a><hr>");
+     }
+     else {
+-      out.print("<h3>" + filename + "</h3>");
++      out.print("<h3>" + HtmlQuoting.quoteHtmlChars(filename) + "</h3>");
+     }
+     out.print("<b>Chunk size to view (in bytes, up to file's DFS block size): </b>");
+     out.print("<input type=\"text\" name=\"chunkSizeToView\" value=" +
+               chunkSizeToView + " size=10 maxlength=10>");
+     out.print("&nbsp;&nbsp;<input type=\"submit\" name=\"submit\" value=\"Refresh\"><hr>");
+-    out.print("<input type=\"hidden\" name=\"filename\" value=\"" + filename +
+-              "\">");
++    out.print("<input type=\"hidden\" name=\"filename\" value=\"" + 
++              HtmlQuoting.quoteHtmlChars(filename) + "\">");
+     out.print("<input type=\"hidden\" name=\"namenodeInfoPort\" value=\"" + namenodeInfoPort +
+     "\">");
+     if (!noLink)
+-- 
+1.7.0.4
+

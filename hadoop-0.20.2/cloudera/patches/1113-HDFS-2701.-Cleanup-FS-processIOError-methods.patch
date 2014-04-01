@@ -1,0 +1,574 @@
+From 09a73c40213864289256e8b7e749eef3f7caa778 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 18 Dec 2011 13:52:48 -0800
+Subject: [PATCH 1113/1179] HDFS-2701. Cleanup FS* processIOError methods.
+
+Let's rename the various "processIOError" methods to be more
+descriptive. The current code makes it difficult to identify and
+reason about bug fixes. While we're at it let's remove "Fatal" from
+the "Unable to sync the edit log" log since it's not actually a fatal
+error (this is confusing to users). And 2NN "Checkpoint done" should
+be info, not a warning (also confusing to users).
+
+Reason: Improvement
+Author: Eli Collins
+Ref: CDH-3921
+---
+ .../hadoop/hdfs/server/namenode/FSEditLog.java     |  174 ++++++++++----------
+ .../hadoop/hdfs/server/namenode/FSImage.java       |   76 ++++-----
+ .../hdfs/server/namenode/SecondaryNameNode.java    |    2 +-
+ .../hdfs/server/namenode/TestStorageRestore.java   |    6 +-
+ 4 files changed, 125 insertions(+), 133 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+index 864ddbb..f4106d5 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+@@ -324,11 +324,13 @@ public class FSEditLog {
+   }
+   
+   private int getNumStorageDirs() {
+- int numStorageDirs = 0;
+- for (Iterator<StorageDirectory> it = 
+-       fsimage.dirIterator(NameNodeDirType.EDITS); it.hasNext(); it.next())
+-   numStorageDirs++;
+-    return numStorageDirs;
++   int numStorageDirs = 0;
++   Iterator<StorageDirectory> it = fsimage.dirIterator(NameNodeDirType.EDITS);
++   while (it.hasNext()) {
++     numStorageDirs++;
++     it.next();
++   }
++   return numStorageDirs;
+   }
+   
+   synchronized int getNumEditStreams() {
+@@ -354,18 +356,17 @@ public class FSEditLog {
+    */
+   public synchronized void open() throws IOException {
+     numTransactions = totalTimeTransactions = numTransactionsBatchedInSync = 0;
+-    if (editStreams == null)
++    if (editStreams == null) {
+       editStreams = new ArrayList<EditLogOutputStream>();
+-    for (Iterator<StorageDirectory> it = 
+-           fsimage.dirIterator(NameNodeDirType.EDITS); it.hasNext();) {
++    }
++    Iterator<StorageDirectory> it = fsimage.dirIterator(NameNodeDirType.EDITS);
++    while (it.hasNext()) {
+       StorageDirectory sd = it.next();
+       File eFile = getEditFile(sd);
+       try {
+         EditLogOutputStream eStream = new EditLogFileOutputStream(eFile);
+         editStreams.add(eStream);
+-      } catch (IOException e) {
+-        FSNamesystem.LOG.warn("Unable to open edit log file " + eFile);
+-        // Remove the directory from list of storage directories
++      } catch (IOException ioe) {
+         fsimage.removedStorageDirs.add(sd);
+         it.remove();
+       }
+@@ -396,8 +397,8 @@ public class FSEditLog {
+         eStream.setReadyToFlush();
+         eStream.flush();
+         eStream.close();
+-      } catch (IOException e) {
+-        processIOError(idx);
++      } catch (IOException ioe) {
++        removeEditsAndStorageDir(idx);
+         idx--;
+       }
+     }
+@@ -405,83 +406,91 @@ public class FSEditLog {
+   }
+ 
+   /**
+-   * If there is an IO Error on any log operations, remove that
+-   * directory from the list of directories.
+-   * If no more directories remain, then exit.
++   * Exit the NN process if there will be no valid edit streams
++   * remaining after removing one. This method is called before
++   * removing the stream which is why we fail even if there is
++   * still one stream.
+    */
+-  synchronized void processIOError(int index) {
++  private void exitIfInvalidStreams() {
+     if (editStreams == null || editStreams.size() <= 1) {
+       FSNamesystem.LOG.fatal(
+-      "Fatal Error : All storage directories are inaccessible."); 
++        "Fatal Error: No edit streams are inaccessible."); 
+       Runtime.getRuntime().exit(-1);
+     }
+-    assert(index < getNumStorageDirs());
+-    assert(getNumStorageDirs() == editStreams.size());
+-    
+-    EditLogFileOutputStream eStream = 
+-        (EditLogFileOutputStream)editStreams.get(index);
+-    File parentStorageDir = ((EditLogFileOutputStream)editStreams
+-                                      .get(index)).getFile()
+-                                      .getParentFile().getParentFile();
++  }
++
++  /**
++   * @return the storage directory for the given edit stream. 
++   */
++  private File getStorageDirForStream(int idx) {
++    File editsFile =
++      ((EditLogFileOutputStream)editStreams.get(idx)).getFile();
++    // Namedir is the parent of current which is the parent of edits
++    return editsFile.getParentFile().getParentFile();
++  }
++
++  /**
++   * Remove the given edits stream and its containing storage dir.
++   * Exit the NN process if we have insufficient streams.
++   */
++  synchronized void removeEditsAndStorageDir(int idx) {
++    exitIfInvalidStreams();
++
++    assert idx < getNumStorageDirs();
++    assert getNumStorageDirs() == editStreams.size();
++
++    EditLogFileOutputStream eStream =
++        (EditLogFileOutputStream)editStreams.get(idx);
+     try {
+       eStream.close();
+     } catch (Exception e) {
+       // Ignore
+     }
+ 
+-    editStreams.remove(index);
+-    //
+-    // Invoke the ioerror routine of the fsimage
+-    //
+-    fsimage.processIOError(parentStorageDir);
++    File dir = getStorageDirForStream(idx);
++    editStreams.remove(idx);
++    fsimage.removeStorageDir(dir);
+   }
+   
+   /**
+-   * If there is an IO Error on any log operations on storage directory,
+-   * remove any stream associated with that directory 
++   * Remove all edits streams for the given storage directory.
++   * Exit the NN process if we have insufficient streams.
+    */
+-  synchronized void processIOError(StorageDirectory sd) {
+-    // Try to remove stream only if one should exist
+-    if (!sd.getStorageDirType().isOfType(NameNodeDirType.EDITS))
++  synchronized void removeEditsForStorageDir(StorageDirectory sd) {
++    if (!sd.getStorageDirType().isOfType(NameNodeDirType.EDITS)) {
+       return;
+-    if (editStreams == null || editStreams.size() <= 1) {
+-      FSNamesystem.LOG.fatal(
+-          "Fatal Error : All storage directories are inaccessible."); 
+-      Runtime.getRuntime().exit(-1);
+     }
++
++    exitIfInvalidStreams();
++
+     for (int idx = 0; idx < editStreams.size(); idx++) {
+       File parentStorageDir = ((EditLogFileOutputStream)editStreams
+                                        .get(idx)).getFile()
+                                        .getParentFile().getParentFile();
+-      if (parentStorageDir.getName().equals(sd.getRoot().getName()))
++      File parentDir = getStorageDirForStream(idx);
++      if (parentDir.getName().equals(sd.getRoot().getName())) {
+         editStreams.remove(idx);
+- }
++      }
++    }
+   }
+   
+   /**
+-   * The specified streams have IO errors. Remove them from logging
+-   * new transactions.
++   * Remove each of the given edits streams and their corresponding
++   * storage directories.
+    */
+-  private void processIOError(ArrayList<EditLogOutputStream> errorStreams) {
++  private void removeEditsStreamsAndStorageDirs(
++      ArrayList<EditLogOutputStream> errorStreams) {
+     if (errorStreams == null) {
+-      return;                       // nothing to do
+-    }
+-    for (int idx = 0; idx < errorStreams.size(); idx++) {
+-      EditLogOutputStream eStream = errorStreams.get(idx);
+-      int j = 0;
+-      int numEditStreams = editStreams.size();
+-      for (j = 0; j < numEditStreams; j++) {
+-        if (editStreams.get(j) == eStream) {
+-          break;
+-        }
+-      }
+-      if (j == numEditStreams) {
+-          FSNamesystem.LOG.error("Unable to find sync log on which " +
+-                                 " IO error occured. " +
+-                                 "Fatal Error.");
+-          Runtime.getRuntime().exit(-1);
++      return;
++    }
++    for (EditLogOutputStream errorStream : errorStreams) {
++      int idx = editStreams.indexOf(errorStream);
++      if (-1 == idx) {
++        FSNamesystem.LOG.error(
++            "Fatal Error: Unable to find edits stream with IO error");
++        Runtime.getRuntime().exit(-1);
+       }
+-      processIOError(j);
++      removeEditsAndStorageDir(idx);
+     }
+     fsimage.incrementCheckpointTime();
+   }
+@@ -490,8 +499,8 @@ public class FSEditLog {
+    * check if ANY edits.new log exists
+    */
+   boolean existsNew() throws IOException {
+-    for (Iterator<StorageDirectory> it = 
+-           fsimage.dirIterator(NameNodeDirType.EDITS); it.hasNext();) {
++    Iterator<StorageDirectory> it = fsimage.dirIterator(NameNodeDirType.EDITS);
++    while (it.hasNext()) {
+       if (getEditNewFile(it.next()).exists()) { 
+         return true;
+       }
+@@ -952,10 +961,8 @@ public class FSEditLog {
+       EditLogOutputStream eStream = editStreams.get(idx);
+       try {
+         eStream.write(op, writables);
+-      } catch (IOException ie) {
+-        processIOError(idx);         
+-        // processIOError will remove the idx's stream 
+-        // from the editStreams collection, so we need to update idx
++      } catch (IOException ioe) {
++        removeEditsAndStorageDir(idx);
+         idx--; 
+       }
+     }
+@@ -1077,7 +1084,7 @@ public class FSEditLog {
+       EditLogOutputStream eStream = editStreams.get(idx);
+       try {
+         eStream.flush();
+-      } catch (IOException ie) {
++      } catch (IOException ioe) {
+         //
+         // remember the streams that encountered an error.
+         //
+@@ -1085,14 +1092,13 @@ public class FSEditLog {
+           errorStreams = new ArrayList<EditLogOutputStream>(1);
+         }
+         errorStreams.add(eStream);
+-        FSNamesystem.LOG.error("Unable to sync edit log. " +
+-                               "Fatal Error.");
++        FSNamesystem.LOG.error("Unable to sync "+eStream.getName());
+       }
+     }
+     long elapsed = FSNamesystem.now() - start;
+ 
+     synchronized (this) {
+-       processIOError(errorStreams);
++       removeEditsStreamsAndStorageDirs(errorStreams);
+        synctxid = syncStart;
+        isSyncRunning = false;
+        this.notifyAll();
+@@ -1291,7 +1297,7 @@ public class FSEditLog {
+    * Return the size of the current EditLog
+    */
+   synchronized long getEditLogSize() throws IOException {
+-    assert(getNumStorageDirs() == editStreams.size());
++    assert getNumStorageDirs() == editStreams.size();
+     long size = 0;
+     for (int idx = 0; idx < editStreams.size(); idx++) {
+       EditLogOutputStream es = editStreams.get(idx);
+@@ -1300,7 +1306,7 @@ public class FSEditLog {
+         assert (size == 0 || size == curSize) : "All streams must be the same";
+         size = curSize;
+       } catch (IOException ioe) {
+-        processIOError(idx);
++        removeEditsAndStorageDir(idx);
+       }
+     }
+     return size;
+@@ -1317,18 +1323,19 @@ public class FSEditLog {
+     // exists in all directories.
+     //
+     if (existsNew()) {
+-      for (Iterator<StorageDirectory> it = 
+-               fsimage.dirIterator(NameNodeDirType.EDITS); it.hasNext();) {
++      Iterator<StorageDirectory> it = 
++        fsimage.dirIterator(NameNodeDirType.EDITS);
++      while (it.hasNext()) {
+         File editsNew = getEditNewFile(it.next());
+-     if (!editsNew.exists()) { 
+-          throw new IOException("Inconsistent existance of edits.new " +
+-                                editsNew);
++        if (!editsNew.exists()) {
++          throw new IOException(
++              "Inconsistent existence of edits.new " + editsNew);
+         }
+       }
+       return; // nothing to do, edits.new exists!
+     }
+ 
+-    close();                     // close existing edit log
++    close(); // close existing edit log
+ 
+     fsimage.attemptRestoreRemovedStorage();
+     
+@@ -1336,19 +1343,18 @@ public class FSEditLog {
+     // Open edits.new
+     //
+     boolean failedSd = false;
+-    for (Iterator<StorageDirectory> it = 
+-           fsimage.dirIterator(NameNodeDirType.EDITS); it.hasNext();) {
++    Iterator<StorageDirectory> it = fsimage.dirIterator(NameNodeDirType.EDITS);
++    while (it.hasNext()) {
+       StorageDirectory sd = it.next();
+       try {
+         EditLogFileOutputStream eStream = 
+              new EditLogFileOutputStream(getEditNewFile(sd));
+         eStream.create();
+         editStreams.add(eStream);
+-      } catch (IOException e) {
++      } catch (IOException ioe) {
+         failedSd = true;
+-        // remove stream and this storage directory from list
+-        processIOError(sd);
+         sd.unlock();
++        removeEditsForStorageDir(sd);
+         fsimage.removedStorageDirs.add(sd);
+         it.remove();
+       }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+index 5f74fc9..03510e4 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+@@ -182,9 +182,9 @@ public class FSImage extends Storage {
+   void setStorageDirectories(Collection<File> fsNameDirs,
+                         Collection<File> fsEditsDirs
+                              ) throws IOException {
+-    this.storageDirs = new ArrayList<StorageDirectory>();
+-    this.removedStorageDirs = new ArrayList<StorageDirectory>();
+-   // Add all name dirs with appropriate NameNodeDirType 
++    storageDirs = new ArrayList<StorageDirectory>();
++    removedStorageDirs = new ArrayList<StorageDirectory>();
++    // Add all name dirs with appropriate NameNodeDirType 
+     for (File dirName : fsNameDirs) {
+       boolean isAlsoEdits = false;
+       for (File editsDirName : fsEditsDirs) {
+@@ -197,13 +197,12 @@ public class FSImage extends Storage {
+       NameNodeDirType dirType = (isAlsoEdits) ?
+                           NameNodeDirType.IMAGE_AND_EDITS :
+                           NameNodeDirType.IMAGE;
+-      this.addStorageDir(new StorageDirectory(dirName, dirType));
++      addStorageDir(new StorageDirectory(dirName, dirType));
+     }
+     
+     // Add edits dirs if they are different from name dirs
+     for (File dirName : fsEditsDirs) {
+-      this.addStorageDir(new StorageDirectory(dirName, 
+-                    NameNodeDirType.EDITS));
++      addStorageDir(new StorageDirectory(dirName, NameNodeDirType.EDITS)); 
+     }
+   }
+ 
+@@ -218,9 +217,9 @@ public class FSImage extends Storage {
+   }
+   
+   List<StorageDirectory> getRemovedStorageDirs() {
+-	  return this.removedStorageDirs;
++	  return removedStorageDirs;
+   }
+-  
++
+   File getEditFile(StorageDirectory sd) {
+     return getImageFile(sd, NameNodeFile.EDITS);
+   }
+@@ -615,7 +614,7 @@ public class FSImage extends Storage {
+   }
+ 
+   /**
+-   * Record new checkpoint time in order to
++   * Record new checkpoint time in each storage dir in order to
+    * distinguish healthy directories from the removed ones.
+    * If there is an error writing new checkpoint time, the corresponding
+    * storage directory is removed from the list.
+@@ -624,18 +623,13 @@ public class FSImage extends Storage {
+     this.checkpointTime++;
+     
+     // Write new checkpoint time in all storage directories
+-    for(Iterator<StorageDirectory> it =
+-                          dirIterator(); it.hasNext();) {
++    Iterator<StorageDirectory> it = dirIterator(); 
++    while (it.hasNext()) {
+       StorageDirectory sd = it.next();
+       try {
+         writeCheckpointTime(sd);
+-      } catch(IOException e) {
+-        // Close any edits stream associated with this dir and remove directory
+-        if (sd.getStorageDirType().isOfType(NameNodeDirType.EDITS)) {
+-          editLog.processIOError(sd);
+-        }
+-
+-        // Add storage to the removed list
++      } catch (IOException ioe) {
++        editLog.removeEditsForStorageDir(sd);
+         removedStorageDirs.add(sd);
+         it.remove();
+       }
+@@ -643,14 +637,13 @@ public class FSImage extends Storage {
+   }
+   
+   /**
+-   * Remove storage directory given directory
++   * Remove the given storage directory.
+    */
+-  
+-  void processIOError(File dirName) {
+-    for (Iterator<StorageDirectory> it = 
+-      dirIterator(); it.hasNext();) {
++  void removeStorageDir(File dir) {
++    Iterator<StorageDirectory> it = dirIterator();
++    while (it.hasNext()) {
+       StorageDirectory sd = it.next();
+-      if (sd.getRoot().getPath().equals(dirName.getPath())) {
++      if (sd.getRoot().getPath().equals(dir.getPath())) {
+         try {
+           sd.unlock(); // Try to unlock before removing (in case it is restored)
+         } catch (Exception e) {
+@@ -1104,7 +1097,7 @@ public class FSImage extends Storage {
+         moveCurrent(sd);
+       } catch(IOException ie) {
+         LOG.error("Unable to move current for " + sd.getRoot(), ie);
+-        processIOError(sd.getRoot());
++        removeStorageDir(sd.getRoot());
+       }
+     }
+ 
+@@ -1116,7 +1109,7 @@ public class FSImage extends Storage {
+         saveCurrent(sd);
+       } catch(IOException ie) {
+         LOG.error("Unable to save image for " + sd.getRoot(), ie);
+-        processIOError(sd.getRoot());
++        removeStorageDir(sd.getRoot());
+       }
+     }
+ 
+@@ -1138,7 +1131,7 @@ public class FSImage extends Storage {
+         saveCurrent(sd);
+       } catch(IOException ie) {
+         LOG.error("Unable to save edits for " + sd.getRoot(), ie);
+-        processIOError(sd.getRoot());
++        removeStorageDir(sd.getRoot());
+       }
+     }
+     // mv lastcheckpoint.tmp -> previous.checkpoint
+@@ -1148,7 +1141,7 @@ public class FSImage extends Storage {
+         moveLastCheckpoint(sd);
+       } catch(IOException ie) {
+         LOG.error("Unable to move last checkpoint for " + sd.getRoot(), ie);
+-        processIOError(sd.getRoot());
++        removeStorageDir(sd.getRoot());
+       }
+     }
+     if(!editLog.isOpen()) editLog.open();
+@@ -1457,8 +1450,8 @@ public class FSImage extends Storage {
+     if (!editLog.existsNew()) {
+       throw new IOException("New Edits file does not exist");
+     }
+-    for (Iterator<StorageDirectory> it = 
+-                       dirIterator(NameNodeDirType.IMAGE); it.hasNext();) {
++    Iterator<StorageDirectory> it = dirIterator(NameNodeDirType.IMAGE);
++    while (it.hasNext()) {
+       StorageDirectory sd = it.next();
+       File ckpt = getImageFile(sd, NameNodeFile.IMAGE_NEW);
+       if (!ckpt.exists()) {
+@@ -1471,8 +1464,8 @@ public class FSImage extends Storage {
+     //
+     // Renames new image
+     //
+-    for (Iterator<StorageDirectory> it = 
+-                       dirIterator(NameNodeDirType.IMAGE); it.hasNext();) {
++    it = dirIterator(NameNodeDirType.IMAGE);
++    while (it.hasNext()) {
+       StorageDirectory sd = it.next();
+       File ckpt = getImageFile(sd, NameNodeFile.IMAGE_NEW);
+       File curFile = getImageFile(sd, NameNodeFile.IMAGE);
+@@ -1481,11 +1474,7 @@ public class FSImage extends Storage {
+       if (!ckpt.renameTo(curFile)) {
+         curFile.delete();
+         if (!ckpt.renameTo(curFile)) {
+-          // Close edit stream, if this directory is also used for edits
+-          if (sd.getStorageDirType().isOfType(NameNodeDirType.EDITS))
+-            editLog.processIOError(sd);
+-          
+-          // add storage to the removed list
++          editLog.removeEditsForStorageDir(sd);
+           removedStorageDirs.add(sd);
+           it.remove();
+         }
+@@ -1498,8 +1487,8 @@ public class FSImage extends Storage {
+     //
+     this.layoutVersion = FSConstants.LAYOUT_VERSION;
+     this.checkpointTime = FSNamesystem.now();
+-    for (Iterator<StorageDirectory> it = 
+-                           dirIterator(); it.hasNext();) {
++    it = dirIterator();
++    while (it.hasNext()) {
+       StorageDirectory sd = it.next();
+       // delete old edits if sd is the image only the directory
+       if (!sd.getStorageDirType().isOfType(NameNodeDirType.EDITS)) {
+@@ -1513,12 +1502,9 @@ public class FSImage extends Storage {
+       }
+       try {
+         sd.write();
+-      } catch (IOException e) {
+-        LOG.error("Cannot write file " + sd.getRoot(), e);
+-        // Close edit stream, if this directory is also used for edits
+-        if (sd.getStorageDirType().isOfType(NameNodeDirType.EDITS))
+-          editLog.processIOError(sd);
+-      //add storage to the removed list
++      } catch (IOException ioe) {
++        LOG.error("Cannot write file " + sd.getRoot(), ioe);
++        editLog.removeEditsForStorageDir(sd);
+         removedStorageDirs.add(sd);
+         it.remove();
+       }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index 1eca544..9c87b79 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -483,7 +483,7 @@ public class SecondaryNameNode implements Runnable {
+     namenode.rollFsImage();
+     checkpointImage.endCheckpoint();
+ 
+-    LOG.warn("Checkpoint done. New Image Size: " 
++    LOG.info("Checkpoint done. New Image Size: "
+               + checkpointImage.getFsImageName().length());
+   }
+ 
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageRestore.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageRestore.java
+index e81a70c..c3d8d04 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageRestore.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageRestore.java
+@@ -101,8 +101,8 @@ public class TestStorageRestore {
+    * Remove edits and storage directories.
+    */
+   public void invalidateStorage(FSImage fi) throws IOException {
+-    fi.getEditLog().processIOError(2); // name3
+-    fi.getEditLog().processIOError(1); // name2
++    fi.getEditLog().removeEditsAndStorageDir(2); // name3
++    fi.getEditLog().removeEditsAndStorageDir(1); // name2
+   }
+   
+   /**
+@@ -194,7 +194,7 @@ public class TestStorageRestore {
+       writeFile(fs, path1, 2);
+   
+       // Take name3 offline
+-      fsImage.getEditLog().processIOError(2);
++      fsImage.getEditLog().removeEditsAndStorageDir(2);
+       
+       // Simulate a 2NN beginning a checkpoint, but not finishing. This will
+       // cause name3 to be restored.
+-- 
+1.7.0.4
+

@@ -1,0 +1,28 @@
+From 645b176875769c8dcbf7d839926eb735bdfd5b14 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Wed, 29 Jun 2011 23:16:27 -0700
+Subject: [PATCH 0994/1179] HADOOP-7040. DiskChecker:mkdirsWithExistsCheck swallows FileNotFoundException.
+
+Reason: Bug
+Author: Boris Shkolnik
+Ref: CDH-3064
+---
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index da56618..75faf1b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -1530,7 +1530,7 @@ public class DataNode extends Configured
+       try {
+         DiskChecker.checkDir(localFS, new Path(dir), dataDirPermission);
+         dirs.add(new File(dir));
+-      } catch (DiskErrorException e) {
++      } catch (IOException e) {
+         LOG.warn("Invalid directory in " + DATA_DIR_KEY +  ": " + 
+                  e.getMessage());
+       }
+-- 
+1.7.0.4
+

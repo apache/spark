@@ -1,0 +1,257 @@
+<?xml version="1.0"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!DOCTYPE document PUBLIC "-//APACHE//DTD Documentation V2.0//EN"
+          "http://forrest.apache.org/dtd/document-v20.dtd">
+
+
+<document>
+
+  <header>
+    <title>
+      Permissions Guide
+    </title>
+  </header>
+
+  <body>
+    <section> <title>Overview</title>
+      <p>
+		The Hadoop Distributed File System (HDFS) implements a permissions model for files and directories that shares much of the POSIX model. 
+		Each file and directory is associated with an <em>owner</em> and a <em>group</em>. The file or directory has separate permissions for the 
+		user that is the owner, for other users that are members of the group, and for all other users. 
+		
+		For files, the <em>r</em> permission is required to read the file, and the <em>w</em> permission is required to write or append to the file. 
+		
+		For directories, the <em>r</em> permission is required to list the contents of the directory, the <em>w</em> permission is required to create 
+		or delete files or directories, and the <em>x</em> permission is required to access a child of the directory. 
+		</p>
+	 <p>	
+		In contrast to the POSIX model, there are no <em>setuid</em> or <em>setgid</em> bits for files as there is no notion of executable files. 
+		For directories, there are no <em>setuid</em> or <em>setgid</em> bits directory as a simplification. 
+         </p>
+         <p>
+                The <em>sticky bit</em> can be set on directories, preventing anyone except the superuser, directory owner, or file owner from deleting
+                or moving the files within the directory. Setting the sticky bit for a file has no effect.
+         </p>
+         <p>
+                Collectively, the permissions of a file or directory are its <em>mode</em>. In general, Unix 
+		customs for representing and displaying modes will be used, including the use of octal numbers in this description. When a file or directory 
+		is created, its owner is the user identity of the client process, and its group is the group of the parent directory (the BSD rule).
+	</p>
+	<p>
+		Each client process that accesses HDFS has a two-part identity composed of the <em>user name</em>, and <em>groups list</em>. 
+		Whenever HDFS must do a permissions check for a file or directory <code>foo</code> accessed by a client process,
+	</p>
+	<ul>
+		<li>
+		   If the user name matches the owner of <code>foo</code>, then the owner permissions are tested;
+		</li>
+		<li>
+		   Else if the group of <code>foo</code> matches any of member of the groups list, then the group permissions are tested;
+		</li>
+		<li>
+		   Otherwise the other permissions of <code>foo</code> are tested.
+		</li>
+	</ul>
+
+<p>
+		If a permissions check fails, the client operation fails.	
+</p>
+     </section>
+
+<section><title>User Identity</title>
+<p>
+As of CDH3, Hadoop supports two different modes of operation to determine the user's identity, specified by the
+<code>hadoop.security.authentication</code> property:
+</p>
+<dl>
+  <dt><code>simple</code></dt>
+  <dd>In this mode of operation, the identity of a client process is determined by the host operating system. On Unix-like systems,
+  the user name is the equivalent of <code>`whoami`</code>.</dd>
+  <dt><code>kerberos</code></dt>
+  <dd>In Kerberized operation, the identity of a client process is determined by its Kerberos credentials. For example, in a
+  Kerberized environment, a user may use the <code>kinit</code> utility to obtain a Kerberos ticket-granting-ticket (TGT) and
+  use <code>klist</code> to determine their current principal. When mapping a Kerberos principal to an HDFS username, all <em>components</em> except for the <em>primary</em> are dropped. For example, a principal <code>todd/foobar@CORP.COMPANY.COM</code> will act as the simple username <code>todd</code> on HDFS.
+  </dd>
+</dl>
+<p>
+Regardless of the mode of operation, the user identity mechanism is extrinsic to HDFS itself.
+There is no provision within HDFS for creating user identities, establishing groups, or processing user credentials.
+</p>
+</section>
+
+<section><title>Group Mapping</title>
+<p>
+Once a username has been determined as described above, the list of groups is determined by a <em>group mapping
+service</em>, configured by the <code>hadoop.security.group.mapping</code> property.
+The default implementation, <code>org.apache.hadoop.security.ShellBasedUnixGroupsMapping</code>, will shell out
+to the Unix <code>bash -c groups</code> command to resolve a list of groups for a user.
+</p>
+<p>
+For HDFS, the mapping of users to groups is performed on the NameNode. Thus, the host system configuration of
+the NameNode determines the group mappings for the users.
+</p>
+<p>
+Note that HDFS stores the user and group of a file or directory as strings; there is no conversion from user and
+group identity numbers as is conventional in Unix.
+</p>
+
+</section>
+
+<section> <title>Understanding the Implementation</title>
+<p>
+Each file or directory operation passes the full path name to the name node, and the permissions checks are applied along the 
+path for each operation. The client framework will implicitly associate the user identity with the connection to the name node, 
+reducing the need for changes to the existing client API. It has always been the case that when one operation on a file succeeds, 
+the operation might fail when repeated because the file, or some directory on the path, no longer exists. For instance, when the 
+client first begins reading a file, it makes a first request to the name node to discover the location of the first blocks of the file. 
+A second request made to find additional blocks may fail. On the other hand, deleting a file does not revoke access by a client 
+that already knows the blocks of the file. With the addition of permissions, a client's access to a file may be withdrawn between 
+requests. Again, changing permissions does not revoke the access of a client that already knows the file's blocks.
+</p>
+</section>
+     
+<section> <title>Changes to the File System API</title>
+<p>
+	All methods that use a path parameter will throw <code>AccessControlException</code> if permission checking fails.
+</p>
+<p>New methods:</p>
+<ul>
+	<li>
+		<code>public FSDataOutputStream create(Path f, FsPermission permission, boolean overwrite, int bufferSize, short 
+		replication, long blockSize, Progressable progress) throws IOException;</code>
+	</li>
+	<li>
+		<code>public boolean mkdirs(Path f, FsPermission permission) throws IOException;</code>
+	</li>
+	<li>
+		<code>public void setPermission(Path p, FsPermission permission) throws IOException;</code>
+	</li>
+	<li>
+		<code>public void setOwner(Path p, String username, String groupname) throws IOException;</code>
+	</li>
+	<li>
+		<code>public FileStatus getFileStatus(Path f) throws IOException;</code> will additionally return the user, 
+		group and mode associated with the path.
+	</li>
+
+</ul>
+<p>
+The mode of a new file or directory is restricted my the <code>umask</code> set as a configuration parameter. 
+When the existing <code>create(path, &hellip;)</code> method (<em>without</em> the permission parameter) 
+is used, the mode of the new file is <code>666&thinsp;&amp;&thinsp;^umask</code>. When the 
+new <code>create(path, </code><em>permission</em><code>, &hellip;)</code> method 
+(<em>with</em> the permission parameter <em>P</em>) is used, the mode of the new file is 
+<code>P&thinsp;&amp;&thinsp;^umask&thinsp;&amp;&thinsp;666</code>. When a new directory is 
+created with the existing <code>mkdirs(path)</code> method (<em>without</em> the permission parameter), 
+the mode of the new directory is <code>777&thinsp;&amp;&thinsp;^umask</code>. When the 
+new <code>mkdirs(path, </code><em>permission</em> <code>)</code> method (<em>with</em> the 
+permission parameter <em>P</em>) is used, the mode of new directory is 
+<code>P&thinsp;&amp;&thinsp;^umask&thinsp;&amp;&thinsp;777</code>. 
+</p>
+</section>
+
+     
+<section> <title>Changes to the Application Shell</title>
+<p>New operations:</p>
+<ul>
+	<li><code>chmod [-R]</code> <em>mode file &hellip;</em>
+	<br />Only the owner of a file or the super-user is permitted to change the mode of a file.
+    </li>
+    
+	<li><code>chgrp [-R]</code> <em>group file &hellip;</em>
+	<br />The user invoking <code>chgrp</code> must belong to the specified group and be the owner of the file, or be the super-user.
+    </li>
+    
+	<li><code>chown [-R]</code> <em>[owner][:[group]] file &hellip;</em>
+    <br />The owner of a file may only be altered by a super-user.
+    </li>
+	
+	<li><code>ls </code> <em>file &hellip;</em>
+	</li>
+
+	<li><code>lsr </code> <em>file &hellip;</em>
+    <br />The output is reformatted to display the owner, group and mode.
+	</li>
+</ul>
+</section>
+
+     
+<section> <title>The Super-User</title>
+<p>
+	The super-user is the user with the same identity as name node process itself. Loosely, if you started the name 
+	node, then you are the super-user. The super-user can do anything in that permissions checks never fail for the 
+	super-user. There is no persistent notion of who <em>was</em> the super-user; when the name node is started 
+	the process identity determines who is the super-user <em>for now</em>. The HDFS super-user does not have 
+	to be the super-user of the name node host, nor is it necessary that all clusters have the same super-user. Also, 
+	an experimenter running HDFS on a personal workstation, conveniently becomes that installation's super-user 
+	without any configuration.
+	</p>
+	<p>
+	In addition, the administrator my identify a distinguished group using a configuration parameter. If set, members 
+	of this group are also super-users.
+</p>
+</section>
+
+<section> <title>The Web Server</title>
+<p>
+By default, the identity of the web server is a configuration parameter. That is, the name node has no notion of the identity of 
+the <em>real</em> user, but the web server behaves as if it has the identity (user and groups) of a user chosen 
+by the administrator. Unless the chosen identity matches the super-user, parts of the name space may be inaccessible
+to the web server.</p>
+</section>
+
+<section> <title>Configuration Parameters</title>
+<ul>
+	<li><code>dfs.permissions = true </code>
+		<br />If <code>yes</code> use the permissions system as described here. If <code>no</code>, permission 
+		<em>checking</em> is turned off, but all other behavior is unchanged. Switching from one parameter 
+		value to the other does not change the mode, owner or group of files or directories.
+		<br />Regardless of whether permissions are on or off, <code>chmod</code>, <code>chgrp</code> and 
+		<code>chown</code> <em>always</em> check permissions. These functions are only useful in the 
+		permissions context, and so there is no backwards compatibility issue. Furthermore, this allows 
+		administrators to reliably set owners and permissions in advance of turning on regular permissions checking.
+    </li>
+
+	<li><code>dfs.web.ugi = webuser,webgroup</code>
+	<br />The user name to be used by the web server. Setting this to the name of the super-user allows any 
+		web client to see everything. Changing this to an otherwise unused identity allows web clients to see 
+		only those things visible using "other" permissions. Additional groups may be added to the comma-separated list.
+    </li>
+    
+	<li><code>dfs.permissions.supergroup = supergroup</code>
+	<br />The name of the group of super-users.
+	</li>
+
+	<li><code>dfs.upgrade.permission = 0777</code>
+	<br />The choice of initial mode during upgrade. The <em>x</em> permission is <em>never</em> set for files. 
+		For configuration files, the decimal value <em>511<sub>10</sub></em> may be used.
+    </li>
+    
+	<li><code>dfs.umask = 022</code>
+    <br />The <code>umask</code> used when creating files and directories. For configuration files, the decimal 
+		value <em>18<sub>10</sub></em> may be used.
+	</li>
+</ul>
+</section>
+
+     
+  </body>
+</document>
+ 	
+

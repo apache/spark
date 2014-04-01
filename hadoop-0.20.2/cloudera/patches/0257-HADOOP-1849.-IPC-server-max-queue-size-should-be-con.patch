@@ -1,0 +1,64 @@
+From e95781032b5d886aa6583cab1306025fe372babf Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 25 May 2010 13:20:00 -0700
+Subject: [PATCH 0257/1179] HADOOP-1849. IPC server max queue size should be configurable.
+
+Description: Currently max queue size for IPC server is set to (100 *
+handlers). Usually when RPC failures are observed (e.g. HADOOP-1763),
+we increase number of handlers and the problem goes away. I think a
+big part of such a fix is increase in max queue size. I think we
+should make maxQsize per handler configurable (with a bigger default
+than 100). There are other improvements also (HADOOP-1841).  Server
+keeps reading RPC requests from clients. When the number in-flight
+RPCs is larger than maxQsize, the earliest RPCs are deleted. This is
+the main feedback Server has for the client. I have often heard from
+users that Hadoop doesn't handle bursty traffic.
+
+Say handler count is 10 (default) and Server can handle 1000 RPCs a
+sec (quite conservative/low for a typical server), it implies that an
+RPC can wait for only for 1 sec before it is dropped. If there 3000
+clients and all of them send RPCs around the same time (not very rare,
+with heartbeats etc), 2000 will be dropped. In stead of dropping the
+earliest RPCs, if the server delays reading new RPCs, the feedback to
+clients would be much smoother, I will file another jira regd queue
+management.
+
+For this jira I propose to make queue size per handler configurable,
+with a larger default (may be 500).
+
+Reason: Improvement
+Author: Eli Collins
+Ref: CDH-1133
+---
+ src/core/org/apache/hadoop/ipc/Server.java |    8 ++++++--
+ 1 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index a7fbcd1..4d717eb 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -88,7 +88,9 @@ public abstract class Server {
+   /**
+    * How many calls/handler are allowed in the queue.
+    */
+-  private static final int MAX_QUEUE_SIZE_PER_HANDLER = 100;
++  private static final int IPC_SERVER_HANDLER_QUEUE_SIZE_DEFAULT = 100;
++  private static final String  IPC_SERVER_HANDLER_QUEUE_SIZE_KEY = 
++                                            "ipc.server.handler.queue.size";
+   
+   /**
+    * Initial and max size of response buffer
+@@ -1029,7 +1031,9 @@ public abstract class Server {
+     this.paramClass = paramClass;
+     this.handlerCount = handlerCount;
+     this.socketSendBufferSize = 0;
+-    this.maxQueueSize = handlerCount * MAX_QUEUE_SIZE_PER_HANDLER;
++    this.maxQueueSize = handlerCount * conf.getInt(
++                                IPC_SERVER_HANDLER_QUEUE_SIZE_KEY,
++                                IPC_SERVER_HANDLER_QUEUE_SIZE_DEFAULT);
+     this.callQueue  = new LinkedBlockingQueue<Call>(maxQueueSize); 
+     this.maxIdleTime = 2*conf.getInt("ipc.client.connection.maxidletime", 1000);
+     this.maxConnectionsToNuke = conf.getInt("ipc.client.kill.max", 10);
+-- 
+1.7.0.4
+

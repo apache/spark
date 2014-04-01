@@ -1,0 +1,39 @@
+From be89980babbc50eb7e1ccce9b583fff0ae24cf80 Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Wed, 26 Jan 2011 10:06:06 -0800
+Subject: [PATCH 0790/1179] MAPREDUCE-2082. Race condition in writing the jobtoken password file when launching pipes jobs
+
+Reason: security
+Author: Jitendra Nath Pandey
+Ref: CDH-2562
+---
+ .../apache/hadoop/mapred/pipes/Application.java    |    6 +-----
+ 1 files changed, 1 insertions(+), 5 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/pipes/Application.java b/src/mapred/org/apache/hadoop/mapred/pipes/Application.java
+index 575de3a..9d41dc3 100644
+--- a/src/mapred/org/apache/hadoop/mapred/pipes/Application.java
++++ b/src/mapred/org/apache/hadoop/mapred/pipes/Application.java
+@@ -101,7 +101,7 @@ class Application<K1 extends WritableComparable, V1 extends Writable,
+     // This password is used as shared secret key between this application and
+     // child pipes process
+     byte[]  password = jobToken.getPassword();
+-    String localPasswordFile = conf.getJobLocalDir() + Path.SEPARATOR
++    String localPasswordFile = new File(".") + Path.SEPARATOR
+         + "jobTokenPassword";
+     writePasswordToLocalFile(localPasswordFile, password, conf);
+     env.put("hadoop.pipes.shared.secret.location", localPasswordFile);
+@@ -167,10 +167,6 @@ class Application<K1 extends WritableComparable, V1 extends Writable,
+       byte[] password, JobConf conf) throws IOException {
+     FileSystem localFs = FileSystem.getLocal(conf);
+     Path localPath = new Path(localPasswordFile);
+-    if (localFs.isFile(localPath)) {
+-      LOG.debug("Password file is already created by previous path");
+-      return;
+-    }
+     FSDataOutputStream out = FileSystem.create(localFs, localPath,
+         new FsPermission("400"));
+     out.write(password);
+-- 
+1.7.0.4
+

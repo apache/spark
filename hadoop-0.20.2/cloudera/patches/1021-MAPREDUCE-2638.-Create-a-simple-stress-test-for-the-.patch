@@ -1,0 +1,507 @@
+From edb61378f7b6c80a7385e3e24997de429f39e0d8 Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Wed, 13 Jul 2011 13:34:52 -0700
+Subject: [PATCH 1021/1179] MAPREDUCE-2638. Create a simple stress test for the fair scheduler
+
+Reason: Test
+Author: Tom White
+Ref: CDH-2847
+---
+ src/contrib/build-contrib.xml                      |    5 +
+ .../hadoop/mapred/FairSchedulerStressTest.java     |  185 ++++++++++++++++++++
+ .../hadoop/mapred/FairSchedulerSystemTestBase.java |  102 +++++++++++
+ .../hadoop/mapred/TestFairSchedulerSystem.java     |  102 +++---------
+ 4 files changed, 315 insertions(+), 79 deletions(-)
+ create mode 100644 src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/FairSchedulerStressTest.java
+ create mode 100644 src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/FairSchedulerSystemTestBase.java
+
+diff --git a/src/contrib/build-contrib.xml b/src/contrib/build-contrib.xml
+index cd01ff2..5a91426 100644
+--- a/src/contrib/build-contrib.xml
++++ b/src/contrib/build-contrib.xml
+@@ -313,10 +313,15 @@
+       <sysproperty key="user.dir" value="${build.test}/data"/>
+       
+       <sysproperty key="fs.default.name" value="${fs.default.name}"/>
++      <sysproperty key="fs.defaultFS" value="${fs.defaultFS}"/>
++      <sysproperty key="mapred.job.tracker" value="${mapred.job.tracker}"/>
+       <sysproperty key="hadoop.test.localoutputfile" value="${hadoop.test.localoutputfile}"/>
+       <sysproperty key="hadoop.log.dir" value="${hadoop.log.dir}"/> 
+       <sysproperty key="taskcontroller-path" value="${taskcontroller-path}"/>
+       <sysproperty key="taskcontroller-ugi" value="${taskcontroller-ugi}"/>
++      <syspropertyset id="fairscheduler.properties">
++        <propertyref prefix="test.fairscheduler."/>
++      </syspropertyset>
+       <classpath refid="test.classpath"/>
+       <formatter type="${test.junit.output.format}" />
+       <batchtest todir="${build.test}" unless="testcase">
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/FairSchedulerStressTest.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/FairSchedulerStressTest.java
+new file mode 100644
+index 0000000..dda737c
+--- /dev/null
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/FairSchedulerStressTest.java
+@@ -0,0 +1,185 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements. See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership. The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License. You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred;
++
++import static org.junit.Assert.fail;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Random;
++import java.util.concurrent.Callable;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
++import java.util.concurrent.Future;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.TimeoutException;
++
++import org.apache.hadoop.fs.CommonConfigurationKeys;
++import org.junit.BeforeClass;
++import org.junit.Test;
++
++/**
++ * A stress test for the fair scheduler.
++ * <p>
++ * Unlike {@link TestFairSchedulerSystem}, this test is designed to be run
++ * against a cluster. Here's an example
++ * configuration for the cluster for the purposes of testing. The update and
++ * preemption intervals are smaller than normal.
++ * <p>
++ * <pre>
++ * &lt;property&gt;
++ *   &lt;name&gt;mapred.jobtracker.taskScheduler&lt;/name&gt;
++ *   &lt;value&gt;org.apache.hadoop.mapred.FairScheduler&lt;/value&gt;
++ * &lt;/property&gt;
++ * &lt;property&gt;
++ *   &lt;name&gt;mapred.fairscheduler.allocation.file&lt;/name&gt;
++ *   &lt;value&gt;/path/to/allocations.xml&lt;/value&gt;
++ * &lt;/property&gt;
++ * &lt;property&gt;
++ *   &lt;name&gt;mapred.fairscheduler.preemption&lt;/name&gt;
++ *   &lt;value&gt;true&lt;/value&gt;
++ * &lt;/property&gt;
++ * &lt;property&gt;
++ *   &lt;name&gt;mapred.fairscheduler.update.interval&lt;/name&gt;
++ *   &lt;value&gt;10&lt;/value&gt;
++ * &lt;/property&gt;
++ * &lt;property&gt;
++ *   &lt;name&gt;mapred.fairscheduler.preemption.interval&lt;/name&gt;
++ *   &lt;value&gt;10&lt;/value&gt;
++ * &lt;/property&gt;
++ * &lt;property&gt;
++ *   &lt;name&gt;mapred.fairscheduler.eventlog.enabled&lt;/name&gt;
++ *   &lt;value&gt;true&lt;/value&gt;
++ * &lt;/property&gt;
++ * </pre>
++ * <p>
++ * Here's an <i>allocations.xml</i> file which sets the minimum share preemption
++ * timeout to a very low value (1 second) to exercise the scheduler:
++ * <p>
++ * <pre>
++ * &lt;?xml version="1.0"?&gt;
++ * &lt;allocations&gt;
++ *   &lt;pool name="pool0"&gt;
++ *     &lt;minMaps&gt;1&lt;/minMaps&gt;
++ *     &lt;minReduces&gt;1&lt;/minReduces&gt;
++ *   &lt;/pool&gt;
++ *   &lt;defaultMinSharePreemptionTimeout&gt;1&lt;/defaultMinSharePreemptionTimeout&gt;
++ * &lt;/allocations&gt;
++ * </pre>
++ * <p>
++ * The following system properties can be set to override the defaults:
++ * <ul>
++ * <li><code>test.fairscheduler.numThreads</code></li>
++ * <li><code>test.fairscheduler.numJobs</code></li>
++ * <li><code>test.fairscheduler.numPools</code></li>
++ * <li><code>test.fairscheduler.sleepTime</code></li>
++ * <li><code>test.fairscheduler.jobTrackerInfoPort</code></li>
++ * </ul>
++ */
++public class FairSchedulerStressTest extends FairSchedulerSystemTestBase {
++  private static final String MAPRED_JOB_TRACKER = "mapred.job.tracker";
++
++  static final int DEFAULT_NUM_THREADS = 10;
++  static final int DEFAULT_NUM_JOBS = 20;
++  static final int DEFAULT_NUM_POOLS = 2;
++  static final int DEFAULT_SLEEP_TIME = 1000;
++  static final int DEFAULT_JOB_TRACKER_INFO_PORT = 50030;
++
++  static Random RAND = new Random();
++
++  static JobConf conf;
++  
++  private static int numThreads;
++  private static int numJobs;
++  private static int numPools;
++  private static int sleepTime;
++  private static int jobTrackerInfoPort;
++  
++  @BeforeClass
++  public static void setUp() throws Exception {
++    
++    String namenode = System
++        .getProperty(CommonConfigurationKeys.FS_DEFAULT_NAME_KEY);
++    if (namenode == null) {
++      fail(String.format("System property %s must be specified.",
++          CommonConfigurationKeys.FS_DEFAULT_NAME_KEY));
++    }
++    String jobtracker = System.getProperty(MAPRED_JOB_TRACKER);
++    if (jobtracker == null) {
++      fail(String.format("System property %s must be specified.",
++          MAPRED_JOB_TRACKER));
++    }
++    conf = new JobConf();
++    conf.set(CommonConfigurationKeys.FS_DEFAULT_NAME_KEY, namenode);
++    conf.set(MAPRED_JOB_TRACKER, jobtracker);
++    
++    numThreads = getIntProperty("numThreads", DEFAULT_NUM_THREADS);
++    numJobs = getIntProperty("numJobs", DEFAULT_NUM_JOBS);
++    numPools = getIntProperty("numPools", DEFAULT_NUM_POOLS);
++    sleepTime = getIntProperty("sleepTime", DEFAULT_SLEEP_TIME);
++    jobTrackerInfoPort = getIntProperty("jobTrackerInfoPort",
++        DEFAULT_JOB_TRACKER_INFO_PORT);
++  }
++  
++  private static int getIntProperty(String suffix, int defaultValue) {
++    String name = "test.fairscheduler." + suffix;
++    if (System.getProperty(name) == null) {
++      return defaultValue;
++    }
++    return Integer.parseInt(System.getProperty(name));
++  }
++  
++  /**
++   * Submit some concurrent sleep jobs, and visit the scheduler servlet
++   * while they're running.
++   */
++  @Test
++  public void testFairSchedulerSystem() throws Exception {
++    ExecutorService exec = Executors.newFixedThreadPool(numThreads);
++    List<Future<Void>> futures = new ArrayList<Future<Void>>(numJobs);
++    for (int i = 0; i < numJobs; i++) {
++      futures.add(exec.submit(new Callable<Void>() {
++            public Void call() throws Exception {
++              JobConf jobConf = new JobConf(conf);
++              jobConf.set("mapred.fairscheduler.pool",
++                  "pool" + RAND.nextInt(numPools));
++              runSleepJob(jobConf, sleepTime);
++              return null;
++            }
++          }));
++    }
++
++    JobClient jc = new JobClient(conf);
++
++    // Wait for the tasks to finish, and visit the scheduler servlet
++    // every few seconds while waiting.
++    for (Future<Void> future : futures) {
++      while (true) {
++        try {
++          future.get(3, TimeUnit.SECONDS);
++          break;
++        } catch (TimeoutException te) {
++          // It's OK
++        }
++        checkServlet(true, false, jobTrackerInfoPort);
++        checkServlet(false, false, jobTrackerInfoPort);
++      }
++    }
++  }
++
++}
+\ No newline at end of file
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/FairSchedulerSystemTestBase.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/FairSchedulerSystemTestBase.java
+new file mode 100644
+index 0000000..013fe38
+--- /dev/null
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/FairSchedulerSystemTestBase.java
+@@ -0,0 +1,102 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertTrue;
++
++import java.io.BufferedReader;
++import java.io.InputStreamReader;
++import java.net.HttpURLConnection;
++import java.net.URL;
++
++import org.apache.hadoop.examples.SleepJob;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.util.ToolRunner;
++
++/**
++ * System test methods for the fair scheduler.
++ */
++public abstract class FairSchedulerSystemTestBase {
++
++  protected void runSleepJob(JobConf conf, int sleepTimeMillis) throws Exception {
++    String[] args = { "-m", "1", "-r", "1", "-mt", "" + sleepTimeMillis,
++        "-rt", "" + sleepTimeMillis };
++    assertEquals(0, ToolRunner.run(conf, new SleepJob(), args));
++  }
++  
++  /**
++   * Check the fair scheduler servlet for good status code and smoke test
++   * for contents.
++   */
++  protected void checkServlet(boolean advanced, boolean poolNameIsGroupName,
++      int jobTrackerInfoPort) throws Exception {
++    String jtURL = "http://localhost:" + jobTrackerInfoPort;
++    URL url = new URL(jtURL + "/scheduler" +
++                      (advanced ? "?advanced" : ""));
++    HttpURLConnection connection = (HttpURLConnection)url.openConnection();
++    connection.setRequestMethod("GET");
++    connection.connect();
++    assertEquals(200, connection.getResponseCode());
++
++    // Just to be sure, slurp the content and make sure it looks like the scheduler
++    String contents = slurpContents(connection);
++    assertTrue("Bad contents for fair scheduler servlet: " + contents,
++      contents.contains("Fair Scheduler Administration"));
++
++    if (poolNameIsGroupName) {
++      String userGroups[] = UserGroupInformation.getCurrentUser().getGroupNames();
++      String primaryGroup = ">" + userGroups[0] + "<";
++      assertTrue("Pool name not group name, expected " + userGroups[0] +
++          " but contents was:\n" + contents,
++          contents.contains(primaryGroup));
++    }
++  }
++
++  protected void checkTaskGraphServlet(JobID job, int jobTrackerInfoPort)
++      throws Exception {
++    String jtURL = "http://localhost:" + jobTrackerInfoPort;
++    URL url = new URL(jtURL + "/taskgraph?jobid=" + job.toString() + "&type=map");
++    HttpURLConnection connection = (HttpURLConnection)url.openConnection();
++    connection.setRequestMethod("GET");
++    connection.connect();
++    assertEquals(200, connection.getResponseCode());
++
++    // Just to be sure, slurp the content and make sure it looks like a graph
++    String contents = slurpContents(connection);
++    if (contents.trim().length() > 0) {
++      assertTrue("Bad contents for job " + job + ":\n" + contents,
++          contents.contains("</svg>"));
++    }
++  }
++
++  protected String slurpContents(HttpURLConnection connection) throws Exception {
++    BufferedReader reader = new BufferedReader(
++      new InputStreamReader(connection.getInputStream()));
++    StringBuilder sb = new StringBuilder();
++
++    String line = null;
++    while ((line = reader.readLine()) != null) {
++      sb.append(line).append('\n');
++    }
++
++    return sb.toString();
++  }
++
++}
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairSchedulerSystem.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairSchedulerSystem.java
+index df8bb0d..92ccb40 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairSchedulerSystem.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairSchedulerSystem.java
+@@ -17,28 +17,20 @@
+  */
+ package org.apache.hadoop.mapred;
+ 
+-import org.apache.hadoop.examples.SleepJob;
+-import org.apache.hadoop.security.UserGroupInformation;
+-import org.apache.hadoop.util.ToolRunner;
+-import org.apache.hadoop.conf.Configuration;
+-import java.io.BufferedReader;
+-import java.io.InputStream;
+-import java.io.InputStreamReader;
+-import java.net.URL;
+-import java.net.HttpURLConnection;
++import java.util.ArrayList;
++import java.util.List;
+ import java.util.concurrent.Callable;
+-import java.util.concurrent.Executors;
+ import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
+ import java.util.concurrent.Future;
+-import java.util.concurrent.TimeoutException;
+ import java.util.concurrent.TimeUnit;
+-import java.util.ArrayList;
+-import java.util.List;
++import java.util.concurrent.TimeoutException;
++
++import junit.framework.AssertionFailedError;
+ 
+-import org.junit.Test;
+-import org.junit.BeforeClass;
+ import org.junit.AfterClass;
+-import static org.junit.Assert.*;
++import org.junit.BeforeClass;
++import org.junit.Test;
+ 
+ /**
+  * System tests for the fair scheduler. These run slower than the
+@@ -50,12 +42,13 @@ import static org.junit.Assert.*;
+  * it is a bit of a "grab-bag" of system tests, since it's important
+  * that they all run as part of the same JVM instantiation.
+  */
+-public class TestFairSchedulerSystem {
++public class TestFairSchedulerSystem extends FairSchedulerSystemTestBase {
+   static final int NUM_THREADS=2;
++  static final int SLEEP_TIME=1;
+ 
+   static MiniMRCluster mr;
+   static JobConf conf;
+-
++  
+   @BeforeClass
+   public static void setUp() throws Exception {
+     conf = new JobConf();
+@@ -71,6 +64,10 @@ public class TestFairSchedulerSystem {
+     conf.set("mapred.fairscheduler.poolnameproperty", "group.name");
+     mr = new MiniMRCluster(taskTrackers, "file:///", 1, null, null, conf);
+   }
++  
++  protected int getJobTrackerInfoPort() {
++    return mr.getJobTrackerRunner().getJobTrackerInfoPort();
++  }
+ 
+   @AfterClass
+   public static void tearDown() throws Exception {
+@@ -78,12 +75,7 @@ public class TestFairSchedulerSystem {
+       mr.shutdown();
+     }
+   }
+-
+-  private void runSleepJob(JobConf conf) throws Exception {
+-    String[] args = { "-m", "1", "-r", "1", "-mt", "1", "-rt", "1" };
+-    ToolRunner.run(conf, new SleepJob(), args);
+-  }
+-
++  
+   /**
+    * Submit some concurrent sleep jobs, and visit the scheduler servlet
+    * while they're running.
+@@ -96,7 +88,7 @@ public class TestFairSchedulerSystem {
+       futures.add(exec.submit(new Callable<Void>() {
+             public Void call() throws Exception {
+               JobConf jobConf = mr.createJobConf();
+-              runSleepJob(jobConf);
++              runSleepJob(jobConf, SLEEP_TIME);
+               return null;
+             }
+           }));
+@@ -114,8 +106,8 @@ public class TestFairSchedulerSystem {
+         } catch (TimeoutException te) {
+           // It's OK
+         }
+-        checkServlet(true);
+-        checkServlet(false);
++        checkServlet(true, true, getJobTrackerInfoPort());
++        checkServlet(false, true, getJobTrackerInfoPort());
+ 
+         JobStatus jobs[] = jc.getAllJobs();
+         if (jobs == null) {
+@@ -123,60 +115,12 @@ public class TestFairSchedulerSystem {
+           continue;
+         }
+         for (JobStatus j : jobs) {
+-          System.err.println("Checking task log for " + j.getJobID());
+-          checkTaskGraphServlet(j.getJobID());
++          System.err.println("Checking task graph for " + j.getJobID());
++          checkTaskGraphServlet(j.getJobID(), getJobTrackerInfoPort());
+         }
+       }
+     }
+   }
+- 
+-  /**
+-   * Check the fair scheduler servlet for good status code and smoke test
+-   * for contents.
+-   */
+-  private void checkServlet(boolean advanced) throws Exception {
+-    String jtURL = "http://localhost:" +
+-      mr.getJobTrackerRunner().getJobTrackerInfoPort();
+-    URL url = new URL(jtURL + "/scheduler" +
+-                      (advanced ? "?advanced" : ""));
+-    HttpURLConnection connection = (HttpURLConnection)url.openConnection();
+-    connection.setRequestMethod("GET");
+-    connection.connect();
+-    assertEquals(200, connection.getResponseCode());
+-
+-    // Just to be sure, slurp the content and make sure it looks like the scheduler
+-    String contents = slurpContents(connection);
+-    assertTrue(contents.contains("Fair Scheduler Administration"));
+-
+-    String userGroups[] = UserGroupInformation.getCurrentUser().getGroupNames();
+-    String primaryGroup = ">" + userGroups[0] + "<";
+-    assertTrue(contents.contains(primaryGroup));
+-  }
+-
+-  private void checkTaskGraphServlet(JobID job) throws Exception {
+-    String jtURL = "http://localhost:" +
+-      mr.getJobTrackerRunner().getJobTrackerInfoPort();
+-    URL url = new URL(jtURL + "/taskgraph?jobid=" + job.toString() + "&type=map");
+-    HttpURLConnection connection = (HttpURLConnection)url.openConnection();
+-    connection.setRequestMethod("GET");
+-    connection.connect();
+-    assertEquals(200, connection.getResponseCode());
+-
+-    // Just to be sure, slurp the content and make sure it looks like the scheduler
+-    String contents = slurpContents(connection);
+-    assertTrue(contents.contains("</svg>"));
+-  }
+-
+-  private String slurpContents(HttpURLConnection connection) throws Exception {
+-    BufferedReader reader = new BufferedReader(
+-      new InputStreamReader(connection.getInputStream()));
+-    StringBuilder sb = new StringBuilder();
+-
+-    String line = null;
+-    while ((line = reader.readLine()) != null) {
+-      sb.append(line).append('\n');
+-    }
+-
+-    return sb.toString();
+-  }
++  
++  
+ }
+-- 
+1.7.0.4
+

@@ -1,0 +1,427 @@
+From ac18b1312c05f9d85b23686807c9b0120f99eac0 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 4 Jan 2010 14:50:55 -0800
+Subject: [PATCH 0416/1179] HADOOP-6415. Adding a common token interface for both job token and delegation token
+
+Patch: https://issues.apache.org/jira/secure/attachment/12429399/HADOOP-6415-0_20.2.patch
+Author: Kan Zhang
+Ref: CDH-648
+---
+ .../hadoop/security/token/SecretManager.java       |  142 ++++++++++++++++++++
+ .../org/apache/hadoop/security/token/Token.java    |  126 +++++++++++++++++
+ .../hadoop/security/token/TokenIdentifier.java     |   52 +++++++
+ .../apache/hadoop/security/token/TestToken.java    |   61 +++++++++
+ 4 files changed, 381 insertions(+), 0 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/security/token/SecretManager.java
+ create mode 100644 src/core/org/apache/hadoop/security/token/Token.java
+ create mode 100644 src/core/org/apache/hadoop/security/token/TokenIdentifier.java
+ create mode 100644 src/test/org/apache/hadoop/security/token/TestToken.java
+
+diff --git a/src/core/org/apache/hadoop/security/token/SecretManager.java b/src/core/org/apache/hadoop/security/token/SecretManager.java
+new file mode 100644
+index 0000000..7517fe3
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/token/SecretManager.java
+@@ -0,0 +1,142 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security.token;
++
++import java.io.IOException;
++import java.security.InvalidKeyException;
++import java.security.NoSuchAlgorithmException;
++
++import javax.crypto.KeyGenerator;
++import javax.crypto.Mac;
++import javax.crypto.SecretKey;
++import javax.crypto.spec.SecretKeySpec;
++
++
++/**
++ * The server-side secret manager for each token type.
++ * @param <T> The type of the token identifier
++ */
++public abstract class SecretManager<T extends TokenIdentifier> {
++  /**
++   * The token was invalid and the message explains why.
++   */
++  @SuppressWarnings("serial")
++  public static class InvalidToken extends IOException {
++    public InvalidToken(String msg) { 
++      super(msg);
++    }
++  }
++  
++  /**
++   * Create the password for the given identifier.
++   * @param identifier the identifier to use
++   * @return the new password
++   */
++  public abstract byte[] createPassword(T identifier);
++  
++  /**
++   * Retrieve the password for the given token identifier. Should check the date
++   * or registry to make sure the token hasn't expired or been revoked. Returns 
++   * the relevant password.
++   * @param identifier the identifier to validate
++   * @return the password to use
++   * @throws InvalidToken the token was invalid
++   */
++  public abstract byte[] retrievePassword(T identifier) throws InvalidToken;
++  
++  /**
++   * The name of the hashing algorithm.
++   */
++  private static final String DEFAULT_HMAC_ALGORITHM = "HmacSHA1";
++
++  /**
++   * The length of the random keys to use.
++   */
++  private static final int KEY_LENGTH = 20;
++
++  /**
++   * A thread local store for the Macs.
++   */
++  private static final ThreadLocal<Mac> threadLocalMac =
++    new ThreadLocal<Mac>(){
++    @Override
++    protected Mac initialValue() {
++      try {
++        return Mac.getInstance(DEFAULT_HMAC_ALGORITHM);
++      } catch (NoSuchAlgorithmException nsa) {
++        throw new IllegalArgumentException("Can't find " + DEFAULT_HMAC_ALGORITHM +
++                                           " algorithm.");
++      }
++    }
++  };
++
++  /**
++   * Key generator to use.
++   */
++  private final KeyGenerator keyGen;
++  {
++    try {
++      keyGen = KeyGenerator.getInstance(DEFAULT_HMAC_ALGORITHM);
++      keyGen.init(KEY_LENGTH);
++    } catch (NoSuchAlgorithmException nsa) {
++      throw new IllegalArgumentException("Can't find " + DEFAULT_HMAC_ALGORITHM +
++      " algorithm.");
++    }
++  }
++
++  /**
++   * Generate a new random secret key.
++   * @return the new key
++   */
++  protected SecretKey generateSecret() {
++    SecretKey key;
++    synchronized (keyGen) {
++      key = keyGen.generateKey();
++    }
++    return key;
++  }
++
++  /**
++   * Compute HMAC of the identifier using the secret key and return the 
++   * output as password
++   * @param identifier the bytes of the identifier
++   * @param key the secret key
++   * @return the bytes of the generated password
++   */
++  protected static byte[] createPassword(byte[] identifier, 
++                                         SecretKey key) {
++    Mac mac = threadLocalMac.get();
++    try {
++      mac.init(key);
++    } catch (InvalidKeyException ike) {
++      throw new IllegalArgumentException("Invalid key to HMAC computation", 
++                                         ike);
++    }
++    return mac.doFinal(identifier);
++  }
++  
++  /**
++   * Convert the byte[] to a secret key
++   * @param key the byte[] to create a secret key from
++   * @return the secret key
++   */
++  protected static SecretKey createSecretKey(byte[] key) {
++    return new SecretKeySpec(key, DEFAULT_HMAC_ALGORITHM);
++  }
++}
+diff --git a/src/core/org/apache/hadoop/security/token/Token.java b/src/core/org/apache/hadoop/security/token/Token.java
+new file mode 100644
+index 0000000..2fa1a93
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/token/Token.java
+@@ -0,0 +1,126 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security.token;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.Writable;
++import org.apache.hadoop.io.WritableUtils;
++
++/**
++ * The client-side form of the token.
++ */
++public class Token<T extends TokenIdentifier> implements Writable {
++  private byte[] identifier;
++  private byte[] password;
++  private Text kind;
++  private Text service;
++  
++  /**
++   * Construct a token given a token identifier and a secret manager for the
++   * type of the token identifier.
++   * @param id the token identifier
++   * @param mgr the secret manager
++   */
++  public Token(T id, SecretManager<T> mgr) {
++    identifier = id.getBytes();
++    password = mgr.createPassword(id);
++    kind = id.getKind();
++    service = new Text();
++  }
++  
++  /**
++   * Default constructor
++   */
++  public Token() {
++    identifier = new byte[0];
++    password = new byte[0];
++    kind = new Text();
++    service = new Text();
++  }
++
++  /**
++   * Get the token identifier
++   * @return the token identifier
++   */
++  public byte[] getIdentifier() {
++    return identifier;
++  }
++  
++  /**
++   * Get the token password/secret
++   * @return the token password/secret
++   */
++  public byte[] getPassword() {
++    return password;
++  }
++  
++  /**
++   * Get the token kind
++   * @return the kind of the token
++   */
++  public Text getKind() {
++    return kind;
++  }
++
++  /**
++   * Get the service on which the token is supposed to be used
++   * @return the service name
++   */
++  public Text getService() {
++    return service;
++  }
++  
++  /**
++   * Set the service on which the token is supposed to be used
++   * @param newService the service name
++   */
++  public void setService(Text newService) {
++    service = newService;
++  }
++
++  /** {@inheritDoc} */
++  public void readFields(DataInput in) throws IOException {
++    int len = WritableUtils.readVInt(in);
++    if (identifier == null || identifier.length != len) {
++      identifier = new byte[len];
++    }
++    in.readFully(identifier);
++    len = WritableUtils.readVInt(in);
++    if (password == null || password.length != len) {
++      password = new byte[len];
++    }
++    in.readFully(password);
++    kind.readFields(in);
++    service.readFields(in);
++  }
++
++  /** {@inheritDoc} */
++  public void write(DataOutput out) throws IOException {
++    WritableUtils.writeVInt(out, identifier.length);
++    out.write(identifier);
++    WritableUtils.writeVInt(out, password.length);
++    out.write(password);
++    kind.write(out);
++    service.write(out);
++  }
++}
+diff --git a/src/core/org/apache/hadoop/security/token/TokenIdentifier.java b/src/core/org/apache/hadoop/security/token/TokenIdentifier.java
+new file mode 100644
+index 0000000..904a627
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/token/TokenIdentifier.java
+@@ -0,0 +1,52 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security.token;
++
++import java.io.IOException;
++import java.util.Arrays;
++
++import org.apache.hadoop.io.DataOutputBuffer;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.io.Writable;
++
++/**
++ * An identifier that identifies a token, may contain public information 
++ * about a token, including its kind (or type).
++ */
++public abstract class TokenIdentifier implements Writable {
++  /**
++   * Get the token kind
++   * @return the kind of the token
++   */
++  public abstract Text getKind();
++
++  /**
++   * Get the bytes for the token identifier
++   * @return the bytes of the identifier
++   */
++  public byte[] getBytes() {
++    DataOutputBuffer buf = new DataOutputBuffer(4096);
++    try {
++      this.write(buf);
++    } catch (IOException ie) {
++      throw new RuntimeException("i/o error in getBytes", ie);
++    }
++    return Arrays.copyOf(buf.getData(), buf.getLength());
++  }
++}
+diff --git a/src/test/org/apache/hadoop/security/token/TestToken.java b/src/test/org/apache/hadoop/security/token/TestToken.java
+new file mode 100644
+index 0000000..c771812
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/token/TestToken.java
+@@ -0,0 +1,61 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security.token;
++
++import java.io.*;
++import java.util.Arrays;
++
++import org.apache.hadoop.io.*;
++
++import junit.framework.TestCase;
++
++/** Unit tests for Token */
++public class TestToken extends TestCase {
++
++  static boolean isEqual(Object a, Object b) {
++    return a == null ? b == null : a.equals(b);
++  }
++
++  static boolean checkEqual(Token<TokenIdentifier> a, Token<TokenIdentifier> b) {
++    return Arrays.equals(a.getIdentifier(), b.getIdentifier())
++        && Arrays.equals(a.getPassword(), b.getPassword())
++        && isEqual(a.getKind(), b.getKind())
++        && isEqual(a.getService(), b.getService());
++  }
++
++  /**
++   * Test token serialization
++   */
++  public void testTokenSerialization() throws IOException {
++    // Get a token
++    Token<TokenIdentifier> sourceToken = new Token<TokenIdentifier>();
++    sourceToken.setService(new Text("service"));
++
++    // Write it to an output buffer
++    DataOutputBuffer out = new DataOutputBuffer();
++    sourceToken.write(out);
++
++    // Read the token back
++    DataInputBuffer in = new DataInputBuffer();
++    in.reset(out.getData(), out.getLength());
++    Token<TokenIdentifier> destToken = new Token<TokenIdentifier>();
++    destToken.readFields(in);
++    assertTrue(checkEqual(sourceToken, destToken));
++  }
++}
+-- 
+1.7.0.4
+

@@ -1,0 +1,789 @@
+From ed4ba254d7708f363f5f1b4708e9e35061ad936c Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:40:37 -0800
+Subject: [PATCH 0037/1179] MAPREDUCE-675. Sqoop should allow user-defined class and package names
+
+Description: Currently Sqoop generates a class for each table to be imported; the class names are equal to the table names and they are not part of any package.
+
+<p>This adds --class-name and --package-name parameters to Sqoop, allowing these aspects of code generation to be controlled.</p>
+Reason: New feature
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ src/contrib/sqoop/build.xml                        |    5 +
+ .../org/apache/hadoop/sqoop/ImportOptions.java     |   48 +++++-
+ .../apache/hadoop/sqoop/manager/SqlManager.java    |    2 +-
+ .../org/apache/hadoop/sqoop/mapred/ImportJob.java  |    6 +-
+ .../org/apache/hadoop/sqoop/orm/ClassWriter.java   |   21 ++-
+ .../hadoop/sqoop/orm/CompilationManager.java       |  107 +++++++----
+ .../apache/hadoop/sqoop/orm/TableClassName.java    |  112 ++++++++++++
+ .../apache/hadoop/sqoop/orm/TestClassWriter.java   |  187 ++++++++++++++++----
+ .../org/apache/hadoop/sqoop/testutil/DirUtil.java  |    1 +
+ 9 files changed, 405 insertions(+), 84 deletions(-)
+ create mode 100644 src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/TableClassName.java
+
+diff --git a/src/contrib/sqoop/build.xml b/src/contrib/sqoop/build.xml
+index 49eed77..c1f7caa 100644
+--- a/src/contrib/sqoop/build.xml
++++ b/src/contrib/sqoop/build.xml
+@@ -43,6 +43,11 @@ to call at top-level: ant deploy-contrib compile-core-test
+       timeout="${test.timeout}"
+       dir="${build.test}/data">
+ 
++      <!-- uncomment this if you want to attach a debugger -->
++      <!--
++      <jvmarg line="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=2601" />
++      -->
++
+       <sysproperty key="test.build.data" value="${build.test}/data"/>
+       <sysproperty key="build.test" value="${build.test}"/>
+       <sysproperty key="contrib.name" value="${name}"/>
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ImportOptions.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ImportOptions.java
+index b88b3e8..0723cef 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ImportOptions.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/ImportOptions.java
+@@ -96,6 +96,8 @@ public class ImportOptions {
+   private String tmpDir; // where temp data goes; usually /tmp
+   private String hiveHome;
+   private boolean hiveImport;
++  private String packageName; // package to prepend to auto-named classes.
++  private String className; // package+class to apply to individual table import.
+ 
+   private static final String DEFAULT_CONFIG_FILE = "sqoop.properties";
+ 
+@@ -140,6 +142,8 @@ public class ImportOptions {
+       this.driverClassName = props.getProperty("jdbc.driver", this.driverClassName);
+       this.warehouseDir = props.getProperty("hdfs.warehouse.dir", this.warehouseDir);
+       this.hiveHome = props.getProperty("hive.home", this.hiveHome);
++      this.className = props.getProperty("java.classname", this.className);
++      this.packageName = props.getProperty("java.packagename", this.packageName);
+ 
+       String localImport = props.getProperty("local.import",
+           Boolean.toString(this.local)).toLowerCase();
+@@ -226,6 +230,9 @@ public class ImportOptions {
+     System.out.println("--outdir (dir)               Output directory for generated code");
+     System.out.println("--bindir (dir)               Output directory for compiled objects");
+     System.out.println("--generate-only              Stop after code generation; do not import");
++    System.out.println("--package-name (name)        Put auto-generated classes in this package");
++    System.out.println("--class-name (name)          When generating one class, use this name.");
++    System.out.println("                             This overrides --package-name.");
+     System.out.println("");
+     System.out.println("Additional commands:");
+     System.out.println("--list-tables                List tables in database and exit");
+@@ -246,6 +253,14 @@ public class ImportOptions {
+    * @throws Exception if there's a problem parsing arguments.
+    */
+   public void parse(String [] args) throws InvalidOptionsException {
++
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("Parsing sqoop arguments:");
++      for (String arg : args) {
++        LOG.debug("  " + arg);
++      }
++    }
++
+     int i = 0;
+     try {
+       for (i = 0; i < args.length; i++) {
+@@ -291,6 +306,10 @@ public class ImportOptions {
+           this.jarOutputDir = args[++i];
+         } else if (args[i].equals("--warehouse-dir")) {
+           this.warehouseDir = args[++i];
++        } else if (args[i].equals("--package-name")) {
++          this.packageName = args[++i];
++        } else if (args[i].equals("--class-name")) {
++          this.className = args[++i];
+         } else if (args[i].equals("--list-databases")) {
+           this.action = ControlAction.ListDatabases;
+         } else if (args[i].equals("--generate-only")) {
+@@ -318,6 +337,8 @@ public class ImportOptions {
+     }
+   }
+ 
++  private static final String HELP_STR = "\nTry --help for usage instructions.";
++
+   /**
+    * Validates options and ensures that any required options are
+    * present and that any mutually-exclusive options are not selected.
+@@ -327,14 +348,21 @@ public class ImportOptions {
+     if (this.allTables && this.columns != null) {
+       // If we're reading all tables in a database, can't filter column names.
+       throw new InvalidOptionsException("--columns and --all-tables are incompatible options."
+-          + "\nTry --help for usage instructions.");
++          + HELP_STR);
+     } else if (this.allTables && this.orderByCol != null) {
+       // If we're reading all tables in a database, can't set pkey
+       throw new InvalidOptionsException("--order-by and --all-tables are incompatible options."
+-          + "\nTry --help for usage instructions.");
++          + HELP_STR);
++    } else if (this.allTables && this.className != null) {
++      // If we're reading all tables, can't set individual class name
++      throw new InvalidOptionsException("--class-name and --all-tables are incompatible options."
++          + HELP_STR);
+     } else if (this.connectString == null) {
+       throw new InvalidOptionsException("Error: Required argument --connect is missing."
+-          + "\nTry --help for usage instructions.");
++          + HELP_STR);
++    } else if (this.className != null && this.packageName != null) {
++      throw new InvalidOptionsException(
++          "--class-name overrides --package-name. You cannot use both." + HELP_STR);
+     }
+   }
+ 
+@@ -385,6 +413,20 @@ public class ImportOptions {
+     return local;
+   }
+ 
++  /**
++   * @return the user-specified absolute class name for the table
++   */
++  public String getClassName() {
++    return className;
++  }
++
++  /**
++   * @return the user-specified package to prepend to table names via --package-name.
++   */
++  public String getPackageName() {
++    return packageName;
++  }
++
+   public String getHiveHome() {
+     return hiveHome;
+   }
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/SqlManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/SqlManager.java
+index 6d1d0fd..b53d77c 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/SqlManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/manager/SqlManager.java
+@@ -250,7 +250,7 @@ public abstract class SqlManager implements ConnManager {
+         }
+       }
+ 
+-      LOG.info("Executing SQL statement: " + stmt);
++      LOG.debug("Executing SQL statement: " + stmt);
+       return statement.executeQuery();
+     } catch (SQLException sqlException) {
+       LOG.error("Error returned by SQL database: " + sqlException.toString());
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapred/ImportJob.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapred/ImportJob.java
+index dfd44bb..53ebeed 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapred/ImportJob.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/mapred/ImportJob.java
+@@ -39,6 +39,7 @@ import org.apache.hadoop.mapred.lib.db.DBWritable;
+ import org.apache.hadoop.sqoop.ConnFactory;
+ import org.apache.hadoop.sqoop.ImportOptions;
+ import org.apache.hadoop.sqoop.manager.ConnManager;
++import org.apache.hadoop.sqoop.orm.TableClassName;
+ import org.apache.hadoop.sqoop.util.ClassLoaderStack;
+ 
+ /**
+@@ -67,8 +68,7 @@ public class ImportJob {
+ 
+     LOG.info("Beginning data import of " + tableName);
+ 
+-    // TODO(aaron): If we add packages, the tableName will not be the class name.
+-    String tableClassName = tableName;
++    String tableClassName = new TableClassName(options).getClassForTable(tableName);
+ 
+     boolean isLocal = "local".equals(conf.get("mapred.job.tracker"));
+     ClassLoader prevClassLoader = null;
+@@ -76,8 +76,6 @@ public class ImportJob {
+       // If we're using the LocalJobRunner, then instead of using the compiled jar file
+       // as the job source, we're running in the current thread. Push on another classloader
+       // that loads from that jar in addition to everything currently on the classpath.
+-
+-      // take advantage of the fact that table name = class name.
+       prevClassLoader = ClassLoaderStack.addJarFile(ormJarFile, tableClassName);
+     }
+ 
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/ClassWriter.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/ClassWriter.java
+index 3cc45a6..21160fd 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/ClassWriter.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/ClassWriter.java
+@@ -455,8 +455,10 @@ public class ClassWriter {
+     // Write this out to a file.
+     String codeOutDir = options.getCodeOutputDir();
+ 
+-    // TODO(aaron): Allow package subdirectory (that goes in sourceFilename).
+-    String sourceFilename = tableName + ".java";
++    // Get the class name to generate, which includes package components
++    String className = new TableClassName(options).getClassForTable(tableName);
++    // convert the '.' characters to '/' characters
++    String sourceFilename = className.replace('.', File.separatorChar) + ".java";
+     String filename = codeOutDir + sourceFilename;
+ 
+     LOG.debug("Writing source file: " + filename);
+@@ -468,6 +470,7 @@ public class ClassWriter {
+     }
+     String colTypeStr = sbColTypes.toString();
+     LOG.debug("Columns: " + colTypeStr);
++    LOG.debug("sourceFilename is " + sourceFilename);
+ 
+     compileManager.addSourceFile(sourceFilename);
+ 
+@@ -515,10 +518,18 @@ public class ClassWriter {
+   public StringBuilder generateClassForColumns(Map<String, Integer> columnTypes,
+       String [] colNames) {
+     StringBuilder sb = new StringBuilder();
+-    // TODO(aaron): Emit package name.
+     sb.append("// ORM class for " + tableName + "\n");
+     sb.append("// WARNING: This class is AUTO-GENERATED. Modify at your own risk.\n");
+ 
++    TableClassName tableNameInfo = new TableClassName(options);
++
++    String packageName = tableNameInfo.getPackageForTable();
++    if (null != packageName) {
++      sb.append("package ");
++      sb.append(packageName);
++      sb.append(";\n");
++    }
++
+     sb.append("import org.apache.hadoop.io.Text;\n");
+     sb.append("import org.apache.hadoop.io.Writable;\n");
+     sb.append("import org.apache.hadoop.mapred.lib.db.DBWritable;\n");
+@@ -533,8 +544,8 @@ public class ClassWriter {
+     sb.append("import java.sql.Time;\n");
+     sb.append("import java.sql.Timestamp;\n");
+ 
+-    // TODO(aaron): Allow different table/class names.
+-    sb.append("public class " + tableName + " implements DBWritable, Writable {\n");
++    String className = tableNameInfo.getShortClassForTable(tableName);
++    sb.append("public class " + className + " implements DBWritable, Writable {\n");
+     sb.append("  public static final int PROTOCOL_VERSION = " + CLASS_WRITER_VERSION + ";\n");
+     generateFields(columnTypes, colNames, sb);
+     generateDbRead(columnTypes, colNames, sb);
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/CompilationManager.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/CompilationManager.java
+index fdeb0d1..90a1572 100644
+--- a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/CompilationManager.java
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/CompilationManager.java
+@@ -162,13 +162,15 @@ public class CompilationManager {
+     }
+ 
+     // NOTE(aaron): Usage is at http://java.sun.com/j2se/1.5.0/docs/tooldocs/solaris/javac.html
+-    LOG.info("Invoking javac with args: " + sb.toString());
++    LOG.debug("Invoking javac with args: " + sb.toString());
+     int javacRet = com.sun.tools.javac.Main.compile(args.toArray(new String[0]));
+     if (javacRet != 0) {
+       throw new IOException("javac exited with status " + javacRet);
+     }
+   }
+ 
++  /**
++   * @return the complete filename of the .jar file to generate */
+   public String getJarFilename() {
+     String jarOutDir = options.getJarOutputDir();
+     String tableName = options.getTableName();
+@@ -188,19 +190,62 @@ public class CompilationManager {
+   }
+ 
+   /**
++   * Searches through a directory and its children for .class
++   * files to add to a jar.
++   *
++   * @param dir - The root directory to scan with this algorithm.
++   * @param jstream - The JarOutputStream to write .class files to.
++   */
++  private void addClassFilesFromDir(File dir, JarOutputStream jstream)
++      throws IOException {
++    LOG.debug("Scanning for .class files in directory: " + dir);
++    List<File> dirEntries = FileListing.getFileListing(dir);
++    String baseDirName = dir.getAbsolutePath();
++    if (!baseDirName.endsWith(File.separator)) {
++      baseDirName = baseDirName + File.separator;
++    }
++
++    // for each input class file, create a zipfile entry for it,
++    // read the file into a buffer, and write it to the jar file.
++    for (File entry : dirEntries) {
++      if (!entry.isDirectory()) {
++        LOG.debug("Considering entry: " + entry);
++
++        // chomp off the portion of the full path that is shared
++        // with the base directory where class files were put;
++        // we only record the subdir parts in the zip entry.
++        String fullPath = entry.getAbsolutePath();
++        String chompedPath = fullPath.substring(baseDirName.length());
++
++        boolean include = chompedPath.endsWith(".class")
++            && sources.contains(
++            chompedPath.substring(0, chompedPath.length() - ".class".length()) + ".java");
++
++        if (include) {
++          // include this file.
++          LOG.debug("Got classfile: " + entry.getPath() + " -> " + chompedPath);
++          ZipEntry ze = new ZipEntry(chompedPath);
++          jstream.putNextEntry(ze);
++          copyFileToStream(entry, jstream);
++          jstream.closeEntry();
++        }
++      }
++    }
++  }
++
++  /**
+    * Create an output jar file to use when executing MapReduce jobs
+    */
+   public void jar() throws IOException {
+     String jarOutDir = options.getJarOutputDir();
+-    List<File> outDirEntries =  FileListing.getFileListing(new File(jarOutDir));
+ 
+     String jarFilename = getJarFilename();
+ 
+     LOG.info("Writing jar file: " + jarFilename);
+ 
+-    findThisJar();
+     File jarFileObj = new File(jarFilename);
+     if (jarFileObj.exists()) {
++      LOG.debug("Found existing jar (" + jarFilename + "); removing.");
+       if (!jarFileObj.delete()) {
+         LOG.warn("Could not remove existing jar file: " + jarFilename);
+       }
+@@ -212,40 +257,7 @@ public class CompilationManager {
+       fstream = new FileOutputStream(jarFilename);
+       jstream = new JarOutputStream(fstream);
+ 
+-      // for each input class file, create a zipfile entry for it,
+-      // read the file into a buffer, and write it to the jar file.
+-
+-      for (File entry : outDirEntries) {
+-        if (entry.equals(jarFileObj)) {
+-          // don't include our own jar!
+-          continue;
+-        } else if (entry.isDirectory()) {
+-          // don't write entries for directories
+-          continue;
+-        } else {
+-          String fileName = entry.getName();
+-
+-          boolean include = fileName.endsWith(".class")
+-              && sources.contains(
+-              fileName.substring(0, fileName.length() - ".class".length()) + ".java");
+-
+-          if (include) {
+-            // include this file.
+-
+-            // chomp off the portion of the full path that is shared
+-            // with the base directory where class files were put;
+-            // we only record the subdir parts in the zip entry.
+-            String fullPath = entry.getAbsolutePath();
+-            String chompedPath = fullPath.substring(jarOutDir.length());
+-
+-            LOG.debug("Got classfile: " + entry.getPath() + " -> " + chompedPath);
+-            ZipEntry ze = new ZipEntry(chompedPath);
+-            jstream.putNextEntry(ze);
+-            copyFileToStream(entry, jstream);
+-            jstream.closeEntry();
+-          }
+-        }
+-      }
++      addClassFilesFromDir(new File(jarOutDir), jstream);
+ 
+       // put our own jar in there in its lib/ subdir
+       String thisJarFile = findThisJar();
+@@ -261,10 +273,27 @@ public class CompilationManager {
+         // couldn't find our own jar (we were running from .class files?)
+         LOG.warn("Could not find jar for Sqoop; MapReduce jobs may not run correctly.");
+       }
++
++      jstream.finish();
+     } finally {
+-      IOUtils.closeStream(jstream);
+-      IOUtils.closeStream(fstream);
++      if (null != jstream) {
++        try {
++          jstream.close();
++        } catch (IOException ioe) {
++          LOG.warn("IOException closing jar stream: " + ioe.toString());
++        }
++      }
++
++      if (null != fstream) {
++        try {
++          fstream.close();
++        } catch (IOException ioe) {
++          LOG.warn("IOException closing file stream: " + ioe.toString());
++        }
++      }
+     }
++
++    LOG.debug("Finished writing jar file " + jarFilename);
+   }
+ 
+ 
+diff --git a/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/TableClassName.java b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/TableClassName.java
+new file mode 100644
+index 0000000..5d78934
+--- /dev/null
++++ b/src/contrib/sqoop/src/java/org/apache/hadoop/sqoop/orm/TableClassName.java
+@@ -0,0 +1,112 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.sqoop.orm;
++
++import org.apache.hadoop.sqoop.ImportOptions;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++/**
++ * Reconciles the table name being imported with the class naming information
++ * specified in ImportOptions to determine the actual package and class name
++ * to use for a table.
++ */
++public class TableClassName {
++
++  public static final Log LOG = LogFactory.getLog(TableClassName.class.getName());
++
++  private final ImportOptions options;
++
++  public TableClassName(final ImportOptions opts) {
++    if (null == opts) {
++      throw new NullPointerException("Cannot instantiate a TableClassName on null options.");
++    } else {
++      this.options = opts;
++    }
++  }
++
++  /**
++   * Taking into account --class-name and --package-name, return the actual
++   * package-part which will be used for a class. The actual table name being
++   * generated-for is irrelevant; so not an argument.
++   *
++   * @return the package where generated ORM classes go. Will be null for top-level.
++   */
++  public String getPackageForTable() {
++    String predefinedClass = options.getClassName();
++    if (null != predefinedClass) {
++      // if the predefined classname contains a package-part, return that.
++      int lastDot = predefinedClass.lastIndexOf('.');
++      if (-1 == lastDot) {
++        // no package part.
++        return null;
++      } else {
++        // return the string up to but not including the last dot.
++        return predefinedClass.substring(0, lastDot);
++      }
++    } else {
++      // If the user has specified a package name, return it.
++      // This will be null if the user hasn't specified one -- as we expect.
++      return options.getPackageName();
++    }
++  }
++
++  /**
++   * @param tableName the name of the table being imported
++   * @return the full name of the class to generate/use to import a table
++   */
++  public String getClassForTable(String tableName) {
++    if (null == tableName) {
++      return null;
++    }
++
++    String predefinedClass = options.getClassName();
++    if (predefinedClass != null) {
++      // The user's chosen a specific class name for this job.
++      return predefinedClass;
++    }
++
++    String packageName = options.getPackageName();
++    if (null != packageName) {
++      // return packageName.tableName.
++      return packageName + "." + tableName;
++    }
++
++    // no specific class; no specific package.
++    return tableName;
++  }
++
++  /**
++   * @return just the last spegment of the class name -- all package info stripped. 
++   */
++  public String getShortClassForTable(String tableName) {
++    String fullClass = getClassForTable(tableName);
++    if (null == fullClass) {
++      return null;
++    }
++
++    int lastDot = fullClass.lastIndexOf('.');
++    if (-1 == lastDot) {
++      return fullClass;
++    } else {
++      return fullClass.substring(lastDot + 1, fullClass.length());
++    }
++  }
++}
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/orm/TestClassWriter.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/orm/TestClassWriter.java
+index 66d97ec..6e86ff8 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/orm/TestClassWriter.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/orm/TestClassWriter.java
+@@ -19,8 +19,12 @@
+ package org.apache.hadoop.sqoop.orm;
+ 
+ import java.io.File;
++import java.io.FileInputStream;
+ import java.io.IOException;
+ import java.sql.SQLException;
++import java.util.Enumeration;
++import java.util.jar.JarEntry;
++import java.util.jar.JarInputStream;
+ 
+ import junit.framework.TestCase;
+ 
+@@ -40,8 +44,6 @@ import org.apache.hadoop.sqoop.testutil.ImportJobTestCase;
+ /**
+  * Test that the ClassWriter generates Java classes based on the given table,
+  * which compile.
+- *
+- * 
+  */
+ public class TestClassWriter extends TestCase {
+ 
+@@ -56,6 +58,8 @@ public class TestClassWriter extends TestCase {
+   @Before
+   public void setUp() {
+     testServer = new HsqldbTestServer();
++    org.apache.log4j.Logger root = org.apache.log4j.Logger.getRootLogger();
++    root.setLevel(org.apache.log4j.Level.DEBUG);
+     try {
+       testServer.resetServer();
+     } catch (SQLException sqlE) {
+@@ -68,6 +72,31 @@ public class TestClassWriter extends TestCase {
+ 
+     manager = testServer.getManager();
+     options = testServer.getImportOptions();
++
++    // sanity check: make sure we're in a tmp dir before we blow anything away.
++    assertTrue("Test generates code in non-tmp dir!",
++        CODE_GEN_DIR.startsWith(ImportJobTestCase.TEMP_BASE_DIR));
++    assertTrue("Test generates jars in non-tmp dir!",
++        JAR_GEN_DIR.startsWith(ImportJobTestCase.TEMP_BASE_DIR));
++
++    // start out by removing these directories ahead of time
++    // to ensure that this is truly generating the code.
++    File codeGenDirFile = new File(CODE_GEN_DIR);
++    File classGenDirFile = new File(JAR_GEN_DIR);
++
++    if (codeGenDirFile.exists()) {
++      LOG.debug("Removing code gen dir: " + codeGenDirFile);
++      if (!DirUtil.deleteDir(codeGenDirFile)) {
++        LOG.warn("Could not delete " + codeGenDirFile + " prior to test");
++      }
++    }
++
++    if (classGenDirFile.exists()) {
++      LOG.debug("Removing class gen dir: " + classGenDirFile);
++      if (!DirUtil.deleteDir(classGenDirFile)) {
++        LOG.warn("Could not delete " + classGenDirFile + " prior to test");
++      }
++    }
+   }
+ 
+   @After
+@@ -84,38 +113,13 @@ public class TestClassWriter extends TestCase {
+   static final String JAR_GEN_DIR = ImportJobTestCase.TEMP_BASE_DIR + "sqoop/test/jargen";
+ 
+   /**
+-   * Test that we can generate code. Test that we can redirect the --outdir and --bindir too.
++   * Run a test to verify that we can generate code and it emits the output files
++   * where we expect them.
+    */
+-  @Test
+-  public void testCodeGen() {
+-
+-    // sanity check: make sure we're in a tmp dir before we blow anything away.
+-    assertTrue("Test generates code in non-tmp dir!",
+-        CODE_GEN_DIR.startsWith(ImportJobTestCase.TEMP_BASE_DIR));
+-    assertTrue("Test generates jars in non-tmp dir!",
+-        JAR_GEN_DIR.startsWith(ImportJobTestCase.TEMP_BASE_DIR));
+-
+-    // start out by removing these directories ahead of time
+-    // to ensure that this is truly generating the code.
++  private void runGenerationTest(String [] argv, String classNameToCheck) {
+     File codeGenDirFile = new File(CODE_GEN_DIR);
+     File classGenDirFile = new File(JAR_GEN_DIR);
+ 
+-    if (codeGenDirFile.exists()) {
+-      DirUtil.deleteDir(codeGenDirFile);
+-    }
+-
+-    if (classGenDirFile.exists()) {
+-      DirUtil.deleteDir(classGenDirFile);
+-    }
+-
+-    // Set the option strings in an "argv" to redirect our srcdir and bindir
+-    String [] argv = {
+-        "--bindir",
+-        JAR_GEN_DIR,
+-        "--outdir",
+-        CODE_GEN_DIR
+-    };
+-
+     try {
+       options.parse(argv);
+     } catch (InvalidOptionsException ioe) {
+@@ -135,14 +139,133 @@ public class TestClassWriter extends TestCase {
+       fail("Got IOException: " + ioe.toString());
+     }
+ 
+-    File tableFile = new File(codeGenDirFile, HsqldbTestServer.getTableName() + ".java");
++    String classFileNameToCheck = classNameToCheck.replace('.', File.separatorChar);
++    LOG.debug("Class file to check for: " + classFileNameToCheck);
++
++    // check that all the files we expected to generate (.java, .class, .jar) exist.
++    File tableFile = new File(codeGenDirFile, classFileNameToCheck + ".java");
+     assertTrue("Cannot find generated source file for table!", tableFile.exists());
++    LOG.debug("Found generated source: " + tableFile);
+ 
+-    File tableClassFile = new File(classGenDirFile, HsqldbTestServer.getTableName() + ".class");
++    File tableClassFile = new File(classGenDirFile, classFileNameToCheck + ".class");
+     assertTrue("Cannot find generated class file for table!", tableClassFile.exists());
++    LOG.debug("Found generated class: " + tableClassFile);
+ 
+     File jarFile = new File(compileMgr.getJarFilename());
+     assertTrue("Cannot find compiled jar", jarFile.exists());
++    LOG.debug("Found generated jar: " + jarFile);
++
++    // check that the .class file made it into the .jar by enumerating 
++    // available entries in the jar file.
++    boolean foundCompiledClass = false;
++    try {
++      JarInputStream jis = new JarInputStream(new FileInputStream(jarFile));
++
++      LOG.debug("Jar file has entries:");
++      while (true) {
++        JarEntry entry = jis.getNextJarEntry();
++        if (null == entry) {
++          // no more entries.
++          break;
++        }
++
++        if (entry.getName().equals(classFileNameToCheck + ".class")) {
++          foundCompiledClass = true;
++          LOG.debug(" * " + entry.getName());
++        } else {
++          LOG.debug("   " + entry.getName());
++        }
++      }
++
++      jis.close();
++    } catch (IOException ioe) {
++      fail("Got IOException iterating over Jar file: " + ioe.toString());
++    }
++
++    assertTrue("Cannot find .class file " + classFileNameToCheck + ".class in jar file",
++        foundCompiledClass);
++
++    LOG.debug("Found class in jar - test success!");
++  }
++
++  /**
++   * Test that we can generate code. Test that we can redirect the --outdir and --bindir too.
++   */
++  @Test
++  public void testCodeGen() {
++
++    // Set the option strings in an "argv" to redirect our srcdir and bindir
++    String [] argv = {
++        "--bindir",
++        JAR_GEN_DIR,
++        "--outdir",
++        CODE_GEN_DIR
++    };
++
++    runGenerationTest(argv, HsqldbTestServer.getTableName());
++  }
++
++  private static final String OVERRIDE_CLASS_NAME = "override";
++
++  /**
++   * Test that we can generate code with a custom class name
++   */
++  @Test
++  public void testSetClassName() {
++
++    // Set the option strings in an "argv" to redirect our srcdir and bindir
++    String [] argv = {
++        "--bindir",
++        JAR_GEN_DIR,
++        "--outdir",
++        CODE_GEN_DIR,
++        "--class-name",
++        OVERRIDE_CLASS_NAME
++    };
++
++    runGenerationTest(argv, OVERRIDE_CLASS_NAME);
++  }
++
++  private static final String OVERRIDE_CLASS_AND_PACKAGE_NAME = "override.pkg.prefix.classname";
++
++  /**
++   * Test that we can generate code with a custom class name that includes a package
++   */
++  @Test
++  public void testSetClassAndPackageName() {
++
++    // Set the option strings in an "argv" to redirect our srcdir and bindir
++    String [] argv = {
++        "--bindir",
++        JAR_GEN_DIR,
++        "--outdir",
++        CODE_GEN_DIR,
++        "--class-name",
++        OVERRIDE_CLASS_AND_PACKAGE_NAME
++    };
++
++    runGenerationTest(argv, OVERRIDE_CLASS_AND_PACKAGE_NAME);
++  }
++ 
++  private static final String OVERRIDE_PACKAGE_NAME = "special.userpackage.name";
++
++  /**
++   * Test that we can generate code with a custom class name that includes a package
++   */
++  @Test
++  public void testSetPackageName() {
++
++    // Set the option strings in an "argv" to redirect our srcdir and bindir
++    String [] argv = {
++        "--bindir",
++        JAR_GEN_DIR,
++        "--outdir",
++        CODE_GEN_DIR,
++        "--package-name",
++        OVERRIDE_PACKAGE_NAME
++    };
++
++    runGenerationTest(argv, OVERRIDE_PACKAGE_NAME + "." + HsqldbTestServer.getTableName());
+   }
+ }
+ 
+diff --git a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/DirUtil.java b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/DirUtil.java
+index 5bfc4ea..6d39f1a 100644
+--- a/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/DirUtil.java
++++ b/src/contrib/sqoop/src/test/org/apache/hadoop/sqoop/testutil/DirUtil.java
+@@ -51,6 +51,7 @@ public final class DirUtil {
+     }
+ 
+     // The directory is now empty so delete it too.
++    LOG.debug("Removing: " + dir);
+     return dir.delete();
+   }
+ 
+-- 
+1.7.0.4
+

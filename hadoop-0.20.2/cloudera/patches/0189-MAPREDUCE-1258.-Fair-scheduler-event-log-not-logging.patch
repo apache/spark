@@ -1,0 +1,44 @@
+From 7c2a791f0a397d924a623e45bf823c238374c42c Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:37:19 -0800
+Subject: [PATCH 0189/1179] MAPREDUCE-1258. Fair scheduler event log not logging job info
+
+Description: The <a href="http://issues.apache.org/jira/browse/MAPREDUCE-706" title="Support for FIFO pools in the fair scheduler"><del>MAPREDUCE-706</del></a> patch seems to have left an unfinished TODO in the Fair Scheduler - namely, in the dump() function for periodically dumping scheduler state to the event log, the part that dumps information about jobs is commented out. This makes the event log less useful than it was before.
+
+<p>It should be fairly easy to update this part to use the new scheduler data structures (Schedulable etc) and print the data.</p>
+Reason: Logging improvement
+Author: Matei Zaharia
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/mapred/FairScheduler.java    |   13 +++++++------
+ 1 files changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+index 3d7bd96..6f15728 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+@@ -937,14 +937,15 @@ public class FairScheduler extends TaskScheduler {
+       for (JobInProgress job: jobs) {
+         JobProfile profile = job.getProfile();
+         JobInfo info = infos.get(job);
+-        // TODO: Fix
+-        /*eventLog.log("JOB",
++        Schedulable ms = info.mapSchedulable;
++        Schedulable rs = info.reduceSchedulable;
++        eventLog.log("JOB",
+             profile.getJobID(), profile.name, profile.user,
+             job.getPriority(), poolMgr.getPoolName(job),
+-            job.numMapTasks, info.runningMaps, info.neededMaps, 
+-            info.mapFairShare, info.mapWeight, info.mapDeficit,
+-            job.numReduceTasks, info.runningReduces, info.neededReduces, 
+-            info.reduceFairShare, info.reduceWeight, info.reduceDeficit);*/
++            job.numMapTasks, ms.getRunningTasks(),
++            ms.getDemand(), ms.getFairShare(), ms.getWeight(),
++            job.numReduceTasks, rs.getRunningTasks(),
++            rs.getDemand(), rs.getFairShare(), rs.getWeight());
+       }
+       // List pools in alphabetical order
+       List<Pool> pools = new ArrayList<Pool>(poolMgr.getPools());
+-- 
+1.7.0.4
+

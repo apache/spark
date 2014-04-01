@@ -1,0 +1,109 @@
+From 8b1f6a660e604fb39284ef8cad7821a6ec27baf5 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 4 Jul 2011 14:53:15 -0700
+Subject: [PATCH 1001/1179] HADOOP-7428. IPC connection is orphaned with null 'out' member
+
+Reason: Can impact a user's ability to submit jobs, among other issues
+Author: Todd Lipcon
+Ref: CDH-3306
+---
+ src/core/org/apache/hadoop/ipc/Client.java  |    8 +++-
+ src/test/org/apache/hadoop/ipc/TestIPC.java |   52 +++++++++++++++++++++++++++
+ 2 files changed, 58 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index ef6fc1c..a3617ec 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -584,8 +584,12 @@ public class Client {
+           start();
+           return;
+         }
+-      } catch (IOException e) {
+-        markClosed(e);
++      } catch (Throwable t) {
++        if (t instanceof IOException) {
++          markClosed((IOException)t);
++        } else {
++          markClosed(new IOException("Couldn't set up IO streams", t));
++        }
+         close();
+       }
+     }
+diff --git a/src/test/org/apache/hadoop/ipc/TestIPC.java b/src/test/org/apache/hadoop/ipc/TestIPC.java
+index aae677a..90572b3 100644
+--- a/src/test/org/apache/hadoop/ipc/TestIPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestIPC.java
+@@ -31,10 +31,14 @@ import java.io.DataOutput;
+ import java.io.IOException;
+ import java.net.InetSocketAddress;
+ import java.net.SocketTimeoutException;
++import java.net.Socket;
+ 
+ import javax.net.SocketFactory;
+ 
+ import org.junit.Test;
++import org.mockito.Mockito;
++import org.mockito.invocation.InvocationOnMock;
++import org.mockito.stubbing.Answer;
+ import static org.junit.Assert.*;
+ import static org.mockito.Mockito.*;
+ 
+@@ -490,6 +494,54 @@ public class TestIPC {
+     }
+   }
+ 
++  /**
++   * Test that, if a RuntimeException is thrown after creating a socket
++   * but before successfully connecting to the IPC server, that the
++   * failure is handled properly. This is a regression test for
++   * HADOOP-7428.
++   */
++  @Test
++  public void testRTEDuringConnectionSetup() throws Exception {
++    // Set up a socket factory which returns sockets which
++    // throw an RTE when setSoTimeout is called.
++    SocketFactory spyFactory = spy(NetUtils.getDefaultSocketFactory(conf));
++    Mockito.doAnswer(new Answer<Socket>() {
++      @Override
++      public Socket answer(InvocationOnMock invocation) throws Throwable {
++        Socket s = spy((Socket)invocation.callRealMethod());
++        doThrow(new RuntimeException("Injected fault")).when(s)
++          .setSoTimeout(anyInt());
++        return s;
++      }
++    }).when(spyFactory).createSocket();
++      
++    Server server = new TestServer(1, true);
++    server.start();
++    try {
++      // Call should fail due to injected exception.
++      InetSocketAddress address = NetUtils.getConnectAddress(server);
++      Client client = new Client(LongWritable.class, conf, spyFactory);
++      try {
++        client.call(new LongWritable(RANDOM.nextLong()),
++                address, null, null, 0, conf);
++        fail("Expected an exception to have been thrown");
++      } catch (Exception e) {
++        LOG.info("caught expected exception", e);
++        assertTrue(StringUtils.stringifyException(e).contains(
++            "Injected fault"));
++      }
++      // Resetting to the normal socket behavior should succeed
++      // (i.e. it should not have cached a half-constructed connection)
++  
++      Mockito.reset(spyFactory);
++      client.call(new LongWritable(RANDOM.nextLong()),
++          address, null, null, 0, conf);
++    } finally {
++      server.stop();
++    }
++  }
++  
++
+   @Test
+   public void testIpcTimeout() throws Exception {
+     // start server
+-- 
+1.7.0.4
+

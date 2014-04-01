@@ -1,0 +1,104 @@
+From 2ef37731c488dc93e4347ad343158fe4a6c02dc4 Mon Sep 17 00:00:00 2001
+From: Colin Patrick Mccabe <cmccabe@cloudera.com>
+Date: Thu, 3 May 2012 12:56:28 -0700
+Subject: [PATCH 1177/1179] HADOOP-4885.  Check for dfs.namenode.name.dir.restore
+
+Upstream uses the configuration option dfs.namenode.name.dir.restore,
+not dfs.name.dir.restore.  We should check for both.
+
+Author: Colin Patrick McCabe
+Reason: Reconcile configuration options with upstream
+Ref: CDH-5580
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java |    2 ++
+ .../hadoop/hdfs/server/namenode/FSDirectory.java   |   19 +++++++++++++++----
+ .../hadoop/hdfs/server/namenode/FSImage.java       |    1 +
+ .../hdfs/server/namenode/TestStorageRestore.java   |    3 ++-
+ 4 files changed, 20 insertions(+), 5 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+index 9ce62ce..4470863 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+@@ -105,6 +105,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final String  DFS_SERVER_HTTPS_KEYSTORE_RESOURCE_KEY = "dfs.https.server.keystore.resource";
+   public static final String  DFS_SERVER_HTTPS_KEYSTORE_RESOURCE_DEFAULT = "ssl-server.xml";
+   public static final String  DFS_NAMENODE_NAME_DIR_RESTORE_KEY = "dfs.namenode.name.dir.restore";
++  public static final String  DFS_NAMENODE_NAME_DIR_RESTORE_KEY_DEPRECATED =
++      "dfs.name.dir.restore";
+   public static final boolean DFS_NAMENODE_NAME_DIR_RESTORE_DEFAULT = false;
+   public static final String  DFS_LIST_LIMIT = "dfs.ls.limit";
+   public static final int     DFS_LIST_LIMIT_DEFAULT = 1000;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
+index ebafaf6..74c13b6 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
+@@ -59,10 +59,6 @@ class FSDirectory implements FSConstants, Closeable {
+   /** Access an existing dfs name directory. */
+   FSDirectory(FSNamesystem ns, Configuration conf) {
+     this(new FSImage(), ns, conf);
+-    if (conf.getBoolean("dfs.name.dir.restore", false)) {
+-      NameNode.LOG.info("Enabling dfs.name.dir storage restoration");
+-      fsImage.setRestoreFailedStorage(true);
+-    }
+     fsImage.setCheckpointDirectories(FSImage.getCheckpointDirs(conf, null),
+                                 FSImage.getCheckpointEditsDirs(conf, null));
+   }
+@@ -77,6 +73,21 @@ class FSDirectory implements FSConstants, Closeable {
+         DFSConfigKeys.DFS_LIST_LIMIT, DFSConfigKeys.DFS_LIST_LIMIT_DEFAULT);
+     this.lsLimit = configuredLimit>0 ? 
+         configuredLimit : DFSConfigKeys.DFS_LIST_LIMIT_DEFAULT;
++    boolean restore = conf.getBoolean
++        (DFSConfigKeys.DFS_NAMENODE_NAME_DIR_RESTORE_KEY,
++        DFSConfigKeys.DFS_NAMENODE_NAME_DIR_RESTORE_DEFAULT);
++    if (conf.getBoolean
++        (DFSConfigKeys.DFS_NAMENODE_NAME_DIR_RESTORE_KEY_DEPRECATED,
++        DFSConfigKeys.DFS_NAMENODE_NAME_DIR_RESTORE_DEFAULT)) {
++      NameNode.LOG.warn(
++          DFSConfigKeys.DFS_NAMENODE_NAME_DIR_RESTORE_KEY_DEPRECATED + " is " +
++          "deprecated; please use " +
++          DFSConfigKeys.DFS_NAMENODE_NAME_DIR_RESTORE_KEY + " instead.");
++      restore = true;
++    }
++    if (restore) {
++      fsImage.setRestoreFailedStorage(true);
++    }
+     initialize(conf);
+   }
+     
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+index 65dc94d..f5b985e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+@@ -118,6 +118,7 @@ public class FSImage extends Storage {
+   private boolean restoreFailedStorage = false;
+ 
+   public void setRestoreFailedStorage(boolean val) {
++    FSImage.LOG.info("Enabling FSImage storage restoration");
+     restoreFailedStorage=val;
+   }
+ 
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageRestore.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageRestore.java
+index c3d8d04..449328d 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageRestore.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageRestore.java
+@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.hdfs.server.common.Storage;
+ import org.apache.hadoop.hdfs.server.namenode.FSImage.NameNodeFile;
+@@ -87,7 +88,7 @@ public class TestStorageRestore {
+  
+     FileSystem.setDefaultUri(config, "hdfs://"+NAME_NODE_HOST + "0");
+     config.set("dfs.secondary.http.address", "0.0.0.0:0");
+-    config.setBoolean("dfs.name.dir.restore", true);
++    config.setBoolean(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_RESTORE_KEY, true);
+   }
+ 
+   @After
+-- 
+1.7.0.4
+

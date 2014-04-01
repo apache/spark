@@ -1,0 +1,85 @@
+From bbd3103a93ebe5050396200fdfe9d2b3b3dfe45b Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Tue, 6 Mar 2012 14:25:11 -0800
+Subject: [PATCH 1132/1179] MAPREDUCE-3997. jobhistory.jsp cuts off the job name at the first underscore of the job name
+
+Reason: Bug (customer request)
+Author: Tom White
+Ref: CDH-4408
+---
+ .../org/apache/hadoop/mapred/JobHistory.java       |   13 +++++++++++++
+ .../org/apache/hadoop/mapred/TestJobHistory.java   |   10 ++++++++++
+ src/webapps/job/jobhistory.jsp                     |   12 +++++-------
+ 3 files changed, 28 insertions(+), 7 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobHistory.java b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+index 92d2f40..6dcb5e9 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobHistory.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+@@ -813,6 +813,19 @@ public class JobHistory {
+       return decodedFileName;
+     }
+     
++    public static String[] getJobHistoryFileNameParts(String logFileName)
++    throws IOException {
++      String decodedJobFileName = decodeJobHistoryFileName(logFileName);
++      String[] jobDetails = decodedJobFileName.split("_", 7);
++      return new String[] {
++          jobDetails[0],
++          jobDetails[1],
++          jobDetails[2] + "_" +jobDetails[3] + "_" + jobDetails[4],
++          jobDetails[5],
++          jobDetails[6]
++      };
++    }
++    
+     /**
+      * Get the job name from the job conf
+      */
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobHistory.java b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+index efa6e7f..e3e68c3 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobHistory.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+@@ -1235,4 +1235,14 @@ public class TestJobHistory extends TestCase {
+       }
+     }
+   }
++  
++  public void testGetJobDetailsFromHistoryFilePath() throws IOException {
++    String[] parts = JobHistory.JobInfo.getJobHistoryFileNameParts(
++        "hostname_1331056103153_job_201203060948_0007_user_my_job");
++    assertEquals("hostname", parts[0]);
++    assertEquals("1331056103153", parts[1]);
++    assertEquals("job_201203060948_0007", parts[2]);
++    assertEquals("user", parts[3]);
++    assertEquals("my_job", parts[4]);
++  }
+ }
+diff --git a/src/webapps/job/jobhistory.jsp b/src/webapps/job/jobhistory.jsp
+index f29e96e..298db88 100644
+--- a/src/webapps/job/jobhistory.jsp
++++ b/src/webapps/job/jobhistory.jsp
+@@ -224,15 +224,13 @@ window.location.href = url;
+     for (int i = start - 1; i < start + length - 1; ++i) {
+       Path jobFile = jobFiles[i];
+       
+-      String decodedJobFileName = 
+-          JobHistory.JobInfo.decodeJobHistoryFileName(jobFile.getName());
+-
+-      String[] jobDetails = decodedJobFileName.split("_");
++      String[] jobDetails = 
++          JobHistory.JobInfo.getJobHistoryFileNameParts(jobFile.getName());
+       String trackerHostName = jobDetails[0];
+       String trackerStartTime = jobDetails[1];
+-      String jobId = jobDetails[2] + "_" +jobDetails[3] + "_" + jobDetails[4] ;
+-      String userName = jobDetails[5];
+-      String jobName = jobDetails[6];
++      String jobId = jobDetails[2];
++      String userName = jobDetails[3];
++      String jobName = jobDetails[4];
+       
+       // Check if the job is already displayed. There can be multiple job 
+       // history files for jobs that have restarted
+-- 
+1.7.0.4
+

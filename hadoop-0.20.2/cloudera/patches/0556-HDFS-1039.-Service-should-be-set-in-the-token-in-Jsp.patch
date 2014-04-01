@@ -1,0 +1,95 @@
+From 2acd7103481363aeadb4593738cc8e6f8f11f483 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 16 Mar 2010 15:46:02 -0700
+Subject: [PATCH 0556/1179] HDFS-1039. Service should be set in the token in JspHelper.getUGI
+
+Patch: https://issues.apache.org/jira/secure/attachment/12438896/HDFS-1039-y20.2.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12439603/HDFS-1039-y20.2.1.patch
+Author: Jitendra Nath Pandey
+Ref: CDH-648
+---
+ .../server/namenode/ContentSummaryServlet.java     |    2 +-
+ .../hadoop/hdfs/server/namenode/JspHelper.java     |   11 +++++++++--
+ .../hdfs/server/namenode/ListPathsServlet.java     |    2 +-
+ src/webapps/datanode/browseDirectory.jsp           |    3 ++-
+ 4 files changed, 13 insertions(+), 5 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
+index b70a153..32cd53d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ContentSummaryServlet.java
+@@ -41,7 +41,7 @@ public class ContentSummaryServlet extends DfsServlet {
+   public void doGet(final HttpServletRequest request,
+       final HttpServletResponse response) throws ServletException, IOException {
+     final Configuration conf = 
+-      (Configuration) request.getAttribute("name.conf");
++      (Configuration) getServletContext().getAttribute("name.conf");
+     final UserGroupInformation ugi = getUGI(request, conf);
+     try {
+       ugi.doAs(new PrivilegedExceptionAction<Object>() {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+index 5c4b4b6..cbbc9b5 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+@@ -48,6 +48,7 @@ import org.apache.hadoop.hdfs.server.datanode.DataNode;
+ import org.apache.hadoop.hdfs.server.namenode.DatanodeDescriptor;
+ import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+ import org.apache.hadoop.http.HtmlQuoting;
++import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.UserGroupInformation;
+@@ -347,8 +348,8 @@ public class JspHelper {
+       String[] parts = dir.split(Path.SEPARATOR);
+       StringBuilder tempPath = new StringBuilder(dir.length());
+       out.print("<a href=\"browseDirectory.jsp" + "?dir="+ Path.SEPARATOR
+-          + "&namenodeInfoPort=" + namenodeInfoPort
+-          + "\">" + Path.SEPARATOR + "</a>");
++          + "&namenodeInfoPort=" + namenodeInfoPort + SET_DELEGATION
++          + tokenString + "\">" + Path.SEPARATOR + "</a>");
+       tempPath.append(Path.SEPARATOR);
+       for (int i = 0; i < parts.length-1; i++) {
+         if (!parts[i].equals("")) {
+@@ -428,6 +429,12 @@ public class JspHelper {
+         Token<DelegationTokenIdentifier> token = 
+           new Token<DelegationTokenIdentifier>();
+         token.decodeFromUrlString(tokenString);
++        InetSocketAddress serviceAddr = NameNode.getAddress(conf);
++        LOG.info("Setting service in token: "
++            + new Text(serviceAddr.getAddress().getHostAddress() + ":"
++                + serviceAddr.getPort()));
++        token.setService(new Text(serviceAddr.getAddress().getHostAddress()
++            + ":" + serviceAddr.getPort()));
+         if (user == null) {
+           //this really doesn't break any security since we use the 
+           //delegation token for authentication in
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
+index b62294a..df3858f 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ListPathsServlet.java
+@@ -136,7 +136,7 @@ public class ListPathsServlet extends DfsServlet {
+       final Pattern filter = Pattern.compile(root.get("filter"));
+       final Pattern exclude = Pattern.compile(root.get("exclude"));
+       final Configuration conf = 
+-        (Configuration) request.getAttribute("name.conf");
++        (Configuration) getServletContext().getAttribute("name.conf");
+       
+       ClientProtocol nnproxy = getUGI(request, conf).doAs
+         (new PrivilegedExceptionAction<ClientProtocol>() {
+diff --git a/src/webapps/datanode/browseDirectory.jsp b/src/webapps/datanode/browseDirectory.jsp
+index 09f8722..5d491d6 100644
+--- a/src/webapps/datanode/browseDirectory.jsp
++++ b/src/webapps/datanode/browseDirectory.jsp
+@@ -131,7 +131,8 @@
+           }
+           String datanodeUrl = req.getRequestURL()+"?dir="+
+               URLEncoder.encode(files[i].getFullName(target).toString(), "UTF-8") + 
+-              "&namenodeInfoPort=" + namenodeInfoPort;
++              "&namenodeInfoPort=" + namenodeInfoPort + JspHelper.SET_DELEGATION + 
++              tokenString;
+           cols[0] = "<a href=\""+datanodeUrl+"\">"+localname+"</a>";
+           cols[5] = FsShell.dateForm.format(new Date((files[i].getModificationTime())));
+           cols[6] = files[i].getPermission().toString();
+-- 
+1.7.0.4
+

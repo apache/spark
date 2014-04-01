@@ -1,0 +1,100 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Put site-specific property overrides in this file. -->
+
+<configuration>
+
+  <property>
+    <name>local.realm</name>
+    <value>HADOOP.COM</value>
+  </property>
+
+  <property>
+    <name>local.namenode</name>
+    <value>nn.hadoop.com</value>
+  </property>
+
+  <property>
+    <name>local.secondnamenode</name>
+    <value>snn.hadoop.com</value>
+  </property>
+
+  <property>
+    <name>local.jobtracker</name>
+    <value>jt.hadoop.com</value>
+  </property>
+
+  <!-- file system properties -->
+
+  <property>
+    <name>fs.default.name</name>
+    <value>hdfs://${local.namenode}:8020</value>
+    <description>The name of the default file system.  Either the
+      literal string "local" or a host:port for NDFS.
+    </description>
+    <final>true</final>
+  </property>
+
+  <property>
+    <name>fs.trash.interval</name>
+    <value>0</value>
+    <description>Number of minutes between trash checkpoints.
+      If zero, the trash feature is disabled.
+    </description>
+  </property>
+
+  <!-- Web Interface Configuration -->
+  <property>
+    <name>webinterface.private.actions</name>
+    <value>false</value>
+    <description> If set to true, the web interfaces of JT and NN may contain
+                actions, such as kill job, delete file, etc., that should
+                not be exposed to public. Enable this option if the interfaces
+                are only reachable by those who have the right authorization.
+    </description>
+  </property>
+
+ <property>
+   <name>hadoop.security.authentication</name>
+   <value>kerberos</value>
+   <description>
+     Set the authentication for the cluster. Valid values are: simple or
+     kerberos.
+   </description>
+ </property>
+
+ <property>
+   <name>hadoop.security.authorization</name>
+   <value>true</value>
+   <description>
+      Enable authorization for different protocols.
+   </description>
+ </property>
+
+ <property>
+   <name>hadoop.security.groups.cache.secs</name>
+   <value>14400</value>
+ </property>
+
+ <property>
+   <name>hadoop.kerberos.kinit.command</name>
+   <value>/usr/kerberos/bin/kinit</value>
+ </property>
+
+ <property>
+   <name>hadoop.http.filter.initializers</name>
+   <value>org.apache.hadoop.http.lib.StaticUserWebFilter</value>
+ </property>
+
+  <!-- OOZIE proxy user setting -->
+  <property>
+    <name>hadoop.proxyuser.oozie.hosts</name>
+    <value>*</value>
+  </property>
+  <property>
+    <name>hadoop.proxyuser.oozie.groups</name>
+    <value>*</value>
+  </property>
+
+</configuration>

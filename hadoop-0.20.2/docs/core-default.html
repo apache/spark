@@ -1,0 +1,370 @@
+<html>
+<body>
+<table border="1">
+<tr>
+<td>name</td><td>value</td><td>description</td>
+</tr>
+<tr>
+<td><a name="hadoop.tmp.dir">hadoop.tmp.dir</a></td><td>/tmp/hadoop-${user.name}</td><td>A base for other temporary directories.</td>
+</tr>
+<tr>
+<td><a name="hadoop.native.lib">hadoop.native.lib</a></td><td>true</td><td>Should native hadoop libraries, if present, be used.</td>
+</tr>
+<tr>
+<td><a name="hadoop.http.filter.initializers">hadoop.http.filter.initializers</a></td><td></td><td>A comma separated list of class names. Each class in the list 
+  must extend org.apache.hadoop.http.FilterInitializer. The corresponding 
+  Filter will be initialized. Then, the Filter will be applied to all user 
+  facing jsp and servlet web pages.  The ordering of the list defines the 
+  ordering of the filters.</td>
+</tr>
+<tr>
+<td><a name="hadoop.security.group.mapping">hadoop.security.group.mapping</a></td><td>org.apache.hadoop.security.ShellBasedUnixGroupsMapping</td><td>Class for user to group mapping (get groups for a given user)
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.security.authorization">hadoop.security.authorization</a></td><td>false</td><td>Is service-level authorization enabled?</td>
+</tr>
+<tr>
+<td><a name="hadoop.security.instrumentation.requires.admin">hadoop.security.instrumentation.requires.admin</a></td><td>false</td><td>
+    Indicates if administrator ACLs are required to access
+    instrumentation servlets (JMX, METRICS, CONF, STACKS).
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.security.authentication">hadoop.security.authentication</a></td><td>simple</td><td>Possible values are simple (no authentication), and kerberos
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.workaround.non.threadsafe.getpwuid">hadoop.workaround.non.threadsafe.getpwuid</a></td><td>false</td><td>Some operating systems or authentication modules are known to
+  have broken implementations of getpwuid_r and getpwgid_r, such that these
+  calls are not thread-safe. Symptoms of this problem include JVM crashes
+  with a stack trace inside these functions. If your system exhibits this
+  issue, enable this configuration parameter to include a lock around the
+  calls as a workaround.
+
+  An incomplete list of some systems known to have this issue is available
+  at http://wiki.apache.org/hadoop/KnownBrokenPwuidImplementations
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.kerberos.kinit.command">hadoop.kerberos.kinit.command</a></td><td>kinit</td><td>Used to periodically renew Kerberos credentials when provided
+  to Hadoop. The default setting assumes that kinit is in the PATH of users
+  running the Hadoop client. Change this to the absolute path to kinit if this
+  is not the case.
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.logfile.size">hadoop.logfile.size</a></td><td>10000000</td><td>The max size of each log file</td>
+</tr>
+<tr>
+<td><a name="hadoop.logfile.count">hadoop.logfile.count</a></td><td>10</td><td>The max number of log files</td>
+</tr>
+<tr>
+<td><a name="io.file.buffer.size">io.file.buffer.size</a></td><td>4096</td><td>The size of buffer for use in sequence files.
+  The size of this buffer should probably be a multiple of hardware
+  page size (4096 on Intel x86), and it determines how much data is
+  buffered during read and write operations.</td>
+</tr>
+<tr>
+<td><a name="io.bytes.per.checksum">io.bytes.per.checksum</a></td><td>512</td><td>The number of bytes per checksum.  Must not be larger than
+  io.file.buffer.size.</td>
+</tr>
+<tr>
+<td><a name="io.skip.checksum.errors">io.skip.checksum.errors</a></td><td>false</td><td>If true, when a checksum error is encountered while
+  reading a sequence file, entries are skipped, instead of throwing an
+  exception.</td>
+</tr>
+<tr>
+<td><a name="io.compression.codecs">io.compression.codecs</a></td><td>org.apache.hadoop.io.compress.DefaultCodec,org.apache.hadoop.io.compress.GzipCodec,org.apache.hadoop.io.compress.BZip2Codec,org.apache.hadoop.io.compress.DeflateCodec,org.apache.hadoop.io.compress.SnappyCodec</td><td>A list of the compression codec classes that can be used 
+               for compression/decompression.</td>
+</tr>
+<tr>
+<td><a name="io.serializations">io.serializations</a></td><td>org.apache.hadoop.io.serializer.WritableSerialization</td><td>A list of serialization classes that can be used for
+  obtaining serializers and deserializers.</td>
+</tr>
+<tr>
+<td><a name="fs.default.name">fs.default.name</a></td><td>file:///</td><td>The name of the default file system.  A URI whose
+  scheme and authority determine the FileSystem implementation.  The
+  uri's scheme determines the config property (fs.SCHEME.impl) naming
+  the FileSystem implementation class.  The uri's authority is used to
+  determine the host, port, etc. for a filesystem.</td>
+</tr>
+<tr>
+<td><a name="fs.trash.interval">fs.trash.interval</a></td><td>0</td><td>Number of minutes between trash checkpoints.
+  If zero, the trash feature is disabled.
+  </td>
+</tr>
+<tr>
+<td><a name="fs.file.impl">fs.file.impl</a></td><td>org.apache.hadoop.fs.LocalFileSystem</td><td>The FileSystem for file: uris.</td>
+</tr>
+<tr>
+<td><a name="fs.hdfs.impl">fs.hdfs.impl</a></td><td>org.apache.hadoop.hdfs.DistributedFileSystem</td><td>The FileSystem for hdfs: uris.</td>
+</tr>
+<tr>
+<td><a name="fs.s3.impl">fs.s3.impl</a></td><td>org.apache.hadoop.fs.s3.S3FileSystem</td><td>The FileSystem for s3: uris.</td>
+</tr>
+<tr>
+<td><a name="fs.s3n.impl">fs.s3n.impl</a></td><td>org.apache.hadoop.fs.s3native.NativeS3FileSystem</td><td>The FileSystem for s3n: (Native S3) uris.</td>
+</tr>
+<tr>
+<td><a name="fs.kfs.impl">fs.kfs.impl</a></td><td>org.apache.hadoop.fs.kfs.KosmosFileSystem</td><td>The FileSystem for kfs: uris.</td>
+</tr>
+<tr>
+<td><a name="fs.hftp.impl">fs.hftp.impl</a></td><td>org.apache.hadoop.hdfs.HftpFileSystem</td><td></td>
+</tr>
+<tr>
+<td><a name="fs.hsftp.impl">fs.hsftp.impl</a></td><td>org.apache.hadoop.hdfs.HsftpFileSystem</td><td></td>
+</tr>
+<tr>
+<td><a name="fs.ftp.impl">fs.ftp.impl</a></td><td>org.apache.hadoop.fs.ftp.FTPFileSystem</td><td>The FileSystem for ftp: uris.</td>
+</tr>
+<tr>
+<td><a name="fs.ramfs.impl">fs.ramfs.impl</a></td><td>org.apache.hadoop.fs.InMemoryFileSystem</td><td>The FileSystem for ramfs: uris.</td>
+</tr>
+<tr>
+<td><a name="fs.har.impl">fs.har.impl</a></td><td>org.apache.hadoop.fs.HarFileSystem</td><td>The filesystem for Hadoop archives. </td>
+</tr>
+<tr>
+<td><a name="fs.har.impl.disable.cache">fs.har.impl.disable.cache</a></td><td>true</td><td>Don't cache 'har' filesystem instances.</td>
+</tr>
+<tr>
+<td><a name="fs.checkpoint.dir">fs.checkpoint.dir</a></td><td>${hadoop.tmp.dir}/dfs/namesecondary</td><td>Determines where on the local filesystem the DFS secondary
+      name node should store the temporary images to merge.
+      If this is a comma-delimited list of directories then the image is
+      replicated in all of the directories for redundancy.
+  </td>
+</tr>
+<tr>
+<td><a name="fs.checkpoint.edits.dir">fs.checkpoint.edits.dir</a></td><td>${fs.checkpoint.dir}</td><td>Determines where on the local filesystem the DFS secondary
+      name node should store the temporary edits to merge.
+      If this is a comma-delimited list of directoires then teh edits is
+      replicated in all of the directoires for redundancy.
+      Default value is same as fs.checkpoint.dir
+  </td>
+</tr>
+<tr>
+<td><a name="fs.checkpoint.period">fs.checkpoint.period</a></td><td>3600</td><td>The number of seconds between two periodic checkpoints.
+  </td>
+</tr>
+<tr>
+<td><a name="fs.checkpoint.size">fs.checkpoint.size</a></td><td>67108864</td><td>The size of the current edit log (in bytes) that triggers
+       a periodic checkpoint even if the fs.checkpoint.period hasn't expired.
+  </td>
+</tr>
+<tr>
+<td><a name="fs.s3.block.size">fs.s3.block.size</a></td><td>67108864</td><td>Block size to use when writing files to S3.</td>
+</tr>
+<tr>
+<td><a name="fs.s3.buffer.dir">fs.s3.buffer.dir</a></td><td>${hadoop.tmp.dir}/s3</td><td>Determines where on the local filesystem the S3 filesystem
+  should store files before sending them to S3
+  (or after retrieving them from S3).
+  </td>
+</tr>
+<tr>
+<td><a name="fs.s3.maxRetries">fs.s3.maxRetries</a></td><td>4</td><td>The maximum number of retries for reading or writing files to S3, 
+  before we signal failure to the application.
+  </td>
+</tr>
+<tr>
+<td><a name="fs.s3.sleepTimeSeconds">fs.s3.sleepTimeSeconds</a></td><td>10</td><td>The number of seconds to sleep between each S3 retry.
+  </td>
+</tr>
+<tr>
+<td><a name="fs.automatic.close">fs.automatic.close</a></td><td>true</td><td>By default, FileSystem instances are automatically closed at program
+  exit using a JVM shutdown hook. Setting this property to false disables this
+  behavior. This is an advanced option that should only be used by server applications
+  requiring a more carefully orchestrated shutdown sequence.
+  </td>
+</tr>
+<tr>
+<td><a name="fs.s3n.block.size">fs.s3n.block.size</a></td><td>67108864</td><td>Block size to use when reading files using the native S3
+  filesystem (s3n: URIs).</td>
+</tr>
+<tr>
+<td><a name="io.seqfile.compress.blocksize">io.seqfile.compress.blocksize</a></td><td>1000000</td><td>The minimum block size for compression in block compressed 
+          SequenceFiles.
+  </td>
+</tr>
+<tr>
+<td><a name="io.seqfile.lazydecompress">io.seqfile.lazydecompress</a></td><td>true</td><td>Should values of block-compressed SequenceFiles be decompressed
+          only when necessary.
+  </td>
+</tr>
+<tr>
+<td><a name="io.seqfile.sorter.recordlimit">io.seqfile.sorter.recordlimit</a></td><td>1000000</td><td>The limit on number of records to be kept in memory in a spill 
+          in SequenceFiles.Sorter
+  </td>
+</tr>
+<tr>
+<td><a name="io.mapfile.bloom.size">io.mapfile.bloom.size</a></td><td>1048576</td><td>The size of BloomFilter-s used in BloomMapFile. Each time this many
+  keys is appended the next BloomFilter will be created (inside a DynamicBloomFilter).
+  Larger values minimize the number of filters, which slightly increases the performance,
+  but may waste too much space if the total number of keys is usually much smaller
+  than this number.
+  </td>
+</tr>
+<tr>
+<td><a name="io.mapfile.bloom.error.rate">io.mapfile.bloom.error.rate</a></td><td>0.005</td><td>The rate of false positives in BloomFilter-s used in BloomMapFile.
+  As this value decreases, the size of BloomFilter-s increases exponentially. This
+  value is the probability of encountering false positives (default is 0.5%).
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.util.hash.type">hadoop.util.hash.type</a></td><td>murmur</td><td>The default implementation of Hash. Currently this can take one of the
+  two values: 'murmur' to select MurmurHash and 'jenkins' to select JenkinsHash.
+  </td>
+</tr>
+<tr>
+<td><a name="ipc.client.idlethreshold">ipc.client.idlethreshold</a></td><td>4000</td><td>Defines the threshold number of connections after which
+               connections will be inspected for idleness.
+  </td>
+</tr>
+<tr>
+<td><a name="ipc.client.kill.max">ipc.client.kill.max</a></td><td>10</td><td>Defines the maximum number of clients to disconnect in one go.
+  </td>
+</tr>
+<tr>
+<td><a name="ipc.client.connection.maxidletime">ipc.client.connection.maxidletime</a></td><td>10000</td><td>The maximum time in msec after which a client will bring down the
+               connection to the server.
+  </td>
+</tr>
+<tr>
+<td><a name="ipc.client.connect.max.retries">ipc.client.connect.max.retries</a></td><td>10</td><td>Indicates the number of retries a client will make to establish
+               a server connection.
+  </td>
+</tr>
+<tr>
+<td><a name="ipc.server.listen.queue.size">ipc.server.listen.queue.size</a></td><td>128</td><td>Indicates the length of the listen queue for servers accepting
+               client connections.
+  </td>
+</tr>
+<tr>
+<td><a name="ipc.server.tcpnodelay">ipc.server.tcpnodelay</a></td><td>false</td><td>Turn on/off Nagle's algorithm for the TCP socket connection on 
+  the server. Setting to true disables the algorithm and may decrease latency
+  with a cost of more/smaller packets. 
+  </td>
+</tr>
+<tr>
+<td><a name="ipc.client.tcpnodelay">ipc.client.tcpnodelay</a></td><td>false</td><td>Turn on/off Nagle's algorithm for the TCP socket connection on 
+  the client. Setting to true disables the algorithm and may decrease latency
+  with a cost of more/smaller packets. 
+  </td>
+</tr>
+<tr>
+<td><a name="webinterface.private.actions">webinterface.private.actions</a></td><td>false</td><td> If set to true, the web interfaces of JT and NN may contain 
+                actions, such as kill job, delete file, etc., that should 
+                not be exposed to public. Enable this option if the interfaces 
+                are only reachable by those who have the right authorization.
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.rpc.socket.factory.class.default">hadoop.rpc.socket.factory.class.default</a></td><td>org.apache.hadoop.net.StandardSocketFactory</td><td> Default SocketFactory to use. This parameter is expected to be
+    formatted as "package.FactoryClassName".
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.rpc.socket.factory.class.ClientProtocol">hadoop.rpc.socket.factory.class.ClientProtocol</a></td><td></td><td> SocketFactory to use to connect to a DFS. If null or empty, use
+    hadoop.rpc.socket.class.default. This socket factory is also used by
+    DFSClient to create sockets to DataNodes.
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.socks.server">hadoop.socks.server</a></td><td></td><td> Address (host:port) of the SOCKS server to be used by the
+    SocksSocketFactory.
+  </td>
+</tr>
+<tr>
+<td><a name="topology.node.switch.mapping.impl">topology.node.switch.mapping.impl</a></td><td>org.apache.hadoop.net.ScriptBasedMapping</td><td> The default implementation of the DNSToSwitchMapping. It
+    invokes a script specified in topology.script.file.name to resolve
+    node names. If the value for topology.script.file.name is not set, the
+    default value of DEFAULT_RACK is returned for all node names.
+  </td>
+</tr>
+<tr>
+<td><a name="topology.script.file.name">topology.script.file.name</a></td><td></td><td> The script name that should be invoked to resolve DNS names to
+    NetworkTopology names. Example: the script would take host.foo.bar as an
+    argument, and return /rack1 as the output.
+  </td>
+</tr>
+<tr>
+<td><a name="topology.script.number.args">topology.script.number.args</a></td><td>100</td><td> The max number of args that the script configured with 
+    topology.script.file.name should be run with. Each arg is an
+    IP address.
+  </td>
+</tr>
+<tr>
+<td><a name="net.topology.table.file.name">net.topology.table.file.name</a></td><td></td><td> The file name for a topology file, which is used when the
+    topology.script.file.name property is set to
+    org.apache.hadoop.net.TableMapping. The file format is a two column text
+    file, with columns separated by whitespace. The first column is a DNS or
+    IP address and the second column specifies the rack where the address maps.
+    If no entry corresponding to a host in the cluster is found, then 
+    /default-rack is assumed.
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.security.uid.cache.secs">hadoop.security.uid.cache.secs</a></td><td>14400</td><td> NativeIO maintains a cache from UID to UserName. This is
+  the timeout for an entry in that cache. </td>
+</tr>
+<tr>
+<td><a name="hadoop.http.authentication.type">hadoop.http.authentication.type</a></td><td>simple</td><td>
+    Defines authentication used for Oozie HTTP endpoint.
+    Supported values are: simple | kerberos | #AUTHENTICATION_HANDLER_CLASSNAME#
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.http.authentication.token.validity">hadoop.http.authentication.token.validity</a></td><td>36000</td><td>
+    Indicates how long (in seconds) an authentication token is valid before it has
+    to be renewed.
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.http.authentication.signature.secret.file">hadoop.http.authentication.signature.secret.file</a></td><td>${user.home}/hadoop-http-auth-signature-secret</td><td>
+    The signature secret for signing the authentication tokens.
+    If not set a random secret is generated at startup time.
+    The same secret should be used for JT/NN/DN/TT configurations.
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.http.authentication.cookie.domain">hadoop.http.authentication.cookie.domain</a></td><td></td><td>
+    The domain to use for the HTTP cookie that stores the authentication token.
+    In order to authentiation to work correctly across all Hadoop nodes web-consoles
+    the domain must be correctly set.
+    IMPORTANT: when using IP addresses, browsers ignore cookies with domain settings.
+    For this setting to work properly all nodes in the cluster must be configured
+    to generate URLs with hostname.domain names on it.
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.http.authentication.simple.anonymous.allowed">hadoop.http.authentication.simple.anonymous.allowed</a></td><td>true</td><td>
+    Indicates if anonymous requests are allowed when using 'simple' authentication.
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.http.authentication.kerberos.principal">hadoop.http.authentication.kerberos.principal</a></td><td>HTTP/_HOST@LOCALHOST</td><td>
+    Indicates the Kerberos principal to be used for HTTP endpoint.
+    The principal MUST start with 'HTTP/' as per Kerberos HTTP SPNEGO specification.
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.http.authentication.kerberos.keytab">hadoop.http.authentication.kerberos.keytab</a></td><td>${user.home}/hadoop.keytab</td><td>
+    Location of the keytab file with the credentials for the principal.
+    Referring to the same keytab file Oozie uses for its Kerberos credentials for Hadoop.
+  </td>
+</tr>
+<tr>
+<td><a name="hadoop.relaxed.worker.version.check">hadoop.relaxed.worker.version.check</a></td><td>true</td><td>
+    This option changes the behavior of datanodes and tasktrackers to
+    only check for a version match (eg "0.20.2-cdh3u4") but ignore the
+    other build fields (revision, user, and source checksum) when
+    checking for compatibility with namenodes and jobtrackers. In
+    previous releases datanodes refused to connect to namenodes if
+    their build revision (svn revision) did not match, and
+    tasktrackers refused to connect to jobtrackers if their build
+    version (version, revision, user, and source checksum) did not
+    match. This behavior can be restored by disabling this option.
+  </td>
+</tr>
+</table>
+</body>
+</html>

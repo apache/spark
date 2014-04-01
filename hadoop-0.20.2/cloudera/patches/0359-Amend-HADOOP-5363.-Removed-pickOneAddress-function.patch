@@ -1,0 +1,110 @@
+From fe36ce2d38b60a1fe1541555e172cc05473debec Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 3 Sep 2009 10:54:21 -0700
+Subject: [PATCH 0359/1179] Amend HADOOP-5363. Removed pickOneAddress function.
+
+Author: zhiyong zhang
+Ref: YDH
+---
+ .../org/apache/hadoop/hdfs/HftpFileSystem.java     |   19 +++----------------
+ .../org/apache/hadoop/hdfs/HsftpFileSystem.java    |    9 +++------
+ 2 files changed, 6 insertions(+), 22 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+index 74b9f9c..2f5ea50 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+@@ -28,7 +28,6 @@ import java.net.InetSocketAddress;
+ import java.net.URI;
+ import java.net.URISyntaxException;
+ import java.net.URL;
+-import java.net.UnknownHostException;
+ 
+ import java.text.ParseException;
+ import java.text.SimpleDateFormat;
+@@ -76,7 +75,6 @@ public class HftpFileSystem extends FileSystem {
+ 
+   protected InetSocketAddress nnAddr;
+   protected UserGroupInformation ugi; 
+-  protected final Random ran = new Random();
+ 
+   public static final String HFTP_TIMEZONE = "UTC";
+   public static final String HFTP_DATE_FORMAT = "yyyy-MM-dd'T'HH:mm:ssZ";
+@@ -107,26 +105,15 @@ public class HftpFileSystem extends FileSystem {
+     nnAddr = NetUtils.createSocketAddr(name.toString());
+   }
+   
+-  /** randomly pick one from all available IP addresses of a given hostname */
+-  protected String pickOneAddress(String hostname) throws UnknownHostException {
+-    if ("localhost".equals(hostname))
+-      return hostname;
+-    InetAddress[] addrs = InetAddress.getAllByName(hostname);
+-    if (addrs.length > 1)
+-      return addrs[ran.nextInt(addrs.length)].getHostAddress();
+-    return addrs[0].getHostAddress();
+-  }
+ 
+   @Override
+   public URI getUri() {
+     try {
+-      return new URI("hftp", null, pickOneAddress(nnAddr.getHostName()), nnAddr.getPort(),
++      return new URI("hftp", null, nnAddr.getHostName(), nnAddr.getPort(),
+                      null, null, null);
+     } catch (URISyntaxException e) {
+       return null;
+-    } catch (UnknownHostException e) {
+-      return null;
+-    }
++    } 
+   }
+ 
+   /**
+@@ -137,7 +124,7 @@ public class HftpFileSystem extends FileSystem {
+   protected HttpURLConnection openConnection(String path, String query)
+       throws IOException {
+     try {
+-      final URL url = new URI("http", null, pickOneAddress(nnAddr.getHostName()),
++      final URL url = new URI("http", null, nnAddr.getHostName(),
+           nnAddr.getPort(), path, query, null).toURL();
+       if (LOG.isTraceEnabled()) {
+         LOG.trace("url=" + url);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/HsftpFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/HsftpFileSystem.java
+index 80caaa0..f70dae0 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/HsftpFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/HsftpFileSystem.java
+@@ -23,7 +23,6 @@ import java.net.HttpURLConnection;
+ import java.net.URI;
+ import java.net.URISyntaxException;
+ import java.net.URL;
+-import java.net.UnknownHostException;
+ import javax.net.ssl.HostnameVerifier;
+ import javax.net.ssl.HttpsURLConnection;
+ import javax.net.ssl.SSLSession;
+@@ -69,7 +68,7 @@ public class HsftpFileSystem extends HftpFileSystem {
+   protected HttpURLConnection openConnection(String path, String query)
+       throws IOException {
+     try {
+-      final URL url = new URI("https", null, pickOneAddress(nnAddr.getHostName()),
++      final URL url = new URI("https", null, nnAddr.getHostName(),
+           nnAddr.getPort(), path, query, null).toURL();
+       HttpsURLConnection conn = (HttpsURLConnection)url.openConnection();
+       // bypass hostname verification
+@@ -83,13 +82,11 @@ public class HsftpFileSystem extends HftpFileSystem {
+   @Override
+   public URI getUri() {
+     try {
+-      return new URI("hsftp", null, pickOneAddress(nnAddr.getHostName()), nnAddr.getPort(),
++      return new URI("hsftp", null, nnAddr.getHostName(), nnAddr.getPort(),
+                      null, null, null);
+     } catch (URISyntaxException e) {
+       return null;
+-    } catch (UnknownHostException e) {
+-      return null;
+-    }
++    } 
+   }
+ 
+   /**
+-- 
+1.7.0.4
+

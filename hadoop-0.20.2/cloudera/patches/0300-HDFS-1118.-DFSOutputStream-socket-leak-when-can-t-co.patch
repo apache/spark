@@ -1,0 +1,27 @@
+From 128395ae4d317204fe8fb118333270826adf96d5 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sun, 6 Jun 2010 16:38:21 -0400
+Subject: [PATCH 0300/1179] HDFS-1118. DFSOutputStream socket leak when can't connect to DN
+
+Reason: Fixes DFS Client socket leaks in an error condition
+Author: Zheng Shao
+Ref: CDH-659
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 1d78f02..491682e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -2966,6 +2966,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       } catch (IOException ie) {
+ 
+         LOG.info("Exception in createBlockOutputStream " + ie);
++        IOUtils.closeSocket(s);
+ 
+         // find the datanode that matches
+         if (firstBadLink.length() != 0) {
+-- 
+1.7.0.4
+

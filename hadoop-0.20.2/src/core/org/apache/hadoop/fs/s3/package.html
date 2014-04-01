@@ -1,0 +1,55 @@
+<html>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<body>
+
+<p>A distributed, block-based implementation of {@link
+org.apache.hadoop.fs.FileSystem} that uses <a href="http://aws.amazon.com/s3">Amazon S3</a>
+as a backing store.</p>
+
+<p>
+Files are stored in S3 as blocks (represented by 
+{@link org.apache.hadoop.fs.s3.Block}), which have an ID and a length.
+Block metadata is stored in S3 as a small record (represented by 
+{@link org.apache.hadoop.fs.s3.INode}) using the URL-encoded
+path string as a key. Inodes record the file type (regular file or directory) and the list of blocks.
+This design makes it easy to seek to any given position in a file by reading the inode data to compute
+which block to access, then using S3's support for 
+<a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.2">HTTP Range</a> headers
+to start streaming from the correct position.
+Renames are also efficient since only the inode is moved (by a DELETE followed by a PUT since 
+S3 does not support renames).
+</p>
+<p>
+For a single file <i>/dir1/file1</i> which takes two blocks of storage, the file structure in S3
+would be something like this:
+</p>
+<pre>
+/
+/dir1
+/dir1/file1
+block-6415776850131549260
+block-3026438247347758425
+</pre>
+<p>
+Inodes start with a leading <code>/</code>, while blocks are prefixed with <code>block-</code>.
+</p>
+
+</body>
+</html>

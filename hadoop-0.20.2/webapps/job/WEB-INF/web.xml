@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<web-app xmlns="http://java.sun.com/xml/ns/javaee"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://java.sun.com/xml/ns/javaee http://java.sun.com/xml/ns/javaee/web-app_2_5.xsd"
+   version="2.5">
+
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.jobtaskshistory_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.jobtaskshistory_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.taskdetails_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.taskdetails_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.jobconf_005fhistory_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.jobconf_005fhistory_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.jobtasks_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.jobtasks_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.jobconf_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.jobconf_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.jobtracker_jspx</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.jobtracker_jspx</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.analysejobhistory_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.analysejobhistory_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.machines_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.machines_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.taskstatshistory_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.taskstatshistory_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.job_005fauthorization_005ferror_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.job_005fauthorization_005ferror_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.taskstats_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.taskstats_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.jobhistory_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.jobhistory_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.jobqueue_005fdetails_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.jobqueue_005fdetails_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.taskdetailshistory_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.taskdetailshistory_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.jobdetails_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.jobdetails_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.jobtracker_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.jobtracker_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.loadhistory_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.loadhistory_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.jobblacklistedtrackers_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.jobblacklistedtrackers_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.jobfailures_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.jobfailures_jsp</servlet-class>
+    </servlet>
+
+    <servlet>
+        <servlet-name>org.apache.hadoop.mapred.jobdetailshistory_jsp</servlet-name>
+        <servlet-class>org.apache.hadoop.mapred.jobdetailshistory_jsp</servlet-class>
+    </servlet>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.jobtaskshistory_jsp</servlet-name>
+        <url-pattern>/jobtaskshistory.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.taskdetails_jsp</servlet-name>
+        <url-pattern>/taskdetails.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.jobconf_005fhistory_jsp</servlet-name>
+        <url-pattern>/jobconf_history.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.jobtasks_jsp</servlet-name>
+        <url-pattern>/jobtasks.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.jobconf_jsp</servlet-name>
+        <url-pattern>/jobconf.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.jobtracker_jspx</servlet-name>
+        <url-pattern>/jobtracker.jspx</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.analysejobhistory_jsp</servlet-name>
+        <url-pattern>/analysejobhistory.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.machines_jsp</servlet-name>
+        <url-pattern>/machines.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.taskstatshistory_jsp</servlet-name>
+        <url-pattern>/taskstatshistory.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.job_005fauthorization_005ferror_jsp</servlet-name>
+        <url-pattern>/job_authorization_error.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.taskstats_jsp</servlet-name>
+        <url-pattern>/taskstats.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.jobhistory_jsp</servlet-name>
+        <url-pattern>/jobhistory.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.jobqueue_005fdetails_jsp</servlet-name>
+        <url-pattern>/jobqueue_details.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.taskdetailshistory_jsp</servlet-name>
+        <url-pattern>/taskdetailshistory.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.jobdetails_jsp</servlet-name>
+        <url-pattern>/jobdetails.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.jobtracker_jsp</servlet-name>
+        <url-pattern>/jobtracker.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.loadhistory_jsp</servlet-name>
+        <url-pattern>/loadhistory.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.jobblacklistedtrackers_jsp</servlet-name>
+        <url-pattern>/jobblacklistedtrackers.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.jobfailures_jsp</servlet-name>
+        <url-pattern>/jobfailures.jsp</url-pattern>
+    </servlet-mapping>
+
+    <servlet-mapping>
+        <servlet-name>org.apache.hadoop.mapred.jobdetailshistory_jsp</servlet-name>
+        <url-pattern>/jobdetailshistory.jsp</url-pattern>
+    </servlet-mapping>
+
+</web-app>
+

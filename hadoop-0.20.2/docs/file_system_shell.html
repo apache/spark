@@ -1,0 +1,988 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta content="Apache Forrest" name="Generator">
+<meta name="Forrest-version" content="0.8">
+<meta name="Forrest-skin-name" content="pelt">
+<title>File System Shell Guide</title>
+<link type="text/css" href="skin/basic.css" rel="stylesheet">
+<link media="screen" type="text/css" href="skin/screen.css" rel="stylesheet">
+<link media="print" type="text/css" href="skin/print.css" rel="stylesheet">
+<link type="text/css" href="skin/profile.css" rel="stylesheet">
+<script src="skin/getBlank.js" language="javascript" type="text/javascript"></script><script src="skin/getMenu.js" language="javascript" type="text/javascript"></script><script src="skin/fontsize.js" language="javascript" type="text/javascript"></script>
+<link rel="shortcut icon" href="images/favicon.ico">
+</head>
+<body onload="init()">
+<script type="text/javascript">ndeSetTextSize();</script>
+<div id="top">
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+<a href="http://www.apache.org/">Apache</a> &gt; <a href="http://hadoop.apache.org/">Hadoop</a> &gt; <a href="http://hadoop.apache.org/core/">Core</a><script src="skin/breadcrumbs.js" language="JavaScript" type="text/javascript"></script>
+</div>
+<!--+
+    |header
+    +-->
+<div class="header">
+<!--+
+    |start group logo
+    +-->
+<div class="grouplogo">
+<a href="http://hadoop.apache.org/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo.jpg" title="Apache Hadoop"></a>
+</div>
+<!--+
+    |end group logo
+    +-->
+<!--+
+    |start Project Logo
+    +-->
+<div class="projectlogo">
+<a href="http://hadoop.apache.org/core/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo-2.gif" title="Scalable Computing Platform"></a>
+</div>
+<!--+
+    |end Project Logo
+    +-->
+<!--+
+    |start Search
+    +-->
+<div class="searchbox">
+<form action="http://www.google.com/search" method="get" class="roundtopsmall">
+<input value="archive.cloudera.com" name="sitesearch" type="hidden"><input onFocus="getBlank (this, 'Search the site with google');" size="25" name="q" id="query" type="text" value="Search the site with google">&nbsp; 
+                    <input name="Search" value="Search" type="submit">
+</form>
+</div>
+<!--+
+    |end search
+    +-->
+<!--+
+    |start Tabs
+    +-->
+<ul id="tabs">
+<li>
+<a class="unselected" href="http://hadoop.apache.org/core/">Project</a>
+</li>
+<li>
+<a class="unselected" href="http://wiki.apache.org/hadoop">Wiki</a>
+</li>
+<li class="current">
+<a class="selected" href="index.html">Hadoop 0.20 Documentation</a>
+</li>
+</ul>
+<!--+
+    |end Tabs
+    +-->
+</div>
+</div>
+<div id="main">
+<div id="publishedStrip">
+<!--+
+    |start Subtabs
+    +-->
+<div id="level2tabs"></div>
+<!--+
+    |end Endtabs
+    +-->
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+
+             &nbsp;
+           </div>
+<!--+
+    |start Menu, mainarea
+    +-->
+<!--+
+    |start Menu
+    +-->
+<div id="menu">
+<div onclick="SwitchMenu('menu_1.1', 'skin/')" id="menu_1.1Title" class="menutitle">Getting Started</div>
+<div id="menu_1.1" class="menuitemgroup">
+<div class="menuitem">
+<a href="index.html">Overview</a>
+</div>
+<div class="menuitem">
+<a href="single_node_setup.html">Single Node Setup</a>
+</div>
+<div class="menuitem">
+<a href="cluster_setup.html">Cluster Setup</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.2', 'skin/')" id="menu_1.2Title" class="menutitle">Guides</div>
+<div id="menu_1.2" class="menuitemgroup">
+<div class="menuitem">
+<a href="HttpAuthentication.html">Authentication for Hadoop HTTP web-consoles</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.3', 'skin/')" id="menu_1.3Title" class="menutitle">MapReduce</div>
+<div id="menu_1.3" class="menuitemgroup">
+<div class="menuitem">
+<a href="mapred_tutorial.html">MapReduce Tutorial</a>
+</div>
+<div class="menuitem">
+<a href="streaming.html">Hadoop Streaming</a>
+</div>
+<div class="menuitem">
+<a href="commands_manual.html">Hadoop Commands</a>
+</div>
+<div class="menuitem">
+<a href="distcp.html">DistCp</a>
+</div>
+<div class="menuitem">
+<a href="vaidya.html">Vaidya</a>
+</div>
+<div class="menuitem">
+<a href="hadoop_archives.html">Hadoop Archives</a>
+</div>
+<div class="menuitem">
+<a href="gridmix.html">Gridmix</a>
+</div>
+<div class="menuitem">
+<a href="capacity_scheduler.html">Capacity Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="fair_scheduler.html">Fair Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="hod_scheduler.html">Hod Scheduler</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.4', 'skin/')" id="menu_1.4Title" class="menutitle">HDFS</div>
+<div id="menu_1.4" class="menuitemgroup">
+<div class="menuitem">
+<a href="hdfs_user_guide.html">HDFS Users </a>
+</div>
+<div class="menuitem">
+<a href="hdfs_design.html">HDFS Architecture</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_permissions_guide.html">Permissions</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_quota_admin_guide.html">Quotas</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_imageviewer.html">Offline Image Viewer Guide</a>
+</div>
+<div class="menuitem">
+<a href="SLG_user_guide.html">Synthetic Load Generator</a>
+</div>
+<div class="menuitem">
+<a href="libhdfs.html">C API libhdfs</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_selected_1.5', 'skin/')" id="menu_selected_1.5Title" class="menutitle" style="background-image: url('skin/images/chapter_open.gif');">Common</div>
+<div id="menu_selected_1.5" class="selectedmenuitemgroup" style="display: block;">
+<div class="menupage">
+<div class="menupagetitle">File System Shell</div>
+</div>
+<div class="menuitem">
+<a href="service_level_auth.html">Service Level Authorization</a>
+</div>
+<div class="menuitem">
+<a href="native_libraries.html">Native Libraries</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.6', 'skin/')" id="menu_1.6Title" class="menutitle">Miscellaneous</div>
+<div id="menu_1.6" class="menuitemgroup">
+<div class="menuitem">
+<a href="Secure_Impersonation.html">Secure Impersonation</a>
+</div>
+<div class="menuitem">
+<a href="api/index.html">API Docs</a>
+</div>
+<div class="menuitem">
+<a href="jdiff/changes.html">API Changes</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/">Wiki</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/FAQ">FAQ</a>
+</div>
+<div class="menuitem">
+<a href="releasenotes.html">Release Notes</a>
+</div>
+<div class="menuitem">
+<a href="changes.html">Change Log</a>
+</div>
+</div>
+<div id="credit"></div>
+<div id="roundbottom">
+<img style="display: none" class="corner" height="15" width="15" alt="" src="skin/images/rc-b-l-15-1body-2menu-3menu.png"></div>
+<!--+
+  |alternative credits
+  +-->
+<div id="credit2"></div>
+</div>
+<!--+
+    |end Menu
+    +-->
+<!--+
+    |start content
+    +-->
+<div id="content">
+<div title="Portable Document Format" class="pdflink">
+<a class="dida" href="file_system_shell.pdf"><img alt="PDF -icon" src="skin/images/pdfdoc.gif" class="skin"><br>
+        PDF</a>
+</div>
+<h1>File System Shell Guide</h1>
+<div id="minitoc-area">
+<ul class="minitoc">
+<li>
+<a href="#Overview">Overview</a>
+<ul class="minitoc">
+<li>
+<a href="#cat"> cat </a>
+</li>
+<li>
+<a href="#chgrp"> chgrp </a>
+</li>
+<li>
+<a href="#chmod"> chmod </a>
+</li>
+<li>
+<a href="#chown"> chown </a>
+</li>
+<li>
+<a href="#copyFromLocal">copyFromLocal</a>
+</li>
+<li>
+<a href="#copyToLocal"> copyToLocal</a>
+</li>
+<li>
+<a href="#count"> count </a>
+</li>
+<li>
+<a href="#cp"> cp </a>
+</li>
+<li>
+<a href="#du">du</a>
+</li>
+<li>
+<a href="#dus"> dus </a>
+</li>
+<li>
+<a href="#expunge"> expunge </a>
+</li>
+<li>
+<a href="#get"> get </a>
+</li>
+<li>
+<a href="#getmerge"> getmerge </a>
+</li>
+<li>
+<a href="#ls">ls</a>
+</li>
+<li>
+<a href="#lsr">lsr</a>
+</li>
+<li>
+<a href="#mkdir"> mkdir </a>
+</li>
+<li>
+<a href="#moveFromLocal"> moveFromLocal </a>
+</li>
+<li>
+<a href="#moveToLocal"> moveToLocal</a>
+</li>
+<li>
+<a href="#mv"> mv </a>
+</li>
+<li>
+<a href="#put"> put </a>
+</li>
+<li>
+<a href="#rm"> rm </a>
+</li>
+<li>
+<a href="#rmr"> rmr </a>
+</li>
+<li>
+<a href="#setrep"> setrep </a>
+</li>
+<li>
+<a href="#stat"> stat </a>
+</li>
+<li>
+<a href="#tail"> tail </a>
+</li>
+<li>
+<a href="#test"> test </a>
+</li>
+<li>
+<a href="#text"> text </a>
+</li>
+<li>
+<a href="#touchz"> touchz </a>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+		
+<a name="N1000D"></a><a name="Overview"></a>
+<h2 class="h3">Overview</h2>
+<div class="section">
+<p>
+      The File System (FS) shell includes various shell-like commands that directly
+      interact with the Hadoop Distributed File System (HDFS) as well as other file systems that Hadoop supports,  
+      such as Local FS, HFTP FS, S3 FS, and others. The FS shell is invoked by: </p>
+<pre class="code">bin/hadoop fs &lt;args&gt;</pre>
+<p>
+      All FS shell commands take path URIs as arguments. The URI
+      format is <em>scheme://autority/path</em>. For HDFS the scheme
+      is <em>hdfs</em>, and for the Local FS the scheme
+      is <em>file</em>. The scheme and authority are optional. If not
+      specified, the default scheme specified in the configuration is
+      used. An HDFS file or directory such as <em>/parent/child</em>
+      can be specified as <em>hdfs://namenodehost/parent/child</em> or
+      simply as <em>/parent/child</em> (given that your configuration
+      is set to point to <em>hdfs://namenodehost</em>). 
+      </p>
+<p>
+      Most of the commands in FS shell behave like corresponding Unix
+      commands. Differences are described with each of the
+      commands. Error information is sent to <em>stderr</em> and the
+      output is sent to <em>stdout</em>.
+  </p>
+<a name="N1003D"></a><a name="cat"></a>
+<h3 class="h4"> cat </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -cat URI [URI &hellip;]</span>
+			
+</p>
+<p>
+		   Copies source paths to <em>stdout</em>. 
+		   </p>
+<p>Example:</p>
+<ul>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -cat hdfs://nn1.example.com/file1 hdfs://nn2.example.com/file2 
+		   </span>
+				
+</li>
+				
+<li>
+					
+<span class="codefrag">hadoop fs -cat file:///file3 /user/hadoop/file4 </span>
+				
+</li>
+			
+</ul>
+<p>Exit Code:<br>
+		   
+<span class="codefrag"> Returns 0 on success and -1 on error. </span>
+</p>
+<a name="N1006B"></a><a name="chgrp"></a>
+<h3 class="h4"> chgrp </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -chgrp [-R] GROUP URI [URI &hellip;]</span>
+			
+</p>
+<p>
+	    Change group association of files. With <span class="codefrag">-R</span>, make the change recursively through the directory structure. 
+	    The user must be the owner of files, or else a super-user. 
+	    Additional information is in the <a href="hdfs_permissions_guide.html">Permissions Guide</a>.
+	    </p>
+<a name="N10082"></a><a name="chmod"></a>
+<h3 class="h4"> chmod </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -chmod [-R] &lt;MODE[,MODE]... | OCTALMODE&gt; URI [URI &hellip;]</span>
+			
+</p>
+<p>
+	    Change the permissions of files. With <span class="codefrag">-R</span>, make the change recursively through the directory structure. 
+	    The user must be the owner of the file, or else a super-user. 
+	    Additional information is in the <a href="hdfs_permissions_guide.html">Permissions Guide</a>.
+	    </p>
+<a name="N1009B"></a><a name="chown"></a>
+<h3 class="h4"> chown </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -chown [-R] [OWNER][:[GROUP]] URI [URI ]</span>
+			
+</p>
+<p>
+	    Change the owner of files. With <span class="codefrag">-R</span>, make the change recursively through the directory structure. 
+	    The user must be a super-user. 
+	    Additional information is in the <a href="hdfs_permissions_guide.html">Permissions Guide</a>.
+	    </p>
+<a name="N100B4"></a><a name="copyFromLocal"></a>
+<h3 class="h4">copyFromLocal</h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -copyFromLocal &lt;localsrc&gt; URI</span>
+			
+</p>
+<p>Similar to <a href="#put"><strong>put</strong></a> command, except that the source is restricted to a local file reference. </p>
+<a name="N100CB"></a><a name="copyToLocal"></a>
+<h3 class="h4"> copyToLocal</h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -copyToLocal [-ignorecrc] [-crc] URI &lt;localdst&gt;</span>
+			
+</p>
+<p> Similar to <a href="#get"><strong>get</strong></a> command, except that the destination is restricted to a local file reference.</p>
+<a name="N100E2"></a><a name="count"></a>
+<h3 class="h4"> count </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -count [-q]  &lt;paths&gt;</span>
+			
+</p>
+<p>
+				Count the number of directories, files and bytes under the paths that match the specified file pattern. <br>
+<br>
+				The output columns with <span class="codefrag">-count </span> are:<br>
+<br>
+				
+<span class="codefrag">DIR_COUNT, FILE_COUNT, CONTENT_SIZE FILE_NAME</span> 
+<br>
+<br>
+				The output columns with <span class="codefrag">-count -q</span> are:<br>
+<br>
+				
+<span class="codefrag">QUOTA, REMAINING_QUATA, SPACE_QUOTA, REMAINING_SPACE_QUOTA, 
+				DIR_COUNT, FILE_COUNT, CONTENT_SIZE, FILE_NAME</span>
+		   
+</p>
+<p>Example:</p>
+<ul>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -count hdfs://nn1.example.com/file1 hdfs://nn2.example.com/file2 
+		   </span>
+				
+</li>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -count -q hdfs://nn1.example.com/file1
+		   </span>
+				
+</li>
+			
+</ul>
+<p>Exit Code:</p>
+<p>
+				
+<span class="codefrag"> Returns 0 on success and -1 on error.</span>
+			
+</p>
+<a name="N10127"></a><a name="cp"></a>
+<h3 class="h4"> cp </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -cp URI [URI &hellip;] &lt;dest&gt;</span>
+			
+</p>
+<p>
+	    Copy files from source to destination. This command allows multiple sources as well in which case the destination must be a directory.
+	    <br>
+	    Example:</p>
+<ul>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -cp /user/hadoop/file1 /user/hadoop/file2</span>
+				
+</li>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -cp /user/hadoop/file1 /user/hadoop/file2 /user/hadoop/dir </span>
+				
+</li>
+			
+</ul>
+<p>Exit Code:</p>
+<p>
+				
+<span class="codefrag"> Returns 0 on success and -1 on error.</span>
+			
+</p>
+<a name="N10153"></a><a name="du"></a>
+<h3 class="h4">du</h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -du URI [URI &hellip;]</span>
+			
+</p>
+<p>
+	     Displays sizes of files and directories contained in the given directory or the length of a file in case its just a file.</p>
+<p>
+	     Example:<br>
+<span class="codefrag">hadoop fs -du /user/hadoop/dir1 /user/hadoop/file1 hdfs://nn.example.com/user/hadoop/dir1</span>
+<br>
+	     Exit Code:<br>
+<span class="codefrag"> Returns 0 on success and -1 on error. </span>
+<br>
+</p>
+<a name="N10171"></a><a name="dus"></a>
+<h3 class="h4"> dus </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -dus &lt;args&gt;</span>
+			
+</p>
+<p>
+	    Displays a summary of file lengths.
+	   </p>
+<a name="N10183"></a><a name="expunge"></a>
+<h3 class="h4"> expunge </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -expunge</span>
+			
+</p>
+<p>Empty the Trash. Refer to the <a href="hdfs_design.html">HDFS Architecture Guide</a>
+			 for more information on the Trash feature.</p>
+<a name="N10199"></a><a name="get"></a>
+<h3 class="h4"> get </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -get [-ignorecrc] [-crc] &lt;src&gt; &lt;localdst&gt;</span>
+				
+<br>
+			
+</p>
+<p>
+	   Copy files to the local file system. Files that fail the CRC check may be copied with the  
+	   <span class="codefrag">-ignorecrc</span> option. Files and CRCs may be copied using the 
+	   <span class="codefrag">-crc</span> option.
+	  </p>
+<p>Example:</p>
+<ul>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -get /user/hadoop/file localfile </span>
+				
+</li>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -get hdfs://nn.example.com/user/hadoop/file localfile</span>
+				
+</li>
+			
+</ul>
+<p>Exit Code:</p>
+<p>
+				
+<span class="codefrag"> Returns 0 on success and -1 on error. </span>
+			
+</p>
+<a name="N101CE"></a><a name="getmerge"></a>
+<h3 class="h4"> getmerge </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -getmerge &lt;src&gt; &lt;localdst&gt; [addnl]</span>
+			
+</p>
+<p>
+	  Takes a source directory and a destination file as input and concatenates files in src into the destination local file. 
+	  Optionally <span class="codefrag">addnl</span> can be set to enable adding a newline character at the end of each file.  
+	  </p>
+<a name="N101E3"></a><a name="ls"></a>
+<h3 class="h4">ls</h3>
+<p>
+               
+<span class="codefrag">Usage: hadoop fs -ls &lt;args&gt;</span>
+           
+</p>
+<p>For a file returns stat on the file with the following format:</p>
+<p>
+               
+<span class="codefrag">permissions number_of_replicas userid  groupid  filesize modification_date modification_time filename</span>
+           
+</p>
+<p>For a directory it returns list of its direct children as in unix.A directory is listed as:</p>
+<p>
+               
+<span class="codefrag">permissions userid groupid modification_date modification_time dirname</span>
+           
+</p>
+<p>Example:</p>
+<p>
+               
+<span class="codefrag">hadoop fs -ls /user/hadoop/file1 </span>
+           
+</p>
+<p>Exit Code:</p>
+<p>
+               
+<span class="codefrag">Returns 0 on success and -1 on error.</span>
+           
+</p>
+<a name="N10216"></a><a name="lsr"></a>
+<h3 class="h4">lsr</h3>
+<p>
+<span class="codefrag">Usage: hadoop fs -lsr &lt;args&gt;</span>
+<br>
+	      Recursive version of <span class="codefrag">ls</span>. Similar to Unix <span class="codefrag">ls -R</span>.
+	      </p>
+<a name="N1022B"></a><a name="mkdir"></a>
+<h3 class="h4"> mkdir </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -mkdir &lt;paths&gt;</span>
+				
+<br>
+			
+</p>
+<p>
+	   Takes path uri's as argument and creates directories. The behavior is much like unix mkdir -p creating parent directories along the path.
+	  </p>
+<p>Example:</p>
+<ul>
+				
+<li>
+					
+<span class="codefrag">hadoop fs -mkdir /user/hadoop/dir1 /user/hadoop/dir2 </span>
+				
+</li>
+				
+<li>
+					
+<span class="codefrag">hadoop fs -mkdir hdfs://nn1.example.com/user/hadoop/dir hdfs://nn2.example.com/user/hadoop/dir
+	  </span>
+				
+</li>
+			
+</ul>
+<p>Exit Code:</p>
+<p>
+				
+<span class="codefrag">Returns 0 on success and -1 on error.</span>
+			
+</p>
+<a name="N1025A"></a><a name="moveFromLocal"></a>
+<h3 class="h4"> moveFromLocal </h3>
+<p>
+				
+<span class="codefrag">Usage: dfs -moveFromLocal &lt;localsrc&gt; &lt;dst&gt;</span>
+			
+</p>
+<p>Similar to <a href="#put"><strong>put</strong></a> command, except that the source <span class="codefrag">localsrc</span> is deleted after it's copied. </p>
+<a name="N10274"></a><a name="moveToLocal"></a>
+<h3 class="h4"> moveToLocal</h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -moveToLocal [-crc] &lt;src&gt; &lt;dst&gt;</span>
+			
+</p>
+<p>Displays a "Not implemented yet" message.</p>
+<a name="N10286"></a><a name="mv"></a>
+<h3 class="h4"> mv </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -mv URI [URI &hellip;] &lt;dest&gt;</span>
+			
+</p>
+<p>
+	    Moves files from source to destination. This command allows multiple sources as well in which case the destination needs to be a directory. 
+	    Moving files across file systems is not permitted.
+	    <br>
+	    Example:
+	    </p>
+<ul>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -mv /user/hadoop/file1 /user/hadoop/file2</span>
+				
+</li>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -mv hdfs://nn.example.com/file1 hdfs://nn.example.com/file2 hdfs://nn.example.com/file3 hdfs://nn.example.com/dir1</span>
+				
+</li>
+			
+</ul>
+<p>Exit Code:</p>
+<p>
+				
+<span class="codefrag"> Returns 0 on success and -1 on error.</span>
+			
+</p>
+<a name="N102B2"></a><a name="put"></a>
+<h3 class="h4"> put </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -put &lt;localsrc&gt; ... &lt;dst&gt;</span>
+			
+</p>
+<p>Copy single src, or multiple srcs from local file system to the destination file system. 
+			Also reads input from stdin and writes to destination file system.<br>
+	   
+</p>
+<ul>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -put localfile /user/hadoop/hadoopfile</span>
+				
+</li>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -put localfile1 localfile2 /user/hadoop/hadoopdir</span>
+				
+</li>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -put localfile hdfs://nn.example.com/hadoop/hadoopfile</span>
+				
+</li>
+				
+<li>
+<span class="codefrag">hadoop fs -put - hdfs://nn.example.com/hadoop/hadoopfile</span>
+<br>Reads the input from stdin.</li>
+			
+</ul>
+<p>Exit Code:</p>
+<p>
+				
+<span class="codefrag"> Returns 0 on success and -1 on error. </span>
+			
+</p>
+<a name="N102EA"></a><a name="rm"></a>
+<h3 class="h4"> rm </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -rm [-skipTrash] URI [URI &hellip;] </span>
+			
+</p>
+<p>
+	   Delete files specified as args. Only deletes non empty directory and files. If the <span class="codefrag">-skipTrash</span> option
+	   is specified, the trash, if enabled, will be bypassed and the specified file(s) deleted immediately.  	This can be
+		   useful when it is necessary to delete files from an over-quota directory.
+	   Refer to rmr for recursive deletes.<br>
+	   Example:
+	   </p>
+<ul>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -rm hdfs://nn.example.com/file /user/hadoop/emptydir </span>
+				
+</li>
+			
+</ul>
+<p>Exit Code:</p>
+<p>
+				
+<span class="codefrag"> Returns 0 on success and -1 on error.</span>
+			
+</p>
+<a name="N10313"></a><a name="rmr"></a>
+<h3 class="h4"> rmr </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -rmr [-skipTrash] URI [URI &hellip;]</span>
+			
+</p>
+<p>Recursive version of delete. If the <span class="codefrag">-skipTrash</span> option
+		   is specified, the trash, if enabled, will be bypassed and the specified file(s) deleted immediately. This can be
+		   useful when it is necessary to delete files from an over-quota directory.<br>
+	   Example:
+	   </p>
+<ul>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -rmr /user/hadoop/dir </span>
+				
+</li>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -rmr hdfs://nn.example.com/user/hadoop/dir </span>
+				
+</li>
+			
+</ul>
+<p>Exit Code:</p>
+<p>
+				
+<span class="codefrag"> Returns 0 on success and -1 on error. </span>
+			
+</p>
+<a name="N10342"></a><a name="setrep"></a>
+<h3 class="h4"> setrep </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -setrep [-R] &lt;path&gt;</span>
+			
+</p>
+<p>
+	   Changes the replication factor of a file. -R option is for recursively increasing the replication factor of files within a directory.
+	  </p>
+<p>Example:</p>
+<ul>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -setrep -w 3 -R /user/hadoop/dir1 </span>
+				
+</li>
+			
+</ul>
+<p>Exit Code:</p>
+<p>
+				
+<span class="codefrag">Returns 0 on success and -1 on error. </span>
+			
+</p>
+<a name="N10369"></a><a name="stat"></a>
+<h3 class="h4"> stat </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -stat URI [URI &hellip;]</span>
+			
+</p>
+<p>
+	   Returns the stat information on the path.
+	   </p>
+<p>Example:</p>
+<ul>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -stat path </span>
+				
+</li>
+			
+</ul>
+<p>Exit Code:<br>
+	   
+<span class="codefrag"> Returns 0 on success and -1 on error.</span>
+</p>
+<a name="N1038E"></a><a name="tail"></a>
+<h3 class="h4"> tail </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -tail [-f] URI </span>
+			
+</p>
+<p>
+	   Displays last kilobyte of the file to stdout. -f option can be used as in Unix.
+	   </p>
+<p>Example:</p>
+<ul>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -tail pathname </span>
+				
+</li>
+			
+</ul>
+<p>Exit Code: <br>
+	   
+<span class="codefrag"> Returns 0 on success and -1 on error.</span>
+</p>
+<a name="N103B3"></a><a name="test"></a>
+<h3 class="h4"> test </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -test -[ezd] URI</span>
+			
+</p>
+<p>
+	   Options: <br>
+	   -e check to see if the file exists. Return 0 if true. <br>
+	   -z check to see if the file is zero length. Return 0 if true. <br>
+	   -d check to see if the path is directory. Return 0 if true. <br>
+</p>
+<p>Example:</p>
+<ul>
+				
+<li>
+					
+<span class="codefrag"> hadoop fs -test -e filename </span>
+				
+</li>
+			
+</ul>
+<a name="N103D8"></a><a name="text"></a>
+<h3 class="h4"> text </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -text &lt;src&gt;</span>
+				
+<br>
+			
+</p>
+<p>
+	   Takes a source file and outputs the file in text format. The allowed formats are zip and TextRecordInputStream.
+	  </p>
+<a name="N103EC"></a><a name="touchz"></a>
+<h3 class="h4"> touchz </h3>
+<p>
+				
+<span class="codefrag">Usage: hadoop fs -touchz URI [URI &hellip;]</span>
+				
+<br>
+			
+</p>
+<p>
+	   Create a file of zero length.
+	   </p>
+<p>Example:</p>
+<ul>
+				
+<li>
+					
+<span class="codefrag"> hadoop -touchz pathname </span>
+				
+</li>
+			
+</ul>
+<p>Exit Code:<br>
+	   
+<span class="codefrag"> Returns 0 on success and -1 on error.</span>
+</p>
+</div>
+	
+</div>
+<!--+
+    |end content
+    +-->
+<div class="clearboth">&nbsp;</div>
+</div>
+<div id="footer">
+<!--+
+    |start bottomstrip
+    +-->
+<div class="lastmodified">
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<div class="copyright">
+        Copyright &copy;
+         2008 <a href="http://www.apache.org/licenses/">The Apache Software Foundation.</a>
+</div>
+<!--+
+    |end bottomstrip
+    +-->
+</div>
+</body>
+</html>

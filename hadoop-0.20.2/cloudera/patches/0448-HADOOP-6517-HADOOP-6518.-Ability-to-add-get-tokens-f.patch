@@ -1,0 +1,119 @@
+From 256f62f67d848260f25fca2e052fd878b93bfe17 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sun, 31 Jan 2010 22:53:34 -0800
+Subject: [PATCH 0448/1179] HADOOP-6517, HADOOP-6518. Ability to add/get tokens from UserGroupInformation
+
+Patch: https://issues.apache.org/jira/secure/attachment/12434368/HADOOP-6518-0_20.1.patch
+Author: Owen O'Malley
+Ref: CDH-648
+---
+ .../hadoop/security/UserGroupInformation.java      |   21 +++++++++++++++----
+ .../hadoop/security/TestUserGroupInformation.java  |   19 ++++++++++++++---
+ 2 files changed, 31 insertions(+), 9 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index a95d940..e67358b 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -193,8 +193,6 @@ public class UserGroupInformation {
+   private static String keytabFile = null;
+ 
+   private final Subject subject;
+-  private final Set<Token<? extends TokenIdentifier>> tokens =
+-                  new LinkedHashSet<Token<? extends TokenIdentifier>>();
+   
+   private static final String OS_LOGIN_MODULE_NAME;
+   private static final Class<? extends Principal> OS_PRINCIPAL_CLASS;
+@@ -235,6 +233,10 @@ public class UserGroupInformation {
+     static {
+       USER_KERBEROS_OPTIONS.put("doNotPrompt", "true");
+       USER_KERBEROS_OPTIONS.put("useTicketCache", "true");
++      String ticketCache = System.getenv("KRB5CCNAME");
++      if (ticketCache != null) {
++        USER_KERBEROS_OPTIONS.put("ticketCache", ticketCache);
++      }
+     }
+     private static final AppConfigurationEntry USER_KERBEROS_LOGIN =
+       new AppConfigurationEntry(Krb5LoginModule.class.getName(),
+@@ -437,7 +439,7 @@ public class UserGroupInformation {
+    * @return true on successful add of new token
+    */
+   public synchronized boolean addToken(Token<? extends TokenIdentifier> token) {
+-    return tokens.add(token);
++    return subject.getPrivateCredentials().add(token);
+   }
+   
+   /**
+@@ -445,8 +447,17 @@ public class UserGroupInformation {
+    * 
+    * @return an unmodifiable collection of tokens associated with user
+    */
+-  public synchronized Collection<Token<? extends TokenIdentifier>> getTokens() {
+-    return Collections.unmodifiableSet(tokens);
++  @SuppressWarnings("unchecked")
++  public synchronized <Ident extends TokenIdentifier>
++  Collection<Token<Ident>> getTokens() {
++    Set<Object> creds = subject.getPrivateCredentials();
++    List<Token<Ident>> result = new ArrayList<Token<Ident>>(creds.size());
++    for(Object o: creds) {
++      if (o instanceof Token) {
++        result.add((Token<Ident>) o);
++      }
++    }
++    return Collections.unmodifiableList(result);
+   }
+ 
+   /**
+diff --git a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+index df1dfc2..9585d30 100644
+--- a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
++++ b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+@@ -27,6 +27,7 @@ import static org.mockito.Mockito.mock;
+ import java.io.BufferedReader;
+ import java.io.IOException;
+ import java.io.InputStreamReader;
++import java.security.PrivilegedAction;
+ import java.security.PrivilegedExceptionAction;
+ import java.util.ArrayList;
+ import java.util.Collection;
+@@ -164,17 +165,17 @@ public class TestUserGroupInformation {
+   
+   @SuppressWarnings("unchecked") // from Mockito mocks
+   @Test
+-  public void testUGITokens() {
++  public <T extends TokenIdentifier> void testUGITokens() throws Exception {
+     UserGroupInformation ugi = 
+       UserGroupInformation.createUserForTesting("TheDoctor", 
+                                                 new String [] { "TheTARDIS"});
+-    Token t1 = mock(Token.class);
+-    Token t2 = mock(Token.class);
++    Token<T> t1 = mock(Token.class);
++    Token<T> t2 = mock(Token.class);
+     
+     ugi.addToken(t1);
+     ugi.addToken(t2);
+     
+-    Collection<Token<? extends TokenIdentifier>> z = ugi.getTokens();
++    Collection<Token<T>> z = ugi.getTokens();
+     assertTrue(z.contains(t1));
+     assertTrue(z.contains(t2));
+     assertEquals(2, z.size());
+@@ -185,5 +186,15 @@ public class TestUserGroupInformation {
+     } catch(UnsupportedOperationException uoe) {
+       // Can't modify tokens
+     }
++    
++    // ensure that the tokens are passed through doAs
++    Collection<Token<T>> otherSet = 
++      ugi.doAs(new PrivilegedExceptionAction<Collection<Token<T>>>(){
++        public Collection<Token<T>> run() throws IOException {
++          return UserGroupInformation.getCurrentUser().getTokens();
++        }
++      });
++    assertTrue(otherSet.contains(t1));
++    assertTrue(otherSet.contains(t2));
+   }
+ }
+-- 
+1.7.0.4
+

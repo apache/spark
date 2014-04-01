@@ -1,0 +1,184 @@
+fuse_impls_symlink.o: fuse_impls_symlink.c fuse_dfs.h \
+ /usr/include/stdio.h /usr/include/features.h /usr/include/bits/predefs.h \
+ /usr/include/sys/cdefs.h /usr/include/bits/wordsize.h \
+ /usr/include/gnu/stubs.h /usr/include/gnu/stubs-64.h \
+ /usr/lib/gcc/x86_64-linux-gnu/4.4.3/include/stddef.h \
+ /usr/include/bits/types.h /usr/include/bits/typesizes.h \
+ /usr/include/libio.h /usr/include/_G_config.h /usr/include/wchar.h \
+ /usr/lib/gcc/x86_64-linux-gnu/4.4.3/include/stdarg.h \
+ /usr/include/bits/stdio_lim.h /usr/include/bits/sys_errlist.h \
+ /usr/include/bits/stdio.h /usr/include/bits/stdio2.h \
+ /usr/include/string.h /usr/include/xlocale.h /usr/include/bits/string.h \
+ /usr/include/bits/string2.h /usr/include/endian.h \
+ /usr/include/bits/endian.h /usr/include/bits/byteswap.h \
+ /usr/include/stdlib.h /usr/include/bits/string3.h /usr/include/errno.h \
+ /usr/include/bits/errno.h /usr/include/linux/errno.h \
+ /usr/include/asm/errno.h /usr/include/asm-generic/errno.h \
+ /usr/include/asm-generic/errno-base.h /usr/include/assert.h \
+ /usr/include/strings.h /usr/include/syslog.h /usr/include/sys/syslog.h \
+ /usr/include/bits/syslog-path.h /usr/include/bits/syslog.h \
+ /usr/include/fuse.h /usr/include/fuse/fuse.h \
+ /usr/include/fuse/fuse_common.h /usr/include/fuse/fuse_opt.h \
+ /usr/include/stdint.h /usr/include/bits/wchar.h /usr/include/fcntl.h \
+ /usr/include/bits/fcntl.h /usr/include/sys/types.h /usr/include/time.h \
+ /usr/include/sys/select.h /usr/include/bits/select.h \
+ /usr/include/bits/sigset.h /usr/include/bits/time.h \
+ /usr/include/sys/sysmacros.h /usr/include/bits/pthreadtypes.h \
+ /usr/include/bits/uio.h /usr/include/sys/stat.h /usr/include/bits/stat.h \
+ /usr/include/bits/fcntl2.h /usr/include/utime.h \
+ /usr/include/sys/statvfs.h /usr/include/bits/statvfs.h \
+ /usr/include/sys/uio.h /usr/include/fuse/fuse_opt.h fuse_impls.h \
+ fuse_context_handle.h \
+ /var/lib/jenkins/workspace/CDH3u4-Full-RC/build/cdh3/hadoop20/0.20.2-cdh3u4/source/src/c++/libhdfs/hdfs.h \
+ /usr/include/bits/waitflags.h /usr/include/bits/waitstatus.h \
+ /usr/include/alloca.h /usr/include/bits/stdlib.h \
+ /opt/toolchain/sun-jdk-64bit-1.6.0.26/include/jni.h \
+ /opt/toolchain/sun-jdk-64bit-1.6.0.26/include/linux/jni_md.h
+
+fuse_dfs.h:
+
+/usr/include/stdio.h:
+
+/usr/include/features.h:
+
+/usr/include/bits/predefs.h:
+
+/usr/include/sys/cdefs.h:
+
+/usr/include/bits/wordsize.h:
+
+/usr/include/gnu/stubs.h:
+
+/usr/include/gnu/stubs-64.h:
+
+/usr/lib/gcc/x86_64-linux-gnu/4.4.3/include/stddef.h:
+
+/usr/include/bits/types.h:
+
+/usr/include/bits/typesizes.h:
+
+/usr/include/libio.h:
+
+/usr/include/_G_config.h:
+
+/usr/include/wchar.h:
+
+/usr/lib/gcc/x86_64-linux-gnu/4.4.3/include/stdarg.h:
+
+/usr/include/bits/stdio_lim.h:
+
+/usr/include/bits/sys_errlist.h:
+
+/usr/include/bits/stdio.h:
+
+/usr/include/bits/stdio2.h:
+
+/usr/include/string.h:
+
+/usr/include/xlocale.h:
+
+/usr/include/bits/string.h:
+
+/usr/include/bits/string2.h:
+
+/usr/include/endian.h:
+
+/usr/include/bits/endian.h:
+
+/usr/include/bits/byteswap.h:
+
+/usr/include/stdlib.h:
+
+/usr/include/bits/string3.h:
+
+/usr/include/errno.h:
+
+/usr/include/bits/errno.h:
+
+/usr/include/linux/errno.h:
+
+/usr/include/asm/errno.h:
+
+/usr/include/asm-generic/errno.h:
+
+/usr/include/asm-generic/errno-base.h:
+
+/usr/include/assert.h:
+
+/usr/include/strings.h:
+
+/usr/include/syslog.h:
+
+/usr/include/sys/syslog.h:
+
+/usr/include/bits/syslog-path.h:
+
+/usr/include/bits/syslog.h:
+
+/usr/include/fuse.h:
+
+/usr/include/fuse/fuse.h:
+
+/usr/include/fuse/fuse_common.h:
+
+/usr/include/fuse/fuse_opt.h:
+
+/usr/include/stdint.h:
+
+/usr/include/bits/wchar.h:
+
+/usr/include/fcntl.h:
+
+/usr/include/bits/fcntl.h:
+
+/usr/include/sys/types.h:
+
+/usr/include/time.h:
+
+/usr/include/sys/select.h:
+
+/usr/include/bits/select.h:
+
+/usr/include/bits/sigset.h:
+
+/usr/include/bits/time.h:
+
+/usr/include/sys/sysmacros.h:
+
+/usr/include/bits/pthreadtypes.h:
+
+/usr/include/bits/uio.h:
+
+/usr/include/sys/stat.h:
+
+/usr/include/bits/stat.h:
+
+/usr/include/bits/fcntl2.h:
+
+/usr/include/utime.h:
+
+/usr/include/sys/statvfs.h:
+
+/usr/include/bits/statvfs.h:
+
+/usr/include/sys/uio.h:
+
+/usr/include/fuse/fuse_opt.h:
+
+fuse_impls.h:
+
+fuse_context_handle.h:
+
+/var/lib/jenkins/workspace/CDH3u4-Full-RC/build/cdh3/hadoop20/0.20.2-cdh3u4/source/src/c++/libhdfs/hdfs.h:
+
+/usr/include/bits/waitflags.h:
+
+/usr/include/bits/waitstatus.h:
+
+/usr/include/alloca.h:
+
+/usr/include/bits/stdlib.h:
+
+/opt/toolchain/sun-jdk-64bit-1.6.0.26/include/jni.h:
+
+/opt/toolchain/sun-jdk-64bit-1.6.0.26/include/linux/jni_md.h:

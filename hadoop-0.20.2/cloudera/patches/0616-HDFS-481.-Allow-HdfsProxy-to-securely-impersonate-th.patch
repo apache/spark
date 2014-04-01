@@ -1,0 +1,3019 @@
+From cb39a8280712bb507e159151de5e62895d79268d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 20 Apr 2010 01:01:07 +0530
+Subject: [PATCH 0616/1179] HDFS-481. Allow HdfsProxy to securely impersonate the real user
+
+Patch: https://issues.apache.org/jira/secure/attachment/12442210/HDFS-481-NEW.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12442280/HDFS-481-bp-y20s.patch
+Author: Srikanth Sundarrajan
+Ref: CDH-648
+---
+ src/contrib/hdfsproxy/build.xml                    |  531 ++++++++++++++++----
+ src/contrib/hdfsproxy/conf/hdfsproxy-default.xml   |   43 ++-
+ src/contrib/hdfsproxy/conf/ssl-server.xml          |   48 ++
+ src/contrib/hdfsproxy/conf/tomcat-forward-web.xml  |  108 ++++
+ src/contrib/hdfsproxy/conf/tomcat-web.xml          |  167 ++++++
+ src/contrib/hdfsproxy/conf/user-certs.xml          |   24 +-
+ src/contrib/hdfsproxy/conf/user-permissions.xml    |   24 +-
+ .../hadoop/hdfsproxy/AuthorizationFilter.java      |  136 +++++
+ .../org/apache/hadoop/hdfsproxy/HdfsProxy.java     |  160 +------
+ .../hdfsproxy/KerberosAuthorizationFilter.java     |   72 +++
+ .../apache/hadoop/hdfsproxy/LdapIpDirFilter.java   |  241 +++++++++
+ .../hadoop/hdfsproxy/ProxyFileDataServlet.java     |    6 +-
+ .../apache/hadoop/hdfsproxy/ProxyFileForward.java  |   41 ++
+ .../org/apache/hadoop/hdfsproxy/ProxyFilter.java   |   81 +++-
+ .../hadoop/hdfsproxy/ProxyForwardServlet.java      |  107 ++++
+ .../hadoop/hdfsproxy/ProxyListPathsServlet.java    |    6 +-
+ .../apache/hadoop/hdfsproxy/ProxyStreamFile.java   |    4 +-
+ .../org/apache/hadoop/hdfsproxy/ProxyUtil.java     |  353 +++++++++++++
+ .../apache/hadoop/hdfsproxy/DummyLdapContext.java  |  128 +++++
+ .../org/apache/hadoop/hdfsproxy/FindFreePort.java  |   87 ++++
+ .../org/apache/hadoop/hdfsproxy/SimpleServlet.java |   51 ++
+ .../org/apache/hadoop/hdfsproxy/TestHdfsProxy.java |   33 +-
+ .../org/apache/hadoop/hdfsproxy/TestProxyUtil.java |   49 ++
+ 23 files changed, 2193 insertions(+), 307 deletions(-)
+ create mode 100644 src/contrib/hdfsproxy/conf/ssl-server.xml
+ create mode 100644 src/contrib/hdfsproxy/conf/tomcat-forward-web.xml
+ create mode 100644 src/contrib/hdfsproxy/conf/tomcat-web.xml
+ create mode 100644 src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/AuthorizationFilter.java
+ create mode 100644 src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/KerberosAuthorizationFilter.java
+ create mode 100644 src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/LdapIpDirFilter.java
+ create mode 100644 src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileForward.java
+ create mode 100644 src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyForwardServlet.java
+ create mode 100644 src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyUtil.java
+ create mode 100644 src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/DummyLdapContext.java
+ create mode 100644 src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/FindFreePort.java
+ create mode 100644 src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/SimpleServlet.java
+ create mode 100644 src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/TestProxyUtil.java
+
+diff --git a/src/contrib/hdfsproxy/build.xml b/src/contrib/hdfsproxy/build.xml
+index e62b2f2..fcc43d8 100644
+--- a/src/contrib/hdfsproxy/build.xml
++++ b/src/contrib/hdfsproxy/build.xml
+@@ -17,121 +17,440 @@
+    limitations under the License.
+ -->
+ 
+-<project name="hdfsproxy" default="jar">
+-	<property name="hdfsproxyVersion" value="1.0"/>
+-	<property name="final.name" value="${ant.project.name}-${hdfsproxyVersion}"/>
+-	<property name="bin.dir" value="${basedir}/bin"/>
+-	<property name="lib.dir" value="${basedir}/lib"/>
+-	<property name="conf.dir" value="${basedir}/conf"/>
+-	<property name="docs.dir" value="${basedir}/docs"/>
+-	<import file="../build-contrib.xml"/>
+-
+-	<target name="jar" depends="compile" description="Create jar">
+-		<echo>
+-            Building the .jar files.
+-        </echo>
+-		<jar jarfile="${build.dir}/${final.name}.jar" basedir="${build.classes}" includes="org/apache/hadoop/hdfsproxy/**/*.class" >
+-                        <manifest>
+-                            <section name="org/apache/hadoop/hdfsproxy">
+-                                <attribute name="Implementation-Title" value="HdfsProxy"/>
+-                                <attribute name="Implementation-Version" value="${hdfsproxyVersion}"/>
+-                                <attribute name="Implementation-Vendor" value="Apache"/>
+-                            </section>
+-                        </manifest>
+-
+-		</jar>
+-	</target>
++<project name="hdfsproxy" default="jar" xmlns:ivy="antlib:org.apache.ivy.ant">
++  <property name="hdfsproxyVersion" value="2.0"/>
++  <property name="final.name" value="${ant.project.name}-${hdfsproxyVersion}"/>
++  <property name="javac.debug" value="on"/>
++  <property name="javac.optimize" value="on"/>
++  <import file="../build-contrib.xml"/>
+ 
+-	<!-- ====================================================== -->
+-	<!-- Macro definitions                                      -->
+-	<!-- ====================================================== -->
+-	<macrodef name="macro_tar" description="Worker Macro for tar">
+-		<attribute name="param.destfile"/>
+-		<element name="param.listofitems"/>
+-		<sequential>
+-			<tar compression="gzip" longfile="gnu"
+-          destfile="@{param.destfile}">
+-				<param.listofitems/>
+-			</tar>
+-		</sequential>
+-	</macrodef>
++  <property name="bin.dir" value="${basedir}/bin"/>
++  <property name="lib.dir" value="${basedir}/lib"/>
++  <property name="hadoop.jars.dir" value="${basedir}/hadoopjars"/>
+ 
+-	<!-- ================================================================== -->
+-	<!-- D I S T R I B U T I O N                                            -->
+-	<!-- ================================================================== -->
+-	<!--                                                                    -->
+-	<!-- ================================================================== -->
+-	<target name="local-package" depends="jar" description="Package in local build directory">
+-		<mkdir dir="${build.dir}/${final.name}"/>
+-		<mkdir dir="${build.dir}/${final.name}/logs"/>
+-		<copy todir="${build.dir}/${final.name}" includeEmptyDirs="false">
+-			<fileset dir="${build.dir}">
+-				<include name="*.jar" />
+-				<include name="*.war" />
+-			</fileset>
+-		</copy>
+-		<copy todir="${build.dir}/${final.name}/lib" includeEmptyDirs="false">
+-			<fileset dir="${common.ivy.lib.dir}">
+-        <include name="commons-logging-${commons-logging.version}"/>
++  <property name="docs.dir" value="${basedir}/docs"/>
++  <property name="test.build.dir" value="${build.dir}/test"/>
++  <property name="test.build.classes" value="${test.build.dir}/classes"/>
++  <property name="src.test.resources" value="${basedir}/src/test/resources"/>
++  <property name="ssl.keystore.proxy" value="${src.test.resources}/ssl-keys/proxy.keystore"/>
++  <property name="ssl.keystore.client" value="${src.test.resources}/ssl-keys/client.keystore"/>
++  <property name="ssl.client.cert" value="${src.test.resources}/ssl-keys/test.crt"/>
++  <property name="proxy.conf.test" value="${src.test.resources}/proxy-config"/>
++  <property name="tomcat.conf.test" value="${src.test.resources}/tomcat-config"/>
++  <property name="target.dir" value="${build.dir}/target"/>
++  <property name="logs.dir" value="${target.dir}/logs"/>
++  <property name="reports.dir" value="${target.dir}/reports"/>
++  <property name="tomcatconfig.dir" value="${target.dir}/tomcat-config"/>
++  <property name="tomcat.container.id" value="tomcat5x"/>
++  <property name="cargo.logging" value="high"/>
++  <property name="cactus.formatter.type" value="xml"/>
++  <property name="cactus.warfile.name" value="test"/>
++  <!-- Used for krb5.conf which is required to run unit tests with MiniDFS -->
++  <property name="test.krb5.conf.location" location="${hadoop.root}/src/test/krb5.conf"/>
++
++  <available file="${hadoop.root}/build/classes" type="dir" property="test.available"/>
++  <property environment="env"/>
++  <!-- check if environment has been set -->
++  <condition property="proxy.conf.dir" value="${env.HDFSPROXY_CONF_DIR}" else="${basedir}/conf">
++    <and>
++      <isset property="env.HDFSPROXY_CONF_DIR"/>
++      <available file="${env.HDFSPROXY_CONF_DIR}/hdfsproxy-default.xml"/>
++    </and>
++  </condition>
++
++  <condition property="startCactus">
++    <and>
++      <or>
++        <equals arg1="${testcase}" arg2="TestProxyFilter"/>
++        <equals arg1="${testcase}" arg2="TestLdapIpDirFilter"/>
++        <equals arg1="${testcase}" arg2="TestProxyUtil"/>
++        <equals arg1="${testcase}" arg2="TestProxyForwardServlet"/>
++        <not>
++          <isset property="testcase"/>
++        </not>
++      </or>
++      <isset property="test.available"/>
++    </and>
++  </condition>
++
++  <condition property="useClover">
++    <and>
++      <isset property="clover.home"/>
++      <available file="${clover.home}/lib/clover.jar"/>
++    </and>
++  </condition>
++
++  <property name="ivy.settings.file" location="${hadoop.root}/ivy/ivysettings.xml"/>
++
++  <target name="ivy-init" depends="ivy-init-antlib">
++    <ivy:settings id="${ant.project.name}.ivy.settings"/>
++  </target>
++
++  <!-- Define the Cactus tasks -->
++  <target name="load-tasks" depends="ivy-retrieve-common">
++    <taskdef resource="cactus.tasks"
++             classpathref="cactus.classpath">
++    </taskdef>
++  </target>
++
++
++  <target name="jar" depends="compile" description="Create jar">
++    <echo>
++      Building the .jar files.
++    </echo>
++    <jar jarfile="${build.dir}/${final.name}.jar" basedir="${build.classes}"
++         includes="org/apache/hadoop/hdfsproxy/**/*.class">
++      <manifest>
++        <section name="org/apache/hadoop/hdfsproxy">
++          <attribute name="Implementation-Title" value="HdfsProxy"/>
++          <attribute name="Implementation-Version" value="${hdfsproxyVersion}"/>
++          <attribute name="Implementation-Vendor" value="Apache"/>
++        </section>
++      </manifest>
++    </jar>
++  </target>
++
++
++  <!-- ================================================================== -->
++  <!-- Make war file                                              -->
++  <!-- ================================================================== -->
++
++  <target name="war" depends="compile" description="Create war">
++    <echo>
++      Building the .war file
++    </echo>
++    <war destfile="${build.dir}/${final.name}.war" webxml="${basedir}/conf/tomcat-web.xml">
++      <lib dir="${common.ivy.lib.dir}">
++        <include name="commons-logging-${commons-logging.version}.jar"/>
++        <include name="junit-${junit.version}.jar"/>
++        <include name="log4j-${log4j.version}.jar"/>
++        <include name="slf4j-api-${slf4j-api.version}.jar"/>
++        <include name="slf4j-log4j12-${slf4j-log4j12.version}.jar"/>
++        <include name="xmlenc-${xmlenc.version}.jar"/>
++      </lib>
++      <lib dir="${hadoop.root}/lib">
++        <include name="hadoop-core-*.jar"/>
++      </lib>
++      <classes dir="${proxy.conf.dir}">
++        <include name="hdfsproxy-default.xml"/>
++        <include name="user-certs.xml"/>
++        <include name="user-permissions.xml"/>
++      </classes>
++      <classes dir="${build.classes}"/>
++      <classes dir="${hadoop.root}/build/classes"/>
++    </war>
++  </target>
++
++  <target name="forward" depends="compile" description="Create forward war">
++    <echo>
++      Building the forward war file
++    </echo>
++    <war destfile="${build.dir}/${final.name}-forward.war" webxml="${basedir}/conf/tomcat-forward-web.xml">
++      <lib dir="${common.ivy.lib.dir}">
++        <include name="commons-logging-${commons-logging.version}.jar"/>
++        <include name="junit-${junit.version}.jar"/>
++        <include name="log4j-${log4j.version}.jar"/>
++        <include name="slf4j-api-${slf4j-api.version}.jar"/>
++        <include name="slf4j-log4j12-${slf4j-log4j12.version}.jar"/>
++        <include name="xmlenc-${xmlenc.version}.jar"/>
++      </lib>
++      <lib dir="${hadoop.root}/lib">
++        <include name="hadoop-core-*.jar"/>
++      </lib>
++      <classes dir="${proxy.conf.dir}">
++        <include name="hdfsproxy-default.xml"/>
++        <include name="hdfsproxy-site.xml"/>
++        <include name="user-certs.xml"/>
++        <include name="user-permissions.xml"/>
++      </classes>
++      <classes dir="${build.classes}"/>
++      <classes dir="${hadoop.root}/build/classes"/>
++    </war>
++  </target>
++
++  <target name="testwar" depends="compile" description="Create testing war">
++    <echo>
++      Building the testing .war file
++    </echo>
++    <war destfile="${build.dir}/${final.name}-test.war" webxml="${src.test.resources}/tomcat-web.xml">
++      <lib dir="${common.ivy.lib.dir}">
++        <include name="commons-logging-${commons-logging.version}.jar"/>
++        <include name="junit-${junit.version}.jar"/>
++        <include name="log4j-${log4j.version}.jar"/>
++        <include name="slf4j-api-${slf4j-api.version}.jar"/>
++        <include name="slf4j-log4j12-${slf4j-log4j12.version}.jar"/>
++        <include name="xmlenc-${xmlenc.version}.jar"/>
++        <include name="core-${core.vesion}.jar"/>
++      </lib>
++      <lib dir="${hadoop.root}/lib">
++        <include name="hadoop-core-*.jar"/>
++      </lib>
++      <classes dir="${proxy.conf.test}" excludes="**/*.template **/*.sh"/>
++      <classes dir="${build.classes}"/>
++      <classes dir="${hadoop.root}/build/classes"/>
++    </war>
++  </target>
++
++  <target name="cactifywar" depends="testwar,load-tasks,cactifywar-pure,cactifywar-clover"
++          description="To include clover coverage test use -Dclover.home ..."/>
++
++  <target name="cactifywar-pure" depends="testwar,load-tasks" unless="useClover">
++    <mkdir dir="${target.dir}"/>
++    <echo>no clover found ...</echo>
++    <cactifywar srcfile="${build.dir}/${final.name}-test.war"
++                destfile="${target.dir}/${cactus.warfile.name}.war"
++                mergewebxml="${src.test.resources}/cactus-web.xml">
++      <servletredirector/>
++      <servletredirector name="ServletRedirectorSecure"
++                         mapping="/ServletRedirectorSecure" roles="test"/>
++      <filterredirector mapping="/test/filterRedirector.jsp"/>
++      <classes dir="${test.build.dir}"/>
++    </cactifywar>
++  </target>
++
++  <target name="cactifywar-clover" depends="testwar,load-tasks" if="useClover">
++    <mkdir dir="${target.dir}"/>
++    <echo>Including clover.jar in the war file ...</echo>
++    <cactifywar srcfile="${build.dir}/${final.name}-test.war"
++                destfile="${target.dir}/${cactus.warfile.name}.war"
++                mergewebxml="${src.test.resources}/cactus-web.xml">
++      <servletredirector/>
++      <servletredirector name="ServletRedirectorSecure"
++                         mapping="/ServletRedirectorSecure" roles="test"/>
++      <filterredirector mapping="/test/filterRedirector.jsp"/>
++      <classes dir="${test.build.dir}"/>
++      <lib dir="${clover.home}/lib">
++        <include name="clover.jar"/>
++      </lib>
++    </cactifywar>
++  </target>
++
++  <target name="test" depends="compile,compile-test,test-junit" description="Automated Test Framework"
++          if="test.available"/>
++
++  <target name="test-junit" depends="compile,compile-test" if="test.available">
++    <copy todir="${src.test.resources}/proxy-config">
++      <fileset dir="${proxy.conf.dir}" />
++    </copy>
++    <copy file="${proxy.conf.dir}/tomcat-web.xml" todir="${src.test.resources}"/>
++    <copy file="${proxy.conf.dir}/tomcat-forward-web.xml" todir="${src.test.resources}"/>
++
++    <junit fork="yes" printsummary="yes" errorProperty="tests.failed" failureProperty="tests.failed">
++      <classpath refid="test.classpath"/>
++      <sysproperty key="test.build.data" value="${build.test}/data"/>
++      <sysproperty key="build.test" value="${build.test}"/>
++      <sysproperty key="user.dir" value="${build.test}/data"/>
++      <sysproperty key="fs.default.name" value="${fs.default.name}"/>
++      <sysproperty key="hadoop.test.localoutputfile" value="${hadoop.test.localoutputfile}"/>
++      <sysproperty key="hadoop.log.dir" value="${hadoop.log.dir}"/>
++      <sysproperty key="test.src.dir" value="${test.src.dir}"/>
++      <sysproperty key="javax.net.ssl.trustStore" value="${ssl.keystore.proxy}"/>
++      <sysproperty key="javax.net.ssl.trustStorePassword" value="changeme"/>
++      <sysproperty key="javax.net.ssl.keyStore.proxy" value="${ssl.keystore.proxy}"/>
++      <sysproperty key="javax.net.ssl.keyStore" value="${ssl.keystore.client}"/>
++      <sysproperty key="javax.net.ssl.keyStorePassword" value="changeme"/>
++      <sysproperty key="javax.net.ssl.keyPassword" value="changeme"/>
++      <sysproperty key="javax.net.ssl.clientCert" value="${ssl.client.cert}"/>
++      <sysproperty key="java.security.krb5.conf" value="${test.krb5.conf.location}"/>
++      <formatter type="xml"/>
++      <batchtest todir="${test.build.dir}" unless="testcase">
++        <fileset dir="${src.test}">
++          <include name="**/TestHdfsProxy.java"/>
++          <include name="**/TestProxyUgiManager.java"/>
++        </fileset>
++      </batchtest>
++      <batchtest todir="${test.build.dir}" if="testcase">
++        <fileset dir="${src.test}">
++          <include name="**/${testcase}.java"/>
++          <exclude name="**/TestProxyFilter.java"/>
++          <exclude name="**/TestLdapIpDirFilter.java"/>
++          <exclude name="**/TestProxyUtil.java"/>
++          <exclude name="**/TestProxyForwardServlet.java"/>
++        </fileset>
++      </batchtest>
++    </junit>
++    <fail if="tests.failed">Tests failed!</fail>
++  </target>
++
++
++  <target name="test-cactus" depends="compile,compile-test,cactifywar" if="startCactus">
++    <exec executable="${env.JAVA_HOME}/bin/java" outputproperty="cargo.servlet.admin.port">
++      <arg line="-cp ${build.test} org.apache.hadoop.hdfsproxy.FindFreePort -random"/>
++    </exec>
++    <exec executable="${env.JAVA_HOME}/bin/java" outputproperty="cargo.servlet.http.port">
++      <arg line="-cp ${build.test} org.apache.hadoop.hdfsproxy.FindFreePort ${cargo.servlet.admin.port}"/>
++    </exec>
++    <exec executable="${env.JAVA_HOME}/bin/java" outputproperty="cargo.servlet.https.port">
++      <arg line="-cp ${build.test} org.apache.hadoop.hdfsproxy.FindFreePort ${cargo.servlet.http.port}"/>
++    </exec>
++
++    <echo>Free Ports: startup-${cargo.servlet.admin.port} / http-${cargo.servlet.http.port} /
++      https-${cargo.servlet.https.port}
++    </echo>
++    <echo>Please take a deep breath while Cargo gets the Tomcat for running the servlet tests...</echo>
++
++    <mkdir dir="${tomcatconfig.dir}"/>
++    <mkdir dir="${tomcatconfig.dir}/conf"/>
++    <mkdir dir="${tomcatconfig.dir}/webapps"/>
++    <mkdir dir="${tomcatconfig.dir}/temp"/>
++    <mkdir dir="${logs.dir}"/>
++    <mkdir dir="${reports.dir}"/>
++    <copy file="${tomcat.conf.test}/server.xml" tofile="${tomcatconfig.dir}/conf/server.xml" overwrite="true">
++      <filterset>
++        <filter token="ADMIN.PORT" value="${cargo.servlet.admin.port}"/>
++        <filter token="HTTP.PORT" value="${cargo.servlet.http.port}"/>
++        <filter token="HTTPS.PORT" value="${cargo.servlet.https.port}"/>
++      </filterset>
++    </copy>
++    <copy file="${tomcat.conf.test}/web.xml" tofile="${tomcatconfig.dir}/conf/web.xml"/>
++    <copy file="${tomcat.conf.test}/tomcat-users.xml" tofile="${tomcatconfig.dir}/conf/tomcat-users.xml"/>
++
++    <cactus warfile="${target.dir}/${cactus.warfile.name}.war" fork="yes" haltonfailure="no" printsummary="yes"
++            failureproperty="tests.failed">
++      <classpath>
++        <path refid="cactus.classpath"/>
++        <pathelement location="${build.classes}"/>
++        <pathelement location="${src.test.resources}"/>
++        <pathelement location="${src.test.resources}/proxy-config"/>
++      </classpath>
++      <containerset>
++        <cargo containerId="${tomcat.container.id}" timeout="30000" output="${logs.dir}/output.log"
++               log="${logs.dir}/cargo.log">
++          <zipUrlInstaller
++              installUrl="http://apache.osuosl.org/tomcat/tomcat-6/v6.0.18/bin/apache-tomcat-6.0.18.zip"
++              installDir="${target.dir}/${tomcat.container.id}"/>
++          <configuration type="existing" home="${tomcatconfig.dir}">
++            <property name="cargo.servlet.port" value="${cargo.servlet.http.port}"/>
++            <property name="cargo.logging" value="${cargo.logging}"/>
++            <property name="cactus.toDir" value="${build.test}"/>
++            <deployable type="war" file="${target.dir}/${cactus.warfile.name}.war"/>
++          </configuration>
++        </cargo>
++      </containerset>
++      <sysproperty key="test.build.data" value="${build.test}/data"/>
++      <sysproperty key="build.test" value="${build.test}"/>
++      <sysproperty key="build.target" value="${target.dir}"/>
++      <sysproperty key="javax.net.ssl.trustStore" value="${ssl.keystore.proxy}"/>
++      <sysproperty key="javax.net.ssl.trustStorePassword" value="changeme"/>
++      <sysproperty key="javax.net.ssl.keyStore.proxy" value="${ssl.keystore.proxy}"/>
++      <sysproperty key="javax.net.ssl.keyStore" value="${ssl.keystore.client}"/>
++      <sysproperty key="javax.net.ssl.keyStorePassword" value="changeme"/>
++      <sysproperty key="javax.net.ssl.keyPassword" value="changeme"/>
++      <sysproperty key="javax.net.ssl.clientCert" value="${ssl.client.cert}"/>
++      <sysproperty key="test.proxy.conf.dir" value="${proxy.conf.test}"/>
++      <sysproperty key="test.proxy.https.port" value="${cargo.servlet.https.port}"/>
++
++      <formatter type="${cactus.formatter.type}"/>
++      <batchtest todir="${reports.dir}" unless="testcase">
++        <fileset dir="${src.test}">
++          <include name="**/Test*.java"/>
++          <exclude name="**/TestHdfsProxy.java"/>
++          <exclude name="**/TestProxyUgiManager.java"/>
++        </fileset>
++      </batchtest>
++      <batchtest todir="${reports.dir}" if="testcase">
++        <fileset dir="${src.test}">
++          <include name="**/${testcase}.java"/>
++          <exclude name="**/TestHdfsProxy.java"/>
++          <exclude name="**/TestProxyUgiManager.java"/>
++        </fileset>
++      </batchtest>
++    </cactus>
++    <fail if="tests.failed">Tests failed!</fail>
++  </target>
++  <!-- ====================================================== -->
++  <!-- Macro definitions                                      -->
++  <!-- ====================================================== -->
++  <macrodef name="macro_tar" description="Worker Macro for tar">
++    <attribute name="param.destfile"/>
++    <element name="param.listofitems"/>
++    <sequential>
++      <tar compression="gzip" longfile="gnu"
++           destfile="@{param.destfile}">
++        <param.listofitems/>
++      </tar>
++    </sequential>
++  </macrodef>
++
++  <!-- ================================================================== -->
++  <!-- D I S T R I B U T I O N                                            -->
++  <!-- ================================================================== -->
++  <!--                                                                    -->
++  <!-- ================================================================== -->
++  <target name="local-package" depends="jar,war" description="Package in local build directory">
++    <mkdir dir="${build.dir}/${final.name}"/>
++    <mkdir dir="${build.dir}/${final.name}/logs"/>
++    <copy todir="${build.dir}/${final.name}" includeEmptyDirs="false">
++      <fileset dir="${build.dir}">
++        <include name="*.jar"/>
++        <include name="*.war"/>
++      </fileset>
++    </copy>
++    <copy todir="${build.dir}/${final.name}/lib" includeEmptyDirs="false">
++      <fileset dir="${common.ivy.lib.dir}">
++        <include name="commons-logging-${commons-logging.version}.jar"/>
+         <include name="commons-logging-api-${commons-logging-api.version}.jar"/>
+         <include name="junit-${junit.version}.jar"/>
+         <include name="log4j-${log4j.version}.jar"/>
+         <include name="slf4j-api-${slf4j-api.version}.jar"/>
+-        <include name="slf4j-log4j${slf4j-log4j.version}.jar"/>
++        <include name="slf4j-log4j12-${slf4j-log4j12.version}.jar"/>
+         <include name="xmlenc-${xmlenc.version}.jar"/>
++        <include name="jetty-util-${jetty-util.version}.jar"/>
+         <include name="jetty-${jetty.version}.jar"/>
+-        <include name="servlet-api-${servlet-api-2.5.version}.jar"/>
+-        <include name="core-${core.vesion}"/> 
+-                       </fileset>
+-		       <fileset dir="${hadoop.root}/lib/jsp-${jsp.version}">
+-        <include name="jsp-${jsp.version}"/> 
+-        <include name="jsp-api-${jsp-api.vesion}"/> 
+-			</fileset>
+-		</copy>
+-
+-		<copy todir="${build.dir}/${final.name}/lib" includeEmptyDirs="false">
+-                  	<fileset dir="${hadoop.root}/build">
+-                          	<include name="*-core.jar"/>
+-                          	<include name="*-tools.jar"/>
+-			</fileset>
+-		</copy>
+-
+-		<copy todir="${build.dir}/${final.name}/bin">
+-			<fileset dir="${bin.dir}"/>
+-		</copy>
+-
+-		<copy todir="${build.dir}/${final.name}/conf">
+-			<fileset dir="${conf.dir}"/>
+-		</copy>
+-
+-		<copy todir="${build.dir}/${final.name}">
+-			<fileset dir="${basedir}">
+-				<include name="README" />
+-				<include name="build.xml" />
+-				<include name="*.txt" />
+-			</fileset>
+-		</copy>
+-
+-		<copy todir="${build.dir}/${final.name}/src" includeEmptyDirs="true">
+-			<fileset dir="${src.dir}" excludes="**/*.template **/docs/build/**/*"/>
+-		</copy>
+-
+-		<chmod perm="ugo+x" type="file" parallel="false">
+-			<fileset dir="${build.dir}/${final.name}/bin"/>
+-		</chmod>
++        <include name="servlet-api-2.5-${servlet-api-2.5.version}.jar"/>
++        <include name="core-${core.vesion}.jar"/>
++      </fileset>
++      <fileset dir="${hadoop.root}/lib/jsp-${jsp.version}">
++        <include name="jsp-${jsp.version}.jar"/>
++        <include name="jsp-api-${jsp.version}.jar"/>
++      </fileset>
++    </copy>
+ 
+-	</target>
+-	
+-	<target name="package" depends="local-package" description="Build distribution">
++    <copy todir="${build.dir}/${final.name}/lib" includeEmptyDirs="false">
++      <fileset dir="${hadoop.root}/build">
++        <include name="*-core.jar"/>
++        <include name="*-tools.jar"/>
++      </fileset>
++    </copy>
++
++    <copy todir="${build.dir}/${final.name}/bin">
++      <fileset dir="${bin.dir}"/>
++    </copy>
++
++
++    <copy todir="${build.dir}/${final.name}/conf">
++      <fileset dir="${proxy.conf.dir}"/>
++    </copy>
++
++
++    <copy todir="${build.dir}/${final.name}">
++      <fileset dir="${basedir}">
++        <include name="README"/>
++        <include name="build.xml"/>
++        <include name="*.txt"/>
++      </fileset>
++    </copy>
++
++    <copy todir="${build.dir}/${final.name}/src" includeEmptyDirs="true">
++      <fileset dir="${src.dir}" excludes="**/*.template **/docs/build/**/*"/>
++    </copy>
++
++    <chmod perm="ugo+x" type="file" parallel="false">
++      <fileset dir="${build.dir}/${final.name}/bin"/>
++    </chmod>
++
++  </target>
++  <target name="package" depends="local-package" description="Build distribution">
+     <mkdir dir="${dist.dir}/contrib/${name}"/>
+     <copy todir="${dist.dir}/contrib/${name}">
+       <fileset dir="${build.dir}/${final.name}">
+-      	<exclude name="**/lib/**" />
+-      	<exclude name="**/src/**" />
++        <exclude name="**/lib/**"/>
++        <exclude name="**/src/**"/>
++        <exclude name="*.war"/>
+       </fileset>
+     </copy>
+-    <chmod dir="${dist.dir}/contrib/${name}/bin" perm="a+x" includes="*"/>                
+-	</target>
++    <chmod dir="${dist.dir}/contrib/${name}/bin" perm="a+x" includes="*"/>
++  </target>
+ 
+ 	<!-- ================================================================== -->
+ 	<!-- Make release tarball                                               -->
+@@ -166,18 +485,24 @@
+ 		</macro_tar>
+ 	</target>
+ 
++
+   <!-- the unit test classpath -->
+   <path id="test.classpath">
+-    <pathelement location="${build.test}" />
++    <pathelement location="${proxy.conf.test}"/>
++    <pathelement location="${test.build.dir}"/>
+     <pathelement location="${hadoop.root}/build/test/classes"/>
+-    <pathelement location="${hadoop.root}/src/contrib/test"/>
++    <!--<pathelement location="${hadoop.root}/src/contrib/test"/>-->
+     <pathelement location="${hadoop.root}/conf"/>
+     <pathelement location="${hadoop.root}/build"/>
+     <pathelement location="${hadoop.root}/build/classes"/>
+     <pathelement location="${hadoop.root}/build/tools"/>
+     <pathelement location="${build.examples}"/>
++    <pathelement path="${clover.jar}"/>
+     <path refid="contrib-classpath"/>
+   </path>
+ 
++  <path id="cactus.classpath">
++    <path refid="test.classpath"/>
++  </path>
+ 
+ </project>
+diff --git a/src/contrib/hdfsproxy/conf/hdfsproxy-default.xml b/src/contrib/hdfsproxy/conf/hdfsproxy-default.xml
+index 0d2a006..94ef7c2 100644
+--- a/src/contrib/hdfsproxy/conf/hdfsproxy-default.xml
++++ b/src/contrib/hdfsproxy/conf/hdfsproxy-default.xml
+@@ -7,7 +7,7 @@
+ 
+ <property>
+   <name>hdfsproxy.https.address</name>
+-  <value>0.0.0.0:50479</value>
++  <value>0.0.0.0:8443</value>
+   <description>the SSL port that hdfsproxy listens on
+   </description>
+ </property>
+@@ -21,7 +21,7 @@
+ 
+ <property>
+   <name>hdfsproxy.dfs.namenode.address</name>
+-  <value></value>
++  <value>localhost:54321</value>
+   <description>namenode address of the HDFS cluster being proxied
+   </description>
+ </property>
+@@ -55,5 +55,44 @@
+   </description>
+ </property>
+ 
++<property>
++  <name>hdfsproxy.ldap.initial.context.factory</name>
++  <value>com.sun.jndi.ldap.LdapCtxFactory</value>
++  <description> ldap initial context factory
++  </description>
++</property>
++
++<property>
++  <name>hdfsproxy.ldap.provider.url</name>
++  <value>ldap://localhost:389</value>
++  <description> ldap server address
++  </description>
++</property>
++
++<property>
++  <name>hdfsproxy.ldap.role.base</name>
++  <value>ou=proxyroles,dc=mycompany,dc=com</value>
++  <description> ldap role base
++  </description>
++</property>
++
++<property>
++    <name>hdfsproxy.kerberos.principle</name>
++    <value>hdfsproxy@LOCALHOST</value>
++    <description> kerberos principle to be used by hdfsproxy </description>
++</property>
++
++<property>
++    <name>hdfsproxy.kerberos.keytab</name>
++    <value>hdfsproxy.keytab</value>
++    <description> kerberos keytab to be used by hdfsproxy </description>
++</property>
++
++<property>
++    <name>hdfsproxy.kerberos.default.realm</name>
++    <value>/component1/componentN@realm</value>
++    <description> kerberos default realm appended to non-qualified userIds </description>
++</property>
++
+ </configuration>
+ 
+diff --git a/src/contrib/hdfsproxy/conf/ssl-server.xml b/src/contrib/hdfsproxy/conf/ssl-server.xml
+new file mode 100644
+index 0000000..641da1a
+--- /dev/null
++++ b/src/contrib/hdfsproxy/conf/ssl-server.xml
+@@ -0,0 +1,48 @@
++<?xml version="1.0"?>
++<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
++
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++
++<configuration>
++
++<property>
++  <name>ssl.server.truststore.location</name>
++  <value>${javax.net.ssl.keyStore.proxy}</value>
++</property>
++
++<property>
++  <name>ssl.server.truststore.password</name>
++  <value>changeme</value>
++</property>
++
++<property>
++  <name>ssl.server.keystore.location</name>
++  <value>${javax.net.ssl.keyStore.proxy}</value>
++</property>
++
++<property>
++  <name>ssl.server.keystore.password</name>
++  <value>changeme</value>
++</property>
++
++<property>
++  <name>ssl.server.keystore.keypassword</name>
++  <value>changeme</value>
++</property>
++
++</configuration>
+diff --git a/src/contrib/hdfsproxy/conf/tomcat-forward-web.xml b/src/contrib/hdfsproxy/conf/tomcat-forward-web.xml
+new file mode 100644
+index 0000000..b022b03
+--- /dev/null
++++ b/src/contrib/hdfsproxy/conf/tomcat-forward-web.xml
+@@ -0,0 +1,108 @@
++<?xml version="1.0" encoding="ISO-8859-1"?>
++<!--
++  Licensed to the Apache Software Foundation (ASF) under one or more
++  contributor license agreements.  See the NOTICE file distributed with
++  this work for additional information regarding copyright ownership.
++  The ASF licenses this file to You under the Apache License, Version 2.0
++  (the "License"); you may not use this file except in compliance with
++  the License.  You may obtain a copy of the License at
++
++      http://www.apache.org/licenses/LICENSE-2.0
++
++  Unless required by applicable law or agreed to in writing, software
++  distributed under the License is distributed on an "AS IS" BASIS,
++  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++  See the License for the specific language governing permissions and
++  limitations under the License.
++-->
++
++<!DOCTYPE web-app 
++    PUBLIC "-//Sun Microsystems, Inc.//DTD Web Application 2.3//EN" 
++    "http://java.sun.com/dtd/web-app_2_3.dtd">
++
++<web-app>
++
++
++    <!-- General description of your web application -->
++
++    <display-name>HDFS Proxy Forward</display-name>
++    <description>
++      get data from grid forward war
++    </description>
++
++    <context-param>
++      <param-name>webmaster</param-name>
++      <param-value>zhiyong1@yahoo-inc.com</param-value>
++      <description>
++        The EMAIL address of the administrator to whom questions
++        and comments about this application should be addressed.
++      </description>
++    </context-param>
++
++
++    <filter>
++	   	<filter-name>ldapIpDirFilter</filter-name>
++	   	<filter-class>org.apache.hadoop.hdfsproxy.LdapIpDirFilter</filter-class>
++	</filter>
++
++	<filter-mapping>
++        <filter-name>ldapIpDirFilter</filter-name>
++		<url-pattern>/*</url-pattern>
++    </filter-mapping>
++
++
++    <servlet>
++    	<servlet-name>proxyForward</servlet-name>
++      <description>forward data access to specifc servlets</description>
++      <servlet-class>org.apache.hadoop.hdfsproxy.ProxyForwardServlet</servlet-class>
++    </servlet>
++    
++    <servlet-mapping>
++        <servlet-name>proxyForward</servlet-name>
++        <url-pattern>/listPaths/*</url-pattern>
++    </servlet-mapping>
++	  <servlet-mapping>
++        <servlet-name>proxyForward</servlet-name>
++        <url-pattern>/data/*</url-pattern>
++    </servlet-mapping>
++    <servlet-mapping>
++        <servlet-name>proxyForward</servlet-name>
++        <url-pattern>/streamFile/*</url-pattern>
++    </servlet-mapping>
++    
++    <servlet>
++    	<servlet-name>fileForward</servlet-name>
++      <description>forward file data access to streamFile</description>
++      <servlet-class>org.apache.hadoop.hdfsproxy.ProxyFileForward</servlet-class>
++    </servlet>
++    
++    <servlet-mapping>
++        <servlet-name>fileForward</servlet-name>
++        <url-pattern>/file/*</url-pattern>
++    </servlet-mapping>
++    
++    
++
++		<welcome-file-list>
++		  <welcome-file>index.html</welcome-file>
++		</welcome-file-list>
++
++    <!-- Define the default session timeout for your application,
++         in minutes.  From a servlet or JSP page, you can modify
++         the timeout for a particular session dynamically by using
++         HttpSession.getMaxInactiveInterval(). -->
++
++    <session-config>
++      <session-timeout>30</session-timeout>    <!-- 30 minutes -->
++    </session-config>    
++
++
++</web-app>
++
++
++
++
++
++
++
++
+diff --git a/src/contrib/hdfsproxy/conf/tomcat-web.xml b/src/contrib/hdfsproxy/conf/tomcat-web.xml
+new file mode 100644
+index 0000000..be1b538
+--- /dev/null
++++ b/src/contrib/hdfsproxy/conf/tomcat-web.xml
+@@ -0,0 +1,167 @@
++<?xml version="1.0" encoding="ISO-8859-1"?>
++<!--
++  Licensed to the Apache Software Foundation (ASF) under one or more
++  contributor license agreements.  See the NOTICE file distributed with
++  this work for additional information regarding copyright ownership.
++  The ASF licenses this file to You under the Apache License, Version 2.0
++  (the "License"); you may not use this file except in compliance with
++  the License.  You may obtain a copy of the License at
++
++      http://www.apache.org/licenses/LICENSE-2.0
++
++  Unless required by applicable law or agreed to in writing, software
++  distributed under the License is distributed on an "AS IS" BASIS,
++  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++  See the License for the specific language governing permissions and
++  limitations under the License.
++-->
++
++<!DOCTYPE web-app 
++    PUBLIC "-//Sun Microsystems, Inc.//DTD Web Application 2.3//EN" 
++    "http://java.sun.com/dtd/web-app_2_3.dtd">
++
++<web-app>
++
++
++    <!-- General description of your web application -->
++
++    <display-name>HDFS Proxy WAR</display-name>
++    <description>
++      get data from grid 
++    </description>
++
++
++    <!-- Context initialization parameters that define shared
++         String constants used within your application, which
++         can be customized by the system administrator who is
++         installing your application.  The values actually
++         assigned to these parameters can be retrieved in a
++         servlet or JSP page by calling:
++
++             String value =
++               getServletContext().getInitParameter("name");
++
++         where "name" matches the <param-name> element of
++         one of these initialization parameters.
++
++         You can define any number of context initialization
++         parameters, including zero.
++    -->
++
++    <context-param>
++      <param-name>webmaster</param-name>
++      <param-value>zhiyong1@yahoo-inc.com</param-value>
++      <description>
++        The EMAIL address of the administrator to whom questions
++        and comments about this application should be addressed.
++      </description>
++    </context-param>
++    
++    <filter>
++	   	<filter-name>ldapIpDirFilter</filter-name>
++	   	<filter-class>org.apache.hadoop.hdfsproxy.LdapIpDirFilter</filter-class>
++    </filter>
++
++    <filter>
++	   	<filter-name>authroizationFilter</filter-name>
++	   	<filter-class>org.apache.hadoop.hdfsproxy.KerberosAuthorizationFilter</filter-class>
++    </filter>
++
++	<filter-mapping>
++        <filter-name>ldapIpDirFilter</filter-name>
++	    <url-pattern>/*</url-pattern>
++        <dispatcher>REQUEST</dispatcher>
++        <dispatcher>FORWARD</dispatcher>
++    </filter-mapping>
++
++    <filter-mapping>
++        <filter-name>authroizationFilter</filter-name>
++	    <url-pattern>/*</url-pattern>
++        <dispatcher>REQUEST</dispatcher>
++        <dispatcher>FORWARD</dispatcher>
++    </filter-mapping>
++    	
++
++    <!-- Servlet definitions for the servlets that make up
++         your web application, including initialization
++         parameters.  With Tomcat, you can also send requests
++         to servlets not listed here with a request like this:
++
++           http://localhost:8080/{context-path}/servlet/{classname}
++
++         but this usage is not guaranteed to be portable.  It also
++         makes relative references to images and other resources
++         required by your servlet more complicated, so defining
++         all of your servlets (and defining a mapping to them with
++         a servlet-mapping element) is recommended.
++
++         Servlet initialization parameters can be retrieved in a
++         servlet or JSP page by calling:
++
++             String value =
++               getServletConfig().getInitParameter("name");
++
++         where "name" matches the <param-name> element of
++         one of these initialization parameters.
++
++         You can define any number of servlets, including zero.
++    -->
++
++    
++    <servlet>
++    	<servlet-name>listPaths</servlet-name>
++      <description>list paths data access</description>
++      <servlet-class>org.apache.hadoop.hdfsproxy.ProxyListPathsServlet</servlet-class>
++    </servlet>
++    
++    <servlet-mapping>
++        <servlet-name>listPaths</servlet-name>
++        <url-pattern>/listPaths/*</url-pattern>
++    </servlet-mapping>
++
++		<servlet>
++    	<servlet-name>data</servlet-name>
++      <description>data access</description>
++      <servlet-class>org.apache.hadoop.hdfsproxy.ProxyFileDataServlet</servlet-class>
++    </servlet>
++    
++	  <servlet-mapping>
++        <servlet-name>data</servlet-name>
++        <url-pattern>/data/*</url-pattern>
++    </servlet-mapping>
++    
++    <servlet>
++    	<servlet-name>streamFile</servlet-name>
++      <description>stream file access</description>
++      <servlet-class>org.apache.hadoop.hdfsproxy.ProxyStreamFile</servlet-class>
++    </servlet>
++    
++    <servlet-mapping>
++        <servlet-name>streamFile</servlet-name>
++        <url-pattern>/streamFile/*</url-pattern>
++    </servlet-mapping>
++    
++
++		<welcome-file-list>
++		  <welcome-file>index.html</welcome-file>
++		</welcome-file-list>
++
++    <!-- Define the default session timeout for your application,
++         in minutes.  From a servlet or JSP page, you can modify
++         the timeout for a particular session dynamically by using
++         HttpSession.getMaxInactiveInterval(). -->
++
++    <session-config>
++      <session-timeout>30</session-timeout>    <!-- 30 minutes -->
++    </session-config>    
++
++
++</web-app>
++
++
++
++
++
++
++
++
+diff --git a/src/contrib/hdfsproxy/conf/user-certs.xml b/src/contrib/hdfsproxy/conf/user-certs.xml
+index f572a55..3e3c08f 100644
+--- a/src/contrib/hdfsproxy/conf/user-certs.xml
++++ b/src/contrib/hdfsproxy/conf/user-certs.xml
+@@ -6,21 +6,27 @@
+ This file defines the mappings from username to comma seperated list
+ of certificate serial numbers that the user is allowed to use. One mapping
+ per user. Wildcard characters, such as "*" and "?", are not recognized. 
+-Any leading or trailing whitespaces are stripped/ignored. Note that user
+-"Admin" is the special hdfsproxy admin user. To make a user an admin, add 
+-the user's certificate serial number to user "Admin". Normal users cannot 
+-have "Admin" as username. Usernames can only comprise of 0-9a-zA-Z and
+-underscore.
++Any leading or trailing whitespaces are stripped/ignored.
+ 
+ -->
+ 
+ <configuration>
++<property>
++  <name> nobody </name>
++  <value> ,6  ,,  3 , 9a2cf0be9ddf8280
++
++
++
++         </value>
++</property>
+ 
+ <property>
+-  <name>Admin</name>
+-  <value></value>
+-  <description> Special hdfsproxy admin user
+-  </description>
++  <name> Admin </name>
++  <value>, 6,  ,,  3 , 9a2cf0be9ddf8280
++
++
++
++         </value>
+ </property>
+ 
+ </configuration>
+diff --git a/src/contrib/hdfsproxy/conf/user-permissions.xml b/src/contrib/hdfsproxy/conf/user-permissions.xml
+index b737375..819c1a6 100644
+--- a/src/contrib/hdfsproxy/conf/user-permissions.xml
++++ b/src/contrib/hdfsproxy/conf/user-permissions.xml
+@@ -3,26 +3,24 @@
+ 
+ <!-- 
+ 
+-This file defines the mappings from username to comma seperated list
+-of directories/files that the user is allowed to use. One mapping
++This file defines the mappings from user name to comma seperated list
++of directories/files that the user is allowed to access. One mapping
+ per user. Wildcard characters, such as "*" and "?", are not recognized. 
+ For example, to match "/output" directory, one can use "/output" or 
+-"/output/", but not "/output/*". Any leading or trailing whitespaces 
+-in the name field are stripped/ignored, while only leading whitespaces 
+-in the value field are. Note that the special hdfsproxy admin user "Admin"
+-doesn't automatically have access to any files, unless explicitly 
+-specified in this file. Usernames can only comprise of 0-9a-zA-Z and 
+-underscore.
++"/output/", but not "/output/*". Note that any leading or trailing
++whitespaces are stripped/ignored for the name field.
+ 
+ -->
+ 
+ <configuration>
+-
+ <property>
+-  <name></name>
+-  <value></value>
+-  <description>
+-  </description>
++  <name> nobody </name>
++  <value> ,
++
++
++
++        /input, /user, /data </value>
+ </property>
+ 
++
+ </configuration>
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/AuthorizationFilter.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/AuthorizationFilter.java
+new file mode 100644
+index 0000000..135f1f7
+--- /dev/null
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/AuthorizationFilter.java
+@@ -0,0 +1,136 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfsproxy;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.security.UserGroupInformation;
++
++import javax.servlet.*;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.List;
++import java.util.regex.Matcher;
++import java.util.regex.Pattern;
++
++public class AuthorizationFilter implements Filter {
++  public static final Log LOG = LogFactory.getLog(AuthorizationFilter.class);
++
++  /** Pattern for a filter to find out if a request is HFTP/HSFTP request */
++  protected static final Pattern HFTP_PATTERN = Pattern
++      .compile("^(/listPaths|/data|/streamFile|/file)$");
++
++  /**
++   * Pattern for a filter to find out if an HFTP/HSFTP request stores its file
++   * path in the extra path information associated with the URL; if not, the
++   * file path is stored in request parameter "filename"
++   */
++  protected static final Pattern FILEPATH_PATTERN = Pattern
++      .compile("^(/listPaths|/data|/file)$");
++
++  /** {@inheritDoc} **/
++  public void init(FilterConfig filterConfig) throws ServletException {
++  }
++
++  /** {@inheritDoc} **/
++  @SuppressWarnings("unchecked")
++  public void doFilter(ServletRequest request,
++                       ServletResponse response,
++                       FilterChain chain)
++      throws IOException, ServletException {
++
++    HttpServletResponse rsp = (HttpServletResponse) response;
++    HttpServletRequest rqst = (HttpServletRequest) request;
++
++    String userId = getUserId(request);
++    String groups = getGroups(request);
++    List<Path> allowedPaths = getAllowedPaths(request);
++
++    String filePath = getPathFromRequest(rqst);
++
++    if (filePath == null || !checkHdfsPath(filePath, allowedPaths)) {
++      String msg = "User " + userId + " (" + groups
++          + ") is not authorized to access path " + filePath;
++      LOG.warn(msg);
++      rsp.sendError(HttpServletResponse.SC_FORBIDDEN, msg);
++      return;
++    }
++    request.setAttribute("authorized.ugi", userId);
++
++    chain.doFilter(request, response);
++  }
++
++  protected String getUserId(ServletRequest request) {
++     return (String)request.
++         getAttribute("org.apache.hadoop.hdfsproxy.authorized.userID");
++  }
++
++   protected String getGroups(ServletRequest request) {
++      return (String)request.
++          getAttribute("org.apache.hadoop.hdfsproxy.authorized.role");
++   }
++
++  protected List<Path> getAllowedPaths(ServletRequest request) {
++     return (List<Path>)request.
++         getAttribute("org.apache.hadoop.hdfsproxy.authorized.paths");
++  }
++  
++   private String getPathFromRequest(HttpServletRequest rqst) {
++    String filePath = null;
++    // check request path
++    String servletPath = rqst.getServletPath();
++    if (HFTP_PATTERN.matcher(servletPath).matches()) {
++      // request is an HSFTP request
++      if (FILEPATH_PATTERN.matcher(servletPath).matches()) {
++        // file path as part of the URL
++        filePath = rqst.getPathInfo() != null ? rqst.getPathInfo() : "/";
++      } else {
++        // file path is stored in "filename" parameter
++        filePath = rqst.getParameter("filename");
++      }
++    }
++    return filePath;
++  }
++
++  /** check that the requested path is listed in the ldap entry */
++  public boolean checkHdfsPath(String pathInfo, List<Path> allowedPaths) {
++    if (pathInfo == null || pathInfo.length() == 0) {
++      LOG.info("Can't get file path from the request");
++      return false;
++    }
++    Path userPath = new Path(pathInfo);
++    while (userPath != null) {
++      if (LOG.isDebugEnabled()) {
++        LOG.debug("\n Checking file path " + userPath);
++      }
++      if (allowedPaths.contains(userPath))
++        return true;
++      userPath = userPath.getParent();
++    }
++    return false;
++  }
++
++  /** {@inheritDoc} **/
++  public void destroy() {
++  }
++}
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/HdfsProxy.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/HdfsProxy.java
+index 349a7f4..9864a45 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/HdfsProxy.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/HdfsProxy.java
+@@ -18,26 +18,17 @@
+ 
+ package org.apache.hadoop.hdfsproxy;
+ 
+-import java.io.IOException;
+-import java.net.InetSocketAddress;
+-import java.net.URI;
+-import java.net.URISyntaxException;
+-import java.net.URL;
+-import java.util.Set;
+-
+-import javax.net.ssl.HttpsURLConnection;
+-import javax.net.ssl.HostnameVerifier;
+-import javax.net.ssl.SSLSession;
+-import javax.servlet.http.HttpServletResponse;
+ import org.apache.hadoop.hdfs.server.namenode.JspHelper;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.net.NetUtils;
+-import org.apache.hadoop.util.HostsFileReader;
+ import org.apache.hadoop.util.StringUtils;
+ 
++import java.io.IOException;
++import java.net.InetSocketAddress;
++
+ /**
+  * A HTTPS/SSL proxy to HDFS, implementing certificate based access control.
+  */
+@@ -46,7 +37,7 @@ public class HdfsProxy {
+ 
+   private ProxyHttpServer server;
+   private InetSocketAddress sslAddr;
+-  
++
+   /** Construct a proxy from the given configuration */
+   public HdfsProxy(Configuration conf) throws IOException {
+     try {
+@@ -56,7 +47,7 @@ public class HdfsProxy {
+       throw e;
+     }
+   }
+-  
++
+   private void initialize(Configuration conf) throws IOException {
+     sslAddr = getSslAddr(conf);
+     String nn = conf.get("hdfsproxy.dfs.namenode.address");
+@@ -86,7 +77,7 @@ public class HdfsProxy {
+   int getPort() throws IOException {
+     return server.getPort();
+   }
+-  
++
+   /**
+    * Start the server.
+    */
+@@ -95,7 +86,7 @@ public class HdfsProxy {
+     LOG.info("HdfsProxy server up at: " + sslAddr.getHostName() + ":"
+         + sslAddr.getPort());
+   }
+-  
++
+   /**
+    * Stop all server threads and wait for all to finish.
+    */
+@@ -109,7 +100,7 @@ public class HdfsProxy {
+       LOG.warn("Got exception shutting down proxy", e);
+     }
+   }
+-  
++
+   /**
+    * Wait for service to finish.
+    * (Normally, it runs forever.)
+@@ -120,87 +111,6 @@ public class HdfsProxy {
+     } catch (InterruptedException ie) {
+     }
+   }
+-  
+-  private static enum StartupOption {
+-    RELOAD("-reloadPermFiles"), CLEAR("-clearUgiCache"), REGULAR("-regular");
+-
+-    private String name = null;
+-
+-    private StartupOption(String arg) {
+-      this.name = arg;
+-    }
+-
+-    public String getName() {
+-      return name;
+-    }
+-  }
+-
+-  private static void printUsage() {
+-    System.err.println("Usage: hdfsproxy ["
+-        + StartupOption.RELOAD.getName() + "] | ["
+-        + StartupOption.CLEAR.getName() + "]");
+-  }
+-
+-  private static StartupOption parseArguments(String args[]) {
+-    int argsLen = (args == null) ? 0 : args.length;
+-    StartupOption startOpt = StartupOption.REGULAR;
+-    for (int i = 0; i < argsLen; i++) {
+-      String cmd = args[i];
+-      if (StartupOption.RELOAD.getName().equalsIgnoreCase(cmd)) {
+-        startOpt = StartupOption.RELOAD;
+-      } else if (StartupOption.CLEAR.getName().equalsIgnoreCase(cmd)) {
+-        startOpt = StartupOption.CLEAR;
+-      } else if (StartupOption.REGULAR.getName().equalsIgnoreCase(cmd)) {
+-        startOpt = StartupOption.REGULAR;
+-      } else
+-        return null;
+-    }
+-    return startOpt;
+-  }
+-
+-  /**
+-   * Dummy hostname verifier that is used to bypass hostname checking
+-   */
+-  private static class DummyHostnameVerifier implements HostnameVerifier {
+-    public boolean verify(String hostname, SSLSession session) {
+-      return true;
+-    }
+-  }
+-
+-  private static HttpsURLConnection openConnection(String hostname, int port,
+-      String path) throws IOException {
+-    try {
+-      final URL url = new URI("https", null, hostname, port, path, null, null)
+-          .toURL();
+-      HttpsURLConnection conn = (HttpsURLConnection) url.openConnection();
+-      // bypass hostname verification
+-      conn.setHostnameVerifier(new DummyHostnameVerifier());
+-      conn.setRequestMethod("GET");
+-      return conn;
+-    } catch (URISyntaxException e) {
+-      throw (IOException) new IOException().initCause(e);
+-    }
+-  }
+-
+-  private static void setupSslProps(Configuration conf) {
+-    Configuration sslConf = new Configuration(false);
+-    sslConf.addResource(conf.get("hdfsproxy.https.server.keystore.resource",
+-        "ssl-server.xml"));
+-    System.setProperty("javax.net.ssl.trustStore", sslConf
+-        .get("ssl.server.truststore.location"));
+-    System.setProperty("javax.net.ssl.trustStorePassword", sslConf.get(
+-        "ssl.server.truststore.password", ""));
+-    System.setProperty("javax.net.ssl.trustStoreType", sslConf.get(
+-        "ssl.server.truststore.type", "jks"));
+-    System.setProperty("javax.net.ssl.keyStore", sslConf
+-        .get("ssl.server.keystore.location"));
+-    System.setProperty("javax.net.ssl.keyStorePassword", sslConf.get(
+-        "ssl.server.keystore.password", ""));
+-    System.setProperty("javax.net.ssl.keyPassword", sslConf.get(
+-        "ssl.server.keystore.keypassword", ""));
+-    System.setProperty("javax.net.ssl.keyStoreType", sslConf.get(
+-        "ssl.server.keystore.type", "jks"));
+-  }
+ 
+   static InetSocketAddress getSslAddr(Configuration conf) throws IOException {
+     String addr = conf.get("hdfsproxy.https.address");
+@@ -209,66 +119,20 @@ public class HdfsProxy {
+     return NetUtils.createSocketAddr(addr);
+   }
+ 
+-  private static boolean sendCommand(Configuration conf, String path)
+-      throws IOException {
+-    setupSslProps(conf);
+-    int sslPort = getSslAddr(conf).getPort();
+-    int err = 0;
+-    StringBuilder b = new StringBuilder();
+-    HostsFileReader hostsReader = new HostsFileReader(conf.get("hdfsproxy.hosts",
+-        "hdfsproxy-hosts"), "");
+-    Set<String> hostsList = hostsReader.getHosts();
+-    for (String hostname : hostsList) {
+-      HttpsURLConnection connection = null;
+-      try {
+-        connection = openConnection(hostname, sslPort, path);
+-        connection.connect();
+-        if (connection.getResponseCode() != HttpServletResponse.SC_OK) {
+-          b.append("\n\t" + hostname + ": " + connection.getResponseCode()
+-              + " " + connection.getResponseMessage());
+-          err++;
+-        }
+-      } catch (IOException e) {
+-        b.append("\n\t" + hostname + ": " + e.getLocalizedMessage());
+-        err++;
+-      } finally {
+-        if (connection != null)
+-          connection.disconnect();
+-      }
+-    }
+-    if (err > 0) {
+-      System.err.print("Command failed on the following "
+-          + err + " host" + (err==1?":":"s:") + b.toString() + "\n");
+-      return true;
+-    }
+-    return false;
+-  }
+ 
+   public static HdfsProxy createHdfsProxy(String argv[], Configuration conf)
+       throws IOException {
++    if (argv.length > 0) {
++      System.err.println("Usage: HdfsProxy");
++      return null;
++    }
+     if (conf == null) {
+       conf = new Configuration(false);
+       conf.addResource("hdfsproxy-default.xml");
+     }
+-    StartupOption startOpt = parseArguments(argv);
+-    if (startOpt == null) {
+-      printUsage();
+-      return null;
+-    }
+-
+-    switch (startOpt) {
+-    case RELOAD:
+-      boolean error = sendCommand(conf, "/reloadPermFiles");
+-      System.exit(error ? 1 : 0);
+-    case CLEAR:
+-      error = sendCommand(conf, "/clearUgiCache");
+-      System.exit(error ? 1 : 0);
+-    default:
+-    }
+ 
+     StringUtils.startupShutdownMessage(HdfsProxy.class, argv, LOG);
+     HdfsProxy proxy = new HdfsProxy(conf);
+-    //proxy.addSslListener(conf);
+     proxy.start();
+     return proxy;
+   }
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/KerberosAuthorizationFilter.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/KerberosAuthorizationFilter.java
+new file mode 100644
+index 0000000..e35a829
+--- /dev/null
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/KerberosAuthorizationFilter.java
+@@ -0,0 +1,72 @@
++package org.apache.hadoop.hdfsproxy;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.CommonConfigurationKeys;
++import org.apache.hadoop.security.UserGroupInformation;
++
++import javax.servlet.FilterConfig;
++import javax.servlet.ServletContext;
++import javax.servlet.ServletException;
++import javax.servlet.ServletRequest;
++import java.io.IOException;
++import java.util.Arrays;
++
++/**
++ * This filter is required for hdfsproxies connecting to HDFS
++ * with kerberos authentication. Keytab file and principal to
++ * use for proxy user is retrieved from a configuration file.
++ * If user attribute in ldap doesn't kerberos realm, the 
++ * default realm is picked up from configuration. 
++ */
++public class KerberosAuthorizationFilter extends AuthorizationFilter {
++
++  private String defaultRealm;
++
++  @Override
++  public void init(FilterConfig filterConfig) throws ServletException {
++    super.init(filterConfig);
++    Configuration conf = new Configuration(false);
++    conf.addResource("hdfsproxy-default.xml");
++    conf.addResource("hdfsproxy-site.xml");
++    initializeUGI(conf);
++    initDefaultRealm(conf);
++  }
++
++  private void initializeUGI(Configuration conf) {
++    try {
++      conf.set(CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION,
++          "kerberos");
++
++      UserGroupInformation.setConfiguration(conf);
++      UserGroupInformation.loginUserFromKeytab(
++          conf.get("hdfsproxy.kerberos.principal"),
++          conf.get("hdfsproxy.kerberos.keytab"));
++
++      LOG.info("Logged in user: " +
++          UserGroupInformation.getLoginUser().getUserName() +
++          ", Current User: " + UserGroupInformation.getCurrentUser().getUserName());
++
++    } catch (IOException e) {
++      throw new RuntimeException("Unable to initialize credentials", e);
++    }
++  }
++
++  private void initDefaultRealm(Configuration conf) {
++    defaultRealm = conf.get("hdfsproxy.kerberos.default.realm","");
++  }
++
++  @Override
++  /** If the userid does not have realm, add the default realm */
++  protected String getUserId(ServletRequest request) {
++    String userId =  super.getUserId(request);
++    return userId +
++        (userId.indexOf('@') > 0 ? "" : defaultRealm);
++  }
++
++  @Override
++  protected String getGroups(ServletRequest request) {
++    UserGroupInformation ugi = UserGroupInformation.
++        createRemoteUser(getUserId(request));
++    return Arrays.toString(ugi.getGroupNames());
++  }
++}
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/LdapIpDirFilter.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/LdapIpDirFilter.java
+new file mode 100644
+index 0000000..e586246
+--- /dev/null
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/LdapIpDirFilter.java
+@@ -0,0 +1,241 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfsproxy;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.net.NetUtils;
++
++import javax.naming.NamingEnumeration;
++import javax.naming.NamingException;
++import javax.naming.directory.*;
++import javax.naming.ldap.InitialLdapContext;
++import javax.servlet.*;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++import java.io.IOException;
++import java.net.InetSocketAddress;
++import java.util.ArrayList;
++import java.util.Hashtable;
++
++public class LdapIpDirFilter implements Filter {
++  public static final Log LOG = LogFactory.getLog(LdapIpDirFilter.class);
++
++  private static String baseName;
++  private static String hdfsIpSchemaStr;
++  private static String hdfsIpSchemaStrPrefix;
++  private static String hdfsUidSchemaStr;
++  private static String hdfsGroupSchemaStr;
++  private static String hdfsPathSchemaStr;
++
++  private InitialLdapContext lctx;
++
++  private class LdapRoleEntry {
++    String userId;
++    String groupNames;
++    ArrayList<Path> paths;
++
++    void init(String userId, String groupNames, ArrayList<Path> paths) {
++      this.userId = userId;
++      this.groupNames = groupNames;
++      this.paths = paths;
++    }
++
++    boolean contains(Path path) {
++      return paths != null && paths.contains(path);
++    }
++
++    @Override
++    public String toString() {
++      return "LdapRoleEntry{" +
++          "groupName='" + groupNames + '\'' +
++          ", userId='" + userId + '\'' +
++          ", paths=" + paths +
++          '}';
++    }
++  }
++
++  public void initialize(String bName, InitialLdapContext ctx) {
++    // hook to cooperate unit test
++    baseName = bName;
++    hdfsIpSchemaStr = "uniqueMember";
++    hdfsIpSchemaStrPrefix = "cn=";
++    hdfsUidSchemaStr = "uid";
++    hdfsGroupSchemaStr = "userClass";
++    hdfsPathSchemaStr = "documentLocation";
++    lctx = ctx;
++  }
++
++  /** {@inheritDoc} */
++  public void init(FilterConfig filterConfig) throws ServletException {
++    ServletContext context = filterConfig.getServletContext();
++
++    Configuration conf = new Configuration(false);
++    conf.addResource("hdfsproxy-default.xml");
++    conf.addResource("hdfsproxy-site.xml");
++    // extract namenode from source conf.
++    String nn = getNamenode(conf);
++
++    InetSocketAddress nAddr = NetUtils.createSocketAddr(nn);
++    context.setAttribute("name.node.address", nAddr);
++    context.setAttribute("name.conf", conf);
++
++    // for storing hostname <--> cluster mapping to decide which source cluster
++    // to forward
++    context.setAttribute("org.apache.hadoop.hdfsproxy.conf", conf);
++
++    if (lctx == null) {
++      Hashtable<String, String> env = new Hashtable<String, String>();
++      env.put(InitialLdapContext.INITIAL_CONTEXT_FACTORY, conf.get(
++          "hdfsproxy.ldap.initial.context.factory",
++          "com.sun.jndi.ldap.LdapCtxFactory"));
++      env.put(InitialLdapContext.PROVIDER_URL, conf
++          .get("hdfsproxy.ldap.provider.url"));
++
++      try {
++        lctx = new InitialLdapContext(env, null);
++      } catch (NamingException ne) {
++        throw new ServletException("NamingException in initializing ldap"
++            + ne.toString());
++      }
++
++      baseName = conf.get("hdfsproxy.ldap.role.base");
++      hdfsIpSchemaStr = conf.get("hdfsproxy.ldap.ip.schema.string",
++          "uniqueMember");
++      hdfsIpSchemaStrPrefix = conf.get(
++          "hdfsproxy.ldap.ip.schema.string.prefix", "cn=");
++      hdfsUidSchemaStr = conf.get("hdfsproxy.ldap.uid.schema.string", "uid");
++      hdfsGroupSchemaStr = conf.get("hdfsproxy.ldap.group.schema.string", "userClass");
++      hdfsPathSchemaStr = conf.get("hdfsproxy.ldap.hdfs.path.schema.string",
++          "documentLocation");
++    }
++    LOG.info("LdapIpDirFilter initialization successful");
++  }
++
++  private String getNamenode(Configuration conf) throws ServletException {
++    String nn = conf.get("fs.default.name");
++     if (nn == null) {
++       throw new ServletException(
++           "Proxy source cluster name node address not specified");
++     }
++     return nn;
++  }
++
++  /** {@inheritDoc} */
++  public void destroy() {
++  }
++
++  /** {@inheritDoc} */
++  public void doFilter(ServletRequest request, ServletResponse response,
++      FilterChain chain) throws IOException, ServletException {
++
++    HttpServletRequest rqst = (HttpServletRequest) request;
++    HttpServletResponse rsp = (HttpServletResponse) response;
++
++    if (LOG.isDebugEnabled()) {
++      StringBuilder b = new StringBuilder("Request from ").append(
++          rqst.getRemoteHost()).append("/").append(rqst.getRemoteAddr())
++          .append(":").append(rqst.getRemotePort());
++      b.append("\n The Scheme is " + rqst.getScheme());
++      b.append("\n The Path Info is " + rqst.getPathInfo());
++      b.append("\n The Translated Path Info is " + rqst.getPathTranslated());
++      b.append("\n The Context Path is " + rqst.getContextPath());
++      b.append("\n The Query String is " + rqst.getQueryString());
++      b.append("\n The Request URI is " + rqst.getRequestURI());
++      b.append("\n The Request URL is " + rqst.getRequestURL());
++      b.append("\n The Servlet Path is " + rqst.getServletPath());
++      LOG.debug(b.toString());
++    }
++    LdapRoleEntry ldapent = new LdapRoleEntry();
++    // check ip address
++    String userIp = rqst.getRemoteAddr();
++    try {
++      boolean isAuthorized = getLdapRoleEntryFromUserIp(userIp, ldapent);
++      if (!isAuthorized) {
++        rsp.sendError(HttpServletResponse.SC_FORBIDDEN, "IP " + userIp
++            + " is not authorized to access");
++        return;
++      }
++    } catch (NamingException ne) {
++      throw new IOException("NamingException while searching ldap"
++          + ne.toString());
++    }
++
++    // since we cannot pass ugi object cross context as they are from
++    // different classloaders in different war file, we have to use String attribute.
++    rqst.setAttribute("org.apache.hadoop.hdfsproxy.authorized.userID",
++        ldapent.userId);
++    rqst.setAttribute("org.apache.hadoop.hdfsproxy.authorized.role",
++        ldapent.groupNames);
++    rqst.setAttribute("org.apache.hadoop.hdfsproxy.authorized.paths",
++        ldapent.paths);
++
++    LOG.info("User: " + ldapent.userId + " Request: " + rqst.getPathInfo() +
++        " From: " + rqst.getRemoteAddr());
++
++    chain.doFilter(request, response);
++  }
++
++  /**
++   * check if client's ip is listed in the Ldap Roles if yes, return true and
++   * update ldapent. if not, return false
++   * */
++  @SuppressWarnings("unchecked")
++  private boolean getLdapRoleEntryFromUserIp(String userIp,
++      LdapRoleEntry ldapent) throws NamingException {
++    String ipMember = hdfsIpSchemaStrPrefix + userIp;
++    Attributes matchAttrs = new BasicAttributes(true);
++    matchAttrs.put(new BasicAttribute(hdfsIpSchemaStr, ipMember));
++    matchAttrs.put(new BasicAttribute(hdfsUidSchemaStr));
++    matchAttrs.put(new BasicAttribute(hdfsGroupSchemaStr));
++    matchAttrs.put(new BasicAttribute(hdfsPathSchemaStr));
++
++    String[] attrIDs = { hdfsUidSchemaStr, hdfsGroupSchemaStr, hdfsPathSchemaStr };
++
++    NamingEnumeration<SearchResult> results = lctx.search(baseName, matchAttrs,
++        attrIDs);
++    if (results.hasMore()) {
++      String userId = null;
++      String groupNames = null;
++      ArrayList<Path> paths = new ArrayList<Path>();
++      SearchResult sr = results.next();
++      Attributes attrs = sr.getAttributes();
++      for (NamingEnumeration ne = attrs.getAll(); ne.hasMore();) {
++        Attribute attr = (Attribute) ne.next();
++        if (hdfsUidSchemaStr.equalsIgnoreCase(attr.getID())) {
++          userId = (String) attr.get();
++        } else if (hdfsGroupSchemaStr.equalsIgnoreCase(attr.getID())) {
++          groupNames = (String) attr.get();
++        } else if (hdfsPathSchemaStr.equalsIgnoreCase(attr.getID())) {
++          for (NamingEnumeration e = attr.getAll(); e.hasMore();) {
++            String pathStr = (String) e.next();
++            paths.add(new Path(pathStr));
++          }
++        }
++      }
++      ldapent.init(userId, groupNames, paths);
++      if (LOG.isDebugEnabled()) LOG.debug(ldapent);
++      return true;
++    }
++    LOG.info("Ip address " + userIp
++        + " is not authorized to access the proxy server");
++    return false;
++  }
++}
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
+index f15ef66..13f7ebf 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileDataServlet.java
+@@ -21,6 +21,8 @@ import java.io.IOException;
+ import java.net.URI;
+ import java.net.URISyntaxException;
+ 
++import javax.servlet.ServletContext;
++import javax.servlet.ServletException;
+ import javax.servlet.http.HttpServletRequest;
+ 
+ import org.apache.hadoop.conf.Configuration;
+@@ -56,6 +58,8 @@ public class ProxyFileDataServlet extends FileDataServlet {
+   @Override
+   protected UserGroupInformation getUGI(HttpServletRequest request,
+                                         Configuration conf) {
+-    return (UserGroupInformation) request.getAttribute("authorized.ugi");
++    String userID = (String) request
++        .getAttribute("org.apache.hadoop.hdfsproxy.authorized.userID");
++    return ProxyUtil.getProxyUGIFor(userID);
+   }
+ }
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileForward.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileForward.java
+new file mode 100644
+index 0000000..b0ea8f7
+--- /dev/null
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFileForward.java
+@@ -0,0 +1,41 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfsproxy;
++
++import org.apache.hadoop.security.UserGroupInformation;
++import javax.servlet.http.HttpServletRequest;
++
++public class ProxyFileForward extends ProxyForwardServlet {
++  /** For java.io.Serializable */
++  private static final long serialVersionUID = 1L;
++
++  /** {@inheritDoc} */
++  @Override
++  protected String buildForwardPath(HttpServletRequest request, String pathInfo) {
++    String path = "/streamFile";
++    path += "?filename=" + request.getPathInfo();
++    String userID = (String) request.
++        getAttribute("org.apache.hadoop.hdfsproxy.authorized.userID");
++    UserGroupInformation ugi = ProxyUtil.getProxyUGIFor(userID);
++    if (ugi != null) {
++      path += "&ugi=" + ugi.getShortUserName();
++    }
++    return path;
++  }
++  
++}
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFilter.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFilter.java
+index e5dc8a1..374893e 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFilter.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyFilter.java
+@@ -17,8 +17,11 @@
+  */
+ package org.apache.hadoop.hdfsproxy;
+ 
++import java.io.FileInputStream;
+ import java.io.IOException;
++import java.io.InputStream;
+ import java.math.BigInteger;
++import java.security.cert.CertificateFactory;
+ import java.security.cert.X509Certificate;
+ import java.security.cert.CertificateExpiredException;
+ import java.security.cert.CertificateNotYetValidException;
+@@ -28,6 +31,7 @@ import java.util.HashSet;
+ import java.util.Map;
+ import java.util.Set;
+ import java.util.regex.Pattern;
++import java.net.InetSocketAddress;
+ 
+ import javax.servlet.Filter;
+ import javax.servlet.FilterChain;
+@@ -37,11 +41,13 @@ import javax.servlet.http.HttpServletResponse;
+ import javax.servlet.ServletException;
+ import javax.servlet.ServletRequest;
+ import javax.servlet.ServletResponse;
++import javax.servlet.ServletContext;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+ public class ProxyFilter implements Filter {
+@@ -52,14 +58,14 @@ public class ProxyFilter implements Filter {
+       .compile("^(/reloadPermFiles)$");
+   /** Pattern for a filter to find out if a request is HFTP/HSFTP request */
+   protected static final Pattern HFTP_PATTERN = Pattern
+-      .compile("^(/listPaths|/data|/streamFile)$");
++      .compile("^(/listPaths|/data|/streamFile|/file)$");
+   /**
+    * Pattern for a filter to find out if an HFTP/HSFTP request stores its file
+    * path in the extra path information associated with the URL; if not, the
+    * file path is stored in request parameter "filename"
+    */
+   protected static final Pattern FILEPATH_PATTERN = Pattern
+-      .compile("^(/listPaths|/data)$");
++      .compile("^(/listPaths|/data|/file)$");
+ 
+   private static volatile Map<String, Set<Path>> permsMap;
+   private static volatile Map<String, Set<BigInteger>> certsMap;
+@@ -71,9 +77,25 @@ public class ProxyFilter implements Filter {
+     Map<String, Set<BigInteger>> cMap = getCertsMap(conf);
+     certsMap = cMap != null ? cMap : new HashMap<String, Set<BigInteger>>();
+   }
++  
+ 
+   /** {@inheritDoc} */
+   public void init(FilterConfig filterConfig) throws ServletException {
++    ServletContext context = filterConfig.getServletContext();
++    Configuration conf = new Configuration(false);
++    conf.addResource("hdfsproxy-default.xml");
++    conf.addResource("ssl-server.xml");
++    conf.addResource("hdfsproxy-site.xml");
++    String nn = conf.get("hdfsproxy.dfs.namenode.address");
++    if (nn == null) {
++      throw new ServletException("Proxy source cluster name node address not speficied");
++    }
++    InetSocketAddress nAddr = NetUtils.createSocketAddr(nn);
++    context.setAttribute("name.node.address", nAddr);
++    context.setAttribute("name.conf", new Configuration());   
++    
++    context.setAttribute("org.apache.hadoop.hdfsproxy.conf", conf);
++    LOG.info("proxyFilter initialization success: " + nn);
+   }
+ 
+   private static Map<String, Set<Path>> getPermMap(Configuration conf) {
+@@ -133,6 +155,8 @@ public class ProxyFilter implements Filter {
+   /** {@inheritDoc} */
+   public void destroy() {
+   }
++  
++  
+ 
+   /** {@inheritDoc} */
+   public void doFilter(ServletRequest request, ServletResponse response,
+@@ -140,7 +164,7 @@ public class ProxyFilter implements Filter {
+ 
+     HttpServletRequest rqst = (HttpServletRequest) request;
+     HttpServletResponse rsp = (HttpServletResponse) response;
+-
++    
+     if (LOG.isDebugEnabled()) {
+       StringBuilder b = new StringBuilder("Request from ").append(
+           rqst.getRemoteHost()).append("/").append(rqst.getRemoteAddr())
+@@ -174,15 +198,33 @@ public class ProxyFilter implements Filter {
+ 
+       LOG.debug(b.toString());
+     }
+-
+-    if (rqst.getScheme().equalsIgnoreCase("https")) {
++    
++    boolean unitTest = false;
++    if (rqst.getScheme().equalsIgnoreCase("http") && rqst.getParameter("UnitTest") != null) unitTest = true;
++    
++    if (rqst.getScheme().equalsIgnoreCase("https") || unitTest) {
+       boolean isAuthorized = false;
+-      X509Certificate[] certs = (X509Certificate[]) rqst
+-          .getAttribute("javax.servlet.request.X509Certificate");
++      X509Certificate[] certs = (X509Certificate[]) rqst.getAttribute("javax.servlet.request.X509Certificate");
++      
++      if (unitTest) {
++        try {
++          LOG.debug("==> Entering https unit test");
++          String SslPath = rqst.getParameter("SslPath");
++          InputStream inStream = new FileInputStream(SslPath);
++          CertificateFactory cf = CertificateFactory.getInstance("X.509");
++          X509Certificate cert = (X509Certificate)cf.generateCertificate(inStream);
++          inStream.close();          
++          certs = new X509Certificate[] {cert};
++        } catch (Exception e) {
++          // do nothing here
++        }
++      } 
++      
+       if (certs == null || certs.length == 0) {
+         rsp.sendError(HttpServletResponse.SC_BAD_REQUEST,
+-            "No client SSL certificate received");
+-        return;
++          "No client SSL certificate received");
++        LOG.info("No Client SSL certificate received");
++        return;       
+       }
+       for (X509Certificate cert : certs) {
+         try {
+@@ -202,7 +244,7 @@ public class ProxyFilter implements Filter {
+           return;
+         }
+       }
+-
++      
+       String[] tokens = certs[0].getSubjectX500Principal().getName().split(
+           "\\s*,\\s*");
+       String userID = null;
+@@ -219,8 +261,13 @@ public class ProxyFilter implements Filter {
+         return;
+       }
+       userID = userID.substring(3);
+-
++      
+       String servletPath = rqst.getServletPath();
++      if (unitTest) { 
++        servletPath = rqst.getParameter("TestSevletPathInfo");
++        LOG.info("this is for unit test purpose only");
++      }
++      
+       if (HFTP_PATTERN.matcher(servletPath).matches()) {
+         // request is an HSFTP request
+         if (FILEPATH_PATTERN.matcher(servletPath).matches()) {
+@@ -255,14 +302,18 @@ public class ProxyFilter implements Filter {
+         rsp.sendError(HttpServletResponse.SC_FORBIDDEN, "Unauthorized access");
+         return;
+       }
++      
+       // request is authorized, set ugi for servlets
+       UserGroupInformation ugi = UserGroupInformation.createRemoteUser(userID);
+       rqst.setAttribute("authorized.ugi", ugi);
+-    } else { // http request, set ugi for servlets, only for testing purposes
++      rqst.setAttribute("org.apache.hadoop.hdfsproxy.authorized.userID", userID);
++    } else if(rqst.getScheme().equalsIgnoreCase("http")) { // http request, set ugi for servlets, only for testing purposes
+       String ugi = rqst.getParameter("ugi");
+-      rqst.setAttribute("authorized.ugi", UserGroupInformation.createRemoteUser(ugi));
++      if (ugi != null) {
++        rqst.setAttribute("authorized.ugi", UserGroupInformation.createRemoteUser(ugi));
++        rqst.setAttribute("org.apache.hadoop.hdfsproxy.authorized.userID", ugi.split(",")[0]);
++      }
+     }
+-
+     chain.doFilter(request, response);
+   }
+ 
+@@ -297,7 +348,7 @@ public class ProxyFilter implements Filter {
+       LOG.info("Can't get file path from HTTPS request; user is " + userID);
+       return false;
+     }
+-
++    
+     Path userPath = new Path(pathInfo);
+     while (userPath != null) {
+       if (LOG.isDebugEnabled()) {
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyForwardServlet.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyForwardServlet.java
+new file mode 100644
+index 0000000..b9de695
+--- /dev/null
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyForwardServlet.java
+@@ -0,0 +1,107 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfsproxy;
++
++import java.io.IOException;
++
++import javax.servlet.RequestDispatcher;
++import javax.servlet.ServletContext;
++import javax.servlet.ServletException;
++import javax.servlet.http.HttpServlet;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++
++/**
++ * 
++ *
++ */
++public class ProxyForwardServlet extends HttpServlet {
++  /**
++   * 
++   */
++  private static final long serialVersionUID = 1L;
++  private static Configuration configuration = null;
++  public static final Log LOG = LogFactory.getLog(ProxyForwardServlet.class);
++
++  /** {@inheritDoc} */
++  @Override
++  public void init() throws ServletException {
++    ServletContext context = getServletContext();
++    configuration = (Configuration) context
++        .getAttribute("org.apache.hadoop.hdfsproxy.conf");
++  }
++
++  /** {@inheritDoc} */
++  @Override
++  public void doGet(HttpServletRequest request, HttpServletResponse response)
++      throws IOException, ServletException {
++    String hostname = request.getServerName();
++
++    String version = configuration.get(hostname);
++    if (version == null) {
++      // extract from hostname directly
++      String[] strs = hostname.split("[-\\.]");
++      version = "/" + strs[0];
++    }
++
++    ServletContext curContext = getServletContext();
++    ServletContext dstContext = curContext.getContext(version);
++
++    // avoid infinite forwarding.
++    if (dstContext == null
++        || "HDFS Proxy Forward".equals(dstContext.getServletContextName())) {
++      LOG.error("Context (" + version
++          + ".war) non-exist or restricted from access");
++      response.sendError(HttpServletResponse.SC_NOT_FOUND);
++      return;
++    }
++    LOG.debug("Request to " + hostname + " is forwarded to version " + version);
++    forwardRequest(request, response, dstContext, request.getServletPath());
++
++  }
++
++  /** {@inheritDoc} */
++  public void forwardRequest(HttpServletRequest request,
++      HttpServletResponse response, ServletContext context, String pathInfo)
++      throws IOException, ServletException {
++    String path = buildForwardPath(request, pathInfo);
++    RequestDispatcher dispatcher = context.getRequestDispatcher(path);
++    if (dispatcher == null) {
++      LOG.info("There was no such dispatcher: " + path);
++      response.sendError(HttpServletResponse.SC_NO_CONTENT);
++      return;
++    }
++    dispatcher.forward(request, response);
++  }
++
++  /** {@inheritDoc} */
++  protected String buildForwardPath(HttpServletRequest request, String pathInfo) {
++    String path = pathInfo;
++    if (request.getPathInfo() != null) {
++      path += request.getPathInfo();
++    }
++    if (request.getQueryString() != null) {
++      path += "?" + request.getQueryString();
++    }
++    return path;
++  }
++}
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyListPathsServlet.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyListPathsServlet.java
+index 9cdd478..51b2ba1 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyListPathsServlet.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyListPathsServlet.java
+@@ -17,6 +17,8 @@
+  */
+ package org.apache.hadoop.hdfsproxy;
+ 
++import javax.servlet.ServletContext;
++import javax.servlet.ServletException;
+ import javax.servlet.http.HttpServletRequest;
+ 
+ import org.apache.hadoop.conf.Configuration;
+@@ -32,6 +34,8 @@ public class ProxyListPathsServlet extends ListPathsServlet {
+   @Override
+   protected UserGroupInformation getUGI(HttpServletRequest request,
+                                         Configuration conf) {
+-    return (UserGroupInformation) request.getAttribute("authorized.ugi");
++    String userID = (String) request
++        .getAttribute("org.apache.hadoop.hdfsproxy.authorized.userID");
++    return ProxyUtil.getProxyUGIFor(userID);
+   }
+ }
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyStreamFile.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyStreamFile.java
+index efe2c15..0522979 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyStreamFile.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyStreamFile.java
+@@ -38,6 +38,8 @@ public class ProxyStreamFile extends StreamFile {
+   @Override
+   protected UserGroupInformation getUGI(HttpServletRequest request,
+                                         Configuration conf) {
+-    return (UserGroupInformation) request.getAttribute("authorized.ugi");
++    String userID = (String) request
++        .getAttribute("org.apache.hadoop.hdfsproxy.authorized.userID");
++    return ProxyUtil.getProxyUGIFor(userID);
+   }
+ }
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyUtil.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyUtil.java
+new file mode 100644
+index 0000000..42f9b42
+--- /dev/null
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyUtil.java
+@@ -0,0 +1,353 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfsproxy;
++
++import java.io.FileInputStream;
++import java.io.IOException;
++import java.io.InputStream;
++import java.net.HttpURLConnection;
++import java.net.InetSocketAddress;
++import java.net.URI;
++import java.net.URISyntaxException;
++import java.net.URL;
++import java.security.KeyStore;
++import java.security.cert.X509Certificate;
++import java.util.Date;
++import java.util.Set;
++
++import javax.net.ssl.HostnameVerifier;
++import javax.net.ssl.HttpsURLConnection;
++import javax.net.ssl.KeyManager;
++import javax.net.ssl.KeyManagerFactory;
++import javax.net.ssl.SSLContext;
++import javax.net.ssl.SSLSession;
++import javax.net.ssl.TrustManager;
++import javax.net.ssl.TrustManagerFactory;
++import javax.net.ssl.X509TrustManager;
++import javax.servlet.ServletException;
++import javax.servlet.http.HttpServletResponse;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FSDataInputStream;
++import org.apache.hadoop.fs.FSInputStream;
++import org.apache.hadoop.io.IOUtils;
++import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.util.HostsFileReader;
++
++/**
++ * Proxy Utility .
++ */
++public class ProxyUtil {
++  public static final Log LOG = LogFactory.getLog(ProxyUtil.class);
++  private static final long MM_SECONDS_PER_DAY = 1000 * 60 * 60 * 24;
++  private static final int CERT_EXPIRATION_WARNING_THRESHOLD = 30; // 30 days
++
++  // warning
++
++  private static enum UtilityOption {
++    RELOAD("-reloadPermFiles"), GET("-get"), CHECKCERTS(
++        "-checkcerts");
++
++    private String name = null;
++
++    private UtilityOption(String arg) {
++      this.name = arg;
++    }
++
++    public String getName() {
++      return name;
++    }
++  }
++
++  /**
++   * Dummy hostname verifier that is used to bypass hostname checking
++   */
++  private static class DummyHostnameVerifier implements HostnameVerifier {
++    public boolean verify(String hostname, SSLSession session) {
++      return true;
++    }
++  }
++
++  /**
++   * Dummy trustmanager that is used to bypass server certificate checking
++   */
++  private static class DummyTrustManager implements X509TrustManager {
++    public void checkClientTrusted(X509Certificate[] chain, String authType) {
++    }
++
++    public void checkServerTrusted(X509Certificate[] chain, String authType) {
++    }
++
++    public X509Certificate[] getAcceptedIssuers() {
++      return null;
++    }
++  }
++
++  private static HttpsURLConnection openConnection(String hostname, int port,
++      String path) throws IOException {
++    try {
++      final URL url = new URI("https", null, hostname, port, path, null, null)
++          .toURL();
++      HttpsURLConnection conn = (HttpsURLConnection) url.openConnection();
++      // bypass hostname verification
++      conn.setHostnameVerifier(new DummyHostnameVerifier());
++      conn.setRequestMethod("GET");
++      return conn;
++    } catch (URISyntaxException e) {
++      throw (IOException) new IOException().initCause(e);
++    }
++  }
++
++  private static void setupSslProps(Configuration conf) throws IOException {
++    FileInputStream fis = null;
++    try {
++      SSLContext sc = SSLContext.getInstance("SSL");
++      KeyManager[] kms = null;
++      TrustManager[] tms = null;
++      if (conf.get("ssl.client.keystore.location") != null) {
++        // initialize default key manager with keystore file and pass
++        KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
++        KeyStore ks = KeyStore.getInstance(conf.get("ssl.client.keystore.type",
++            "JKS"));
++        char[] ksPass = conf.get("ssl.client.keystore.password", "changeit")
++            .toCharArray();
++        fis = new FileInputStream(conf.get("ssl.client.keystore.location",
++            "keystore.jks"));
++        ks.load(fis, ksPass);
++        kmf.init(ks, conf.get("ssl.client.keystore.keypassword", "changeit")
++            .toCharArray());
++        kms = kmf.getKeyManagers();
++        fis.close();
++        fis = null;
++      }
++      // initialize default trust manager with keystore file and pass
++      if (conf.getBoolean("ssl.client.do.not.authenticate.server", false)) {
++        // by pass trustmanager validation
++        tms = new DummyTrustManager[] { new DummyTrustManager() };
++      } else {
++        TrustManagerFactory tmf = TrustManagerFactory.getInstance("PKIX");
++        KeyStore ts = KeyStore.getInstance(conf.get(
++            "ssl.client.truststore.type", "JKS"));
++        char[] tsPass = conf.get("ssl.client.truststore.password", "changeit")
++            .toCharArray();
++        fis = new FileInputStream(conf.get("ssl.client.truststore.location",
++            "truststore.jks"));
++        ts.load(fis, tsPass);
++        tmf.init(ts);
++        tms = tmf.getTrustManagers();
++      }
++      sc.init(kms, tms, new java.security.SecureRandom());
++      HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
++    } catch (Exception e) {
++      throw new IOException("Could not initialize SSLContext", e);
++    } finally {
++      if (fis != null) {
++        fis.close();
++      }
++    }
++  }
++
++  static InetSocketAddress getSslAddr(Configuration conf) throws IOException {
++    String addr = conf.get("hdfsproxy.https.address");
++    if (addr == null)
++      throw new IOException("HdfsProxy address is not specified");
++    return NetUtils.createSocketAddr(addr);
++  }
++
++  static boolean sendCommand(Configuration conf, String path)
++      throws IOException {
++    setupSslProps(conf);
++    int sslPort = getSslAddr(conf).getPort();
++    int err = 0;
++    StringBuilder b = new StringBuilder();
++
++    HostsFileReader hostsReader = new HostsFileReader(conf.get(
++        "hdfsproxy.hosts", "hdfsproxy-hosts"), "");
++    Set<String> hostsList = hostsReader.getHosts();
++    for (String hostname : hostsList) {
++      HttpsURLConnection connection = null;
++      try {
++        connection = openConnection(hostname, sslPort, path);
++        connection.connect();
++        if (LOG.isDebugEnabled()) {
++          StringBuffer sb = new StringBuffer();
++          X509Certificate[] clientCerts = (X509Certificate[]) connection
++              .getLocalCertificates();
++          if (clientCerts != null) {
++            for (X509Certificate cert : clientCerts)
++              sb.append("\n Client certificate Subject Name is "
++                  + cert.getSubjectX500Principal().getName());
++          } else {
++            sb.append("\n No client certificates were found");
++          }
++          X509Certificate[] serverCerts = (X509Certificate[]) connection
++              .getServerCertificates();
++          if (serverCerts != null) {
++            for (X509Certificate cert : serverCerts)
++              sb.append("\n Server certificate Subject Name is "
++                  + cert.getSubjectX500Principal().getName());
++          } else {
++            sb.append("\n No server certificates were found");
++          }
++          LOG.debug(sb.toString());
++        }
++        if (connection.getResponseCode() != HttpServletResponse.SC_OK) {
++          b.append("\n\t" + hostname + ": " + connection.getResponseCode()
++              + " " + connection.getResponseMessage());
++          err++;
++        }
++      } catch (IOException e) {
++        b.append("\n\t" + hostname + ": " + e.getLocalizedMessage());
++        if (LOG.isDebugEnabled())
++          LOG.debug("Exception happend for host " + hostname, e);
++        err++;
++      } finally {
++        if (connection != null)
++          connection.disconnect();
++      }
++    }
++    if (err > 0) {
++      System.err.print("Command failed on the following " + err + " host"
++          + (err == 1 ? ":" : "s:") + b.toString() + "\n");
++      return false;
++    }
++    return true;
++  }
++
++  static FSDataInputStream open(Configuration conf, String hostname, int port,
++      String path) throws IOException {
++    setupSslProps(conf);
++    HttpURLConnection connection = null;
++    connection = openConnection(hostname, port, path);
++    connection.connect();
++    final InputStream in = connection.getInputStream();
++    return new FSDataInputStream(new FSInputStream() {
++      public int read() throws IOException {
++        return in.read();
++      }
++
++      public int read(byte[] b, int off, int len) throws IOException {
++        return in.read(b, off, len);
++      }
++
++      public void close() throws IOException {
++        in.close();
++      }
++
++      public void seek(long pos) throws IOException {
++        throw new IOException("Can't seek!");
++      }
++
++      public long getPos() throws IOException {
++        throw new IOException("Position unknown!");
++      }
++
++      public boolean seekToNewSource(long targetPos) throws IOException {
++        return false;
++      }
++    });
++  }
++
++  static void checkServerCertsExpirationDays(Configuration conf,
++      String hostname, int port) throws IOException {
++    setupSslProps(conf);
++    HttpsURLConnection connection = null;
++    connection = openConnection(hostname, port, null);
++    connection.connect();
++    X509Certificate[] serverCerts = (X509Certificate[]) connection
++        .getServerCertificates();
++    Date curDate = new Date();
++    long curTime = curDate.getTime();
++    if (serverCerts != null) {
++      for (X509Certificate cert : serverCerts) {
++        StringBuffer sb = new StringBuffer();
++        sb.append("\n Server certificate Subject Name: "
++            + cert.getSubjectX500Principal().getName());
++        Date expDate = cert.getNotAfter();
++        long expTime = expDate.getTime();
++        int dayOffSet = (int) ((expTime - curTime) / MM_SECONDS_PER_DAY);
++        sb.append(" have " + dayOffSet + " days to expire");
++        if (dayOffSet < CERT_EXPIRATION_WARNING_THRESHOLD)
++          LOG.warn(sb.toString());
++        else
++          LOG.info(sb.toString());
++      }
++    } else {
++      LOG.info("\n No Server certs was found");
++    }
++
++    if (connection != null) {
++      connection.disconnect();
++    }
++  }
++
++  public static UserGroupInformation getProxyUGIFor(String userID) {
++    LOG.debug("Proxying as " + userID);
++    try {
++      return UserGroupInformation.createProxyUser(userID, UserGroupInformation.getLoginUser());
++    } catch (IOException e) {
++      throw new RuntimeException("Unable get current logged in user", e);
++    }
++  }
++
++  public static String getNamenode(Configuration conf) throws ServletException {
++    String nn = conf.get("fs.default.name");
++     if (nn == null) {
++       throw new ServletException(
++           "Proxy source cluster name node address not specified");
++     }
++     return nn;
++  }
++
++  public static void main(String[] args) throws Exception {
++    if (args.length < 1
++        || (!UtilityOption.RELOAD.getName().equalsIgnoreCase(args[0])
++            && !UtilityOption.GET.getName().equalsIgnoreCase(args[0]) && !UtilityOption.CHECKCERTS
++            .getName().equalsIgnoreCase(args[0]))
++        || (UtilityOption.GET.getName().equalsIgnoreCase(args[0]) && args.length != 4)
++        || (UtilityOption.CHECKCERTS.getName().equalsIgnoreCase(args[0]) && args.length != 3)) {
++      System.err.println("Usage: ProxyUtil [" + UtilityOption.RELOAD.getName()
++          + "] | ["
++          + UtilityOption.GET.getName() + " <hostname> <#port> <path> ] | ["
++          + UtilityOption.CHECKCERTS.getName() + " <hostname> <#port> ]");
++      System.exit(0);
++    }
++    Configuration conf = new Configuration(false);
++    conf.addResource("ssl-client.xml");
++    conf.addResource("hdfsproxy-default.xml");
++
++    if (UtilityOption.RELOAD.getName().equalsIgnoreCase(args[0])) {
++      // reload user-certs.xml and user-permissions.xml files
++      sendCommand(conf, "/reloadPermFiles");
++    } else if (UtilityOption.CHECKCERTS.getName().equalsIgnoreCase(args[0])) {
++      checkServerCertsExpirationDays(conf, args[1], Integer.parseInt(args[2]));
++    } else {
++      String hostname = args[1];
++      int port = Integer.parseInt(args[2]);
++      String path = args[3];
++      InputStream in = open(conf, hostname, port, path);
++      IOUtils.copyBytes(in, System.out, conf, false);
++      in.close();
++    }
++  }
++
++}
+diff --git a/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/DummyLdapContext.java b/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/DummyLdapContext.java
+new file mode 100644
+index 0000000..8e5848a
+--- /dev/null
++++ b/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/DummyLdapContext.java
+@@ -0,0 +1,128 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfsproxy;
++
++import java.util.ArrayList;
++import java.util.Hashtable;
++
++import javax.naming.NamingEnumeration;
++import javax.naming.NamingException;
++import javax.naming.directory.Attribute;
++import javax.naming.directory.Attributes;
++import javax.naming.directory.BasicAttribute;
++import javax.naming.directory.BasicAttributes;
++import javax.naming.directory.SearchResult;
++import javax.naming.ldap.Control;
++import javax.naming.ldap.InitialLdapContext;
++
++class DummyLdapContext extends InitialLdapContext {
++  class ResultEnum<T> implements NamingEnumeration<T> {
++    private ArrayList<T> rl;
++
++    public ResultEnum() {
++      rl = new ArrayList<T>();
++    }
++
++    public ResultEnum(ArrayList<T> al) {
++      rl = al;
++    }
++
++    public boolean hasMoreElements() {
++      return !rl.isEmpty();
++    }
++
++    public T nextElement() {
++      T t = rl.get(0);
++      rl.remove(0);
++      return t;
++    }
++
++    public boolean hasMore() throws NamingException {
++      return !rl.isEmpty();
++    }
++
++    public T next() throws NamingException {
++      T t = rl.get(0);
++      rl.remove(0);
++      return t;
++    }
++
++    public void close() throws NamingException {
++    }
++  }
++
++  public DummyLdapContext() throws NamingException {
++  }
++
++  public DummyLdapContext(Hashtable<?, ?> environment, Control[] connCtls)
++      throws NamingException {
++  }
++
++  public NamingEnumeration<SearchResult> search(String name,
++      Attributes matchingAttributes, String[] attributesToReturn)
++      throws NamingException {
++    System.out.println("Searching Dummy LDAP Server Results:");
++    if (!"ou=proxyroles,dc=mycompany,dc=com".equalsIgnoreCase(name)) {
++      System.out.println("baseName mismatch");
++      return new ResultEnum<SearchResult>();
++    }
++    if (!"cn=127.0.0.1".equals((String) matchingAttributes.get("uniqueMember")
++        .get())) {
++      System.out.println("Ip address mismatch");
++      return new ResultEnum<SearchResult>();
++    }
++    BasicAttributes attrs = new BasicAttributes();
++    BasicAttribute uidAttr = new BasicAttribute("uid", "testuser");
++    attrs.put(uidAttr);
++    BasicAttribute groupAttr = new BasicAttribute("userClass", "testgroup");
++    attrs.put(groupAttr);
++    BasicAttribute locAttr = new BasicAttribute("documentLocation", "/testdir");
++    attrs.put(locAttr);
++    SearchResult sr = new SearchResult(null, null, attrs);
++    ArrayList<SearchResult> al = new ArrayList<SearchResult>();
++    al.add(sr);
++    NamingEnumeration<SearchResult> ne = new ResultEnum<SearchResult>(al);
++    return ne;
++  }
++
++  @SuppressWarnings("unchecked")
++  public static void main(String[] args) throws Exception {
++    DummyLdapContext dlc = new DummyLdapContext();
++    String baseName = "ou=proxyroles,dc=mycompany,dc=com";
++    Attributes matchAttrs = new BasicAttributes(true);
++    String[] attrIDs = { "uid", "documentLocation" };
++    NamingEnumeration<SearchResult> results = dlc.search(baseName, matchAttrs,
++        attrIDs);
++    if (results.hasMore()) {
++      SearchResult sr = results.next();
++      Attributes attrs = sr.getAttributes();
++      for (NamingEnumeration ne = attrs.getAll(); ne.hasMore();) {
++        Attribute attr = (Attribute) ne.next();
++        if ("uid".equalsIgnoreCase(attr.getID())) {
++          System.out.println("User ID = " + attr.get());
++        } else if ("documentLocation".equalsIgnoreCase(attr.getID())) {
++          System.out.println("Document Location = ");
++          for (NamingEnumeration e = attr.getAll(); e.hasMore();) {
++            System.out.println(e.next());
++          }
++        }
++      }
++    }
++  }
++}
+diff --git a/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/FindFreePort.java b/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/FindFreePort.java
+new file mode 100644
+index 0000000..b4dde89
+--- /dev/null
++++ b/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/FindFreePort.java
+@@ -0,0 +1,87 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfsproxy;
++
++import java.net.ServerSocket;
++import java.io.IOException;
++import java.net.BindException;
++import java.util.Random;
++
++public class FindFreePort {
++  private static final int MIN_AVAILABLE_PORT = 10000;
++  private static final int MAX_AVAILABLE_PORT = 65535;
++  private static Random random = new Random();
++  /**
++   * 
++   * @param num <= 0, find a single free port
++   * @return free port next to port (>port)
++   * @throws IOException
++   */
++  public static int findFreePort(int port) throws IOException {
++    ServerSocket server;
++    if (port < 0) {
++      server =  new ServerSocket(0);      
++    } else {
++      int freePort = port+1;
++      while (true) {
++        try {
++          server =  new ServerSocket(freePort);
++          break;
++        } catch (IOException e) {
++          if (e instanceof BindException) {
++            if (freePort >= MAX_AVAILABLE_PORT || 
++                freePort < MIN_AVAILABLE_PORT) {
++              throw e;
++            }
++          } else {
++            throw e;
++          }
++          freePort += 1;
++        }
++      }
++    }
++    int fport = server.getLocalPort();
++    server.close();
++    return fport;    
++  }
++ /**
++  * 
++  * @return
++  * @throws IOException
++  */
++  public static int findFreePortRandom() throws IOException {
++    return findFreePort(MIN_AVAILABLE_PORT + random.nextInt(MAX_AVAILABLE_PORT - MIN_AVAILABLE_PORT + 1));
++  }
++   
++
++  public static void main(String[] args) throws Exception {
++    if(args.length < 1) {       
++      System.err.println("Usage: FindFreePort < -random / <#port> >");        
++      System.exit(0);      
++    }
++    int j = 0;
++    String cmd = args[j++];
++    if ("-random".equals(cmd)) {
++      System.out.println(findFreePortRandom());
++    } else {
++      System.out.println(findFreePort(Integer.parseInt(cmd)));
++    }   
++  }
++        
++}
+diff --git a/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/SimpleServlet.java b/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/SimpleServlet.java
+new file mode 100644
+index 0000000..e0b8a03
+--- /dev/null
++++ b/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/SimpleServlet.java
+@@ -0,0 +1,51 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfsproxy;
++
++import javax.servlet.http.HttpServlet;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++
++import java.io.PrintWriter;
++import java.io.IOException;
++
++
++/**
++ * simple servlet for forward testing purpose
++ */
++
++public class SimpleServlet extends HttpServlet {
++ 
++  /**
++   * 
++   */
++  private static final long serialVersionUID = 1L;
++
++  public void doGet(HttpServletRequest request, HttpServletResponse response)
++    throws IOException {
++	  response.setContentType("text/html");
++	  PrintWriter out = response.getWriter();	  
++	  out.print("<html><head/><body>");
++    out.print("A GET request");
++    out.print("</body></html>");
++	  out.close();
++	  return;
++  }
++
++}
+diff --git a/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/TestHdfsProxy.java b/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/TestHdfsProxy.java
+index 1bf1769..d2b5c05 100644
+--- a/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/TestHdfsProxy.java
++++ b/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/TestHdfsProxy.java
+@@ -32,6 +32,7 @@ import org.apache.log4j.Level;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.FSDataInputStream;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.Path;
+@@ -39,8 +40,6 @@ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.hdfs.server.datanode.DataNode;
+ import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+ import org.apache.hadoop.net.NetUtils;
+-import org.apache.hadoop.tools.DistCp;
+-import org.apache.hadoop.util.ToolRunner;
+ 
+ /**
+  * A JUnit test for HdfsProxy
+@@ -51,7 +50,6 @@ public class TestHdfsProxy extends TestCase {
+         .getLogger().setLevel(Level.OFF);
+     ((Log4JLogger) DataNode.LOG).getLogger().setLevel(Level.OFF);
+     ((Log4JLogger) FSNamesystem.LOG).getLogger().setLevel(Level.OFF);
+-    ((Log4JLogger) DistCp.LOG).getLogger().setLevel(Level.ALL);
+   }
+ 
+   static final URI LOCAL_FS = URI.create("file:///");
+@@ -206,10 +204,15 @@ public class TestHdfsProxy extends TestCase {
+     try {
+ 
+       final Configuration dfsConf = new Configuration();
++      dfsConf.set("hadoop.proxyuser." + System.getProperty("user.name") +
++          ".groups", "users");
++      dfsConf.set("hadoop.proxyuser.users.hosts", "127.0.0.1,localhost");
++      dfsConf.set("hadoop.proxyuser." + System.getProperty("user.name") +
++          ".hosts", "127.0.0.1,localhost");
++      dfsConf.set("hadoop.security.authentication", "simple");
+       cluster = new MiniDFSCluster(dfsConf, 2, true, null);
+       cluster.waitActive();
+ 
+-      final DistCp distcp = new DistCp(dfsConf);
+       final FileSystem localfs = FileSystem.get(LOCAL_FS, dfsConf);
+       final FileSystem hdfs = cluster.getFileSystem();
+       final Configuration proxyConf = new Configuration(false);
+@@ -219,12 +222,11 @@ public class TestHdfsProxy extends TestCase {
+       final String namenode = hdfs.getUri().toString();
+       if (namenode.startsWith("hdfs://")) {
+         MyFile[] files = createFiles(LOCAL_FS, TEST_ROOT_DIR + "/srcdat");
+-        ToolRunner.run(distcp, new String[] { "-log", namenode + "/logs",
+-            "file:///" + TEST_ROOT_DIR + "/srcdat", namenode + "/destdat" });
++        hdfs.copyFromLocalFile
++	    (new Path("file:///" + TEST_ROOT_DIR + "/srcdat"),
++             new Path(namenode + "/destdat" ));
+         assertTrue("Source and destination directories do not match.",
+             checkFiles(hdfs, "/destdat", files));
+-        assertTrue("Log directory does not exist.", hdfs.exists(new Path(
+-            namenode + "/logs")));
+ 
+         proxyConf.set("proxy.http.test.listener.addr", "localhost:0");
+         proxy = new HdfsProxy(proxyConf);
+@@ -232,15 +234,18 @@ public class TestHdfsProxy extends TestCase {
+         InetSocketAddress proxyAddr = NetUtils.createSocketAddr("localhost:0");
+         final String realProxyAddr = proxyAddr.getHostName() + ":"
+             + proxy.getPort();
+-
+-        ToolRunner.run(distcp, new String[] {
+-            "hftp://" + realProxyAddr + "/destdat", namenode + "/copied1" });
++        final Path proxyUrl = new Path("hftp://" + realProxyAddr);
++	final FileSystem hftp = proxyUrl.getFileSystem(dfsConf);
++        FileUtil.copy(hftp, new Path(proxyUrl, "/destdat"),
++                      hdfs, new Path(namenode + "/copied1"),
++                      false, true, proxyConf);
++        
+         assertTrue("Source and copied directories do not match.", checkFiles(
+             hdfs, "/copied1", files));
+ 
+-        ToolRunner.run(distcp, new String[] {
+-            "hftp://" + realProxyAddr + "/destdat",
+-            "file:///" + TEST_ROOT_DIR + "/copied2" });
++        FileUtil.copy(hftp, new Path(proxyUrl, "/destdat"),
++                      localfs, new Path(TEST_ROOT_DIR + "/copied2"),
++                      false, true, proxyConf);
+         assertTrue("Source and copied directories do not match.", checkFiles(
+             localfs, TEST_ROOT_DIR + "/copied2", files));
+ 
+diff --git a/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/TestProxyUtil.java b/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/TestProxyUtil.java
+new file mode 100644
+index 0000000..07b2627
+--- /dev/null
++++ b/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/TestProxyUtil.java
+@@ -0,0 +1,49 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfsproxy;
++
++import junit.framework.TestCase;
++
++import org.apache.hadoop.conf.Configuration;
++
++/** Unit tests for ProxyUtil */
++public class TestProxyUtil extends TestCase {
++  
++  private static String TEST_PROXY_CONF_DIR = System.getProperty("test.proxy.conf.dir", "./conf");
++  private static String TEST_PROXY_HTTPS_PORT = System.getProperty("test.proxy.https.port", "8443");
++
++  public void testSendCommand() throws Exception {
++      
++    Configuration conf = new Configuration(false);  
++    conf.addResource("ssl-client.xml");
++    conf.addResource("hdfsproxy-default.xml");
++    String address = "localhost:" + TEST_PROXY_HTTPS_PORT;
++    conf.set("hdfsproxy.https.address", address);
++    String hostFname = TEST_PROXY_CONF_DIR + "/hdfsproxy-hosts";
++    conf.set("hdfsproxy.hosts", hostFname);    
++    
++    assertTrue(ProxyUtil.sendCommand(conf, "/test/reloadPermFiles"));
++    assertTrue(ProxyUtil.sendCommand(conf, "/test/clearUgiCache"));    
++    
++    conf.set("hdfsproxy.https.address", "localhost:0");
++    assertFalse(ProxyUtil.sendCommand(conf, "/test/reloadPermFiles"));
++    assertFalse(ProxyUtil.sendCommand(conf, "/test/reloadPermFiles"));
++  }
++ 
++}
+-- 
+1.7.0.4
+

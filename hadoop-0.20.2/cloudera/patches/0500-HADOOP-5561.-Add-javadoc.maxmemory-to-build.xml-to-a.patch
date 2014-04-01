@@ -1,0 +1,61 @@
+From 74cc8e6e9836a9daab24553b41efca110f50411a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 25 Feb 2010 10:29:08 -0800
+Subject: [PATCH 0500/1179] HADOOP-5561. Add javadoc.maxmemory to build.xml to allow larger memory.
+
+Author: Jakob Homan
+Ref: YDH
+---
+ build.xml |    8 ++++++--
+ 1 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index a6687e5..3f263f5 100644
+--- a/build.xml
++++ b/build.xml
+@@ -133,6 +133,7 @@
+   <property name="javadoc.link.java"
+ 	    value="http://java.sun.com/javase/6/docs/api/"/>
+   <property name="javadoc.packages" value="org.apache.hadoop.*"/>
++  <property name="javadoc.maxmemory" value="512m" />
+ 
+   <property name="dist.dir" value="${build.dir}/${final.name}"/>
+ 
+@@ -1136,6 +1137,7 @@
+       windowtitle="${Name} ${version} API"
+       doctitle="${Name} ${version} Developer API"
+       bottom="Copyright &amp;copy; ${year} The Apache Software Foundation"
++      maxmemory="${javadoc.maxmemory}"
+       >
+         <packageset dir="${core.src.dir}"/>
+         <packageset dir="${mapred.src.dir}"/>
+@@ -1189,6 +1191,7 @@
+       windowtitle="${Name} ${version} API"
+       doctitle="${Name} ${version} API"
+       bottom="Copyright &amp;copy; ${year} The Apache Software Foundation"
++      maxmemory="${javadoc.maxmemory}"
+       >
+         <packageset dir="${core.src.dir}"/>
+         <packageset dir="${mapred.src.dir}"/>
+@@ -1222,7 +1225,7 @@
+   </target>	
+ 
+   <target name="api-xml" depends="ivy-retrieve-jdiff,javadoc,write-null">
+-    <javadoc>
++    <javadoc maxmemory="${javadoc.maxmemory}">
+        <doclet name="jdiff.JDiff"
+                path="${jdiff.jar}:${xerces.jar}">
+          <param name="-apidir" value="${jdiff.xml.dir}"/>
+@@ -1249,7 +1252,8 @@
+     <mkdir dir="${jdiff.build.dir}"/>
+     <javadoc sourcepath="src/core,src/hdfs,src,mapred,src/tools"
+              destdir="${jdiff.build.dir}"
+-             sourceFiles="${jdiff.home}/Null.java">
++	     sourceFiles="${jdiff.home}/Null.java"
++	     maxmemory="${javadoc.maxmemory}">
+        <doclet name="jdiff.JDiff"
+                path="${jdiff.jar}:${xerces.jar}">
+          <param name="-oldapi" value="hadoop ${jdiff.stable}"/>
+-- 
+1.7.0.4
+

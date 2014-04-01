@@ -1,0 +1,36 @@
+From 51804fd45d3a527a130a373c591a17c185102a0c Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:41:40 -0800
+Subject: [PATCH 0194/1179] Revert "HDFS-127: DFSClient block read failures cause open DFSInputStream to become unusable"
+
+Description: This is being reverted as it causes infinite retries when there are no valid replicas.
+Reason: bugfix
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java |    2 --
+ 1 files changed, 0 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 1b3f37f..502610b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -1640,7 +1640,6 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       // Connect to best DataNode for desired Block, with potential offset
+       //
+       DatanodeInfo chosenNode = null;
+-      failures = 0;
+       while (s == null) {
+         DNAddrPair retval = chooseDataNode(targetBlock);
+         chosenNode = retval.info;
+@@ -1843,7 +1842,6 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       Socket dn = null;
+       int numAttempts = block.getLocations().length;
+       IOException ioe = null;
+-      failures = 0;
+       
+       while (dn == null && numAttempts-- > 0 ) {
+         DNAddrPair retval = chooseDataNode(block);
+-- 
+1.7.0.4
+

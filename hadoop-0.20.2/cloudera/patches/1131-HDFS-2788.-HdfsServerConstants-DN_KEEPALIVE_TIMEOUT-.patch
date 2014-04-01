@@ -1,0 +1,27 @@
+From 390a845823cf6fb21c4a8112d0c47b8f9a1379fd Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Wed, 7 Mar 2012 17:21:29 -0800
+Subject: [PATCH 1131/1179] HDFS-2788. HdfsServerConstants#DN_KEEPALIVE_TIMEOUT is dead code.
+
+Reason: Improvement
+Author: Eli Collins
+Ref: CDH-3777
+---
+ .../hadoop/hdfs/server/common/HdfsConstants.java   |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/common/HdfsConstants.java b/src/hdfs/org/apache/hadoop/hdfs/server/common/HdfsConstants.java
+index 20e4ce5..8705182 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/common/HdfsConstants.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/common/HdfsConstants.java
+@@ -51,7 +51,6 @@ public interface HdfsConstants {
+   public static int READ_TIMEOUT_EXTENSION = 3 * 1000;
+   public static int WRITE_TIMEOUT = 8 * 60 * 1000;
+   public static int WRITE_TIMEOUT_EXTENSION = 5 * 1000; //for write pipeline
+-  public static int DN_KEEPALIVE_TIMEOUT = 5 * 1000;
+ 
+ 
+   // The lease holder for recovery initiated by the NameNode
+-- 
+1.7.0.4
+

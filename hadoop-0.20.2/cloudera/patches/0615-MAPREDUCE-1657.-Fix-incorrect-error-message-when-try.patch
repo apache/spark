@@ -1,0 +1,164 @@
+From 0bb2bf837469bdafa5df1b14ed1fb2991070c9d0 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 19 Apr 2010 13:15:50 +0530
+Subject: [PATCH 0615/1179] MAPREDUCE-1657. Fix incorrect error message when trying to view already-deleted logs of a task.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12442135/MR1657.20S.1.patch
+Author: Ravi Gummadi
+Ref: CDH-648
+---
+ .../org/apache/hadoop/mapred/TaskLogServlet.java   |   52 ++++++++++++++------
+ .../hadoop/mapred/TestWebUIAuthorization.java      |   26 ++++++++--
+ 2 files changed, 56 insertions(+), 22 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskLogServlet.java b/src/mapred/org/apache/hadoop/mapred/TaskLogServlet.java
+index f3f8aff..f69213d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskLogServlet.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskLogServlet.java
+@@ -31,7 +31,6 @@ import javax.servlet.http.HttpServletResponse;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.mapreduce.JobACL;
+-import org.apache.hadoop.mapreduce.JobContext;
+ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.AccessControlList;
+@@ -129,7 +128,8 @@ public class TaskLogServlet extends HttpServlet {
+         constructJobACLs(conf).get(JobACL.VIEW_JOB);
+ 
+     String jobOwner = conf.get("user.name");
+-    UserGroupInformation callerUGI = UserGroupInformation.createRemoteUser(user);
++    UserGroupInformation callerUGI =
++        UserGroupInformation.createRemoteUser(user);
+ 
+     tracker.getJobACLsManager().checkAccess(jobId, callerUGI, JobACL.VIEW_JOB,
+         jobOwner, jobViewACL);
+@@ -138,11 +138,21 @@ public class TaskLogServlet extends HttpServlet {
+   /**
+    * Builds a Configuration object by reading the xml file.
+    * This doesn't load the default resources.
++   *
++   * Returns null if job-acls.xml is not there in userlogs/$jobid/attempt-dir on
++   * local file system. This can happen when we restart the cluster with job
++   * level authorization enabled(but was disabled on earlier cluster) and
++   * viewing task logs of old jobs(i.e. jobs finished on earlier unsecure
++   * cluster).
+    */
+   static Configuration getConfFromJobACLsFile(String attemptIdStr) {
+-    Configuration conf = new Configuration(false);
+-    conf.addResource(new Path(TaskLog.getAttemptDir(attemptIdStr).toString(),
+-        TaskRunner.jobACLsFile));
++    Path jobAclsFilePath = new Path(
++        TaskLog.getAttemptDir(attemptIdStr).toString(), TaskRunner.jobACLsFile);
++    Configuration conf = null;
++    if (new File(jobAclsFilePath.toUri().getPath()).exists()) {
++      conf = new Configuration(false);
++      conf.addResource(jobAclsFilePath);
++    }
+     return conf;
+   }
+ 
+@@ -167,24 +177,34 @@ public class TaskLogServlet extends HttpServlet {
+     }
+ 
+     TaskAttemptID attemptId = TaskAttemptID.forName(attemptIdStr);
++    if (!TaskLog.getAttemptDir(attemptIdStr).exists()) {
++      response.sendError(HttpServletResponse.SC_GONE,
++          "Task log directory for task " + attemptId +
++          " does not exist. May be cleaned up by Task Tracker, if older logs.");
++      return;
++    }
+ 
+     // get user name who is accessing
+     String user = request.getRemoteUser();
+     if (user != null) {
+-      // get jobACLConf from ACLs file
+-      JobConf jobACLConf = new JobConf(getConfFromJobACLsFile(attemptIdStr));
+       ServletContext context = getServletContext();
+       TaskTracker taskTracker = (TaskTracker) context.getAttribute(
+           "task.tracker");
+-      JobID jobId = attemptId.getJobID();
++      // get jobACLConf from ACLs file
++      Configuration jobACLConf = getConfFromJobACLsFile(attemptIdStr);
++      // Ignore authorization if job-acls.xml is not found
++      if (jobACLConf != null) {
++        JobID jobId = attemptId.getJobID();
+ 
+-      try {
+-        checkAccessForTaskLogs(jobACLConf, user, jobId, taskTracker);
+-      } catch (AccessControlException e) {
+-        String errMsg = "User " + user + " failed to view tasklogs of job " +
+-            jobId + "!\n\n" + e.getMessage();
+-        response.sendError(HttpServletResponse.SC_UNAUTHORIZED, errMsg);
+-        return;
++        try {
++          checkAccessForTaskLogs(new JobConf(jobACLConf), user, jobId,
++              taskTracker);
++        } catch (AccessControlException e) {
++          String errMsg = "User " + user + " failed to view tasklogs of job " +
++              jobId + "!\n\n" + e.getMessage();
++          response.sendError(HttpServletResponse.SC_UNAUTHORIZED, errMsg);
++          return;
++        }
+       }
+     }
+ 
+diff --git a/src/test/org/apache/hadoop/mapred/TestWebUIAuthorization.java b/src/test/org/apache/hadoop/mapred/TestWebUIAuthorization.java
+index 7c64ef2..e21ffb0 100644
+--- a/src/test/org/apache/hadoop/mapred/TestWebUIAuthorization.java
++++ b/src/test/org/apache/hadoop/mapred/TestWebUIAuthorization.java
+@@ -28,13 +28,12 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ 
+ import org.apache.hadoop.fs.CommonConfigurationKeys;
+-import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.http.TestHttpServer.DummyFilterInitializer;
+ import org.apache.hadoop.mapred.JobHistory.Keys;
+ import org.apache.hadoop.mapred.JobHistory.TaskAttempt;
+ import org.apache.hadoop.mapreduce.JobContext;
+-import org.apache.hadoop.mapreduce.Job;
+ import org.apache.hadoop.examples.SleepJob;
+ import org.apache.hadoop.security.Groups;
+ import org.apache.hadoop.security.ShellBasedUnixGroupsMapping;
+@@ -47,7 +46,6 @@ import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Properties;
+-import java.util.Map.Entry;
+ 
+ public class TestWebUIAuthorization extends ClusterMapReduceTestCase {
+ 
+@@ -366,9 +364,25 @@ public class TestWebUIAuthorization extends ClusterMapReduceTestCase {
+             + attempt.toString() + "&logFile=" + urlEncodedHistoryFileName, "GET");
+ 
+         // validate access to tasklogs
+-        validateViewJob(TaskLogServlet.getTaskLogUrl("localhost",
+-            attemptsMap.get(attempt).get(Keys.HTTP_PORT),
+-            attempt.toString()), "GET");
++        String taskLogURL = TaskLogServlet.getTaskLogUrl("localhost",
++            attemptsMap.get(attempt).get(Keys.HTTP_PORT), attempt.toString());
++        validateViewJob(taskLogURL, "GET");
++
++        // delete job-acls.xml file from the task log dir of attempt and verify
++        // if unauthorized users can view task logs of attempt.
++        Path jobACLsFilePath = new Path(TaskLog.getAttemptDir(attempt).
++            toString(), TaskRunner.jobACLsFile);
++        new File(jobACLsFilePath.toUri().getPath()).delete();
++        assertEquals("Incorrect return code for " + unauthorizedUser,
++            HttpURLConnection.HTTP_OK, getHttpStatusCode(taskLogURL,
++                unauthorizedUser, "GET"));
++
++        // delete the whole task log dir of attempt and verify that we get
++        // correct response code (i.e. HTTP_GONE) when task logs are accessed.
++        FileUtil.fullyDelete(TaskLog.getAttemptDir(attempt));
++        assertEquals("Incorrect return code for " + jobSubmitter,
++            HttpURLConnection.HTTP_GONE, getHttpStatusCode(taskLogURL,
++                jobSubmitter, "GET"));
+       }
+     }
+ 
+-- 
+1.7.0.4
+

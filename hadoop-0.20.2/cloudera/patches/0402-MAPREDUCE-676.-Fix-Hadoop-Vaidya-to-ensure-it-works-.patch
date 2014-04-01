@@ -1,0 +1,717 @@
+From e3a25294b2faf7d57fbf69b75060611362a35463 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 15 Dec 2009 15:41:45 +0530
+Subject: [PATCH 0402/1179] MAPREDUCE-676. Fix Hadoop Vaidya to ensure it works for map-only jobs.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12410257/vaidya-patch-06092009.patch
+Author: Suhas Gogate
+Ref: YDH
+---
+ src/contrib/vaidya/build.xml                       |    1 +
+ .../org/apache/hadoop/vaidya/DiagnosticTest.java   |   67 ++++++++++-
+ .../PostExPerformanceDiagnoser.java                |   10 +-
+ .../tests/BalancedReducePartitioning.java          |   14 ++-
+ .../postexdiagnosis/tests/MapSideDiskSpill.java    |   12 +-
+ .../tests/MapsReExecutionImpact.java               |    3 +-
+ .../tests/ReadingHDFSFilesAsSideEffect.java        |    4 +-
+ .../tests/ReducesReExecutionImpact.java            |    9 +-
+ .../vaidya/statistics/job/JobStatistics.java       |  136 +++++++++++---------
+ .../statistics/job/JobStatisticsInterface.java     |   14 +-
+ .../vaidya/statistics/job/TaskStatistics.java      |   33 ++++--
+ .../org/apache/hadoop/vaidya/util/XMLUtils.java    |    8 +-
+ 12 files changed, 208 insertions(+), 103 deletions(-)
+
+diff --git a/src/contrib/vaidya/build.xml b/src/contrib/vaidya/build.xml
+index b6e428b..eda5991 100644
+--- a/src/contrib/vaidya/build.xml
++++ b/src/contrib/vaidya/build.xml
+@@ -20,6 +20,7 @@
+ <project name="vaidya" default="jar">
+ 
+ 	<import file="../build-contrib.xml" />
++        <import file="../../../build.xml" />
+ 
+ 	<target name="init">
+ 		<mkdir dir="${build.dir}" />
+diff --git a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/DiagnosticTest.java b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/DiagnosticTest.java
+index 2a0fcb0..392acc9 100644
+--- a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/DiagnosticTest.java
++++ b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/DiagnosticTest.java
+@@ -18,12 +18,14 @@
+ package org.apache.hadoop.vaidya;
+ 
+ import java.lang.Runnable;
++import java.sql.Timestamp;
+ import org.apache.hadoop.vaidya.statistics.job.*;
+ import org.apache.hadoop.vaidya.util.*;
+ import org.w3c.dom.Node;
+ import org.w3c.dom.Document;
+ import org.w3c.dom.NodeList;
+ import org.w3c.dom.Element;
++import org.apache.hadoop.vaidya.statistics.job.JobStatisticsInterface.JobKeys;
+ 
+ /*
+  * This is an abstract base class to be extended by each diagnostic test 
+@@ -151,14 +153,75 @@ public abstract class DiagnosticTest implements Runnable {
+    * Creates and returns the report element for this test based on the 
+    * test evaluation results.
+    */
+-  public Element getReportElement(Document doc, Node parent) throws Exception {
++  public Element getReportElement(Document doc, Node parent, int i) throws Exception {
++
+     /* 
+      * If test is not evaluated yet then throw exception
+      */
+     if (!this.isEvaluated()) {
+       throw new Exception("Test has not been evaluated");
+     }
+-    
++
++    /* 
++     * If i == 0, means first test, then print job information
++     * before it.
++    */
++    if (i == 0) {
++      Node reportElementx = doc.createElement("JobInformationElement");
++      parent.appendChild(reportElementx);
++
++      // Insert JOBTRACKERID
++      Node itemx = doc.createElement("JobTrackerID");
++      reportElementx.appendChild(itemx);
++      Node valuex = doc.createTextNode(this._jobExecutionStats.getStringValue(JobKeys.JOBTRACKERID));
++      itemx.appendChild(valuex);
++
++      // Insert JOBNAME
++      itemx = doc.createElement("JobName");
++      reportElementx.appendChild(itemx);
++      valuex = doc.createTextNode(this._jobExecutionStats.getStringValue(JobKeys.JOBNAME));
++      itemx.appendChild(valuex);
++
++      // Insert JOBTYPE
++      itemx = doc.createElement("JobType");
++      reportElementx.appendChild(itemx);
++      valuex = doc.createTextNode(this._jobExecutionStats.getStringValue(JobKeys.JOBTYPE));
++      itemx.appendChild(valuex);
++
++      // Insert USER
++      itemx = doc.createElement("User");
++      reportElementx.appendChild(itemx);
++      valuex = doc.createTextNode(this._jobExecutionStats.getStringValue(JobKeys.USER));
++      itemx.appendChild(valuex);
++
++      // Insert SUBMIT_TIME
++      itemx = doc.createElement("SubmitTime");
++      reportElementx.appendChild(itemx);
++      String st1 = (new Timestamp(Long.parseLong(this._jobExecutionStats.getStringValue(JobKeys.SUBMIT_TIME))).toString());
++      valuex = doc.createTextNode(st1);
++      itemx.appendChild(valuex);
++
++      // Insert LAUNCH_TIME
++      itemx = doc.createElement("LaunchTime");
++      reportElementx.appendChild(itemx);
++      String st2 = (new Timestamp(Long.parseLong(this._jobExecutionStats.getStringValue(JobKeys.LAUNCH_TIME))).toString());
++      valuex = doc.createTextNode(st2);
++      itemx.appendChild(valuex);
++
++      // Insert FINISH_TIME
++      itemx = doc.createElement("FinishTime");
++      reportElementx.appendChild(itemx);
++      String st3 = (new Timestamp(Long.parseLong(this._jobExecutionStats.getStringValue(JobKeys.FINISH_TIME))).toString());
++      valuex = doc.createTextNode(st3);
++      itemx.appendChild(valuex);
++
++      // Insert STATUS
++      itemx = doc.createElement("Status");
++      reportElementx.appendChild(itemx);
++      valuex = doc.createTextNode(this._jobExecutionStats.getStringValue(JobKeys.STATUS));
++      itemx.appendChild(valuex);
++    }
++
+     /*
+      * Construct and return the report element
+      */
+diff --git a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/PostExPerformanceDiagnoser.java b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/PostExPerformanceDiagnoser.java
+index b2994b8..fb76698 100644
+--- a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/PostExPerformanceDiagnoser.java
++++ b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/PostExPerformanceDiagnoser.java
+@@ -200,15 +200,15 @@ public class PostExPerformanceDiagnoser extends JobDiagnoser {
+         }
+       }
+     } catch (Exception e) {
+-      System.out.println ("Invalid arguments.");
++      System.err.println ("Invalid arguments.");
+       e.printStackTrace();
+-      System.out.println();
++      System.err.println();
+       printHelp();
+     }
+     
+     // Check if required arguments are specified
+     if (jobconffile == null || joblogfile  == null) {
+-      System.out.println ("Invalid arguments: -jobconf or -joblog arguments are missing");
++      System.err.println ("Invalid arguments: -jobconf or -joblog arguments are missing");
+       printHelp();
+       return;
+     }
+@@ -251,7 +251,7 @@ public class PostExPerformanceDiagnoser extends JobDiagnoser {
+         NodeList nodelist = pa.getReport().getElementsByTagName("PostExPerformanceDiagnosticReport");
+         Element root = (Element)nodelist.item(0);
+         //root.appendChild(rule.getReportElement(pa.getReport(), root)); 
+-        Element re = test.getReportElement(pa.getReport(), root);
++        Element re = test.getReportElement(pa.getReport(), root, i);
+         //XMLUtils.printDOM(re);
+       } 
+       
+@@ -262,7 +262,7 @@ public class PostExPerformanceDiagnoser extends JobDiagnoser {
+         pa.saveReport(pa.getReportFile());
+       }
+     }catch (Exception e) {
+-      System.out.print("Exception:"+e);
++      System.err.print("Exception:"+e);
+       e.printStackTrace();
+     }
+   }
+diff --git a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/BalancedReducePartitioning.java b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/BalancedReducePartitioning.java
+index 11523fc..afd0eff 100644
+--- a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/BalancedReducePartitioning.java
++++ b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/BalancedReducePartitioning.java
+@@ -37,6 +37,7 @@ public class BalancedReducePartitioning extends DiagnosticTest {
+   private long percentReduceRecordsSize;
+   private double percent;
+   private double impact;
++  private JobStatistics _job;
+   
+   /**
+    * 
+@@ -49,12 +50,20 @@ public class BalancedReducePartitioning extends DiagnosticTest {
+   @Override
+   public double evaluate(JobStatistics jobExecutionStats) {
+     
++    /* Set the global job variable */
++    this._job = jobExecutionStats;
++
++    /* If Map only job then impact is zero */
++    if (jobExecutionStats.getStringValue(JobKeys.JOBTYPE).equals("MAP_ONLY")) {
++      this.impact = 0;
++      return this.impact;
++    }
++
+     /*
+      * Read this rule specific input PercentReduceRecords
+      */
+     this.percent = getInputElementDoubleValue("PercentReduceRecords", 0.90);
+     
+-    
+     /*
+      * Get the sorted reduce task list by number of INPUT_RECORDS (ascending) 
+      */
+@@ -74,7 +83,6 @@ public class BalancedReducePartitioning extends DiagnosticTest {
+     
+     // Calculate Impact
+     return this.impact = (1 - (double)this.busyReducers/(double)this.totalReduces);
+-    
+   }
+ 
+   /*
+@@ -82,7 +90,7 @@ public class BalancedReducePartitioning extends DiagnosticTest {
+    */
+   public void printReduceCounters (List<Hashtable<ReduceTaskKeys, String>> x, ReduceTaskKeys key) {
+     for (int i=0; i<x.size(); i++) {
+-      System.out.println("ind:"+i+", Value:<"+x.get(i).get(key)+">");
++      System.out.println("ind:"+i+", Value:"+x.get(i).get(key)+":");
+     }
+   }
+   
+diff --git a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/MapSideDiskSpill.java b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/MapSideDiskSpill.java
+index fc2682f..87a5506 100644
+--- a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/MapSideDiskSpill.java
++++ b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/MapSideDiskSpill.java
+@@ -60,18 +60,20 @@ public class MapSideDiskSpill extends DiagnosticTest {
+     double normF = getInputElementDoubleValue("NormalizationFactor", 3.0);
+     
+     /*
+-     * Get the sorted reduce task list by number MapTaskKeys.OUTPUT_BYTES
++     * Get the sorted map task list by number MapTaskKeys.OUTPUT_BYTES
+      */
+-    List<MapTaskStatistics> srTaskList = job.getMapTaskList(MapTaskKeys.LOCAL_BYTES_WRITTEN, KeyDataType.LONG);
+-    int size = srTaskList.size();
++    List<MapTaskStatistics> smTaskList = job.getMapTaskList(MapTaskKeys.FILE_BYTES_WRITTEN, KeyDataType.LONG);
++    int size = smTaskList.size();
+     long numLocalBytesWrittenByMaps = 0;
+     for (int i=0; i<size; i++) {
+-      numLocalBytesWrittenByMaps += srTaskList.get(i).getLongValue(MapTaskKeys.LOCAL_BYTES_WRITTEN);
++      numLocalBytesWrittenByMaps += smTaskList.get(i).getLongValue(MapTaskKeys.FILE_BYTES_WRITTEN);
+     }
+     this._numLocalBytesWrittenByMaps = numLocalBytesWrittenByMaps;
+     
+     /*
+      * Map only job vs. map reduce job
++     * For MapReduce job MAP_OUTPUT_BYTES are normally written by maps on local disk, so they are subtracted
++     * from the localBytesWrittenByMaps.
+      */
+     if (job.getLongValue(JobKeys.TOTAL_REDUCES) > 0) {
+       this._impact = (this._numLocalBytesWrittenByMaps - job.getLongValue(JobKeys.MAP_OUTPUT_BYTES))/job.getLongValue(JobKeys.MAP_OUTPUT_BYTES);
+@@ -98,7 +100,7 @@ public class MapSideDiskSpill extends DiagnosticTest {
+     "* Use combiner to lower the map output size.\n" +
+       "* Increase map side sort buffer size (io.sort.mb:"+this._job.getJobConf().getInt("io.sort.mb", 0) + ").\n" +
+       "* Increase index buffer size (io.sort.record.percent:"+ this._job.getJobConf().getInt("io.sort.record.percent", 0) + ") if number of Map Output Records are large. \n" +
+-      "* Increase (io.sort.spill.percent:"+ this._job.getJobConf().getInt("io.sort.spill.percent", 0) + "), default 0.80 i.e. 80% of sort buffer size & index buffer size. \n";
++      "* Increase (io.sort.spill.percent:"+ this._job.getJobConf().getInt("io.sort.spill.percent", 0) + "), default 0.80 i.e. 80% of sort buffer size and index buffer size. \n";
+   }
+ 
+   /* (non-Javadoc)
+diff --git a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/MapsReExecutionImpact.java b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/MapsReExecutionImpact.java
+index f8168a5..27e716b 100644
+--- a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/MapsReExecutionImpact.java
++++ b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/MapsReExecutionImpact.java
+@@ -36,7 +36,6 @@ public class MapsReExecutionImpact extends DiagnosticTest {
+   private JobStatistics _job;
+   private long _percentMapsReExecuted;
+   
+-  
+   /**
+    * 
+    */
+@@ -53,7 +52,7 @@ public class MapsReExecutionImpact extends DiagnosticTest {
+      * Set the this._job
+      */
+     this._job = job;
+-    
++
+     /*
+      * Calculate and return the impact
+      */
+diff --git a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/ReadingHDFSFilesAsSideEffect.java b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/ReadingHDFSFilesAsSideEffect.java
+index 8892f37..8417c46 100644
+--- a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/ReadingHDFSFilesAsSideEffect.java
++++ b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/ReadingHDFSFilesAsSideEffect.java
+@@ -35,8 +35,6 @@ public class ReadingHDFSFilesAsSideEffect extends DiagnosticTest {
+   private double _impact;
+   private JobStatistics _job;
+   
+-  
+-  
+   /**
+    * 
+    */
+@@ -53,7 +51,7 @@ public class ReadingHDFSFilesAsSideEffect extends DiagnosticTest {
+      * Set the this._job
+      */
+     this._job = job;
+-        
++
+     /*
+      * Read the Normalization Factor
+      */
+diff --git a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/ReducesReExecutionImpact.java b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/ReducesReExecutionImpact.java
+index f770ccf..5f6446b 100644
+--- a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/ReducesReExecutionImpact.java
++++ b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/postexdiagnosis/tests/ReducesReExecutionImpact.java
+@@ -36,7 +36,6 @@ public class ReducesReExecutionImpact extends DiagnosticTest {
+   private JobStatistics _job;
+   private long _percentReducesReExecuted;
+   
+-  
+   /**
+    * 
+    */
+@@ -53,6 +52,12 @@ public class ReducesReExecutionImpact extends DiagnosticTest {
+      * Set the this._job
+      */
+     this._job = job;
++
++    /* find job type */
++    if (job.getStringValue(JobKeys.JOBTYPE).equals("MAP_ONLY")) {
++      this._impact = 0;
++      return this._impact;
++    }
+     
+     /*
+      * Calculate and return the impact
+@@ -80,7 +85,7 @@ public class ReducesReExecutionImpact extends DiagnosticTest {
+   @Override
+   public String getReferenceDetails() {
+     String ref = 
+-      "* Total Reduce Tasks: "+this._job.getLongValue(JobKeys.TOTAL_REDUCES)+"\n"+
++        "* Total Reduce Tasks: "+this._job.getLongValue(JobKeys.TOTAL_REDUCES)+"\n"+
+         "* Launched Reduce Tasks: "+this._job.getLongValue(JobKeys.LAUNCHED_REDUCES)+"\n"+
+         "* Percent Reduce Tasks ReExecuted: "+this._percentReducesReExecuted + "\n" +
+         "* Impact: "+truncate(this._impact);
+diff --git a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/statistics/job/JobStatistics.java b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/statistics/job/JobStatistics.java
+index 3da8ae5..1cfebd8 100644
+--- a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/statistics/job/JobStatistics.java
++++ b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/statistics/job/JobStatistics.java
+@@ -106,11 +106,11 @@ public class JobStatistics implements JobStatisticsInterface {
+    * Get Job Counters of type String
+    */
+   public String getStringValue(Enum key) {
+-	if (this._job.get(key) == null) {
+-	  return "";
+-	} else {
++  if (this._job.get(key) == null) {
++    return "";
++  } else {
+       return this._job.get(key);
+-	}
++  }
+   }
+   
+   /*
+@@ -154,6 +154,13 @@ public class JobStatistics implements JobStatisticsInterface {
+     this._job = new Hashtable<Enum, String>();
+     populate_Job(this._job, this._jobInfo.getValues());  
+     populate_MapReduceTaskLists(this._mapTaskList, this._reduceTaskList, this._jobInfo.getAllTasks());
++
++    // Add the Job Type: MAP_REDUCE, MAP_ONLY
++    if (getLongValue(JobKeys.TOTAL_REDUCES) == 0) {
++      this._job.put(JobKeys.JOBTYPE,"MAP_ONLY");
++    } else {
++      this._job.put(JobKeys.JOBTYPE,"MAP_REDUCE");
++    }
+   }
+   
+   /*
+@@ -179,7 +186,7 @@ public class JobStatistics implements JobStatisticsInterface {
+       if (successTaskAttemptMap != null) {
+         mapTask.putAll(successTaskAttemptMap);
+       } else {
+-        System.out.println("Task:<"+task.get(Keys.TASKID)+"> is not successful - SKIPPING");
++        System.err.println("Task:<"+task.get(Keys.TASKID)+"> is not successful - SKIPPING");
+       }
+       int size = mapTask.size();
+       java.util.Iterator<Map.Entry<JobHistory.Keys, String>> kv = mapTask.entrySet().iterator();
+@@ -207,63 +214,73 @@ public class JobStatistics implements JobStatisticsInterface {
+           parseAndAddMapTaskCounters(mapT, value);
+           mapTaskList.add(mapT);
+           break;
+-        default: System.out.println("JobHistory.MapKeys."+key+" : NOT INCLUDED IN PERFORMANCE ADVISOR MAP COUNTERS");
++        default: System.err.println("JobHistory.MapKeys."+key+" : NOT INCLUDED IN PERFORMANCE ADVISOR MAP COUNTERS");
+           break;
+         }
+       }
+       
+       // Add number of task attempts
+       mapT.setValue(MapTaskKeys.NUM_ATTEMPTS, (new Integer(task.getTaskAttempts().size())).toString());
++
++      // Add EXECUTION_TIME = FINISH_TIME - START_TIME
++      long etime = mapT.getLongValue(MapTaskKeys.FINISH_TIME) - mapT.getLongValue(MapTaskKeys.START_TIME);
++      mapT.setValue(MapTaskKeys.EXECUTION_TIME, (new Long(etime)).toString());
+       
+       }else if (task.get(Keys.TASK_TYPE).equals("REDUCE")) {
+-      ReduceTaskStatistics reduceT = new ReduceTaskStatistics();
+-      java.util.Map<JobHistory.Keys, String> reduceTask = task.getValues();
+-      java.util.Map<JobHistory.Keys, String> successTaskAttemptMap  =  getLastSuccessfulTaskAttempt(task);
+-      // NOTE: Following would lead to less number of actual tasks collected in the tasklist array
+-      if (successTaskAttemptMap != null) {
+-        reduceTask.putAll(successTaskAttemptMap);
+-      } else {
+-        System.out.println("Task:<"+task.get(Keys.TASKID)+"> is not successful - SKIPPING");
+-      }
+-      int size = reduceTask.size();
+-      java.util.Iterator<Map.Entry<JobHistory.Keys, String>> kv = reduceTask.entrySet().iterator();
+-      for (int j = 0; j < size; j++)
+-      {
+-        Map.Entry<JobHistory.Keys, String> rtc = kv.next();
+-        JobHistory.Keys key = rtc.getKey();
+-        String value = rtc.getValue();
+-        //System.out.println("JobHistory.ReduceKeys."+key+": "+value);
+-        switch (key) {
+-        case TASKID: reduceT.setValue(ReduceTaskKeys.TASK_ID, value); break;
+-        case TASK_ATTEMPT_ID: reduceT.setValue(ReduceTaskKeys.ATTEMPT_ID, value); break;
+-        case HOSTNAME: reduceT.setValue(ReduceTaskKeys.HOSTNAME, value); break;
+-        case TASK_TYPE: reduceT.setValue(ReduceTaskKeys.TASK_TYPE, value); break;
+-        case TASK_STATUS: reduceT.setValue(ReduceTaskKeys.STATUS, value); break;
+-        case START_TIME: reduceT.setValue(ReduceTaskKeys.START_TIME, value); break;
+-        case FINISH_TIME: reduceT.setValue(ReduceTaskKeys.FINISH_TIME, value); break;
+-        case SHUFFLE_FINISHED: reduceT.setValue(ReduceTaskKeys.SHUFFLE_FINISH_TIME, value); break;
+-        case SORT_FINISHED: reduceT.setValue(ReduceTaskKeys.SORT_FINISH_TIME, value); break;
+-        case SPLITS: reduceT.setValue(ReduceTaskKeys.SPLITS, value); break;
+-        case TRACKER_NAME: reduceT.setValue(ReduceTaskKeys.TRACKER_NAME, value); break;
+-        case STATE_STRING: reduceT.setValue(ReduceTaskKeys.STATE_STRING, value); break;
+-        case HTTP_PORT: reduceT.setValue(ReduceTaskKeys.HTTP_PORT, value); break;
+-        case COUNTERS:
+-          value.concat(",");
+-          parseAndAddReduceTaskCounters(reduceT, value);
+-          reduceTaskList.add(reduceT);
+-          break;
+-        default: System.out.println("JobHistory.ReduceKeys."+key+" : NOT INCLUDED IN PERFORMANCE ADVISOR REDUCE COUNTERS");
+-          break;
++
++        ReduceTaskStatistics reduceT = new ReduceTaskStatistics();
++        java.util.Map<JobHistory.Keys, String> reduceTask = task.getValues();
++        java.util.Map<JobHistory.Keys, String> successTaskAttemptMap  =  getLastSuccessfulTaskAttempt(task);
++        // NOTE: Following would lead to less number of actual tasks collected in the tasklist array
++        if (successTaskAttemptMap != null) {
++          reduceTask.putAll(successTaskAttemptMap);
++        } else {
++          System.err.println("Task:<"+task.get(Keys.TASKID)+"> is not successful - SKIPPING");
++        }
++        int size = reduceTask.size();
++        java.util.Iterator<Map.Entry<JobHistory.Keys, String>> kv = reduceTask.entrySet().iterator();
++        for (int j = 0; j < size; j++)
++        {
++          Map.Entry<JobHistory.Keys, String> rtc = kv.next();
++          JobHistory.Keys key = rtc.getKey();
++          String value = rtc.getValue();
++          //System.out.println("JobHistory.ReduceKeys."+key+": "+value);
++          switch (key) {
++          case TASKID: reduceT.setValue(ReduceTaskKeys.TASK_ID, value); break;
++          case TASK_ATTEMPT_ID: reduceT.setValue(ReduceTaskKeys.ATTEMPT_ID, value); break;
++          case HOSTNAME: reduceT.setValue(ReduceTaskKeys.HOSTNAME, value); break;
++          case TASK_TYPE: reduceT.setValue(ReduceTaskKeys.TASK_TYPE, value); break;
++          case TASK_STATUS: reduceT.setValue(ReduceTaskKeys.STATUS, value); break;
++          case START_TIME: reduceT.setValue(ReduceTaskKeys.START_TIME, value); break;
++          case FINISH_TIME: reduceT.setValue(ReduceTaskKeys.FINISH_TIME, value); break;
++          case SHUFFLE_FINISHED: reduceT.setValue(ReduceTaskKeys.SHUFFLE_FINISH_TIME, value); break;
++          case SORT_FINISHED: reduceT.setValue(ReduceTaskKeys.SORT_FINISH_TIME, value); break;
++          case SPLITS: reduceT.setValue(ReduceTaskKeys.SPLITS, value); break;
++          case TRACKER_NAME: reduceT.setValue(ReduceTaskKeys.TRACKER_NAME, value); break;
++          case STATE_STRING: reduceT.setValue(ReduceTaskKeys.STATE_STRING, value); break;
++          case HTTP_PORT: reduceT.setValue(ReduceTaskKeys.HTTP_PORT, value); break;
++          case COUNTERS:
++            value.concat(",");
++            parseAndAddReduceTaskCounters(reduceT, value);
++            reduceTaskList.add(reduceT);
++            break;
++          default: System.err.println("JobHistory.ReduceKeys."+key+" : NOT INCLUDED IN PERFORMANCE ADVISOR REDUCE COUNTERS");
++            break;
++          }
+         }
+-        
++
+         // Add number of task attempts
+         reduceT.setValue(ReduceTaskKeys.NUM_ATTEMPTS, (new Integer(task.getTaskAttempts().size())).toString());
+-      }
++
++        // Add EXECUTION_TIME = FINISH_TIME - START_TIME
++        long etime1 = reduceT.getLongValue(ReduceTaskKeys.FINISH_TIME) - reduceT.getLongValue(ReduceTaskKeys.START_TIME);
++        reduceT.setValue(ReduceTaskKeys.EXECUTION_TIME, (new Long(etime1)).toString());
++
+       } else if (task.get(Keys.TASK_TYPE).equals("CLEANUP") ||
+                  task.get(Keys.TASK_TYPE).equals("SETUP")) {
+         //System.out.println("INFO: IGNORING TASK TYPE : "+task.get(Keys.TASK_TYPE));
+       } else {
+-        System.out.println("UNKNOWN TASK TYPE : "+task.get(Keys.TASK_TYPE));
++        System.err.println("UNKNOWN TASK TYPE : "+task.get(Keys.TASK_TYPE));
+       }
+     }
+   }
+@@ -302,7 +319,6 @@ public class JobStatistics implements JobStatisticsInterface {
+       //System.out.println("JobHistory.JobKeys."+key+": "+value);
+       switch (key) {
+       case JOBTRACKERID: job.put(JobKeys.JOBTRACKERID, value); break;
+-      //case START_TIME: job.put(JobKeys., value); break;
+       case FINISH_TIME: job.put(JobKeys.FINISH_TIME, value); break;
+       case JOBID: job.put(JobKeys.JOBID, value); break;
+       case JOBNAME: job.put(JobKeys.JOBNAME, value); break;
+@@ -322,7 +338,7 @@ public class JobStatistics implements JobStatisticsInterface {
+         value.concat(",");
+         parseAndAddJobCounters(job, value);
+         break;
+-      default:   System.out.println("JobHistory.Keys."+key+" : NOT INCLUDED IN PERFORMANCE ADVISOR COUNTERS");
++      default:   System.err.println("JobHistory.Keys."+key+" : NOT INCLUDED IN PERFORMANCE ADVISOR COUNTERS");
+                break;
+       }
+     }
+@@ -339,15 +355,15 @@ public class JobStatistics implements JobStatisticsInterface {
+       for (java.util.Iterator<Counters.Counter> mycounters = grp.iterator(); mycounters.hasNext(); ) {
+         Counters.Counter counter = mycounters.next();
+         //String countername = "<"+counter.getName()+">::<"+counter.getDisplayName()+">::<"+counter.getValue()+">";
+-        //System.out.println("groupName:"+groupname+",countername: "+countername);
++        //System.err.println("groupName:"+groupname+",countername: "+countername);
+         String countername = grp.getDisplayName()+"."+counter.getDisplayName();
+         String value = (new Long(counter.getValue())).toString();
+         String[] parts = {countername,value};
+-        //System.out.println("part0:"+parts[0]+",:part1 "+parts[1]);
++        //System.err.println("part0:<"+parts[0]+">,:part1 <"+parts[1]+">");
+         if (parts[0].equals("FileSystemCounters.FILE_BYTES_READ")) {
+-          job.put(JobKeys.LOCAL_BYTES_READ, parts[1]);
++          job.put(JobKeys.FILE_BYTES_READ, parts[1]);
+         } else if (parts[0].equals("FileSystemCounters.FILE_BYTES_WRITTEN")) {
+-          job.put(JobKeys.LOCAL_BYTES_WRITTEN, parts[1]);
++          job.put(JobKeys.FILE_BYTES_WRITTEN, parts[1]);
+         } else if (parts[0].equals("FileSystemCounters.HDFS_BYTES_READ")) {
+           job.put(JobKeys.HDFS_BYTES_READ, parts[1]);
+         } else if (parts[0].equals("FileSystemCounters.HDFS_BYTES_WRITTEN")) {
+@@ -383,7 +399,7 @@ public class JobStatistics implements JobStatisticsInterface {
+         } else if (parts[0].equals("Map-Reduce Framework.Reduce shuffle bytes")) {
+           job.put(JobKeys.SHUFFLE_BYTES, parts[1]);
+         } else {
+-          System.out.println("JobCounterKey:<"+parts[0]+"> ==> NOT INCLUDED IN PERFORMANCE ADVISOR");
++          System.err.println("JobCounterKey:<"+parts[0]+"> ==> NOT INCLUDED IN PERFORMANCE ADVISOR");
+         }
+       }
+     }  
+@@ -406,9 +422,9 @@ public class JobStatistics implements JobStatisticsInterface {
+         String[] parts = {countername,value};
+         //System.out.println("part0:"+parts[0]+",:part1 "+parts[1]);
+         if (parts[0].equals("FileSystemCounters.FILE_BYTES_READ")) {
+-          mapTask.setValue(MapTaskKeys.LOCAL_BYTES_READ, parts[1]);
++          mapTask.setValue(MapTaskKeys.FILE_BYTES_READ, parts[1]);
+         } else if (parts[0].equals("FileSystemCounters.FILE_BYTES_WRITTEN")) {
+-          mapTask.setValue(MapTaskKeys.LOCAL_BYTES_WRITTEN, parts[1]);
++          mapTask.setValue(MapTaskKeys.FILE_BYTES_WRITTEN, parts[1]);
+         } else if (parts[0].equals("FileSystemCounters.HDFS_BYTES_READ")) {
+           mapTask.setValue(MapTaskKeys.HDFS_BYTES_READ, parts[1]);
+         } else if (parts[0].equals("FileSystemCounters.HDFS_BYTES_WRITTEN")) {
+@@ -428,7 +444,7 @@ public class JobStatistics implements JobStatisticsInterface {
+         } else if (parts[0].equals("Map-Reduce Framework.Spilled Records")) {
+           mapTask.setValue(MapTaskKeys.SPILLED_RECORDS, parts[1]);
+         } else {
+-          System.out.println("MapCounterKey:<"+parts[0]+"> ==> NOT INCLUDED IN PERFORMANCE ADVISOR MAP TASK");
++          System.err.println("MapCounterKey:<"+parts[0]+"> ==> NOT INCLUDED IN PERFORMANCE ADVISOR MAP TASK");
+         }
+       }    
+     }
+@@ -451,9 +467,9 @@ public class JobStatistics implements JobStatisticsInterface {
+         String[] parts = {countername,value};
+         //System.out.println("part0:"+parts[0]+",:part1 "+parts[1]);
+         if (parts[0].equals("FileSystemCounters.FILE_BYTES_READ")) {
+-          reduceTask.setValue(ReduceTaskKeys.LOCAL_BYTES_READ, parts[1]);
++          reduceTask.setValue(ReduceTaskKeys.FILE_BYTES_READ, parts[1]);
+         } else if (parts[0].equals("FileSystemCounters.FILE_BYTES_WRITTEN")) {
+-          reduceTask.setValue(ReduceTaskKeys.LOCAL_BYTES_WRITTEN, parts[1]);
++          reduceTask.setValue(ReduceTaskKeys.FILE_BYTES_WRITTEN, parts[1]);
+         } else if (parts[0].equals("FileSystemCounters.HDFS_BYTES_READ")) {
+           reduceTask.setValue(ReduceTaskKeys.HDFS_BYTES_READ, parts[1]);
+         } else if (parts[0].equals("FileSystemCounters.HDFS_BYTES_WRITTEN")) {
+@@ -473,7 +489,7 @@ public class JobStatistics implements JobStatisticsInterface {
+         } else if (parts[0].equals("Map-Reduce Framework.Reduce shuffle bytes")) {
+           reduceTask.setValue(ReduceTaskKeys.SHUFFLE_BYTES, parts[1]);
+         } else {
+-          System.out.println("ReduceCounterKey:<"+parts[0]+"> ==> NOT INCLUDED IN PERFORMANCE ADVISOR REDUCE TASK");
++          System.err.println("ReduceCounterKey:<"+parts[0]+"> ==> NOT INCLUDED IN PERFORMANCE ADVISOR REDUCE TASK");
+         }
+       }
+     }    
+diff --git a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/statistics/job/JobStatisticsInterface.java b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/statistics/job/JobStatisticsInterface.java
+index ca71c1d..39ca94e 100644
+--- a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/statistics/job/JobStatisticsInterface.java
++++ b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/statistics/job/JobStatisticsInterface.java
+@@ -92,23 +92,23 @@ public interface JobStatisticsInterface {
+    * Job Keys
+    */
+   public static enum JobKeys {
+-    JOBTRACKERID, JOBID, JOBNAME, USER, SUBMIT_TIME, CONF_PATH, LAUNCH_TIME, TOTAL_MAPS, TOTAL_REDUCES,
++    JOBTRACKERID, JOBID, JOBNAME, JOBTYPE, USER, SUBMIT_TIME, CONF_PATH, LAUNCH_TIME, TOTAL_MAPS, TOTAL_REDUCES,
+     STATUS, FINISH_TIME, FINISHED_MAPS, FINISHED_REDUCES, FAILED_MAPS, FAILED_REDUCES, 
+     LAUNCHED_MAPS, LAUNCHED_REDUCES, RACKLOCAL_MAPS, DATALOCAL_MAPS, HDFS_BYTES_READ,
+-    HDFS_BYTES_WRITTEN, LOCAL_BYTES_READ, LOCAL_BYTES_WRITTEN, COMBINE_OUTPUT_RECORDS,
++    HDFS_BYTES_WRITTEN, FILE_BYTES_READ, FILE_BYTES_WRITTEN, COMBINE_OUTPUT_RECORDS,
+     COMBINE_INPUT_RECORDS, REDUCE_INPUT_GROUPS, REDUCE_INPUT_RECORDS, REDUCE_OUTPUT_RECORDS,
+     MAP_INPUT_RECORDS, MAP_OUTPUT_RECORDS, MAP_INPUT_BYTES, MAP_OUTPUT_BYTES, MAP_HDFS_BYTES_WRITTEN,
+     JOBCONF, JOB_PRIORITY, SHUFFLE_BYTES, SPILLED_RECORDS
+-   }
++  }
+   
+   /**
+    * Map Task Keys
+    */
+   public static enum MapTaskKeys {
+     TASK_ID, TASK_TYPE, START_TIME, STATUS, FINISH_TIME, HDFS_BYTES_READ, HDFS_BYTES_WRITTEN,
+-    LOCAL_BYTES_READ, LOCAL_BYTES_WRITTEN, COMBINE_OUTPUT_RECORDS, COMBINE_INPUT_RECORDS, 
++    FILE_BYTES_READ, FILE_BYTES_WRITTEN, COMBINE_OUTPUT_RECORDS, COMBINE_INPUT_RECORDS, 
+     OUTPUT_RECORDS, INPUT_RECORDS, INPUT_BYTES, OUTPUT_BYTES, NUM_ATTEMPTS, ATTEMPT_ID,
+-    HOSTNAME, SPLITS, SPILLED_RECORDS, TRACKER_NAME, STATE_STRING, HTTP_PORT, ERROR
++    HOSTNAME, SPLITS, SPILLED_RECORDS, TRACKER_NAME, STATE_STRING, HTTP_PORT, ERROR, EXECUTION_TIME
+   }
+   
+   /**
+@@ -117,9 +117,9 @@ public interface JobStatisticsInterface {
+   public static enum ReduceTaskKeys {
+     
+     TASK_ID, TASK_TYPE, START_TIME, STATUS, FINISH_TIME, HDFS_BYTES_READ, HDFS_BYTES_WRITTEN,
+-    LOCAL_BYTES_READ, LOCAL_BYTES_WRITTEN, COMBINE_OUTPUT_RECORDS, COMBINE_INPUT_RECORDS, 
++    FILE_BYTES_READ, FILE_BYTES_WRITTEN, COMBINE_OUTPUT_RECORDS, COMBINE_INPUT_RECORDS, 
+     OUTPUT_RECORDS, INPUT_RECORDS, NUM_ATTEMPTS, ATTEMPT_ID, HOSTNAME, SHUFFLE_FINISH_TIME,
+     SORT_FINISH_TIME, INPUT_GROUPS, TRACKER_NAME, STATE_STRING, HTTP_PORT, SPLITS, SHUFFLE_BYTES, 
+-    SPILLED_RECORDS
++    SPILLED_RECORDS, EXECUTION_TIME
+   }
+ }
+diff --git a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/statistics/job/TaskStatistics.java b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/statistics/job/TaskStatistics.java
+index 1a0d55c..ee7ebbe 100644
+--- a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/statistics/job/TaskStatistics.java
++++ b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/statistics/job/TaskStatistics.java
+@@ -30,27 +30,40 @@ public class TaskStatistics {
+    */
+   private Hashtable<Enum, String>  _task = new Hashtable<Enum, String>();
+   
+-  /*
++  /* 
+    * Get Long key value
+    */
+   public long getLongValue(Enum key) {
+-    return Long.parseLong(this._task.get(key));
+-  }
+-  
++    if (this._task.get(key) == null) {
++      return (long)0;
++    }
++    else {
++      return Long.parseLong(this._task.get(key));
++    }
++  } 
++
+   /*
+-   * Get double key value
++   * Get key type Double
+    */
+   public double getDoubleValue(Enum key) {
+-    return Double.parseDouble(this._task.get(key));
++    if (this._task.get(key) == null) {
++      return (double)0;
++    } else {
++      return Double.parseDouble(this._task.get(key));
++    }
+   }
+-  
++ 
+   /*
+-   * Get String key value
++   * Get key of type String
+    */
+   public String getStringValue(Enum key) {
+-    return this._task.get(key);
++    if (this._task.get(key) == null) {
++      return "";
++    } else {
++     return this._task.get(key);
++    }
+   }
+-  
++
+   /*
+    * Set long key value 
+    */
+diff --git a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/util/XMLUtils.java b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/util/XMLUtils.java
+index e66fe57..22071c1 100644
+--- a/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/util/XMLUtils.java
++++ b/src/contrib/vaidya/src/java/org/apache/hadoop/vaidya/util/XMLUtils.java
+@@ -171,9 +171,9 @@ public class XMLUtils {
+       return document;
+     } catch (SAXParseException spe) {
+       // Error generated by the parser
+-      System.out.println("\n** Parsing error , line " + spe.getLineNumber()
++      System.err.println("\n** Parsing error , line " + spe.getLineNumber()
+                          + ", uri " + spe.getSystemId());
+-      System.out.println(" " + spe.getMessage() );
++      System.err.println(" " + spe.getMessage() );
+       // Use the contained exception, if any
+       Exception x = spe;
+       if (spe.getException() != null)
+@@ -218,9 +218,9 @@ public class XMLUtils {
+       xformer.transform(source, result);
+ 
+     } catch (TransformerConfigurationException e) {
+-      System.out.println("TransformerConfigurationException: " + e);
++      System.err.println("TransformerConfigurationException: " + e);
+     } catch (TransformerException e) {
+-      System.out.println("TransformerException: " + e);
++      System.err.println("TransformerException: " + e);
+     }
+   }
+ 
+-- 
+1.7.0.4
+

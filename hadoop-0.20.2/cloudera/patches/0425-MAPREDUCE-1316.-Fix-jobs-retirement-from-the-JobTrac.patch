@@ -1,0 +1,1128 @@
+From c759d3e421565c13c79d6091d1917ce57cbb6636 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 13 Jan 2010 22:27:07 -0800
+Subject: [PATCH 0425/1179] MAPREDUCE-1316. Fix jobs' retirement from the JobTracker to prevent memory leaks via stale references.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12430197/mapreduce-1316-v1.15-branch20-yahoo.patch
+Author: Amar Kamat
+Ref: YDH
+---
+ .../hadoop/mapred/CapacityTaskScheduler.java       |    4 +-
+ .../hadoop/mapred/TestCapacityScheduler.java       |    1 -
+ .../org/apache/hadoop/mapred/FairScheduler.java    |    3 +-
+ .../apache/hadoop/mapred/FairSchedulerServlet.java |    1 +
+ .../org/apache/hadoop/mapred/JobSchedulable.java   |    4 +-
+ .../apache/hadoop/mapred/NewJobWeightBooster.java  |    1 +
+ .../src/java/org/apache/hadoop/mapred/Pool.java    |    2 +-
+ .../java/org/apache/hadoop/mapred/PoolManager.java |    1 +
+ .../org/apache/hadoop/mapred/PoolSchedulable.java  |    2 +-
+ .../java/org/apache/hadoop/mapred/TaskType.java    |   26 --
+ .../org/apache/hadoop/mapred/WeightAdjuster.java   |    1 +
+ .../apache/hadoop/mapred/TestFairScheduler.java    |   24 ++-
+ .../org/apache/hadoop/mapred/JobInProgress.java    |   74 ++++---
+ .../org/apache/hadoop/mapred/JobTracker.java       |   43 ++--
+ .../org/apache/hadoop/mapred/TaskInProgress.java   |   35 +++
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    2 +-
+ .../org/apache/hadoop/mapred/MiniMRCluster.java    |   18 ++-
+ .../org/apache/hadoop/mapred/TestJobHistory.java   |    5 +-
+ .../hadoop/mapred/TestJobQueueTaskScheduler.java   |    1 -
+ .../org/apache/hadoop/mapred/TestJobRetire.java    |  272 +++++++++++++++++++-
+ .../org/apache/hadoop/mapred/TestLostTracker.java  |    5 +-
+ .../hadoop/mapred/TestParallelInitialization.java  |    1 -
+ .../hadoop/mapred/TestSetupAndCleanupFailure.java  |    7 +-
+ src/webapps/job/jobdetails.jsp                     |   13 +-
+ src/webapps/job/jobfailures.jsp                    |    5 +-
+ 25 files changed, 436 insertions(+), 115 deletions(-)
+ delete mode 100644 src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/TaskType.java
+
+diff --git a/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java b/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java
+index 35973df..0c8bce5 100644
+--- a/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java
++++ b/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java
+@@ -832,7 +832,7 @@ class CapacityTaskScheduler extends TaskScheduler {
+       //Check if job supports speculative map execution first then 
+       //check if job has speculative maps.
+       return (job.getJobConf().getMapSpeculativeExecution())&& (
+-          hasSpeculativeTask(job.getMapTasks(), 
++          hasSpeculativeTask(job.getTasks(TaskType.MAP), 
+               job.getStatus().mapProgress(), tts));
+     }
+ 
+@@ -895,7 +895,7 @@ class CapacityTaskScheduler extends TaskScheduler {
+       //check if the job supports reduce speculative execution first then
+       //check if the job has speculative tasks.
+       return (job.getJobConf().getReduceSpeculativeExecution()) && (
+-          hasSpeculativeTask(job.getReduceTasks(), 
++          hasSpeculativeTask(job.getTasks(TaskType.REDUCE), 
+               job.getStatus().reduceProgress(), tts));
+     }
+ 
+diff --git a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
+index dfc9bef..433fdfd 100644
+--- a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
++++ b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
+@@ -172,7 +172,6 @@ public class TestCapacityScheduler extends TestCase {
+       super(jId, jobConf, jt);
+       this.taskTrackerManager = taskTrackerManager;
+       this.startTime = System.currentTimeMillis();
+-      this.status = new JobStatus(jId, 0f, 0f, JobStatus.PREP);
+       this.status.setJobPriority(JobPriority.NORMAL);
+       this.status.setStartTime(startTime);
+       if (null == jobConf.getQueueName()) {
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+index cfa2a88..b8dcf8c 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+@@ -35,6 +35,7 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.http.HttpServer;
+ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker;
++import org.apache.hadoop.mapreduce.TaskType;
+ 
+ /**
+  * A {@link TaskScheduler} that implements fair sharing.
+@@ -456,7 +457,7 @@ public class FairScheduler extends TaskScheduler {
+     int cap = (type == TaskType.MAP) ? mapAssignCap : reduceAssignCap;
+     if (cap == -1) // Infinite cap; use the TaskTracker's slot count
+       return (type == TaskType.MAP) ?
+-          tts.getAvailableMapSlots() : tts.getAvailableReduceSlots();
++          tts.getAvailableMapSlots(): tts.getAvailableReduceSlots();
+     else
+       return cap;
+   }
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairSchedulerServlet.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairSchedulerServlet.java
+index 4abce71..6f83a68 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairSchedulerServlet.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairSchedulerServlet.java
+@@ -39,6 +39,7 @@ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpServletResponse;
+ 
+ import org.apache.hadoop.mapred.FairScheduler.JobInfo;
++import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.hadoop.util.StringUtils;
+ 
+ /**
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/JobSchedulable.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/JobSchedulable.java
+index ed8860b..65deb6e 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/JobSchedulable.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/JobSchedulable.java
+@@ -22,7 +22,7 @@ import java.io.IOException;
+ import java.util.Collection;
+ 
+ import org.apache.hadoop.mapred.FairScheduler.JobInfo;
+-import org.apache.hadoop.mapred.TaskType;
++import org.apache.hadoop.mapreduce.TaskType;
+ 
+ public class JobSchedulable extends Schedulable {
+   private FairScheduler scheduler;
+@@ -58,7 +58,7 @@ public class JobSchedulable extends Schedulable {
+       // - have N attempts running, in which case it demands N slots, and may
+       //   potentially demand one more slot if it needs to be speculated
+       TaskInProgress[] tips = (taskType == TaskType.MAP ? 
+-          job.getMapTasks() : job.getReduceTasks());
++          job.getTasks(TaskType.MAP) : job.getTasks(TaskType.REDUCE));
+       boolean speculationEnabled = (taskType == TaskType.MAP ?
+           job.hasSpeculativeMaps() : job.hasSpeculativeReduces());
+       long time = scheduler.getClock().getTime();
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/NewJobWeightBooster.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/NewJobWeightBooster.java
+index 32236f3..b7a79b5 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/NewJobWeightBooster.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/NewJobWeightBooster.java
+@@ -20,6 +20,7 @@ package org.apache.hadoop.mapred;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.conf.Configured;
++import org.apache.hadoop.mapreduce.TaskType;
+ 
+ /**
+  * A {@link WeightAdjuster} implementation that gives a weight boost to new jobs
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/Pool.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/Pool.java
+index 502c0ca..ca0b82f 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/Pool.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/Pool.java
+@@ -21,7 +21,7 @@ package org.apache.hadoop.mapred;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ 
+-import org.apache.hadoop.mapred.TaskType;
++import org.apache.hadoop.mapreduce.TaskType;
+ 
+ /**
+  * A schedulable pool of jobs.
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
+index 5c323db..a417728 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
+@@ -34,6 +34,7 @@ import javax.xml.parsers.ParserConfigurationException;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.mapreduce.TaskType;
+ import org.w3c.dom.Document;
+ import org.w3c.dom.Element;
+ import org.w3c.dom.Node;
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolSchedulable.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolSchedulable.java
+index be676f9..3fbcab3 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolSchedulable.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolSchedulable.java
+@@ -29,7 +29,7 @@ import java.util.List;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.mapred.FairScheduler.JobInfo;
+-import org.apache.hadoop.mapred.TaskType;
++import org.apache.hadoop.mapreduce.TaskType;
+ 
+ public class PoolSchedulable extends Schedulable {
+   public static final Log LOG = LogFactory.getLog(
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/TaskType.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/TaskType.java
+deleted file mode 100644
+index 5668e6f..0000000
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/TaskType.java
++++ /dev/null
+@@ -1,26 +0,0 @@
+-/**
+- * Licensed to the Apache Software Foundation (ASF) under one
+- * or more contributor license agreements.  See the NOTICE file
+- * distributed with this work for additional information
+- * regarding copyright ownership.  The ASF licenses this file
+- * to you under the Apache License, Version 2.0 (the
+- * "License"); you may not use this file except in compliance
+- * with the License.  You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-
+-package org.apache.hadoop.mapred;
+-
+-/**
+- * Utility enum for map and reduce task types.
+- */
+-public enum TaskType {
+-  MAP, REDUCE
+-}
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/WeightAdjuster.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/WeightAdjuster.java
+index a8a5547..5f11038 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/WeightAdjuster.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/WeightAdjuster.java
+@@ -19,6 +19,7 @@
+ package org.apache.hadoop.mapred;
+ 
+ import org.apache.hadoop.conf.Configurable;
++import org.apache.hadoop.mapreduce.TaskType;
+ 
+ /**
+  * A pluggable object for altering the weights of jobs in the fair scheduler,
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+index 74c2ee4..a4633c0 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+@@ -40,6 +40,8 @@ import org.apache.hadoop.io.BytesWritable;
+ import org.apache.hadoop.net.Node;
+ 
+ import org.apache.hadoop.mapred.FairScheduler.JobInfo;
++import org.apache.hadoop.mapreduce.TaskType;
++import org.apache.hadoop.mapreduce.Job;
+ import org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker;
+ import org.apache.hadoop.mapreduce.split.JobSplit;
+ 
+@@ -244,7 +246,7 @@ public class TestFairScheduler extends TestCase {
+     // Constructor for reduce
+     FakeTaskInProgress(JobID jId, int id, JobConf jobConf,
+                        FakeJobInProgress job) {
+-      super(jId, "", jobConf.getNumMapTasks(), id, null, jobConf, job, 1);
++      super(jId, "", jobConf.getNumMapTasks(), id, job.jobtracker, jobConf, job, 1);
+       this.isMap = false;
+       this.fakeJob = job;
+       activeTasks = new TreeMap<TaskAttemptID, String>();
+@@ -350,6 +352,23 @@ public class TestFairScheduler extends TestCase {
+      }
+    }
+ 
++    public FakeTaskTrackerManager() {
++      TaskTracker tt1 = new TaskTracker("tt1");
++      tt1.setStatus(new TaskTrackerStatus("tt1", "tt1.host", 1,
++                                          new ArrayList<TaskStatus>(), 0,
++                                          maxMapTasksPerTracker, 
++                                          maxReduceTasksPerTracker));
++      trackers.put("tt1", tt1);
++      
++      TaskTracker tt2 = new TaskTracker("tt2");
++      tt2.setStatus(new TaskTrackerStatus("tt2", "tt2.host", 2,
++                                          new ArrayList<TaskStatus>(), 0,
++                                          maxMapTasksPerTracker, 
++                                          maxReduceTasksPerTracker));
++      trackers.put("tt2", tt2);
++
++    }
++    
+     @Override
+     public ClusterStatus getClusterStatus() {
+       int numTrackers = trackers.size();
+@@ -948,7 +967,8 @@ public class TestFairScheduler extends TestCase {
+     // Finish up the tasks and advance time again. Note that we must finish
+     // the task since FakeJobInProgress does not properly maintain running
+     // tasks, so the scheduler will always get an empty task list from
+-    // the JobInProgress's getMapTasks/getReduceTasks and think they finished.
++    // the JobInProgress's getTasks(TaskType.MAP)/getTasks(TaskType.REDUCE) and 
++    // think they finished.
+     taskTrackerManager.finishTask("tt1", "attempt_test_0001_m_000000_0");
+     taskTrackerManager.finishTask("tt1", "attempt_test_0002_m_000000_0");
+     taskTrackerManager.finishTask("tt1", "attempt_test_0001_r_000000_0");
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 594d5b6..0b379bb 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -283,6 +283,9 @@ public class JobInProgress {
+     this.anyCacheLevel = this.maxLevel+1;
+     this.jobtracker = tracker;
+     this.restartCount = 0;
++    this.status = new JobStatus(jobid, 0.0f, 0.0f, JobStatus.PREP);
++    this.profile = new JobProfile(conf.getUser(), jobid, "", "", 
++                                  conf.getJobName(), conf.getQueueName());
+   }
+   
+   /**
+@@ -627,6 +630,10 @@ public class JobInProgress {
+     tasksInited.set(true);
+     JobHistory.JobInfo.logInited(profile.getJobID(), this.launchTime, 
+                                  numMapTasks, numReduceTasks);
++    
++   // Log the number of map and reduce tasks
++   LOG.info("Job " + jobId + " initialized successfully with " + numMapTasks
++            + " map tasks and " + numReduceTasks + " reduce tasks.");
+   }
+   
+   TaskSplitMetaInfo[] createSplits(org.apache.hadoop.mapreduce.JobID jobId)
+@@ -732,39 +739,46 @@ public class JobInProgress {
+     return launchedSetup;
+   }
+ 
+-  /**
+-   * Get the list of map tasks
+-   * @return the raw array of maps for this job
++  /** 
++   * Get all the tasks of the desired type in this job.
++   * @param type {@link TaskType} of the tasks required
++   * @return An array of {@link TaskInProgress} matching the given type. 
++   *         Returns an empty array if no tasks are found for the given type.  
+    */
+-  public TaskInProgress[] getMapTasks() {
+-    return maps;
+-  }
++  TaskInProgress[] getTasks(TaskType type) {
++    TaskInProgress[] tasks = null;
++    switch (type) {
++      case MAP:
++        {
++          tasks = maps;
++        }
++        break;
++      case REDUCE:
++        {
++          tasks = reduces;
++        }
++        break;
++      case JOB_SETUP: 
++        {
++          tasks = setup;
++        }
++        break;
++      case JOB_CLEANUP:
++        {
++          tasks = cleanup;
++        }
++        break;
++      default:
++        {
++          tasks = new TaskInProgress[0];
++        }
++        break;
++    }
+     
+-  /**
+-   * Get the list of cleanup tasks
+-   * @return the array of cleanup tasks for the job
+-   */
+-  public TaskInProgress[] getCleanupTasks() {
+-    return cleanup;
+-  }
+-  
+-  /**
+-   * Get the list of setup tasks
+-   * @return the array of setup tasks for the job
+-   */
+-  public TaskInProgress[] getSetupTasks() {
+-    return setup;
++    return tasks;
+   }
+   
+   /**
+-   * Get the list of reduce tasks
+-   * @return the raw array of reduce tasks for this job
+-   */
+-  public TaskInProgress[] getReduceTasks() {
+-    return reduces;
+-  }
+-
+-  /**
+    * Return the nonLocalRunningMaps
+    * @return
+    */
+@@ -3108,11 +3122,11 @@ public class JobInProgress {
+                "submitTime" + EQUALS + job.getStartTime() + StringUtils.COMMA +
+                "launchTime" + EQUALS + job.getLaunchTime() + StringUtils.COMMA +
+                "finishTime" + EQUALS + job.getFinishTime() + StringUtils.COMMA +
+-               "numMaps" + EQUALS + job.getMapTasks().length + 
++               "numMaps" + EQUALS + job.getTasks(TaskType.MAP).length + 
+                            StringUtils.COMMA +
+                "numSlotsPerMap" + EQUALS + job.getNumSlotsPerMap() + 
+                                   StringUtils.COMMA +
+-               "numReduces" + EQUALS + job.getReduceTasks().length + 
++               "numReduces" + EQUALS + job.getTasks(TaskType.REDUCE).length + 
+                               StringUtils.COMMA +
+                "numSlotsPerReduce" + EQUALS + job.getNumSlotsPerReduce() + 
+                                      StringUtils.COMMA +
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 73719e9..330acb2 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -2420,8 +2420,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   // and TaskInProgress
+   ///////////////////////////////////////////////////////
+   void createTaskEntry(TaskAttemptID taskid, String taskTracker, TaskInProgress tip) {
+-    LOG.info("Adding task " + 
+-      (tip.isCleanupAttempt(taskid) ? "(cleanup)" : "") + 
++    LOG.info("Adding task (" + tip.getAttemptType(taskid) + ") " + 
+       "'"  + taskid + "' to tip " + 
+       tip.getTIPId() + ", for tracker '" + taskTracker + "'");
+ 
+@@ -2454,9 +2453,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     }
+ 
+     // taskid --> TIP
+-    taskidToTIPMap.remove(taskid);
+-        
+-    LOG.debug("Removing task '" + taskid + "'");
++    if (taskidToTIPMap.remove(taskid) != null) {   
++      LOG.info("Removing task '" + taskid + "'");
++    }
+   }
+     
+   /**
+@@ -2485,7 +2484,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+    * @param job the completed job
+    */
+   void markCompletedJob(JobInProgress job) {
+-    for (TaskInProgress tip : job.getSetupTasks()) {
++    for (TaskInProgress tip : job.getTasks(TaskType.JOB_SETUP)) {
+       for (TaskStatus taskStatus : tip.getTaskStatuses()) {
+         if (taskStatus.getRunState() != TaskStatus.State.RUNNING && 
+             taskStatus.getRunState() != TaskStatus.State.COMMIT_PENDING &&
+@@ -2495,7 +2494,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         }
+       }
+     }
+-    for (TaskInProgress tip : job.getMapTasks()) {
++    for (TaskInProgress tip : job.getTasks(TaskType.MAP)) {
+       for (TaskStatus taskStatus : tip.getTaskStatuses()) {
+         if (taskStatus.getRunState() != TaskStatus.State.RUNNING && 
+             taskStatus.getRunState() != TaskStatus.State.COMMIT_PENDING &&
+@@ -2507,7 +2506,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         }
+       }
+     }
+-    for (TaskInProgress tip : job.getReduceTasks()) {
++    for (TaskInProgress tip : job.getTasks(TaskType.REDUCE)) {
+       for (TaskStatus taskStatus : tip.getTaskStatuses()) {
+         if (taskStatus.getRunState() != TaskStatus.State.RUNNING &&
+             taskStatus.getRunState() != TaskStatus.State.COMMIT_PENDING &&
+@@ -2535,8 +2534,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     if (markedTaskSet != null) {
+       for (TaskAttemptID taskid : markedTaskSet) {
+         removeTaskEntry(taskid);
+-        LOG.info("Removed completed task '" + taskid + "' from '" + 
+-                 taskTracker + "'");
++        if (LOG.isDebugEnabled()) {
++          LOG.debug("Removed marked completed task '" + taskid + "' from '" + 
++                    taskTracker + "'");
++        }
+       }
+       // Clear
+       trackerToMarkedTasksMap.remove(taskTracker);
+@@ -2554,15 +2555,16 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+    * 
+    * @param job the job about to be 'retired'
+    */
+-  synchronized private void removeJobTasks(JobInProgress job) { 
+-    for (TaskInProgress tip : job.getMapTasks()) {
+-      for (TaskStatus taskStatus : tip.getTaskStatuses()) {
+-        removeTaskEntry(taskStatus.getTaskID());
+-      }
+-    }
+-    for (TaskInProgress tip : job.getReduceTasks()) {
+-      for (TaskStatus taskStatus : tip.getTaskStatuses()) {
+-        removeTaskEntry(taskStatus.getTaskID());
++  synchronized void removeJobTasks(JobInProgress job) { 
++    // iterate over all the task types
++    for (TaskType type : TaskType.values()) {
++      // iterate over all the tips of the type under consideration
++      for (TaskInProgress tip : job.getTasks(type)) {
++        // iterate over all the task-ids in the tip under consideration
++        for (TaskAttemptID id : tip.getAllTaskAttemptIDs()) {
++          // remove the task-id entry from the jobtracker
++          removeTaskEntry(id);
++        }
+       }
+     }
+   }
+@@ -3676,6 +3678,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       }
+     }
+     myInstrumentation.submitJob(job.getJobConf(), jobId);
++    LOG.info("Job " + jobId + " added successfully for user '" 
++             + job.getJobConf().getUser() + "' to queue '" 
++             + job.getJobConf().getQueueName() + "'");
+     return job.getStatus();
+   }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+index 7fbdf5d..c810bab 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+@@ -21,6 +21,7 @@ package org.apache.hadoop.mapred;
+ import java.io.IOException;
+ import java.util.ArrayList;
+ import java.util.Arrays;
++import java.util.Collection;
+ import java.util.Comparator;
+ import java.util.Iterator;
+ import java.util.List;
+@@ -32,6 +33,7 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.mapred.SortedRanges.Range;
+ import org.apache.hadoop.mapreduce.split.JobSplit.TaskSplitMetaInfo;
++import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.hadoop.net.Node;
+ 
+ 
+@@ -288,6 +290,32 @@ public class TaskInProgress {
+   }
+     
+   /**
++   * Returns the type of the {@link TaskAttemptID} passed. 
++   * The type of an attempt is determined by the nature of the task and not its 
++   * id. 
++   * For example,
++   * - Attempt 'attempt_123_01_m_01_0' might be a job-setup task even though it 
++   *   has a _m_ in its id. Hence the task type of this attempt is JOB_SETUP 
++   *   instead of MAP.
++   * - Similarly reduce attempt 'attempt_123_01_r_01_0' might have failed and is
++   *   now supposed to do the task-level cleanup. In such a case this attempt 
++   *   will be of type TASK_CLEANUP instead of REDUCE.
++   */
++  TaskType getAttemptType (TaskAttemptID id) {
++    if (isCleanupAttempt(id)) {
++      return TaskType.TASK_CLEANUP;
++    } else if (isJobSetupTask()) {
++      return TaskType.JOB_SETUP;
++    } else if (isJobCleanupTask()) {
++      return TaskType.JOB_CLEANUP;
++    } else if (isMapTask()) {
++      return TaskType.MAP;
++    } else {
++      return TaskType.REDUCE;
++    }
++  }
++  
++  /**
+    * Is the Task associated with taskid is the first attempt of the tip? 
+    * @param taskId
+    * @return Returns true if the Task is the first attempt of the tip
+@@ -759,6 +787,13 @@ public class TaskInProgress {
+   }
+ 
+   /**
++   * Get all the {@link TaskAttemptID}s in this {@link TaskInProgress}
++   */
++  TaskAttemptID[] getAllTaskAttemptIDs() {
++    return tasks.toArray(new TaskAttemptID[tasks.size()]);
++  }
++  
++  /**
+    * Get the status of the specified task
+    * @param taskid
+    */
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index ac71558..825c82e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -1315,7 +1315,7 @@ public class TaskTracker
+    * @return false if the tracker was unknown
+    * @throws IOException
+    */
+-  private HeartbeatResponse transmitHeartBeat(long now) throws IOException {
++  HeartbeatResponse transmitHeartBeat(long now) throws IOException {
+     // Send Counters in the status once every COUNTER_UPDATE_INTERVAL
+     boolean sendCounters;
+     if (now > (previousUpdate + COUNTER_UPDATE_INTERVAL)) {
+diff --git a/src/test/org/apache/hadoop/mapred/MiniMRCluster.java b/src/test/org/apache/hadoop/mapred/MiniMRCluster.java
+index 3026437..8e6bbf6 100644
+--- a/src/test/org/apache/hadoop/mapred/MiniMRCluster.java
++++ b/src/test/org/apache/hadoop/mapred/MiniMRCluster.java
+@@ -178,7 +178,7 @@ public class MiniMRCluster {
+       conf.set("mapred.local.dir", localPath.toString());
+       LOG.info("mapred.local.dir is " +  localPath);
+       try {
+-        tt = new TaskTracker(conf);
++        tt = createTaskTracker(conf);
+         isInitialized = true;
+       } catch (Throwable e) {
+         isDead = true;
+@@ -186,7 +186,14 @@ public class MiniMRCluster {
+         LOG.error("task tracker " + trackerId + " crashed", e);
+       }
+     }
+-        
++     
++    /**
++     * Creates a default {@link TaskTracker} using the conf passed. 
++     */
++    TaskTracker createTaskTracker(JobConf conf) throws IOException {
++      return new TaskTracker(conf);
++    }
++    
+     /**
+      * Create and run the task tracker.
+      */
+@@ -657,6 +664,13 @@ public class MiniMRCluster {
+     TaskTrackerRunner taskTracker;
+     taskTracker = new TaskTrackerRunner(idx, numDir, host, conf);
+     
++    addTaskTracker(taskTracker);
++  }
++  
++  /**
++   * Add a tasktracker to the Mini-MR cluster.
++   */
++  void addTaskTracker(TaskTrackerRunner taskTracker) throws IOException {
+     Thread taskTrackerThread = new Thread(taskTracker);
+     taskTrackerList.add(taskTracker);
+     taskTrackerThreadList.add(taskTrackerThread);
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobHistory.java b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+index 2d536bd..cc8ef54 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobHistory.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+@@ -38,6 +38,7 @@ import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.mapred.JobHistory.*;
++import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ 
+@@ -604,7 +605,7 @@ public class TestJobHistory extends TestCase {
+     TaskID mapTaskId = new TaskID(job.getID(), true, 0);
+     TaskID reduceTaskId = new TaskID(job.getID(), false, 0);
+ 
+-    TaskInProgress cleanups[] = jip.getCleanupTasks();
++    TaskInProgress cleanups[] = jip.getTasks(TaskType.JOB_CLEANUP);
+     TaskID cleanupTaskId;
+     if (cleanups[0].isComplete()) {
+       cleanupTaskId = cleanups[0].getTIPId();
+@@ -613,7 +614,7 @@ public class TestJobHistory extends TestCase {
+       cleanupTaskId = cleanups[1].getTIPId();
+     }
+ 
+-    TaskInProgress setups[] = jip.getSetupTasks();
++    TaskInProgress setups[] = jip.getTasks(TaskType.JOB_SETUP);
+     TaskID setupTaskId;
+     if (setups[0].isComplete()) {
+       setupTaskId = setups[0].getTIPId();
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java b/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
+index 4bba6a6..5550740 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobQueueTaskScheduler.java
+@@ -50,7 +50,6 @@ public class TestJobQueueTaskScheduler extends TestCase {
+       super(new JobID("test", ++jobCounter), jobConf, jt);
+       this.taskTrackerManager = taskTrackerManager;
+       this.startTime = System.currentTimeMillis();
+-      this.status = new JobStatus(getJobID(), 0f, 0f, JobStatus.PREP);
+       this.status.setJobPriority(JobPriority.NORMAL);
+       this.status.setStartTime(startTime);
+     }
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobRetire.java b/src/test/org/apache/hadoop/mapred/TestJobRetire.java
+index b2a879d..11c50cd 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobRetire.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobRetire.java
+@@ -25,27 +25,42 @@ import java.net.URL;
+ 
+ import junit.framework.TestCase;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.mapred.JobTracker.RetireJobInfo;
++import org.apache.hadoop.mapred.MiniMRCluster.TaskTrackerRunner;
++import org.apache.hadoop.mapreduce.TaskType;
++import org.apache.hadoop.mapreduce.split.JobSplit;
+ 
+ /**
+  * Test if the job retire works fine.
+  */
+ public class TestJobRetire extends TestCase {
++  static final Log LOG = LogFactory.getLog(TestJobRetire.class);
+   static final Path testDir =
+     new Path(System.getProperty("test.build.data","/tmp"),
+              "job-expiry-testing");
+ 
++  private MiniMRCluster startCluster(JobConf conf, int numTrackers) 
++  throws IOException {
++    conf.setLong("mapred.job.tracker.retiredjobs.cache.size", 1);
++    conf.setLong("mapred.jobtracker.retirejob.interval", 0);
++    conf.setLong("mapred.jobtracker.retirejob.check", 0);
++    conf.getLong("mapred.jobtracker.completeuserjobs.maximum", 0);
++    
++    return new MiniMRCluster(0, 0, numTrackers, "file:///", 1, null, null, null,
++                             conf, 0);
++  }
++  
+   public void testJobRetire() throws Exception {
+     MiniMRCluster mr = null;
+     try {
+       JobConf conf = new JobConf();
+-
+-      conf.setLong("mapred.job.tracker.retiredjobs.cache.size", 1);
+-      conf.setLong("mapred.jobtracker.retirejob.interval", 0);
+-      conf.setLong("mapred.jobtracker.retirejob.check", 0);
+-      conf.getLong("mapred.jobtracker.completeuserjobs.maximum", 0);
+-      mr = new MiniMRCluster(0, 0, 1, "file:///", 1, null, null, null, conf, 0);
++      mr = startCluster(conf, 1);
++      
+       JobConf jobConf = mr.createJobConf();
+       JobTracker jobtracker = mr.getJobTrackerRunner().getJobTracker();
+ 
+@@ -63,6 +78,7 @@ public class TestJobRetire extends TestCase {
+           1, jobtracker.getAllJobs().length);
+     } finally {
+       if (mr != null) { mr.shutdown();}
++      FileUtil.fullyDelete(new File(testDir.toString()));
+     }
+   }
+ 
+@@ -74,13 +90,8 @@ public class TestJobRetire extends TestCase {
+     assertTrue(rj.isSuccessful());
+     JobID id = rj.getID();
+ 
+-    JobInProgress job = jobtracker.getJob(id);
+     //wait for job to get retired
+-    for (int i = 0; i < 10 && job != null; i++) {
+-      UtilsForTests.waitFor(1000);
+-      job = jobtracker.getJob(id);
+-    }
+-    assertNull("Job did not retire", job);
++    waitTillRetire(id, jobtracker);
+     RetireJobInfo retired = jobtracker.retireJobs.get(id);
+     assertTrue("History url not set", retired.getHistoryFile() != null &&
+       retired.getHistoryFile().length() > 0);
+@@ -107,5 +118,242 @@ public class TestJobRetire extends TestCase {
+ 
+     return id;
+   }
++  
++  // wait till the job retires
++  private void waitTillRetire(JobID id, JobTracker jobtracker) {
++    //wait for job to get retired
++    JobInProgress job = jobtracker.getJob(id);
++    for (int i = 0; i < 10 && job != null; i++) {
++      UtilsForTests.waitFor(1000);
++      job = jobtracker.getJob(id);
++    }
++    assertNull("Job did not retire", job);
++  }
++  
++  /**
++   * Custom TaskTracker which waits forever after a successful contact to 
++   * the JobTracker.
++   */
++  class WaitingTaskTracker extends TaskTracker {
++    
++    WaitingTaskTracker(JobConf conf) throws IOException {
++      super(conf);
++    }
++    
++    @Override
++    HeartbeatResponse transmitHeartBeat(long now) throws IOException {
++      HeartbeatResponse response = super.transmitHeartBeat(now);
++      LOG.info("WaitingTaskTracker waiting");
++      // wait forever
++      UtilsForTests.waitFor(Long.MAX_VALUE);
++      throw new IOException ("WaitingTaskTracker interrupted. Bailing out");
++    }
++  }
++  
++  /**
++   * Test job retire with tasks that report their *first* status only after the
++   * job retires.
++   * Steps :
++   *  - Start a mini-mr cluster with 1 task-tracker having only map slots.
++   *    Note that this task-tracker will take care of setup/cleanup and the map
++   *    tasks.
++   *  - Submit a job with 1 map task and 1 reduce task
++   *  - Wait for the job to finish the map task
++   *  - Start a 2nd tracker that waits for a long time after contacting the JT.
++   *  - Wait for the 2nd tracker to get stuck
++   *  - Kill the job
++   *  - Wait for the job to retire
++   *  - Check if the tip mappings are cleaned up. 
++   */
++  public void testJobRetireWithUnreportedTasks() throws Exception {
++    MiniMRCluster mr = null;
++    try {
++      JobConf conf = new JobConf();
++      // set the num-map-slots to 1 so that no reduce tasks but setup/cleanup 
++      // can run on it
++      conf.setInt("mapred.tasktracker.map.tasks.maximum", 1);
++      conf.setInt("mapred.tasktracker.reduce.tasks.maximum", 0);
++      
++      mr = startCluster(conf, 1);
++      JobTracker jobtracker = mr.getJobTrackerRunner().getJobTracker();
++      
++      RunningJob job = 
++        UtilsForTests.runJob(mr.createJobConf(), new Path(testDir, "in-1"), 
++                             new Path(testDir, "out-1"), 1, 1);
++      JobID id = JobID.downgrade(job.getID());
++      JobInProgress jip = jobtracker.getJob(id);
++      
++      // wait 100 secs for the job to complete its map task
++      for (int i = 0; i < 1000 && jip.finishedMaps() < 1; i++) {
++        UtilsForTests.waitFor(100);
++      }
++      assertEquals(jip.finishedMaps(), 1);
++      
++      // start a tracker that will wait
++      LOG.info("Adding a waiting tracker");
++      TaskTrackerRunner testTrackerRunner = 
++        mr.new TaskTrackerRunner(1, 1, null, mr.createJobConf()) {
++        @Override
++        TaskTracker createTaskTracker(JobConf conf) throws IOException {
++          return new WaitingTaskTracker(conf);
++        }
++      };
++      mr.addTaskTracker(testTrackerRunner);
++      LOG.info("Waiting tracker added");
++      
++      WaitingTaskTracker testTT = 
++        (WaitingTaskTracker)testTrackerRunner.getTaskTracker();
++      
++      // wait 100 secs for the newly started task-tracker to join
++      for (int i = 0; i < 1000 && jobtracker.taskTrackers().size() < 2; i++) {
++        UtilsForTests.waitFor(100);
++      }
++      assertEquals(jobtracker.taskTrackers().size(), 2);
++      LOG.info("Cluster is now up with 2 trackers");
++      // stop the test-tt as its no longer required
++      mr.stopTaskTracker(mr.getTaskTrackerID(testTT.getName()));
++      
++      // 1 reduce task should be scheduled
++      assertEquals("TestTT contacted but no reduce task scheduled on it", 
++                   1, jip.runningReduces());
++      
++      // kill the job
++      LOG.info("Killing job " + id);
++      job.killJob();
++      
++      // check if the reduce task attempt status is missing
++      TaskInProgress tip = jip.getTasks(TaskType.REDUCE)[0]; 
++      assertNull(tip.getTaskStatus(tip.getAllTaskAttemptIDs()[0]));
++      
++      // wait for the job to retire
++      waitTillRetire(id, jobtracker);
++      
++      // check the taskidToTIPMap
++      for (TaskAttemptID tid : jobtracker.taskidToTIPMap.keySet()) {
++        LOG.info("TaskidToTIP : " + tid);
++      }
++      assertEquals("'taskid' to TIP mapping still exists", 
++                   0, jobtracker.taskidToTIPMap.size());
++    } finally {
++      if (mr != null) { mr.shutdown();}
++      // cleanup
++      FileUtil.fullyDelete(new File(testDir.toString()));
++    }
++  }
+ 
++  /**
++   * (Mock)Test JobTracker.removeJobTasks() which is called only when the job 
++   * retires.
++   */
++  public void testJobRemoval() throws Exception {
++    MiniMRCluster mr = null;
++    try {
++      JobConf conf = new JobConf();
++      mr = startCluster(conf, 0);
++      JobTracker jobtracker = mr.getJobTrackerRunner().getJobTracker();
++      
++      // test map task removal
++      testRemoveJobTasks(jobtracker, conf, TaskType.MAP);
++      // test reduce task removal
++      testRemoveJobTasks(jobtracker, conf, TaskType.REDUCE);
++      // test job setup removal
++      testRemoveJobTasks(jobtracker, conf, TaskType.JOB_SETUP);
++      // test job cleanup removal
++      testRemoveJobTasks(jobtracker, conf, TaskType.JOB_CLEANUP);
++    } finally {
++      if (mr != null) { mr.shutdown();}
++      // cleanup
++      FileUtil.fullyDelete(new File(testDir.toString()));
++    }
++  }
++ 
++  // create a new job and add it to the jobtracker
++  private JobInProgress createAndAddJob(JobTracker jobtracker, JobConf conf) {
++    // submit a job in a fake manner
++    // get the new job-id
++    JobID id = 
++      new JobID(jobtracker.getTrackerIdentifier(), jobtracker.jobs.size() + 1);
++    // create a JobInProgress for this fake job
++    JobInProgress jip = new JobInProgress(id, conf, jobtracker);
++    
++    // insert this fake completed job in the jobtracker
++    jobtracker.jobs.put(id, jip);
++    
++    return jip;
++  }
++  
++  // create a new TaskInProgress and make it running by adding it to jobtracker
++  private TaskInProgress createAndAddTIP(JobTracker jobtracker, 
++                                         JobInProgress jip, TaskType type) {
++    JobConf conf = jip.getJobConf();
++    JobID id = jip.getJobID();
++    // now create a fake tip for this fake job
++    TaskInProgress tip = null;
++    if (type == TaskType.MAP) {
++      tip = new TaskInProgress(id, "dummy", JobSplit.EMPTY_TASK_SPLIT,
++                               jobtracker, conf, jip, 0, 1);
++      jip.maps = new TaskInProgress[] {tip};
++    } else if (type == TaskType.REDUCE) {
++      tip = new TaskInProgress(id, "dummy", jip.desiredMaps(), 0, 
++                               jobtracker, conf, jip, 1);
++      jip.reduces = new TaskInProgress[] {tip};
++    } else if (type == TaskType.JOB_SETUP) {
++      tip = 
++        new TaskInProgress(id, "dummy", JobSplit.EMPTY_TASK_SPLIT,
++                           jobtracker, conf, jip, 0, 1);
++      jip.setup = new TaskInProgress[] {tip};
++    } else if (type == TaskType.JOB_CLEANUP) {
++      tip = 
++        new TaskInProgress(id, "dummy", JobSplit.EMPTY_TASK_SPLIT,
++                           jobtracker, conf, jip, 0, 1);
++      jip.cleanup = new TaskInProgress[] {tip};
++    }
++    return tip;
++  }
++  
++  // create a new Task for the given tip and make it running
++  private TaskAttemptID createAndAddAttempt(TaskInProgress tip, int attemptId) {
++    // create a fake attempt for this fake task
++    TaskAttemptID taskid = new TaskAttemptID(tip.getTIPId(), attemptId);
++    
++    // insert this fake task into the jobtracker by making it running
++    tip.addRunningTask(taskid, "test-tt");
++    
++    return taskid;
++  }
++  
++  // Mock a job run such that the jobtracker is in a state similar to that 
++  // resulting from an actual job run.
++  // Steps :
++  //   - generate a new job-id
++  //   - create and add a JobInProgress object using the fake job-id
++  //   - create and add a fake tip of the passed type 't' under the fake job
++  //     Note that t can be a MAP or a REDUCE or a JOB_SETUP or a JOB_CLEANUP.
++  //   - create and add a fake attempt under the fake tip
++  //   - remove the job from the jobtracker
++  //   - check if the fake attempt is removed from the jobtracker
++  private void testRemoveJobTasks(JobTracker jobtracker, JobConf conf, 
++                                  TaskType type) {
++    // create and submit a job
++    JobInProgress jip = createAndAddJob(jobtracker, conf);
++    // create and add a tip
++    TaskInProgress tip = createAndAddTIP(jobtracker, jip, type);
++    // create and add an attempt
++    TaskAttemptID taskid = createAndAddAttempt(tip, 0);
++    
++    // this fake attempt should not have any status
++    assertNull(tip.getTaskStatus(taskid));
++    
++    // remove the job tasks for this fake job from the jobtracker
++    jobtracker.removeJobTasks(jip);
++    
++    // check the taskidToTIPMap
++    for (TaskAttemptID tid : jobtracker.taskidToTIPMap.keySet()) {
++      LOG.info("TaskidToTIP : " + tid);
++    }
++    
++    // check if the fake attempt is removed from the jobtracker
++    assertEquals("'taskid' to TIP mapping still exists", 
++                 0, jobtracker.taskidToTIPMap.size());
++  }
+ }
+diff --git a/src/test/org/apache/hadoop/mapred/TestLostTracker.java b/src/test/org/apache/hadoop/mapred/TestLostTracker.java
+index 448dfe5..66a471b 100644
+--- a/src/test/org/apache/hadoop/mapred/TestLostTracker.java
++++ b/src/test/org/apache/hadoop/mapred/TestLostTracker.java
+@@ -20,6 +20,7 @@ package org.apache.hadoop.mapred;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.*;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.mapreduce.TaskType;
+ 
+ import junit.framework.TestCase;
+ import java.io.*;
+@@ -95,8 +96,8 @@ public class TestLostTracker extends TestCase {
+     
+     // check if the task statuses for the tasks are sane
+     JobTracker jt = mr.getJobTrackerRunner().getJobTracker();
+-    for (TaskInProgress taskInProgress : jt.getJob(id).getMapTasks()) {
+-      testTaskStatuses(taskInProgress.getTaskStatuses());
++    for (TaskInProgress mtip : jt.getJob(id).getTasks(TaskType.MAP)) {
++      testTaskStatuses(mtip.getTaskStatuses());
+     }
+     
+     // validate the history file
+diff --git a/src/test/org/apache/hadoop/mapred/TestParallelInitialization.java b/src/test/org/apache/hadoop/mapred/TestParallelInitialization.java
+index f2415f8..675deb7 100644
+--- a/src/test/org/apache/hadoop/mapred/TestParallelInitialization.java
++++ b/src/test/org/apache/hadoop/mapred/TestParallelInitialization.java
+@@ -48,7 +48,6 @@ public class TestParallelInitialization extends TestCase {
+       super(new JobID("test", ++jobCounter), jobConf,
+           jt);
+       this.startTime = System.currentTimeMillis();
+-      this.status = new JobStatus(getJobID(), 0f, 0f, JobStatus.PREP);
+       this.status.setJobPriority(JobPriority.NORMAL);
+       this.status.setStartTime(startTime);
+     }
+diff --git a/src/test/org/apache/hadoop/mapred/TestSetupAndCleanupFailure.java b/src/test/org/apache/hadoop/mapred/TestSetupAndCleanupFailure.java
+index 18a0613..8c89413 100644
+--- a/src/test/org/apache/hadoop/mapred/TestSetupAndCleanupFailure.java
++++ b/src/test/org/apache/hadoop/mapred/TestSetupAndCleanupFailure.java
+@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.mapred.lib.IdentityMapper;
+ import org.apache.hadoop.mapred.lib.IdentityReducer;
++import org.apache.hadoop.mapreduce.TaskType;
+ 
+ /**
+  * Tests various failures in setup/cleanup of job, like 
+@@ -184,7 +185,8 @@ public class TestSetupAndCleanupFailure extends TestCase {
+     JobTracker jt = mr.getJobTrackerRunner().getJobTracker();
+     JobInProgress jip = jt.getJob(job.getID());
+     // get the running setup task id
+-    TaskAttemptID setupID = getRunningTaskID(jip.getSetupTasks());
++    TaskAttemptID setupID = 
++      getRunningTaskID(jip.getTasks(TaskType.JOB_SETUP));
+     if (commandLineKill) {
+       killTaskFromCommandLine(job, setupID, jt);
+     } else {
+@@ -201,7 +203,8 @@ public class TestSetupAndCleanupFailure extends TestCase {
+       } catch (InterruptedException ie) {}
+     }
+     // get the running cleanup task id
+-    TaskAttemptID cleanupID = getRunningTaskID(jip.getCleanupTasks());
++    TaskAttemptID cleanupID = 
++      getRunningTaskID(jip.getTasks(TaskType.JOB_CLEANUP));
+     if (commandLineKill) {
+       killTaskFromCommandLine(job, cleanupID, jt);
+     } else {
+diff --git a/src/webapps/job/jobdetails.jsp b/src/webapps/job/jobdetails.jsp
+index ef0c868..22a386d 100644
+--- a/src/webapps/job/jobdetails.jsp
++++ b/src/webapps/job/jobdetails.jsp
+@@ -7,6 +7,7 @@
+   import="java.util.*"
+   import="java.text.DecimalFormat"
+   import="org.apache.hadoop.mapred.*"
++  import="org.apache.hadoop.mapreduce.TaskType"
+   import="org.apache.hadoop.util.*"
+ %>
+ 
+@@ -220,7 +221,8 @@
+     out.print("<b>Job File:</b> <a href=\"jobconf.jsp?jobid=" + jobId + "\">" 
+               + profile.getJobFile() + "</a><br>\n");
+     out.print("<b>Job Setup:</b>");
+-    printJobLevelTaskSummary(out, jobId, "setup", job.getSetupTasks());
++    printJobLevelTaskSummary(out, jobId, "setup", 
++                             job.getTasks(TaskType.JOB_SETUP));
+     out.print("<br>\n");
+     if (runState == JobStatus.RUNNING) {
+       out.print("<b>Status:</b> Running<br>\n");
+@@ -252,7 +254,8 @@
+       }
+     }
+     out.print("<b>Job Cleanup:</b>");
+-    printJobLevelTaskSummary(out, jobId, "cleanup", job.getCleanupTasks());
++    printJobLevelTaskSummary(out, jobId, "cleanup", 
++                             job.getTasks(TaskType.JOB_CLEANUP));
+     out.print("<br>\n");
+     if (flakyTaskTrackers > 0) {
+       out.print("<b>Black-listed TaskTrackers:</b> " + 
+@@ -271,9 +274,9 @@
+               "<th><a href=\"jobfailures.jsp?jobid=" + jobId + 
+               "\">Failed/Killed<br>Task Attempts</a></th></tr>\n");
+     printTaskSummary(out, jobId, "map", status.mapProgress(), 
+-                     job.getMapTasks());
++                     job.getTasks(TaskType.MAP));
+     printTaskSummary(out, jobId, "reduce", status.reduceProgress(),
+-                     job.getReduceTasks());
++                     job.getTasks(TaskType.REDUCE));
+     out.print("</table>\n");
+     
+     %>
+@@ -348,7 +351,7 @@ if("off".equals(session.getAttribute("map.graph"))) { %>
+        style="width:100%" type="image/svg+xml" pluginspage="http://www.adobe.com/svg/viewer/install/" />
+ <%}%>
+ 
+-<%if(job.getReduceTasks().length > 0) { %>
++<%if(job.getTasks(TaskType.REDUCE).length > 0) { %>
+ <hr>Reduce Completion Graph -
+ <%if("off".equals(session.getAttribute("reduce.graph"))) { %>
+ <a href="/jobdetails.jsp?jobid=<%=jobId%>&refresh=<%=refresh%>&reduce.graph=on" > open </a>
+diff --git a/src/webapps/job/jobfailures.jsp b/src/webapps/job/jobfailures.jsp
+index 969fb5a..ef6892e 100644
+--- a/src/webapps/job/jobfailures.jsp
++++ b/src/webapps/job/jobfailures.jsp
+@@ -5,6 +5,7 @@
+   import="java.io.*"
+   import="java.util.*"
+   import="org.apache.hadoop.mapred.*"
++  import="org.apache.hadoop.mapreduce.TaskType"
+   import="org.apache.hadoop.util.*"
+ %>
+ 
+@@ -130,13 +131,13 @@
+               "<th>Error</th><th>Logs</th></tr>\n");
+     out.print("</thead><tbody>\n");
+     if (includeMap) {
+-      TaskInProgress[] tips = job.getMapTasks();
++      TaskInProgress[] tips = job.getTasks(TaskType.MAP);
+       for(int i=0; i < tips.length; ++i) {
+         printFailedAttempts(out, tracker, jobId, tips[i], state);
+       }
+     }
+     if (includeReduce) {
+-      TaskInProgress[] tips = job.getReduceTasks();
++      TaskInProgress[] tips = job.getTasks(TaskType.REDUCE);
+       for(int i=0; i < tips.length; ++i) {
+         printFailedAttempts(out, tracker, jobId, tips[i], state);
+       }
+-- 
+1.7.0.4
+

@@ -1,0 +1,52 @@
+From a6e1a230ab14e00c9d3f8826f1e7a1ac33144aa1 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@apache.org>
+Date: Thu, 2 Feb 2012 22:10:36 +0000
+Subject: [PATCH 1138/1179] HDFS-2877. If locking of a storage dir fails, it will remove the other NN's lock file on exit.
+
+In Storage.tryLock(), we call lockF.deleteOnExit() regardless of
+whether we successfully lock the directory. So, if another NN has the
+directory locked, then we'll fail to lock it the first time we start
+another NN. But our failed start attempt will still remove the other
+NN's lockfile, and a second attempt will erroneously start.
+
+Reason: Bug
+Author: Todd Lipcon
+Ref: CDH-4410
+---
+ .../apache/hadoop/hdfs/server/common/Storage.java  |   12 +++++++++++-
+ 1 files changed, 11 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/common/Storage.java b/src/hdfs/org/apache/hadoop/hdfs/server/common/Storage.java
+index 7f6bb1d..c373f00 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/common/Storage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/common/Storage.java
+@@ -608,8 +608,12 @@ public abstract class Storage extends StorageInfo {
+      * @throws IOException if locking fails.
+      */
+     FileLock tryLock() throws IOException {
++      boolean deletionHookAdded = false;
+       File lockF = new File(root, STORAGE_FILE_LOCK);
+-      lockF.deleteOnExit();
++      if (!lockF.exists()) {
++        lockF.deleteOnExit();
++        deletionHookAdded = true;
++      }
+       RandomAccessFile file = new RandomAccessFile(lockF, "rws");
+       FileLock res = null;
+       try {
+@@ -622,6 +626,12 @@ public abstract class Storage extends StorageInfo {
+         file.close();
+         throw e;
+       }
++      if (res != null && !deletionHookAdded) {
++        // If the file existed prior to our startup, we didn't
++        // call deleteOnExit above. But since we successfully locked
++        // the dir, we can take care of cleaning it up.
++        lockF.deleteOnExit();
++      }
+       return res;
+     }
+ 
+-- 
+1.7.0.4
+

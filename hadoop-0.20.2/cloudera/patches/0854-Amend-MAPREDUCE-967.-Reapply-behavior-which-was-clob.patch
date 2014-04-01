@@ -1,0 +1,37 @@
+From 0ed0d5e311f4f0c57ab6bafa39d324e19dd15b53 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 7 Feb 2011 09:45:39 -0800
+Subject: [PATCH 0854/1179] Amend MAPREDUCE-967. Reapply behavior which was clobbered by MAPREDUCE-2178
+
+(TT should not unpack job jars unnecessarily)
+
+Author: Todd Lipcon
+Ref: CDH-2623
+---
+ .../org/apache/hadoop/mapred/JobLocalizer.java     |   10 ++++++----
+ 1 files changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobLocalizer.java b/src/mapred/org/apache/hadoop/mapred/JobLocalizer.java
+index 0802b03..99710bc 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobLocalizer.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobLocalizer.java
+@@ -272,10 +272,12 @@ public class JobLocalizer {
+       //Download job.jar
+       userFs.copyToLocalFile(jarFilePath, localJarFile);
+       localJobConf.setJar(localJarFile.toString());
+-      // Also un-jar the job.jar files. We un-jar it so that classes inside
+-      // sub-directories, for e.g., lib/, classes/ are available on class-path
+-      RunJar.unJar(new File(localJarFile.toString()),
+-          new File(localJarFile.getParent().toString()));
++      // also unjar the parts of the job.jar that need to end up on the
++      // classpath, or explicitly requested by the user.
++      RunJar.unJar(
++        new File(localJarFile.toString()),
++        new File(localJarFile.getParent().toString()),
++        localJobConf.getJarUnpackPattern());
+       FileUtil.chmod(localJarFile.getParent().toString(), "ugo+rx", true);
+     }
+   }
+-- 
+1.7.0.4
+

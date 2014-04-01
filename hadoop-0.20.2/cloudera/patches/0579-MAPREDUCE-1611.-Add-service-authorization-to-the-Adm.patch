@@ -1,0 +1,112 @@
+From 94abbf7bee9701230cff703aac7d740ff0333176 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 19 Mar 2010 22:58:21 +0530
+Subject: [PATCH 0579/1179] MAPREDUCE-1611. Add service authorization to the AdminOperationsProtocol
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439295/MAPREDUCE-1611-20100319-ydist.txt.
+Author: Amar Kamat
+Ref: CDH-648
+---
+ conf/hadoop-policy.xml.template                    |    9 +++
+ .../hadoop/mapred/MapReducePolicyProvider.java     |    2 +
+ ...OperationsProtocolWithServiceAuthorization.java |   57 ++++++++++++++++++++
+ 3 files changed, 68 insertions(+), 0 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestAdminOperationsProtocolWithServiceAuthorization.java
+
+diff --git a/conf/hadoop-policy.xml.template b/conf/hadoop-policy.xml.template
+index ef48f2b..5727b13 100644
+--- a/conf/hadoop-policy.xml.template
++++ b/conf/hadoop-policy.xml.template
+@@ -94,4 +94,13 @@
+     A special value of "*" means all users are allowed.</description>
+   </property>
+ 
++  <property>
++    <name>security.admin.operations.protocol.acl</name>
++    <value>*</value>
++    <description>ACL for AdminOperationsProtocol, used by the mradmins commands
++    to refresh queues and nodes at JobTracker. The ACL is a comma-separated list of 
++    user and group names. The user and group list is separated by a blank. 
++    For e.g. "alice,bob users,wheel". A special value of "*" means all users are 
++    allowed.</description>
++  </property>
+ </configuration>
+diff --git a/src/mapred/org/apache/hadoop/mapred/MapReducePolicyProvider.java b/src/mapred/org/apache/hadoop/mapred/MapReducePolicyProvider.java
+index 6f58453..4841864 100644
+--- a/src/mapred/org/apache/hadoop/mapred/MapReducePolicyProvider.java
++++ b/src/mapred/org/apache/hadoop/mapred/MapReducePolicyProvider.java
+@@ -38,6 +38,8 @@ public class MapReducePolicyProvider extends PolicyProvider {
+                   RefreshAuthorizationPolicyProtocol.class),
+       new Service("security.refresh.usertogroups.mappings.protocol.acl", 
+                   RefreshUserToGroupMappingsProtocol.class),
++      new Service("security.admin.operations.protocol.acl", 
++                  AdminOperationsProtocol.class),
+   };
+   
+   @Override
+diff --git a/src/test/org/apache/hadoop/mapred/TestAdminOperationsProtocolWithServiceAuthorization.java b/src/test/org/apache/hadoop/mapred/TestAdminOperationsProtocolWithServiceAuthorization.java
+new file mode 100644
+index 0000000..0e38422
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestAdminOperationsProtocolWithServiceAuthorization.java
+@@ -0,0 +1,57 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.mapred.tools.MRAdmin;
++import org.apache.hadoop.security.authorize.PolicyProvider;
++import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
++
++import junit.framework.TestCase;
++
++/**
++ * Test case to check if {@link AdminOperationsProtocol#refreshNodes()} and 
++ * {@link AdminOperationsProtocol#refreshQueueAcls()} works with service-level
++ * authorization enabled i.e 'hadoop.security.authorization' set to true.
++ */
++public class TestAdminOperationsProtocolWithServiceAuthorization 
++extends TestCase {
++  public void testServiceLevelAuthorization() throws Exception {
++    MiniMRCluster mr = null;
++    try {
++      // Turn on service-level authorization
++      final JobConf conf = new JobConf();
++      conf.setClass(PolicyProvider.POLICY_PROVIDER_CONFIG, 
++                    MapReducePolicyProvider.class, PolicyProvider.class);
++      conf.setBoolean(ServiceAuthorizationManager.SERVICE_AUTHORIZATION_CONFIG, 
++                      true);
++      
++      // Start the mini mr cluster
++      mr = new MiniMRCluster(1, "file:///", 1, null, null, conf);
++
++      // Invoke MRAdmin commands
++      MRAdmin mrAdmin = new MRAdmin(mr.createJobConf());
++      assertEquals(0, mrAdmin.run(new String[] { "-refreshQueueAcls" }));
++      assertEquals(0, mrAdmin.run(new String[] { "-refreshNodes" }));
++    } finally {
++      if (mr != null) { 
++        mr.shutdown();
++      }
++    }
++  }
++}
+-- 
+1.7.0.4
+

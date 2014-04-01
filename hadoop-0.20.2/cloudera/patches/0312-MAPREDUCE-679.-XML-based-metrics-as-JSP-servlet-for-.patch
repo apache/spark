@@ -1,0 +1,372 @@
+From f07b2df591b91c7de50e8dbb526cf11b27a32a6f Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 18 Jun 2010 17:58:53 -0700
+Subject: [PATCH 0312/1179] MAPREDUCE-679. XML-based metrics as JSP servlet for JobTracker
+
+Description: A simple XML translation of the existing JobTracker status page
+which provides the same metrics (including the tables of
+running/completed/failed jobs) as the human-readable page. This is a
+relatively lightweight addition to provide some machine-understandable metrics
+reporting.
+Reason: Improvement
+Author: Aaron Kimball
+Ref: CDH-651
+---
+ build.xml                                          |    1 +
+ src/mapred/org/apache/hadoop/mapred/JSPUtil.java   |    4 +-
+ .../org/apache/hadoop/mapred/JobTracker.java       |   13 +++
+ .../server/jobtracker/JobTrackerJspHelper.java     |  105 ++++++++++++++++++++
+ .../apache/hadoop/mapred/TestJobTrackerXmlJsp.java |   55 ++++++++++
+ src/webapps/job/jobtracker.jsp                     |    6 +-
+ src/webapps/job/jobtracker.jspx                    |   80 +++++++++++++++
+ 7 files changed, 260 insertions(+), 4 deletions(-)
+ create mode 100644 src/mapred/org/apache/hadoop/mapreduce/server/jobtracker/JobTrackerJspHelper.java
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestJobTrackerXmlJsp.java
+ create mode 100644 src/webapps/job/jobtracker.jspx
+
+diff --git a/build.xml b/build.xml
+index 3b3d6bf..d4f5f98 100644
+--- a/build.xml
++++ b/build.xml
+@@ -330,6 +330,7 @@
+     <copy todir="${build.webapps}">
+       <fileset dir="${src.webapps}">
+         <exclude name="**/*.jsp" />
++        <exclude name="**/*.jspx" />
+       </fileset>
+     </copy>
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+index f9ef98d..56d338e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
++++ b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+@@ -18,11 +18,14 @@
+ package org.apache.hadoop.mapred;
+ 
+ import java.io.IOException;
++import java.net.URLEncoder;
+ import java.util.Iterator;
+ import java.util.Collection;
++import java.util.Date;
+ 
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpServletResponse;
++import javax.servlet.jsp.JspWriter;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.util.StringUtils;
+@@ -186,5 +189,4 @@ class JSPUtil {
+     
+     return sb.toString();
+   }
+-
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 5fa2473..4db85cb 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -2287,6 +2287,13 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     }
+     return v;
+   }
++
++  public synchronized List<JobInProgress> getFailedJobs() {
++    synchronized (jobs) {
++      return failedJobs();
++    }
++  }
++
+   public Vector<JobInProgress> completedJobs() {
+     Vector<JobInProgress> v = new Vector<JobInProgress>();
+     for (Iterator it = jobs.values().iterator(); it.hasNext();) {
+@@ -2299,6 +2306,12 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     return v;
+   }
+ 
++  public synchronized List<JobInProgress> getCompletedJobs() {
++    synchronized (jobs) {
++      return completedJobs();
++    }
++  }
++
+   /**
+    * Get all the task trackers in the cluster
+    * 
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/server/jobtracker/JobTrackerJspHelper.java b/src/mapred/org/apache/hadoop/mapreduce/server/jobtracker/JobTrackerJspHelper.java
+new file mode 100644
+index 0000000..59878df
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapreduce/server/jobtracker/JobTrackerJspHelper.java
+@@ -0,0 +1,105 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.server.jobtracker;
++
++import java.io.IOException;
++import java.util.List;
++import java.text.DecimalFormat;
++
++import javax.servlet.jsp.JspWriter;
++import javax.servlet.http.*;
++
++import org.apache.hadoop.mapred.ClusterStatus;
++import org.apache.hadoop.mapred.JobInProgress;
++import org.apache.hadoop.mapred.JobProfile;
++import org.apache.hadoop.mapred.JobStatus;
++import org.apache.hadoop.mapred.JobTracker;
++import org.apache.hadoop.mapred.TaskTrackerStatus;
++import org.apache.hadoop.mapreduce.JobID;
++import org.apache.hadoop.util.StringUtils;
++
++/**
++ * Methods to help format output for JobTracker XML JSPX
++ */
++public class JobTrackerJspHelper {
++
++  public JobTrackerJspHelper() {
++    percentFormat = new DecimalFormat("##0.00");
++  }
++
++  private DecimalFormat percentFormat;
++
++  /**
++   * Returns an XML-formatted table of the jobs in the list.
++   * This is called repeatedly for different lists of jobs (e.g., running, completed, failed).
++   */
++  public void generateJobTable(JspWriter out, String label, List<JobInProgress> jobs)
++      throws IOException {
++    if (jobs.size() > 0) {
++      for (JobInProgress job : jobs) {
++        JobProfile profile = job.getProfile();
++        JobStatus status = job.getStatus();
++        JobID jobid = profile.getJobID();
++
++        int desiredMaps = job.desiredMaps();
++        int desiredReduces = job.desiredReduces();
++        int completedMaps = job.finishedMaps();
++        int completedReduces = job.finishedReduces();
++        String name = profile.getJobName();
++
++        out.print("<" + label + "_job jobid=\"" + jobid + "\">\n");
++        out.print("  <jobid>" + jobid + "</jobid>\n");
++        out.print("  <user>" + profile.getUser() + "</user>\n");
++        out.print("  <name>" + ("".equals(name) ? "&nbsp;" : name) + "</name>\n");
++        out.print("  <map_complete>" + StringUtils.formatPercent(status.mapProgress(), 2) + "</map_complete>\n");
++        out.print("  <map_total>" + desiredMaps + "</map_total>\n");
++        out.print("  <maps_completed>" + completedMaps + "</maps_completed>\n");
++        out.print("  <reduce_complete>" + StringUtils.formatPercent(status.reduceProgress(), 2) + "</reduce_complete>\n");
++        out.print("  <reduce_total>" + desiredReduces + "</reduce_total>\n");
++        out.print("  <reduces_completed>" + completedReduces + "</reduces_completed>\n");
++        out.print("</" + label + "_job>\n");
++      }
++    }
++  }
++
++  /**
++   * Generates an XML-formatted block that summarizes the state of the JobTracker.
++   */
++  public void generateSummaryTable(JspWriter out,
++                                   JobTracker tracker) throws IOException {
++    ClusterStatus status = tracker.getClusterStatus();
++    int maxMapTasks = status.getMaxMapTasks();
++    int maxReduceTasks = status.getMaxReduceTasks();
++    int numTaskTrackers = status.getTaskTrackers();
++    String tasksPerNodeStr;
++    if (numTaskTrackers > 0) {
++      double tasksPerNodePct = (double) (maxMapTasks + maxReduceTasks) / (double) numTaskTrackers;
++      tasksPerNodeStr = percentFormat.format(tasksPerNodePct);
++    } else {
++      tasksPerNodeStr = "-";
++    }
++    out.print("<maps>" + status.getMapTasks() + "</maps>\n" +
++            "<reduces>" + status.getReduceTasks() + "</reduces>\n" +
++            "<total_submissions>" + tracker.getTotalSubmissions() + "</total_submissions>\n" +
++            "<nodes>" + status.getTaskTrackers() + "</nodes>\n" +
++            "<map_task_capacity>" + status.getMaxMapTasks() + "</map_task_capacity>\n" +
++            "<reduce_task_capacity>" + status.getMaxReduceTasks() + "</reduce_task_capacity>\n" +
++            "<avg_tasks_per_node>" + tasksPerNodeStr + "</avg_tasks_per_node>\n");
++  }
++}
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobTrackerXmlJsp.java b/src/test/org/apache/hadoop/mapred/TestJobTrackerXmlJsp.java
+new file mode 100644
+index 0000000..e1074c0
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestJobTrackerXmlJsp.java
+@@ -0,0 +1,55 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred;
++
++import java.io.IOException;
++import javax.xml.parsers.DocumentBuilder;
++import javax.xml.parsers.DocumentBuilderFactory;
++import javax.xml.parsers.ParserConfigurationException;
++import org.w3c.dom.Document;
++import org.w3c.dom.NodeList;
++import org.xml.sax.SAXException;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++public class TestJobTrackerXmlJsp extends ClusterMapReduceTestCase {
++
++  private static final Log LOG = LogFactory.getLog(TestJobTrackerXmlJsp.class);
++
++  /**
++   * Read the jobtracker.jspx status page and validate that the XML is well formed.
++   */
++  public void testXmlWellFormed() throws IOException, ParserConfigurationException, SAXException {
++    MiniMRCluster cluster = getMRCluster();
++    int infoPort = cluster.getJobTrackerRunner().getJobTrackerInfoPort();
++
++    String xmlJspUrl = "http://localhost:" + infoPort + "/jobtracker.jspx";
++    LOG.info("Retrieving XML from URL: " + xmlJspUrl);
++
++    DocumentBuilder parser = DocumentBuilderFactory.newInstance().newDocumentBuilder();
++    Document doc = parser.parse(xmlJspUrl);
++
++    // If we get here, then the document was successfully parsed by SAX and is well-formed.
++    LOG.info("Document received and parsed.");
++
++    // Make sure it has a <cluster> element as top-level.
++    NodeList clusterNodes = doc.getElementsByTagName("cluster");
++    assertEquals("There should be exactly 1 <cluster> element", 1, clusterNodes.getLength());
++  }
++}
+diff --git a/src/webapps/job/jobtracker.jsp b/src/webapps/job/jobtracker.jsp
+index 4113407..0fbe3de 100644
+--- a/src/webapps/job/jobtracker.jsp
++++ b/src/webapps/job/jobtracker.jsp
+@@ -16,9 +16,9 @@
+   String trackerName = 
+            StringUtils.simpleHostname(tracker.getJobTrackerMachine());
+   JobQueueInfo[] queues = tracker.getQueues();
+-  Vector<JobInProgress> runningJobs = tracker.runningJobs();
+-  Vector<JobInProgress> completedJobs = tracker.completedJobs();
+-  Vector<JobInProgress> failedJobs = tracker.failedJobs();
++  List<JobInProgress> runningJobs = tracker.runningJobs();
++  List<JobInProgress> completedJobs = tracker.completedJobs();
++  List<JobInProgress> failedJobs = tracker.failedJobs();
+ %>
+ <%!
+   private static DecimalFormat percentFormat = new DecimalFormat("##0.00");
+diff --git a/src/webapps/job/jobtracker.jspx b/src/webapps/job/jobtracker.jspx
+new file mode 100644
+index 0000000..29b7b79
+--- /dev/null
++++ b/src/webapps/job/jobtracker.jspx
+@@ -0,0 +1,80 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++-->
++<cluster xmlns:jsp="http://java.sun.com/JSP/Page">
++  <jsp:directive.page contentType="text/xml; charset=UTF-8" session="false" />
++  <jsp:directive.page import="java.util.Date" />
++  <jsp:directive.page import="java.util.List" />
++  <jsp:directive.page import="org.apache.hadoop.mapreduce.server.jobtracker.JobTrackerJspHelper" />
++  <jsp:directive.page import="org.apache.hadoop.util.*" />
++  <jsp:directive.page import="org.apache.hadoop.mapreduce.*" />
++  <jsp:directive.page import="org.apache.hadoop.mapred.JSPUtil" />
++
++  <jsp:scriptlet>
++    response.setHeader("Pragma", "no-cache");
++    response.setHeader("Cache-Control", "no-store");
++    response.setDateHeader("Expires", -1);
++  </jsp:scriptlet>
++  <jsp:scriptlet>
++    JobTracker tracker = (JobTracker) application.getAttribute("job.tracker");
++    String trackerName = StringUtils.simpleHostname(tracker.getJobTrackerMachine());
++    JobTrackerJspHelper jspHelper = new JobTrackerJspHelper();
++
++    List&lt;JobInProgress&gt; runningJobs = tracker.getRunningJobs();
++    List&lt;JobInProgress&gt; completedJobs = tracker.getCompletedJobs();
++    List&lt;JobInProgress&gt; failedJobs = tracker.getFailedJobs();
++  </jsp:scriptlet>
++
++    <tracker_name><jsp:expression>trackerName</jsp:expression></tracker_name>
++
++    <tracker>
++      <state><jsp:expression>tracker.getClusterStatus().getJobTrackerState()</jsp:expression></state>
++      <started><jsp:expression>new Date(tracker.getStartTime())</jsp:expression></started>
++      <version><jsp:expression>VersionInfo.getVersion()</jsp:expression></version>
++      <revision><jsp:expression>VersionInfo.getRevision()</jsp:expression></revision>
++      <compiled_at><jsp:expression>VersionInfo.getDate()</jsp:expression></compiled_at>
++      <compiled_by><jsp:expression>VersionInfo.getUser()</jsp:expression></compiled_by>
++      <identifier><jsp:expression>tracker.getTrackerIdentifier()</jsp:expression></identifier>
++    </tracker>
++
++    <cluster_summary>
++      <jsp:scriptlet>
++        jspHelper.generateSummaryTable(out, tracker);
++      </jsp:scriptlet>
++    </cluster_summary>
++
++    <running_jobs>
++      <jsp:scriptlet>
++        jspHelper.generateJobTable(out, "running", runningJobs);
++      </jsp:scriptlet>
++    </running_jobs>
++
++    <completed_jobs>
++      <jsp:scriptlet>
++        jspHelper.generateJobTable(out, "completed", completedJobs);
++      </jsp:scriptlet>
++    </completed_jobs>
++
++    <failed_jobs>
++      <jsp:scriptlet>
++        jspHelper.generateJobTable(out, "failed", failedJobs);
++      </jsp:scriptlet>
++    </failed_jobs>
++</cluster>
+-- 
+1.7.0.4
+

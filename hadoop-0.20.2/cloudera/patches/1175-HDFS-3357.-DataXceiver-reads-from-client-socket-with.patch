@@ -1,0 +1,257 @@
+From 5fd8f4d8f80053817c5a9c0ee6636bf3cb3560af Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 3 May 2012 16:48:17 -0700
+Subject: [PATCH 1175/1179] HDFS-3357. DataXceiver reads from client socket with incorrect/no timeout
+
+Reason: fix hung xceiver threads on datanodes
+Author: Todd Lipcon
+Ref: CDH-5622
+---
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    2 +-
+ .../hadoop/hdfs/server/datanode/DataXceiver.java   |   15 +-
+ .../hdfs/server/datanode/DataXceiverServer.java    |    2 +
+ .../hadoop/hdfs/TestDataTransferKeepalive.java     |  155 ++++++++++++++++++++
+ 4 files changed, 167 insertions(+), 7 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/TestDataTransferKeepalive.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index ce6adff..4e5ecce 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -917,7 +917,7 @@ public class DataNode extends Configured
+   }
+     
+   /** Number of concurrent xceivers per node. */
+-  int getXceiverCount() {
++  public int getXceiverCount() {
+     return threadGroup == null ? 0 : threadGroup.activeCount();
+   }
+     
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+index 9a33815..4af6a1e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+@@ -44,6 +44,7 @@ import org.apache.hadoop.io.IOUtils;
+ import org.apache.hadoop.io.MD5Hash;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.net.SocketInputWrapper;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+ import org.apache.hadoop.util.DataChecksum;
+@@ -105,14 +106,14 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+    * Read/write data from/to the DataXceiverServer.
+    */
+   public void run() {
+-    DataInputStream in=null;
++    DataInputStream in = null;
++    SocketInputWrapper sin = null;
+     int opsProcessed = 0;
+     try {
++      sin = NetUtils.getInputStream(s, datanode.socketTimeout);
+       in = new DataInputStream(
+-          new BufferedInputStream(NetUtils.getInputStream(s), 
+-                                  SMALL_BUFFER_SIZE));
++          new BufferedInputStream(sin, SMALL_BUFFER_SIZE));
+       boolean local = s.getInetAddress().equals(s.getLocalAddress());
+-      int stdTimeout = s.getSoTimeout();
+ 
+       // We process requests in a loop, and stay around for a short timeout.
+       // This optimistic behaviour allows the other end to reuse connections.
+@@ -124,7 +125,9 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+         try {
+           if (opsProcessed != 0) {
+             assert socketKeepaliveTimeout > 0;
+-            s.setSoTimeout(socketKeepaliveTimeout);
++            sin.setTimeout(socketKeepaliveTimeout);
++          } else {
++            sin.setTimeout(datanode.socketTimeout);
+           }
+           short version = in.readShort();
+           if ( version != DataTransferProtocol.DATA_TRANSFER_VERSION ) {
+@@ -153,7 +156,7 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+         
+         // restore normal timeout
+         if (opsProcessed != 0) {
+-          s.setSoTimeout(stdTimeout);
++          sin.setTimeout(datanode.socketTimeout);
+         }
+         // Indentation is left alone here so that patches merge easier from 0.20.20x
+         
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiverServer.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiverServer.java
+index a2752f6..8af7acc 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiverServer.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiverServer.java
+@@ -128,6 +128,8 @@ class DataXceiverServer implements Runnable, FSConstants {
+       try {
+         Socket s = ss.accept();
+         s.setTcpNoDelay(true);
++        // Timeouts are set within DataXceiver.run()
++
+         new DataXceiver(s, datanode, this).start();
+       } catch (SocketTimeoutException ignored) {
+         // wake up to see if should continue to run
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDataTransferKeepalive.java b/src/test/org/apache/hadoop/hdfs/TestDataTransferKeepalive.java
+new file mode 100644
+index 0000000..2fa2886
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/TestDataTransferKeepalive.java
+@@ -0,0 +1,155 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs;
++
++import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SOCKET_REUSE_KEEPALIVE_KEY;
++import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SOCKET_WRITE_TIMEOUT_KEY;
++import static org.junit.Assert.*;
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertNotNull;
++import static org.junit.Assert.fail;
++
++import java.io.PrintWriter;
++import java.net.InetSocketAddress;
++import java.net.Socket;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FSDataInputStream;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.MiniDFSCluster.DataNodeProperties;
++import org.apache.hadoop.hdfs.protocol.DatanodeID;
++import org.apache.hadoop.hdfs.protocol.FSConstants.DatanodeReportType;
++import org.apache.hadoop.hdfs.server.datanode.DataNode;
++import org.apache.hadoop.io.IOUtils;
++import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.util.ReflectionUtils;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Test;
++
++public class TestDataTransferKeepalive {
++  Configuration conf = new Configuration();
++  private MiniDFSCluster cluster;
++  private FileSystem fs;
++  private InetSocketAddress dnAddr;
++  private DataNode dn;
++  private DFSClient dfsClient;
++  private static Path TEST_FILE = new Path("/test");
++  
++  private static final int KEEPALIVE_TIMEOUT = 1000;
++  private static final int WRITE_TIMEOUT = 3000;
++  
++  @Before
++  public void setup() throws Exception {
++    conf.setInt(DFS_DATANODE_SOCKET_REUSE_KEEPALIVE_KEY,
++        KEEPALIVE_TIMEOUT);
++    
++    cluster = new MiniDFSCluster(conf, 1, true, null);
++    fs = cluster.getFileSystem();
++    dfsClient = ((DistributedFileSystem)fs).dfs;
++
++    dn = cluster.getDataNodes().get(0);
++    DatanodeID dnReg = dfsClient.datanodeReport(DatanodeReportType.LIVE)[0];
++    dnAddr = NetUtils.createSocketAddr(dnReg.getName());
++  }
++  
++  @After
++  public void teardown() {
++    cluster.shutdown();
++  }
++  
++  /**
++   * Regression test for HDFS-3357. Check that the datanode is respecting
++   * its configured keepalive timeout.
++   */
++  @Test(timeout=30000)
++  public void testKeepaliveTimeouts() throws Exception {
++    DFSTestUtil.createFile(fs, TEST_FILE, 1L, (short)1, 0L);
++
++    // Clients that write aren't currently re-used.
++    assertEquals(0, dfsClient.socketCache.size());
++    assertXceiverCount(0);
++
++    // Reads the file, so we should get a
++    // cached socket, and should have an xceiver on the other side.
++    DFSTestUtil.readFile(fs, TEST_FILE);
++    assertEquals(1, dfsClient.socketCache.size());
++    assertXceiverCount(1);
++
++    // Sleep for a bit longer than the keepalive timeout
++    // and make sure the xceiver died.
++    Thread.sleep(KEEPALIVE_TIMEOUT * 2);
++    assertXceiverCount(0);
++    
++    // The socket is still in the cache, because we don't
++    // notice that it's closed until we try to read
++    // from it again.
++    assertEquals(1, dfsClient.socketCache.size());
++    
++    // Take it out of the cache - reading should
++    // give an EOF.
++    Socket s = dfsClient.socketCache.get(dnAddr);
++    assertNotNull(s);
++    assertEquals(-1, NetUtils.getInputStream(s).read());
++  }
++
++  /**
++   * Test for the case where the client beings to read a long block, but doesn't
++   * read bytes off the stream quickly. The datanode should time out sending the
++   * chunks and the transceiver should die, even if it has a long keepalive.
++   */
++  @Test(timeout=30000)
++  public void testSlowReader() throws Exception {
++    // Restart the DN with a shorter write timeout.
++    DataNodeProperties props = cluster.stopDataNode(0);
++    props.conf.setInt(DFS_DATANODE_SOCKET_WRITE_TIMEOUT_KEY,
++        WRITE_TIMEOUT);
++    props.conf.setInt(DFS_DATANODE_SOCKET_REUSE_KEEPALIVE_KEY,
++        120000);
++    assertTrue(cluster.restartDataNode(props, true));
++    dn = cluster.getDataNodes().get(0);
++    
++    DFSTestUtil.createFile(fs, TEST_FILE, 1024*1024*8L, (short)1, 0L);
++    FSDataInputStream stm = fs.open(TEST_FILE);
++    try {
++      stm.read();
++      assertXceiverCount(1);
++
++      Thread.sleep(WRITE_TIMEOUT + 1000);
++      // DN should time out in sendChunks, and this should force
++      // the xceiver to exit.
++      assertXceiverCount(0);
++    } finally {
++      IOUtils.closeStream(stm);
++    }
++  }
++
++  private void assertXceiverCount(int expected) {
++    // Subtract 1, since the DataXceiverServer
++    // counts as one
++    int count = dn.getXceiverCount() - 1;
++    if (count != expected) {
++      ReflectionUtils.printThreadInfo(
++          new PrintWriter(System.err),
++          "Thread dumps");
++      fail("Expected " + expected + " xceivers, found " +
++          count);
++    }
++  }
++}
+-- 
+1.7.0.4
+

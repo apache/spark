@@ -1,0 +1,370 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta content="Apache Forrest" name="Generator">
+<meta name="Forrest-version" content="0.8">
+<meta name="Forrest-skin-name" content="pelt">
+<title> 
+      Authentication for Hadoop HTTP web-consoles
+    </title>
+<link type="text/css" href="skin/basic.css" rel="stylesheet">
+<link media="screen" type="text/css" href="skin/screen.css" rel="stylesheet">
+<link media="print" type="text/css" href="skin/print.css" rel="stylesheet">
+<link type="text/css" href="skin/profile.css" rel="stylesheet">
+<script src="skin/getBlank.js" language="javascript" type="text/javascript"></script><script src="skin/getMenu.js" language="javascript" type="text/javascript"></script><script src="skin/fontsize.js" language="javascript" type="text/javascript"></script>
+<link rel="shortcut icon" href="images/favicon.ico">
+</head>
+<body onload="init()">
+<script type="text/javascript">ndeSetTextSize();</script>
+<div id="top">
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+<a href="http://www.apache.org/">Apache</a> &gt; <a href="http://hadoop.apache.org/">Hadoop</a> &gt; <a href="http://hadoop.apache.org/core/">Core</a><script src="skin/breadcrumbs.js" language="JavaScript" type="text/javascript"></script>
+</div>
+<!--+
+    |header
+    +-->
+<div class="header">
+<!--+
+    |start group logo
+    +-->
+<div class="grouplogo">
+<a href="http://hadoop.apache.org/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo.jpg" title="Apache Hadoop"></a>
+</div>
+<!--+
+    |end group logo
+    +-->
+<!--+
+    |start Project Logo
+    +-->
+<div class="projectlogo">
+<a href="http://hadoop.apache.org/core/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo-2.gif" title="Scalable Computing Platform"></a>
+</div>
+<!--+
+    |end Project Logo
+    +-->
+<!--+
+    |start Search
+    +-->
+<div class="searchbox">
+<form action="http://www.google.com/search" method="get" class="roundtopsmall">
+<input value="archive.cloudera.com" name="sitesearch" type="hidden"><input onFocus="getBlank (this, 'Search the site with google');" size="25" name="q" id="query" type="text" value="Search the site with google">&nbsp; 
+                    <input name="Search" value="Search" type="submit">
+</form>
+</div>
+<!--+
+    |end search
+    +-->
+<!--+
+    |start Tabs
+    +-->
+<ul id="tabs">
+<li>
+<a class="unselected" href="http://hadoop.apache.org/core/">Project</a>
+</li>
+<li>
+<a class="unselected" href="http://wiki.apache.org/hadoop">Wiki</a>
+</li>
+<li class="current">
+<a class="selected" href="index.html">Hadoop 0.20 Documentation</a>
+</li>
+</ul>
+<!--+
+    |end Tabs
+    +-->
+</div>
+</div>
+<div id="main">
+<div id="publishedStrip">
+<!--+
+    |start Subtabs
+    +-->
+<div id="level2tabs"></div>
+<!--+
+    |end Endtabs
+    +-->
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+
+             &nbsp;
+           </div>
+<!--+
+    |start Menu, mainarea
+    +-->
+<!--+
+    |start Menu
+    +-->
+<div id="menu">
+<div onclick="SwitchMenu('menu_1.1', 'skin/')" id="menu_1.1Title" class="menutitle">Getting Started</div>
+<div id="menu_1.1" class="menuitemgroup">
+<div class="menuitem">
+<a href="index.html">Overview</a>
+</div>
+<div class="menuitem">
+<a href="single_node_setup.html">Single Node Setup</a>
+</div>
+<div class="menuitem">
+<a href="cluster_setup.html">Cluster Setup</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_selected_1.2', 'skin/')" id="menu_selected_1.2Title" class="menutitle" style="background-image: url('skin/images/chapter_open.gif');">Guides</div>
+<div id="menu_selected_1.2" class="selectedmenuitemgroup" style="display: block;">
+<div class="menupage">
+<div class="menupagetitle">Authentication for Hadoop HTTP web-consoles</div>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.3', 'skin/')" id="menu_1.3Title" class="menutitle">MapReduce</div>
+<div id="menu_1.3" class="menuitemgroup">
+<div class="menuitem">
+<a href="mapred_tutorial.html">MapReduce Tutorial</a>
+</div>
+<div class="menuitem">
+<a href="streaming.html">Hadoop Streaming</a>
+</div>
+<div class="menuitem">
+<a href="commands_manual.html">Hadoop Commands</a>
+</div>
+<div class="menuitem">
+<a href="distcp.html">DistCp</a>
+</div>
+<div class="menuitem">
+<a href="vaidya.html">Vaidya</a>
+</div>
+<div class="menuitem">
+<a href="hadoop_archives.html">Hadoop Archives</a>
+</div>
+<div class="menuitem">
+<a href="gridmix.html">Gridmix</a>
+</div>
+<div class="menuitem">
+<a href="capacity_scheduler.html">Capacity Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="fair_scheduler.html">Fair Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="hod_scheduler.html">Hod Scheduler</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.4', 'skin/')" id="menu_1.4Title" class="menutitle">HDFS</div>
+<div id="menu_1.4" class="menuitemgroup">
+<div class="menuitem">
+<a href="hdfs_user_guide.html">HDFS Users </a>
+</div>
+<div class="menuitem">
+<a href="hdfs_design.html">HDFS Architecture</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_permissions_guide.html">Permissions</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_quota_admin_guide.html">Quotas</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_imageviewer.html">Offline Image Viewer Guide</a>
+</div>
+<div class="menuitem">
+<a href="SLG_user_guide.html">Synthetic Load Generator</a>
+</div>
+<div class="menuitem">
+<a href="libhdfs.html">C API libhdfs</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.5', 'skin/')" id="menu_1.5Title" class="menutitle">Common</div>
+<div id="menu_1.5" class="menuitemgroup">
+<div class="menuitem">
+<a href="file_system_shell.html">File System Shell</a>
+</div>
+<div class="menuitem">
+<a href="service_level_auth.html">Service Level Authorization</a>
+</div>
+<div class="menuitem">
+<a href="native_libraries.html">Native Libraries</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.6', 'skin/')" id="menu_1.6Title" class="menutitle">Miscellaneous</div>
+<div id="menu_1.6" class="menuitemgroup">
+<div class="menuitem">
+<a href="Secure_Impersonation.html">Secure Impersonation</a>
+</div>
+<div class="menuitem">
+<a href="api/index.html">API Docs</a>
+</div>
+<div class="menuitem">
+<a href="jdiff/changes.html">API Changes</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/">Wiki</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/FAQ">FAQ</a>
+</div>
+<div class="menuitem">
+<a href="releasenotes.html">Release Notes</a>
+</div>
+<div class="menuitem">
+<a href="changes.html">Change Log</a>
+</div>
+</div>
+<div id="credit"></div>
+<div id="roundbottom">
+<img style="display: none" class="corner" height="15" width="15" alt="" src="skin/images/rc-b-l-15-1body-2menu-3menu.png"></div>
+<!--+
+  |alternative credits
+  +-->
+<div id="credit2"></div>
+</div>
+<!--+
+    |end Menu
+    +-->
+<!--+
+    |start content
+    +-->
+<div id="content">
+<div title="Portable Document Format" class="pdflink">
+<a class="dida" href="HttpAuthentication.pdf"><img alt="PDF -icon" src="skin/images/pdfdoc.gif" class="skin"><br>
+        PDF</a>
+</div>
+<h1> 
+      Authentication for Hadoop HTTP web-consoles
+    </h1>
+<div id="minitoc-area">
+<ul class="minitoc">
+<li>
+<a href="#Introduction"> Introduction </a>
+</li>
+<li>
+<a href="#Configuration"> Configuration </a>
+</li>
+</ul>
+</div>
+    
+<a name="N1000D"></a><a name="Introduction"></a>
+<h2 class="h3"> Introduction </h2>
+<div class="section">
+<p>
+        This document describes how to configure Hadoop HTTP web-consoles to require user
+        authentication. 
+      </p>
+<p>
+        By default Hadoop HTTP web-consoles (JobTracker, NameNode, TaskTrackers and DataNodes) allow 
+        access without any form of authentication. 
+      </p>
+<p>
+        Similarly to Hadoop RPC, Hadoop HTTP web-consoles can be configured to require Kerberos 
+        authentication using HTTP SPNEGO protocol (supported by browsers like Firefox and Internet
+        Explorer).        
+      </p>
+<p>
+        In addition, Hadoop HTTP web-consoles support the equivalent of Hadoop's Pseudo/Simple
+        authentication. If this option is enabled, user must specify their user name in the first
+        browser interaction using the <span class="codefrag">user.name</span> query string parameter. For example:
+        <span class="codefrag">http://localhost:50030/jobtracker.jsp?user.name=babu</span>.
+      </p>
+<p>
+        If a custom authentication mechanism is required for the HTTP web-consoles, it is possible 
+        to implement a plugin to support the alternate authentication mechanism (refer to 
+        Hadoop Alfredo for details on writing an <span class="codefrag">AuthenticatorHandler</span>).
+      </p>
+<p>       
+        The next section describes how to configure Hadoop HTTP web-consoles to require user 
+        authentication.
+      </p>
+</div>
+
+    
+<a name="N1002F"></a><a name="Configuration"></a>
+<h2 class="h3"> Configuration </h2>
+<div class="section">
+<p>
+        The following properties should be in the <span class="codefrag">core-site.xml</span> of all the nodes
+        in the cluster.
+      </p>
+<p>
+<span class="codefrag">hadoop.http.filter.initializers</span>: add to this property the 
+      <span class="codefrag">org.apache.hadoop.security.AuthenticationFilterInitializer</span> initializer class.
+      </p>
+<p>
+<span class="codefrag">hadoop.http.authentication.type</span>: Defines authentication used for the HTTP 
+      web-consoles. The supported values are: <span class="codefrag">simple | kerberos | 
+      #AUTHENTICATION_HANDLER_CLASSNAME#</span>. The dfeault value is <span class="codefrag">simple</span>.
+      </p>
+<p>
+<span class="codefrag">hadoop.http.authentication.token.validity</span>: Indicates how long (in seconds) 
+      an authentication token is valid before it has to be renewed. The default value is 
+      <span class="codefrag">36000</span>.
+      </p>
+<p>
+<span class="codefrag">hadoop.http.authentication.signature.secret.file</span>: The signature secret
+      file for signing the authentication tokens. If not set a random secret is generated at
+      startup time. The same secret should be used for all nodes in the cluster, JobTracker,
+      NameNode, DataNode and TastTracker. The default value is
+      <span class="codefrag">${user.home}/hadoop-http-auth-signature-secret</span>.
+      IMPORTANT: This file should be readable only by the Unix user running the daemons.
+      </p>
+<p>
+<span class="codefrag">hadoop.http.authentication.cookie.domain</span>: The domain to use for the HTTP 
+      cookie that stores the authentication token. In order to authentiation to work 
+      correctly across all nodes in the cluster the domain must be correctly set.
+      There is no default value, the HTTP cookie will not have a domain working only
+      with the hostname issuing the HTTP cookie.
+      </p>
+<p>
+      IMPORTANT: when using IP addresses, browsers ignore cookies with domain settings.
+      For this setting to work properly all nodes in the cluster must be configured
+      to generate URLs with hostname.domain names on it.
+      </p>
+<p>
+<span class="codefrag">hadoop.http.authentication.simple.anonymous.allowed</span>: Indicates if anonymous 
+      requests are allowed when using 'simple' authentication. The default value is 
+      <span class="codefrag">true</span>
+      
+</p>
+<p>
+<span class="codefrag">hadoop.http.authentication.kerberos.principal</span>: Indicates the Kerberos 
+      principal to be used for HTTP endpoint when using 'kerberos' authentication.
+      The principal short name must be <span class="codefrag">HTTP</span> per Kerberos HTTP SPENGO specification.
+      The default value is <span class="codefrag">HTTP/localhost@$LOCALHOST</span>.
+      </p>
+<p>
+<span class="codefrag">hadoop.http.authentication.kerberos.keytab</span>: Location of the keytab file 
+      with the credentials for the Kerberos principal used for the HTTP endpoint. 
+      The default value is <span class="codefrag">${user.home}/hadoop.keytab</span>.i
+      </p>
+</div>
+
+  
+</div>
+<!--+
+    |end content
+    +-->
+<div class="clearboth">&nbsp;</div>
+</div>
+<div id="footer">
+<!--+
+    |start bottomstrip
+    +-->
+<div class="lastmodified">
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<div class="copyright">
+        Copyright &copy;
+         2008 <a href="http://www.apache.org/licenses/">The Apache Software Foundation.</a>
+</div>
+<!--+
+    |end bottomstrip
+    +-->
+</div>
+</body>
+</html>

@@ -1,0 +1,35 @@
+From 03b655719d13929bd68bb2c2f9cee615b389cea9 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Thu, 5 Jan 2012 10:35:36 -0800
+Subject: [PATCH 1117/1179] HDFS-2751. Datanode drops OS cache behind reads even for short reads.
+
+HDFS-2465 has some code which attempts to disable the "drop cache
+behind reads" functionality when the reads are <256KB (eg HBase
+random access). But this check was missing in the close()
+function, so it always drops cache behind reads regardless of the
+size of the read. This hurts HBase random read performance when
+this patch is enabled.
+
+Reason: Bug
+Author: Todd Lipcon
+Ref: CDH-4047
+---
+ .../hadoop/hdfs/server/datanode/BlockSender.java   |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java
+index 16aa073..bda246c 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java
+@@ -210,7 +210,7 @@ class BlockSender implements java.io.Closeable, FSConstants {
+    * close opened files.
+    */
+   public void close() throws IOException {
+-    if (blockInFd != null && shouldDropCacheBehindRead) {
++    if (blockInFd != null && shouldDropCacheBehindRead && isLongRead()) {
+       // drop the last few MB of the file from cache
+       try {
+         NativeIO.posixFadviseIfPossible(
+-- 
+1.7.0.4
+

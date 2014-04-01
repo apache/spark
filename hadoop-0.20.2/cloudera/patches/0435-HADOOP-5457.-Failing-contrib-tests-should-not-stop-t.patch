@@ -1,0 +1,67 @@
+From ef9e572a545e56b790000f16bf6d416b63083520 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 22 Jan 2010 16:23:34 +0530
+Subject: [PATCH 0435/1179] HADOOP-5457. Failing contrib tests should not stop the rest of the contrib tests
+
+Patch: https://issues.apache.org/jira/secure/attachment/12431103/Hadoop-5457-y20.patch
+Author: Giridharan Kesavan
+Ref: YDH
+---
+ src/contrib/build-contrib.xml |    8 +++++++-
+ src/contrib/build.xml         |    6 ++++++
+ 2 files changed, 13 insertions(+), 1 deletions(-)
+
+diff --git a/src/contrib/build-contrib.xml b/src/contrib/build-contrib.xml
+index 9b412c4..39c3996 100644
+--- a/src/contrib/build-contrib.xml
++++ b/src/contrib/build-contrib.xml
+@@ -42,6 +42,7 @@
+   <property name="test.junit.output.format" value="plain"/>
+   <property name="test.output" value="no"/>
+   <property name="test.timeout" value="900000"/>
++  <property name="build.contrib.dir" location="${hadoop.root}/build/contrib"/>
+   <property name="build.dir" location="${hadoop.root}/build/contrib/${name}"/>
+   <property name="build.classes" location="${build.dir}/classes"/>
+   <!-- NB: sun.arch.data.model is not supported on all platforms -->
+@@ -266,7 +267,12 @@
+         <fileset dir="${src.test}" includes="**/${testcase}.java"/>
+       </batchtest>
+     </junit>
+-    <fail if="tests.failed">Tests failed!</fail>
++    <antcall target="checkfailure"/>
++  </target>
++
++  <target name="checkfailure" if="tests.failed">
++    <touch file="${build.contrib.dir}/testsfailed"/>
++    <fail unless="continueOnFailure">Contrib Tests failed!</fail>
+   </target>
+ 
+   <!-- ================================================================== -->
+diff --git a/src/contrib/build.xml b/src/contrib/build.xml
+index c73d3ad..2fadc41 100644
+--- a/src/contrib/build.xml
++++ b/src/contrib/build.xml
+@@ -45,7 +45,11 @@
+   <!-- Test all the contribs.                               -->
+   <!-- ====================================================== -->
+   <target name="test">
++     <property name="hadoop.root" location="${root}/../../../"/>
++     <property name="build.contrib.dir" location="${hadoop.root}/build/contrib"/>
++     <delete file="${build.contrib.dir}/testsfailed"/>
+     <subant target="test">
++      <property name="continueOnFailure" value="true"/>
+       <fileset dir="." includes="hdfsproxy/build.xml"/>
+       <fileset dir="." includes="streaming/build.xml"/>
+       <fileset dir="." includes="fairscheduler/build.xml"/>
+@@ -53,6 +57,8 @@
+       <fileset dir="." includes="mrunit/build.xml"/>
+       <fileset dir="." includes="gridmix/build.xml"/>
+     </subant>
++     <available file="${build.contrib.dir}/testsfailed" property="testsfailed"/>
++     <fail if="testsfailed">Tests failed!</fail>
+   </target>
+   
+   
+-- 
+1.7.0.4
+

@@ -1,0 +1,217 @@
+From 110cd5235ba960e003ac94824a29a8b0ac36a031 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sat, 24 Apr 2010 09:23:55 -0700
+Subject: [PATCH 0606/1179] MAPREDUCE-1718. Fix a bug in HFTPFileSystem so that delegation tokens function correctly
+
+Patch: https://issues.apache.org/jira/secure/attachment/12442726/MAPREDUCE-1718-BP20-2.patch
+Author: Boris Shkolnik
+Reason: Security
+Ref: CDH-648
+---
+ .../org/apache/hadoop/security/SecurityUtil.java   |   21 ++++++++++++-
+ .../org/apache/hadoop/hdfs/HftpFileSystem.java     |   15 +++++----
+ .../hadoop/mapreduce/security/TokenCache.java      |   32 +++++--------------
+ .../hadoop/mapreduce/security/TestTokenCache.java  |   12 ++++---
+ 4 files changed, 44 insertions(+), 36 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/SecurityUtil.java b/src/core/org/apache/hadoop/security/SecurityUtil.java
+index ddabd4e..edb7331 100644
+--- a/src/core/org/apache/hadoop/security/SecurityUtil.java
++++ b/src/core/org/apache/hadoop/security/SecurityUtil.java
+@@ -18,6 +18,7 @@ package org.apache.hadoop.security;
+ 
+ import java.io.IOException;
+ import java.net.InetAddress;
++import java.net.URI;
+ import java.net.URL;
+ import java.net.UnknownHostException;
+ import java.security.AccessController;
+@@ -29,7 +30,7 @@ import javax.security.auth.kerberos.KerberosTicket;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.net.NetUtils;
+ 
+ import sun.security.jgss.krb5.Krb5Util;
+ import sun.security.krb5.Credentials;
+@@ -195,4 +196,22 @@ public class SecurityUtil {
+         hostname);
+     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename);
+   }
++  
++  /**
++   * create service name for Delegation token ip:port
++   * @param uri
++   * @return "ip:port"
++   */
++  public static String buildDTServiceName(URI uri, int defPort) {
++    int port = uri.getPort();
++    if(port == -1) 
++      port = defPort;
++    
++    // build the service name string "/ip:port"
++    // for whatever reason using NetUtils.createSocketAddr(target).toString()
++    // returns "localhost/ip:port"
++    StringBuffer sb = new StringBuffer();
++    sb.append(NetUtils.normalizeHostName(uri.getHost())).append(":").append(port);
++    return sb.toString();
++  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+index ecc93ae..56ba3d8 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+@@ -45,11 +45,13 @@ import org.apache.hadoop.fs.MD5MD5CRC32FileChecksum;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.hdfs.server.namenode.JspHelper;
++import org.apache.hadoop.hdfs.server.namenode.NameNode;
+ import org.apache.hadoop.hdfs.tools.DelegationTokenFetcher;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.Credentials;
++import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+@@ -104,17 +106,16 @@ public class HftpFileSystem extends FileSystem {
+     nnAddr = NetUtils.createSocketAddr(name.toString());
+     
+     if (UserGroupInformation.isSecurityEnabled()) {
+-      StringBuffer sb = new StringBuffer(HFTP_SERVICE_NAME_KEY);
+       // configuration has the actual service name for this url. Build the key 
+       // and get it.
+-      final String key = sb.append(NetUtils.normalizeHostName(name.getHost())).
+-        append(".").append(name.getPort()).toString();
+-      
+-      LOG.debug("Trying to find DT for " + name + " using key=" + key + "; conf=" + conf.get(key, ""));
++      final String key = HftpFileSystem.HFTP_SERVICE_NAME_KEY+
++      SecurityUtil.buildDTServiceName(name, NameNode.DEFAULT_PORT);
++
++      LOG.debug("Trying to find DT for " + name + " using key=" + key + 
++          "; conf=" + conf.get(key, ""));
+       Text nnServiceNameText = new Text(conf.get(key, ""));
+       
+-      Collection<Token<? extends TokenIdentifier>> tokens =
+-        ugi.getTokens();
++      Collection<Token<? extends TokenIdentifier>> tokens = ugi.getTokens();
+       //try finding a token for this namenode (esp applicable for tasks
+       //using hftp). If there exists one, just set the delegationField
+       for (Token<? extends TokenIdentifier> t : tokens) {
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+index 1cba290..376e165 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+@@ -34,9 +34,9 @@ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapred.JobTracker;
+ import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
+-import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.security.Credentials;
+ import org.apache.hadoop.security.KerberosName;
++import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+@@ -93,7 +93,8 @@ public class TokenCache {
+       if(fs instanceof DistributedFileSystem) {
+         DistributedFileSystem dfs = (DistributedFileSystem)fs;
+         URI uri = fs.getUri();
+-        String fs_addr = buildDTServiceName(uri);
++        String fs_addr = 
++            SecurityUtil.buildDTServiceName(uri, NameNode.DEFAULT_PORT);
+ 
+         // see if we already have the token
+         Token<DelegationTokenIdentifier> token = 
+@@ -129,7 +130,8 @@ public class TokenCache {
+         LOG.info("Got dt for " + p + ";uri="+ fs_addr + 
+             ";t.service="+token.getService());
+       } else if (fs instanceof HftpFileSystem) {
+-        String fs_addr = buildDTServiceName(fs.getUri());
++        String fs_addr = 
++          SecurityUtil.buildDTServiceName(fs.getUri(), NameNode.DEFAULT_PORT);
+         Token<DelegationTokenIdentifier> token = 
+           TokenCache.getDelegationToken(credentials, fs_addr); 
+         if(token != null) {
+@@ -146,9 +148,11 @@ public class TokenCache {
+         // to find the correct DT we need to know the mapping between Hftp port 
+         // and RPC one. hence this new setting in the conf.
+         URI uri = ((HftpFileSystem) fs).getUri();
+-        String key = HftpFileSystem.HFTP_SERVICE_NAME_KEY+uri.getHost() + "." + uri.getPort();
++        String key = HftpFileSystem.HFTP_SERVICE_NAME_KEY+
++           SecurityUtil.buildDTServiceName(uri, NameNode.DEFAULT_PORT);
+         conf.set(key, t.getService().toString());
+-        LOG.info("GOT dt for " + p + " and stored in conf as " + key + "=" + t.getService());
++        LOG.info("GOT dt for " + p + " and stored in conf as " + key + "=" 
++            + t.getService());
+       }
+     }
+   }
+@@ -218,22 +222,4 @@ public class TokenCache {
+   public static Token<JobTokenIdentifier> getJobToken(Credentials credentials) {
+     return (Token<JobTokenIdentifier>) credentials.getToken(JOB_TOKEN);
+   }
+-
+-  /**
+-   * create service name for Delegation token ip:port
+-   * @param uri
+-   * @return "ip:port"
+-   */
+-  public static String buildDTServiceName(URI uri) {
+-    int port = uri.getPort();
+-    if(port == -1) 
+-      port = NameNode.DEFAULT_PORT;
+-    
+-    // build the service name string "/ip:port"
+-    // for whatever reason using NetUtils.createSocketAddr(target).toString()
+-    // returns "localhost/ip:port"
+-    StringBuffer sb = new StringBuffer();
+-    sb.append(NetUtils.normalizeHostName(uri.getHost())).append(":").append(port);
+-    return sb.toString();
+-  }
+ }
+diff --git a/src/test/org/apache/hadoop/mapreduce/security/TestTokenCache.java b/src/test/org/apache/hadoop/mapreduce/security/TestTokenCache.java
+index 2635e3e..98a420d 100644
+--- a/src/test/org/apache/hadoop/mapreduce/security/TestTokenCache.java
++++ b/src/test/org/apache/hadoop/mapreduce/security/TestTokenCache.java
+@@ -18,7 +18,10 @@
+ package org.apache.hadoop.mapreduce.security;
+ 
+ 
+-import static org.junit.Assert.*;
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertNotNull;
++import static org.junit.Assert.assertTrue;
++import static org.junit.Assert.fail;
+ 
+ import java.io.File;
+ import java.io.IOException;
+@@ -49,12 +52,10 @@ import org.apache.hadoop.mapred.MiniMRCluster;
+ import org.apache.hadoop.mapred.OutputCollector;
+ import org.apache.hadoop.mapred.Reporter;
+ import org.apache.hadoop.mapreduce.JobContext;
+-import org.apache.hadoop.mapreduce.security.TokenCache;
+ import org.apache.hadoop.security.Credentials;
+-import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+-import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.ToolRunner;
+ import org.codehaus.jackson.map.ObjectMapper;
+ import org.junit.AfterClass;
+@@ -265,7 +266,8 @@ public class TestTokenCache {
+     TokenCache.obtainTokensForNamenodesInternal(credentials, new Path [] {p1, p2},
+                                         jConf);
+     // this token is keyed by hostname:port key.
+-    String fs_addr = TokenCache.buildDTServiceName(p1.toUri()); 
++    String fs_addr = 
++      SecurityUtil.buildDTServiceName(p1.toUri(), NameNode.DEFAULT_PORT); 
+     Token<DelegationTokenIdentifier> nnt =
+       TokenCache.getDelegationToken(credentials, fs_addr);
+ 
+-- 
+1.7.0.4
+

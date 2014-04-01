@@ -1,0 +1,102 @@
+From 9d0bd80bedd72f3b366d5ceda970109a0d3e124a Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Fri, 17 Jun 2011 16:02:59 -0700
+Subject: [PATCH 0972/1179] HDFS-2082. SecondayNameNode web interface doesn't show the right info
+
+Reason: Bug
+Author: Aaron T. Myers
+Ref: CDH-3277
+---
+ .../hdfs/server/namenode/SecondaryNameNode.java    |    3 +-
+ .../hdfs/server/namenode/TestSecondaryWebUi.java   |   58 ++++++++++++++++++++
+ 2 files changed, 60 insertions(+), 1 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/namenode/TestSecondaryWebUi.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index 086aa50..1c5ddd0 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -103,6 +103,7 @@ public class SecondaryNameNode implements Runnable {
+       + "\nCheckpoint Dirs      : " + checkpointDirs
+       + "\nCheckpoint Edits Dirs: " + checkpointEditsDirs;
+   }
++  
+   /**
+    * Utility class to facilitate junit test error simulation.
+    */
+@@ -225,7 +226,7 @@ public class SecondaryNameNode implements Runnable {
+             infoServer.addSslListener(secInfoSocAddr, conf, false, true);
+           }
+           
+-          infoServer.setAttribute("secondary.name.node", this);
++          infoServer.setAttribute("secondary.name.node", SecondaryNameNode.this);
+           infoServer.setAttribute("name.system.image", checkpointImage);
+           infoServer.setAttribute(JspHelper.CURRENT_CONF, conf);
+           infoServer.addInternalServlet("getimage", "/getimage",
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestSecondaryWebUi.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestSecondaryWebUi.java
+new file mode 100644
+index 0000000..d8d1e43
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestSecondaryWebUi.java
+@@ -0,0 +1,58 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++
++import static org.junit.Assert.*;
++
++import java.io.IOException;
++import java.net.URL;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
++import org.apache.hadoop.hdfs.DFSTestUtil;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.junit.Test;
++
++public class TestSecondaryWebUi {
++
++  @SuppressWarnings("deprecation")
++  @Test
++  public void testSecondaryWebUi() throws IOException {
++    Configuration conf = new Configuration();
++    conf.set(DFSConfigKeys.DFS_NAMENODE_SECONDARY_HTTP_ADDRESS_KEY,
++        "0.0.0.0:0");
++    MiniDFSCluster cluster = null;
++    SecondaryNameNode snn = null;
++    try {
++      cluster = new MiniDFSCluster(conf, 0, true, null);
++      cluster.waitActive();
++      
++      snn = new SecondaryNameNode(conf);
++      String pageContents = DFSTestUtil.urlGet(new URL("http://localhost:" +
++          SecondaryNameNode.getHttpAddress(conf).getPort() + "/status.jsp"));
++      assertTrue(pageContents.contains("Last Checkpoint Time"));
++    } finally {
++      if (cluster != null) {
++        cluster.shutdown();
++      }
++      if (snn != null) {
++        snn.shutdown();
++      }
++    }
++  }
++}
+-- 
+1.7.0.4
+

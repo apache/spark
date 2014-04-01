@@ -1,0 +1,46 @@
+From fcfa442e85a7f3f107b2d4ea71b5f362b9fd3f99 Mon Sep 17 00:00:00 2001
+From: Andrew Bayer <andrew@cloudera.com>
+Date: Wed, 2 Nov 2011 13:11:26 -0700
+Subject: [PATCH 1067/1179] CLOUDERA-BUILD. Adding IVY_MIRROR_PROPS to ant calls.
+
+This will allow overriding the URLs Ivy uses for Maven repositories,
+so that we can have internal builds take advantage of our internal
+Maven mirror.
+---
+ cloudera/do-release-build |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index 2de74fa..7a45cb0 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -116,7 +116,7 @@ JAVA_HOME=$JAVA32_HOME \
+   -Dcompile.c++=true \
+   -Dforrest.home=$FORREST_HOME \
+   -Dhadoop.conf.dir=/etc/hadoop-0.20/conf \
+-  -propertyfile cloudera/build.properties \
++  -propertyfile cloudera/build.properties -Drepo.maven.org=${IVY_MIRROR_PROP} \
+   task-controller package-native
+ 
+ JAVA_HOME=$JAVA64_HOME
+@@ -127,7 +127,7 @@ ant \
+   -Dreactor.repo=file://$HOME/.m2/repository \
+   -Djdiff.stable=0.20.1 \
+   -Djdiff.build.dir=build/docs/jdiff-cloudera \
+-  -propertyfile build.properties \
++  -propertyfile build.properties -Drepo.maven.org=${IVY_MIRROR_PROP} \
+   -propertyfile cloudera/build.properties api-report
+ fi
+ 
+@@ -144,7 +144,7 @@ ant \
+   -Dhadoop.conf.dir=/etc/hadoop-0.20/conf \
+   -propertyfile cloudera/build.properties \
+   -Dsnappy.prefix=${SNAPPY_BUILDDIR}/usr/local \
+-  -Dbundle.snappy=true \
++  -Dbundle.snappy=true -Drepo.maven.org=${IVY_MIRROR_PROP} \
+   compile-core-native compile-c++ compile-c++-examples task-controller tar
+ 
+ if [ -z "$SKIP_MVN_EXPLICIT" ]; then
+-- 
+1.7.0.4
+

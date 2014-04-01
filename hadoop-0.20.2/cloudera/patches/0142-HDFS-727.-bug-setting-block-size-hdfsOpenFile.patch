@@ -1,0 +1,44 @@
+From a9466041ccfcdb07f4f0dd34a57c9e9bdd6a3e70 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:23:06 -0800
+Subject: [PATCH 0142/1179] HDFS-727. bug setting block size hdfsOpenFile
+
+Description: In hdfsOpenFile in libhdfs invokeMethod needs to cast the block size argument to a jlong so a full 8 bytes are passed (rather than 4 plus some garbage which causes writes to fail due to a bogus block size).
+
+Reason: Bugfix
+Author: Eli Collins
+Ref: UNKNOWN
+---
+ src/c++/libhdfs/hdfs.c          |    2 +-
+ src/c++/libhdfs/hdfsJniHelper.c |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/c++/libhdfs/hdfs.c b/src/c++/libhdfs/hdfs.c
+index bd932f6..81e03b0 100644
+--- a/src/c++/libhdfs/hdfs.c
++++ b/src/c++/libhdfs/hdfs.c
+@@ -678,7 +678,7 @@ hdfsFile hdfsOpenFile(hdfsFS fs, const char* path, int flags,
+         if (!blockSize) {
+             if (invokeMethod(env, &jVal, &jExc, INSTANCE, jConfiguration, 
+                              HADOOP_CONF, "getLong", "(Ljava/lang/String;J)J",
+-                             jStrBlockSize, 67108864)) {
++                             jStrBlockSize, (jlong)67108864)) {
+                 errno = errnoFromException(jExc, env, "org.apache.hadoop.conf."
+                                            "FileSystem::%s(%s)", method,
+                                            signature);
+diff --git a/src/c++/libhdfs/hdfsJniHelper.c b/src/c++/libhdfs/hdfsJniHelper.c
+index 6d1a39f..ea0fa88 100644
+--- a/src/c++/libhdfs/hdfsJniHelper.c
++++ b/src/c++/libhdfs/hdfsJniHelper.c
+@@ -222,7 +222,7 @@ int invokeMethod(JNIEnv *env, RetVal *retval, Exc *exc, MethType methType,
+ }
+ 
+ jarray constructNewArrayString(JNIEnv *env, Exc *exc, const char **elements, int size) {
+-  const char *className = "Ljava/lang/String;";
++  const char *className = "java/lang/String";
+   jobjectArray result;
+   int i;
+   jclass arrCls = (*env)->FindClass(env, className);
+-- 
+1.7.0.4
+

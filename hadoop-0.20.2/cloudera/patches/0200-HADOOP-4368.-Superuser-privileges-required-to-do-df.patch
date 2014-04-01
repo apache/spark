@@ -1,0 +1,698 @@
+From 7fafe032223921ad194c69b16ab451b4aade87fa Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:43:41 -0800
+Subject: [PATCH 0200/1179] HADOOP-4368. Superuser privileges required to do "df"
+
+Description: super user privileges are required in DFS in order to get the file system statistics (FSNamesystem.java, getStats method).  This means that when HDFS is mounted via fuse-dfs as a non-root user, "df" is going to return 16exabytes total and 0 free instead of the correct amount.
+
+<p>As far as I can tell, there's no need to require super user privileges to see the file system size (and historically in Unix, this is not required).</p>
+
+<p>To fix this, simply comment out the privilege check in the getStats method.</p>
+Reason: Usability improvement
+Author: Craig Macdonald
+Ref: UNKNOWN
+---
+ src/c++/libhdfs/hdfs.c                             |   54 ++++++++-------
+ src/core/org/apache/hadoop/fs/FileSystem.java      |   28 ++++++++
+ .../org/apache/hadoop/fs/FilterFileSystem.java     |    6 ++
+ src/core/org/apache/hadoop/fs/FsShell.java         |   45 ++++++++++++-
+ src/core/org/apache/hadoop/fs/FsStatus.java        |   70 ++++++++++++++++++++
+ .../org/apache/hadoop/fs/RawLocalFileSystem.java   |   11 +++
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |   18 +-----
+ .../apache/hadoop/hdfs/DistributedFileSystem.java  |   50 ++++++++------
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   15 +---
+ .../hadoop/hdfs/server/namenode/NameNode.java      |    2 +-
+ .../org/apache/hadoop/hdfs/tools/DFSAdmin.java     |    6 +-
+ .../hadoop/fs/FileSystemContractBaseTest.java      |    9 +++
+ .../org/apache/hadoop/hdfs/MiniDFSCluster.java     |   14 ++---
+ src/webapps/hdfs/dfshealth.jsp                     |   17 +++--
+ 14 files changed, 248 insertions(+), 97 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/fs/FsStatus.java
+
+diff --git a/src/c++/libhdfs/hdfs.c b/src/c++/libhdfs/hdfs.c
+index 64168d5..b84fef7 100644
+--- a/src/c++/libhdfs/hdfs.c
++++ b/src/c++/libhdfs/hdfs.c
+@@ -25,6 +25,7 @@
+ #define HADOOP_PATH     "org/apache/hadoop/fs/Path"
+ #define HADOOP_LOCALFS  "org/apache/hadoop/fs/LocalFileSystem"
+ #define HADOOP_FS       "org/apache/hadoop/fs/FileSystem"
++#define HADOOP_FSSTATUS "org/apache/hadoop/fs/FsStatus"
+ #define HADOOP_BLK_LOC  "org/apache/hadoop/fs/BlockLocation"
+ #define HADOOP_DFS      "org/apache/hadoop/hdfs/DistributedFileSystem"
+ #define HADOOP_ISTRM    "org/apache/hadoop/fs/FSDataInputStream"
+@@ -1904,7 +1905,8 @@ tOffset hdfsGetDefaultBlockSize(hdfsFS fs)
+ tOffset hdfsGetCapacity(hdfsFS fs)
+ {
+     // JAVA EQUIVALENT:
+-    //  fs.getRawCapacity();
++    //  FsStatus fss = fs.getStatus();
++    //  return Fss.getCapacity();
+ 
+     //Get the JNIEnv* corresponding to current thread
+     JNIEnv* env = getJNIEnv();
+@@ -1915,23 +1917,22 @@ tOffset hdfsGetCapacity(hdfsFS fs)
+ 
+     jobject jFS = (jobject)fs;
+ 
+-    if (!((*env)->IsInstanceOf(env, jFS, 
+-                               globalClassReference(HADOOP_DFS, env)))) {
+-        fprintf(stderr, "hdfsGetCapacity works only on a "
+-                "DistributedFileSystem!\n");
+-        return -1;
+-    }
+-
+-    //FileSystem::getRawCapacity()
++    //FileSystem::getStatus
+     jvalue  jVal;
+     jthrowable jExc = NULL;
+-    if (invokeMethod(env, &jVal, &jExc, INSTANCE, jFS, HADOOP_DFS,
+-                     "getRawCapacity", "()J") != 0) {
++    if (invokeMethod(env, &jVal, &jExc, INSTANCE, jFS, HADOOP_FS,
++                     "getStatus", "()Lorg/apache/hadoop/fs/FsStatus;") != 0) {
+         errno = errnoFromException(jExc, env, "org.apache.hadoop.fs."
+-                                   "FileSystem::getRawCapacity");
++                                   "FileSystem::getStatus");
++        return -1;
++    }
++    jobject fss = (jobject)jVal.l;
++    if (invokeMethod(env, &jVal, &jExc, INSTANCE, fss, HADOOP_FSSTATUS,
++                     "getCapacity", "()J") != 0) {
++        errno = errnoFromException(jExc, env, "org.apache.hadoop.fs."
++                                   "FsStatus::getCapacity");
+         return -1;
+     }
+-
+     return jVal.j;
+ }
+ 
+@@ -1940,7 +1941,8 @@ tOffset hdfsGetCapacity(hdfsFS fs)
+ tOffset hdfsGetUsed(hdfsFS fs)
+ {
+     // JAVA EQUIVALENT:
+-    //  fs.getRawUsed();
++    //  FsStatus fss = fs.getStatus();
++    //  return Fss.getUsed();
+ 
+     //Get the JNIEnv* corresponding to current thread
+     JNIEnv* env = getJNIEnv();
+@@ -1951,24 +1953,24 @@ tOffset hdfsGetUsed(hdfsFS fs)
+ 
+     jobject jFS = (jobject)fs;
+ 
+-    if (!((*env)->IsInstanceOf(env, jFS, 
+-                               globalClassReference(HADOOP_DFS, env)))) {
+-        fprintf(stderr, "hdfsGetUsed works only on a "
+-                "DistributedFileSystem!\n");
++    //FileSystem::getStatus
++    jvalue  jVal;
++    jthrowable jExc = NULL;
++    if (invokeMethod(env, &jVal, &jExc, INSTANCE, jFS, HADOOP_FS,
++                     "getStatus", "()Lorg/apache/hadoop/fs/FsStatus;") != 0) {
++        errno = errnoFromException(jExc, env, "org.apache.hadoop.fs."
++                                   "FileSystem::getStatus");
+         return -1;
+     }
+-
+-    //FileSystem::getRawUsed()
+-    jvalue jVal;
+-    jthrowable jExc = NULL;
+-    if (invokeMethod(env, &jVal, &jExc, INSTANCE, jFS, HADOOP_DFS,
+-                     "getRawUsed", "()J") != 0) {
++    jobject fss = (jobject)jVal.l;
++    if (invokeMethod(env, &jVal, &jExc, INSTANCE, fss, HADOOP_FSSTATUS,
++                     "getUsed", "()J") != 0) {
+         errno = errnoFromException(jExc, env, "org.apache.hadoop.fs."
+-                                   "FileSystem::getRawUsed");
++                                   "FsStatus::getUsed");
+         return -1;
+     }
+-
+     return jVal.j;
++
+ }
+ 
+ 
+diff --git a/src/core/org/apache/hadoop/fs/FileSystem.java b/src/core/org/apache/hadoop/fs/FileSystem.java
+index f355605..0efc4e0 100644
+--- a/src/core/org/apache/hadoop/fs/FileSystem.java
++++ b/src/core/org/apache/hadoop/fs/FileSystem.java
+@@ -1375,6 +1375,34 @@ public abstract class FileSystem extends Configured implements Closeable {
+     }
+     return results.toArray(new FileStatus[results.size()]);
+   }
++  
++  /**
++   * Returns a status object describing the use and capacity of the
++   * file system. If the file system has multiple partitions, the
++   * use and capacity of the root partition is reflected.
++   * 
++   * @return a FsStatus object
++   * @throws IOException
++   *           see specific implementation
++   */
++  public FsStatus getStatus() throws IOException {
++    return getStatus(null);
++  }
++
++  /**
++   * Returns a status object describing the use and capacity of the
++   * file system. If the file system has multiple partitions, the
++   * use and capacity of the partition pointed to by the specified
++   * path is reflected.
++   * @param p Path for which status should be obtained. null means
++   * the default partition. 
++   * @return a FsStatus object
++   * @throws IOException
++   *           see specific implementation
++   */
++  public FsStatus getStatus(Path p) throws IOException {
++    return new FsStatus(Long.MAX_VALUE, 0, Long.MAX_VALUE);
++  }
+ 
+   /**
+    * Set permission of a path.
+diff --git a/src/core/org/apache/hadoop/fs/FilterFileSystem.java b/src/core/org/apache/hadoop/fs/FilterFileSystem.java
+index a52853f..5509b4e 100644
+--- a/src/core/org/apache/hadoop/fs/FilterFileSystem.java
++++ b/src/core/org/apache/hadoop/fs/FilterFileSystem.java
+@@ -176,6 +176,12 @@ public class FilterFileSystem extends FileSystem {
+   public Path getWorkingDirectory() {
+     return fs.getWorkingDirectory();
+   }
++
++  /** {@inheritDoc} */
++  @Override
++  public FsStatus getStatus(Path p) throws IOException {
++    return fs.getStatus(p);
++  }
+   
+   /** {@inheritDoc} */
+   @Override
+diff --git a/src/core/org/apache/hadoop/fs/FsShell.java b/src/core/org/apache/hadoop/fs/FsShell.java
+index 51fe6eb..b138992 100644
+--- a/src/core/org/apache/hadoop/fs/FsShell.java
++++ b/src/core/org/apache/hadoop/fs/FsShell.java
+@@ -643,6 +643,28 @@ public class FsShell extends Configured implements Tool {
+     }
+   }
+ 
++   /**
++   * Show the size of a partition in the filesystem that contains
++   * the specified <i>path</i>.
++   * @param path a path specifying the source partition. null means /.
++   * @throws IOException  
++   */
++  void df(String path) throws IOException {
++    if (path == null) path = "/";
++    final Path srcPath = new Path(path);
++    final FileSystem srcFs = srcPath.getFileSystem(getConf());
++    if (! srcFs.exists(srcPath)) {
++      throw new FileNotFoundException("Cannot access "+srcPath.toString());
++    }
++    final FsStatus stats = srcFs.getStatus(srcPath);
++    final int PercentUsed = (int)(100.0f *  (float)stats.getUsed() / (float)stats.getCapacity());
++    System.out.println("Filesystem\t\tSize\tUsed\tAvail\tUse%");
++    System.out.printf("%s\t\t%d\t%d\t%d\t%d%%\n",
++      path, 
++      stats.getCapacity(), stats.getUsed(), stats.getRemaining(),
++      PercentUsed);
++  }
++
+   /**
+    * Show the size of all files that match the file pattern <i>src</i>
+    * @param src a file pattern specifying source files
+@@ -1253,7 +1275,7 @@ public class FsShell extends Configured implements Tool {
+     String summary = "hadoop fs is the command to execute fs commands. " +
+       "The full syntax is: \n\n" +
+       "hadoop fs [-fs <local | file system URI>] [-conf <configuration file>]\n\t" +
+-      "[-D <property=value>] [-ls <path>] [-lsr <path>] [-du <path>]\n\t" + 
++      "[-D <property=value>] [-ls <path>] [-lsr <path>] [-df <path>] [-du <path>]\n\t" + 
+       "[-dus <path>] [-mv <src> <dst>] [-cp <src> <dst>] [-rm [-skipTrash] <src>]\n\t" + 
+       "[-rmr [-skipTrash] <src>] [-put <localsrc> ... <dst>] [-copyFromLocal <localsrc> ... <dst>]\n\t" +
+       "[-moveFromLocal <localsrc> ... <dst>] [" + 
+@@ -1299,6 +1321,10 @@ public class FsShell extends Configured implements Tool {
+       "\t\texcept that the data is shown for all the entries in the\n" +
+       "\t\tsubtree.\n";
+ 
++    String df = "-df [<path>]: \tShows the capacity, free and used space of the filesystem.\n"+
++      "\t\tIf the filesystem has multiple partitions, and no path to a particular partition\n"+
++      "\t\tis specified, then the status of the root partitions will be shown.\n";
++
+     String du = "-du <path>: \tShow the amount of space, in bytes, used by the files that \n" +
+       "\t\tmatch the specified file pattern.  Equivalent to the unix\n" + 
+       "\t\tcommand \"du -sb <path>/*\" in case of a directory, \n" +
+@@ -1425,6 +1451,8 @@ public class FsShell extends Configured implements Tool {
+       System.out.println(ls);
+     } else if ("lsr".equals(cmd)) {
+       System.out.println(lsr);
++    } else if ("df".equals(cmd)) {
++      System.out.println(df);
+     } else if ("du".equals(cmd)) {
+       System.out.println(du);
+     } else if ("dus".equals(cmd)) {
+@@ -1484,6 +1512,7 @@ public class FsShell extends Configured implements Tool {
+       System.out.println(fs);
+       System.out.println(ls);
+       System.out.println(lsr);
++      System.out.println(df);
+       System.out.println(du);
+       System.out.println(dus);
+       System.out.println(mv);
+@@ -1547,6 +1576,8 @@ public class FsShell extends Configured implements Tool {
+           delete(argv[i], false, rmSkipTrash);
+         } else if ("-rmr".equals(cmd)) {
+           delete(argv[i], true, rmSkipTrash);
++        } else if ("-df".equals(cmd)) {
++          df(argv[i]);
+         } else if ("-du".equals(cmd)) {
+           du(argv[i]);
+         } else if ("-dus".equals(cmd)) {
+@@ -1614,6 +1645,9 @@ public class FsShell extends Configured implements Tool {
+                "-text".equals(cmd)) {
+       System.err.println("Usage: java FsShell" + 
+                          " [" + cmd + " <path>]");
++    } else if ("-df".equals(cmd) ) {
++      System.err.println("Usage: java FsShell" +
++                         " [" + cmd + " [<path>]]");
+     } else if (Count.matches(cmd)) {
+       System.err.println(prefix + " [" + Count.USAGE + "]");
+     } else if ("-rm".equals(cmd) || "-rmr".equals(cmd)) {
+@@ -1650,6 +1684,7 @@ public class FsShell extends Configured implements Tool {
+       System.err.println("Usage: java FsShell");
+       System.err.println("           [-ls <path>]");
+       System.err.println("           [-lsr <path>]");
++      System.err.println("           [-df [<path>]]");
+       System.err.println("           [-du <path>]");
+       System.err.println("           [-dus <path>]");
+       System.err.println("           [" + Count.USAGE + "]");
+@@ -1695,7 +1730,6 @@ public class FsShell extends Configured implements Tool {
+     int exitCode = -1;
+     int i = 0;
+     String cmd = argv[i++];
+-
+     //
+     // verify that we have enough command line parameters
+     //
+@@ -1725,7 +1759,6 @@ public class FsShell extends Configured implements Tool {
+         return exitCode;
+       }
+     }
+-
+     // initialize FsShell
+     try {
+       init();
+@@ -1791,6 +1824,12 @@ public class FsShell extends Configured implements Tool {
+         exitCode = doall(cmd, argv, i);
+       } else if ("-expunge".equals(cmd)) {
+         expunge();
++      } else if ("-df".equals(cmd)) {
++        if (argv.length-1 > 0) {
++          exitCode = doall(cmd, argv, i);
++        } else {
++          df(null);
++        }
+       } else if ("-du".equals(cmd)) {
+         if (i < argv.length) {
+           exitCode = doall(cmd, argv, i);
+diff --git a/src/core/org/apache/hadoop/fs/FsStatus.java b/src/core/org/apache/hadoop/fs/FsStatus.java
+new file mode 100644
+index 0000000..0c7a5ac
+--- /dev/null
++++ b/src/core/org/apache/hadoop/fs/FsStatus.java
+@@ -0,0 +1,70 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.fs;
++
++import java.io.DataInput;
++import java.io.DataOutput;
++import java.io.IOException;
++
++import org.apache.hadoop.io.Writable;
++
++/** This class is used to represent the capacity, free and used space on a
++  * {@link FileSystem}.
++  */
++public class FsStatus implements Writable {
++  private long capacity;
++  private long used;
++  private long remaining;
++
++  /** Construct a FsStatus object, using the specified statistics */
++  public FsStatus(long capacity, long used, long remaining) {
++    this.capacity = capacity;
++    this.used = used;
++    this.remaining = remaining;
++  }
++
++  /** Return the capacity in bytes of the file system */
++  public long getCapacity() {
++    return capacity;
++  }
++
++  /** Return the number of bytes used on the file system */
++  public long getUsed() {
++    return used;
++  }
++
++  /** Return the number of remaining bytes on the file system */
++  public long getRemaining() {
++    return remaining;
++  }
++
++  //////////////////////////////////////////////////
++  // Writable
++  //////////////////////////////////////////////////
++  public void write(DataOutput out) throws IOException {
++    out.writeLong(capacity);
++    out.writeLong(used);
++    out.writeLong(remaining);
++  }
++
++  public void readFields(DataInput in) throws IOException {
++    capacity = in.readLong();
++    used = in.readLong();
++    remaining = in.readLong();
++  }
++}
+diff --git a/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java b/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java
+index 8d439f9..9fd7bb0 100644
+--- a/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java
++++ b/src/core/org/apache/hadoop/fs/RawLocalFileSystem.java
+@@ -328,6 +328,17 @@ public class RawLocalFileSystem extends FileSystem {
+   public Path getWorkingDirectory() {
+     return workingDir;
+   }
++
++  /** {@inheritDoc} */
++  @Override
++  public FsStatus getStatus(Path p) throws IOException {
++    File partition = pathToFile(p == null ? new Path("/") : p);
++    //File provides getUsableSpace() and getFreeSpace()
++    //File provides no API to obtain used space, assume used = total - free
++    return new FsStatus(partition.getTotalSpace(), 
++      partition.getTotalSpace() - partition.getFreeSpace(),
++      partition.getFreeSpace());
++  }
+   
+   // In the case of the local filesystem, we can just rename the file.
+   public void moveFromLocalFile(Path src, Path dst) throws IOException {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 502610b..b595ff6 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -27,7 +27,6 @@ import org.apache.hadoop.ipc.*;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.net.NodeBase;
+ import org.apache.hadoop.conf.*;
+-import org.apache.hadoop.hdfs.DistributedFileSystem.DiskStatus;
+ import org.apache.hadoop.hdfs.protocol.*;
+ import org.apache.hadoop.hdfs.protocol.DataTransferProtocol.PipelineAck;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants;
+@@ -779,22 +778,9 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     }
+   }
+ 
+-  public DiskStatus getDiskStatus() throws IOException {
++  public FsStatus getDiskStatus() throws IOException {
+     long rawNums[] = namenode.getStats();
+-    return new DiskStatus(rawNums[0], rawNums[1], rawNums[2]);
+-  }
+-  /**
+-   */
+-  public long totalRawCapacity() throws IOException {
+-    long rawNums[] = namenode.getStats();
+-    return rawNums[0];
+-  }
+-
+-  /**
+-   */
+-  public long totalRawUsed() throws IOException {
+-    long rawNums[] = namenode.getStats();
+-    return rawNums[1];
++    return new FsStatus(rawNums[0], rawNums[1], rawNums[2]);
+   }
+ 
+   /**
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
+index 958f52c..129fbce 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
+@@ -280,44 +280,52 @@ public class DistributedFileSystem extends FileSystem {
+     return dfs;
+   }        
+   
+-  public static class DiskStatus {
+-    private long capacity;
+-    private long dfsUsed;
+-    private long remaining;
+-    public DiskStatus(long capacity, long dfsUsed, long remaining) {
+-      this.capacity = capacity;
+-      this.dfsUsed = dfsUsed;
+-      this.remaining = remaining;
++  /** @deprecated Use {@link org.apache.hadoop.fs.FsStatus instead */
++  @Deprecated
++  public static class DiskStatus extends FsStatus {
++    public DiskStatus(FsStatus stats) {
++      super(stats.getCapacity(), stats.getUsed(), stats.getRemaining());
+     }
+-    
+-    public long getCapacity() {
+-      return capacity;
++
++    public DiskStatus(long capacity, long dfsUsed, long remaining) {
++      super(capacity, dfsUsed, remaining);
+     }
++
+     public long getDfsUsed() {
+-      return dfsUsed;
+-    }
+-    public long getRemaining() {
+-      return remaining;
++      return super.getUsed();
+     }
+   }
+   
++  /** {@inheritDoc} */
++  public FsStatus getStatus(Path p) throws IOException {
++    return dfs.getDiskStatus();
++  }
+ 
+   /** Return the disk usage of the filesystem, including total capacity,
+-   * used space, and remaining space */
++   * used space, and remaining space 
++   * @deprecated Use {@link org.apache.hadoop.fs.FileSystem#getStatus()} 
++   * instead */
++   @Deprecated
+   public DiskStatus getDiskStatus() throws IOException {
+-    return dfs.getDiskStatus();
++    return new DiskStatus(dfs.getDiskStatus());
+   }
+   
+   /** Return the total raw capacity of the filesystem, disregarding
+-   * replication .*/
++   * replication.
++   * @deprecated Use {@link org.apache.hadoop.fs.FileSystem#getStatus()} 
++   * instead */
++   @Deprecated
+   public long getRawCapacity() throws IOException{
+-    return dfs.totalRawCapacity();
++    return dfs.getDiskStatus().getCapacity();
+   }
+ 
+   /** Return the total raw used space in the filesystem, disregarding
+-   * replication .*/
++   * replication.
++   * @deprecated Use {@link org.apache.hadoop.fs.FileSystem#getStatus()} 
++   * instead */
++   @Deprecated
+   public long getRawUsed() throws IOException{
+-    return dfs.totalRawUsed();
++    return dfs.getDiskStatus().getUsed();
+   }
+    
+   /**
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 75ea19e..c83f0e9 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -3433,8 +3433,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     return Math.max(missingBlocksInPrevIter, missingBlocksInCurIter); 
+   }
+   
+-  long[] getStats() throws IOException {
+-    checkSuperuserPrivilege();
++  long[] getStats() {
+     synchronized(heartbeats) {
+       return new long[] {this.capacityTotal, this.capacityUsed, 
+                          this.capacityRemaining,
+@@ -3448,18 +3447,14 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+    * Total raw bytes including non-dfs used space.
+    */
+   public long getCapacityTotal() {
+-    synchronized (heartbeats) {
+-      return this.capacityTotal;
+-    }
++    return getStats()[0];
+   }
+ 
+   /**
+    * Total used space by data nodes
+    */
+   public long getCapacityUsed() {
+-    synchronized(heartbeats){
+-      return this.capacityUsed;
+-    }
++    return getStats()[1];
+   }
+   /**
+    * Total used space by data nodes as percentage of total capacity
+@@ -3488,9 +3483,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+    * Total non-used raw bytes.
+    */
+   public long getCapacityRemaining() {
+-    synchronized (heartbeats) {
+-      return this.capacityRemaining;
+-    }
++    return getStats()[2];
+   }
+ 
+   /**
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index b1a63b6..f80412f 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -606,7 +606,7 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+   }
+ 
+   /** @inheritDoc */
+-  public long[] getStats() throws IOException {
++  public long[] getStats() {
+     return namesystem.getStats();
+   }
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/DFSAdmin.java b/src/hdfs/org/apache/hadoop/hdfs/tools/DFSAdmin.java
+index 5ae6ed0..0d337e8 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/DFSAdmin.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/DFSAdmin.java
+@@ -24,7 +24,6 @@ import javax.security.auth.login.LoginException;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.DistributedFileSystem;
+-import org.apache.hadoop.hdfs.DistributedFileSystem.DiskStatus;
+ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+ import org.apache.hadoop.hdfs.protocol.FSConstants;
+ import org.apache.hadoop.hdfs.protocol.FSConstants.DatanodeReportType;
+@@ -32,6 +31,7 @@ import org.apache.hadoop.hdfs.protocol.FSConstants.UpgradeAction;
+ import org.apache.hadoop.hdfs.server.common.UpgradeStatusReport;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+ import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.FsStatus;
+ import org.apache.hadoop.fs.FsShell;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.shell.Command;
+@@ -260,9 +260,9 @@ public class DFSAdmin extends FsShell {
+   public void report() throws IOException {
+     if (fs instanceof DistributedFileSystem) {
+       DistributedFileSystem dfs = (DistributedFileSystem) fs;
+-      DiskStatus ds = dfs.getDiskStatus();
++      FsStatus ds = dfs.getStatus();
+       long capacity = ds.getCapacity();
+-      long used = ds.getDfsUsed();
++      long used = ds.getUsed();
+       long remaining = ds.getRemaining();
+       long presentCapacity = used + remaining;
+       boolean mode = dfs.setSafeMode(FSConstants.SafeModeAction.SAFEMODE_GET);
+diff --git a/src/test/org/apache/hadoop/fs/FileSystemContractBaseTest.java b/src/test/org/apache/hadoop/fs/FileSystemContractBaseTest.java
+index b38c578..8bdeb3b 100644
+--- a/src/test/org/apache/hadoop/fs/FileSystemContractBaseTest.java
++++ b/src/test/org/apache/hadoop/fs/FileSystemContractBaseTest.java
+@@ -68,6 +68,15 @@ public abstract class FileSystemContractBaseTest extends TestCase {
+   protected boolean renameSupported() {
+     return true;
+   }
++
++  public void testFsStatus() throws Exception {
++    FsStatus fsStatus = fs.getStatus();
++    assertNotNull(fsStatus);
++    //used, free and capacity are non-negative longs
++    assertTrue(fsStatus.getUsed() >= 0);
++    assertTrue(fsStatus.getRemaining() >= 0);
++    assertTrue(fsStatus.getCapacity() >= 0);
++  }
+   
+   public void testWorkingDirectory() throws Exception {
+ 
+diff --git a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+index 349c94c..18c57be 100644
+--- a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
++++ b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+@@ -668,16 +668,12 @@ public class MiniDFSCluster {
+     if (nameNode == null) {
+       return false;
+     }
+-    try {
+-      long[] sizes = nameNode.getStats();
+-      boolean isUp = false;
+-      synchronized (this) {
+-        isUp = (!nameNode.isInSafeMode() && sizes[0] != 0);
+-      }
+-      return isUp;
+-    } catch (IOException ie) {
+-      return false;
++    long[] sizes = nameNode.getStats();
++    boolean isUp = false;
++    synchronized (this) {
++      isUp = (!nameNode.isInSafeMode() && sizes[0] != 0);
+     }
++    return isUp;
+   }
+   
+   /**
+diff --git a/src/webapps/hdfs/dfshealth.jsp b/src/webapps/hdfs/dfshealth.jsp
+index 2b190bc..24cbda0 100644
+--- a/src/webapps/hdfs/dfshealth.jsp
++++ b/src/webapps/hdfs/dfshealth.jsp
+@@ -188,13 +188,16 @@
+     }
+         
+     counterReset();
+-    
+-    long total = fsn.getCapacityTotal();
+-    long remaining = fsn.getCapacityRemaining();
+-    long used = fsn.getCapacityUsed();
+-    long nonDFS = fsn.getCapacityUsedNonDFS();
+-    float percentUsed = fsn.getCapacityUsedPercent();
+-    float percentRemaining = fsn.getCapacityRemainingPercent();
++    long[] fsnStats = fsn.getStats(); 
++    long total = fsnStats[0];
++    long remaining = fsnStats[2];
++    long used = fsnStats[1];
++    long nonDFS = total - remaining - used;
++	nonDFS = nonDFS < 0 ? 0 : nonDFS; 
++    float percentUsed = total <= 0 
++        ? 0f : ((float)used * 100.0f)/(float)total;
++    float percentRemaining = total <= 0 
++        ? 100f : ((float)remaining * 100.0f)/(float)total;
+ 
+     out.print( "<div id=\"dfstable\"> <table>\n" +
+ 	       rowTxt() + colTxt() + "Configured Capacity" + colTxt() + ":" + colTxt() +
+-- 
+1.7.0.4
+

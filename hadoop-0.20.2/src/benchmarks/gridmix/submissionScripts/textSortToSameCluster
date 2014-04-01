@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+
+GRID_DIR=`dirname "$0"`
+GRID_DIR=`cd "$GRID_DIR"; pwd`
+source $GRID_DIR/../gridmix-env
+PROCESSES=""
+
+for ((i=0; i < $NUM_OF_SMALL_JOBS_PER_CLASS; i++))
+do
+    echo $i
+    $GRID_MIX_HOME/pipesort/text-sort.small  2>&1 > pipesort.small.$i.out &
+    PROCESSES="${PROCESSES} $!"
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+    $GRID_MIX_HOME/streamsort/text-sort.small  2>&1 > streamsort.small.$i.out &
+    PROCESSES="${PROCESSES} $!"
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+    $GRID_MIX_HOME/javasort/text-sort.small  2>&1 > javasort.small.$i.out & 
+    PROCESSES="${PROCESSES} $!"
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done
+    
+for ((i=0; i < $NUM_OF_MEDIUM_JOBS_PER_CLASS; i++))
+do
+    echo $i
+    $GRID_MIX_HOME/pipesort/text-sort.medium  2>&1 > pipesort.medium.$i.out &
+    PROCESSES="${PROCESSES} $!"
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+    $GRID_MIX_HOME/streamsort/text-sort.medium  2>&1 > streamsort.medium.$i.out &
+    PROCESSES="${PROCESSES} $!"
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+    $GRID_MIX_HOME/javasort/text-sort.medium  2>&1 > javasort.medium.$i.out & 
+    PROCESSES="${PROCESSES} $!"
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done
+
+for ((i=0; i < $NUM_OF_LARGE_JOBS_PER_CLASS; i++))
+do
+    echo $i
+    $GRID_MIX_HOME/pipesort/text-sort.large  2>&1 > pipesort.large.$i.out &
+    PROCESSES="${PROCESSES} $!"
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+    $GRID_MIX_HOME/streamsort/text-sort.large  2>&1 > pipesort.large.$i.out &
+    PROCESSES="${PROCESSES} $!"
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+    $GRID_MIX_HOME/javasort/text-sort.large  2>&1 > pipesort.large.$i.out &
+    PROCESSES="${PROCESSES} $!"
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done
+
+for APROC in ${PROCESSES}; do
+  wait ${APROC}
+done
+    

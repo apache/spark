@@ -1,0 +1,455 @@
+<?xml version="1.0"?>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<!-- Imported by contrib/*/build.xml files to share generic targets. -->
+
+<project name="hadoopbuildcontrib" xmlns:ivy="antlib:org.apache.ivy.ant">
+
+  <property name="name" value="${ant.project.name}"/>
+  <dirname property="src.contrib.dir" file="${ant.file.hadoopbuildcontrib}" />
+  <property name="root" value="${basedir}"/>
+
+  <!-- Load all the default properties, and any the user wants    -->
+  <!-- to contribute (without having to type -D or edit this file -->
+  <property file="${user.home}/${name}.build.properties" />
+  <property file="${root}/build.properties" />
+
+  <property name="hadoop.root" location="${src.contrib.dir}/../../"/>
+  <property name="src.dir"  location="${root}/src/java"/>
+  <property name="src.test" location="${root}/src/test"/>
+  <property name="src.examples" location="${root}/src/examples"/>
+  <!-- Property added for contrib system tests -->
+  <property name="src.test.system" location="${root}/src/test/system"/>
+
+  <available file="${src.examples}" type="dir" property="examples.available"/>
+  <available file="${src.test}" type="dir" property="test.available"/>
+  <!-- Property added for contrib system tests -->
+  <available file="${src.test.system}" type="dir" 
+      property="test.system.available"/>
+
+  <property name="conf.dir" location="${hadoop.root}/conf"/>
+  <property name="test.junit.output.format" value="plain"/>
+  <property name="test.output" value="no"/>
+  <property name="test.timeout" value="900000"/>
+  <property name="build.contrib.dir" location="${hadoop.root}/build/contrib"/>
+  <property name="build.dir" location="${hadoop.root}/build/contrib/${name}"/>
+  <property name="build.classes" location="${build.dir}/classes"/>
+  <!-- NB: sun.arch.data.model is not supported on all platforms -->
+  <property name="build.platform"
+            value="${os.name}-${os.arch}-${sun.arch.data.model}"/>
+  <property name="build.c++.libhdfs" value="${build.dir}/../../c++/${build.platform}/lib"/>
+  <property name="build.test" location="${build.dir}/test"/>
+  <property name="build.examples" location="${build.dir}/examples"/>
+  <property name="hadoop.log.dir" location="${build.dir}/test/logs"/>
+  <!-- all jars together -->
+  <property name="javac.deprecation" value="off"/>
+  <property name="javac.debug" value="on"/>
+  <property name="build.ivy.lib.dir" value="${hadoop.root}/build/ivy/lib"/> 
+
+  <property name="javadoc.link"
+            value="http://java.sun.com/j2se/1.4/docs/api/"/>
+
+  <property name="build.encoding" value="ISO-8859-1"/>
+
+  <fileset id="lib.jars" dir="${root}" includes="lib/*.jar"/>
+
+  <!-- Property added for contrib system tests -->
+  <property name="build.test.system" location="${build.dir}/system"/>
+  <property name="build.system.classes" 
+      location="${build.test.system}/classes"/>
+
+   <!-- IVY properties set here -->
+  <property name="ivy.dir" location="ivy" />
+  <property name="ivysettings.xml" location="${hadoop.root}/ivy/ivysettings.xml"/>
+  <loadproperties srcfile="${ivy.dir}/libraries.properties"/>
+  <loadproperties srcfile="${hadoop.root}/ivy/libraries.properties"/>
+  <property name="ivy.jar" location="${hadoop.root}/ivy/ivy-${ivy.version}.jar"/>
+  <property name="ivy_repo_url" 
+	value="http://repo2.maven.org/maven2/org/apache/ivy/ivy/${ivy.version}/ivy-${ivy.version}.jar" />
+  <property name="build.dir" location="build" />
+  <property name="build.ivy.dir" location="${build.dir}/ivy" />
+  <property name="build.ivy.lib.dir" location="${build.ivy.dir}/lib" />
+  <property name="build.ivy.report.dir" location="${build.ivy.dir}/report" />
+  <property name="common.ivy.lib.dir" location="${build.ivy.lib.dir}/${ant.project.name}/common"/> 
+  <property name="hadoop.ivy.lib.dir" location="${build.ivy.lib.dir}/Hadoop/common"/>
+
+  <!--this is the naming policy for artifacts we want pulled down-->
+  <property name="ivy.artifact.retrieve.pattern"
+    			value="${ant.project.name}/[conf]/[artifact]-[revision].[ext]"/>
+
+  <!-- the normal classpath -->
+  <path id="contrib-classpath">
+    <pathelement location="${build.classes}"/>
+    <pathelement location="${hadoop.root}/build/tools"/>
+    <fileset refid="lib.jars"/>
+    <pathelement location="${hadoop.root}/build/classes"/>
+    <fileset dir="${hadoop.ivy.lib.dir}">
+      <include name="*.jar" />
+    </fileset>
+    <fileset dir="${hadoop.root}/lib">
+      <include name="**/*.jar" />
+    </fileset>
+    <path refid="${ant.project.name}.common-classpath"/>
+    <pathelement path="${clover.jar}"/>
+  </path>
+
+  <!-- the unit test classpath -->
+  <path id="test.classpath">
+    <pathelement location="${build.test}" />
+    <pathelement location="${hadoop.root}/build/test/classes"/>
+    <pathelement location="${hadoop.root}/src/contrib/test"/>
+    <pathelement location="${conf.dir}"/>
+    <pathelement location="${hadoop.root}/build"/>
+    <pathelement location="${build.examples}"/>
+    <path refid="${ant.project.name}.test-classpath"/>
+    <pathelement location="${hadoop.root}/build/examples"/>
+    <path refid="contrib-classpath"/>
+  </path>
+
+  <!-- The system test classpath -->
+  <path id="test.system.classpath">
+    <pathelement location="${hadoop.root}/src/contrib/${name}/src/test/system" />
+    <pathelement location="${build.test.system}" />
+    <pathelement location="${build.test.system}/classes"/>
+    <pathelement location="${build.examples}"/>
+    <pathelement location="${hadoop.root}/build-fi/system/classes" />
+    <pathelement location="${hadoop.root}/build-fi/system/test/classes" />
+    <pathelement location="${hadoop.root}/build-fi" />
+    <pathelement location="${hadoop.root}/build-fi/tools" />
+    <pathelement location="${hadoop.home}"/>
+    <pathelement location="${hadoop.conf.dir}"/>
+    <pathelement location="${hadoop.conf.dir.deployed}"/>
+    <pathelement location="${hadoop.root}/build"/>
+    <pathelement location="${hadoop.root}/build/examples"/>
+    <pathelement location="${hadoop.root}/build-fi/test/classes" />
+    <path refid="contrib-classpath"/>
+    <fileset dir="${hadoop.root}/src/test/lib">
+      <include name="**/*.jar" />
+      <exclude name="**/excluded/" />
+    </fileset>
+    <fileset dir="${hadoop.root}/build-fi/system">
+       <include name="**/*.jar" />
+       <exclude name="**/excluded/" />
+     </fileset>
+    <fileset dir="${hadoop.root}/build-fi/test/testjar">
+      <include name="**/*.jar" />
+      <exclude name="**/excluded/" />
+    </fileset>
+  </path>
+
+  <!-- to be overridden by sub-projects -->
+  <target name="check-contrib"/>
+  <target name="init-contrib"/>
+
+  <!-- ====================================================== -->
+  <!-- Stuff needed by all targets                            -->
+  <!-- ====================================================== -->
+  <target name="init" depends="check-contrib" unless="skip.contrib">
+    <echo message="contrib: ${name}"/>
+    <mkdir dir="${build.dir}"/>
+    <mkdir dir="${build.classes}"/>
+    <mkdir dir="${build.test}"/>
+    <!-- The below two tags  added for contrib system tests -->
+    <mkdir dir="${build.test.system}"/>
+    <mkdir dir="${build.system.classes}"/> 
+    <mkdir dir="${build.examples}"/>
+    <mkdir dir="${hadoop.log.dir}"/>
+    <antcall target="init-contrib"/>
+  </target>
+
+
+  <!-- ====================================================== -->
+  <!-- Compile a Hadoop contrib's files                       -->
+  <!-- ====================================================== -->
+  <target name="compile" depends="init, ivy-retrieve-common" unless="skip.contrib">
+    <echo message="contrib: ${name}"/>
+    <javac
+     encoding="${build.encoding}"
+     srcdir="${src.dir}"
+     includes="**/*.java"
+     destdir="${build.classes}"
+     debug="${javac.debug}"
+     deprecation="${javac.deprecation}">
+     <classpath refid="contrib-classpath"/>
+    </javac>
+  </target>
+
+
+  <!-- ======================================================= -->
+  <!-- Compile a Hadoop contrib's example files (if available) -->
+  <!-- ======================================================= -->
+  <target name="compile-examples" depends="compile" if="examples.available">
+    <echo message="contrib: ${name}"/>
+    <javac
+     encoding="${build.encoding}"
+     srcdir="${src.examples}"
+     includes="**/*.java"
+     destdir="${build.examples}"
+     debug="${javac.debug}">
+     <classpath refid="contrib-classpath"/>
+    </javac>
+  </target>
+
+
+  <!-- ================================================================== -->
+  <!-- Compile test code                                                  -->
+  <!-- ================================================================== -->
+  <target name="compile-test" depends="compile-examples, ivy-retrieve-test" if="test.available">
+    <echo message="contrib: ${name}"/>
+    <javac
+     encoding="${build.encoding}"
+     srcdir="${src.test}"
+     includes="**/*.java"
+     excludes="system/**/*.java"
+     destdir="${build.test}"
+     debug="${javac.debug}">
+    <classpath refid="test.classpath"/>
+    </javac>
+  </target>
+  
+  <!-- ================================================================== -->
+  <!-- Compile system test code                                           -->
+  <!-- ================================================================== -->
+  <target name="compile-test-system" depends="compile-examples"
+     if="test.system.available">
+    <echo message="contrib: ${name}"/>
+    <javac
+       encoding="${build.encoding}"
+       srcdir="${src.test.system}"
+       includes="**/*.java"
+       destdir="${build.system.classes}"
+       debug="${javac.debug}">
+      <classpath refid="test.system.classpath"/>
+    </javac>
+  </target>
+
+  <!-- ====================================================== -->
+  <!-- Make a Hadoop contrib's jar                            -->
+  <!-- ====================================================== -->
+  <target name="jar" depends="compile" unless="skip.contrib">
+    <echo message="contrib: ${name}"/>
+    <jar
+      jarfile="${build.dir}/hadoop-${name}-${version}.jar"
+      basedir="${build.classes}"      
+    />
+  </target>
+
+  
+  <!-- ====================================================== -->
+  <!-- Make a Hadoop contrib's examples jar                   -->
+  <!-- ====================================================== -->
+  <target name="jar-examples" depends="compile-examples"
+          if="examples.available" unless="skip.contrib">
+    <echo message="contrib: ${name}"/>
+    <jar jarfile="${build.dir}/hadoop-${name}-examples-${version}.jar">
+      <fileset dir="${build.classes}">
+      </fileset>
+      <fileset dir="${build.examples}">
+      </fileset>
+    </jar>
+  </target>
+  
+  <!-- ====================================================== -->
+  <!-- Package a Hadoop contrib                               -->
+  <!-- ====================================================== -->
+  <target name="package" depends="jar, jar-examples" unless="skip.contrib"> 
+    <mkdir dir="${dist.dir}/contrib/${name}"/>
+    <copy todir="${dist.dir}/contrib/${name}" includeEmptyDirs="false" flatten="true">
+      <fileset dir="${build.dir}">
+        <include name="hadoop-${name}-${version}.jar" />
+      </fileset>
+    </copy>
+
+    <!-- copy the dependency libraries into the contrib/lib dir -->
+    <mkdir dir="${dist.dir}/contrib/${name}/lib"/>
+    <copy todir="${dist.dir}/contrib/${name}/lib" includeEmptyDirs="false" flatten="true">
+      <fileset dir="${common.ivy.lib.dir}">
+        <!-- except for those already present due to Hadoop -->
+        <present present="srconly" targetdir="${dist.dir}/lib" />
+      </fileset>
+    </copy>
+    <!-- if the lib dir is empty, remove it. -->
+    <delete dir="${dist.dir}/contrib/${name}/lib" includeEmptyDirs="true" excludes="*.jar" />
+  </target>
+  
+  <!-- ================================================================== -->
+  <!-- Run unit tests                                                     -->
+  <!-- ================================================================== -->
+  <target name="test" depends="compile-test, compile" if="test.available">
+    <echo message="contrib: ${name}"/>
+    <delete dir="${hadoop.log.dir}"/>
+    <mkdir dir="${hadoop.log.dir}"/>
+    <junit
+      printsummary="yes" showoutput="${test.output}" 
+      haltonfailure="no" fork="yes" maxmemory="256m"
+      errorProperty="tests.failed" failureProperty="tests.failed"
+      timeout="${test.timeout}">
+      
+      <assertions><enable/></assertions>
+      <sysproperty key="test.build.data" value="${build.test}/data"/>
+      <sysproperty key="build.test" value="${build.test}"/>
+      <sysproperty key="contrib.name" value="${name}"/>
+      
+      <!-- requires fork=yes for: 
+        relative File paths to use the specified user.dir 
+        classpath to use build/contrib/*.jar
+      -->
+      <sysproperty key="user.dir" value="${build.test}/data"/>
+      
+      <sysproperty key="fs.default.name" value="${fs.default.name}"/>
+      <sysproperty key="fs.defaultFS" value="${fs.defaultFS}"/>
+      <sysproperty key="mapred.job.tracker" value="${mapred.job.tracker}"/>
+      <sysproperty key="hadoop.test.localoutputfile" value="${hadoop.test.localoutputfile}"/>
+      <sysproperty key="hadoop.log.dir" value="${hadoop.log.dir}"/> 
+      <sysproperty key="taskcontroller-path" value="${taskcontroller-path}"/>
+      <sysproperty key="taskcontroller-ugi" value="${taskcontroller-ugi}"/>
+      <syspropertyset id="fairscheduler.properties">
+        <propertyref prefix="test.fairscheduler."/>
+      </syspropertyset>
+      <classpath refid="test.classpath"/>
+      <formatter type="${test.junit.output.format}" />
+      <batchtest todir="${build.test}" unless="testcase">
+        <fileset dir="${src.test}"
+                 includes="**/Test*.java" excludes="**/${test.exclude}.java, system/**/*.java" />
+      </batchtest>
+      <batchtest todir="${build.test}" if="testcase">
+        <fileset dir="${src.test}" includes="**/${testcase}.java" excludes="system/**/*.java" />
+      </batchtest>
+    </junit>
+    <antcall target="checkfailure"/>
+  </target>
+
+  <!-- ================================================================== -->
+  <!-- Run system tests                                                   -->
+  <!-- ================================================================== -->
+  <target name="test-system" depends="compile, compile-test-system"
+     if="test.system.available">
+     <delete dir="${build.test.system}/extraconf"/>
+     <mkdir dir="${build.test.system}/extraconf"/>
+     <property name="test.src.dir" location="${hadoop.root}/src/test"/>
+     <property name="test.junit.printsummary" value="yes" />
+     <property name="test.junit.haltonfailure" value="no" />
+     <property name="test.junit.maxmemory" value="512m" />
+     <property name="test.junit.fork.mode" value="perTest" />
+     <property name="test.all.tests.file" value="${test.src.dir}/all-tests" />
+     <property name="test.build.dir" value="${hadoop.root}/build/test"/>
+     <property name="basedir" value="${hadoop.root}"/>
+     <property name="test.timeout" value="900000"/>
+     <property name="test.junit.output.format" value="plain"/>
+     <property name="test.tools.input.dir" value="${basedir}/src/test/tools/data"/>
+     <property name="c++.src" value="${basedir}/src/c++"/>
+     <property name="test.include" value="Test*"/>
+     <property name="c++.libhdfs.src" value="${c++.src}/libhdfs"/>
+     <property name="test.build.data" value="${build.test.system}/data"/>
+     <property name="test.cache.data" value="${build.test.system}/cache"/>
+     <property name="test.debug.data" value="${build.test.system}/debug"/>
+     <property name="test.log.dir" value="${build.test.system}/logs"/>
+     <patternset id="empty.exclude.list.id" />
+        <exec executable="sed" inputstring="${os.name}"
+            outputproperty="nonspace.os">
+          <arg value="s/ /_/g"/>
+        </exec>
+     <property name="build.platform"
+         value="${nonspace.os}-${os.arch}-${sun.arch.data.model}"/>
+     <property name="build.native" 
+         value="${hadoop.root}/build/native/${build.platform}"/>
+     <property name="lib.dir" value="${hadoop.root}/lib"/>
+     <property name="install.c++.examples"
+         value="${hadoop.root}/build/c++-examples/${build.platform}"/>
+    <condition property="tests.testcase">
+       <and>
+         <isset property="testcase" />
+       </and>
+    </condition>
+    <macro-test-runner test.file="${test.all.tests.file}"
+                       classpath="test.system.classpath"
+                       test.dir="${build.test.system}"
+                       fileset.dir="${hadoop.root}/src/contrib/${name}/src/test/system"
+                       hadoop.conf.dir.deployed="${hadoop.conf.dir.deployed}">
+    </macro-test-runner>
+  </target>
+
+  <target name="checkfailure" if="tests.failed">
+    <touch file="${build.contrib.dir}/testsfailed"/>
+    <fail unless="continueOnFailure">Contrib Tests failed!</fail>
+  </target>
+
+  <!-- ================================================================== -->
+  <!-- Clean.  Delete the build files, and their directories              -->
+  <!-- ================================================================== -->
+  <target name="clean">
+    <echo message="contrib: ${name}"/>
+    <delete dir="${build.dir}"/>
+  </target>
+
+  <target name="ivy-probe-antlib" >
+    <condition property="ivy.found">
+      <typefound uri="antlib:org.apache.ivy.ant" name="cleancache"/>
+    </condition>
+  </target>
+
+
+  <target name="ivy-download" description="To download ivy " unless="offline">
+    <get src="${ivy_repo_url}" dest="${ivy.jar}" usetimestamp="true"/>
+  </target>
+
+  <target name="ivy-init-antlib" depends="ivy-download,ivy-probe-antlib" unless="ivy.found">
+    <typedef uri="antlib:org.apache.ivy.ant" onerror="fail"
+      loaderRef="ivyLoader">
+      <classpath>
+        <pathelement location="${ivy.jar}"/>
+      </classpath>
+    </typedef>
+    <fail >
+      <condition >
+        <not>
+          <typefound uri="antlib:org.apache.ivy.ant" name="cleancache"/>
+        </not>
+      </condition>
+      You need Apache Ivy 2.0 or later from http://ant.apache.org/
+      It could not be loaded from ${ivy_repo_url}
+    </fail>
+  </target>
+
+  <target name="ivy-init" depends="ivy-init-antlib">
+    <ivy:configure settingsid="${ant.project.name}.ivy.settings" file="${ivysettings.xml}"/>
+  </target>
+
+  <target name="ivy-resolve-common" depends="ivy-init">
+    <ivy:resolve settingsRef="${ant.project.name}.ivy.settings" conf="common" />
+  </target>
+
+  <target name="ivy-retrieve-common" depends="ivy-resolve-common"
+    description="Retrieve Ivy-managed artifacts for the compile/test configurations">
+    <ivy:retrieve settingsRef="${ant.project.name}.ivy.settings" 
+      pattern="${build.ivy.lib.dir}/${ivy.artifact.retrieve.pattern}" sync="true" />
+    <ivy:cachepath pathid="${ant.project.name}.common-classpath" conf="common" />
+  </target>
+
+  <target name="ivy-resolve-test" depends="ivy-init">
+    <ivy:resolve settingsRef="${ant.project.name}.ivy.settings" conf="test" />
+  </target>
+
+  <target name="ivy-retrieve-test" depends="ivy-resolve-test"
+    description="Retrieve Ivy-managed artifacts for the test configuration">
+    <ivy:retrieve settingsRef="${ant.project.name}.ivy.settings"
+      pattern="${build.ivy.lib.dir}/${ivy.artifact.retrieve.pattern}" sync="true" />
+    <ivy:cachepath pathid="${ant.project.name}.test-classpath" conf="test" />
+  </target>
+</project>

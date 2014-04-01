@@ -1,0 +1,88 @@
+From b820011d599b1f6d9315cc777576381f957d9808 Mon Sep 17 00:00:00 2001
+From: Alejandro Abdelnur <tucu@apache.org>
+Date: Fri, 6 Apr 2012 08:45:36 +0000
+Subject: [PATCH 1165/1179] HADOOP-8249. invalid hadoop-auth cookies should trigger authentication if info is avail before returning HTTP 401 (tucu)
+
+git-svn-id: https://svn.apache.org/repos/asf/hadoop/common/trunk@1310235 13f79535-47bb-0310-9956-ffa450edef68
+---
+ .../server/AuthenticationFilter.java               |   12 +++++++++++-
+ .../server/TestAuthenticationFilter.java           |   16 +++++++++++++---
+ 2 files changed, 24 insertions(+), 4 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/authentication/server/AuthenticationFilter.java b/src/core/org/apache/hadoop/security/authentication/server/AuthenticationFilter.java
+index f7305d0..b37f39a 100644
+--- a/src/core/org/apache/hadoop/security/authentication/server/AuthenticationFilter.java
++++ b/src/core/org/apache/hadoop/security/authentication/server/AuthenticationFilter.java
+@@ -331,7 +331,14 @@ public class AuthenticationFilter implements Filter {
+     HttpServletResponse httpResponse = (HttpServletResponse) response;
+     try {
+       boolean newToken = false;
+-      AuthenticationToken token = getToken(httpRequest);
++      AuthenticationToken token;
++      try {
++        token = getToken(httpRequest);
++      }
++      catch (AuthenticationException ex) {
++        LOG.warn("AuthenticationToken ignored: " + ex.getMessage());
++        token = null;
++      }
+       if (token == null) {
+         if (LOG.isDebugEnabled()) {
+           LOG.debug("Request [{}] triggering authentication", getRequestURL(httpRequest));
+@@ -371,6 +378,9 @@ public class AuthenticationFilter implements Filter {
+         }
+         filterChain.doFilter(httpRequest, httpResponse);
+       }
++      else {
++        throw new AuthenticationException("Missing AuthenticationToken");
++      }
+     } catch (AuthenticationException ex) {
+       if (!httpResponse.isCommitted()) {
+         Cookie cookie = createCookie("");
+diff --git a/src/test/org/apache/hadoop/security/authentication/server/TestAuthenticationFilter.java b/src/test/org/apache/hadoop/security/authentication/server/TestAuthenticationFilter.java
+index 415600e..78cd199 100644
+--- a/src/test/org/apache/hadoop/security/authentication/server/TestAuthenticationFilter.java
++++ b/src/test/org/apache/hadoop/security/authentication/server/TestAuthenticationFilter.java
+@@ -349,7 +349,7 @@ public class TestAuthenticationFilter extends TestCase {
+     }
+   }
+ 
+-  private void _testDoFilterAuthentication(boolean withDomainPath) throws Exception {
++  private void _testDoFilterAuthentication(boolean withDomainPath, boolean invalidToken) throws Exception {
+     AuthenticationFilter filter = new AuthenticationFilter();
+     try {
+       FilterConfig config = Mockito.mock(FilterConfig.class);
+@@ -380,6 +380,12 @@ public class TestAuthenticationFilter extends TestCase {
+       Mockito.when(request.getRequestURL()).thenReturn(new StringBuffer("http://foo:8080/bar"));
+       Mockito.when(request.getQueryString()).thenReturn("authenticated=true");
+ 
++      if (invalidToken) {
++        Mockito.when(request.getCookies()).thenReturn(
++          new Cookie[] { new Cookie(AuthenticatedURL.AUTH_COOKIE, "foo")}
++        );
++      }
++
+       HttpServletResponse response = Mockito.mock(HttpServletResponse.class);
+ 
+       FilterChain chain = Mockito.mock(FilterChain.class);
+@@ -437,11 +443,15 @@ public class TestAuthenticationFilter extends TestCase {
+   }
+ 
+   public void testDoFilterAuthentication() throws Exception {
+-    _testDoFilterAuthentication(false);
++    _testDoFilterAuthentication(false, false);
++  }
++
++  public void testDoFilterAuthenticationWithInvalidToken() throws Exception {
++    _testDoFilterAuthentication(false, true);
+   }
+ 
+   public void testDoFilterAuthenticationWithDomainPath() throws Exception {
+-    _testDoFilterAuthentication(true);
++    _testDoFilterAuthentication(true, false);
+   }
+ 
+   public void testDoFilterAuthenticated() throws Exception {
+-- 
+1.7.0.4
+

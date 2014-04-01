@@ -1,0 +1,36 @@
+From 12f51ccde0651d7ed7e2458dfd498f0b8856d70a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 26 Feb 2010 13:14:06 -0800
+Subject: [PATCH 0506/1179] HDFS-998. The servlets should quote server generated strings sent in the response
+
+Patch: http://issues.apache.org/jira/secure/attachment/12436835/H998-0y20.patch
+Author: Chris Douglas
+Ref: CDH-648
+---
+ .../hadoop/hdfs/server/namenode/JspHelper.java     |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+index 2ae6497..986499c 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+@@ -40,6 +40,7 @@ import org.apache.hadoop.hdfs.protocol.FSConstants.UpgradeAction;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants;
+ import org.apache.hadoop.hdfs.server.common.UpgradeStatusReport;
+ import org.apache.hadoop.hdfs.server.datanode.DataNode;
++import org.apache.hadoop.http.HtmlQuoting;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.net.NetUtils;
+@@ -147,7 +148,7 @@ public class JspHelper {
+     }
+     blockReader = null;
+     s.close();
+-    out.print(new String(buf));
++    out.print(HtmlQuoting.quoteHtmlChars(new String(buf)));
+   }
+   public void DFSNodesStatus(ArrayList<DatanodeDescriptor> live,
+                              ArrayList<DatanodeDescriptor> dead) {
+-- 
+1.7.0.4
+

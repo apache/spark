@@ -1,0 +1,323 @@
+From e7c439b8842ae77d185c85d56ce294f8c6467507 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 21 Apr 2010 23:03:27 -0700
+Subject: [PATCH 1073/1179] HDFS-1001. DataXceiver and BlockReader disagree on when to send/recv CHECKSUM_OK
+
+Reason: This patch is necessary for backport of HDFS-941 (socket reuse).
+Author: bc Wong
+Ref: CDH-3777
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |    2 +-
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    4 +-
+ .../hadoop/hdfs/server/datanode/DataXceiver.java   |   19 ++-
+ .../apache/hadoop/hdfs/BlockReaderTestUtil.java    |  154 ++++++++++++++++++++
+ .../hdfs/server/datanode/TestDataXceiver.java      |   73 +++++++++
+ 5 files changed, 241 insertions(+), 11 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/BlockReaderTestUtil.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/datanode/TestDataXceiver.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 870ecde..6b757fe 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -1522,7 +1522,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       return readFully(this, buf, offset, len);
+     }
+     
+-    /* When the reader reaches end of a block and there are no checksum
++    /* When the reader reaches end of the read and there are no checksum
+      * errors, we send OP_STATUS_CHECKSUM_OK to datanode to inform that 
+      * checksum was verified and there was no error.
+      */ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index a225b64..e888152 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -1283,10 +1283,12 @@ public class DataNode extends Configured
+     "LastPacketInBlock" set to true or with a zero length. If there is 
+     no checksum error, it replies to DataNode with OP_STATUS_CHECKSUM_OK:
+     
+-    Client optional response at the end of data transmission :
++    Client optional response at the end of data transmission of any length:
+       +------------------------------+
+       | 2 byte OP_STATUS_CHECKSUM_OK |
+       +------------------------------+
++    The DataNode always expects OP_STATUS_CHECKSUM_OK. It will close the
++    client connection if it is absent.
+     
+     PACKET : Contains a packet header, checksum and data. Amount of data
+     ======== carried is set by BUFFER_SIZE.
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+index 846534d..4627f7e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+@@ -213,17 +213,18 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+       out.writeShort(DataTransferProtocol.OP_STATUS_SUCCESS); // send op status
+       long read = blockSender.sendBlock(out, baseStream, null); // send data
+ 
+-      if (blockSender.isBlockReadFully()) {
+-        // See if client verification succeeded. 
+-        // This is an optional response from client.
+-        try {
+-          if (in.readShort() == DataTransferProtocol.OP_STATUS_CHECKSUM_OK  && 
+-              datanode.blockScanner != null) {
++      // If client verification succeeded, and if it's for the whole block,
++      // tell the DataBlockScanner that it's good. This is an optional response
++      // from client. If absent, we close the connection (which is what we
++      // always do anyways).
++      try {
++        if (in.readShort() == DataTransferProtocol.OP_STATUS_CHECKSUM_OK) {
++          if (blockSender.isBlockReadFully() && datanode.blockScanner != null) {
+             datanode.blockScanner.verifiedByClient(block);
+           }
+-        } catch (IOException ignored) {}
+-      }
+-      
++        }
++      } catch (IOException ignored) {}
++
+       datanode.myMetrics.bytesRead.inc((int) read);
+       datanode.myMetrics.blocksRead.inc();
+     } catch ( SocketException ignored ) {
+diff --git a/src/test/org/apache/hadoop/hdfs/BlockReaderTestUtil.java b/src/test/org/apache/hadoop/hdfs/BlockReaderTestUtil.java
+new file mode 100644
+index 0000000..b967efe
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/BlockReaderTestUtil.java
+@@ -0,0 +1,154 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs;
++
++import java.net.Socket;
++import java.net.InetSocketAddress;
++import java.io.DataOutputStream;
++import java.util.Random;
++import java.util.List;
++import java.io.IOException;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hdfs.DFSClient.BlockReader;
++import org.apache.hadoop.hdfs.protocol.Block;
++import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
++import org.apache.hadoop.hdfs.protocol.LocatedBlock;
++import org.apache.hadoop.hdfs.server.common.HdfsConstants;
++import org.apache.hadoop.hdfs.server.datanode.DataNode;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.net.NetUtils;
++
++import static org.junit.Assert.*;
++
++/**
++ * A helper class to setup the cluster, and get to BlockReader and DataNode for a block.
++ */
++public class BlockReaderTestUtil {
++
++  private Configuration conf = null;
++  private MiniDFSCluster cluster = null;
++
++  /**
++   * Setup the cluster
++   */
++  public BlockReaderTestUtil(int replicationFactor) throws Exception {
++    conf = new Configuration();
++    conf.setInt("dfs.replication", replicationFactor);
++    cluster = new MiniDFSCluster(conf, replicationFactor, true, null);
++    cluster.waitActive();
++  }
++
++  /**
++   * Shutdown cluster
++   */
++  public void shutdown() {
++    if (cluster != null) {
++      cluster.shutdown();
++    }
++  }
++
++  public MiniDFSCluster getCluster() {
++    return cluster;
++  }
++
++  public Configuration getConf() {
++    return conf;
++  }
++
++  /**
++   * Create a file of the given size filled with random data.
++   * @return  List of Blocks of the new file.
++   */
++  public List<LocatedBlock> writeFile(Path filepath, int sizeKB)
++      throws IOException {
++    FileSystem fs = cluster.getFileSystem();
++
++    // Write a file with 256K of data
++    DataOutputStream os = fs.create(filepath);
++    byte data[] = new byte[1024];
++    new Random().nextBytes(data);
++    for (int i = 0; i < sizeKB; i++) {
++      os.write(data);
++    }
++    os.close();
++
++    // Return the blocks we just wrote
++    DFSClient dfsclient = new DFSClient(
++      new InetSocketAddress("localhost", cluster.getNameNodePort()), conf);
++    return dfsclient.namenode.getBlockLocations(
++      filepath.toString(), 0, sizeKB * 1024).getLocatedBlocks();
++  }
++
++
++  /**
++   * Exercise the BlockReader and read length bytes.
++   *
++   * It does not verify the bytes read.
++   */
++  public void readCasually(BlockReader reader, int length, boolean expectEof)
++      throws IOException {
++    byte buf[] = new byte[1024];
++    int nRead = 0;
++    while (nRead < length) {
++      DFSClient.LOG.info("So far read " + nRead + " - going to read more.");
++      int n = reader.read(buf, 0, buf.length);
++      assertTrue(n > 0);
++      nRead += n;
++    }
++
++    if (expectEof) {
++      DFSClient.LOG.info("Done reading, expect EOF for next read.");
++      assertEquals(-1, reader.read(buf, 0, buf.length));
++    }
++  }
++
++  /**
++   * Get a BlockReader for the given block.
++   */
++  public BlockReader getBlockReader(LocatedBlock testBlock, int offset, int lenToRead)
++      throws IOException {
++    InetSocketAddress targetAddr = null;
++    Socket sock = null;
++    BlockReader blockReader = null;
++    Block block = testBlock.getBlock();
++    DatanodeInfo[] nodes = testBlock.getLocations();
++    targetAddr = NetUtils.createSocketAddr(nodes[0].getName());
++    sock = new Socket();
++    sock.connect(targetAddr, HdfsConstants.READ_TIMEOUT);
++    sock.setSoTimeout(HdfsConstants.READ_TIMEOUT);
++
++    return BlockReader.newBlockReader(
++      sock, targetAddr.toString()+ ":" + block.getBlockId(), block.getBlockId(),
++      block.getGenerationStamp(),
++      offset, lenToRead,
++      conf.getInt("io.file.buffer.size", 4096));
++  }
++
++  /**
++   * Get a DataNode that serves our testBlock.
++   */
++  public DataNode getDataNode(LocatedBlock testBlock) {
++    DatanodeInfo[] nodes = testBlock.getLocations();
++    int ipcport = nodes[0].ipcPort;
++    return cluster.getDataNode(ipcport);
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataXceiver.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataXceiver.java
+new file mode 100644
+index 0000000..49133ca
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataXceiver.java
+@@ -0,0 +1,73 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.hdfs.server.datanode;
++
++import java.util.List;
++
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.BlockReaderTestUtil;
++import org.apache.hadoop.hdfs.protocol.Block;
++import org.apache.hadoop.hdfs.protocol.LocatedBlock;
++import org.apache.hadoop.hdfs.DFSClient.BlockReader;
++
++import org.junit.Test;
++import org.junit.AfterClass;
++import org.junit.BeforeClass;
++import org.mockito.Mockito;
++import static org.mockito.Mockito.spy;
++import static org.mockito.Mockito.verify;
++import static org.mockito.Mockito.never;
++
++public class TestDataXceiver {
++  static BlockReaderTestUtil util = null;
++  static final Path TEST_FILE = new Path("/test.file");
++  static final int FILE_SIZE_K = 256;
++  static LocatedBlock testBlock = null;
++
++  @BeforeClass
++  public static void setupCluster() throws Exception {
++    final int REPLICATION_FACTOR = 1;
++    util = new BlockReaderTestUtil(REPLICATION_FACTOR);
++    List<LocatedBlock> blkList = util.writeFile(TEST_FILE, FILE_SIZE_K);
++    testBlock = blkList.get(0);     // Use the first block to test
++  }
++
++  /**
++   * Test that we don't call verifiedByClient() when the client only
++   * reads a partial block.
++   */
++  @Test
++  public void testCompletePartialRead() throws Exception {
++    // Ask for half the file
++    BlockReader reader = util.getBlockReader(testBlock, 0, FILE_SIZE_K * 1024 / 2);
++    DataNode dn = util.getDataNode(testBlock);
++    DataBlockScanner scanner = spy(dn.blockScanner);
++    dn.blockScanner = scanner;
++
++    // And read half the file
++    util.readCasually(reader, FILE_SIZE_K * 1024 / 2, true);
++    verify(scanner, never()).verifiedByClient(Mockito.isA(Block.class));
++    reader.close();
++  }
++
++  @AfterClass
++  public static void teardownCluster() throws Exception {
++    util.shutdown();
++  }
++}
+-- 
+1.7.0.4
+

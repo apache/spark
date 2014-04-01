@@ -1,0 +1,630 @@
+From 176816d52d875d33877baba51294de5b1868d3aa Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sun, 14 Feb 2010 14:50:27 +0530
+Subject: [PATCH 0472/1179] HADOOP-2141. speculative execution start up condition based on completion time
+
+Patch: https://issues.apache.org/jira/secure/attachment/12435253/hadoop-2141-yahoo-v1.4.8.patch (only test related changes)
+Author: Andy Konwinski
+Ref: YDH
+---
+ .../hadoop/mapred/TestCapacityScheduler.java       |    3 +-
+ .../org/apache/hadoop/mapred/FairScheduler.java    |    9 ----
+ .../apache/hadoop/mapred/TestFairScheduler.java    |   14 +------
+ src/mapred/org/apache/hadoop/mapred/Clock.java     |   28 ++++++++++++
+ .../org/apache/hadoop/mapred/ClusterStatus.java    |   18 ++++++++
+ .../org/apache/hadoop/mapred/JobInProgress.java    |   45 +++++++++++++-------
+ .../org/apache/hadoop/mapred/JobTracker.java       |   42 ++++++++++++-------
+ .../org/apache/hadoop/mapred/TaskInProgress.java   |   10 ++--
+ src/test/findbugsExcludeFile.xml                   |   12 +++++
+ .../hadoop/mapred/TestResourceEstimation.java      |    6 +-
+ .../org/apache/hadoop/mapred/UtilsForTests.java    |   14 ++++++-
+ 11 files changed, 138 insertions(+), 63 deletions(-)
+ create mode 100644 src/mapred/org/apache/hadoop/mapred/Clock.java
+
+diff --git a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
+index 433fdfd..655b203 100644
+--- a/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
++++ b/src/contrib/capacity-scheduler/src/test/org/apache/hadoop/mapred/TestCapacityScheduler.java
+@@ -337,7 +337,8 @@ public class TestCapacityScheduler extends TestCase {
+     
+     FakeTaskInProgress(JobID jId, JobConf jobConf, Task t, 
+         boolean isMap, FakeJobInProgress job) {
+-      super(jId, "", JobSplit.EMPTY_TASK_SPLIT, null, jobConf, job, 0, 1);
++      super(jId, "", JobSplit.EMPTY_TASK_SPLIT, job.jobtracker, jobConf, job, 
++            0, 1);
+       this.isMap = isMap;
+       this.fakeJob = job;
+       activeTasks = new TreeMap<TaskAttemptID, String>();
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+index b8dcf8c..e20c3fc 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+@@ -114,15 +114,6 @@ public class FairScheduler extends TaskScheduler {
+     }
+   }
+   
+-  /**
+-   * A clock class - can be mocked out for testing.
+-   */
+-  static class Clock {
+-    long getTime() {
+-      return System.currentTimeMillis();
+-    }
+-  }
+-  
+   public FairScheduler() {
+     this(new Clock(), false);
+   }
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+index a4633c0..e4766e3 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+@@ -44,6 +44,7 @@ import org.apache.hadoop.mapreduce.TaskType;
+ import org.apache.hadoop.mapreduce.Job;
+ import org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker;
+ import org.apache.hadoop.mapreduce.split.JobSplit;
++import org.apache.hadoop.mapred.UtilsForTests.FakeClock;
+ 
+ public class TestFairScheduler extends TestCase {
+   final static String TEST_DIR = new File(System.getProperty("test.build.data",
+@@ -489,19 +490,6 @@ public class TestFairScheduler extends TestCase {
+     }
+   }
+   
+-  protected class FakeClock extends FairScheduler.Clock {
+-    private long time = 0;
+-    
+-    public void advance(long millis) {
+-      time += millis;
+-    }
+-
+-    @Override
+-    long getTime() {
+-      return time;
+-    }
+-  }
+-  
+   protected JobConf conf;
+   protected FairScheduler scheduler;
+   private FakeTaskTrackerManager taskTrackerManager;
+diff --git a/src/mapred/org/apache/hadoop/mapred/Clock.java b/src/mapred/org/apache/hadoop/mapred/Clock.java
+new file mode 100644
+index 0000000..2cfbf9d
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapred/Clock.java
+@@ -0,0 +1,28 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapred;
++
++/**
++ * A clock class - can be mocked out for testing.
++ */
++class Clock {
++  long getTime() {
++    return System.currentTimeMillis();
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapred/ClusterStatus.java b/src/mapred/org/apache/hadoop/mapred/ClusterStatus.java
+index 0e29999..eff0414 100644
+--- a/src/mapred/org/apache/hadoop/mapred/ClusterStatus.java
++++ b/src/mapred/org/apache/hadoop/mapred/ClusterStatus.java
+@@ -111,6 +111,15 @@ public class ClusterStatus implements Writable {
+   }
+ 
+   /**
++   * Construct a new cluster status.
++   * @param trackers no. of tasktrackers in the cluster
++   * @param blacklists no of blacklisted task trackers in the cluster
++   * @param ttExpiryInterval the tasktracker expiry interval
++   * @param maps no. of currently running map-tasks in the cluster
++   * @param reduces no. of currently running reduce-tasks in the cluster
++   * @param maxMaps the maximum no. of map tasks in the cluster
++   * @param maxReduces the maximum no. of reduce tasks in the cluster
++   * @param state the {@link JobTracker.State} of the <code>JobTracker</code>
+    * @param numDecommissionedNodes number of decommission trackers
+    */
+   ClusterStatus(int trackers, int blacklists, long ttExpiryInterval, 
+@@ -151,6 +160,15 @@ public class ClusterStatus implements Writable {
+   }
+ 
+   /**
++   * Construct a new cluster status. 
++   * @param activeTrackers active tasktrackers in the cluster
++   * @param blacklistedTrackers blacklisted tasktrackers in the cluster
++   * @param ttExpiryInterval the tasktracker expiry interval
++   * @param maps no. of currently running map-tasks in the cluster
++   * @param reduces no. of currently running reduce-tasks in the cluster
++   * @param maxMaps the maximum no. of map tasks in the cluster
++   * @param maxReduces the maximum no. of reduce tasks in the cluster
++   * @param state the {@link JobTracker.State} of the <code>JobTracker</code>
+    * @param numDecommissionNodes number of decommission trackers
+    */
+   ClusterStatus(Collection<String> activeTrackers, 
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index d714932..73b51ec 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -21,6 +21,8 @@ import java.io.IOException;
+ import java.security.PrivilegedExceptionAction;
+ import java.util.ArrayList;
+ import java.util.Collection;
++import java.util.Collections;
++import java.util.Comparator;
+ import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.IdentityHashMap;
+@@ -295,6 +297,17 @@ public class JobInProgress {
+     this.status = new JobStatus(jobid, 0.0f, 0.0f, JobStatus.PREP);
+     this.profile = new JobProfile(conf.getUser(), jobid, "", "", 
+                                   conf.getJobName(), conf.getQueueName());
++    hasSpeculativeMaps = conf.getMapSpeculativeExecution();
++    hasSpeculativeReduces = conf.getReduceSpeculativeExecution();
++    this.nonLocalMaps = new LinkedList<TaskInProgress>();
++    this.nonLocalRunningMaps = new LinkedHashSet<TaskInProgress>();
++    this.runningMapCache = new IdentityHashMap<Node, Set<TaskInProgress>>();
++    this.nonRunningReduces = new LinkedList<TaskInProgress>();
++    this.runningReduces = new LinkedHashSet<TaskInProgress>();
++    this.resourceEstimator = new ResourceEstimator(this);
++    this.status = new JobStatus(jobid, 0.0f, 0.0f, JobStatus.PREP);
++    this.taskCompletionEvents = new ArrayList<TaskCompletionEvent>
++      (numMapTasks + numReduceTasks + 10);
+     try {
+       this.userUGI = UserGroupInformation.getCurrentUser();
+     } catch (IOException ie){
+@@ -328,7 +341,7 @@ public class JobInProgress {
+     this.jobtracker = jobtracker;
+     this.status = new JobStatus(jobId, 0.0f, 0.0f, JobStatus.PREP);
+     this.jobtracker.getInstrumentation().addPrepJob(conf, jobId);
+-    this.startTime = System.currentTimeMillis();
++    this.startTime = jobtracker.getClock().getTime();
+     status.setStartTime(startTime);
+     this.localFs = jobtracker.getLocalFileSystem();
+ 
+@@ -452,7 +465,7 @@ public class JobInProgress {
+     
+     for (int i = 0; i < splits.length; i++) {
+       String[] splitLocations = splits[i].getLocations();
+-      if (splitLocations.length == 0) {
++      if (splitLocations == null || splitLocations.length == 0) {
+         nonLocalMaps.add(maps[i]);
+         continue;
+       }
+@@ -611,7 +624,7 @@ public class JobInProgress {
+     }
+         
+     // set the launch time
+-    this.launchTime = System.currentTimeMillis();
++    this.launchTime = jobtracker.getClock().getTime();
+ 
+     //
+     // Create reduce tasks
+@@ -1594,7 +1607,7 @@ public class JobInProgress {
+     Map<TaskTracker, FallowSlotInfo> map =
+       (type == TaskType.MAP) ? trackersReservedForMaps : trackersReservedForReduces;
+     
+-    long now = System.currentTimeMillis();
++    long now = jobtracker.getClock().getTime();
+     
+     FallowSlotInfo info = map.get(taskTracker);
+     int reservedSlots = 0;
+@@ -1640,7 +1653,7 @@ public class JobInProgress {
+       return;
+     }
+     
+-    long now = System.currentTimeMillis();
++    long now = jobtracker.getClock().getTime();
+ 
+     Enum<Counter> counter = 
+       (type == TaskType.MAP) ? 
+@@ -1728,7 +1741,7 @@ public class JobInProgress {
+     String[] splitLocations = tip.getSplitLocations();
+ 
+     // Remove the TIP from the list for running non-local maps
+-    if (splitLocations.length == 0) {
++    if (splitLocations == null || splitLocations.length == 0) {
+       nonLocalRunningMaps.remove(tip);
+       return;
+     }
+@@ -1768,7 +1781,7 @@ public class JobInProgress {
+    * Adds a map tip to the list of running maps.
+    * @param tip the tip that needs to be scheduled as running
+    */
+-  private synchronized void scheduleMap(TaskInProgress tip) {
++  protected synchronized void scheduleMap(TaskInProgress tip) {
+     
+     if (runningMapCache == null) {
+       LOG.warn("Running cache for maps is missing!! " 
+@@ -1778,7 +1791,7 @@ public class JobInProgress {
+     String[] splitLocations = tip.getSplitLocations();
+ 
+     // Add the TIP to the list of non-local running TIPs
+-    if (splitLocations.length == 0) {
++    if (splitLocations == null || splitLocations.length == 0) {
+       nonLocalRunningMaps.add(tip);
+       return;
+     }
+@@ -1803,7 +1816,7 @@ public class JobInProgress {
+    * Adds a reduce tip to the list of running reduces
+    * @param tip the tip that needs to be scheduled as running
+    */
+-  private synchronized void scheduleReduce(TaskInProgress tip) {
++  protected synchronized void scheduleReduce(TaskInProgress tip) {
+     if (runningReduces == null) {
+       LOG.warn("Running cache for reducers missing!! "
+                + "Job details are missing.");
+@@ -1830,7 +1843,7 @@ public class JobInProgress {
+     String[] splitLocations = tip.getSplitLocations();
+ 
+     // Add the TIP in the front of the list for non-local non-running maps
+-    if (splitLocations.length == 0) {
++    if (splitLocations == null || splitLocations.length == 0) {
+       nonLocalMaps.add(0, tip);
+       return;
+     }
+@@ -2118,7 +2131,7 @@ public class JobInProgress {
+     // 
+  
+     if (hasSpeculativeMaps) {
+-      long currentTime = System.currentTimeMillis();
++      long currentTime = jobtracker.getClock().getTime();
+ 
+       // 1. Check bottom up for speculative tasks from the running cache
+       if (node != null) {
+@@ -2230,7 +2243,7 @@ public class JobInProgress {
+     // 2. check for a reduce tip to be speculated
+     if (hasSpeculativeReduces) {
+       tip = findSpeculativeTask(runningReduces, tts, avgProgress, 
+-                                System.currentTimeMillis(), false);
++                                jobtracker.getClock().getTime(), false);
+       if (tip != null) {
+         scheduleReduce(tip);
+         return tip.getIdWithinJob();
+@@ -2486,7 +2499,7 @@ public class JobInProgress {
+       if (reduces.length == 0) {
+         this.status.setReduceProgress(1.0f);
+       }
+-      this.finishTime = System.currentTimeMillis();
++      this.finishTime = jobtracker.getClock().getTime();
+       LOG.info("Job " + this.status.getJobID() + 
+                " has completed successfully.");
+       
+@@ -2511,7 +2524,7 @@ public class JobInProgress {
+   private synchronized void terminateJob(int jobTerminationState) {
+     if ((status.getRunState() == JobStatus.RUNNING) ||
+         (status.getRunState() == JobStatus.PREP)) {
+-      this.finishTime = System.currentTimeMillis();
++      this.finishTime = jobtracker.getClock().getTime();
+       this.status.setMapProgress(1.0f);
+       this.status.setReduceProgress(1.0f);
+       this.status.setCleanupProgress(1.0f);
+@@ -2899,10 +2912,10 @@ public class JobInProgress {
+     // update the actual start-time of the attempt
+     TaskStatus oldStatus = tip.getTaskStatus(taskid); 
+     long startTime = oldStatus == null
+-                     ? System.currentTimeMillis()
++                     ? jobtracker.getClock().getTime()
+                      : oldStatus.getStartTime();
+     status.setStartTime(startTime);
+-    status.setFinishTime(System.currentTimeMillis());
++    status.setFinishTime(jobtracker.getClock().getTime());
+     boolean wasComplete = tip.isComplete();
+     updateTaskStatus(tip, status);
+     boolean isComplete = tip.isComplete();
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index a886b07..e2d09d5 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -201,6 +201,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   // system files should have 700 permission
+   final static FsPermission SYSTEM_FILE_PERMISSION =
+     FsPermission.createImmutable((short) 0700); // rwx------
++  
++  private Clock clock;
+ 
+   private MRAsyncDiskService asyncDiskService;
+   
+@@ -242,6 +244,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   public static final Log LOG = LogFactory.getLog(JobTracker.class);
+   
+   private PluginDispatcher<JobTrackerPlugin> pluginDispatcher;
++
++  public Clock getClock() {
++    return clock;
++  }
+     
+   /**
+    * Start the JobTracker with given configuration.
+@@ -331,7 +337,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         try {
+           // Every 3 minutes check for any tasks that are overdue
+           Thread.sleep(TASKTRACKER_EXPIRY_INTERVAL/3);
+-          long now = System.currentTimeMillis();
++          long now = clock.getTime();
+           LOG.debug("Starting launching task sweep");
+           synchronized (JobTracker.this) {
+             synchronized (launchingTasks) {
+@@ -385,7 +391,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     public void addNewTask(TaskAttemptID taskName) {
+       synchronized (launchingTasks) {
+         launchingTasks.put(taskName, 
+-                           System.currentTimeMillis());
++                           clock.getTime());
+       }
+     }
+       
+@@ -429,7 +435,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+           synchronized (JobTracker.this) {
+             synchronized (taskTrackers) {
+               synchronized (trackerExpiryQueue) {
+-                long now = System.currentTimeMillis();
++                long now = clock.getTime();
+                 TaskTrackerStatus leastRecent = null;
+                 while ((trackerExpiryQueue.size() > 0) &&
+                        (leastRecent = trackerExpiryQueue.first()) != null &&
+@@ -565,7 +571,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         try {
+           Thread.sleep(RETIRE_JOB_CHECK_INTERVAL);
+           List<JobInProgress> retiredJobs = new ArrayList<JobInProgress>();
+-          long now = System.currentTimeMillis();
++          long now = clock.getTime();
+           long retireBefore = now - RETIRE_JOB_INTERVAL;
+ 
+           synchronized (jobs) {
+@@ -653,9 +659,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     private boolean isHealthy;
+     private HashMap<ReasonForBlackListing, String>rfbMap;
+     
+-    FaultInfo() {
++    FaultInfo(long time) {
+       numFaults = 0;
+-      lastUpdated = System.currentTimeMillis();
++      lastUpdated = time;
+       blacklisted = false;
+       rfbMap = new  HashMap<ReasonForBlackListing, String>();
+     }
+@@ -748,7 +754,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         int numFaults = fi.getFaultCount();
+         ++numFaults;
+         fi.setFaultCount(numFaults);
+-        fi.setLastUpdated(System.currentTimeMillis());
++        fi.setLastUpdated(clock.getTime());
+         if (exceedsFaults(fi)) {
+           LOG.info("Adding " + hostName + " to the blacklist"
+               + " across all jobs");
+@@ -835,7 +841,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       synchronized (potentiallyFaultyTrackers) {
+         fi = potentiallyFaultyTrackers.get(hostName);
+         if (fi == null && createIfNeccessary) {
+-          fi = new FaultInfo();
++          fi = new FaultInfo(clock.getTime());
+           potentiallyFaultyTrackers.put(hostName, fi);
+         }
+       }
+@@ -1392,7 +1398,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       TaskTrackerStatus ttStatus = 
+         new TaskTrackerStatus(trackerName, trackerHostName, port, ttStatusList, 
+                               0 , 0, 0);
+-      ttStatus.setLastSeen(System.currentTimeMillis());
++      ttStatus.setLastSeen(clock.getTime());
+ 
+       synchronized (JobTracker.this) {
+         synchronized (taskTrackers) {
+@@ -1726,7 +1732,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         }
+       }
+ 
+-      long recoveryStartTime = System.currentTimeMillis();
++      long recoveryStartTime = clock.getTime();
+ 
+       // II. Recover each job
+       idIter = jobsToRecover.iterator();
+@@ -1783,14 +1789,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+         }
+       }
+ 
+-      recoveryDuration = System.currentTimeMillis() - recoveryStartTime;
++      recoveryDuration = clock.getTime() - recoveryStartTime;
+       hasRecovered = true;
+ 
+       // III. Finalize the recovery
+       synchronized (trackerExpiryQueue) {
+         // Make sure that the tracker statuses in the expiry-tracker queue
+         // are updated
+-        long now = System.currentTimeMillis();
++        long now = clock.getTime();
+         int size = trackerExpiryQueue.size();
+         for (int i = 0; i < size ; ++i) {
+           // Get the first tasktracker
+@@ -1985,6 +1991,12 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   
+   JobTracker(final JobConf conf, String identifier) 
+   throws IOException, InterruptedException {   
++    this(conf, identifier, new Clock());
++  }
++  
++  JobTracker(final JobConf conf, String identifier, Clock clock) 
++  throws IOException, InterruptedException { 
++    this.clock = clock;
+     // find the owner of the process
+     // get the desired principal to load
+     String keytabFilename = conf.get(JT_KEYTAB_FILE);
+@@ -2102,7 +2114,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     InetSocketAddress infoSocAddr = NetUtils.createSocketAddr(infoAddr);
+     String infoBindAddress = infoSocAddr.getHostName();
+     int tmpInfoPort = infoSocAddr.getPort();
+-    this.startTime = System.currentTimeMillis();
++    this.startTime = clock.getTime();
+     infoServer = new HttpServer("job", infoBindAddress, tmpInfoPort, 
+         tmpInfoPort == 0, conf);
+     infoServer.setAttribute("job.tracker", this);
+@@ -2652,7 +2664,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     final JobTrackerInstrumentation metrics = getInstrumentation();
+     metrics.finalizeJob(conf, id);
+     
+-    long now = System.currentTimeMillis();
++    long now = clock.getTime();
+     
+     // mark the job for cleanup at all the trackers
+     addJobForCleanup(id);
+@@ -3060,7 +3072,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+ 
+     // First check if the last heartbeat response got through
+     String trackerName = status.getTrackerName();
+-    long now = System.currentTimeMillis();
++    long now = clock.getTime();
+     boolean isBlacklisted = false;
+     if (restarted) {
+       faultyTrackers.markTrackerHealthy(status.getHost());
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+index fd7c0e0..804bf6d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+@@ -228,7 +228,7 @@ public class TaskInProgress {
+    * Initialization common to Map and Reduce
+    */
+   void init(JobID jobId) {
+-    this.startTime = System.currentTimeMillis();
++    this.startTime = jobtracker.getClock().getTime();
+     this.id = new TaskID(jobId, isMapTask(), partition);
+     this.skipping = startSkipping();
+   }
+@@ -663,7 +663,7 @@ public class TaskInProgress {
+ 
+       // tasktracker went down and failed time was not reported. 
+       if (0 == status.getFinishTime()){
+-        status.setFinishTime(System.currentTimeMillis());
++        status.setFinishTime(jobtracker.getClock().getTime());
+       }
+     }
+ 
+@@ -768,7 +768,7 @@ public class TaskInProgress {
+     //
+ 
+     this.completes++;
+-    this.execFinishTime = System.currentTimeMillis();
++    this.execFinishTime = jobtracker.getClock().getTime();
+     recomputeProgress();
+     
+   }
+@@ -813,7 +813,7 @@ public class TaskInProgress {
+     }
+     this.failed = true;
+     killed = true;
+-    this.execFinishTime = System.currentTimeMillis();
++    this.execFinishTime = jobtracker.getClock().getTime();
+     recomputeProgress();
+   }
+ 
+@@ -937,7 +937,7 @@ public class TaskInProgress {
+   public Task getTaskToRun(String taskTracker) throws IOException {
+     if (0 == execStartTime){
+       // assume task starts running now
+-      execStartTime = System.currentTimeMillis();
++      execStartTime = jobtracker.getClock().getTime();
+     }
+ 
+     // Create the 'taskid'; do not count the 'killed' tasks against the job!
+diff --git a/src/test/findbugsExcludeFile.xml b/src/test/findbugsExcludeFile.xml
+index ac97282..f885b08 100644
+--- a/src/test/findbugsExcludeFile.xml
++++ b/src/test/findbugsExcludeFile.xml
+@@ -89,4 +89,16 @@
+        <Class name="org.apache.hadoop.mapred.FileOutputCommitter" />
+        <Bug pattern="NM_WRONG_PACKAGE_INTENTIONAL" />
+      </Match>
++    <!--
++       JobTracker's static variables should be ignored
++     -->
++     <Match>
++       <Class name="org.apache.hadoop.mapred.JobTracker" />
++       <Or>
++       <Field name="RETIRE_JOB_INTERVAL" />
++       <Field name="TASKTRACKER_EXPIRY_INTERVAL" />
++       <Field name="RETIRE_JOB_CHECK_INTERVAL" />
++       </Or>
++       <Bug pattern="ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD" />
++     </Match>
+ </FindBugsFilter>
+diff --git a/src/test/org/apache/hadoop/mapred/TestResourceEstimation.java b/src/test/org/apache/hadoop/mapred/TestResourceEstimation.java
+index dc243a2..a7c091b 100644
+--- a/src/test/org/apache/hadoop/mapred/TestResourceEstimation.java
++++ b/src/test/org/apache/hadoop/mapred/TestResourceEstimation.java
+@@ -48,7 +48,7 @@ public class TestResourceEstimation extends TestCase {
+       JobSplit.TaskSplitMetaInfo split =
+           new JobSplit.TaskSplitMetaInfo(new String[0], 0, 0);
+       TaskInProgress tip = 
+-        new TaskInProgress(jid, "", split, null, jc, jip, 0, 1);
++        new TaskInProgress(jid, "", split, jip.jobtracker, jc, jip, 0, 1);
+       re.updateWithCompletedTask(ts, tip);
+     }
+     assertEquals(2* singleMapOutputSize, re.getEstimatedMapOutputSize());
+@@ -86,7 +86,7 @@ public class TestResourceEstimation extends TestCase {
+               new JobSplit.TaskSplitMetaInfo(new String[0], 0,
+                                            singleMapInputSize);
+       TaskInProgress tip = 
+-        new TaskInProgress(jid, "", split, null, jc, jip, 0, 1);
++        new TaskInProgress(jid, "", split, jip.jobtracker, jc, jip, 0, 1);
+       re.updateWithCompletedTask(ts, tip);
+     }
+     
+@@ -99,7 +99,7 @@ public class TestResourceEstimation extends TestCase {
+     JobSplit.TaskSplitMetaInfo split =
+         new JobSplit.TaskSplitMetaInfo(new String[0], 0, 0);
+     TaskInProgress tip = 
+-      new TaskInProgress(jid, "", split, null, jc, jip, 0, 1);
++      new TaskInProgress(jid, "", split, jip.jobtracker, jc, jip, 0, 1);
+     re.updateWithCompletedTask(ts, tip);
+     
+     long expectedTotalMapOutSize = (singleMapOutputSize*11) * 
+diff --git a/src/test/org/apache/hadoop/mapred/UtilsForTests.java b/src/test/org/apache/hadoop/mapred/UtilsForTests.java
+index d85da76..f521704 100644
+--- a/src/test/org/apache/hadoop/mapred/UtilsForTests.java
++++ b/src/test/org/apache/hadoop/mapred/UtilsForTests.java
+@@ -30,7 +30,6 @@ import java.util.Properties;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.commons.logging.Log;
+ import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.examples.RandomWriter;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.hdfs.DFSTestUtil;
+@@ -678,6 +677,19 @@ public class UtilsForTests {
+     return job;
+   }
+ 
++  static class FakeClock extends Clock {
++    long time = 0;
++    
++    public void advance(long millis) {
++      time += millis;
++    }
++     
++      @Override
++      long getTime() {
++        return time;
++      }
++    }
++  
+   // Mapper that fails
+   static class FailMapper extends MapReduceBase implements
+       Mapper<WritableComparable, Writable, WritableComparable, Writable> {
+-- 
+1.7.0.4
+

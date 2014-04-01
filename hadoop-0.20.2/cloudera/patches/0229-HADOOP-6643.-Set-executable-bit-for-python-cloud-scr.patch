@@ -1,0 +1,36 @@
+From 8424e32eb866d677f40a9446f9c4cf74972b751e Mon Sep 17 00:00:00 2001
+From: Chad Metcalf <chad@cloudera.com>
+Date: Thu, 18 Mar 2010 17:05:47 -0700
+Subject: [PATCH 0229/1179] HADOOP-6643. Set executable bit for python cloud scripts in the distribution
+
+Description: This needs to be set in the tar target.
+Reason: Required for the EC2 scripts.
+Author: Tom White
+Ref: CDH-821
+---
+ build.xml |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index de13070..e5eb1c2 100644
+--- a/build.xml
++++ b/build.xml
+@@ -1123,6 +1123,7 @@
+           <exclude name="${final.name}/contrib/*/bin/*" />
+           <exclude name="${final.name}/src/contrib/ec2/bin/*" />
+           <exclude name="${final.name}/src/contrib/ec2/bin/image/*" />
++          <exclude name="${final.name}/src/contrib/cloud/src/py/hadoop-*" />
+           <include name="${final.name}/**" />
+         </tarfileset>
+         <tarfileset dir="${build.dir}" mode="755">
+@@ -1130,6 +1131,7 @@
+           <include name="${final.name}/contrib/*/bin/*" />
+           <include name="${final.name}/src/contrib/ec2/bin/*" />
+           <include name="${final.name}/src/contrib/ec2/bin/image/*" />
++          <include name="${final.name}/src/contrib/cloud/src/py/hadoop-*" />
+         </tarfileset>
+       </param.listofitems>
+     </macro_tar>
+-- 
+1.7.0.4
+

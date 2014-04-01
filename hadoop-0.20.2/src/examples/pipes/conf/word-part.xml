@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<configuration>
+
+<property>
+  <name>mapred.reduce.tasks</name>
+  <value>2</value>
+</property>
+
+<property>
+  <name>hadoop.pipes.executable</name>
+  <value>hdfs:/examples/bin/wordcount-part</value>
+</property>
+
+<property>
+  <name>hadoop.pipes.java.recordreader</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>hadoop.pipes.java.recordwriter</name>
+  <value>true</value>
+</property>
+
+</configuration>

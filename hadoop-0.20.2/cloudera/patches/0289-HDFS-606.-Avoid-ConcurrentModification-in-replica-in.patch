@@ -1,0 +1,113 @@
+From 1b8316d403ac542772c0745159a7397c798a5698 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 11 May 2010 16:47:47 -0700
+Subject: [PATCH 0289/1179] HDFS-606. Avoid ConcurrentModification in replica invalidation
+
+Description: Replica invalidation iterated over a collection that it
+             also modified, causing a CME. This patch makes a copy
+             before iteration. Performance should be unaffected
+             as this is a rare code path.
+Reason: Avoid runtime exception in namenode
+Author: Konstantin Shvachko
+Ref: CDH-659
+---
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |    5 ++
+ .../hadoop/hdfs/server/namenode/TestNodeCount.java |   51 ++++++++++++++++++++
+ 2 files changed, 56 insertions(+), 0 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index fdb3bca..0490994 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -3260,6 +3260,11 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     boolean gotException = false;
+     if (nodes == null)
+       return;
++    // Make a copy of this list, since calling invalidateBlock will modify
++    // the original (avoid CME)
++    nodes = new ArrayList<DatanodeDescriptor>(nodes);
++    NameNode.stateChangeLog.debug("NameNode.invalidateCorruptReplicas: " +
++        "invalidating corrupt replicas on " + nodes.size() + "nodes");
+     for (Iterator<DatanodeDescriptor> it = nodes.iterator(); it.hasNext(); ) {
+       DatanodeDescriptor node = it.next();
+       try {
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestNodeCount.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNodeCount.java
+index 347a50a..47ff64f 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestNodeCount.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNodeCount.java
+@@ -2,6 +2,7 @@ package org.apache.hadoop.hdfs.server.namenode;
+ 
+ import java.util.Collection;
+ import java.util.Iterator;
++import java.util.List;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -12,7 +13,11 @@ import org.apache.hadoop.hdfs.DFSTestUtil;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.hdfs.MiniDFSCluster.DataNodeProperties;
+ import org.apache.hadoop.hdfs.protocol.Block;
++import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
++import org.apache.hadoop.hdfs.protocol.LocatedBlock;
++import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+ import org.apache.hadoop.hdfs.server.namenode.FSNamesystem.NumberReplicas;
++import org.apache.hadoop.hdfs.server.namenode.metrics.NameNodeActivtyMBean;
+ 
+ import junit.framework.TestCase;
+ 
+@@ -23,6 +28,52 @@ import junit.framework.TestCase;
+ public class TestNodeCount extends TestCase {
+   static final Log LOG = LogFactory.getLog(TestNodeCount.class);
+ 
++  public void testInvalidateMultipleReplicas() throws Exception {
++    Configuration conf = new Configuration();
++    MiniDFSCluster cluster =
++      new MiniDFSCluster(conf, 5, true, null);
++    final int FILE_LEN = 123;
++    final String pathStr = "/testInvalidateMultipleReplicas";
++    try {
++      FileSystem fs = cluster.getFileSystem();
++      Path path = new Path(pathStr);
++      cluster.waitActive();
++      // create a small file on 3 nodes
++      DFSTestUtil.createFile(fs, path, 123, (short)3, 0);
++      DFSTestUtil.waitReplication(fs, path, (short)3);
++      NameNode nn = cluster.getNameNode();
++      LocatedBlocks located = nn.getBlockLocations(pathStr, 0, FILE_LEN);
++      
++      // Get the original block locations
++      List<LocatedBlock> blocks = located.getLocatedBlocks();
++      LocatedBlock firstBlock = blocks.get(0);
++      
++      DatanodeInfo[] locations = firstBlock.getLocations();
++      assertEquals("Should have 3 good blocks", 3, locations.length);
++      nn.getNamesystem().stallReplicationWork();
++      
++      DatanodeInfo[] badLocations = new DatanodeInfo[2];
++      badLocations[0] = locations[0];
++      badLocations[1] = locations[1];
++      
++      // Report some blocks corrupt
++      LocatedBlock badLBlock = new LocatedBlock(
++          firstBlock.getBlock(), badLocations);
++      
++      nn.reportBadBlocks(new LocatedBlock[] {badLBlock});
++      
++      nn.getNamesystem().restartReplicationWork();
++      
++      DFSTestUtil.waitReplication(fs, path, (short)3);
++      NumberReplicas num = nn.getNamesystem().countNodes(
++          firstBlock.getBlock());
++      assertEquals(0, num.corruptReplicas());
++
++    } finally {
++      cluster.shutdown();
++    }
++  }
++  
+   public void testNodeCount() throws Exception {
+     // start a mini dfs cluster of 2 nodes
+     final Configuration conf = new Configuration();
+-- 
+1.7.0.4
+

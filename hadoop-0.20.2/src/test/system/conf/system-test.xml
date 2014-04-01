@@ -1,0 +1,166 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Put site-specific property overrides in this file. -->
+
+<configuration>
+<!-- Mandatory properties that are to be set and uncommented before running the tests -->
+
+<!-- $(YINST_ROOT) variable needs to be replace with something corporate
+neutral at the forward-port stage -->
+<property>
+  <name>test.system.hdrc.hadoophome</name>
+  <value>$(YINST_ROOT)/share/hadoop-current</value>
+  <description> This is the path to the home directory of the hadoop deployment.
+  </description>
+</property>
+<property>
+  <name>test.system.hdrc.hadoopconfdir</name>
+  <value>$(YINST_ROOT)/conf/hadoop</value>
+  <description> This is the path to the configuration directory of the hadoop
+  cluster that is deployed.
+  </description>
+</property>
+
+<property>
+  <name>test.system.hdrc.tt.hostfile</name>
+  <value>slaves.localcopy.txt</value>
+  <description> File name containing the hostnames where the TaskTrackers are running.
+  </description>
+</property>
+<property>
+  <name>test.system.hdrc.dn.hostfile</name>
+  <value>slaves.localcopy.txt</value>
+  <description> File name containing the hostnames where the DataNodes are running.
+  </description>
+</property>
+<property>
+  <name>test.system.mr.clusterprocess.impl.class</name>
+  <value>org.apache.hadoop.mapreduce.test.system.MRCluster$MRProcessManager</value>
+  <description>
+  Cluster process manager for the Mapreduce subsystem of the cluster. The value
+  org.apache.hadoop.mapreduce.test.system.MRCluster$MultiMRProcessManager can
+  be used to enable multi user support.
+  </description>
+</property>
+<property>
+  <name>test.system.hdfs.clusterprocess.impl.class</name>
+  <value>org.apache.hadoop.hdfs.test.system.HDFSCluster$HDFSProcessManager</value>
+  <description>
+  Cluster process manager for the Hdfs subsystem of the cluster. The value
+  org.apache.hadoop.hdfs.test.system.HDFSCluster$MultiUserHDFSProcessManager can
+  be used to enable multi user support.
+  </description>
+</property>
+<property>
+   <name>test.system.hdrc.deployed.scripts.dir</name>
+   <value>$(YINST_ROOT)/share/hadoop-current/src/test/system/scripts</value>
+   <description>
+     This directory hosts the scripts in the deployed location where
+     the system test client runs.
+   </description>
+</property>
+<property>
+  <name>test.system.hdrc.hadoopnewconfdir</name>
+  <value>$(TO_DO_GLOBAL_TMP_DIR)/newconf</value>
+  <description>
+  The directory where the new config files will be copied to in all
+  the clusters is pointed out this directory. 
+  </description>
+</property>
+<property>
+  <name>test.system.hdrc.hadoop.local.confdir</name>
+  <value>$(TO_DO_GLOBAL_TMP_DIR)/localconf</value>
+  <description>
+  It's a local conf directory where the new config file is store temporarily
+  before pushing into new config folder location in the cluster.
+  </description>
+</property>
+<property>
+  <name>test.system.hdrc.suspend.cmd</name>
+  <value>kill -SIGSTOP</value>
+  <description>
+    Command for suspending the given process.
+  </description>
+</property>
+<property>
+  <name>test.system.hdrc.resume.cmd</name>
+  <value>kill -SIGCONT</value>
+  <description>
+  Command for resuming the given suspended process.
+  </description>
+</property>
+<property>
+  <name>test.system.hdrc.healthscript.path</name>
+  <value>/tmp</value>
+  <description>
+  This location is used by health script test cases to configure the
+  health script in remote cluster where the error inducing health script
+  will be copied.
+  </description>
+</property>
+
+<!-- Mandatory keys to be set for the multi user support to be enabled.  -->
+
+ <property>
+  <name>test.system.mr.clusterprocess.impl.class</name>
+  <value>org.apache.hadoop.mapreduce.test.system.MRCluster$MultiMRProcessManager</value>
+  <description>
+    Enabling multi user based cluster process manger.
+  </description>
+</property>
+<property>
+  <name>test.system.hdfs.clusterprocess.impl.class</name>
+  <value>org.apache.hadoop.hdfs.test.system.HDFSCluster$MultiUserHDFSProcessManager</value>
+  <description>
+    Enabling multi user based cluster process manger.
+  </description>
+</property>
+<property>
+  <name>test.system.hdrc.multi-user.list.path</name>
+  <value>$(YINST_ROOT)/conf/hadoop/proxyusers</value>
+  <description>
+  Multi user list for creating the proxy users.
+  </description>
+</property>
+<property>
+  <name>test.system.hdrc.multi-user.binary.path</name>
+  <value>$(YINST_ROOT)/conf/hadoop/runAs</value>
+  <description>
+    Local file system path on gate way to cluster-controller binary including the binary name.
+    To build the binary the following commands need to be executed:
+     % ant run-as -Drun-as.hadoop.home.dir=(HADOOP_HOME of setup cluster)
+     % cp build-fi/system/c++-build/runAs test.system.hdrc.multi-user.binary.path
+    Location of the cluster is important security precaution.
+    The binary should be owned by root and test user group permission should be set such a
+    way that it can be executed by binary. Example usage would be:
+     % sudo chown root binary
+     % sudo chmod 6511 binary
+    Change permission appropriately to make it more secure.
+  </description>
+</property>
+<property>
+  <name>test.system.hdrc.multi-user.managinguser.namenode</name>
+  <value>hdfs</value>
+  <description>
+    User value for managing the particular daemon, please note that these user should be
+    present on gateways also, an example configuration for the above would be 
+    key name = test.system.hdrc.multi-user.managinguser.jobtracker
+    key value = guest
+    Please note the daemon names are all lower case, corresponding to hadoop-daemon.sh command.
+  </description>
+</property>
+<property>
+  <name>test.system.hdrc.multi-user.managinguser.datanode</name>
+  <value>hdfs</value>
+</property>
+<property>
+  <name>test.system.hdrc.multi-user.managinguser.jobtracker</name>
+  <value>mapred</value>
+</property>
+<property>
+  <name>test.system.hdrc.multi-user.managinguser.tasktracker</name>
+  <value>mapred</value>
+</property>
+ 
+</configuration>

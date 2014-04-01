@@ -1,0 +1,156 @@
+#!/bin/bash
+# Copyright (c) 2009 Cloudera, inc
+#
+# Performs a release build
+
+#
+# Setup
+#
+set -e
+
+if [ $(uname -s) = "SunOS" ]; then
+if [ $(isainfo -b) != "64" -a -z "$SKIP_EXTRA_NATIVE" ]; then
+  echo Release build should be done on a 64-bit box to generate 1>&2
+  echo both 64 and 32 bit native libraries. 1>&2
+  exit 1
+fi
+else
+if [ $(uname -m) != "x86_64" -a -z "$SKIP_EXTRA_NATIVE" ]; then
+  echo Release build should be done on a 64-bit box to generate 1>&2
+  echo both 64 and 32 bit native libraries. 1>&2
+  exit 1
+fi
+fi
+
+JAVA32_HOME=${JAVA32_HOME:-$JAVA_HOME}
+JAVA64_HOME=${JAVA64_HOME:-$JAVA_HOME}
+IVY_MIRROR_PROP=${IVY_MIRROR_PROP:-http://repo1.maven.org/maven2/}
+
+# Do the build
+BIN_DIR=$(readlink -f $(dirname $0))
+RELEASE_DIR=$BIN_DIR/..
+
+failIfNotOK() {
+  if [ $? != 0 ]; then
+    echo "Failed!"
+    exit $?
+  fi
+}
+
+# Clean build directory
+#
+BUILDDIR=${RELEASE_DIR}/build
+rm -rf ${BUILDDIR}
+failIfNotOK
+mkdir ${BUILDDIR}
+failIfNotOK
+
+#
+# Building Snappy
+#
+
+echo "Downloading Snappy"
+
+SNAPPY_VERSION=1.0.3
+SNAPPY_JAVA_VERSION=1.0.3.1
+
+# Get Snappy source
+#
+sh -x ${RELEASE_DIR}/cloudera/getsnappysource.sh ${SNAPPY_VERSION} ${SNAPPY_JAVA_VERSION} ${RELEASE_DIR}/cloudera ${BUILDDIR}
+failIfNotOK
+
+echo "Building Snappy"
+
+SNAPPY_DIR=${BUILDDIR}/snappy-${SNAPPY_VERSION}
+cd ${SNAPPY_DIR}
+failIfNotOK
+
+./configure
+failIfNotOK
+
+# Disable rpath
+# TODO: find the correct way of disabling RPATH when running configure
+#
+sed -i 's|^hardcode_libdir_flag_spec=.*|hardcode_libdir_flag_spec=""|g' libtool
+sed -i 's|^runpath_var=LD_RUN_PATH|runpath_var=DIE_RPATH_DIE|g' libtool
+
+SNAPPY_BUILDDIR=${SNAPPY_DIR}/build
+mkdir ${SNAPPY_BUILDDIR}
+
+LIBTOOL_VAR="LIBTOOL=libtool"
+if [ -f "/etc/SuSE-release" ]; then
+  LIBTOOL_VAR=""
+fi
+
+make install CXXFLAGS="-O2 -DNDEBUG" DESTDIR=${SNAPPY_BUILDDIR} ${LIBTOOL_VAR}
+failIfNotOK
+
+echo "Building snappy-java"
+
+cd ${BUILDDIR}/snappy-java-${SNAPPY_JAVA_VERSION}
+failIfNotOK
+
+SNAPPY_ARCHIVE=${BUILDDIR}/snappy-${SNAPPY_VERSION}.tar.gz
+mkdir target
+mvn compile
+make SNAPPY_OUT=target SNAPPY_ARCHIVE=${SNAPPY_ARCHIVE} \
+     SNAPPY_UNPACKED=${SNAPPY_ARCHIVE} SNAPPY_SRC_DIR=${SNAPPY_DIR} native
+failIfNotOK
+
+cp target/libsnappyjava.so ${SNAPPY_BUILDDIR}/usr/local/lib
+failIfNotOK
+
+#
+# Building Hadoop
+#
+cd $RELEASE_DIR
+
+if [ -z "$SKIP_EXTRA_NATIVE" ]; then
+JAVA_HOME=$JAVA32_HOME \
+  CFLAGS=-m32 \
+  CXXFLAGS=-m32 \
+  ant \
+  -Dreactor.repo=file://$HOME/.m2/repository \
+  -Dlibhdfs=true \
+  -Dcompile.native=true \
+  -Dfusedfs=true \
+  -Dcompile.c++=true \
+  -Dforrest.home=$FORREST_HOME \
+  -Dhadoop.conf.dir=/etc/hadoop-0.20/conf \
+  -propertyfile cloudera/build.properties -Drepo.maven.org=${IVY_MIRROR_PROP} \
+  task-controller package-native
+
+JAVA_HOME=$JAVA64_HOME
+fi
+
+if [ -z "$SKIP_JDIFF" ]; then
+ant \
+  -Dreactor.repo=file://$HOME/.m2/repository \
+  -Djdiff.stable=0.20.1 \
+  -Djdiff.build.dir=build/docs/jdiff-cloudera \
+  -propertyfile build.properties -Drepo.maven.org=${IVY_MIRROR_PROP} \
+  -propertyfile cloudera/build.properties api-report
+fi
+
+# Copy them into the main build directory to be included in the tarball
+mkdir -p build/hadoop-$FULL_VERSION/docs/
+
+ant \
+  -Dreactor.repo=file://$HOME/.m2/repository \
+  -Dlibhdfs=true \
+  -Dcompile.native=true \
+  -Dfusedfs=true \
+  -Dcompile.c++=true \
+  -Dforrest.home=$FORREST_HOME \
+  -Dhadoop.conf.dir=/etc/hadoop-0.20/conf \
+  -propertyfile cloudera/build.properties \
+  -Dsnappy.prefix=${SNAPPY_BUILDDIR}/usr/local \
+  -Dbundle.snappy=true -Drepo.maven.org=${IVY_MIRROR_PROP} \
+  compile-core-native compile-c++ compile-c++-examples task-controller tar
+
+if [ -z "$SKIP_MVN_EXPLICIT" ]; then
+# Change to cloudera/maven directory, and install
+# (and if called from CDH nightly build, deploy) artifacts into Maven repository
+cd $BIN_DIR/maven-packaging
+mvn -Dnot.cdh.release.build=false install $DO_MAVEN_DEPLOY
+fi

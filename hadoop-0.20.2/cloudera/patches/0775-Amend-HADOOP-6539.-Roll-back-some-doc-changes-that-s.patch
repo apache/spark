@@ -1,0 +1,612 @@
+From a144f415c0e14d1b4d42c72ccf5c97dc8f8423e8 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 18 Jan 2011 14:17:56 -0800
+Subject: [PATCH 0775/1179] Amend HADOOP-6539. Roll back some doc changes that snuck in from trunk
+
+Reason: referenced features not backported into CDH3
+Author: Todd Lipcon
+Ref: CDH-2541
+---
+ .../content/xdocs/file_system_shell.xml            |  113 ++++++++---------
+ .../content/xdocs/hdfs_user_guide.xml              |  132 +-------------------
+ 2 files changed, 55 insertions(+), 190 deletions(-)
+
+diff --git a/src/docs/src/documentation/content/xdocs/file_system_shell.xml b/src/docs/src/documentation/content/xdocs/file_system_shell.xml
+index 6754d28..28db8f1 100644
+--- a/src/docs/src/documentation/content/xdocs/file_system_shell.xml
++++ b/src/docs/src/documentation/content/xdocs/file_system_shell.xml
+@@ -28,7 +28,7 @@
+       interact with the Hadoop Distributed File System (HDFS) as well as other file systems that Hadoop supports,  
+       such as Local FS, HFTP FS, S3 FS, and others. The FS shell is invoked by: </p>
+ 
+-    <source>bin/hdfs dfs &lt;args&gt;</source>
++    <source>bin/hadoop fs &lt;args&gt;</source>
+     
+       <p>
+       All FS shell commands take path URIs as arguments. The URI
+@@ -53,7 +53,7 @@
+ 		<section>
+ 			<title> cat </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -cat URI [URI &#x2026;]</code>
++				<code>Usage: hadoop fs -cat URI [URI &#x2026;]</code>
+ 			</p>
+ 			<p>
+ 		   Copies source paths to <em>stdout</em>. 
+@@ -61,11 +61,11 @@
+ 			<p>Example:</p>
+ 			<ul>
+ 				<li>
+-					<code> hdfs dfs -cat hdfs://nn1.example.com/file1 hdfs://nn2.example.com/file2 
++					<code> hadoop fs -cat hdfs://nn1.example.com/file1 hdfs://nn2.example.com/file2 
+ 		   </code>
+ 				</li>
+ 				<li>
+-					<code>hdfs dfs -cat file:///file3 /user/hadoop/file4 </code>
++					<code>hadoop fs -cat file:///file3 /user/hadoop/file4 </code>
+ 				</li>
+ 			</ul>
+ 			<p>Exit Code:<br/>
+@@ -77,7 +77,7 @@
+ 		<section>
+ 			<title> chgrp </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -chgrp [-R] GROUP URI [URI &#x2026;]</code>
++				<code>Usage: hadoop fs -chgrp [-R] GROUP URI [URI &#x2026;]</code>
+ 			</p>
+ 			<p>
+ 	    Change group association of files. With <code>-R</code>, make the change recursively through the directory structure. 
+@@ -88,7 +88,7 @@
+ 		<section>
+ 			<title> chmod </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -chmod [-R] &lt;MODE[,MODE]... | OCTALMODE&gt; URI [URI &#x2026;]</code>
++				<code>Usage: hadoop fs -chmod [-R] &lt;MODE[,MODE]... | OCTALMODE&gt; URI [URI &#x2026;]</code>
+ 			</p>
+ 			<p>
+ 	    Change the permissions of files. With <code>-R</code>, make the change recursively through the directory structure. 
+@@ -102,7 +102,7 @@
+ 		<section>
+ 			<title> chown </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -chown [-R] [OWNER][:[GROUP]] URI [URI ]</code>
++				<code>Usage: hadoop fs -chown [-R] [OWNER][:[GROUP]] URI [URI ]</code>
+ 			</p>
+ 			<p>
+ 	    Change the owner of files. With <code>-R</code>, make the change recursively through the directory structure. 
+@@ -116,7 +116,7 @@
+ 		<section>
+ 			<title>copyFromLocal</title>
+ 			<p>
+-				<code>Usage: hdfs dfs -copyFromLocal &lt;localsrc&gt; URI</code>
++				<code>Usage: hadoop fs -copyFromLocal &lt;localsrc&gt; URI</code>
+ 			</p>
+ 			<p>Similar to <a href="#put"><strong>put</strong></a> command, except that the source is restricted to a local file reference. </p>
+ 		</section>
+@@ -126,7 +126,7 @@
+ 		<section>
+ 			<title> copyToLocal</title>
+ 			<p>
+-				<code>Usage: hdfs dfs -copyToLocal [-ignorecrc] [-crc] URI &lt;localdst&gt;</code>
++				<code>Usage: hadoop fs -copyToLocal [-ignorecrc] [-crc] URI &lt;localdst&gt;</code>
+ 			</p>
+ 			<p> Similar to <a href="#get"><strong>get</strong></a> command, except that the destination is restricted to a local file reference.</p>
+ 		</section>
+@@ -135,7 +135,7 @@
+ 		<section>
+ 			<title> count </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -count [-q]  &lt;paths&gt;</code>
++				<code>Usage: hadoop fs -count [-q]  &lt;paths&gt;</code>
+ 			</p>
+ 			<p>
+ 				Count the number of directories, files and bytes under the paths that match the specified file pattern. <br/><br/>
+@@ -148,11 +148,11 @@
+ 			<p>Example:</p>
+ 			<ul>
+ 				<li>
+-					<code> hdfs dfs -count hdfs://nn1.example.com/file1 hdfs://nn2.example.com/file2 
++					<code> hadoop fs -count hdfs://nn1.example.com/file1 hdfs://nn2.example.com/file2 
+ 		   </code>
+ 				</li>
+ 				<li>
+-					<code> hdfs dfs -count -q hdfs://nn1.example.com/file1
++					<code> hadoop fs -count -q hdfs://nn1.example.com/file1
+ 		   </code>
+ 				</li>
+ 			</ul>
+@@ -167,7 +167,7 @@
+ 		<section>
+ 			<title> cp </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -cp URI [URI &#x2026;] &lt;dest&gt;</code>
++				<code>Usage: hadoop fs -cp URI [URI &#x2026;] &lt;dest&gt;</code>
+ 			</p>
+ 			<p>
+ 	    Copy files from source to destination. This command allows multiple sources as well in which case the destination must be a directory.
+@@ -175,10 +175,10 @@
+ 	    Example:</p>
+ 			<ul>
+ 				<li>
+-					<code> hdfs dfs -cp /user/hadoop/file1 /user/hadoop/file2</code>
++					<code> hadoop fs -cp /user/hadoop/file1 /user/hadoop/file2</code>
+ 				</li>
+ 				<li>
+-					<code> hdfs dfs -cp /user/hadoop/file1 /user/hadoop/file2 /user/hadoop/dir </code>
++					<code> hadoop fs -cp /user/hadoop/file1 /user/hadoop/file2 /user/hadoop/dir </code>
+ 				</li>
+ 			</ul>
+ 			<p>Exit Code:</p>
+@@ -191,17 +191,12 @@
+ 		<section>
+ 			<title>du</title>
+ 			<p>
+-				<code>Usage: hdfs dfs -du [-s] [-h] URI [URI &#x2026;]</code>
++				<code>Usage: hadoop fs -du URI [URI &#x2026;]</code>
+ 			</p>
+ 			<p>
+ 	     Displays sizes of files and directories contained in the given directory or the length of a file in case its just a file.</p>
+-             <p>Options:</p>
+-             <ul>
+-             <li>The <code>-s</code> option will result in an aggregate summary of file lengths being displayed, rather than the individual files.</li>
+-             <li>The <code>-h</code> option will format file sizes in a &quot;human-readable&quot; fashion (e.g 64.0m instead of 67108864)</li>
+-             </ul>
+              <p>
+-	     Example:<br/><code>hdfs dfs -du /user/hadoop/dir1 /user/hadoop/file1 hdfs://nn.example.com/user/hadoop/dir1</code><br/>
++	     Example:<br/><code>hadoop fs -du /user/hadoop/dir1 /user/hadoop/file1 hdfs://nn.example.com/user/hadoop/dir1</code><br/>
+ 	     Exit Code:<br/><code> Returns 0 on success and -1 on error. </code><br/></p>
+ 		</section>
+ 		
+@@ -209,10 +204,10 @@
+ 		<section>
+ 			<title> dus </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -dus &lt;args&gt;</code>
++				<code>Usage: hadoop fs -dus &lt;args&gt;</code>
+ 			</p>
+ 			<p>
+-	    Displays a summary of file lengths. This is an alternate form of <code>hdfs dfs -du -s</code>.
++	    Displays a summary of file lengths.
+ 	   </p>
+ 		</section>
+ 		
+@@ -221,7 +216,7 @@
+ 		<section>
+ 			<title> expunge </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -expunge</code>
++				<code>Usage: hadoop fs -expunge</code>
+ 			</p>
+ 			<p>Empty the Trash. Refer to the <a href="hdfs_design.html">HDFS Architecture Guide</a>
+ 			 for more information on the Trash feature.</p>
+@@ -232,7 +227,7 @@
+ 		<section>
+ 			<title> get </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -get [-ignorecrc] [-crc] &lt;src&gt; &lt;localdst&gt;</code>
++				<code>Usage: hadoop fs -get [-ignorecrc] [-crc] &lt;src&gt; &lt;localdst&gt;</code>
+ 				<br/>
+ 			</p>
+ 			<p>
+@@ -243,10 +238,10 @@
+ 			<p>Example:</p>
+ 			<ul>
+ 				<li>
+-					<code> hdfs dfs -get /user/hadoop/file localfile </code>
++					<code> hadoop fs -get /user/hadoop/file localfile </code>
+ 				</li>
+ 				<li>
+-					<code> hdfs dfs -get hdfs://nn.example.com/user/hadoop/file localfile</code>
++					<code> hadoop fs -get hdfs://nn.example.com/user/hadoop/file localfile</code>
+ 				</li>
+ 			</ul>
+ 			<p>Exit Code:</p>
+@@ -260,7 +255,7 @@
+ 		<section>
+ 			<title> getmerge </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -getmerge &lt;src&gt; &lt;localdst&gt; [addnl]</code>
++				<code>Usage: hadoop fs -getmerge &lt;src&gt; &lt;localdst&gt; [addnl]</code>
+ 			</p>
+ 			<p>
+ 	  Takes a source directory and a destination file as input and concatenates files in src into the destination local file. 
+@@ -273,7 +268,7 @@
+        <section>
+            <title>ls</title>
+            <p>
+-               <code>Usage: hdfs dfs -ls &lt;args&gt;</code>
++               <code>Usage: hadoop fs -ls &lt;args&gt;</code>
+            </p>
+            <p>For a file returns stat on the file with the following format:</p>
+            <p>
+@@ -285,7 +280,7 @@
+            </p>
+            <p>Example:</p>
+            <p>
+-               <code>hdfs dfs -ls /user/hadoop/file1 </code>
++               <code>hadoop fs -ls /user/hadoop/file1 </code>
+            </p>
+            <p>Exit Code:</p>
+            <p>
+@@ -297,7 +292,7 @@
+ <!-- LSR -->       
+ 		<section>
+ 			<title>lsr</title>
+-			<p><code>Usage: hdfs dfs -lsr &lt;args&gt;</code><br/>
++			<p><code>Usage: hadoop fs -lsr &lt;args&gt;</code><br/>
+ 	      Recursive version of <code>ls</code>. Similar to Unix <code>ls -R</code>.
+ 	      </p>
+ 		</section>
+@@ -307,7 +302,7 @@
+ 		<section>
+ 			<title> mkdir </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -mkdir &lt;paths&gt;</code>
++				<code>Usage: hadoop fs -mkdir &lt;paths&gt;</code>
+ 				<br/>
+ 			</p>
+ 			<p>
+@@ -316,10 +311,10 @@
+ 			<p>Example:</p>
+ 			<ul>
+ 				<li>
+-					<code>hdfs dfs -mkdir /user/hadoop/dir1 /user/hadoop/dir2 </code>
++					<code>hadoop fs -mkdir /user/hadoop/dir1 /user/hadoop/dir2 </code>
+ 				</li>
+ 				<li>
+-					<code>hdfs dfs -mkdir hdfs://nn1.example.com/user/hadoop/dir hdfs://nn2.example.com/user/hadoop/dir
++					<code>hadoop fs -mkdir hdfs://nn1.example.com/user/hadoop/dir hdfs://nn2.example.com/user/hadoop/dir
+ 	  </code>
+ 				</li>
+ 			</ul>
+@@ -344,7 +339,7 @@
+ 		<section>
+ 			<title> moveToLocal</title>
+ 			<p>
+-				<code>Usage: hdfs dfs -moveToLocal [-crc] &lt;src&gt; &lt;dst&gt;</code>
++				<code>Usage: hadoop fs -moveToLocal [-crc] &lt;src&gt; &lt;dst&gt;</code>
+ 			</p>
+ 			<p>Displays a "Not implemented yet" message.</p>
+ 		</section>
+@@ -354,7 +349,7 @@
+ 		<section>
+ 			<title> mv </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -mv URI [URI &#x2026;] &lt;dest&gt;</code>
++				<code>Usage: hadoop fs -mv URI [URI &#x2026;] &lt;dest&gt;</code>
+ 			</p>
+ 			<p>
+ 	    Moves files from source to destination. This command allows multiple sources as well in which case the destination needs to be a directory. 
+@@ -364,10 +359,10 @@
+ 	    </p>
+ 			<ul>
+ 				<li>
+-					<code> hdfs dfs -mv /user/hadoop/file1 /user/hadoop/file2</code>
++					<code> hadoop fs -mv /user/hadoop/file1 /user/hadoop/file2</code>
+ 				</li>
+ 				<li>
+-					<code> hdfs dfs -mv hdfs://nn.example.com/file1 hdfs://nn.example.com/file2 hdfs://nn.example.com/file3 hdfs://nn.example.com/dir1</code>
++					<code> hadoop fs -mv hdfs://nn.example.com/file1 hdfs://nn.example.com/file2 hdfs://nn.example.com/file3 hdfs://nn.example.com/dir1</code>
+ 				</li>
+ 			</ul>
+ 			<p>Exit Code:</p>
+@@ -381,22 +376,22 @@
+ 		<section>
+ 			<title> put </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -put &lt;localsrc&gt; ... &lt;dst&gt;</code>
++				<code>Usage: hadoop fs -put &lt;localsrc&gt; ... &lt;dst&gt;</code>
+ 			</p>
+ 			<p>Copy single src, or multiple srcs from local file system to the destination file system. 
+ 			Also reads input from stdin and writes to destination file system.<br/>
+ 	   </p>
+ 			<ul>
+ 				<li>
+-					<code> hdfs dfs -put localfile /user/hadoop/hadoopfile</code>
++					<code> hadoop fs -put localfile /user/hadoop/hadoopfile</code>
+ 				</li>
+ 				<li>
+-					<code> hdfs dfs -put localfile1 localfile2 /user/hadoop/hadoopdir</code>
++					<code> hadoop fs -put localfile1 localfile2 /user/hadoop/hadoopdir</code>
+ 				</li>
+ 				<li>
+-					<code> hdfs dfs -put localfile hdfs://nn.example.com/hadoop/hadoopfile</code>
++					<code> hadoop fs -put localfile hdfs://nn.example.com/hadoop/hadoopfile</code>
+ 				</li>
+-				<li><code>hdfs dfs -put - hdfs://nn.example.com/hadoop/hadoopfile</code><br/>Reads the input from stdin.</li>
++				<li><code>hadoop fs -put - hdfs://nn.example.com/hadoop/hadoopfile</code><br/>Reads the input from stdin.</li>
+ 			</ul>
+ 			<p>Exit Code:</p>
+ 			<p>
+@@ -409,7 +404,7 @@
+ 		<section>
+ 			<title> rm </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -rm [-skipTrash] URI [URI &#x2026;] </code>
++				<code>Usage: hadoop fs -rm [-skipTrash] URI [URI &#x2026;] </code>
+ 			</p>
+ 			<p>
+ 	   Delete files specified as args. Only deletes non empty directory and files. If the <code>-skipTrash</code> option
+@@ -420,7 +415,7 @@
+ 	   </p>
+ 			<ul>
+ 				<li>
+-					<code> hdfs dfs -rm hdfs://nn.example.com/file /user/hadoop/emptydir </code>
++					<code> hadoop fs -rm hdfs://nn.example.com/file /user/hadoop/emptydir </code>
+ 				</li>
+ 			</ul>
+ 			<p>Exit Code:</p>
+@@ -434,7 +429,7 @@
+ 		<section>
+ 			<title> rmr </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -rmr [-skipTrash] URI [URI &#x2026;]</code>
++				<code>Usage: hadoop fs -rmr [-skipTrash] URI [URI &#x2026;]</code>
+ 			</p>
+ 			<p>Recursive version of delete. If the <code>-skipTrash</code> option
+ 		   is specified, the trash, if enabled, will be bypassed and the specified file(s) deleted immediately. This can be
+@@ -443,10 +438,10 @@
+ 	   </p>
+ 			<ul>
+ 				<li>
+-					<code> hdfs dfs -rmr /user/hadoop/dir </code>
++					<code> hadoop fs -rmr /user/hadoop/dir </code>
+ 				</li>
+ 				<li>
+-					<code> hdfs dfs -rmr hdfs://nn.example.com/user/hadoop/dir </code>
++					<code> hadoop fs -rmr hdfs://nn.example.com/user/hadoop/dir </code>
+ 				</li>
+ 			</ul>
+ 			<p>Exit Code:</p>
+@@ -460,7 +455,7 @@
+ 		<section>
+ 			<title> setrep </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -setrep [-R] &lt;path&gt;</code>
++				<code>Usage: hadoop fs -setrep [-R] &lt;path&gt;</code>
+ 			</p>
+ 			<p>
+ 	   Changes the replication factor of a file. -R option is for recursively increasing the replication factor of files within a directory.
+@@ -468,7 +463,7 @@
+ 			<p>Example:</p>
+ 			<ul>
+ 				<li>
+-					<code> hdfs dfs -setrep -w 3 -R /user/hadoop/dir1 </code>
++					<code> hadoop fs -setrep -w 3 -R /user/hadoop/dir1 </code>
+ 				</li>
+ 			</ul>
+ 			<p>Exit Code:</p>
+@@ -482,7 +477,7 @@
+ 		<section>
+ 			<title> stat </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -stat URI [URI &#x2026;]</code>
++				<code>Usage: hadoop fs -stat URI [URI &#x2026;]</code>
+ 			</p>
+ 			<p>
+ 	   Returns the stat information on the path.
+@@ -490,7 +485,7 @@
+ 			<p>Example:</p>
+ 			<ul>
+ 				<li>
+-					<code> hdfs dfs -stat path </code>
++					<code> hadoop fs -stat path </code>
+ 				</li>
+ 			</ul>
+ 			<p>Exit Code:<br/>
+@@ -502,7 +497,7 @@
+ 		<section>
+ 			<title> tail </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -tail [-f] URI </code>
++				<code>Usage: hadoop fs -tail [-f] URI </code>
+ 			</p>
+ 			<p>
+ 	   Displays last kilobyte of the file to stdout. -f option can be used as in Unix.
+@@ -510,7 +505,7 @@
+ 			<p>Example:</p>
+ 			<ul>
+ 				<li>
+-					<code> hdfs dfs -tail pathname </code>
++					<code> hadoop fs -tail pathname </code>
+ 				</li>
+ 			</ul>
+ 			<p>Exit Code: <br/>
+@@ -522,7 +517,7 @@
+ 		<section>
+ 			<title> test </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -test -[ezd] URI</code>
++				<code>Usage: hadoop fs -test -[ezd] URI</code>
+ 			</p>
+ 			<p>
+ 	   Options: <br/>
+@@ -532,7 +527,7 @@
+ 			<p>Example:</p>
+ 			<ul>
+ 				<li>
+-					<code> hdfs dfs -test -e filename </code>
++					<code> hadoop fs -test -e filename </code>
+ 				</li>
+ 			</ul>
+ 		</section>
+@@ -542,7 +537,7 @@
+ 		<section>
+ 			<title> text </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -text &lt;src&gt;</code>
++				<code>Usage: hadoop fs -text &lt;src&gt;</code>
+ 				<br/>
+ 			</p>
+ 			<p>
+@@ -555,7 +550,7 @@
+ 		<section>
+ 			<title> touchz </title>
+ 			<p>
+-				<code>Usage: hdfs dfs -touchz URI [URI &#x2026;]</code>
++				<code>Usage: hadoop fs -touchz URI [URI &#x2026;]</code>
+ 				<br/>
+ 			</p>
+ 			<p>
+diff --git a/src/docs/src/documentation/content/xdocs/hdfs_user_guide.xml b/src/docs/src/documentation/content/xdocs/hdfs_user_guide.xml
+index 604e841..0e45185 100644
+--- a/src/docs/src/documentation/content/xdocs/hdfs_user_guide.xml
++++ b/src/docs/src/documentation/content/xdocs/hdfs_user_guide.xml
+@@ -112,25 +112,9 @@
+     		problems.
+     	</li>
+     	<li>
+-    		Secondary NameNode (deprecated): performs periodic checkpoints of the 
++    		Secondary NameNode performs periodic checkpoints of the 
+     		namespace and helps keep the size of file containing log of HDFS 
+     		modifications within certain limits at the NameNode.
+-    		Replaced by Checkpoint node.
+-    	</li>
+-    	<li>
+-    		Checkpoint node: performs periodic checkpoints of the namespace and
+-    		helps minimize the size of the log stored at the NameNode 
+-    		containing changes to the HDFS.
+-    		Replaces the role previously filled by the Secondary NameNode. 
+-    		NameNode allows multiple Checkpoint nodes simultaneously, 
+-    		as long as there are no Backup nodes registered with the system.
+-    	</li>
+-    	<li>
+-    		Backup node: An extension to the Checkpoint node.
+-    		In addition to checkpointing it also receives a stream of edits 
+-    		from the NameNode and maintains its own in-memory copy of the namespace,
+-    		which is always in sync with the active NameNode namespace state.
+-    		Only one Backup node may be registered with the NameNode at once.
+     	</li>
+       </ul>
+     </li>
+@@ -232,12 +216,6 @@
+    
+    </section> 
+ 	<section> <title>Secondary NameNode</title>
+-   <note>
+-   The Secondary NameNode has been deprecated. 
+-   Instead, consider using the 
+-   <a href="hdfs_user_guide.html#Checkpoint+Node">Checkpoint Node</a> or 
+-   <a href="hdfs_user_guide.html#Backup+Node">Backup Node</a>.
+-   </note>
+    <p>	
+      The NameNode stores modifications to the file system as a log
+      appended to a native file system file, <code>edits</code>. 
+@@ -284,114 +262,6 @@
+      For command usage, see  
+      <a href="commands_manual.html#secondarynamenode">secondarynamenode</a>.
+    </p>
+-   
+-   </section><section> <title> Checkpoint Node </title>
+-   <p>NameNode persists its namespace using two files: <code>fsimage</code>,
+-      which is the latest checkpoint of the namespace and <code>edits</code>,
+-      a journal (log) of changes to the namespace since the checkpoint.
+-      When a NameNode starts up, it merges the <code>fsimage</code> and
+-      <code>edits</code> journal to provide an up-to-date view of the
+-      file system metadata.
+-      The NameNode then overwrites <code>fsimage</code> with the new HDFS state 
+-      and begins a new <code>edits</code> journal. 
+-   </p>
+-   <p>
+-     The Checkpoint node periodically creates checkpoints of the namespace. 
+-     It downloads <code>fsimage</code> and <code>edits</code> from the active 
+-     NameNode, merges them locally, and uploads the new image back to the 
+-     active NameNode.
+-     The Checkpoint node usually runs on a different machine than the NameNode
+-     since its memory requirements are on the same order as the NameNode.
+-     The Checkpoint node is started by 
+-     <code>bin/hdfs namenode -checkpoint</code> on the node 
+-     specified in the configuration file.
+-   </p>
+-   <p>The location of the Checkpoint (or Backup) node and its accompanying 
+-      web interface are configured via the <code>dfs.backup.address</code> 
+-      and <code>dfs.backup.http.address</code> configuration variables.
+-	 </p>
+-   <p>
+-     The start of the checkpoint process on the Checkpoint node is 
+-     controlled by two configuration parameters.
+-   </p>
+-   <ul>
+-      <li>
+-        <code>fs.checkpoint.period</code>, set to 1 hour by default, specifies
+-        the maximum delay between two consecutive checkpoints 
+-      </li>
+-      <li>
+-        <code>fs.checkpoint.size</code>, set to 64MB by default, defines the
+-        size of the edits log file that forces an urgent checkpoint even if 
+-        the maximum checkpoint delay is not reached.
+-      </li>
+-   </ul>
+-   <p>
+-     The Checkpoint node stores the latest checkpoint in a  
+-     directory that is structured the same as the NameNode's
+-     directory. This allows the checkpointed image to be always available for
+-     reading by the NameNode if necessary.
+-     See <a href="hdfs_user_guide.html#Import+Checkpoint">Import Checkpoint</a>.
+-   </p>
+-   <p>Multiple checkpoint nodes may be specified in the cluster configuration file.</p>
+-   <p>
+-     For command usage, see  
+-     <a href="commands_manual.html#namenode">namenode</a>.
+-   </p>
+-   </section>
+-
+-   <section> <title> Backup Node </title>
+-   <p>	
+-    The Backup node provides the same checkpointing functionality as the 
+-    Checkpoint node, as well as maintaining an in-memory, up-to-date copy of the
+-    file system namespace that is always synchronized with the active NameNode state.
+-    Along with accepting a journal stream of file system edits from 
+-    the NameNode and persisting this to disk, the Backup node also applies 
+-    those edits into its own copy of the namespace in memory, thus creating 
+-    a backup of the namespace.
+-   </p>
+-   <p>
+-    The Backup node does not need to download 
+-    <code>fsimage</code> and <code>edits</code> files from the active NameNode
+-    in order to create a checkpoint, as would be required with a 
+-    Checkpoint node or Secondary NameNode, since it already has an up-to-date 
+-    state of the namespace state in memory.
+-    The Backup node checkpoint process is more efficient as it only needs to 
+-    save the namespace into the local <code>fsimage</code> file and reset
+-    <code>edits</code>.
+-   </p> 
+-   <p>
+-    As the Backup node maintains a copy of the
+-    namespace in memory, its RAM requirements are the same as the NameNode.
+-   </p> 
+-   <p>
+-    The NameNode supports one Backup node at a time. No Checkpoint nodes may be
+-    registered if a Backup node is in use. Using multiple Backup nodes 
+-    concurrently will be supported in the future.
+-   </p> 
+-   <p>
+-    The Backup node is configured in the same manner as the Checkpoint node.
+-    It is started with <code>bin/hdfs namenode -checkpoint</code>.
+-   </p>
+-   <p>The location of the Backup (or Checkpoint) node and its accompanying 
+-      web interface are configured via the <code>dfs.backup.address</code> 
+-      and <code>dfs.backup.http.address</code> configuration variables.
+-	 </p>
+-   <p>
+-    Use of a Backup node provides the option of running the NameNode with no 
+-    persistent storage, delegating all responsibility for persisting the state
+-    of the namespace to the Backup node. 
+-    To do this, start the NameNode with the 
+-    <code>-importCheckpoint</code> option, along with specifying no persistent
+-    storage directories of type edits <code>dfs.name.edits.dir</code> 
+-    for the NameNode configuration.
+-   </p> 
+-   <p>
+-    For a complete discussion of the motivation behind the creation of the 
+-    Backup node and Checkpoint node, see 
+-    <a href="https://issues.apache.org/jira/browse/HADOOP-4539">HADOOP-4539</a>.
+-    For command usage, see  
+-     <a href="commands_manual.html#namenode">namenode</a>.
+-   </p>
+    </section>
+ 
+    <section> <title> Import Checkpoint </title>
+-- 
+1.7.0.4
+

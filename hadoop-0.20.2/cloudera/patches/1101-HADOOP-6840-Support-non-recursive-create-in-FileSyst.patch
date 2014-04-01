@@ -1,0 +1,199 @@
+From 9934440df63c790387a54b212aacad4ee12a9dc9 Mon Sep 17 00:00:00 2001
+From: Jonathan Hsieh <jon@cloudera.com>
+Date: Mon, 28 Nov 2011 10:19:56 -0800
+Subject: [PATCH 1101/1179] HADOOP-6840 Support non-recursive create() in FileSystem and SequenceFile.Writer
+
+Reason: Bug (hbase data loss)
+Author: Nicolas Spiegelberg and Jitendra Nath Pandey
+Ref: CDH-3815
+---
+ src/core/org/apache/hadoop/fs/FileSystem.java      |   48 +++++++++++++++
+ src/core/org/apache/hadoop/io/SequenceFile.java    |   61 ++++++++++++++++++--
+ .../apache/hadoop/hdfs/DistributedFileSystem.java  |    1 +
+ 3 files changed, 105 insertions(+), 5 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/FileSystem.java b/src/core/org/apache/hadoop/fs/FileSystem.java
+index 1859bd6..f8d5fed 100644
+--- a/src/core/org/apache/hadoop/fs/FileSystem.java
++++ b/src/core/org/apache/hadoop/fs/FileSystem.java
+@@ -608,6 +608,54 @@ public abstract class FileSystem extends Configured implements Closeable {
+       Progressable progress) throws IOException;
+ 
+   /**
++  * Opens an FSDataOutputStream at the indicated Path with write-progress
++  * reporting. Same as create(), except fails if parent directory doesn't
++  * already exist.
++  * @param f the file name to open
++  * @param overwrite if a file with this name already exists, then if true,
++  * the file will be overwritten, and if false an error will be thrown.
++  * @param bufferSize the size of the buffer to be used.
++  * @param replication required block replication for the file.
++  * @param blockSize
++  * @param progress
++  * @throws IOException
++  * @see #setPermission(Path, FsPermission)
++  * @deprecated API only for 0.20-append
++  */
++  @Deprecated
++  public FSDataOutputStream createNonRecursive(Path f,
++      boolean overwrite,
++      int bufferSize, short replication, long blockSize,
++      Progressable progress) throws IOException {
++    return this.createNonRecursive(f, FsPermission.getDefault(),
++        overwrite, bufferSize, replication, blockSize, progress);
++  }
++  
++  /**
++  * Opens an FSDataOutputStream at the indicated Path with write-progress
++  * reporting. Same as create(), except fails if parent directory doesn't
++  * already exist.
++  * @param f the file name to open
++  * @param permission
++  * @param overwrite if a file with this name already exists, then if true,
++  * the file will be overwritten, and if false an error will be thrown.
++  * @param bufferSize the size of the buffer to be used.
++  * @param replication required block replication for the file.
++  * @param blockSize
++  * @param progress
++  * @throws IOException
++  * @see #setPermission(Path, FsPermission)
++  * @deprecated API only for 0.20-append
++  */
++  @Deprecated
++  public FSDataOutputStream createNonRecursive(Path f, FsPermission permission,
++      boolean overwrite,
++      int bufferSize, short replication, long blockSize,
++      Progressable progress) throws IOException {
++    throw new IOException("createNonRecursive unsupported for this filesystem");
++  }
++
++  /**
+    * Creates the given Path as a brand-new zero-length file.  If
+    * create fails, or if it already existed, return false.
+    */
+diff --git a/src/core/org/apache/hadoop/io/SequenceFile.java b/src/core/org/apache/hadoop/io/SequenceFile.java
+index a85b95a..83addf7 100644
+--- a/src/core/org/apache/hadoop/io/SequenceFile.java
++++ b/src/core/org/apache/hadoop/io/SequenceFile.java
+@@ -408,6 +408,55 @@ public class SequenceFile {
+ 
+   /**
+    * Construct the preferred type of SequenceFile Writer.
++   * @param fs The configured filesystem.
++   * @param conf The configuration.
++   * @param name The name of the file.
++   * @param keyClass The 'key' type.
++   * @param valClass The 'value' type.
++   * @param bufferSize buffer size for the underlaying outputstream.
++   * @param replication replication factor for the file.
++   * @param blockSize block size for the file.
++   * @param createParent create parent directory if non-existent
++   * @param compressionType The compression type.
++   * @param codec The compression codec.
++   * @param progress The Progressable object to track progress.
++   * @param metadata The metadata of the file.
++   * @return Returns the handle to the constructed SequenceFile Writer.
++   * @throws IOException
++   */
++  public static Writer
++    createWriter(FileSystem fs, Configuration conf, Path name,
++                 Class keyClass, Class valClass, int bufferSize,
++                 short replication, long blockSize, boolean createParent,
++                 CompressionType compressionType, CompressionCodec codec,
++                 Metadata metadata) throws IOException {
++    if ((codec instanceof GzipCodec) &&
++        !NativeCodeLoader.isNativeCodeLoaded() &&
++        !ZlibFactory.isNativeZlibLoaded(conf)) {
++      throw new IllegalArgumentException("SequenceFile doesn't work with " +
++                                         "GzipCodec without native-hadoop code!");
++    }
++
++    switch (compressionType) {
++    case NONE:
++      return new Writer(conf, 
++          fs.createNonRecursive(name, true, bufferSize, replication, blockSize, null),
++          keyClass, valClass, metadata).ownStream();
++    case RECORD:
++      return new RecordCompressWriter(conf, 
++          fs.createNonRecursive(name, true, bufferSize, replication, blockSize, null),
++          keyClass, valClass, codec, metadata).ownStream();
++    case BLOCK:
++      return new BlockCompressWriter(conf,
++          fs.createNonRecursive(name, true, bufferSize, replication, blockSize, null),
++          keyClass, valClass, codec, metadata).ownStream();
++    default:
++      return null;
++    }
++  } 
++  
++  /**
++   * Construct the preferred type of SequenceFile Writer.
+    * @param fs The configured filesystem. 
+    * @param conf The configuration.
+    * @param name The name of the file. 
+@@ -849,7 +898,7 @@ public class SequenceFile {
+     }
+ 
+     /** Write to an arbitrary stream using a specified buffer size. */
+-    private Writer(Configuration conf, FSDataOutputStream out, 
++    Writer(Configuration conf, FSDataOutputStream out, 
+                    Class keyClass, Class valClass, Metadata metadata)
+       throws IOException {
+       this.ownOutputStream = false;
+@@ -876,6 +925,8 @@ public class SequenceFile {
+     boolean isCompressed() { return compress; }
+     boolean isBlockCompressed() { return false; }
+     
++    Writer ownStream() { this.ownOutputStream = true; return this; }
++    
+     /** Write and flush the file header. */
+     void writeFileHeader() 
+       throws IOException {
+@@ -1096,7 +1147,7 @@ public class SequenceFile {
+     }
+     
+     /** Write to an arbitrary stream using a specified buffer size. */
+-    private RecordCompressWriter(Configuration conf, FSDataOutputStream out,
++    RecordCompressWriter(Configuration conf, FSDataOutputStream out,
+                                  Class keyClass, Class valClass, CompressionCodec codec, Metadata metadata)
+       throws IOException {
+       this.ownOutputStream = false;
+@@ -1205,7 +1256,7 @@ public class SequenceFile {
+       super.init(name, conf,
+                  fs.create(name, true, bufferSize, replication, blockSize, progress),
+                  keyClass, valClass, true, codec, metadata);
+-      init(conf.getInt("io.seqfile.compress.blocksize", 1000000));
++      init(1000000);
+ 
+       initializeFileHeader();
+       writeFileHeader();
+@@ -1221,12 +1272,12 @@ public class SequenceFile {
+     }
+     
+     /** Write to an arbitrary stream using a specified buffer size. */
+-    private BlockCompressWriter(Configuration conf, FSDataOutputStream out,
++    BlockCompressWriter(Configuration conf, FSDataOutputStream out,
+                                 Class keyClass, Class valClass, CompressionCodec codec, Metadata metadata)
+       throws IOException {
+       this.ownOutputStream = false;
+       super.init(null, conf, out, keyClass, valClass, true, codec, metadata);
+-      init(1000000);
++      init(conf.getInt("io.seqfile.compress.blocksize", 1000000));
+       
+       initializeFileHeader();
+       writeFileHeader();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
+index 1d174b8..942fc48 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DistributedFileSystem.java
+@@ -226,6 +226,7 @@ public class DistributedFileSystem extends FileSystem {
+    * Same as create(), except fails if parent directory doesn't already exist.
+    * @see #create(Path, FsPermission, boolean, int, short, long, Progressable)
+    */
++  @Override
+   public FSDataOutputStream createNonRecursive(Path f, FsPermission permission,
+       boolean overwrite,
+       int bufferSize, short replication, long blockSize, 
+-- 
+1.7.0.4
+

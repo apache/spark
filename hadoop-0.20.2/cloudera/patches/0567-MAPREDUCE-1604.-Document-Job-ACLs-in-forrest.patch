@@ -1,0 +1,124 @@
+From 87c00a2594f42c8d96479ba339800e5224136902 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 18 Mar 2010 12:05:01 +0530
+Subject: [PATCH 0567/1179] MAPREDUCE-1604. Document Job ACLs in forrest
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439114/patch-1604-ydist.txt
+Author: Amareshwari Sriramadasu
+Ref: CDH-648
+---
+ .../documentation/content/xdocs/cluster_setup.xml  |   19 ++++++--
+ .../content/xdocs/mapred_tutorial.xml              |   54 ++++++++++++++++++++
+ 2 files changed, 69 insertions(+), 4 deletions(-)
+
+diff --git a/src/docs/src/documentation/content/xdocs/cluster_setup.xml b/src/docs/src/documentation/content/xdocs/cluster_setup.xml
+index cb3a6f0..4b72ff2 100644
+--- a/src/docs/src/documentation/content/xdocs/cluster_setup.xml
++++ b/src/docs/src/documentation/content/xdocs/cluster_setup.xml
+@@ -294,15 +294,26 @@
+         </tr>
+         <tr>
+           <td>mapred.acls.enabled</td>
+-          <td>Specifies whether ACLs are supported for controlling job
+-              submission and administration</td>
++          <td>Boolean, specifying whether queue ACLs are supported for 
++              authorizing job submission and job administration in a 
++              queue</td>
+           <td>
+-            If <em>true</em>, ACLs would be checked while submitting
++            If <em>true</em>, queue ACLs would be checked while submitting
+             and administering jobs. ACLs can be specified using the
+             configuration parameters of the form
+             <em>mapred.queue.queue-name.acl-name</em>, defined below.
+           </td>
+         </tr>
++        <tr>
++          <td>mapreduce.cluster.job-authorization-enabled</td>
++          <td>Boolean, specifying whether job ACLs are supported for 
++              authorizing view and modification of a job</td>
++          <td>
++            If <em>true</em>, job ACLs would be checked while viewing or
++            modifying a job. More details are available at 
++            <a href ="mapred_tutorial.html#Job+Authorization">Job Authorization</a>. 
++          </td>
++        </tr>
+ 		  </table>
+       
+       <p><br/><code> conf/mapred-queue-acls.xml</code></p>
+@@ -599,7 +610,7 @@
+             <p>
+             The LinuxTaskController requires that paths including and leading up
+             to the directories specified in
+-            <em>mapreduce.cluster.local.dir</em> and <em>hadoop.log.dir</em> to
++            <em>mapred.local.dir</em> and <em>hadoop.log.dir</em> to
+             be set 755 permissions.
+             </p>
+             
+diff --git a/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml b/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
+index b4afd38..403ffcc 100644
+--- a/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
++++ b/src/docs/src/documentation/content/xdocs/mapred_tutorial.xml
+@@ -1488,6 +1488,60 @@
+         <p>Normally the user creates the application, describes various facets 
+         of the job via <code>JobConf</code>, and then uses the 
+         <code>JobClient</code> to submit the job and monitor its progress.</p>
++        
++        <section>
++          <title>Job Authorization</title>
++          <p>Job level authorization is enabled on the cluster, if the configuration
++          <code>mapreduce.cluster.job-authorization-enabled</code> is set to
++          true. When enabled, access control checks are done by the JobTracker
++          and the TaskTracker before allowing users to view
++          job details or to modify a job using Map/Reduce APIs,
++          CLI or web user interfaces.</p>
++          
++          <p>A job submitter can specify access control lists for viewing or
++          modifying a job via the configuration properties
++          <code>mapreduce.job.acl-view-job</code> and
++          <code>mapreduce.job.acl-modify-job</code> respectively. By default, 
++          nobody is given access in these properties.</p> 
++          
++          <p>However, irrespective of the ACLs configured, a job's owner,
++          the superuser and the members of an admin configured supergroup
++          (<code>mapred.permissions.supergroup</code>) always have access to
++          view and modify a job.</p>
++          
++          <p> A job view ACL authorizes users against the configured 
++          <code>mapreduce.job.acl-view-job</code> before returning possibly 
++          sensitive information about a job, like: </p>
++          <ul>
++            <li> job level counters </li>
++            <li> task level counters </li>
++            <li> tasks's diagnostic information </li>
++            <li> task logs displayed on the TaskTracker web UI </li>
++            <li> job.xml showed by the JobTracker's web UI </li>
++          </ul>
++          <p>Other information about a job, like its status and its profile, 
++          is accessible to all users, without requiring authorization.</p>
++          
++          <p> A job modification ACL authorizes users against the configured
++          <code>mapreduce.job.acl-modify-job</code> before allowing
++          modifications to jobs, like: </p>
++          <ul>
++            <li> killing a job </li>
++            <li> killing/failing a task of a job </li>
++            <li> setting the priority of a job </li>
++          </ul>
++          <p>These operations are also protected by the queue level ACL,
++          "acl-administer-jobs", configured via mapred-queue-acls.xml. The caller
++          will be authorized against both queue level ACLs and job level ACLs,
++          depending on what is enabled.</p>
++          
++          <p>The format of a job level ACL is the same as the format for a
++          queue level ACL as defined in the
++          <a href ="cluster_setup.html#Configuring+the+Hadoop+Daemons">
++          Cluster Setup</a> documentation.
++          </p>
++          
++        </section>
+ 
+         <section>
+           <title>Job Control</title>
+-- 
+1.7.0.4
+

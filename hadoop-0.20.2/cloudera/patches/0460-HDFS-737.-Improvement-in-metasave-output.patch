@@ -1,0 +1,207 @@
+From b14b570878b9262f1a77c668b5123345406f8374 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 5 Feb 2010 17:29:01 -0800
+Subject: [PATCH 0460/1179] HDFS-737. Improvement in metasave output
+
+Patch: https://issues.apache.org/jira/secure/attachment/12435041/HDFS-737.3.rel20.patch
+Author: Jitendra Nath Pandey
+Ref: YDH
+---
+ .../hadoop/hdfs/server/namenode/FSDirectory.java   |   17 +++
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   19 +++
+ .../hadoop/hdfs/server/namenode/TestMetaSave.java  |  118 ++++++++++++++++++++
+ 3 files changed, 154 insertions(+), 0 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/namenode/TestMetaSave.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
+index aeb40c4..90d1667 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
+@@ -898,6 +898,23 @@ class FSDirectory implements FSConstants, Closeable {
+     return fullPathName.toString();
+   }
+   
++  /** Return the full path name of the specified inode */
++  static String getFullPathName(INode inode) {
++    // calculate the depth of this inode from root
++    int depth = 0;
++    for (INode i = inode; i != null; i = i.parent) {
++      depth++;
++    }
++    INode[] inodes = new INode[depth];
++
++    // fill up the inodes in the path from this inode to root
++    for (int i = 0; i < depth; i++) {
++      inodes[depth-i-1] = inode;
++      inode = inode.parent;
++    }
++    return getFullPathName(inodes, depth-1);
++  }
++  
+   /**
+    * Create a directory 
+    * If ancestor directories do not exist, automatically create them.
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index b463ddb..1db53a0 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -539,6 +539,18 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     PrintWriter out = new PrintWriter(new BufferedWriter(
+                                                          new FileWriter(file, true)));
+  
++    long totalInodes = this.dir.totalInodes();
++    long totalBlocks = this.getBlocksTotal();
++
++    ArrayList<DatanodeDescriptor> live = new ArrayList<DatanodeDescriptor>();
++    ArrayList<DatanodeDescriptor> dead = new ArrayList<DatanodeDescriptor>();
++    this.DFSNodesStatus(live, dead);
++    
++    String str = totalInodes + " files and directories, " + totalBlocks
++        + " blocks = " + (totalInodes + totalBlocks) + " total";
++    out.println(str);
++    out.println("Live Datanodes: "+live.size());
++    out.println("Dead Datanodes: "+dead.size());
+ 
+     //
+     // Dump contents of neededReplication
+@@ -554,6 +566,13 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+         chooseSourceDatanode(block, containingNodes, numReplicas);
+         int usableReplicas = numReplicas.liveReplicas() + 
+                              numReplicas.decommissionedReplicas(); 
++
++        if (block instanceof BlockInfo) {
++          String fileName = FSDirectory.getFullPathName(((BlockInfo) block)
++              .getINode());
++          out.print(fileName + ": ");
++        }
++
+         // l: == live:, d: == decommissioned c: == corrupt e: == excess
+         out.print(block + ((usableReplicas > 0)? "" : " MISSING") +
+                   " (replicas:" +
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestMetaSave.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestMetaSave.java
+new file mode 100644
+index 0000000..4a5718f
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestMetaSave.java
+@@ -0,0 +1,118 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++
++import org.junit.Test;
++import org.junit.AfterClass;
++import org.junit.BeforeClass;
++import java.io.BufferedReader;
++import java.io.FileInputStream;
++import java.io.DataInputStream;
++import java.io.InputStreamReader;
++import java.io.IOException;
++import java.lang.InterruptedException;
++import java.util.Random;
++import static org.junit.Assert.assertTrue;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
++import org.apache.hadoop.fs.FSDataOutputStream;
++
++/**
++ * This class tests the creation and validation of metasave
++ */
++public class TestMetaSave {
++  static final int NUM_DATA_NODES = 2;
++  static final long seed = 0xDEADBEEFL;
++  static final int blockSize = 8192;
++  private static MiniDFSCluster cluster = null;
++  private static FileSystem fileSys = null;
++
++  private void createFile(FileSystem fileSys, Path name) throws IOException {
++    FSDataOutputStream stm = fileSys.create(name, true, fileSys.getConf()
++        .getInt("io.file.buffer.size", 4096), (short) 2, (long) blockSize);
++    byte[] buffer = new byte[1024];
++    Random rand = new Random(seed);
++    rand.nextBytes(buffer);
++    stm.write(buffer);
++    stm.close();
++  }
++
++  @BeforeClass
++  public static void setUp() throws IOException {
++    // start a cluster
++    Configuration conf = new Configuration();
++
++    // High value of replication interval
++    // so that blocks remain under-replicated
++    conf.setInt("dfs.replication.interval", 1000);
++    conf.setLong("dfs.heartbeat.interval", 1L);
++    conf.setLong("heartbeat.recheck.interval", 1L);
++    cluster = new MiniDFSCluster(conf, NUM_DATA_NODES, true, null);
++    cluster.waitActive();
++    fileSys = cluster.getFileSystem();
++  }
++
++  /**
++   * Tests metasave
++   */
++  @Test
++  public void testMetaSave() throws IOException, InterruptedException {
++
++    final FSNamesystem namesystem = cluster.getNameNode().getNamesystem();
++
++    for (int i = 0; i < 2; i++) {
++      Path file = new Path("/filestatus" + i);
++      createFile(fileSys, file);
++    }
++
++    cluster.stopDataNode(1);
++    // wait for namenode to discover that a datanode is dead
++    Thread.sleep(15000);
++    namesystem.setReplication("/filestatus0", (short) 4);
++
++    namesystem.metaSave("metasave.out.txt");
++
++    // Verification
++    String logFile = System.getProperty("hadoop.log.dir") + "/"
++        + "metasave.out.txt";
++    FileInputStream fstream = new FileInputStream(logFile);
++    DataInputStream in = new DataInputStream(fstream);
++    BufferedReader reader = new BufferedReader(new InputStreamReader(in));
++    String line = reader.readLine();
++    assertTrue(line.equals("3 files and directories, 2 blocks = 5 total"));
++    line = reader.readLine();
++    assertTrue(line.equals("Live Datanodes: 1"));
++    line = reader.readLine();
++    assertTrue(line.equals("Dead Datanodes: 1"));
++    line = reader.readLine();
++    line = reader.readLine();
++    assertTrue(line.matches("^/filestatus[01]:.*"));
++  }
++
++  @AfterClass
++  public static void tearDown() throws IOException {
++    if (fileSys != null)
++      fileSys.close();
++    if (cluster != null)
++      cluster.shutdown();
++  }
++}
+-- 
+1.7.0.4
+

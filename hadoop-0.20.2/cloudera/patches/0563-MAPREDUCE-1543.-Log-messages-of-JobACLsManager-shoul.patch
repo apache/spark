@@ -1,0 +1,487 @@
+From 353f15176ed481f268f37e33d4fc9f1745f44afe Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 18 Mar 2010 00:06:22 +0530
+Subject: [PATCH 0563/1179] MAPREDUCE-1543. Log messages of JobACLsManager should use security logging of HADOOP-6586
+
+Patch: https://issues.apache.org/jira/secure/attachment/12439057/mapreduce-1543-y20s-3.patch
+Author: Luke Lu
+Ref: CDH-648
+---
+ .../org/apache/hadoop/mapred/AuditLogger.java      |  129 ++++++++++++++++++
+ .../org/apache/hadoop/mapred/JobACLsManager.java   |   33 ++---
+ .../org/apache/hadoop/mapred/JobInProgress.java    |    9 +-
+ .../org/apache/hadoop/mapred/JobTracker.java       |   10 ++-
+ .../org/apache/hadoop/mapred/QueueManager.java     |   14 ++
+ .../org/apache/hadoop/mapred/TestAuditLogger.java  |  138 ++++++++++++++++++++
+ 6 files changed, 309 insertions(+), 24 deletions(-)
+ create mode 100644 src/mapred/org/apache/hadoop/mapred/AuditLogger.java
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestAuditLogger.java
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/AuditLogger.java b/src/mapred/org/apache/hadoop/mapred/AuditLogger.java
+new file mode 100644
+index 0000000..7a4e7bb
+--- /dev/null
++++ b/src/mapred/org/apache/hadoop/mapred/AuditLogger.java
+@@ -0,0 +1,129 @@
++package org.apache.hadoop.mapred;
++
++import java.net.InetAddress;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.ipc.Server;
++
++/** Manages MapReduce audit logs. Audit logs provides information about
++ * authorization/authentication events (success/failure).
++ *  
++ * Audit log format is written as key=value pairs.
++ */
++class AuditLogger {
++  private static final Log LOG = LogFactory.getLog(AuditLogger.class);
++
++  // Keys
++  static enum Keys {USER, OPERATION, TARGET, RESULT, IP, PERMISSIONS, 
++                    DESCRIPTION}
++  
++  static class Constants {
++    // Some constants used by AuditLogger itself.
++    static final String SUCCESS = "SUCCESS";
++    static final String FAILURE = "FAILURE";
++    static final String KEY_VAL_SEPARATOR = "=";
++    static final char PAIR_SEPARATOR = '\t';
++    
++    // Some constants used by others using AuditLogger.
++    
++    // Some commonly used targets
++    static final String JOBTRACKER = "JobTracker";
++  
++    // Some commonly used operations
++    static final String REFRESH_QUEUE = "REFRESH_QUEUE";
++    static final String REFRESH_NODES = "REFRESH_NODES";
++    
++    // Some commonly used descriptions
++    static final String UNAUTHORIZED_USER = "Unauthorized user";
++  }
++  
++  /**
++   * A helper api for creating an audit log for a successful event.
++   * This is factored out for testing purpose.
++   */
++  static String createSuccessLog(String user, String operation, String target) {
++    StringBuilder b = new StringBuilder();
++    start(Keys.USER, user, b);
++    addRemoteIP(b);
++    add(Keys.OPERATION, operation, b);
++    add(Keys.TARGET, target ,b);
++    add(Keys.RESULT, Constants.SUCCESS, b);
++    return b.toString();
++  }
++  
++  /**
++   * Create a readable and parseable audit log string for a successful event.
++   * 
++   * @param user User who made the service request to the JobTracker.
++   * @param operation Operation requested by the user
++   * @param target The target on which the operation is being performed. Most 
++   *               commonly operated targets are jobs, JobTracker, queues etc
++   * 
++   * <br><br>
++   * Note that the {@link AuditLogger} uses tabs ('\t') as a key-val delimiter 
++   * and hence the value fields should not contains tabs ('\t').
++   */
++  static void logSuccess(String user, String operation, String target) {
++    LOG.info(createSuccessLog(user, operation, target));
++  }
++  
++  /**
++   * A helper api for creating an audit log for a failure event.
++   * This is factored out for testing purpose.
++   */
++  static String createFailureLog(String user, String operation, String perm, 
++                                 String target, String description) {
++    StringBuilder b = new StringBuilder();
++    start(Keys.USER, user, b);
++    addRemoteIP(b);
++    add(Keys.OPERATION, operation, b);
++    add(Keys.TARGET, target ,b);
++    add(Keys.RESULT, Constants.FAILURE, b);
++    add(Keys.DESCRIPTION, description, b);
++    add(Keys.PERMISSIONS, perm, b);
++    return b.toString();
++  }
++  
++  /**
++   * Create a readable and parseable audit log string for a failed event.
++   * 
++   * @param user User who made the service request to the JobTracker.
++   * @param operation Operation requested by the user
++   * @param perm Target permissions like JobACLs for jobs, QueueACLs for queues.
++   * @param target The target on which the operation is being performed. Most 
++   *               commonly operated targets are jobs, JobTracker, queues etc
++   * @param description Some additional information as to why the operation 
++   *                    failed.
++   * 
++   * <br><br>
++   * Note that the {@link AuditLogger} uses tabs ('\t') as a key-val delimiter 
++   * and hence the value fields should not contains tabs ('\t').
++   */
++  static void logFailure(String user, String operation, String perm, 
++                         String target, String description) {
++    LOG.warn(createFailureLog(user, operation, perm, target, description));
++  }
++  
++  // A helper api to add remote IP address
++  static void addRemoteIP(StringBuilder b) {
++    InetAddress ip = Server.getRemoteIp();
++    // ip address can be null for testcases
++    if (ip != null) {
++      add(Keys.IP, ip.getHostAddress(), b);
++    }
++  }
++  
++  // Adds the first key-val pair to the passed builder in the following format
++  //  key=value
++  static void start(Keys key, String value, StringBuilder b) {
++    b.append(key.name()).append(Constants.KEY_VAL_SEPARATOR).append(value);
++  }
++  
++  // Appends the key-val pair to the passed builder in the following format
++  //  <pair-delim>key=value
++  static void add(Keys key, String value, StringBuilder b) {
++    b.append(Constants.PAIR_SEPARATOR).append(key.name())
++     .append(Constants.KEY_VAL_SEPARATOR).append(value);
++  }
++}
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobACLsManager.java b/src/mapred/org/apache/hadoop/mapred/JobACLsManager.java
+index d242ed8..62ac7e1 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobACLsManager.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobACLsManager.java
+@@ -23,6 +23,8 @@ import java.util.Map;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.mapreduce.JobACL;
++import org.apache.hadoop.mapred.AuditLogger;
++import org.apache.hadoop.mapred.AuditLogger.Constants;
+ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.AccessControlList;
+@@ -109,34 +111,23 @@ public abstract class JobACLsManager {
+ 	      JobACL jobOperation, String jobOwner, AccessControlList jobACL)
+ 	      throws AccessControlException {
+ 
++	    String user = callerUGI.getShortUserName();
+ 	    if (!isJobLevelAuthorizationEnabled()) {
+ 	      return;
+ 	    }
+ 
+-	    // Check for superusers/supergroups
+-	    if (isSuperUserOrSuperGroup(callerUGI)) {
+-	      LOG.info("superuser/supergroupMember "
+-	          + callerUGI.getShortUserName() + " trying to perform "
+-	          + jobOperation.toString() + " on " + jobId);
+-	      return;
+-	    }
+-
+-	    // Job-owner is always part of all the ACLs
+-	    if (callerUGI.getShortUserName().equals(jobOwner)) {
+-	      LOG.info("Jobowner " + callerUGI.getShortUserName()
+-	          + " trying to perform " + jobOperation.toString() + " on "
+-	          + jobId);
+-	      return;
+-	    }
+-
+-	    
+-	    if (jobACL.isUserAllowed(callerUGI)) {
+-	      LOG.info("Normal user " + callerUGI.getShortUserName()
+-	          + " trying to perform " + jobOperation.toString() + " on "
+-	          + jobId);
++	    // Allow superusers/supergroups
++	    // Allow Job-owner as the job's owner is always part of all the ACLs
++	    if (callerUGI.getShortUserName().equals(jobOwner)
++	        || isSuperUserOrSuperGroup(callerUGI) 
++	        || jobACL.isUserAllowed(callerUGI)) {
++	      AuditLogger.logSuccess(user, jobOperation.name(),  jobId.toString());
+ 	      return;
+ 	    }
+ 
++	    // log this event to the audit log
++	    AuditLogger.logFailure(user, jobOperation.name(), jobACL.toString(), 
++	                           jobId.toString(), Constants.UNAUTHORIZED_USER);
+ 	    throw new AccessControlException(callerUGI
+ 	        + " is not authorized for performing the operation "
+ 	        + jobOperation.toString() + " on " + jobId + ". "
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 5f14de7..9e89b05 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -42,6 +42,7 @@ import org.apache.hadoop.fs.LocalFileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapred.CleanupQueue.PathDeletionContext;
++import org.apache.hadoop.mapred.AuditLogger;
+ import org.apache.hadoop.mapred.JobHistory.Values;
+ import org.apache.hadoop.mapreduce.JobACL;
+ import org.apache.hadoop.mapreduce.JobContext;
+@@ -383,8 +384,12 @@ public class JobInProgress {
+       this.conf.setUser(user);
+     }
+     if (!conf.getUser().equals(user)) {
+-      throw new IOException("The username obtained from the conf doesn't " +
+-            "match the username the user authenticated as");
++      String desc = "The username obtained from the conf doesn't " +
++                      "match the username the user authenticated as";
++      AuditLogger.logFailure(user, 
++          QueueManager.QueueOperation.SUBMIT_JOB.name(), conf.getUser(), 
++          jobId.toString(), desc);
++      throw new IOException(desc);
+     }
+     this.priority = conf.getJobPriority();
+     this.status.setJobPriority(this.priority);
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index a3f2fc4..3837bcd 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -30,6 +30,7 @@ import java.io.InputStreamReader;
+ import java.io.OutputStreamWriter;
+ import java.io.Writer;
+ import java.net.BindException;
++import java.net.InetAddress;
+ import java.net.InetSocketAddress;
+ import java.net.UnknownHostException;
+ import java.security.PrivilegedExceptionAction;
+@@ -76,6 +77,7 @@ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.ipc.Server;
+ import org.apache.hadoop.ipc.RPC.VersionMismatch;
++import org.apache.hadoop.mapred.AuditLogger.Constants;
+ import org.apache.hadoop.mapred.JobHistory.Keys;
+ import org.apache.hadoop.mapred.JobHistory.Listener;
+ import org.apache.hadoop.mapred.JobHistory.Values;
+@@ -3784,6 +3786,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     LOG.info("Job " + jobId + " added successfully for user '" 
+              + job.getJobConf().getUser() + "' to queue '" 
+              + job.getJobConf().getQueueName() + "'");
++    AuditLogger.logSuccess(job.getUser(), 
++        QueueManager.QueueOperation.SUBMIT_JOB.name(), jobId.toString());
+     return job.getStatus();
+   }
+ 
+@@ -4617,14 +4621,18 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+    * Rereads the files to update the hosts and exclude lists.
+    */
+   public synchronized void refreshNodes() throws IOException {
++    String user = UserGroupInformation.getCurrentUser().getShortUserName();
+     // check access
+     if (!isSuperUserOrSuperGroup(UserGroupInformation.getCurrentUser(), mrOwner,
+                                  supergroup)) {
+-      String user = UserGroupInformation.getCurrentUser().getShortUserName();
++      AuditLogger.logFailure(user, Constants.REFRESH_NODES, 
++          mrOwner + " " + supergroup, Constants.JOBTRACKER, 
++          Constants.UNAUTHORIZED_USER);
+       throw new AccessControlException(user + 
+                                        " is not authorized to refresh nodes.");
+     }
+     
++    AuditLogger.logSuccess(user, Constants.REFRESH_NODES, Constants.JOBTRACKER);
+     // call the actual api
+     refreshHosts();
+   }
+diff --git a/src/mapred/org/apache/hadoop/mapred/QueueManager.java b/src/mapred/org/apache/hadoop/mapred/QueueManager.java
+index 2adc424..458627c 100644
+--- a/src/mapred/org/apache/hadoop/mapred/QueueManager.java
++++ b/src/mapred/org/apache/hadoop/mapred/QueueManager.java
+@@ -32,6 +32,8 @@ import java.io.IOException;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.mapred.AuditLogger;
++import org.apache.hadoop.mapred.AuditLogger.Constants;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.AccessControlList;
+ import org.apache.hadoop.util.StringUtils;
+@@ -167,6 +169,9 @@ class QueueManager {
+   public synchronized boolean hasAccess(String queueName, JobInProgress job, 
+                                 QueueOperation oper, 
+                                 UserGroupInformation ugi) {
++    String user = ugi.getShortUserName();
++    String jobId = job == null ? "-" : job.getJobID().toString();
++    
+     if (!aclsEnabled) {
+       return true;
+     }
+@@ -178,12 +183,15 @@ class QueueManager {
+     
+     if (oper.isJobOwnerAllowed()) {
+       if (job != null && job.getJobConf().getUser().equals(ugi.getShortUserName())) {
++        AuditLogger.logSuccess(user, oper.name(), queueName);
+         return true;
+       }
+     }
+     
+     AccessControlList acl = aclsMap.get(toFullPropertyName(queueName, oper.getAclName()));
+     if (acl == null) {
++      AuditLogger.logFailure(user, oper.name(), null, queueName, 
++                             "Disabled queue ACLs, job : " + jobId);
+       return false;
+     }
+     
+@@ -195,6 +203,12 @@ class QueueManager {
+         allowed = true;
+       }
+     }
++    if (allowed) {
++      AuditLogger.logSuccess(user, oper.name(), queueName);
++    } else {
++      AuditLogger.logFailure(user, oper.name(), null, queueName,
++                             Constants.UNAUTHORIZED_USER + ", job : " + jobId);
++    }
+     
+     return allowed;    
+   }
+diff --git a/src/test/org/apache/hadoop/mapred/TestAuditLogger.java b/src/test/org/apache/hadoop/mapred/TestAuditLogger.java
+new file mode 100644
+index 0000000..6079ba3
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestAuditLogger.java
+@@ -0,0 +1,138 @@
++package org.apache.hadoop.mapred;
++
++import java.net.InetAddress;
++import java.net.InetSocketAddress;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.ipc.RPC;
++import org.apache.hadoop.ipc.Server;
++import org.apache.hadoop.ipc.TestRPC.TestImpl;
++import org.apache.hadoop.ipc.TestRPC.TestProtocol;
++import org.apache.hadoop.mapred.AuditLogger.Constants;
++import org.apache.hadoop.mapred.AuditLogger.Keys;
++import org.apache.hadoop.net.NetUtils;
++
++import junit.framework.TestCase;
++
++/**
++ * Tests {@link AuditLogger}.
++ */
++public class TestAuditLogger extends TestCase {
++  private static final String USER = "test";
++  private static final String OPERATION = "oper";
++  private static final String TARGET = "tgt";
++  private static final String PERM = "admin group";
++  private static final String DESC = "description of an audit log";
++  
++  /**
++   * Test the AuditLog format with key-val pair.
++   */
++  public void testKeyValLogFormat() {
++    StringBuilder actLog = new StringBuilder();
++    StringBuilder expLog = new StringBuilder();
++    // add the first k=v pair and check
++    AuditLogger.start(Keys.USER, USER, actLog);
++    expLog.append("USER=test");
++    assertEquals(expLog.toString(), actLog.toString());
++    
++    // append another k1=v1 pair to already added k=v and test
++    AuditLogger.add(Keys.OPERATION, OPERATION, actLog);
++    expLog.append("\tOPERATION=oper");
++    assertEquals(expLog.toString(), actLog.toString());
++    
++    // append another k1=null pair and test
++    AuditLogger.add(Keys.PERMISSIONS, (String)null, actLog);
++    expLog.append("\tPERMISSIONS=null");
++    assertEquals(expLog.toString(), actLog.toString());
++    
++    // now add the target and check of the final string
++    AuditLogger.add(Keys.TARGET, TARGET, actLog);
++    expLog.append("\tTARGET=tgt");
++    assertEquals(expLog.toString(), actLog.toString());
++  }
++  
++  /**
++   * Test the AuditLog format for successful events.
++   */
++  private void testSuccessLogFormat(boolean checkIP) {
++    // check without the IP
++    String sLog = AuditLogger.createSuccessLog(USER, OPERATION, TARGET);
++    StringBuilder expLog = new StringBuilder();
++    expLog.append("USER=test\t");
++    if (checkIP) {
++      InetAddress ip = Server.getRemoteIp();
++      expLog.append(Keys.IP.name() + "=" + ip.getHostAddress() + "\t");
++    }
++    expLog.append("OPERATION=oper\tTARGET=tgt\tRESULT=SUCCESS");
++    assertEquals(expLog.toString(), sLog);
++    
++  }
++  
++  /**
++   * Test the AuditLog format for failure events.
++   */
++  private void testFailureLogFormat(boolean checkIP, String perm) {
++    String fLog = 
++      AuditLogger.createFailureLog(USER, OPERATION, perm, TARGET, DESC);
++    StringBuilder expLog = new StringBuilder();
++    expLog.append("USER=test\t");
++    if (checkIP) {
++      InetAddress ip = Server.getRemoteIp();
++      expLog.append(Keys.IP.name() + "=" + ip.getHostAddress() + "\t");
++    }
++    expLog.append("OPERATION=oper\tTARGET=tgt\tRESULT=FAILURE\t");
++    expLog.append("DESCRIPTION=description of an audit log\t");
++    expLog.append("PERMISSIONS=" + perm);
++    assertEquals(expLog.toString(), fLog);
++  }
++  
++  /**
++   * Test the AuditLog format for failure events.
++   */
++  private void testFailureLogFormat(boolean checkIP) {
++    testFailureLogFormat(checkIP, PERM);
++    testFailureLogFormat(checkIP, null);
++  }
++  
++  /**
++   * Test {@link AuditLogger} without IP set.
++   */
++  public void testAuditLoggerWithoutIP() throws Exception {
++    // test without ip
++    testSuccessLogFormat(false);
++    testFailureLogFormat(false);
++  }
++  
++  /**
++   * A special extension of {@link TestImpl} RPC server with 
++   * {@link TestImpl#ping()} testing the audit logs.
++   */
++  private class MyTestRPCServer extends TestImpl {
++    @Override
++    public void ping() {
++      // test with ip set
++      testSuccessLogFormat(true);
++      testFailureLogFormat(true);
++    }
++  }
++  
++  /**
++   * Test {@link AuditLogger} with IP set.
++   */
++  public void testAuditLoggerWithIP() throws Exception {
++    Configuration conf = new Configuration();
++    // start the IPC server
++    Server server = RPC.getServer(new MyTestRPCServer(), "0.0.0.0", 0, conf);
++    server.start();
++    
++    InetSocketAddress addr = NetUtils.getConnectAddress(server);
++    
++    // Make a client connection and test the audit log
++    TestProtocol proxy = (TestProtocol)RPC.getProxy(TestProtocol.class, 
++                           TestProtocol.versionID, addr, conf);
++    // Start the testcase
++    proxy.ping();
++
++    server.stop();
++  }
++}
+-- 
+1.7.0.4
+

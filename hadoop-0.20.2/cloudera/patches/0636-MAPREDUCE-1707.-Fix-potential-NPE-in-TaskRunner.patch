@@ -1,0 +1,93 @@
+From 51d7be14f892334ea1ad399a34d91ea1bd10e804 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 5 May 2010 11:00:56 +0530
+Subject: [PATCH 0636/1179] MAPREDUCE-1707. Fix potential NPE in TaskRunner
+
+Patch: https://issues.apache.org/jira/secure/attachment/12443680/MAPREDUCE-1707-20100504-ydist.txt
+Author: Vinod K V
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/TaskRunner.java       |   10 +++-----
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   22 ++++++++++++++++---
+ 2 files changed, 22 insertions(+), 10 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index 2b0d7bb..423cc95 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -164,10 +164,7 @@ abstract class TaskRunner extends Thread {
+       
+       // We don't create any symlinks yet, so presence/absence of workDir
+       // actually on the file system doesn't matter.
+-      UserGroupInformation ugi =
+-        //UserGroupInformation.createRemoteUser(conf.getUser());
+-        tracker.getRunningJob(t.getJobID()).getUGI();
+-      ugi.doAs(new PrivilegedExceptionAction<Void>() {
++      tip.getUGI().doAs(new PrivilegedExceptionAction<Void>() {
+         public Void run() throws IOException {
+           taskDistributedCacheManager =
+             tracker.getTrackerDistributedCacheManager()
+@@ -242,8 +239,9 @@ abstract class TaskRunner extends Thread {
+       }
+     } finally {
+       try{
+-        taskDistributedCacheManager.release();
+-
++        if (taskDistributedCacheManager != null) {
++          taskDistributedCacheManager.release();
++        }
+       }catch(IOException ie){
+         LOG.warn("Error releasing caches : Cache files might not have been cleaned up");
+       }
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index c8e2d03..74e84eb 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -1136,10 +1136,11 @@ public class TaskTracker
+     }
+   }
+ 
+-  private void launchTaskForJob(TaskInProgress tip, JobConf jobConf)
+-      throws IOException{
++  private void launchTaskForJob(TaskInProgress tip, JobConf jobConf,
++      UserGroupInformation ugi) throws IOException {
+     synchronized (tip) {
+       tip.setJobConf(jobConf);
++      tip.setUGI(ugi);
+       tip.launchTask();
+     }
+   }
+@@ -2133,7 +2134,8 @@ public class TaskTracker
+   void startNewTask(TaskInProgress tip) {
+     try {
+       RunningJob rjob = localizeJob(tip);
+-      launchTaskForJob(tip, new JobConf(rjob.jobConf)); 
++      // Localization is done. Neither rjob.jobConf nor rjob.ugi can be null
++      launchTaskForJob(tip, new JobConf(rjob.jobConf), rjob.ugi); 
+     } catch (Throwable e) {
+       String msg = ("Error initializing " + tip.getTask().getTaskID() + 
+                     ":\n" + StringUtils.stringifyException(e));
+@@ -2262,7 +2264,19 @@ public class TaskTracker
+     private String debugCommand;
+     private volatile boolean slotTaken = false;
+     private TaskLauncher launcher;
+-        
++
++    // The ugi of the user who is running the job. This contains all the tokens
++    // too which will be populated during job-localization
++    private UserGroupInformation ugi;
++
++    UserGroupInformation getUGI() {
++      return ugi;
++    }
++
++    void setUGI(UserGroupInformation userUGI) {
++      ugi = userUGI;
++    }
++
+     /**
+      */
+     public TaskInProgress(Task task, JobConf conf) {
+-- 
+1.7.0.4
+

@@ -1,0 +1,684 @@
+From 63cf96b62842f8b5634087641a9f40492e43aed4 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 2 Mar 2012 19:05:24 -0800
+Subject: [PATCH 1153/1179] HDFS-3150. Add option for clients to contact DNs via hostname in branch-1.
+
+Modifies Client/Datanode <-> Datanode access use the hostname field
+instead of the IP. To enable this new client and Datanode configuration
+options are introduced:
+
+1. dfs.client.use.datanode.hostname indicates all client to datanode
+connections should use the datanode hostname (as clients outside cluster
+may not be able to route the IP).
+
+2. dfs.datanode.use.datanode.hostname indicates whether Datanodes should
+use hostnames when connecting to other Datanodes for data transfer.
+
+Author: Eli Collins
+Reason: Enable datanode multihoming
+Ref: CDH-4292
+---
+ src/hdfs/hdfs-default.xml                          |   18 +++++-
+ .../org/apache/hadoop/hdfs/BlockReaderLocal.java   |   16 +++--
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |   70 ++++++++++++-------
+ src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java |    6 ++-
+ .../apache/hadoop/hdfs/protocol/DatanodeID.java    |    8 +-
+ .../apache/hadoop/hdfs/protocol/DatanodeInfo.java  |   15 ++++-
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   30 +++++----
+ .../hadoop/hdfs/server/datanode/DataXceiver.java   |   16 ++++-
+ .../org/apache/hadoop/hdfs/TestFileCreation.java   |   21 ++++++-
+ .../org/apache/hadoop/hdfs/TestLeaseRecovery.java  |    2 +-
+ .../hadoop/hdfs/TestShortCircuitLocalRead.java     |    4 +-
+ .../server/datanode/TestInterDatanodeProtocol.java |   27 +++++++-
+ 12 files changed, 170 insertions(+), 63 deletions(-)
+
+diff --git a/src/hdfs/hdfs-default.xml b/src/hdfs/hdfs-default.xml
+index db0c03b..d65fb88 100644
+--- a/src/hdfs/hdfs-default.xml
++++ b/src/hdfs/hdfs-default.xml
+@@ -28,7 +28,7 @@ creations/deletions), or "all".</description>
+   <name>dfs.datanode.address</name>
+   <value>0.0.0.0:50010</value>
+   <description>
+-    The address where the datanode server will listen to.
++    The datanode server address and port for data transfer.
+     If the port is 0 then the server will start on a free port.
+   </description>
+ </property>
+@@ -469,4 +469,20 @@ creations/deletions), or "all".</description>
+   </description>
+ </property>
+ 
++<property>
++  <name>dfs.client.use.datanode.hostname</name>
++  <value>false</value>
++  <description>Whether clients should use datanode hostnames when
++    connecting to datanodes.
++  </description>
++</property>
++
++<property>
++  <name>dfs.datanode.use.datanode.hostname</name>
++  <value>false</value>
++  <description>Whether datanodes should use datanode hostnames when
++    connecting to other datanodes for data transfer.
++  </description>
++</property>
++
+ </configuration>
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/BlockReaderLocal.java b/src/hdfs/org/apache/hadoop/hdfs/BlockReaderLocal.java
+index 72e96a2..ce9c67b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/BlockReaderLocal.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/BlockReaderLocal.java
+@@ -84,11 +84,11 @@ class BlockReaderLocal extends FSInputChecker implements BlockReader {
+     }
+ 
+     private synchronized ClientDatanodeProtocol getDatanodeProxy(
+-        DatanodeInfo node, Configuration conf, int socketTimeout)
+-        throws IOException {
++        DatanodeInfo node, Configuration conf, int socketTimeout,
++        boolean connectToDnViaHostname) throws IOException {
+       if (proxy == null) {
+         proxy = DFSClient.createClientDatanodeProtocolProxy(node, conf,
+-            socketTimeout);
++            socketTimeout, connectToDnViaHostname);
+       }
+       return proxy;
+     }
+@@ -134,13 +134,14 @@ class BlockReaderLocal extends FSInputChecker implements BlockReader {
+    */
+   static BlockReaderLocal newBlockReader(Configuration conf,
+     String file, Block blk, Token<BlockTokenIdentifier> token, DatanodeInfo node, 
+-    int socketTimeout, long startOffset, long length) throws IOException {
++    int socketTimeout, long startOffset, long length, boolean connectToDnViaHostname)
++    throws IOException {
+     
+     LocalDatanodeInfo localDatanodeInfo =  getLocalDatanodeInfo(node.getIpcPort());
+     // check the cache first
+     BlockLocalPathInfo pathinfo = localDatanodeInfo.getBlockLocalPathInfo(blk);
+     if (pathinfo == null) {
+-      pathinfo = getBlockPathInfo(blk, node, conf, socketTimeout, token);
++      pathinfo = getBlockPathInfo(blk, node, conf, socketTimeout, token, connectToDnViaHostname);
+     }
+ 
+     // check to see if the file exists. It may so happen that the
+@@ -215,11 +216,12 @@ class BlockReaderLocal extends FSInputChecker implements BlockReader {
+   
+   private static BlockLocalPathInfo getBlockPathInfo(Block blk,
+       DatanodeInfo node, Configuration conf, int timeout,
+-      Token<BlockTokenIdentifier> token) throws IOException {
++      Token<BlockTokenIdentifier> token, boolean connectToDnViaHostname) 
++      throws IOException {
+     LocalDatanodeInfo localDatanodeInfo = getLocalDatanodeInfo(node.ipcPort);
+     BlockLocalPathInfo pathinfo = null;
+     ClientDatanodeProtocol proxy = localDatanodeInfo.getDatanodeProxy(node,
+-        conf, timeout);
++        conf, timeout, connectToDnViaHostname);
+     try {
+       // make RPC to local datanode to find local pathnames of blocks
+       pathinfo = proxy.getBlockLocalPathInfo(blk, token);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 7d92b10..14fb24d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -89,6 +89,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+   private final FileSystem.Statistics stats;
+   private int maxBlockAcquireFailures;
+   private boolean shortCircuitLocalReads;
++  private boolean connectToDnViaHostname;
+ 
+   final SocketCache socketCache;
+ 
+@@ -151,10 +152,12 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+ 
+   /** Create {@link ClientDatanodeProtocol} proxy with block/token */
+   static ClientDatanodeProtocol createClientDatanodeProtocolProxy (
+-      DatanodeID datanodeid, Configuration conf, int socketTimeout,
+-      Block block, Token<BlockTokenIdentifier> token) throws IOException {
+-    InetSocketAddress addr = NetUtils.createSocketAddr(
+-      datanodeid.getHost() + ":" + datanodeid.getIpcPort());
++      DatanodeInfo di, Configuration conf, int socketTimeout,
++      Block block, Token<BlockTokenIdentifier> token,
++      boolean connectToDnViaHostname) throws IOException {
++    final String dnName = di.getNameWithIpcPort(connectToDnViaHostname);
++    LOG.debug("Connecting to " + dnName);
++    InetSocketAddress addr = NetUtils.createSocketAddr(dnName);
+     if (ClientDatanodeProtocol.LOG.isDebugEnabled()) {
+       ClientDatanodeProtocol.LOG.info("ClientDatanodeProtocol addr=" + addr);
+     }
+@@ -168,10 +171,11 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         
+   /** Create {@link ClientDatanodeProtocol} proxy using kerberos ticket */
+   static ClientDatanodeProtocol createClientDatanodeProtocolProxy(
+-      DatanodeID datanodeid, Configuration conf, int socketTimeout)
+-      throws IOException {
+-    InetSocketAddress addr = NetUtils.createSocketAddr(
+-      datanodeid.getHost() + ":" + datanodeid.getIpcPort());
++      DatanodeInfo di, Configuration conf, int socketTimeout,
++      boolean connectToDnViaHostname) throws IOException {
++    final String dnName = di.getNameWithIpcPort(connectToDnViaHostname);
++    LOG.debug("Connecting to " + dnName);
++    InetSocketAddress addr = NetUtils.createSocketAddr(dnName);
+     if (ClientDatanodeProtocol.LOG.isDebugEnabled()) {
+       ClientDatanodeProtocol.LOG.info("ClientDatanodeProtocol addr=" + addr);
+     }
+@@ -260,6 +264,12 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     if (LOG.isDebugEnabled()) {
+       LOG.debug("Short circuit read is " + shortCircuitLocalReads);
+     }
++    this.connectToDnViaHostname = conf.getBoolean(
++        DFSConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME,
++        DFSConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME_DEFAULT);
++    if (LOG.isDebugEnabled()) {
++      LOG.debug("Connect to datanode via hostname is " + connectToDnViaHostname);
++    }
+   }
+ 
+   static int getMaxBlockAcquireFailures(Configuration conf) {
+@@ -348,14 +358,14 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+   /**
+    * Get {@link BlockReader} for short circuited local reads.
+    */
+-  private static BlockReader getLocalBlockReader(Configuration conf,
++  private BlockReader getLocalBlockReader(Configuration conf,
+       String src, Block blk, Token<BlockTokenIdentifier> accessToken,
+       DatanodeInfo chosenNode, int socketTimeout, long offsetIntoBlock)
+       throws InvalidToken, IOException {
+     try {
+       return BlockReaderLocal.newBlockReader(conf, src, blk, accessToken,
+           chosenNode, socketTimeout, offsetIntoBlock, blk.getNumBytes()
+-              - offsetIntoBlock);
++              - offsetIntoBlock, connectToDnViaHostname);
+     } catch (RemoteException re) {
+       throw re.unwrapRemoteException(InvalidToken.class,
+           AccessControlException.class);
+@@ -845,7 +855,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+    */
+   MD5MD5CRC32FileChecksum getFileChecksum(String src) throws IOException {
+     checkOpen();
+-    return getFileChecksum(src, namenode, socketFactory, socketTimeout);    
++    return getFileChecksum(src, namenode, socketFactory, socketTimeout, connectToDnViaHostname);    
+   }
+ 
+   /**
+@@ -856,6 +866,12 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+   public static MD5MD5CRC32FileChecksum getFileChecksum(String src,
+       ClientProtocol namenode, SocketFactory socketFactory, int socketTimeout
+       ) throws IOException {
++    return getFileChecksum(src, namenode, socketFactory, socketTimeout, false);
++  }
++
++  private static MD5MD5CRC32FileChecksum getFileChecksum(String src,
++      ClientProtocol namenode, SocketFactory socketFactory, int socketTimeout,
++      boolean connectToDnViaHostname) throws IOException {
+     //get all block locations
+     List<LocatedBlock> locatedblocks
+         = callGetBlockLocations(namenode, src, 0, Long.MAX_VALUE).getLocatedBlocks();
+@@ -884,8 +900,10 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       for(int j = 0; !done && j < datanodes.length; j++) {
+         //connect to a datanode
+         final Socket sock = socketFactory.createSocket();
++        final String dnName = datanodes[j].getName(connectToDnViaHostname);
++        LOG.debug("Connecting to " + dnName);
+         NetUtils.connect(sock, 
+-                         NetUtils.createSocketAddr(datanodes[j].getName()),
++                         NetUtils.createSocketAddr(dnName),
+                          timeout);
+         sock.setSoTimeout(timeout);
+ 
+@@ -897,7 +915,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         // get block MD5
+         try {
+           if (LOG.isDebugEnabled()) {
+-            LOG.debug("write to " + datanodes[j].getName() + ": "
++            LOG.debug("write to " + dnName + ": "
+                 + DataTransferProtocol.OP_BLOCK_CHECKSUM +
+                 ", block=" + block);
+           }
+@@ -915,7 +933,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+               if (LOG.isDebugEnabled()) {
+                 LOG.debug("Got access token error in response to OP_BLOCK_CHECKSUM "
+                     + "for file " + src + " for block " + block
+-                    + " from datanode " + datanodes[j].getName()
++                    + " from datanode " + dnName
+                     + ". Will retry the block once.");
+               }
+               lastRetriedIndex = i;
+@@ -925,7 +943,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+               break;
+             } else {
+               throw new IOException("Bad response " + reply + " for block "
+-                  + block + " from datanode " + datanodes[j].getName());
++                  + block + " from datanode " + dnName);
+             }
+           }
+ 
+@@ -956,12 +974,10 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+               LOG.debug("set bytesPerCRC=" + bytesPerCRC
+                   + ", crcPerBlock=" + crcPerBlock);
+             }
+-            LOG.debug("got reply from " + datanodes[j].getName()
+-                + ": md5=" + md5);
++            LOG.debug("got reply from " + dnName + ": md5=" + md5);
+           }
+         } catch (IOException ie) {
+-          LOG.warn("src=" + src + ", datanodes[" + j + "].getName()="
+-              + datanodes[j].getName(), ie);
++          LOG.warn("src=" + src + ", datanodes[" + j + "]=" + dnName, ie);
+         } finally {
+           IOUtils.closeStream(in);
+           IOUtils.closeStream(out);
+@@ -1322,7 +1338,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     }
+   }
+ 
+-  /** Utility class to encapsulate data node info and its ip address. */
++  /** Utility class to encapsulate data node info and its address. */
+   private static class DNAddrPair {
+     DatanodeInfo info;
+     InetSocketAddress addr;
+@@ -1850,7 +1866,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+           try {
+             primary = createClientDatanodeProtocolProxy(
+               primaryNode, conf, DFSClient.this.socketTimeout,
+-              last.getBlock(), last.getBlockToken());
++              last.getBlock(), last.getBlockToken(), connectToDnViaHostname);
+             Block newBlock = primary.getBlockInfo(last.getBlock());
+             long newBlockSize = newBlock.getNumBytes();
+             long delta = newBlockSize - last.getBlockSize();
+@@ -2208,8 +2224,8 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         DatanodeInfo[] nodes = block.getLocations();
+         try {
+           DatanodeInfo chosenNode = bestNode(nodes, deadNodes);
+-          InetSocketAddress targetAddr = 
+-                            NetUtils.createSocketAddr(chosenNode.getName());
++          InetSocketAddress targetAddr =
++            NetUtils.createSocketAddr(chosenNode.getName(connectToDnViaHostname));
+           return new DNAddrPair(chosenNode, targetAddr);
+         } catch (IOException ie) {
+           String blockInfo = block.getBlock() + " file=" + src;
+@@ -2376,6 +2392,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+           // disaster.
+           sock.setTcpNoDelay(true);
+   
++          LOG.debug("Connecting to " + dnAddr);
+           NetUtils.connect(sock, dnAddr, socketTimeout);
+           sock.setSoTimeout(socketTimeout);
+         }
+@@ -3116,7 +3133,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+           int recoveryTimeout =
+             (newnodes.length * 2 + 2) * DFSClient.this.socketTimeout;
+           primary = createClientDatanodeProtocolProxy(
+-              primaryNode, conf, recoveryTimeout, block, accessToken);
++              primaryNode, conf, recoveryTimeout, block, accessToken, connectToDnViaHostname);
+           newBlock = primary.recoverBlock(block, isAppend, newnodes);
+         } catch (IOException e) {
+           LOG.warn("Failed recovery attempt #" + recoveryErrorCount +
+@@ -3467,8 +3484,9 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       persistBlocks = true;
+ 
+       try {
+-        LOG.debug("Connecting to " + nodes[0].getName());
+-        InetSocketAddress target = NetUtils.createSocketAddr(nodes[0].getName());
++        final String dnName = nodes[0].getName(connectToDnViaHostname);
++        LOG.debug("Connecting to " + dnName);
++        InetSocketAddress target = NetUtils.createSocketAddr(dnName);
+         s = socketFactory.createSocket();
+         int timeoutValue =
+           (socketTimeout > 0) ? (3000 * nodes.length + socketTimeout) : 0;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+index 66a00bb..f9f2288 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+@@ -41,7 +41,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final int     DFS_CLIENT_SOCKET_CACHE_CAPACITY_DEFAULT = 16;
+   public static final String  DFS_CLIENT_CACHED_CONN_RETRY_KEY = "dfs.client.cached.conn.retry";
+   public static final int     DFS_CLIENT_CACHED_CONN_RETRY_DEFAULT = 3;
+-  
++  public static final String  DFS_CLIENT_USE_DN_HOSTNAME = "dfs.client.use.datanode.hostname";
++  public static final boolean DFS_CLIENT_USE_DN_HOSTNAME_DEFAULT = false;
++
+   public static final String  DFS_NAMENODE_BACKUP_ADDRESS_KEY = "dfs.namenode.backup.address";
+   public static final String  DFS_NAMENODE_BACKUP_ADDRESS_DEFAULT = "localhost:50100";
+   public static final String  DFS_NAMENODE_BACKUP_HTTP_ADDRESS_KEY = "dfs.namenode.backup.http-address";
+@@ -59,6 +61,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final boolean DFS_DATANODE_DROP_CACHE_BEHIND_READS_DEFAULT = false;
+   public static final String  DFS_DATANODE_SOCKET_REUSE_KEEPALIVE_KEY = "dfs.datanode.socket.reuse.keepalive";
+   public static final int     DFS_DATANODE_SOCKET_REUSE_KEEPALIVE_DEFAULT = 1000;
++  public static final String  DFS_DATANODE_USE_DN_HOSTNAME = "dfs.datanode.use.datanode.hostname";
++  public static final boolean DFS_DATANODE_USE_DN_HOSTNAME_DEFAULT = false;
+   
+   public static final String  DFS_NAMENODE_HTTP_ADDRESS_KEY = "dfs.namenode.http-address";
+   public static final String  DFS_NAMENODE_HTTP_ADDRESS_DEFAULT = "0.0.0.0:50070";
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/DatanodeID.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/DatanodeID.java
+index c0640f2..b07bae6 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/DatanodeID.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/DatanodeID.java
+@@ -34,10 +34,10 @@ import org.apache.hadoop.io.WritableComparable;
+ public class DatanodeID implements WritableComparable<DatanodeID> {
+   public static final DatanodeID[] EMPTY_ARRAY = {}; 
+ 
+-  public String name;      /// hostname:portNumber
+-  public String storageID; /// unique per cluster storageID
+-  protected int infoPort;     /// the port where the infoserver is running
+-  public int ipcPort;     /// the port where the ipc server is running
++  public String name;       // hostname:port (data transfer port)
++  public String storageID;  // unique per cluster storageID
++  protected int infoPort;   // info server port
++  public int ipcPort;       // ipc server port
+ 
+   /** Equivalent to DatanodeID(""). */
+   public DatanodeID() {this("");}
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/DatanodeInfo.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/DatanodeInfo.java
+index 6830423..42c173e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/DatanodeInfo.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/DatanodeInfo.java
+@@ -162,7 +162,20 @@ public class DatanodeInfo extends DatanodeID implements Node {
+   public void setHostName(String host) {
+     hostName = host;
+   }
+-  
++
++  /** Return hostname:port if requested, ip:port otherwise */
++  public String getName(boolean useHostname) {
++    return useHostname ? getHostName() + ":" + getPort() : getName();
++  }
++
++  /** Return hostname:ipcPort if requested, ip:ipcPort otherwise */
++  public String getNameWithIpcPort(boolean useHostname) {
++    // NB: DatanodeID#getHost returns the IP, ie the name without
++    // the port, not the hostname as the name implies
++    return useHostname ? getHostName() + ":" + getIpcPort()
++                       : getHost() + ":" + getIpcPort();
++  }
++
+   /** A formatted string for reporting the status of the DataNode. */
+   public String getDatanodeReport() {
+     StringBuffer buffer = new StringBuffer();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index a1b7cba..aa94971 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -228,7 +228,8 @@ public class DataNode extends Configured
+ 
+   int writePacketSize = 0;
+   private boolean supportAppends;
+-
++  private boolean connectToDnViaHostname;
++  
+   /**
+    * Testing hook that allows tests to delay the sending of blockReceived
+    * RPCs to the namenode. This can help find bugs in append.
+@@ -436,7 +437,7 @@ public class DataNode extends Configured
+     selfAddr = new InetSocketAddress(ss.getInetAddress().getHostAddress(),
+                                      tmpPort);
+     this.dnRegistration.setName(machineName + ":" + tmpPort);
+-    LOG.info("Opened info server at " + tmpPort);
++    LOG.info("Opened streaming server at " + tmpPort);
+       
+     this.threadGroup = new ThreadGroup("dataXceiverServer");
+     this.dataXceiverServer = new Daemon(threadGroup, 
+@@ -469,6 +470,11 @@ public class DataNode extends Configured
+                reason + ".");
+     }
+ 
++    this.connectToDnViaHostname = conf.getBoolean(
++        DFSConfigKeys.DFS_DATANODE_USE_DN_HOSTNAME,
++        DFSConfigKeys.DFS_DATANODE_USE_DN_HOSTNAME_DEFAULT);
++    LOG.debug("Connect to datanode via hostname is " + connectToDnViaHostname);
++
+     //create a servlet to serve full-file content
+     InetSocketAddress infoSocAddr = DataNode.getInfoAddr(conf);
+     String infoHost = infoSocAddr.getHostName();
+@@ -600,10 +606,10 @@ public class DataNode extends Configured
+   } 
+ 
+   public static InterDatanodeProtocol createInterDataNodeProtocolProxy(
+-      DatanodeID datanodeid, final Configuration conf, final int socketTimeout)
+-    throws IOException {
+-    final InetSocketAddress addr = NetUtils.createSocketAddr(
+-        datanodeid.getHost() + ":" + datanodeid.getIpcPort());
++      DatanodeInfo info, final Configuration conf, final int socketTimeout,
++      boolean connectToDnViaHostname) throws IOException {
++    final String dnName = info.getNameWithIpcPort(connectToDnViaHostname);
++    final InetSocketAddress addr = NetUtils.createSocketAddr(dnName);
+     if (InterDatanodeProtocol.LOG.isDebugEnabled()) {
+       InterDatanodeProtocol.LOG.info("InterDatanodeProtocol addr=" + addr);
+     }
+@@ -1396,9 +1402,10 @@ public class DataNode extends Configured
+       BlockSender blockSender = null;
+       
+       try {
+-        InetSocketAddress curTarget = 
+-          NetUtils.createSocketAddr(targets[0].getName());
++        final String dnName = targets[0].getName(connectToDnViaHostname);
++        InetSocketAddress curTarget = NetUtils.createSocketAddr(dnName);
+         sock = newSocket();
++        LOG.debug("Connecting to " + dnName);
+         NetUtils.connect(sock, curTarget, socketTimeout);
+         sock.setSoTimeout(targets.length * socketTimeout);
+ 
+@@ -1895,7 +1902,6 @@ public class DataNode extends Configured
+   private LocatedBlock recoverBlock(Block block, boolean keepLength,
+       DatanodeInfo[] targets, boolean closeFile) throws IOException {
+ 
+-    DatanodeID[] datanodeids = (DatanodeID[])targets;
+     // If the block is already being recovered, then skip recovering it.
+     // This can happen if the namenode and client start recovering the same
+     // file at the same time.
+@@ -1921,7 +1927,7 @@ public class DataNode extends Configured
+       int rwrCount = 0;
+       
+       List<BlockRecord> blockRecords = new ArrayList<BlockRecord>();
+-      for(DatanodeID id : datanodeids) {
++      for (DatanodeInfo id : targets) {
+         try {
+           InterDatanodeProtocol datanode;
+           if (dnRegistration.getHost().equals(id.getHost()) &&
+@@ -1929,7 +1935,7 @@ public class DataNode extends Configured
+             datanode = this;
+           } else {
+             datanode = DataNode.createInterDataNodeProtocolProxy(id, getConf(),
+-                socketTimeout);
++                socketTimeout, connectToDnViaHostname);
+           }
+           BlockRecoveryInfo info = datanode.startBlockRecovery(block);
+           if (info == null) {
+@@ -1988,7 +1994,7 @@ public class DataNode extends Configured
+ 
+       if (syncList.isEmpty() && errorCount > 0) {
+         throw new IOException("All datanodes failed: block=" + block
+-            + ", datanodeids=" + Arrays.asList(datanodeids));
++            + ", datanodeids=" + Arrays.asList(targets));
+       }
+       if (!keepLength) {
+         block.setNumBytes(minlength);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+index 5aece5f..9a33815 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+@@ -64,7 +64,8 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+   DataXceiverServer dataXceiverServer;
+   
+   private int socketKeepaliveTimeout;
+-  
++  private boolean connectToDnViaHostname;
++
+   public DataXceiver(Socket s, DataNode datanode, 
+       DataXceiverServer dataXceiverServer) {
+     super(datanode.threadGroup, "DataXceiver (initializing)");
+@@ -82,6 +83,10 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+     
+     LOG.debug("Number of active connections is: " + datanode.getXceiverCount());
+     updateThreadName("waiting for handshake");
++    
++    this.connectToDnViaHostname = datanode.getConf().getBoolean(
++        DFSConfigKeys.DFS_DATANODE_USE_DN_HOSTNAME,
++        DFSConfigKeys.DFS_DATANODE_USE_DN_HOSTNAME_DEFAULT);
+   }
+ 
+   /**
+@@ -392,14 +397,16 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+       if (targets.length > 0) {
+         InetSocketAddress mirrorTarget = null;
+         // Connect to backup machine
++        final String dnName = targets[0].getName(connectToDnViaHostname);
+         mirrorNode = targets[0].getName();
+-        mirrorTarget = NetUtils.createSocketAddr(mirrorNode);
++        mirrorTarget = NetUtils.createSocketAddr(dnName);
+         mirrorSock = datanode.newSocket();
+         try {
+           int timeoutValue = datanode.socketTimeout +
+                              (HdfsConstants.READ_TIMEOUT_EXTENSION * numTargets);
+           int writeTimeout = datanode.socketWriteTimeout + 
+                              (HdfsConstants.WRITE_TIMEOUT_EXTENSION * numTargets);
++          LOG.debug("Connecting to " + dnName);
+           NetUtils.connect(mirrorSock, mirrorTarget, timeoutValue);
+           mirrorSock.setSoTimeout(timeoutValue);
+           mirrorSock.setSendBufferSize(DEFAULT_DATA_SOCKET_SIZE);
+@@ -694,9 +701,10 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+     updateThreadName("replacing block " + block + " from " + sourceID);
+     try {
+       // get the output stream to the proxy
+-      InetSocketAddress proxyAddr = NetUtils.createSocketAddr(
+-          proxySource.getName());
++      final String dnName = proxySource.getName(connectToDnViaHostname);
++      InetSocketAddress proxyAddr = NetUtils.createSocketAddr(dnName);
+       proxySock = datanode.newSocket();
++      LOG.debug("Connecting to " + dnName);
+       NetUtils.connect(proxySock, proxyAddr, datanode.socketTimeout);
+       proxySock.setSoTimeout(datanode.socketTimeout);
+ 
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileCreation.java b/src/test/org/apache/hadoop/hdfs/TestFileCreation.java
+index 86baa84..e3a2da1 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileCreation.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileCreation.java
+@@ -170,11 +170,30 @@ public class TestFileCreation extends junit.framework.TestCase {
+     stm.close();
+   }
+ 
++  public void testFileCreation() throws IOException {
++    checkFileCreation(false);
++  }
++
++  public void testFileCreationByHostname() throws IOException {
++    checkFileCreation(true);
++  }
++
+   /**
+    * Test that file data becomes available before file is closed.
++   * @param useDnHostname if clients should access DNs by hostname (vs IP)
+    */
+-  public void testFileCreation() throws IOException {
++  public void checkFileCreation(boolean useDnHostname) throws IOException {
+     Configuration conf = new Configuration();
++
++    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME, useDnHostname);
++    if (useDnHostname) {
++      // Since the mini cluster only listens on the loopback we have to
++      // ensure the hostname used to access DNs maps to the loopback. We
++      // do this by telling the DN to advertise localhost as its hostname
++      // instead of the default hostname.
++      conf.set("slave.host.name", "localhost");
++    }
++
+     if (simulatedStorage) {
+       conf.setBoolean(SimulatedFSDataset.CONFIG_PROPERTY_SIMULATED, true);
+     }
+diff --git a/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery.java b/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery.java
+index c57bc56..116c7e4 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery.java
++++ b/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery.java
+@@ -95,7 +95,7 @@ public class TestLeaseRecovery extends junit.framework.TestCase {
+       InterDatanodeProtocol[] idps = new InterDatanodeProtocol[REPLICATION_NUM];
+       DataNode[] datanodes = new DataNode[REPLICATION_NUM];
+       for(int i = 0; i < REPLICATION_NUM; i++) {
+-        idps[i] = DataNode.createInterDataNodeProtocolProxy(datanodeinfos[i], conf, 0);
++        idps[i] = DataNode.createInterDataNodeProtocolProxy(datanodeinfos[i], conf, 0, false);
+         datanodes[i] = cluster.getDataNode(datanodeinfos[i].getIpcPort());
+         assertTrue(datanodes[i] != null);
+       }
+diff --git a/src/test/org/apache/hadoop/hdfs/TestShortCircuitLocalRead.java b/src/test/org/apache/hadoop/hdfs/TestShortCircuitLocalRead.java
+index 0fe8c7e..e0c63dd 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestShortCircuitLocalRead.java
++++ b/src/test/org/apache/hadoop/hdfs/TestShortCircuitLocalRead.java
+@@ -208,7 +208,7 @@ public class TestShortCircuitLocalRead {
+             @Override
+             public ClientDatanodeProtocol run() throws Exception {
+               return DFSClient.createClientDatanodeProtocolProxy(
+-                  dnInfo, conf, 60000);
++                  dnInfo, conf, 60000, false);
+             }
+           });
+       
+@@ -226,7 +226,7 @@ public class TestShortCircuitLocalRead {
+             @Override
+             public ClientDatanodeProtocol run() throws Exception {
+               return DFSClient.createClientDatanodeProtocolProxy(
+-                  dnInfo, conf, 60000);
++                  dnInfo, conf, 60000, false);
+             }
+           });
+       try {
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestInterDatanodeProtocol.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestInterDatanodeProtocol.java
+index 652cd94..9236eb3 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/datanode/TestInterDatanodeProtocol.java
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestInterDatanodeProtocol.java
+@@ -22,6 +22,7 @@ import java.util.List;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.*;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.hdfs.DFSTestUtil;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.hdfs.DistributedFileSystem;
+@@ -62,15 +63,35 @@ public class TestInterDatanodeProtocol extends junit.framework.TestCase {
+     return blocks.get(blocks.size() - 1);
+   }
+ 
++  /** Test block MD access via a DN */
++  public void testBlockMetaDataInfo() throws Exception {
++    checkBlockMetaDataInfo(false);
++  }
++
++  /** The same as above, but use hostnames for DN<->DN communication */
++  public void testBlockMetaDataInfoWithHostname() throws Exception {
++    checkBlockMetaDataInfo(true);
++  }
++
+   /**
+    * The following test first creates a file.
+    * It verifies the block information from a datanode.
+-   * Then, it updates the block with new information and verifies again. 
++   * Then, it updates the block with new information and verifies again.
++   * @param useDnHostname if DNs should access DNs by hostname (vs IP)
+    */
+-  public void testBlockMetaDataInfo() throws Exception {
++  private void checkBlockMetaDataInfo(boolean useDnHostname) throws Exception {    
+     Configuration conf = new Configuration();
+     MiniDFSCluster cluster = null;
+ 
++    conf.setBoolean(DFSConfigKeys.DFS_DATANODE_USE_DN_HOSTNAME, useDnHostname);
++    if (useDnHostname) {
++      // Since the mini cluster only listens on the loopback we have to
++      // ensure the hostname used to access DNs maps to the loopback. We
++      // do this by telling the DN to advertise localhost as its hostname
++      // instead of the default hostname.
++      conf.set("slave.host.name", "localhost");
++    }
++
+     try {
+       cluster = new MiniDFSCluster(conf, 3, true, null);
+       cluster.waitActive();
+@@ -89,7 +110,7 @@ public class TestInterDatanodeProtocol extends junit.framework.TestCase {
+ 
+       //connect to a data node
+       InterDatanodeProtocol idp = DataNode.createInterDataNodeProtocolProxy(
+-          datanodeinfo[0], conf, 0);
++          datanodeinfo[0], conf, 0, useDnHostname);
+       DataNode datanode = cluster.getDataNode(datanodeinfo[0].getIpcPort());
+       assertTrue(datanode != null);
+       
+-- 
+1.7.0.4
+

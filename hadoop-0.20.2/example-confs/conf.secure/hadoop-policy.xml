@@ -1,0 +1,106 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Put site-specific property overrides in this file. -->
+
+<configuration>
+  <property>
+    <name>security.client.protocol.acl</name>
+    <value>*</value>
+    <description>ACL for ClientProtocol, which is used by user code 
+    via the DistributedFileSystem. 
+    The ACL is a comma-separated list of user and group names. The user and 
+    group list is separated by a blank. For e.g. "alice,bob users,wheel". 
+    A special value of "*" means all users are allowed.</description>
+  </property>
+
+  <property>
+    <name>security.client.datanode.protocol.acl</name>
+    <value>*</value>
+    <description>ACL for ClientDatanodeProtocol, the client-to-datanode protocol 
+    for block recovery.
+    The ACL is a comma-separated list of user and group names. The user and 
+    group list is separated by a blank. For e.g. "alice,bob users,wheel". 
+    A special value of "*" means all users are allowed.</description>
+  </property>
+
+  <property>
+    <name>security.datanode.protocol.acl</name>
+    <value>*</value>
+    <description>ACL for DatanodeProtocol, which is used by datanodes to 
+    communicate with the namenode.
+    The ACL is a comma-separated list of user and group names. The user and 
+    group list is separated by a blank. For e.g. "alice,bob users,wheel". 
+    A special value of "*" means all users are allowed.</description>
+  </property>
+
+  <property>
+    <name>security.inter.datanode.protocol.acl</name>
+    <value>*</value>
+    <description>ACL for InterDatanodeProtocol, the inter-datanode protocol
+    for updating generation timestamp.
+    The ACL is a comma-separated list of user and group names. The user and 
+    group list is separated by a blank. For e.g. "alice,bob users,wheel". 
+    A special value of "*" means all users are allowed.</description>
+  </property>
+
+  <property>
+    <name>security.namenode.protocol.acl</name>
+    <value>*</value>
+    <description>ACL for NamenodeProtocol, the protocol used by the secondary
+    namenode to communicate with the namenode.
+    The ACL is a comma-separated list of user and group names. The user and 
+    group list is separated by a blank. For e.g. "alice,bob users,wheel". 
+    A special value of "*" means all users are allowed.</description>
+  </property>
+
+  <property>
+    <name>security.inter.tracker.protocol.acl</name>
+    <value>*</value>
+    <description>ACL for InterTrackerProtocol, used by the tasktrackers to 
+    communicate with the jobtracker.
+    The ACL is a comma-separated list of user and group names. The user and 
+    group list is separated by a blank. For e.g. "alice,bob users,wheel". 
+    A special value of "*" means all users are allowed.</description>
+  </property>
+
+  <property>
+    <name>security.job.submission.protocol.acl</name>
+    <value>*</value>
+    <description>ACL for JobSubmissionProtocol, used by job clients to 
+    communciate with the jobtracker for job submission, querying job status etc.
+    The ACL is a comma-separated list of user and group names. The user and 
+    group list is separated by a blank. For e.g. "alice,bob users,wheel". 
+    A special value of "*" means all users are allowed.</description>
+  </property>
+
+  <property>
+    <name>security.task.umbilical.protocol.acl</name>
+    <value>*</value>
+    <description>ACL for TaskUmbilicalProtocol, used by the map and reduce 
+    tasks to communicate with the parent tasktracker. 
+    The ACL is a comma-separated list of user and group names. The user and 
+    group list is separated by a blank. For e.g. "alice,bob users,wheel". 
+    A special value of "*" means all users are allowed.</description>
+  </property>
+
+  <property>
+    <name>security.refresh.policy.protocol.acl</name>
+    <value>*</value>
+    <description>ACL for RefreshAuthorizationPolicyProtocol, used by the 
+    dfsadmin and mradmin commands to refresh the security policy in-effect. 
+    The ACL is a comma-separated list of user and group names. The user and 
+    group list is separated by a blank. For e.g. "alice,bob users,wheel". 
+    A special value of "*" means all users are allowed.</description>
+  </property>
+
+  <property>
+    <name>security.admin.operations.protocol.acl</name>
+    <value>*</value>
+    <description>ACL for AdminOperationsProtocol, used by the mradmins commands
+    to refresh queues and nodes at JobTracker. The ACL is a comma-separated list of 
+    user and group names. The user and group list is separated by a blank. 
+    For e.g. "alice,bob users,wheel". A special value of "*" means all users are 
+    allowed.</description>
+  </property>
+</configuration>

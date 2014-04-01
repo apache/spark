@@ -1,0 +1,92 @@
+From d9541f7113f0e678af0819f45876bbcd454b20d5 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 3 Mar 2011 15:19:25 -0800
+Subject: [PATCH 0909/1179] Amend MAPREDUCE-2323. Fix unregistering of fair scheduler metrics updater during fairsched termination
+
+Fixes an occasional test failure where different test cases
+in the same JVM were causing each other to fail.
+
+Author: Todd Lipcon
+Ref: CDH-2677
+---
+ src/contrib/build-contrib.xml                      |    1 +
+ .../org/apache/hadoop/mapred/FairScheduler.java    |   10 +++++++++-
+ .../apache/hadoop/mapred/TestFairScheduler.java    |   15 +++++++++++++--
+ 3 files changed, 23 insertions(+), 3 deletions(-)
+
+diff --git a/src/contrib/build-contrib.xml b/src/contrib/build-contrib.xml
+index 8d52e32..9a5ebe1 100644
+--- a/src/contrib/build-contrib.xml
++++ b/src/contrib/build-contrib.xml
+@@ -300,6 +300,7 @@
+       errorProperty="tests.failed" failureProperty="tests.failed"
+       timeout="${test.timeout}">
+       
++      <assertions><enable/></assertions>
+       <sysproperty key="test.build.data" value="${build.test}/data"/>
+       <sysproperty key="build.test" value="${build.test}"/>
+       <sysproperty key="contrib.name" value="${name}"/>
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+index 756597b..c7f5088 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+@@ -96,6 +96,8 @@ public class FairScheduler extends TaskScheduler {
+   protected long lastHeartbeatTime;  // Time we last ran assignTasks 
+   private long lastPreemptCheckTime; // Time we last ran preemptTasksIfNecessary
+ 
++  private MetricsUpdater metricsUpdater; // responsible for pushing hadoop metrics
++
+   /**
+    * A class for holding per-job scheduler variables. These always contain the
+    * values of the variables at the last update(), and are used along with a
+@@ -231,7 +233,8 @@ public class FairScheduler extends TaskScheduler {
+    */
+   private void initMetrics() {
+     MetricsContext context = MetricsUtil.getContext("fairscheduler");
+-    context.registerUpdater(new MetricsUpdater());
++    metricsUpdater = new MetricsUpdater();
++    context.registerUpdater(metricsUpdater);
+   }
+ 
+   @Override
+@@ -245,6 +248,11 @@ public class FairScheduler extends TaskScheduler {
+       taskTrackerManager.removeJobInProgressListener(eagerInitListener);
+     if (eventLog != null)
+       eventLog.shutdown();
++    if (metricsUpdater != null) {
++      MetricsContext context = MetricsUtil.getContext("fairscheduler");
++      context.unregisterUpdater(metricsUpdater);
++      metricsUpdater = null;
++    }
+   }
+ 
+   /**
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+index 3a56a97..8a927bd 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+@@ -2770,8 +2770,19 @@ public class TestFairScheduler extends TestCase {
+   private void verifyPoolMetrics() {
+     MetricsContext ctx = MetricsUtil.getContext("fairscheduler");
+     Collection<OutputRecord> records = ctx.getAllRecords().get("pools");
+-    assertEquals(scheduler.getPoolSchedulables(TaskType.MAP).size() * 2,
+-        records.size());
++
++    try {
++      assertEquals(scheduler.getPoolSchedulables(TaskType.MAP).size() * 2,
++          records.size());
++    } catch (Error e) {
++      for (OutputRecord rec : records) {
++        System.err.println("record:");
++        System.err.println(" name: " + rec.getTag("name"));
++        System.err.println(" type: " + rec.getTag("type"));
++      }
++
++      throw e;
++    }
+     
+     Map<String, OutputRecord> byPoolAndType =
+       new HashMap<String, OutputRecord>();
+-- 
+1.7.0.4
+

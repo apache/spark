@@ -1,0 +1,189 @@
+From 5fc6261a4c399bcb75bcc7cadf6cdd74f9362bcd Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Mon, 10 Oct 2011 18:02:41 -0700
+Subject: [PATCH 1064/1179] HDFS-2422. The NN should tolerate the same number of low-resource volumes as failed volumes
+
+Reason: Bug
+Author: Aaron T. Myers
+Ref: CDH-3684
+---
+ .../server/namenode/NameNodeResourceChecker.java   |   16 ++++-
+ .../namenode/TestNameNodeResourceChecker.java      |   63 +++++++++++++++-----
+ 2 files changed, 60 insertions(+), 19 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeResourceChecker.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeResourceChecker.java
+index a755ea3..962353f 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeResourceChecker.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNodeResourceChecker.java
+@@ -30,6 +30,8 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.DF;
+ import org.apache.hadoop.hdfs.DFSConfigKeys;
+ 
++//import com.google.common.annotations.VisibleForTesting;
++
+ /**
+  * 
+  * NameNodeResourceChecker provides a method -
+@@ -93,15 +95,16 @@ public class NameNodeResourceChecker {
+   }
+ 
+   /**
+-   * Return true if disk space is available on all all the configured volumes.
++   * Return true if disk space is available on at least one of the configured
++   * volumes.
+    * 
+-   * @return True if the configured amount of disk space is available on all
+-   *         volumes, false otherwise.
++   * @return True if the configured amount of disk space is available on at
++   *         least one volume, false otherwise.
+    * @throws IOException
+    */
+   boolean hasAvailableDiskSpace()
+       throws IOException {
+-    return getVolumesLowOnSpace().size() == 0;
++    return getVolumesLowOnSpace().size() < volumes.size();
+   }
+ 
+   /**
+@@ -129,4 +132,9 @@ public class NameNodeResourceChecker {
+     }
+     return lowVolumes;
+   }
++
++  //@VisibleForTesting
++  void setVolumes(Map<String, DF> volumes) {
++    this.volumes = volumes;
++  }
+ }
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeResourceChecker.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeResourceChecker.java
+index 3294ee1..a6f3b16 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeResourceChecker.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeResourceChecker.java
+@@ -20,6 +20,10 @@ package org.apache.hadoop.hdfs.server.namenode;
+ import java.io.File;
+ import java.io.FileOutputStream;
+ import java.io.IOException;
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.List;
++import java.util.Map;
+ import java.util.Set;
+ 
+ import org.apache.hadoop.conf.Configuration;
+@@ -44,7 +48,7 @@ public class TestNameNodeResourceChecker {
+   @Before
+   public void setUp () throws IOException {
+     conf = new Configuration();
+-    baseDir = new File(conf.get("hadoop.tmp.dir"));
++    baseDir = new File(System.getProperty("test.build.data"));
+     nameDir = new File(baseDir, "resource-check-name-dir");
+     nameDir.mkdirs();
+     conf.set("dfs.name.dir", nameDir.getAbsolutePath());
+@@ -54,8 +58,6 @@ public class TestNameNodeResourceChecker {
+   /**
+    * Tests that hasAvailableDiskSpace returns true if disk usage is below
+    * threshold.
+-   *
+-   * @throws IOException in case of errors
+    */
+   @Test
+   public void testCheckAvailability()
+@@ -71,8 +73,6 @@ public class TestNameNodeResourceChecker {
+   /**
+    * Tests that hasAvailableDiskSpace returns false if disk usage is above
+    * threshold.
+-   * 
+-   * @throws IOException in case of errors
+    */
+   @Test
+   public void testCheckAvailabilityNeg() throws IOException {
+@@ -87,9 +87,6 @@ public class TestNameNodeResourceChecker {
+   /**
+    * Tests that NameNode resource monitor causes the NN to enter safe mode when
+    * resources are low.
+-   * 
+-   * @throws IOException in case of errors
+-   * @throws InterruptedException 
+    */
+   @Test
+   public void testCheckThatNameNodeResourceMonitorIsRunning()
+@@ -142,14 +139,12 @@ public class TestNameNodeResourceChecker {
+   /**
+    * Tests that only a single space check is performed if two name dirs are
+    * supplied which are on the same volume.
+-   * 
+-   * @throws IOException
+    */
+   @Test
+   public void testChecking2NameDirsOnOneVolume() throws IOException {
+     Configuration conf = new Configuration();
+-    File nameDir1 = new File(conf.get("hadoop.tmp.dir", "name-dir1"));
+-    File nameDir2 = new File(conf.get("hadoop.tmp.dir", "name-dir2"));
++    File nameDir1 = new File(System.getProperty("test.build.data"), "name-dir1");
++    File nameDir2 = new File(System.getProperty("test.build.data"), "name-dir2");
+     nameDir1.mkdirs();
+     nameDir2.mkdirs();
+     conf.set("dfs.name.dir",
+@@ -165,13 +160,11 @@ public class TestNameNodeResourceChecker {
+   /**
+    * Tests that only a single space check is performed if extra volumes are
+    * configured manually which also coincide with a volume the name dir is on.
+-   * 
+-   * @throws IOException
+    */
+   @Test
+   public void testCheckingExtraVolumes() throws IOException {
+     Configuration conf = new Configuration();
+-    File nameDir = new File(conf.get("hadoop.tmp.dir", "name-dir"));
++    File nameDir = new File(System.getProperty("test.build.data"), "name-dir");
+     nameDir.mkdirs();
+     conf.set("dfs.name.dir", nameDir.getAbsolutePath());
+     conf.set(DFSConfigKeys.DFS_NAMENODE_CHECKED_VOLUMES_KEY, nameDir.getAbsolutePath());
+@@ -182,4 +175,44 @@ public class TestNameNodeResourceChecker {
+     assertEquals("Should not check the same volume more than once.",
+         1, nb.getVolumesLowOnSpace().size());
+   }
++
++  /**
++   * Test that the NN is considered to be out of resources only once all
++   * configured volumes are low on resources.
++   */
++  @Test
++  public void testLowResourceVolumePolicy() throws IOException {
++    Configuration conf = new Configuration();
++    File nameDir1 = new File(System.getProperty("test.build.data"), "name-dir1");
++    File nameDir2 = new File(System.getProperty("test.build.data"), "name-dir2");
++    nameDir1.mkdirs();
++    nameDir2.mkdirs();
++
++    conf.set("dfs.name.dir",
++        nameDir1.getAbsolutePath() + "," + nameDir2.getAbsolutePath());
++
++    NameNodeResourceChecker nnrc = new NameNodeResourceChecker(conf);
++
++    // For the purpose of this test, we need to force the name dirs to appear to
++    // be on different volumes.
++    Map<String, DF> volumes = new HashMap<String, DF>();
++    volumes.put("volume1", new DF(nameDir1, conf));
++    volumes.put("volume2", new DF(nameDir2, conf));
++    nnrc.setVolumes(volumes);
++
++    NameNodeResourceChecker spyNnrc = Mockito.spy(nnrc);
++
++    List<String> returnedVolumes = new ArrayList<String>();
++    returnedVolumes.add("volume1");
++
++    Mockito.when(spyNnrc.getVolumesLowOnSpace()).thenReturn(returnedVolumes);
++
++    assertTrue(spyNnrc.hasAvailableDiskSpace());
++
++    returnedVolumes.add("volume2");
++
++    Mockito.when(spyNnrc.getVolumesLowOnSpace()).thenReturn(returnedVolumes);
++
++    assertFalse(spyNnrc.hasAvailableDiskSpace());
++  }
+ }
+-- 
+1.7.0.4
+

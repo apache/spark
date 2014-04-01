@@ -1,0 +1,90 @@
+From 912eed1c5d50066e68700d2143b775914d7f8e54 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Thu, 17 Jun 2010 16:00:49 -0700
+Subject: [PATCH 0260/1179] MAPREDUCE-1489. DataDrivenDBInputFormat should not query the database when generating only one split
+
+Description: DataDrivenDBInputFormat runs a query to establish bounding values for each split it
+generates; but if it's going to generate only one split (mapreduce.job.maps == 1), then there's no
+reason to do this. This will remove overhead associated with a single-threaded import of a
+non-indexed table since it avoids a full table scan.
+Reason: Improvement
+Author: Aaron Kimball
+Ref: CDH-1431
+---
+ .../mapreduce/lib/db/DataDrivenDBInputFormat.java  |   10 ++++++++++
+ .../hadoop/mapreduce/lib/db/FloatSplitter.java     |   11 +++++++++++
+ .../hadoop/mapreduce/lib/db/TextSplitter.java      |    2 +-
+ 3 files changed, 22 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DataDrivenDBInputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DataDrivenDBInputFormat.java
+index 836cb99..bbaf469 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DataDrivenDBInputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DataDrivenDBInputFormat.java
+@@ -160,6 +160,16 @@ public class DataDrivenDBInputFormat<T extends DBWritable>
+   /** {@inheritDoc} */
+   public List<InputSplit> getSplits(JobContext job) throws IOException {
+ 
++    int targetNumTasks = job.getConfiguration().getInt("mapred.map.tasks", 1);
++    if (1 == targetNumTasks) {
++      // There's no need to run a bounding vals query; just return a split
++      // that separates nothing. This can be considerably more optimal for a
++      // large table with no index.
++      List<InputSplit> singletonSplit = new ArrayList<InputSplit>();
++      singletonSplit.add(new DataDrivenDBInputSplit("1=1", "1=1"));
++      return singletonSplit;
++    }
++
+     ResultSet results = null;
+     Statement statement = null;
+     try {
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/FloatSplitter.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/FloatSplitter.java
+index dd41b4f..268daaa 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/db/FloatSplitter.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/FloatSplitter.java
+@@ -23,19 +23,30 @@ import java.sql.SQLException;
+ import java.util.ArrayList;
+ import java.util.List;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapreduce.JobContext;
+ 
+ /**
+  * Implement DBSplitter over floating-point values.
+  */
+ public class FloatSplitter implements DBSplitter {
+ 
++  private static final Log LOG = LogFactory.getLog(FloatSplitter.class);
++
+   private static final double MIN_INCREMENT = 10000 * Double.MIN_VALUE;
+ 
+   public List<InputSplit> split(Configuration conf, ResultSet results, String colName)
+       throws SQLException {
+ 
++    LOG.warn("Generating splits for a floating-point index column. Due to the");
++    LOG.warn("imprecise representation of floating-point values in Java, this");
++    LOG.warn("may result in an incomplete import.");
++    LOG.warn("You are strongly encouraged to choose an integral split column.");
++
+     List<InputSplit> splits = new ArrayList<InputSplit>();
+ 
+     if (results.getString(1) == null && results.getString(2) == null) {
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/TextSplitter.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/TextSplitter.java
+index 98dbe20..7d2b6c4 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/db/TextSplitter.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/TextSplitter.java
+@@ -61,7 +61,7 @@ public class TextSplitter extends BigDecimalSplitter {
+     LOG.warn("Generating splits for a textual index column.");
+     LOG.warn("If your database sorts in a case-insensitive order, "
+         + "this may result in a partial import or duplicate records.");
+-    LOG.warn("You are strongly encouraged to choose a numeric split column.");
++    LOG.warn("You are strongly encouraged to choose an integral split column.");
+ 
+     String minString = results.getString(1);
+     String maxString = results.getString(2);
+-- 
+1.7.0.4
+

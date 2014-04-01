@@ -1,0 +1,1168 @@
+From e0afb34b89a013419fca4bdcda5f2cf0401f93ca Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Thu, 17 Jun 2010 19:06:50 -0700
+Subject: [PATCH 0264/1179] MAPREDUCE-1302. TrackerDistributedCacheManager can delete file asynchronously
+
+Description: With the help of AsyncDiskService from MAPREDUCE-1213, we should be able to delete
+files from distributed cache asynchronously. That will help make task initialization faster, because task initialization calls the code that
+localizes files into the cache and may delete some other files.
+The deletion can slow down the task initialization speed.
+Reason: Performance improvement
+Author: Zheng Shao
+Ref: CDH-495
+---
+ .../apache/hadoop/filecache/DistributedCache.java  |   64 +++-
+ .../org/apache/hadoop/util/MRAsyncDiskService.java |  360 ++++++++++++++++++++
+ src/mapred/org/apache/hadoop/mapred/JobConf.java   |    5 +
+ .../org/apache/hadoop/mapred/JobTracker.java       |    2 +-
+ .../org/apache/hadoop/mapred/TaskRunner.java       |    6 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   46 ++-
+ .../hadoop/mapreduce/util/MRAsyncDiskService.java  |  229 -------------
+ .../hadoop/filecache/TestDistributedCache.java     |    4 +-
+ .../apache/hadoop/mapred/TestMiniMRWithDFS.java    |    2 +-
+ .../mapreduce/util/TestMRAsyncDiskService.java     |  137 +++++++-
+ 10 files changed, 582 insertions(+), 273 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/util/MRAsyncDiskService.java
+ delete mode 100644 src/mapred/org/apache/hadoop/mapreduce/util/MRAsyncDiskService.java
+
+diff --git a/src/core/org/apache/hadoop/filecache/DistributedCache.java b/src/core/org/apache/hadoop/filecache/DistributedCache.java
+index ad5f734..74b55e7 100644
+--- a/src/core/org/apache/hadoop/filecache/DistributedCache.java
++++ b/src/core/org/apache/hadoop/filecache/DistributedCache.java
+@@ -152,10 +152,11 @@ public class DistributedCache {
+   public static Path getLocalCache(URI cache, Configuration conf, 
+                                    Path baseDir, FileStatus fileStatus,
+                                    boolean isArchive, long confFileStamp,
+-                                   Path currentWorkDir) 
++                                   Path currentWorkDir,
++                                   MRAsyncDiskService asyncDiskService) 
+   throws IOException {
+     return getLocalCache(cache, conf, baseDir, fileStatus, isArchive, 
+-        confFileStamp, currentWorkDir, true);
++        confFileStamp, currentWorkDir, true, asyncDiskService);
+   }
+   /**
+    * Get the locally cached file or archive; it could either be 
+@@ -188,7 +189,8 @@ public class DistributedCache {
+   public static Path getLocalCache(URI cache, Configuration conf, 
+       Path baseDir, FileStatus fileStatus,
+       boolean isArchive, long confFileStamp,
+-      Path currentWorkDir, boolean honorSymLinkConf) 
++        Path currentWorkDir, boolean honorSymLinkConf,
++        MRAsyncDiskService asyncDiskService) 
+   throws IOException {
+     String cacheId = makeRelative(cache, conf);
+     CacheStatus lcacheStatus;
+@@ -203,7 +205,7 @@ public class DistributedCache {
+ 
+       synchronized (lcacheStatus) {
+         localizedPath = localizeCache(conf, cache, confFileStamp, lcacheStatus, 
+-            fileStatus, isArchive, currentWorkDir, honorSymLinkConf);
++            fileStatus, isArchive, currentWorkDir, honorSymLinkConf, asyncDiskService);
+         lcacheStatus.refcount++;
+       }
+     }
+@@ -220,7 +222,7 @@ public class DistributedCache {
+     long allowedSize = conf.getLong("local.cache.size", DEFAULT_CACHE_SIZE);
+     if (allowedSize < size) {
+       // try some cache deletions
+-      deleteCache(conf);
++      deleteCache(conf, asyncDiskService);
+     }
+     return localizedPath;
+   }
+@@ -253,11 +255,13 @@ public class DistributedCache {
+    */
+   public static Path getLocalCache(URI cache, Configuration conf, 
+                                    Path baseDir, boolean isArchive,
+-                                   long confFileStamp, Path currentWorkDir) 
++                                   long confFileStamp, Path currentWorkDir,
++                                   MRAsyncDiskService asyncDiskService) 
+   throws IOException {
+     return getLocalCache(cache, conf, 
+                          baseDir, null, isArchive,
+-                         confFileStamp, currentWorkDir);
++                         confFileStamp, currentWorkDir,
++                         asyncDiskService);
+   }
+   
+   /**
+@@ -283,7 +287,8 @@ public class DistributedCache {
+   
+   // To delete the caches which have a refcount of zero
+   
+-  private static void deleteCache(Configuration conf) throws IOException {
++  private static void deleteCache(Configuration conf,
++      MRAsyncDiskService asyncDiskService) throws IOException {
+     // try deleting cache Status with refcount of zero
+     synchronized (cachedArchives) {
+       for (Iterator it = cachedArchives.keySet().iterator(); it.hasNext();) {
+@@ -292,7 +297,8 @@ public class DistributedCache {
+         synchronized (lcacheStatus) {
+           if (lcacheStatus.refcount == 0) {
+             // delete this cache entry
+-            FileSystem.getLocal(conf).delete(lcacheStatus.localLoadPath, true);
++            deleteLocalPath(asyncDiskService, FileSystem.getLocal(conf),
++                lcacheStatus.localLoadPath);
+             synchronized (baseDirSize) {
+               Long dirSize = baseDirSize.get(lcacheStatus.baseDir);
+               if ( dirSize != null ) {
+@@ -307,6 +313,30 @@ public class DistributedCache {
+     }
+   }
+ 
++  /**
++   * Delete a local path with asyncDiskService if available,
++   * or otherwise synchronously with local file system.
++   */
++  private static void deleteLocalPath(MRAsyncDiskService asyncDiskService,
++      LocalFileSystem fs, Path path) throws IOException {
++    boolean deleted = false;
++    if (asyncDiskService != null) {
++      // Try to delete using asyncDiskService
++      String localPathToDelete = 
++        path.toUri().getPath();
++      deleted = asyncDiskService.moveAndDeleteAbsolutePath(localPathToDelete);
++      if (!deleted) {
++        LOG.warn("Cannot find DistributedCache path " + localPathToDelete
++            + " on any of the asyncDiskService volumes!");
++      }
++    }
++    if (!deleted) {
++      // If no asyncDiskService, we will delete the files synchronously
++      fs.delete(path, true);
++    }
++    LOG.info("Deleted path " + path);
++  }
++  
+   /*
+    * Returns the relative path of the dir this cache will be localized in
+    * relative path that this cache will be localized in. For
+@@ -344,7 +374,9 @@ public class DistributedCache {
+                                     CacheStatus cacheStatus,
+                                     FileStatus fileStatus,
+                                     boolean isArchive, 
+-                                    Path currentWorkDir,boolean honorSymLinkConf) 
++                                    Path currentWorkDir,
++                                    boolean honorSymLinkConf,
++                                    MRAsyncDiskService asyncDiskService) 
+   throws IOException {
+     boolean doSymlink = honorSymLinkConf && getSymlink(conf);
+     if(cache.getFragment() == null) {
+@@ -380,8 +412,9 @@ public class DistributedCache {
+         throw new IOException("Cache " + cacheStatus.localLoadPath.toString()
+                               + " is in use and cannot be refreshed");
+       
+-      FileSystem localFs = FileSystem.getLocal(conf);
+-      localFs.delete(cacheStatus.localLoadPath, true);
++      LocalFileSystem localFs = FileSystem.getLocal(conf);
++      deleteLocalPath(asyncDiskService, localFs, cacheStatus.localLoadPath);
++      
+       synchronized (baseDirSize) {
+     	Long dirSize = baseDirSize.get(cacheStatus.baseDir);
+     	if ( dirSize != null ) {
+@@ -874,12 +907,13 @@ public class DistributedCache {
+    * should only be used when the server is reinitializing, because the users
+    * are going to lose their files.
+    */
+-  public static void purgeCache(Configuration conf) throws IOException {
++  public static void purgeCache(Configuration conf,
++      MRAsyncDiskService service) throws IOException {
+     synchronized (cachedArchives) {
+-      FileSystem localFs = FileSystem.getLocal(conf);
++      LocalFileSystem localFs = FileSystem.getLocal(conf);
+       for (Map.Entry<String,CacheStatus> f: cachedArchives.entrySet()) {
+         try {
+-          localFs.delete(f.getValue().localLoadPath, true);
++          deleteLocalPath(service, localFs, f.getValue().localLoadPath);
+         } catch (IOException ie) {
+           LOG.debug("Error cleaning up cache", ie);
+         }
+diff --git a/src/core/org/apache/hadoop/util/MRAsyncDiskService.java b/src/core/org/apache/hadoop/util/MRAsyncDiskService.java
+new file mode 100644
+index 0000000..1399549
+--- /dev/null
++++ b/src/core/org/apache/hadoop/util/MRAsyncDiskService.java
+@@ -0,0 +1,360 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.util;
++
++import java.io.FileNotFoundException;
++import java.io.IOException;
++import java.text.SimpleDateFormat;
++import java.util.Date;
++import java.util.List;
++import java.util.concurrent.atomic.AtomicLong;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++
++/**
++ * This class is a container of multiple thread pools, each for a volume,
++ * so that we can schedule async disk operations easily.
++ * 
++ * Examples of async disk operations are deletion of files.
++ * We can move the files to a "toBeDeleted" folder before asychronously
++ * deleting it, to make sure the caller can run it faster.
++ * 
++ * Users should not write files into the "toBeDeleted" folder, otherwise
++ * the files can be gone any time we restart the MRAsyncDiskService.  
++ * 
++ * This class also contains all operations that will be performed by the
++ * thread pools. 
++ */
++public class MRAsyncDiskService {
++  
++  public static final Log LOG = LogFactory.getLog(MRAsyncDiskService.class);
++  
++  AsyncDiskService asyncDiskService;
++  
++  public static final String TOBEDELETED = "toBeDeleted";
++  
++  /**
++   * Create a AsyncDiskServices with a set of volumes (specified by their
++   * root directories).
++   * 
++   * The AsyncDiskServices uses one ThreadPool per volume to do the async
++   * disk operations.
++   * 
++   * @param localFileSystem The localFileSystem used for deletions.
++   * @param volumes The roots of the file system volumes.
++   */
++  public MRAsyncDiskService(FileSystem localFileSystem, String[] volumes)
++      throws IOException {
++    
++    this.volumes = new String[volumes.length];
++    for (int v = 0; v < volumes.length; v++) {
++      this.volumes[v] = normalizePath(volumes[v]);
++    }  
++    this.localFileSystem = localFileSystem;
++    
++    asyncDiskService = new AsyncDiskService(this.volumes);
++    
++    // Create one ThreadPool per volume
++    for (int v = 0 ; v < volumes.length; v++) {
++      // Create the root for file deletion
++      Path absoluteSubdir = new Path(volumes[v], TOBEDELETED);
++      if (!localFileSystem.mkdirs(absoluteSubdir)) {
++        throw new IOException("Cannot create " + TOBEDELETED + " in " + volumes[v]);
++      }
++    }
++    
++    // Create tasks to delete the paths inside the volumes
++    for (int v = 0 ; v < volumes.length; v++) {
++      Path absoluteSubdir = new Path(volumes[v], TOBEDELETED);
++      // List all files inside the volumes
++      FileStatus[] files = localFileSystem.listStatus(absoluteSubdir);
++      for (int f = 0; f < files.length; f++) {
++        // Get the relative file name to the root of the volume
++        String absoluteFilename = files[f].getPath().toUri().getPath();
++        String relative = getRelativePathName(absoluteFilename, volumes[v]);
++        if (relative == null) {
++          // This should never happen
++          throw new IOException("Cannot delete " + absoluteFilename
++              + " because it's outside of " + volumes[v]);
++        }
++        DeleteTask task = new DeleteTask(volumes[v], absoluteFilename,
++            relative);
++        execute(volumes[v], task);
++      }
++    }
++  }
++  
++  /**
++   * Execute the task sometime in the future, using ThreadPools.
++   */
++  synchronized void execute(String root, Runnable task) {
++    asyncDiskService.execute(root, task);
++  }
++  
++  /**
++   * Gracefully start the shut down of all ThreadPools.
++   */
++  public synchronized void shutdown() {
++    asyncDiskService.shutdown();
++  }
++
++  /**
++   * Shut down all ThreadPools immediately.
++   */
++  public synchronized List<Runnable> shutdownNow() {
++    return asyncDiskService.shutdownNow();
++  }
++  
++  /**
++   * Wait for the termination of the thread pools.
++   * 
++   * @param milliseconds  The number of milliseconds to wait
++   * @return   true if all thread pools are terminated within time limit
++   * @throws InterruptedException 
++   */
++  public synchronized boolean awaitTermination(long milliseconds) 
++      throws InterruptedException {
++    boolean result = asyncDiskService.awaitTermination(milliseconds);
++    if (result) {
++      LOG.info("Deleting toBeDeleted directory.");
++      for (int v = 0; v < volumes.length; v++) {
++        Path p = new Path(volumes[v], TOBEDELETED);
++        try {
++          localFileSystem.delete(p, true);
++        } catch (IOException e) {
++          LOG.warn("Cannot cleanup " + p + " " + StringUtils.stringifyException(e));
++        }
++      }
++    }
++    return result;
++  }  
++  
++  private SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss.SSS");
++  
++  private FileSystem localFileSystem;
++  
++  private String[] volumes; 
++                 
++  private static AtomicLong uniqueId = new AtomicLong(0);
++  
++  /** A task for deleting a pathName from a volume.
++   */
++  class DeleteTask implements Runnable {
++
++    /** The volume that the file is on*/
++    String volume;
++    /** The file name before the move */
++    String originalPath;
++    /** The file name after the move */
++    String pathToBeDeleted;
++    
++    /**
++     * Delete a file/directory (recursively if needed).
++     * @param volume        The volume that the file/dir is in.
++     * @param originalPath  The original name, relative to volume root.
++     * @param pathToBeDeleted  The name after the move, relative to volume root,
++     *                         containing TOBEDELETED.
++     */
++    DeleteTask(String volume, String originalPath, String pathToBeDeleted) {
++      this.volume = volume;
++      this.originalPath = originalPath;
++      this.pathToBeDeleted = pathToBeDeleted;
++    }
++    
++    @Override
++    public String toString() {
++      // Called in AsyncDiskService.execute for displaying error messages.
++      return "deletion of " + pathToBeDeleted + " on " + volume
++          + " with original name " + originalPath;
++    }
++
++    @Override
++    public void run() {
++      boolean success = false;
++      Exception e = null;
++      try {
++        Path absolutePathToBeDeleted = new Path(volume, pathToBeDeleted);
++        success = localFileSystem.delete(absolutePathToBeDeleted, true);
++      } catch (Exception ex) {
++        e = ex;
++      }
++      
++      if (!success) {
++        if (e != null) {
++          LOG.warn("Failure in " + this + " with exception "
++              + StringUtils.stringifyException(e));
++        } else {
++          LOG.warn("Failure in " + this);
++        }
++      } else {
++        LOG.debug("Successfully did " + this.toString());
++      }
++    }
++  };
++  
++  
++  /**
++   * Move the path name on one volume to a temporary location and then 
++   * delete them.
++   * 
++   * This functions returns when the moves are done, but not necessarily all
++   * deletions are done. This is usually good enough because applications 
++   * won't see the path name under the old name anyway after the move. 
++   * 
++   * @param volume       The disk volume
++   * @param pathName     The path name relative to volume root.
++   * @throws IOException If the move failed 
++   * @return   false     if the file is not found
++   */
++  public boolean moveAndDeleteRelativePath(String volume, String pathName)
++      throws IOException {
++    
++    volume = normalizePath(volume);
++    
++    // Move the file right now, so that it can be deleted later
++    String newPathName = 
++        format.format(new Date()) + "_" + uniqueId.getAndIncrement();
++    newPathName = TOBEDELETED + Path.SEPARATOR_CHAR + newPathName;
++    
++    Path source = new Path(volume, pathName);
++    Path target = new Path(volume, newPathName); 
++    try {
++      if (!localFileSystem.rename(source, target)) {
++        // Try to recreate the parent directory just in case it gets deleted.
++        if (!localFileSystem.mkdirs(new Path(volume, TOBEDELETED))) {
++          throw new IOException("Cannot create " + TOBEDELETED + " under "
++              + volume);
++        }
++        // Try rename again. If it fails, return false.
++        if (!localFileSystem.rename(source, target)) {
++          throw new IOException("Cannot rename " + source + " to "
++              + target);
++        }
++      }
++    } catch (FileNotFoundException e) {
++      // Return false in case that the file is not found.  
++      return false;
++    }
++
++    DeleteTask task = new DeleteTask(volume, pathName, newPathName);
++    execute(volume, task);
++    return true;
++  }
++
++  /**
++   * Move the path name on each volume to a temporary location and then 
++   * delete them.
++   * 
++   * This functions returns when the moves are done, but not necessarily all
++   * deletions are done. This is usually good enough because applications 
++   * won't see the path name under the old name anyway after the move. 
++   * 
++   * @param pathName     The path name relative to each volume root
++   * @throws IOException If any of the move failed 
++   * @return   false     If any of the target pathName did not exist,
++   *                     note that the operation is still done on all volumes.
++   */
++  public boolean moveAndDeleteFromEachVolume(String pathName) throws IOException {
++    boolean result = true; 
++    for (int i = 0; i < volumes.length; i++) {
++      result = result && moveAndDeleteRelativePath(volumes[i], pathName);
++    }
++    return result;
++  }
++
++  /**
++   * Move all files/directories inside volume into TOBEDELETED, and then
++   * delete them.  The TOBEDELETED directory itself is ignored.
++   */
++  public void cleanupAllVolumes() throws IOException {
++    for (int v = 0; v < volumes.length; v++) {
++      // List all files inside the volumes
++      FileStatus[] files = localFileSystem.listStatus(new Path(volumes[v]));
++      for (int f = 0; f < files.length; f++) {
++        // Get the file name - the last component of the Path
++        String entryName = files[f].getPath().getName();
++        // Do not delete the current TOBEDELETED
++        if (!TOBEDELETED.equals(entryName)) {
++          moveAndDeleteRelativePath(volumes[v], entryName);
++        }
++      }
++    }
++  }
++  
++  /**
++   * Returns the normalized path of a path.
++   */
++  private static String normalizePath(String path) {
++    return (new Path(path)).toUri().getPath();
++  }
++  
++  /**
++   * Get the relative path name with respect to the root of the volume.
++   * @param absolutePathName The absolute path name
++   * @param volume Root of the volume.
++   * @return null if the absolute path name is outside of the volume.
++   */
++  private static String getRelativePathName(String absolutePathName,
++      String volume) {
++    
++    absolutePathName = normalizePath(absolutePathName);
++    // Get the file names
++    if (!absolutePathName.startsWith(volume)) {
++      return null;
++    }
++    // Get rid of the volume prefix
++    String fileName = absolutePathName.substring(volume.length());
++    if (fileName.charAt(0) == Path.SEPARATOR_CHAR) {
++      fileName = fileName.substring(1);
++    }
++    return fileName;
++  }
++  
++  /**
++   * Move the path name to a temporary location and then delete it.
++   * 
++   * Note that if there is no volume that contains this path, the path
++   * will stay as it is, and the function will return false.
++   *  
++   * This functions returns when the moves are done, but not necessarily all
++   * deletions are done. This is usually good enough because applications 
++   * won't see the path name under the old name anyway after the move. 
++   * 
++   * @param absolutePathName    The path name from root "/"
++   * @throws IOException        If the move failed
++   * @return   false if we are unable to move the path name
++   */
++  public boolean moveAndDeleteAbsolutePath(String absolutePathName)
++      throws IOException {
++    
++    for (int v = 0; v < volumes.length; v++) {
++      String relative = getRelativePathName(absolutePathName, volumes[v]);
++      if (relative != null) {
++        return moveAndDeleteRelativePath(volumes[v], relative);
++      }
++    }
++    
++    throw new IOException("Cannot delete " + absolutePathName
++        + " because it's outside of all volumes.");
++  }
++  
++}
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobConf.java b/src/mapred/org/apache/hadoop/mapred/JobConf.java
+index fea26dd..3d43725 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobConf.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobConf.java
+@@ -271,6 +271,11 @@ public class JobConf extends Configuration {
+     return getTrimmedStrings("mapred.local.dir");
+   }
+ 
++  /**
++   * Use MRAsyncDiskService.moveAndDeleteAllVolumes instead.
++   * @see org.apache.hadoop.util.MRAsyncDiskService#cleanupAllVolumes()
++   */
++  @Deprecated
+   public void deleteLocalFiles() throws IOException {
+     String[] localDirs = getLocalDirs();
+     for (int i = 0; i < localDirs.length; i++) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 8687739..1ab9941 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -79,11 +79,11 @@ import org.apache.hadoop.security.authorize.PolicyProvider;
+ import org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol;
+ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+ import org.apache.hadoop.util.HostsFileReader;
++import org.apache.hadoop.util.MRAsyncDiskService;
+ import org.apache.hadoop.util.PluginDispatcher;
+ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.VersionInfo;
+-import org.apache.hadoop.mapreduce.util.MRAsyncDiskService;
+ 
+ /*******************************************************
+  * JobTracker is the central location for submitting and 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+index ee14b90..11cd7b8 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskRunner.java
+@@ -151,7 +151,8 @@ abstract class TaskRunner extends Thread {
+                                                         archivesTimestamps[i]),
+                                                   new Path(workDir.
+                                                         getAbsolutePath()), 
+-                                                  false);
++                                                  false,
++                                                  tracker.getAsyncDiskService());
+             
+           }
+           DistributedCache.setLocalArchives(conf, stringifyPathArray(p));
+@@ -177,7 +178,8 @@ abstract class TaskRunner extends Thread {
+                                                            fileTimestamps[i]),
+                                                   new Path(workDir.
+                                                         getAbsolutePath()), 
+-                                                  false);
++                                                  false,
++                                                  tracker.getAsyncDiskService());
+           }
+           DistributedCache.setLocalFiles(conf, stringifyPathArray(p));
+         }
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 3bb47e9..f2d6622 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -79,6 +79,7 @@ import org.apache.hadoop.security.authorize.ConfiguredPolicy;
+ import org.apache.hadoop.security.authorize.PolicyProvider;
+ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+ import org.apache.hadoop.util.DiskChecker;
++import org.apache.hadoop.util.MRAsyncDiskService;
+ import org.apache.hadoop.util.MemoryCalculatorPlugin;
+ import org.apache.hadoop.util.ProcfsBasedProcessTree;
+ import org.apache.hadoop.util.ReflectionUtils;
+@@ -87,7 +88,6 @@ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.VersionInfo;
+ import org.apache.hadoop.util.DiskChecker.DiskErrorException;
+ import org.apache.hadoop.util.Shell.ShellCommandExecutor;
+-import org.apache.hadoop.mapreduce.util.MRAsyncDiskService;
+ 
+ /*******************************************************
+  * TaskTracker is a process that starts and tracks MR Tasks
+@@ -440,10 +440,12 @@ public class TaskTracker
+        fConf.get("mapred.tasktracker.dns.nameserver","default"));
+     }
+  
+-    //check local disk and start async disk service
++    // Check local disk, start async disk service, and clean up all 
++    // local directories.
+     checkLocalDirs(this.fConf.getLocalDirs());
+-    asyncDiskService = new MRAsyncDiskService(FileSystem.getLocal(fConf), fConf.getLocalDirs());
+-    asyncDiskService.moveAndDeleteFromEachVolume(SUBDIR);
++    asyncDiskService = new MRAsyncDiskService(FileSystem.getLocal(fConf),
++        fConf.getLocalDirs());
++    asyncDiskService.cleanupAllVolumes();
+ 
+     // Clear out state tables
+     this.tasks.clear();
+@@ -512,10 +514,6 @@ public class TaskTracker
+     this.taskTrackerName = "tracker_" + localHostname + ":" + taskReportAddress;
+     LOG.info("Starting tracker " + taskTrackerName);
+ 
+-    // Clear out temporary files that might be lying around
+-    DistributedCache.purgeCache(this.fConf);
+-    cleanupStorage();
+-
+     this.jobClient = (InterTrackerProtocol) 
+       RPC.waitForProxy(InterTrackerProtocol.class,
+                        InterTrackerProtocol.versionID, 
+@@ -552,10 +550,14 @@ public class TaskTracker
+         t, TaskTrackerInstrumentation.class);
+   }
+   
+-  /** 
+-   * Removes all contents of temporary storage.  Called upon 
++  /**
++   * Removes all contents of temporary storage.  Called upon
+    * startup, to remove any leftovers from previous run.
++   * 
++   * Use MRAsyncDiskService.moveAndDeleteAllVolumes instead.
++   * @see org.apache.hadoop.util.MRAsyncDiskService#cleanupAllVolumes()
+    */
++  @Deprecated
+   public void cleanupStorage() throws IOException {
+     this.fConf.deleteLocalFiles();
+   }
+@@ -872,7 +874,22 @@ public class TaskTracker
+     this.running = false;
+         
+     // Clear local storage
+-    cleanupStorage();
++    if (asyncDiskService != null) {
++      // Clear local storage
++      asyncDiskService.cleanupAllVolumes();
++      
++      // Shutdown all async deletion threads with up to 10 seconds of delay
++      asyncDiskService.shutdown();
++      try {
++        if (!asyncDiskService.awaitTermination(10000)) {
++          asyncDiskService.shutdownNow();
++          asyncDiskService = null;
++        }
++      } catch (InterruptedException e) {
++        asyncDiskService.shutdownNow();
++        asyncDiskService = null;
++      }
++    }
+         
+     // Shutdown the fetcher thread
+     this.mapEventsFetcher.interrupt();
+@@ -1265,6 +1282,13 @@ public class TaskTracker
+   }
+ 
+   /**
++   * Returns the MRAsyncDiskService object for async deletions.
++   */
++  public MRAsyncDiskService getAsyncDiskService() {
++    return asyncDiskService;
++  }
++  
++  /**
+    * Return the total virtual memory available on this TaskTracker.
+    * @return total size of virtual memory.
+    */
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/util/MRAsyncDiskService.java b/src/mapred/org/apache/hadoop/mapreduce/util/MRAsyncDiskService.java
+deleted file mode 100644
+index a974f07..0000000
+--- a/src/mapred/org/apache/hadoop/mapreduce/util/MRAsyncDiskService.java
++++ /dev/null
+@@ -1,229 +0,0 @@
+-/**
+- * Licensed to the Apache Software Foundation (ASF) under one
+- * or more contributor license agreements.  See the NOTICE file
+- * distributed with this work for additional information
+- * regarding copyright ownership.  The ASF licenses this file
+- * to you under the Apache License, Version 2.0 (the
+- * "License"); you may not use this file except in compliance
+- * with the License.  You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.apache.hadoop.mapreduce.util;
+-
+-import java.io.FileNotFoundException;
+-import java.io.IOException;
+-import java.text.SimpleDateFormat;
+-import java.util.Date;
+-import java.util.List;
+-
+-import org.apache.commons.logging.Log;
+-import org.apache.commons.logging.LogFactory;
+-import org.apache.hadoop.fs.FileSystem;
+-import org.apache.hadoop.fs.Path;
+-import org.apache.hadoop.util.AsyncDiskService;
+-import org.apache.hadoop.util.StringUtils;
+-
+-/*
+- * This class is a container of multiple thread pools, each for a volume,
+- * so that we can schedule async disk operations easily.
+- * 
+- * Examples of async disk operations are deletion of files.
+- * We can move the files to a "TO_BE_DELETED" folder before asychronously
+- * deleting it, to make sure the caller can run it faster.
+- * 
+- * This class also contains all operations that will be performed by the
+- * thread pools. 
+- */
+-public class MRAsyncDiskService {
+-  
+-  public static final Log LOG = LogFactory.getLog(MRAsyncDiskService.class);
+-  
+-  AsyncDiskService asyncDiskService;
+-  
+-  /**
+-   * Create a AsyncDiskServices with a set of volumes (specified by their
+-   * root directories).
+-   * 
+-   * The AsyncDiskServices uses one ThreadPool per volume to do the async
+-   * disk operations.
+-   * 
+-   * @param localFileSystem The localFileSystem used for deletions.
+-   * @param volumes The roots of the file system volumes.
+-   */
+-  public MRAsyncDiskService(FileSystem localFileSystem, String[] volumes) throws IOException {
+-    
+-    asyncDiskService = new AsyncDiskService(volumes);
+-    
+-    this.localFileSystem = localFileSystem;
+-    this.volumes = volumes;
+-    
+-    // Create one ThreadPool per volume
+-    for (int v = 0 ; v < volumes.length; v++) {
+-      // Create the root for file deletion
+-      if (!localFileSystem.mkdirs(new Path(volumes[v], SUBDIR))) {
+-        throw new IOException("Cannot create " + SUBDIR + " in " + volumes[v]);
+-      }
+-    }
+-    
+-  }
+-  
+-  /**
+-   * Execute the task sometime in the future, using ThreadPools.
+-   */
+-  synchronized void execute(String root, Runnable task) {
+-    asyncDiskService.execute(root, task);
+-  }
+-  
+-  /**
+-   * Gracefully start the shut down of all ThreadPools.
+-   */
+-  synchronized void shutdown() {
+-    asyncDiskService.shutdown();
+-  }
+-
+-  /**
+-   * Shut down all ThreadPools immediately.
+-   */
+-  public synchronized List<Runnable> shutdownNow() {
+-    return asyncDiskService.shutdownNow();
+-  }
+-  
+-  /**
+-   * Wait for the termination of the thread pools.
+-   * 
+-   * @param milliseconds  The number of milliseconds to wait
+-   * @return   true if all thread pools are terminated without time limit
+-   * @throws InterruptedException 
+-   */
+-  public synchronized boolean awaitTermination(long milliseconds) 
+-      throws InterruptedException {
+-    return asyncDiskService.awaitTermination(milliseconds);
+-  }
+-  
+-  public static final String SUBDIR = "toBeDeleted";
+-  
+-  private SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss.SSS");
+-  
+-  private FileSystem localFileSystem;
+-  
+-  private String[] volumes; 
+-                 
+-  private int uniqueId = 0;
+-  
+-  /** A task for deleting a pathName from a volume.
+-   */
+-  class DeleteTask implements Runnable {
+-
+-    /** The volume that the file is on*/
+-    String volume;
+-    /** The file name before the move */
+-    String originalPath;
+-    /** The file name after the move */
+-    String pathToBeDeleted;
+-    
+-    /**
+-     * Delete a file/directory (recursively if needed).
+-     * @param volume        The volume that the file/dir is in.
+-     * @param originalPath  The original name, relative to volume root.
+-     * @param pathToBeDeleted  The name after the move, relative to volume root,
+-     *                         containing SUBDIR.
+-     */
+-    DeleteTask(String volume, String originalPath, String pathToBeDeleted) {
+-      this.volume = volume;
+-      this.originalPath = originalPath;
+-      this.pathToBeDeleted = pathToBeDeleted;
+-    }
+-    
+-    @Override
+-    public String toString() {
+-      // Called in AsyncDiskService.execute for displaying error messages.
+-      return "deletion of " + pathToBeDeleted + " on " + volume
+-          + " with original name " + originalPath;
+-    }
+-
+-    @Override
+-    public void run() {
+-      boolean success = false;
+-      Exception e = null;
+-      try {
+-        Path absolutePathToBeDeleted = new Path(volume, pathToBeDeleted);
+-        success = localFileSystem.delete(absolutePathToBeDeleted, true);
+-      } catch (Exception ex) {
+-        e = ex;
+-      }
+-      
+-      if (!success) {
+-        if (e != null) {
+-          LOG.warn("Failure in " + this + " with exception " + StringUtils.stringifyException(e));
+-        } else {
+-          LOG.warn("Failure in " + this);
+-        }
+-      } else {
+-        LOG.debug("Successfully did " + this.toString());
+-      }
+-    }
+-  };
+-  
+-  
+-  /**
+-   * Move the path name on one volume to a temporary location and then 
+-   * delete them.
+-   * 
+-   * This functions returns when the moves are done, but not necessarily all
+-   * deletions are done. This is usually good enough because applications 
+-   * won't see the path name under the old name anyway after the move. 
+-   * 
+-   * @param volume       The disk volume
+-   * @param pathName     The path name relative to volume.
+-   * @throws IOException If the move failed 
+-   */
+-  public boolean moveAndDelete(String volume, String pathName) throws IOException {
+-    // Move the file right now, so that it can be deleted later
+-    String newPathName;
+-    synchronized (this) {
+-      newPathName = format.format(new Date()) + "_" + uniqueId;
+-      uniqueId ++;
+-    }
+-    newPathName = SUBDIR + Path.SEPARATOR_CHAR + newPathName;
+-    
+-    Path source = new Path(volume, pathName);
+-    Path target = new Path(volume, newPathName); 
+-    try {
+-      if (!localFileSystem.rename(source, target)) {
+-        return false;
+-      }
+-    } catch (FileNotFoundException e) {
+-      // Return false in case that the file is not found.  
+-      return false;
+-    }
+-
+-    DeleteTask task = new DeleteTask(volume, pathName, newPathName);
+-    execute(volume, task);
+-    return true;
+-  }
+-
+-  /**
+-   * Move the path name on each volume to a temporary location and then 
+-   * delete them.
+-   * 
+-   * This functions returns when the moves are done, but not necessarily all
+-   * deletions are done. This is usually good enough because applications 
+-   * won't see the path name under the old name anyway after the move. 
+-   * 
+-   * @param pathName     The path name on each volume.
+-   * @throws IOException If the move failed 
+-   */
+-  public void moveAndDeleteFromEachVolume(String pathName) throws IOException {
+-    for (int i = 0; i < volumes.length; i++) {
+-      moveAndDelete(volumes[i], pathName);
+-    }
+-  }
+-  
+-}
+diff --git a/src/test/org/apache/hadoop/filecache/TestDistributedCache.java b/src/test/org/apache/hadoop/filecache/TestDistributedCache.java
+index 2da7f0b..e021e01 100644
+--- a/src/test/org/apache/hadoop/filecache/TestDistributedCache.java
++++ b/src/test/org/apache/hadoop/filecache/TestDistributedCache.java
+@@ -44,13 +44,13 @@ public class TestDistributedCache extends TestCase {
+   /** test delete cache */
+   public void testDeleteCache() throws Exception {
+     DistributedCache.getLocalCache(firstCacheFile.toUri(), conf, new Path(TEST_CACHE_BASE_DIR), 
+-        false, System.currentTimeMillis(), new Path(TEST_ROOT_DIR));
++        false, System.currentTimeMillis(), new Path(TEST_ROOT_DIR), null);
+     DistributedCache.releaseCache(firstCacheFile.toUri(), conf);
+     //in above code,localized a file of size 4K and then release the cache which will cause the cache 
+     //be deleted when the limit goes out. The below code localize another cache which's designed to 
+     //sweep away the first cache.
+     DistributedCache.getLocalCache(secondCacheFile.toUri(), conf, new Path(TEST_CACHE_BASE_DIR), 
+-        false, System.currentTimeMillis(), new Path(TEST_ROOT_DIR));
++        false, System.currentTimeMillis(), new Path(TEST_ROOT_DIR), null);
+     FileStatus[] dirStatuses = localfs.listStatus(new Path(TEST_CACHE_BASE_DIR));
+     assertTrue("DistributedCache failed deleting old cache when the cache store is full.",
+         dirStatuses.length > 1);
+diff --git a/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFS.java b/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFS.java
+index 37bdb4a..75c5cd0 100644
+--- a/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFS.java
++++ b/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFS.java
+@@ -149,7 +149,7 @@ public class TestMiniMRWithDFS extends TestCase {
+       }
+       for(int fileIdx = 0; fileIdx < contents.length; ++fileIdx) {
+         String name = contents[fileIdx];
+-        if (!("taskTracker".equals(contents[fileIdx]))) {
++        if (!("taskTracker".equals(name)) && !("toBeDeleted".equals(name))) {
+           LOG.debug("Looking at " + name);
+           assertTrue("Spurious directory " + name + " found in " +
+                      localDir, false);
+diff --git a/src/test/org/apache/hadoop/mapreduce/util/TestMRAsyncDiskService.java b/src/test/org/apache/hadoop/mapreduce/util/TestMRAsyncDiskService.java
+index 90d030f..d613b54 100644
+--- a/src/test/org/apache/hadoop/mapreduce/util/TestMRAsyncDiskService.java
++++ b/src/test/org/apache/hadoop/mapreduce/util/TestMRAsyncDiskService.java
+@@ -18,11 +18,13 @@
+ package org.apache.hadoop.mapreduce.util;
+ 
+ import java.io.File;
++import java.io.IOException;
++
+ import junit.framework.TestCase;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+-import org.apache.hadoop.mapreduce.util.MRAsyncDiskService;
++import org.apache.hadoop.util.MRAsyncDiskService;
+ 
+ /**
+  * A test for MRAsyncDiskService.
+@@ -33,9 +35,8 @@ public class TestMRAsyncDiskService extends TestCase {
+       "test.build.data", "/tmp")).toString();
+ 
+   /**
+-   * This test creates one empty directory, and one directory with content, 
+-   * and then removes them through MRAsyncDiskService. 
+-   * @throws Throwable
++   * This test creates some directories and then removes them through 
++   * MRAsyncDiskService. 
+    */
+   public void testMRAsyncDiskService() throws Throwable {
+   
+@@ -48,27 +49,137 @@ public class TestMRAsyncDiskService extends TestCase {
+     String a = "a";
+     String b = "b";
+     String c = "b/c";
++    String d = "d";
+     
+     File fa = new File(vols[0], a);
+     File fb = new File(vols[1], b);
+     File fc = new File(vols[1], c);
++    File fd = new File(vols[1], d);
+     
+     // Create the directories
+     fa.mkdirs();
+     fb.mkdirs();
+     fc.mkdirs();
++    fd.mkdirs();
+     
+     assertTrue(fa.exists());
+     assertTrue(fb.exists());
+     assertTrue(fc.exists());
++    assertTrue(fd.exists());
+     
+     // Move and delete them
+-    service.moveAndDelete(vols[0], a);
++    service.moveAndDeleteRelativePath(vols[0], a);
+     assertFalse(fa.exists());
+-    service.moveAndDelete(vols[1], b);
++    service.moveAndDeleteRelativePath(vols[1], b);
+     assertFalse(fb.exists());
+     assertFalse(fc.exists());
+     
++    // asyncDiskService is NOT able to delete files outside all volumes.
++    IOException ee = null;
++    try {
++      service.moveAndDeleteAbsolutePath(TEST_ROOT_DIR + "/2");
++    } catch (IOException e) {
++      ee = e;
++    }
++    assertNotNull("asyncDiskService should not be able to delete files "
++        + "outside all volumes", ee);
++    // asyncDiskService is able to automatically find the file in one
++    // of the volumes.
++    assertTrue(service.moveAndDeleteAbsolutePath(vols[1] + Path.SEPARATOR_CHAR + d));
++    
++    // Make sure everything is cleaned up
++    makeSureCleanedUp(vols, service);
++  }
++
++  /**
++   * This test creates some directories inside the volume roots, and then 
++   * call asyncDiskService.MoveAndDeleteAllVolumes.
++   * We should be able to delete all files/dirs inside the volumes except
++   * the toBeDeleted directory.
++   */
++  public void testMRAsyncDiskServiceMoveAndDeleteAllVolumes() throws Throwable {
++    FileSystem localFileSystem = FileSystem.getLocal(new Configuration());
++    String[] vols = new String[]{TEST_ROOT_DIR + "/0",
++        TEST_ROOT_DIR + "/1"};
++    MRAsyncDiskService service = new MRAsyncDiskService(
++        localFileSystem, vols);
++
++    String a = "a";
++    String b = "b";
++    String c = "b/c";
++    String d = "d";
++    
++    File fa = new File(vols[0], a);
++    File fb = new File(vols[1], b);
++    File fc = new File(vols[1], c);
++    File fd = new File(vols[1], d);
++    
++    // Create the directories
++    fa.mkdirs();
++    fb.mkdirs();
++    fc.mkdirs();
++    fd.mkdirs();
++
++    assertTrue(fa.exists());
++    assertTrue(fb.exists());
++    assertTrue(fc.exists());
++    assertTrue(fd.exists());
++    
++    // Delete all of them
++    service.cleanupAllVolumes();
++    
++    assertFalse(fa.exists());
++    assertFalse(fb.exists());
++    assertFalse(fc.exists());
++    assertFalse(fd.exists());
++    
++    // Make sure everything is cleaned up
++    makeSureCleanedUp(vols, service);
++  }
++  
++  /**
++   * This test creates some directories inside the toBeDeleted directory and
++   * then start the asyncDiskService.
++   * AsyncDiskService will create tasks to delete the content inside the
++   * toBeDeleted directories.
++   */
++  public void testMRAsyncDiskServiceStartupCleaning() throws Throwable {
++    FileSystem localFileSystem = FileSystem.getLocal(new Configuration());
++    String[] vols = new String[]{TEST_ROOT_DIR + "/0",
++        TEST_ROOT_DIR + "/1"};
++
++    String a = "a";
++    String b = "b";
++    String c = "b/c";
++    String d = "d";
++    
++    // Create directories inside SUBDIR
++    File fa = new File(vols[0] + Path.SEPARATOR_CHAR + MRAsyncDiskService.TOBEDELETED, a);
++    File fb = new File(vols[1] + Path.SEPARATOR_CHAR + MRAsyncDiskService.TOBEDELETED, b);
++    File fc = new File(vols[1] + Path.SEPARATOR_CHAR + MRAsyncDiskService.TOBEDELETED, c);
++    File fd = new File(vols[1] + Path.SEPARATOR_CHAR + MRAsyncDiskService.TOBEDELETED, d);
++    
++    // Create the directories
++    fa.mkdirs();
++    fb.mkdirs();
++    fc.mkdirs();
++    fd.mkdirs();
++
++    assertTrue(fa.exists());
++    assertTrue(fb.exists());
++    assertTrue(fc.exists());
++    assertTrue(fd.exists());
++    
++    // Create the asyncDiskService which will delete all contents inside SUBDIR
++    MRAsyncDiskService service = new MRAsyncDiskService(
++        localFileSystem, vols);
++    
++    // Make sure everything is cleaned up
++    makeSureCleanedUp(vols, service);
++  }
++  
++  private void makeSureCleanedUp(String[] vols, MRAsyncDiskService service)
++      throws Throwable {
+     // Sleep at most 5 seconds to make sure the deleted items are all gone.
+     service.shutdown();
+     if (!service.awaitTermination(5000)) {
+@@ -76,12 +187,14 @@ public class TestMRAsyncDiskService extends TestCase {
+     }
+     
+     // All contents should be gone by now.
+-    for (int i = 0; i < 2; i++) {
+-      File toBeDeletedDir = new File(vols[0], MRAsyncDiskService.SUBDIR);
+-      String[] content = toBeDeletedDir.list();
+-      assertNotNull("Cannot find " + toBeDeletedDir, content);
+-      assertEquals("" + toBeDeletedDir + " should be empty now.", 
+-          0, content.length);
++    for (int i = 0; i < vols.length; i++) {
++      File subDir = new File(vols[i]);
++      String[] subDirContent = subDir.list();
++      // 0.20 version of MRAsyncDiskService deletes toBeDeleted/ after
++      // shutdown, so we should not see any children in any volume.
++      assertEquals("Volume should contain no children: "
++          + MRAsyncDiskService.TOBEDELETED, 0, subDirContent.length);
+     }
+   }
++    
+ }
+-- 
+1.7.0.4
+

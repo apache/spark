@@ -1,0 +1,444 @@
+From 542f37d8c93b1cae42aec29789068d27bc2330fb Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 9 Feb 2010 12:07:45 +0530
+Subject: [PATCH 0466/1179] HADOOP-5879. GzipCodec should read compression level etc from configuration
+
+Patch: http://issues.apache.org/jira/secure/attachment/12435254/hadoop-5879-yahoo-0.20-v1.0.patch
+Author: He Yongqiang
+Ref: YDH
+---
+ .../org/apache/hadoop/io/compress/CodecPool.java   |    9 +++-
+ .../org/apache/hadoop/io/compress/Compressor.java  |   12 +++-
+ .../org/apache/hadoop/io/compress/GzipCodec.java   |   12 +++-
+ .../io/compress/bzip2/BZip2DummyCompressor.java    |    6 ++
+ .../io/compress/zlib/BuiltInZlibDeflater.java      |   28 ++++++++
+ .../hadoop/io/compress/zlib/ZlibCompressor.java    |   67 +++++++++++++++-----
+ .../hadoop/io/compress/zlib/ZlibFactory.java       |   24 +++++++-
+ .../org/apache/hadoop/io/compress/TestCodec.java   |   60 +++++++++++++++++
+ 8 files changed, 199 insertions(+), 19 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/io/compress/CodecPool.java b/src/core/org/apache/hadoop/io/compress/CodecPool.java
+index 8960b41..dbf1f15 100644
+--- a/src/core/org/apache/hadoop/io/compress/CodecPool.java
++++ b/src/core/org/apache/hadoop/io/compress/CodecPool.java
+@@ -24,6 +24,7 @@ import java.util.Map;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.util.ReflectionUtils;
+ 
+ /**
+@@ -91,20 +92,26 @@ public class CodecPool {
+    *
+    * @param codec the <code>CompressionCodec</code> for which to get the 
+    *              <code>Compressor</code>
++   * @param conf the <code>Configuration</code> object which contains confs for creating or reinit the compressor
+    * @return <code>Compressor</code> for the given 
+    *         <code>CompressionCodec</code> from the pool or a new one
+    */
+-  public static Compressor getCompressor(CompressionCodec codec) {
++  public static Compressor getCompressor(CompressionCodec codec, Configuration conf) {
+     Compressor compressor = borrow(compressorPool, codec.getCompressorType());
+     if (compressor == null) {
+       compressor = codec.createCompressor();
+       LOG.info("Got brand-new compressor");
+     } else {
++      compressor.reinit(conf);
+       LOG.debug("Got recycled compressor");
+     }
+     return compressor;
+   }
+   
++  public static Compressor getCompressor(CompressionCodec codec) {
++    return getCompressor(codec, null);
++  }
++  
+   /**
+    * Get a {@link Decompressor} for the given {@link CompressionCodec} from the
+    * pool or a new one.
+diff --git a/src/core/org/apache/hadoop/io/compress/Compressor.java b/src/core/org/apache/hadoop/io/compress/Compressor.java
+index 66bc4bf..0d05cdf 100644
+--- a/src/core/org/apache/hadoop/io/compress/Compressor.java
++++ b/src/core/org/apache/hadoop/io/compress/Compressor.java
+@@ -20,6 +20,8 @@ package org.apache.hadoop.io.compress;
+ 
+ import java.io.IOException;
+ 
++import org.apache.hadoop.conf.Configuration;
++
+ /**
+  * Specification of a stream-based 'compressor' which can be  
+  * plugged into a {@link CompressionOutputStream} to compress data.
+@@ -102,5 +104,13 @@ public interface Compressor {
+   /**
+    * Closes the compressor and discards any unprocessed input.
+    */
+-  public void end(); 
++  public void end();
++
++  /**
++   * Prepare the compressor to be used in a new stream with settings defined in
++   * the given Configuration
++   * 
++   * @param conf Configuration from which new setting are fetched
++   */
++  public void reinit(Configuration conf);
+ }
+diff --git a/src/core/org/apache/hadoop/io/compress/GzipCodec.java b/src/core/org/apache/hadoop/io/compress/GzipCodec.java
+index 20b3dd8..9a52941 100644
+--- a/src/core/org/apache/hadoop/io/compress/GzipCodec.java
++++ b/src/core/org/apache/hadoop/io/compress/GzipCodec.java
+@@ -22,8 +22,11 @@ import java.io.*;
+ import java.util.zip.GZIPOutputStream;
+ import java.util.zip.GZIPInputStream;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.compress.DefaultCodec;
+ import org.apache.hadoop.io.compress.zlib.*;
++import org.apache.hadoop.io.compress.zlib.ZlibCompressor.CompressionLevel;
++import org.apache.hadoop.io.compress.zlib.ZlibCompressor.CompressionStrategy;
+ 
+ /**
+  * This class creates gzip compressors/decompressors. 
+@@ -155,7 +158,7 @@ public class GzipCodec extends DefaultCodec {
+ 
+   public Compressor createCompressor() {
+     return (ZlibFactory.isNativeZlibLoaded(conf))
+-      ? new GzipZlibCompressor()
++      ? new GzipZlibCompressor(conf)
+       : null;
+   }
+ 
+@@ -206,6 +209,13 @@ public class GzipCodec extends DefaultCodec {
+           ZlibCompressor.CompressionStrategy.DEFAULT_STRATEGY,
+           ZlibCompressor.CompressionHeader.GZIP_FORMAT, 64*1024);
+     }
++    
++    public GzipZlibCompressor(Configuration conf) {
++      super(ZlibFactory.getCompressionLevel(conf),
++           ZlibFactory.getCompressionStrategy(conf),
++           ZlibCompressor.CompressionHeader.GZIP_FORMAT,
++           64 * 1024);
++    }
+   }
+ 
+   static final class GzipZlibDecompressor extends ZlibDecompressor {
+diff --git a/src/core/org/apache/hadoop/io/compress/bzip2/BZip2DummyCompressor.java b/src/core/org/apache/hadoop/io/compress/bzip2/BZip2DummyCompressor.java
+index 2594717..afb004d 100644
+--- a/src/core/org/apache/hadoop/io/compress/bzip2/BZip2DummyCompressor.java
++++ b/src/core/org/apache/hadoop/io/compress/bzip2/BZip2DummyCompressor.java
+@@ -2,6 +2,7 @@ package org.apache.hadoop.io.compress.bzip2;
+ 
+ import java.io.IOException;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.compress.Compressor;
+ 
+ /**
+@@ -59,4 +60,9 @@ public class BZip2DummyCompressor implements Compressor {
+     throw new UnsupportedOperationException();
+   }
+ 
++  @Override
++  public void reinit(Configuration conf) {
++    // do nothing
++  }
++
+ }
+diff --git a/src/core/org/apache/hadoop/io/compress/zlib/BuiltInZlibDeflater.java b/src/core/org/apache/hadoop/io/compress/zlib/BuiltInZlibDeflater.java
+index f27e831..a017e1b 100644
+--- a/src/core/org/apache/hadoop/io/compress/zlib/BuiltInZlibDeflater.java
++++ b/src/core/org/apache/hadoop/io/compress/zlib/BuiltInZlibDeflater.java
+@@ -21,7 +21,9 @@ package org.apache.hadoop.io.compress.zlib;
+ import java.io.IOException;
+ import java.util.zip.Deflater;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.compress.Compressor;
++import org.mortbay.log.Log;
+ 
+ /**
+  * A wrapper around java.util.zip.Deflater to make it conform 
+@@ -46,4 +48,30 @@ public class BuiltInZlibDeflater extends Deflater implements Compressor {
+     throws IOException {
+     return super.deflate(b, off, len);
+   }
++
++  /**
++   * reinit the compressor with the given configuration. It will reset the
++   * compressor's compression level and compression strategy. Different from
++   * <tt>ZlibCompressor</tt>, <tt>BuiltInZlibDeflater</tt> only support three
++   * kind of compression strategy: FILTERED, HUFFMAN_ONLY and DEFAULT_STRATEGY.
++   * It will use DEFAULT_STRATEGY as default if the configured compression
++   * strategy is not supported.
++   */
++  @Override
++  public void reinit(Configuration conf) {
++    reset();
++    if (conf == null) {
++      return;
++    }
++    setLevel(ZlibFactory.getCompressionLevel(conf).compressionLevel());
++    final ZlibCompressor.CompressionStrategy strategy =
++      ZlibFactory.getCompressionStrategy(conf);
++    try {
++      setStrategy(strategy.compressionStrategy());
++    } catch (IllegalArgumentException ill) {
++      Log.warn(strategy + " not supported by BuiltInZlibDeflater.");
++      setStrategy(DEFAULT_STRATEGY);
++    }
++    Log.debug("Reinit compressor with new compression configuration");
++  }
+ }
+diff --git a/src/core/org/apache/hadoop/io/compress/zlib/ZlibCompressor.java b/src/core/org/apache/hadoop/io/compress/zlib/ZlibCompressor.java
+index 7abdcfb..67fa8b1 100644
+--- a/src/core/org/apache/hadoop/io/compress/zlib/ZlibCompressor.java
++++ b/src/core/org/apache/hadoop/io/compress/zlib/ZlibCompressor.java
+@@ -22,8 +22,10 @@ import java.io.IOException;
+ import java.nio.Buffer;
+ import java.nio.ByteBuffer;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.compress.Compressor;
+ import org.apache.hadoop.util.NativeCodeLoader;
++import org.mortbay.log.Log;
+ 
+ /**
+  * A {@link Compressor} based on the popular 
+@@ -40,7 +42,7 @@ public class ZlibCompressor implements Compressor {
+   private long stream;
+   private CompressionLevel level;
+   private CompressionStrategy strategy;
+-  private CompressionHeader windowBits;
++  private final CompressionHeader windowBits;
+   private int directBufferSize;
+   private byte[] userBuf = null;
+   private int userBufOff = 0, userBufLen = 0;
+@@ -178,6 +180,31 @@ public class ZlibCompressor implements Compressor {
+     return nativeZlibLoaded;
+   }
+ 
++  protected final void construct(CompressionLevel level, CompressionStrategy strategy,
++      CompressionHeader header, int directBufferSize) {
++  }
++
++  /**
++   * Creates a new compressor with the default compression level.
++   * Compressed data will be generated in ZLIB format.
++   */
++  public ZlibCompressor() {
++    this(CompressionLevel.DEFAULT_COMPRESSION,
++         CompressionStrategy.DEFAULT_STRATEGY,
++         CompressionHeader.DEFAULT_HEADER,
++         DEFAULT_DIRECT_BUFFER_SIZE);
++  }
++
++  /**
++   * Creates a new compressor, taking settings from the configuration.
++   */
++  public ZlibCompressor(Configuration conf) {
++    this(ZlibFactory.getCompressionLevel(conf),
++         ZlibFactory.getCompressionStrategy(conf),
++         CompressionHeader.DEFAULT_HEADER,
++         DEFAULT_DIRECT_BUFFER_SIZE);
++  }
++
+   /** 
+    * Creates a new compressor using the specified compression level.
+    * Compressed data will be generated in ZLIB format.
+@@ -192,28 +219,38 @@ public class ZlibCompressor implements Compressor {
+     this.level = level;
+     this.strategy = strategy;
+     this.windowBits = header;
++    stream = init(this.level.compressionLevel(), 
++                  this.strategy.compressionStrategy(), 
++                  this.windowBits.windowBits());
++
+     this.directBufferSize = directBufferSize;
+-    
+     uncompressedDirectBuf = ByteBuffer.allocateDirect(directBufferSize);
+     compressedDirectBuf = ByteBuffer.allocateDirect(directBufferSize);
+     compressedDirectBuf.position(directBufferSize);
+-    
+-    stream = init(this.level.compressionLevel(), 
+-                  this.strategy.compressionStrategy(), 
+-                  this.windowBits.windowBits());
+   }
+-  
++
+   /**
+-   * Creates a new compressor with the default compression level.
+-   * Compressed data will be generated in ZLIB format.
++   * Prepare the compressor to be used in a new stream with settings defined in
++   * the given Configuration. It will reset the compressor's compression level
++   * and compression strategy.
++   * 
++   * @param conf Configuration storing new settings
+    */
+-  public ZlibCompressor() {
+-    this(CompressionLevel.DEFAULT_COMPRESSION, 
+-         CompressionStrategy.DEFAULT_STRATEGY, 
+-         CompressionHeader.DEFAULT_HEADER, 
+-         DEFAULT_DIRECT_BUFFER_SIZE);
++  @Override
++  public synchronized void reinit(Configuration conf) {
++    reset();
++    if (conf == null) {
++      return;
++    }
++    end(stream);
++    level = ZlibFactory.getCompressionLevel(conf);
++    strategy = ZlibFactory.getCompressionStrategy(conf);
++    stream = init(level.compressionLevel(), 
++                  strategy.compressionStrategy(), 
++                  windowBits.windowBits());
++    Log.debug("Reinit compressor with new compression configuration");
+   }
+-  
++
+   public synchronized void setInput(byte[] b, int off, int len) {
+     if (b== null) {
+       throw new NullPointerException();
+diff --git a/src/core/org/apache/hadoop/io/compress/zlib/ZlibFactory.java b/src/core/org/apache/hadoop/io/compress/zlib/ZlibFactory.java
+index e3ce3ec..bf16262 100644
+--- a/src/core/org/apache/hadoop/io/compress/zlib/ZlibFactory.java
++++ b/src/core/org/apache/hadoop/io/compress/zlib/ZlibFactory.java
+@@ -23,6 +23,8 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.compress.Compressor;
+ import org.apache.hadoop.io.compress.Decompressor;
++import org.apache.hadoop.io.compress.zlib.ZlibCompressor.CompressionLevel;
++import org.apache.hadoop.io.compress.zlib.ZlibCompressor.CompressionStrategy;
+ import org.apache.hadoop.util.NativeCodeLoader;
+ 
+ /**
+@@ -106,5 +108,25 @@ public class ZlibFactory {
+     return (isNativeZlibLoaded(conf)) ? 
+       new ZlibDecompressor() : new BuiltInZlibInflater(); 
+   }
+-  
++
++  public static void setCompressionStrategy(Configuration conf,
++      CompressionStrategy strategy) {
++    conf.setEnum("zlib.compress.strategy", strategy);
++  }
++
++  public static CompressionStrategy getCompressionStrategy(Configuration conf) {
++    return conf.getEnum("zlib.compress.strategy",
++        CompressionStrategy.DEFAULT_STRATEGY);
++  }
++
++  public static void setCompressionLevel(Configuration conf,
++      CompressionLevel level) {
++    conf.setEnum("zlib.compress.level", level);
++  }
++
++  public static CompressionLevel getCompressionLevel(Configuration conf) {
++    return conf.getEnum("zlib.compress.level",
++        CompressionLevel.DEFAULT_COMPRESSION);
++  }
++
+ }
+diff --git a/src/test/org/apache/hadoop/io/compress/TestCodec.java b/src/test/org/apache/hadoop/io/compress/TestCodec.java
+index 1a5b344..a0ddff8 100644
+--- a/src/test/org/apache/hadoop/io/compress/TestCodec.java
++++ b/src/test/org/apache/hadoop/io/compress/TestCodec.java
+@@ -22,6 +22,7 @@ import java.io.BufferedOutputStream;
+ import java.io.ByteArrayInputStream;
+ import java.io.BufferedReader;
+ import java.io.BufferedWriter;
++import java.io.ByteArrayOutputStream;
+ import java.io.DataInputStream;
+ import java.io.DataOutputStream;
+ import java.io.File;
+@@ -32,6 +33,7 @@ import java.io.InputStream;
+ import java.io.InputStreamReader;
+ import java.io.OutputStream;
+ import java.io.OutputStreamWriter;
++import java.util.Arrays;
+ import java.util.Random;
+ import java.util.zip.GZIPInputStream;
+ import java.util.zip.GZIPOutputStream;
+@@ -53,6 +55,8 @@ import org.apache.hadoop.io.compress.CompressionOutputStream;
+ import org.apache.hadoop.io.compress.CompressorStream;
+ import org.apache.hadoop.io.compress.zlib.BuiltInZlibDeflater;
+ import org.apache.hadoop.io.compress.zlib.BuiltInZlibInflater;
++import org.apache.hadoop.io.compress.zlib.ZlibCompressor.CompressionLevel;
++import org.apache.hadoop.io.compress.zlib.ZlibCompressor.CompressionStrategy;
+ import org.apache.hadoop.io.compress.zlib.ZlibFactory;
+ import org.apache.hadoop.util.LineReader;
+ import org.apache.hadoop.util.ReflectionUtils;
+@@ -91,6 +95,14 @@ public class TestCodec {
+     codecTest(conf, seed, count, "org.apache.hadoop.io.compress.BZip2Codec");
+   }
+ 
++  public void testGzipCodecWithParam() throws IOException {
++    Configuration conf = new Configuration(this.conf);
++    ZlibFactory.setCompressionLevel(conf, CompressionLevel.BEST_COMPRESSION);
++    ZlibFactory.setCompressionStrategy(conf, CompressionStrategy.HUFFMAN_ONLY);
++    codecTest(conf, seed, 0, "org.apache.hadoop.io.compress.GzipCodec");
++    codecTest(conf, seed, count, "org.apache.hadoop.io.compress.GzipCodec");
++  }
++
+   private static void codecTest(Configuration conf, int seed, int count, 
+                                 String codecClass) 
+     throws IOException {
+@@ -276,6 +288,54 @@ public class TestCodec {
+     assertTrue("Got mismatched ZlibCompressor", c2 != CodecPool.getCompressor(gzc));
+   }
+ 
++  private static void gzipReinitTest(Configuration conf, CompressionCodec codec)
++      throws IOException {
++    // Add codec to cache
++    ZlibFactory.setCompressionLevel(conf, CompressionLevel.BEST_COMPRESSION);
++    ZlibFactory.setCompressionStrategy(conf,
++        CompressionStrategy.DEFAULT_STRATEGY);
++    Compressor c1 = CodecPool.getCompressor(codec);
++    CodecPool.returnCompressor(c1);
++    // reset compressor's compression level to perform no compression
++    ZlibFactory.setCompressionLevel(conf, CompressionLevel.NO_COMPRESSION);
++    Compressor c2 = CodecPool.getCompressor(codec, conf);
++    // ensure same compressor placed earlier
++    assertTrue("Got mismatched ZlibCompressor", c1 == c2);
++    ByteArrayOutputStream bos = new ByteArrayOutputStream();
++    CompressionOutputStream cos = null;
++    // write trivially compressable data
++    byte[] b = new byte[1 << 15];
++    Arrays.fill(b, (byte) 43);
++    try {
++      cos = codec.createOutputStream(bos, c2);
++      cos.write(b);
++    } finally {
++      if (cos != null) {
++        cos.close();
++      }
++      CodecPool.returnCompressor(c2);
++    }
++    byte[] outbytes = bos.toByteArray();
++    // verify data were not compressed
++    assertTrue("Compressed bytes contrary to configuration",
++               outbytes.length >= b.length);
++  }
++
++  @Test
++  public void testCodecPoolCompressorReinit() throws Exception {
++    Configuration conf = new Configuration();
++    conf.setBoolean("hadoop.native.lib", true);
++    if (ZlibFactory.isNativeZlibLoaded(conf)) {
++      GzipCodec gzc = ReflectionUtils.newInstance(GzipCodec.class, conf);
++      gzipReinitTest(conf, gzc);
++    } else {
++      LOG.warn("testCodecPoolCompressorReinit skipped: native libs not loaded");
++    }
++    conf.setBoolean("hadoop.native.lib", false);
++    DefaultCodec dfc = ReflectionUtils.newInstance(DefaultCodec.class, conf);
++    gzipReinitTest(conf, dfc);
++  }
++
+   @Test
+   public void testSequenceFileDefaultCodec() throws IOException, ClassNotFoundException,
+       InstantiationException, IllegalAccessException {
+-- 
+1.7.0.4
+

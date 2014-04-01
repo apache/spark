@@ -1,0 +1,55 @@
+From d8c973d9c6f650032c88915d9fef6f4a568d37a5 Mon Sep 17 00:00:00 2001
+From: Chad Metcalf <chad@cloudera.com>
+Date: Wed, 19 May 2010 15:38:14 -0700
+Subject: [PATCH 0253/1179] CLOUDERA-BUILD. Fixes for the fuse_dfs wrapper.
+
+Description: The wrapper uses bash syntax (i.e., +=) so we should use
+bash. We need to modprobe fuse explicitly on Ubuntu. Since this is
+installed by install_hadoop.sh we know HADOOP_HOME and should use it
+directly. Lastly, there is more robust JAVA_HOME checking in
+hadoop-config.sh so we should use that.
+
+Reason: Fuse currently broken on Ubuntu
+Author: Chad Metcalf
+Ref: CDH-1089
+---
+ cloudera/install_hadoop.sh |   18 +++++++-----------
+ 1 files changed, 7 insertions(+), 11 deletions(-)
+
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index 0f35b82..4eaef0f 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -199,22 +199,18 @@ if [ ! -z "$NATIVE_BUILD_STRING" ]; then
+ 
+   fuse_wrapper=${BIN_DIR}/fuse_dfs
+   cat > $fuse_wrapper << EOF
+-#!/bin/sh
+-if [ "\$HADOOP_HOME" = "" ]
+-        then export HADOOP_HOME=/usr/lib/hadoop
+-fi
++#!/bin/bash
++
++/sbin/modprobe fuse
++
++export HADOOP_HOME=$INSTALLED_LIB_DIR
+ 
+ if [ -f /etc/default/hadoop-0.20-fuse ] 
+ 	then . /etc/default/hadoop-0.20-fuse
+ fi
+ 
+-if [ "\$JAVA_HOME" = "" ]
+-	then if [ -d /usr/java/default ]
+-		then JAVA_HOME=/usr/java/default/
+-	elif [ -d /usr/lib/jvm/java-6-sun ]
+-		then JAVA_HOME=/usr/lib/jvm/java-6-sun
+-	fi
+-	export JAVA_HOME
++if [ -f \$HADOOP_HOME/bin/hadoop-config.sh ] 
++	then . \$HADOOP_HOME/bin/hadoop-config.sh  
+ fi
+ 
+ if [ "\$LD_LIBRARY_PATH" = "" ]
+-- 
+1.7.0.4
+

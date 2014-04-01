@@ -1,0 +1,83 @@
+From eb95ac7cd89f243bebaba7ddfbf3787ff9739c31 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 3 May 2012 15:46:40 -0700
+Subject: [PATCH 1173/1179] HDFS-3359. DFSClient.close should close cached sockets.
+
+Reason: address socket leak in clients, especially seen on TTs
+Author: Todd Lipcon
+Ref: CDH-5622
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |    1 +
+ src/test/org/apache/hadoop/hdfs/DFSTestUtil.java   |    6 ++++++
+ .../hadoop/hdfs/TestDistributedFileSystem.java     |   15 ++++++++++++++-
+ 3 files changed, 21 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 0e4cdb5..08ef807 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -309,6 +309,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         leasechecker.interruptAndJoin();
+       } catch (InterruptedException ie) {
+       }
++      socketCache.clear();
+   
+       // close connections to the namenode
+       RPC.stopProxy(rpcNamenode);
+diff --git a/src/test/org/apache/hadoop/hdfs/DFSTestUtil.java b/src/test/org/apache/hadoop/hdfs/DFSTestUtil.java
+index ff0c761..da08206 100644
+--- a/src/test/org/apache/hadoop/hdfs/DFSTestUtil.java
++++ b/src/test/org/apache/hadoop/hdfs/DFSTestUtil.java
+@@ -136,6 +136,12 @@ public class DFSTestUtil {
+           replicationFactor, files[idx].getSeed());
+     }
+   }
++
++  public static String readFile(FileSystem fs, Path fileName) throws IOException {
++    ByteArrayOutputStream os = new ByteArrayOutputStream();
++    IOUtils.copyBytes(fs.open(fileName), os, 1024, true);
++    return os.toString();
++  }
+   
+   public static void createFile(FileSystem fs, Path fileName, long fileLen, 
+       short replFactor, long seed) throws IOException {
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDistributedFileSystem.java b/src/test/org/apache/hadoop/hdfs/TestDistributedFileSystem.java
+index 82080d1..56e5b78 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDistributedFileSystem.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDistributedFileSystem.java
+@@ -77,6 +77,7 @@ public class TestDistributedFileSystem {
+   /**
+    * Tests DFSClient.close throws no ConcurrentModificationException if 
+    * multiple files are open.
++   * Also tests that any cached sockets are closed. (HDFS-3359)
+    */
+   @Test
+   public void testDFSClose() throws Exception {
+@@ -85,11 +86,23 @@ public class TestDistributedFileSystem {
+     FileSystem fileSys = cluster.getFileSystem();
+ 
+     try {
+-      // create two files
++      // create two files, leaving them open
+       fileSys.create(new Path("/test/dfsclose/file-0"));
+       fileSys.create(new Path("/test/dfsclose/file-1"));
+ 
++      // create another file, close it, and read it, so
++      // the client gets a socket in its SocketCache
++      Path p = new Path("/non-empty-file");
++      DFSTestUtil.createFile(fileSys, p, 1L, (short)1, 0L);
++      DFSTestUtil.readFile(fileSys, p);
++      
++      DFSClient client = ((DistributedFileSystem)fileSys).dfs;
++      SocketCache cache = client.socketCache;
++      assertEquals(1, cache.size());
++
+       fileSys.close();
++
++      assertEquals(0, cache.size());
+     }
+     finally {
+       if (cluster != null) {cluster.shutdown();}
+-- 
+1.7.0.4
+

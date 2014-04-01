@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<!--
+  Copyright 2002-2004 The Apache Software Foundation
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!DOCTYPE tabs PUBLIC "-//APACHE//DTD Cocoon Documentation Tab V1.0//EN" 
+          "http://forrest.apache.org/dtd/tab-cocoon-v10.dtd">
+
+<tabs software="Hadoop"
+      title="Hadoop"
+      copyright="The Apache Software Foundation"
+      xmlns:xlink="http://www.w3.org/1999/xlink">
+
+  <!-- The rules are:
+    @dir will always have /index.html added.
+    @href is not modified unless it is root-relative and obviously specifies a
+    directory (ends in '/'), in which case /index.html will be added
+  -->
+
+  <tab label="Project" href="http://hadoop.apache.org/core/" />
+  <tab label="Wiki" href="http://wiki.apache.org/hadoop" />
+  <tab label="Hadoop 0.20 Documentation" dir="" />  
+  
+</tabs>

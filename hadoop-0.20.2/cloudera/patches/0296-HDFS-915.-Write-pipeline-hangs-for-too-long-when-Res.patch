@@ -1,0 +1,43 @@
+From 2ec4301341b249acd0c0cac1792aaa6a6dabab8e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@lipcon.org>
+Date: Thu, 20 May 2010 00:23:20 -0700
+Subject: [PATCH 0296/1179] HDFS-915. Write pipeline hangs for too long when ResponseProcessor hits timeout
+
+Description: Previously, the write pipeline would hang for the entire write
+             timeout when it encountered a read timeout (eg due to a
+             network connectivity issue). This patch interrupts the writing
+             thread when a read error occurs.
+Reason: Faster recovery from pipeline failure for HBase and other
+        interactive applications.
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 2d81c53..611374e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -2141,8 +2141,8 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     boolean closed = false;
+   
+     private String src;
+-    private DataOutputStream blockStream;
+-    private DataInputStream blockReplyStream;
++    DataOutputStream blockStream;
++    DataInputStream blockReplyStream;
+     private Block block;
+     final private long blockSize;
+     private DataChecksum checksum;
+@@ -2518,6 +2518,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+                        " for block " + block +
+                         StringUtils.stringifyException(e));
+               closed = true;
++              streamer.interrupt();
+             }
+           }
+ 
+-- 
+1.7.0.4
+

@@ -1,0 +1,46 @@
+From b9c48d0bf87c3ca3cabd467c6b03360a022e5669 Mon Sep 17 00:00:00 2001
+From: Konstantin Boudnik <cos@apache.org>
+Date: Wed, 4 May 2011 14:10:34 -0700
+Subject: [PATCH 0957/1179] MAPREDUCE-1832. Support for file sizes less than 1MB in DFSIO benchmark.
+
+Reason: Reverting backport of MAPREDUCE-1614 and completing the merge of MAPREDUCE-1832.
+Author: Konstantin Boudnik
+Ref:    CDH-3140
+---
+ src/test/org/apache/hadoop/fs/TestDFSIO.java |   15 +++++++++++----
+ 1 files changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/fs/TestDFSIO.java b/src/test/org/apache/hadoop/fs/TestDFSIO.java
+index f7d559b..a06c261 100644
+--- a/src/test/org/apache/hadoop/fs/TestDFSIO.java
++++ b/src/test/org/apache/hadoop/fs/TestDFSIO.java
+@@ -137,10 +137,7 @@ public class TestDFSIO extends Configured implements Tool {
+   }
+ 
+   public TestDFSIO() {
+-    Configuration conf = new Configuration();
+-    conf.set("test.build.data",
+-        System.getProperty("test.build.data", "/benchmarks/TestDFSIO"));
+-    this.config = conf;
++    this.config = new Configuration();
+   }
+ 
+   private static String getBaseDir(Configuration conf) {
+@@ -629,4 +626,14 @@ public class TestDFSIO extends Configured implements Tool {
+   static float toMB(long bytes) {
+     return ((float)bytes)/MEGA;
+   }
++
++  @Override // Configurable
++  public Configuration getConf() {
++    return this.config;
++  }
++
++  @Override // Configurable
++  public void setConf(Configuration conf) {
++    this.config = conf;
++  }
+ }
+-- 
+1.7.0.4
+

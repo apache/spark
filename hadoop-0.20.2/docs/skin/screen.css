@@ -1,0 +1,587 @@
+/*
+* Licensed to the Apache Software Foundation (ASF) under one or more
+* contributor license agreements.  See the NOTICE file distributed with
+* this work for additional information regarding copyright ownership.
+* The ASF licenses this file to You under the Apache License, Version 2.0
+* (the "License"); you may not use this file except in compliance with
+* the License.  You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/
+body {  margin: 0px 0px 0px 0px; font-family: Verdana, Helvetica, sans-serif; }
+
+h1     { font-size : 160%; margin: 0px 0px 0px 0px;  padding: 0px; }
+h2     { font-size : 140%; margin: 1em 0px 0.8em 0px; padding: 0px; font-weight : bold;}
+h3     { font-size : 130%; margin: 0.8em 0px 0px 0px; padding: 0px; font-weight : bold; }
+.h3 { margin: 22px 0px 3px 0px; }
+h4     { font-size : 120%; margin: 0.7em 0px 0px 0px; padding: 0px; font-weight : normal; text-align: left; }
+.h4 { margin: 18px 0px 0px 0px; }
+h4.faq { font-size : 120%; margin: 18px 0px 0px 0px; padding: 0px; font-weight : bold;   text-align: left; }
+h5     { font-size : 100%; margin: 14px 0px 0px 0px; padding: 0px; font-weight : normal; text-align: left; }
+
+/**
+* table
+*/
+table .title { background-color: #000000; }
+.ForrestTable         {
+    color: #ffffff;
+    background-color: #7099C5;
+    width: 100%;
+    font-size : 100%;
+    empty-cells: show;
+}
+table caption {
+    padding-left: 5px;
+    color: white;
+    text-align: left;
+    font-weight: bold;
+    background-color: #000000;
+}
+.ForrestTable td {
+    color: black;
+    background-color: #f0f0ff;
+}
+.ForrestTable th { text-align: center; }
+/**
+ * Page Header
+ */
+
+#top {
+    position: relative;
+    float: left;
+    width: 100%;
+    background: #294563; /* if you want a background in the header, put it here */
+}
+
+#top .breadtrail {
+    background: #CFDCED;
+    color: black;
+    border-bottom: solid 1px white;
+    padding: 3px 10px;
+    font-size: 75%;
+}
+#top .breadtrail a { color: black; }
+
+#top .header {
+    float: left;
+    width: 100%;
+    background: url("images/header_white_line.gif") repeat-x bottom;
+}
+
+#top .grouplogo {
+    padding: 7px 0 10px 10px;
+    float: left;
+    text-align: left;
+}
+#top .projectlogo {
+    padding: 7px 0 10px 10px;
+    float: left;
+    width: 33%;
+    text-align: right;
+}
+#top .projectlogoA1 {
+    padding: 7px 0 10px 10px;
+    float: right;
+}
+html>body #top .searchbox {
+    bottom: 0px;
+}
+#top .searchbox {
+    position: absolute;
+    right: 10px;
+    height: 42px;
+    font-size: 70%;
+    white-space: nowrap;
+    text-align: right;
+    color: white;
+    background-color: #000000;
+    z-index:0;
+    background-image: url(images/rc-t-l-5-1header-2searchbox-3searchbox.png);
+    background-repeat: no-repeat;
+    background-position: top left;
+    bottom: -1px; /* compensate for IE rendering issue */
+}
+
+#top .searchbox form {
+    padding: 5px 10px;
+    margin: 0;
+}
+#top .searchbox p {
+    padding: 0 0 2px 0;
+    margin: 0;
+}
+#top .searchbox input {
+    font-size: 100%;
+}
+
+#tabs {
+    clear: both;
+    padding-left: 10px;
+    margin: 0;
+    list-style: none;
+}
+/*    background: #CFDCED url("images/tab-right.gif") no-repeat right top;*/
+#tabs li {
+    float: left;
+    background-image: url(images/rc-t-r-5-1header-2tab-unselected-3tab-unselected.png);
+    background-repeat: no-repeat;
+    background-position: top right;
+    background-color: #000000;
+    margin: 0 3px 0 0;
+    padding: 0;
+}
+
+/*background: url("images/tab-left.gif") no-repeat left top;*/
+#tabs li a {
+    float: left;
+    display: block;
+    font-family: verdana, arial, sans-serif;
+    text-decoration: none;
+    color: black;
+    white-space: nowrap;
+    background-image: url(images/rc-t-l-5-1header-2tab-unselected-3tab-unselected.png);
+    background-repeat: no-repeat;
+    background-position: top left;
+    padding: 5px 15px 4px;
+    width: .1em; /* IE/Win fix */
+}
+
+#tabs li a:hover {
+   
+    cursor: pointer;
+    text-decoration:underline;
+}
+
+#tabs > li a { width: auto; } /* Rest of IE/Win fix */
+
+/* Commented Backslash Hack hides rule from IE5-Mac \*/
+#tabs a { float: none; }
+/* End IE5-Mac hack */
+
+#top .header .current {
+    background-color: #4C6C8F;
+    background-image: url(images/rc-t-r-5-1header-2tab-selected-3tab-selected.png);
+    background-repeat: no-repeat;
+    background-position: top right;
+}
+#top .header .current a {
+    font-weight: bold;
+    padding-bottom: 5px;
+    color: white;
+    background-image: url(images/rc-t-l-5-1header-2tab-selected-3tab-selected.png);
+    background-repeat: no-repeat;
+    background-position: top left;
+}
+#publishedStrip {
+    padding-right: 10px;
+    padding-left: 20px;
+    padding-top: 3px;
+    padding-bottom:3px;
+    color: #ffffff;
+    font-size : 60%;
+    font-weight: bold;
+    background-color: #4C6C8F;
+    text-align:right;
+}
+
+#level2tabs {
+margin: 0;
+float:left;
+position:relative;
+
+}
+
+
+
+#level2tabs  a:hover {
+   
+    cursor: pointer;
+    text-decoration:underline;
+    
+}
+
+#level2tabs  a{
+   
+    cursor: pointer;
+    text-decoration:none;
+    background-image: url('images/chapter.gif');
+    background-repeat: no-repeat;
+    background-position: center left;
+    padding-left: 6px;
+    margin-left: 6px;
+}
+
+/*
+*    border-top: solid #4C6C8F 15px;
+*/
+#main {
+    position: relative;
+    background: white;
+    clear:both;
+}
+#main .breadtrail {
+    clear:both;
+    position: relative;
+    background: #CFDCED;
+    color: black;
+    border-bottom: solid 1px black;
+    border-top: solid 1px black;
+    padding: 0px 180px;
+    font-size: 75%;
+    z-index:10;
+}
+/**
+* Round corner
+*/
+#roundtop {
+    background-image: url(images/rc-t-r-15-1body-2menu-3menu.png);
+    background-repeat: no-repeat;
+    background-position: top right;
+}
+
+#roundbottom {
+    background-image: url(images/rc-b-r-15-1body-2menu-3menu.png);
+    background-repeat: no-repeat;
+    background-position: top right;
+}
+
+img.corner {
+   width: 15px;
+   height: 15px;
+   border: none;
+   display: block !important;
+}
+
+.roundtopsmall {
+    background-image: url(images/rc-t-r-5-1header-2searchbox-3searchbox.png);
+    background-repeat: no-repeat;
+    background-position: top right;
+}
+
+#roundbottomsmall {
+    background-image: url(images/rc-b-r-5-1header-2tab-selected-3tab-selected.png);
+    background-repeat: no-repeat;
+    background-position: top right;
+}
+
+img.cornersmall {
+   width: 5px;
+   height: 5px;
+   border: none;
+   display: block !important;
+}
+/**
+ * Side menu
+ */
+#menu a {  font-weight: normal; text-decoration: none;}
+#menu a:visited {  font-weight: normal; }
+#menu a:active {  font-weight: normal; }
+#menu a:hover {  font-weight: normal;  text-decoration:underline;}
+
+#menuarea { width:10em;}
+#menu {
+    position: relative;
+    float: left;
+    width: 160px;
+    padding-top: 0px;
+    top:-18px;
+    left:10px;
+    z-index: 20;
+    background-color: #f90;
+    font-size : 70%;
+    
+}
+
+.menutitle {
+        cursor:pointer;
+        padding: 3px 12px;
+        margin-left: 10px;
+        background-image: url('images/chapter.gif');
+        background-repeat: no-repeat;
+        background-position: center left;
+        font-weight : bold;
+
+        
+}
+
+.menutitle:hover{text-decoration:underline;cursor: pointer;}
+
+#menu .menuitemgroup {
+        margin: 0px 0px 6px 8px;
+        padding: 0px;
+        font-weight : bold; }
+
+#menu .selectedmenuitemgroup{
+        margin: 0px 0px 0px 8px;
+        padding: 0px;
+        font-weight : normal; 
+       
+        }
+
+#menu .menuitem {
+        padding: 2px 0px 1px 13px;
+        background-image: url('images/page.gif');
+        background-repeat: no-repeat;
+        background-position: center left;
+        font-weight : normal;
+        margin-left: 10px;
+}
+
+#menu .menupage {
+        margin: 2px 0px 1px 10px;
+        padding: 0px 3px 0px 12px;
+        background-image: url('images/page.gif');
+        background-repeat: no-repeat;
+        background-position: center left;
+        font-style : normal;
+}
+#menu .menupagetitle {
+        padding: 0px 0px 0px 1px;
+        font-style : normal;
+        border-style: solid;
+        border-width: 1px;
+        margin-right: 10px;
+         
+}
+#menu .menupageitemgroup {
+        padding: 3px 0px 4px 6px;
+        font-style : normal;
+        border-bottom: 1px solid ;
+        border-left: 1px solid ;
+        border-right: 1px solid ;
+        margin-right: 10px;
+}
+#menu .menupageitem {
+        font-style : normal;
+        font-weight : normal;
+        border-width: 0px;
+        font-size : 90%;
+}
+#menu #credit {
+    text-align: center;
+}
+#menu #credit2 {
+    text-align: center;
+    padding: 3px 3px 3px 3px;
+    background-color: #ffffff;
+}
+#menu .searchbox {
+    text-align: center;
+}
+#menu .searchbox form {
+    padding: 3px 3px;
+    margin: 0;
+}
+#menu .searchbox input {
+    font-size: 100%;
+}
+
+#content {
+    padding: 20px 20px 20px 180px;
+    margin: 0;
+    font : small Verdana, Helvetica, sans-serif;
+    font-size : 80%;
+}
+
+#content ul {
+    margin: 0;
+    padding: 0 25px;
+}
+#content li {
+    padding: 0 5px;
+}
+#feedback {
+    color: black;
+    background: #CFDCED;
+    text-align:center;
+    margin-top: 5px;
+}
+#feedback #feedbackto {
+    font-size: 90%;
+    color: black;
+}
+#footer {
+    clear: both;
+    position: relative; /* IE bugfix (http://www.dracos.co.uk/web/css/ie6floatbug/) */
+    width: 100%;
+    background: #CFDCED;
+    border-top: solid 1px #4C6C8F;
+    color: black;
+}
+#footer .copyright {
+    position: relative; /* IE bugfix cont'd */
+    padding: 5px;
+    margin: 0;
+    width: 45%;
+}
+#footer .lastmodified {
+    position: relative; /* IE bugfix cont'd */
+    float: right;
+    width: 45%;
+    padding: 5px;
+    margin: 0;
+    text-align: right;
+}
+#footer a { color: white; }
+
+#footer #logos {
+    text-align: left;
+}
+
+
+/**
+ * Misc Styles
+ */
+
+acronym { cursor: help; }
+.boxed      { background-color: #a5b6c6;}
+.underlined_5     {border-bottom: solid 5px #4C6C8F;}
+.underlined_10     {border-bottom: solid 10px #4C6C8F;}
+/* ==================== snail trail ============================ */
+
+.trail {
+  position: relative; /* IE bugfix cont'd */
+  font-size: 70%;
+  text-align: right;
+  float: right;
+  margin: -10px 5px 0px 5px;
+  padding: 0;
+}
+
+#motd-area {
+    position: relative; /* IE bugfix cont'd */
+    float: right;
+    width: 35%;
+    background-color: #f0f0ff;
+    border-top: solid 1px #4C6C8F;
+    border-bottom: solid 1px #4C6C8F;
+    margin-bottom: 15px;
+    margin-left: 15px;
+    margin-right: 10%;
+    padding-bottom: 5px;
+    padding-top: 5px;
+}
+
+#minitoc-area {
+    border-top: solid 1px #4C6C8F;
+    border-bottom: solid 1px #4C6C8F;
+    margin: 15px 10% 5px 15px;
+   /* margin-bottom: 15px;
+    margin-left: 15px;
+    margin-right: 10%;*/
+    padding-bottom: 7px;
+    padding-top: 5px;
+}
+.minitoc {
+    list-style-image: url('images/current.gif');
+    font-weight: normal;
+}
+
+li p {
+    margin: 0;
+    padding: 0;
+}
+
+.pdflink {
+    position: relative; /* IE bugfix cont'd */
+    float: right;
+    margin: 0px 5px;
+    padding: 0;
+}
+.pdflink br {
+    margin-top: -10px;
+    padding-left: 1px;
+}
+.pdflink a {
+    display: block;
+    font-size: 70%;
+    text-align: center;
+    margin: 0;
+    padding: 0;
+}
+
+.pdflink img {
+    display: block;
+    height: 16px;
+    width: 16px;
+}
+.xmllink {
+    position: relative; /* IE bugfix cont'd */
+    float: right;
+    margin: 0px 5px;
+    padding: 0;
+}
+.xmllink br {
+    margin-top: -10px;
+    padding-left: 1px;
+}
+.xmllink a {
+    display: block;
+    font-size: 70%;
+    text-align: center;
+    margin: 0;
+    padding: 0;
+}
+
+.xmllink img {
+    display: block;
+    height: 16px;
+    width: 16px;
+}
+.podlink {
+    position: relative; /* IE bugfix cont'd */
+    float: right;
+    margin: 0px 5px;
+    padding: 0;
+}
+.podlink br {
+    margin-top: -10px;
+    padding-left: 1px;
+}
+.podlink a {
+    display: block;
+    font-size: 70%;
+    text-align: center;
+    margin: 0;
+    padding: 0;
+}
+
+.podlink img {
+    display: block;
+    height: 16px;
+    width: 16px;
+}
+
+.printlink {
+    position: relative; /* IE bugfix cont'd */
+    float: right;
+}
+.printlink br {
+    margin-top: -10px;
+    padding-left: 1px;
+}
+.printlink a {
+    display: block;
+    font-size: 70%;
+    text-align: center;
+    margin: 0;
+    padding: 0;
+}
+.printlink img {
+    display: block;
+    height: 16px;
+    width: 16px;
+}
+
+p.instruction {
+  display: list-item;
+  list-style-image: url('../images/instruction_arrow.png');
+  list-style-position: outside;
+  margin-left: 2em;
+} 

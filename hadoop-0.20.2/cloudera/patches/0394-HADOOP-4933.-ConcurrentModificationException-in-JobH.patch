@@ -1,0 +1,37 @@
+From b350799d72e4a4bec1f76527eb8fe02590295785 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 30 Nov 2009 16:10:53 +0530
+Subject: [PATCH 0394/1179] HADOOP-4933. ConcurrentModificationException in JobHistory.java
+
+Patch: http://issues.apache.org/jira/secure/attachment/12397116/HADOOP-4933-v1.1.patch
+Author: Amar Kamat
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobHistory.java       |    4 +---
+ 1 files changed, 1 insertions(+), 3 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobHistory.java b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+index bb550c1..2fa0023 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobHistory.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+@@ -278,9 +278,6 @@ public class JobHistory {
+     SUCCESS, FAILED, KILLED, MAP, REDUCE, CLEANUP, RUNNING, PREP, SETUP
+   }
+ 
+-  // temp buffer for parsed dataa
+-  private static Map<Keys,String> parseBuffer = new HashMap<Keys, String>(); 
+-
+   /**
+    * Initialize JobHistory files. 
+    * @param conf Jobconf of the job tracker.
+@@ -482,6 +479,7 @@ public class JobHistory {
+     String data = line.substring(idx+1, line.length());
+     
+     Matcher matcher = pattern.matcher(data); 
++    Map<Keys,String> parseBuffer = new HashMap<Keys, String>();
+ 
+     while(matcher.find()){
+       String tuple = matcher.group(0);
+-- 
+1.7.0.4
+

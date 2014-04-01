@@ -1,0 +1,36 @@
+From aaeecc5050d10ff5788cea98de3004e72a0c3a3c Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 27 Nov 2011 18:20:29 -0800
+Subject: [PATCH 1092/1179] CLOUDERA-BUILD. Update eclipse classpath.
+
+---
+ .eclipse.templates/.classpath |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/.eclipse.templates/.classpath b/.eclipse.templates/.classpath
+index 5e0aa43..df8b90f 100644
+--- a/.eclipse.templates/.classpath
++++ b/.eclipse.templates/.classpath
+@@ -20,7 +20,7 @@
+   	<classpathentry kind="lib" path="lib/jsp-2.1/jsp-api-2.1.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/commons-codec-1.4.jar"/>
+   <classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/commons-daemon-1.0.1.jar" />
+-  <classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/commons-httpclient-3.0.1.jar"/>
++  <classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/commons-httpclient-3.1.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/commons-el-1.0.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/jasper-compiler-5.5.12.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/jasper-runtime-5.5.12.jar"/>
+@@ -33,8 +33,8 @@
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/log4j-1.2.15.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/mockito-all-1.8.2.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/oro-2.0.8.jar"/>
+-	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/jetty-6.1.26.jar"/>
+-	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/jetty-util-6.1.26.jar"/>
++	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/jetty-6.1.26.cloudera.1.jar"/>
++	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/jetty-util-6.1.26.cloudera.1.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/jackson-core-asl-1.5.2.jar"/>
+ 	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/jackson-mapper-asl-1.5.2.jar"/>
+   	<classpathentry kind="lib" path="build/ivy/lib/Hadoop/common/servlet-api-2.5-6.1.14.jar"/>
+-- 
+1.7.0.4
+

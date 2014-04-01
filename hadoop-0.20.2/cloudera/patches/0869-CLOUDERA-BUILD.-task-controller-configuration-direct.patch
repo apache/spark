@@ -1,0 +1,118 @@
+From 4b44138e14ad63a6b54a962e16c8f1fd922b3a80 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Feb 2011 00:38:48 -0800
+Subject: [PATCH 0869/1179] CLOUDERA-BUILD. task-controller configuration directory should be inferred from task-controller location
+
+Searches at ../../conf/ for task-controller.cfg
+
+Author: Todd Lipcon
+Ref: CDH-2623
+---
+ ivy/libraries.properties                       |    3 --
+ src/c++/task-controller/impl/main.c            |   40 ++++++++++++++++++++++-
+ src/c++/task-controller/impl/task-controller.h |    1 +
+ 3 files changed, 39 insertions(+), 5 deletions(-)
+
+diff --git a/ivy/libraries.properties b/ivy/libraries.properties
+index 9fbdddb..095b699 100644
+--- a/ivy/libraries.properties
++++ b/ivy/libraries.properties
+@@ -13,9 +13,6 @@
+ #This properties file lists the versions of the various artifacts used by hadoop and components.
+ #It drives ivy and the generation of a maven POM
+ 
+-# This is the version of hadoop we are generating
+-hadoop.version=0.20.0
+-
+ #These are the versions of our dependencies (in alphabetical order)
+ apacheant.version=1.7.0
+ ant-task.version=2.0.10
+diff --git a/src/c++/task-controller/impl/main.c b/src/c++/task-controller/impl/main.c
+index 256705b..12edfe0 100644
+--- a/src/c++/task-controller/impl/main.c
++++ b/src/c++/task-controller/impl/main.c
+@@ -21,6 +21,7 @@
+ 
+ #include <errno.h>
+ #include <grp.h>
++#include <libgen.h>
+ #include <limits.h>
+ #include <unistd.h>
+ #include <signal.h>
+@@ -51,6 +52,29 @@ void display_usage(FILE *stream) {
+ 	  RUN_COMMAND_AS_USER);
+ }
+ 
++/**
++ * Return the conf dir based on the path of the executable
++ */
++char *infer_conf_dir(char *executable_file) {
++  char *result;
++  char *exec_dup = strdup(executable_file);
++  char *dir = dirname(exec_dup);
++
++  int relative_len = strlen(dir) + 1 + strlen(CONF_DIR_RELATIVE_TO_EXEC) + 1;
++  char *relative_unresolved = malloc(relative_len);
++  snprintf(relative_unresolved, relative_len, "%s/%s",
++           dir, CONF_DIR_RELATIVE_TO_EXEC);
++  result = realpath(relative_unresolved, NULL);
++  // realpath will return NULL if the directory doesn't exist
++  if (result == NULL) {
++    fprintf(LOGFILE, "No conf directory at expected location %s\n",
++            relative_unresolved);
++  }
++  free(exec_dup);
++  free(relative_unresolved);
++  return result;
++}
++
+ int main(int argc, char **argv) {
+   LOGFILE = stdout;
+   int command;
+@@ -67,17 +91,29 @@ int main(int argc, char **argv) {
+ 
+   char *executable_file = get_executable();
+ 
++  char *conf_dir;
++
+ #ifndef HADOOP_CONF_DIR
+-  #error HADOOP_CONF_DIR must be defined
++  conf_dir = infer_conf_dir(argv[0]);
++  if (conf_dir == NULL) {
++    fprintf(LOGFILE, "Couldn't infer HADOOP_CONF_DIR. Please set in environment\n");
++    return INVALID_CONFIG_FILE;
++  }
++#else
++  conf_dir = strdup(HADOOP_CONF_DIR);
+ #endif
+ 
+-  char *orig_conf_file = STRINGIFY(HADOOP_CONF_DIR) "/" CONF_FILENAME;
++  size_t len = strlen(conf_dir) + strlen(CONF_FILENAME) + 2;
++  char *orig_conf_file = malloc(len);
++  snprintf(orig_conf_file, len, "%s/%s", conf_dir, CONF_FILENAME);
+   char *conf_file = realpath(orig_conf_file, NULL);
+ 
+   if (conf_file == NULL) {
+     fprintf(LOGFILE, "Configuration file %s not found.\n", orig_conf_file);
+     return INVALID_CONFIG_FILE;
+   }
++  free(orig_conf_file);
++  free(conf_dir);
+   read_config(conf_file);
+   free(conf_file);
+ 
+diff --git a/src/c++/task-controller/impl/task-controller.h b/src/c++/task-controller/impl/task-controller.h
+index b42e2a5..e2567a1 100644
+--- a/src/c++/task-controller/impl/task-controller.h
++++ b/src/c++/task-controller/impl/task-controller.h
+@@ -57,6 +57,7 @@ enum errorcodes {
+ };
+ 
+ #define TT_GROUP_KEY "mapreduce.tasktracker.group"
++#define CONF_DIR_RELATIVE_TO_EXEC "../../conf"
+ 
+ extern struct passwd *user_detail;
+ 
+-- 
+1.7.0.4
+

@@ -1,0 +1,55 @@
+From a4b1840a88ab2fede2944a6f8b14f2a386fde586 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 11 Mar 2012 19:31:21 -0700
+Subject: [PATCH 1142/1179] HADOOP-6255. Pick up HADOOP_SECURITY_LOGGER.
+
+bin/hadoop needs to use HADOOP_SECURITY_LOGGER to set
+hadoop.security.logger in log4j.properties.
+
+Reason: Bug
+Author: Eric Yang
+Ref: CDH-2609
+---
+ bin/hadoop            |    8 ++++++++
+ conf/log4j.properties |    6 ++++++
+ 2 files changed, 14 insertions(+), 0 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index b7b1062..aece254 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -329,6 +329,14 @@ HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.log.file=$HADOOP_LOGFILE"
+ HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.home.dir=$HADOOP_HOME"
+ HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.id.str=$HADOOP_IDENT_STRING"
+ HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.root.logger=${HADOOP_ROOT_LOGGER:-INFO,console}"
++
++#turn security logger on the namenode and jobtracker only
++if [ $COMMAND = "namenode" ] || [ $COMMAND = "jobtracker" ]; then
++  HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.security.logger=${HADOOP_SECURITY_LOGGER:-INFO,DRFAS}"
++else
++  HADOOP_OPTS="$HADOOP_OPTS -Dhadoop.security.logger=${HADOOP_SECURITY_LOGGER:-INFO,NullAppender}"
++fi
++
+ if [ "x$JAVA_LIBRARY_PATH" != "x" ]; then
+   HADOOP_OPTS="$HADOOP_OPTS -Djava.library.path=$JAVA_LIBRARY_PATH"
+ fi  
+diff --git a/conf/log4j.properties b/conf/log4j.properties
+index 50a3839..85b3880 100644
+--- a/conf/log4j.properties
++++ b/conf/log4j.properties
+@@ -101,6 +101,12 @@ log4j.logger.org.apache.hadoop.hdfs.server.namenode.FSNamesystem.audit=WARN
+ log4j.logger.org.jets3t.service.impl.rest.httpclient.RestS3Service=ERROR
+ 
+ #
++# Null Appender
++# Trap security logger on the hadoop client side
++#
++log4j.appender.NullAppender=org.apache.log4j.varia.NullAppender
++
++#
+ # Event Counter Appender
+ # Sends counts of logging messages at different severity levels to Hadoop Metrics.
+ #
+-- 
+1.7.0.4
+

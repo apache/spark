@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+GRID_DIR=`dirname "$0"`
+GRID_DIR=`cd "$GRID_DIR"; pwd`
+source $GRID_DIR/../gridmix-env
+
+NUM_OF_REDUCERS=$NUM_OF_REDUCERS_FOR_MEDIUM_JOB
+INDIR="${VARINFLTEXT}/{part-000*0,part-000*1,part-000*2}"
+Date=`date +%F-%H-%M-%S-%N`
+
+OUTDIR=perf-out/stream-out-dir-medium_$Date
+${HADOOP_HOME}/bin/hadoop dfs -rmr $OUTDIR
+
+
+${HADOOP_HOME}/bin/hadoop jar ${STREAM_JAR} -input $INDIR -output $OUTDIR -mapper cat -reducer cat -numReduceTasks $NUM_OF_REDUCERS
+

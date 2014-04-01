@@ -1,0 +1,1015 @@
+From 402cb922c498031014819a8cb01bf2c8f01d3491 Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Tue, 13 Mar 2012 13:57:13 -0700
+Subject: [PATCH 1150/1179] MAPREDUCE-1221. Kill tasks on a node if the free physical memory on that machine falls below a configured threshold
+
+Reason: Customer request
+Author: Scott Chen, Tom White
+Ref: CDH-3828
+---
+ src/core/org/apache/hadoop/util/ProcessTree.java   |  113 ++++++++++
+ .../apache/hadoop/util/ProcfsBasedProcessTree.java |  122 +++++++++++-
+ .../hadoop/mapred/TaskMemoryManagerThread.java     |  219 ++++++++++++++++++--
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   59 +++++-
+ .../org/apache/hadoop/mapreduce/JobContext.java    |    5 +
+ .../mapred/TestTaskTrackerMemoryManager.java       |  134 ++++++++++++-
+ 6 files changed, 615 insertions(+), 37 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/util/ProcessTree.java b/src/core/org/apache/hadoop/util/ProcessTree.java
+index bb54ac5..396612f 100644
+--- a/src/core/org/apache/hadoop/util/ProcessTree.java
++++ b/src/core/org/apache/hadoop/util/ProcessTree.java
+@@ -34,6 +34,8 @@ public class ProcessTree {
+ 
+   private static final Log LOG = LogFactory.getLog(ProcessTree.class);
+   
++  public static final long DEFAULT_SLEEPTIME_BEFORE_SIGKILL = 5000L;
++  
+   /**
+    * The constants for the signals.
+    */
+@@ -64,6 +66,95 @@ public class ProcessTree {
+     }
+     return setsidSupported;
+   }
++  
++  /**
++   * Destroy the process-tree.
++   * @param pid process id of the root process of the subtree of processes
++   *            to be killed
++   * @param sleeptimeBeforeSigkill The time to wait before sending SIGKILL
++   *                               after sending SIGTERM
++   * @param isProcessGroup pid is a process group leader or not
++   * @param inBackground Process is to be killed in the back ground with
++   *                     a separate thread
++   */
++  public static void destroy(String pid, long sleeptimeBeforeSigkill,
++                             boolean isProcessGroup, boolean inBackground) {
++    if(isProcessGroup) {
++      destroyProcessGroup(pid, sleeptimeBeforeSigkill, inBackground);
++    }
++    else {
++      //TODO: Destroy all the processes in the subtree in this case also.
++      // For the time being, killing only the root process.
++      destroyProcess(pid, sleeptimeBeforeSigkill, inBackground);
++    }
++  }
++
++  /** Destroy the process.
++   * @param pid Process id of to-be-killed-process
++   * @param sleeptimeBeforeSigkill The time to wait before sending SIGKILL
++   *                               after sending SIGTERM
++   * @param inBackground Process is to be killed in the back ground with
++   *                     a separate thread
++   */
++  protected static void destroyProcess(String pid, long sleeptimeBeforeSigkill,
++                                    boolean inBackground) {
++    terminateProcess(pid);
++    sigKill(pid, false, sleeptimeBeforeSigkill, inBackground);
++  }
++
++  /** Destroy the process group.
++   * @param pgrpId Process group id of to-be-killed-processes
++   * @param sleeptimeBeforeSigkill The time to wait before sending SIGKILL
++   *                               after sending SIGTERM
++   * @param inBackground Process group is to be killed in the back ground with
++   *                     a separate thread
++   */
++  protected static void destroyProcessGroup(String pgrpId,
++                       long sleeptimeBeforeSigkill, boolean inBackground) {
++    terminateProcessGroup(pgrpId);
++    sigKill(pgrpId, true, sleeptimeBeforeSigkill, inBackground);
++  }
++
++  /**
++   * Sends terminate signal to the process, allowing it to gracefully exit.
++   * 
++   * @param pid pid of the process to be sent SIGTERM
++   */
++  public static void terminateProcess(String pid) {
++    ShellCommandExecutor shexec = null;
++    try {
++      String[] args = { "kill", pid };
++      shexec = new ShellCommandExecutor(args);
++      shexec.execute();
++    } catch (IOException ioe) {
++      LOG.warn("Error executing shell command " + ioe);
++    } finally {
++      LOG.info("Killing process " + pid +
++               " with SIGTERM. Exit code from 'kill' command " +
++               shexec.getExitCode());
++    }
++  }
++
++  /**
++   * Sends terminate signal to all the process belonging to the passed process
++   * group, allowing the group to gracefully exit.
++   * 
++   * @param pgrpId process group id
++   */
++  public static void terminateProcessGroup(String pgrpId) {
++    ShellCommandExecutor shexec = null;
++    try {
++      String[] args = { "kill", "--", "-" + pgrpId };
++      shexec = new ShellCommandExecutor(args);
++      shexec.execute();
++    } catch (IOException ioe) {
++      LOG.warn("Error executing shell command " + ioe);
++    } finally {
++      LOG.info("Killing all processes in the process group " + pgrpId +
++               " with SIGTERM. Exit code from 'kill' command " +
++               shexec.getExitCode());
++    }
++  }
+ 
+   /**
+    * Kills the process(OR process group) by sending the signal SIGKILL
+@@ -92,6 +183,28 @@ public class ProcessTree {
+     }  
+   }
+   
++  /** Kills the process(OR process group) by sending the signal SIGKILL
++   * @param pid Process id(OR process group id) of to-be-deleted-process
++   * @param isProcessGroup Is pid a process group id of to-be-deleted-processes
++   * @param sleeptimeBeforeSigkill The time to wait before sending SIGKILL
++   *                               after sending SIGTERM
++   * @param inBackground Process is to be killed in the back ground with
++   *                     a separate thread
++   */
++  private static void sigKill(String pid, boolean isProcessGroup,
++                        long sleeptimeBeforeSigkill, boolean inBackground) {
++
++    if(inBackground) { // use a separate thread for killing
++      SigKillThread sigKillThread = new SigKillThread(pid, isProcessGroup,
++                                                      sleeptimeBeforeSigkill);
++      sigKillThread.setDaemon(true);
++      sigKillThread.start();
++    }
++    else {
++      sigKillInCurrentThread(pid, isProcessGroup, sleeptimeBeforeSigkill);
++    }
++  }
++  
+   /**
+    * Sends signal to process, forcefully terminating the process.
+    * 
+diff --git a/src/core/org/apache/hadoop/util/ProcfsBasedProcessTree.java b/src/core/org/apache/hadoop/util/ProcfsBasedProcessTree.java
+index 49d340f..0f907b3 100644
+--- a/src/core/org/apache/hadoop/util/ProcfsBasedProcessTree.java
++++ b/src/core/org/apache/hadoop/util/ProcfsBasedProcessTree.java
+@@ -87,6 +87,8 @@ public class ProcfsBasedProcessTree extends ProcessTree {
+   
+   private Integer pid = -1;
+   private Long cpuTime = 0L;
++  private boolean setsidUsed = false;
++  private long sleeptimeBeforeSigkill = DEFAULT_SLEEPTIME_BEFORE_SIGKILL;
+ 
+   private Map<Integer, ProcessInfo> processTree = new HashMap<Integer, ProcessInfo>();
+ 
+@@ -95,15 +97,51 @@ public class ProcfsBasedProcessTree extends ProcessTree {
+   }
+   
+   public ProcfsBasedProcessTree(String pid, boolean setsidUsed) {
+-    this(pid,PROCFS);
++    this(pid, setsidUsed, DEFAULT_SLEEPTIME_BEFORE_SIGKILL);
+   }
+ 
+   public ProcfsBasedProcessTree(String pid, String procfsDir) {
++    this(pid, false, DEFAULT_SLEEPTIME_BEFORE_SIGKILL, procfsDir);
++  }
++  
++  public ProcfsBasedProcessTree(String pid, boolean setsidUsed,
++                                long sigkillInterval) {
++    this(pid, setsidUsed, sigkillInterval, PROCFS);
++  }
++
++  /**
++   * Build a new process tree rooted at the pid.
++   * 
++   * This method is provided mainly for testing purposes, where
++   * the root of the proc file system can be adjusted.
++   * 
++   * @param pid root of the process tree
++   * @param setsidUsed true, if setsid was used for the root pid
++   * @param sigkillInterval how long to wait between a SIGTERM and SIGKILL 
++   *                        when killing a process tree
++   * @param procfsDir the root of a proc file system - only used for testing. 
++   */
++  public ProcfsBasedProcessTree(String pid, boolean setsidUsed,
++                                long sigkillInterval, String procfsDir) {
+     this.pid = getValidPID(pid);
++    this.setsidUsed = setsidUsed;
++    sleeptimeBeforeSigkill = sigkillInterval;
+     this.procfsDir = procfsDir;
+   }
+   
+   /**
++   * Sets SIGKILL interval
++   * @deprecated Use {@link ProcfsBasedProcessTree#ProcfsBasedProcessTree(
++   *                  String, boolean, long)} instead
++   * @param interval The time to wait before sending SIGKILL
++   *                 after sending SIGTERM
++   */
++  @Deprecated
++  public void setSigKillInterval(long interval) {
++    sleeptimeBeforeSigkill = interval;
++  }
++  
++  /**
+    * Checks if the ProcfsBasedProcessTree is available on this system.
+    * 
+    * @return true if ProcfsBasedProcessTree is available. False otherwise.
+@@ -227,6 +265,88 @@ public class ProcfsBasedProcessTree extends ProcessTree {
+     }
+     return false;
+   }
++  
++  /** Verify that the given process id is same as its process group id.
++   * @param pidStr Process id of the to-be-verified-process
++   * @param procfsDir  Procfs root dir
++   */
++  static boolean checkPidPgrpidForMatch(String pidStr, String procfsDir) {
++    Integer pId = Integer.parseInt(pidStr);
++    // Get information for this process
++    ProcessInfo pInfo = new ProcessInfo(pId);
++    pInfo = constructProcessInfo(pInfo, procfsDir);
++    if (pInfo == null) {
++      // process group leader may have finished execution, but we still need to
++      // kill the subProcesses in the process group.
++      return true;
++    }
++
++    //make sure that pId and its pgrpId match
++    if (!pInfo.getPgrpId().equals(pId)) {
++      LOG.warn("Unexpected: Process with PID " + pId +
++               " is not a process group leader.");
++      return false;
++    }
++    if (LOG.isDebugEnabled()) {
++      LOG.debug(pId + " is a process group leader, as expected.");
++    }
++    return true;
++  }
++  
++  /** Make sure that the given pid is a process group leader and then
++   * destroy the process group.
++   * @param pgrpId   Process group id of to-be-killed-processes
++   * @param interval The time to wait before sending SIGKILL
++   *                 after sending SIGTERM
++   * @param inBackground Process is to be killed in the back ground with
++   *                     a separate thread
++   */
++  public static void assertAndDestroyProcessGroup(String pgrpId, long interval,
++                       boolean inBackground)
++         throws IOException {
++    // Make sure that the pid given is a process group leader
++    if (!checkPidPgrpidForMatch(pgrpId, PROCFS)) {
++      throw new IOException("Process with PID " + pgrpId  +
++                          " is not a process group leader.");
++    }
++    destroyProcessGroup(pgrpId, interval, inBackground);
++  }
++
++  /**
++   * Destroy the process-tree.
++   */
++  public void destroy() {
++    destroy(true);
++  }
++  
++  /**
++   * Destroy the process-tree.
++   * @param inBackground Process is to be killed in the back ground with
++   *                     a separate thread
++   */
++  public void destroy(boolean inBackground) {
++    LOG.debug("Killing ProcfsBasedProcessTree of " + pid);
++    if (pid == -1) {
++      return;
++    }
++    if (isAlive(pid.toString())) {
++      if (isSetsidAvailable && setsidUsed) {
++        // In this case, we know that pid got created using setsid. So kill the
++        // whole processGroup.
++        try {
++          assertAndDestroyProcessGroup(pid.toString(), sleeptimeBeforeSigkill,
++                              inBackground);
++        } catch (IOException e) {
++          LOG.warn(StringUtils.stringifyException(e));
++        }
++      }
++      else {
++        //TODO: Destroy all the processes in the subtree in this case also.
++        // For the time being, killing only the root process.
++        destroyProcess(pid.toString(), sleeptimeBeforeSigkill, inBackground);
++      }
++    }
++  }
+ 
+   private static final String PROCESSTREE_DUMP_FORMAT =
+       "\t|- %d %d %d %d %s %d %d %d %d %s\n";
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskMemoryManagerThread.java b/src/mapred/org/apache/hadoop/mapred/TaskMemoryManagerThread.java
+index b069c28..1166950 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskMemoryManagerThread.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskMemoryManagerThread.java
+@@ -18,6 +18,8 @@
+ 
+ package org.apache.hadoop.mapred;
+ 
++import java.util.Collections;
++import java.util.Comparator;
+ import java.util.HashMap;
+ import java.util.Iterator;
+ import java.util.Map;
+@@ -26,6 +28,7 @@ import java.util.ArrayList;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapred.TaskTracker;
+ import org.apache.hadoop.mapred.TaskTracker.TaskInProgress;
+ import org.apache.hadoop.util.ProcessTree;
+@@ -44,14 +47,15 @@ class TaskMemoryManagerThread extends Thread {
+   private long monitoringInterval;
+ 
+   private long maxMemoryAllowedForAllTasks;
++  private long maxRssMemoryAllowedForAllTasks;
+ 
+   private Map<TaskAttemptID, ProcessTreeInfo> processTreeInfoMap;
+   private Map<TaskAttemptID, ProcessTreeInfo> tasksToBeAdded;
+   private List<TaskAttemptID> tasksToBeRemoved;
+ 
+   private static final String MEMORY_USAGE_STRING =
+-    "Memory usage of ProcessTree %s for task-id %s : %d bytes, " +
+-      "limit : %d bytes";
++    "Memory usage of ProcessTree %s for task-id %s : Virtual %d bytes, " +
++      "limit : %d bytes; Physical %d bytes, limit %d bytes";
+   
+   public TaskMemoryManagerThread(TaskTracker taskTracker) {
+     
+@@ -61,6 +65,26 @@ class TaskMemoryManagerThread extends Thread {
+         5000L));
+ 
+     this.taskTracker = taskTracker;
++    long reservedRssMemory = taskTracker.getReservedPhysicalMemoryOnTT();
++    long totalPhysicalMemoryOnTT = taskTracker.getTotalPhysicalMemoryOnTT();
++    if (reservedRssMemory == JobConf.DISABLED_MEMORY_LIMIT ||
++        totalPhysicalMemoryOnTT == JobConf.DISABLED_MEMORY_LIMIT) {
++      maxRssMemoryAllowedForAllTasks = JobConf.DISABLED_MEMORY_LIMIT;
++      LOG.info("Physical memory monitoring disabled");
++    } else {
++      maxRssMemoryAllowedForAllTasks =
++                totalPhysicalMemoryOnTT - reservedRssMemory;
++      if (maxRssMemoryAllowedForAllTasks < 0) {
++        maxRssMemoryAllowedForAllTasks = JobConf.DISABLED_MEMORY_LIMIT;
++        LOG.warn("Reserved physical memory exceeds total. Physical memory " +
++            "monitoring disabled.");
++      } else {
++        LOG.info(String.format("Physical memory monitoring enabled. " +
++            "System total: %s. Reserved: %s. Maximum: %s.",
++            totalPhysicalMemoryOnTT, reservedRssMemory,
++            maxRssMemoryAllowedForAllTasks));
++      }
++    }
+   }
+ 
+   // mainly for test purposes. note that the tasktracker variable is
+@@ -73,15 +97,17 @@ class TaskMemoryManagerThread extends Thread {
+     tasksToBeAdded = new HashMap<TaskAttemptID, ProcessTreeInfo>();
+     tasksToBeRemoved = new ArrayList<TaskAttemptID>();
+ 
+-    this.maxMemoryAllowedForAllTasks = maxMemoryAllowedForAllTasks;
++    this.maxMemoryAllowedForAllTasks = maxMemoryAllowedForAllTasks < 0 ?
++        JobConf.DISABLED_MEMORY_LIMIT : maxMemoryAllowedForAllTasks;
+ 
+     this.monitoringInterval = monitoringInterval;
+   }
+ 
+-  public void addTask(TaskAttemptID tid, long memLimit) {
++  public void addTask(TaskAttemptID tid, long memLimit, long memLimitPhysical) {
+     synchronized (tasksToBeAdded) {
+       LOG.debug("Tracking ProcessTree " + tid + " for the first time");
+-      ProcessTreeInfo ptInfo = new ProcessTreeInfo(tid, null, null, memLimit);
++      ProcessTreeInfo ptInfo =
++        new ProcessTreeInfo(tid, null, null, memLimit, memLimitPhysical);
+       tasksToBeAdded.put(tid, ptInfo);
+     }
+   }
+@@ -97,14 +123,16 @@ class TaskMemoryManagerThread extends Thread {
+     private String pid;
+     private ProcfsBasedProcessTree pTree;
+     private long memLimit;
++    private long memLimitPhysical;
+     private String pidFile;
+ 
+     public ProcessTreeInfo(TaskAttemptID tid, String pid,
+-        ProcfsBasedProcessTree pTree, long memLimit) {
++        ProcfsBasedProcessTree pTree, long memLimit, long memLimitPhysical) {
+       this.tid = tid;
+       this.pid = pid;
+       this.pTree = pTree;
+       this.memLimit = memLimit;
++      this.memLimitPhysical = memLimitPhysical;
+     }
+ 
+     public TaskAttemptID getTID() {
+@@ -130,6 +158,13 @@ class TaskMemoryManagerThread extends Thread {
+     public long getMemLimit() {
+       return memLimit;
+     }
++
++    /**
++     * @return Physical memory limit for the process tree in bytes
++     */
++    public long getMemLimitPhysical() {
++      return memLimitPhysical;
++    }
+   }
+ 
+   @Override
+@@ -164,6 +199,7 @@ class TaskMemoryManagerThread extends Thread {
+       }
+ 
+       long memoryStillInUsage = 0;
++      long rssMemoryStillInUsage = 0;
+       // Now, check memory usage and kill any overflowing tasks
+       for (Iterator<Map.Entry<TaskAttemptID, ProcessTreeInfo>> it = processTreeInfoMap
+           .entrySet().iterator(); it.hasNext();) {
+@@ -197,6 +233,10 @@ class TaskMemoryManagerThread extends Thread {
+             continue; // processTree cannot be tracked
+           }
+ 
++          if (taskTracker.getRunningTask(tid).wasKilled()) {
++            continue; // this task has been killed already
++          }
++
+           LOG.debug("Constructing ProcessTree for : PID = " + pId + " TID = "
+               + tid);
+           ProcfsBasedProcessTree pTree = ptInfo.getProcessTree();
+@@ -204,26 +244,50 @@ class TaskMemoryManagerThread extends Thread {
+           ptInfo.setProcessTree(pTree); // update ptInfo with proces-tree of
+           // updated state
+           long currentMemUsage = pTree.getCumulativeVmem();
++          long currentRssMemUsage = pTree.getCumulativeRssmem();
+           // as processes begin with an age 1, we want to see if there 
+           // are processes more than 1 iteration old.
+           long curMemUsageOfAgedProcesses = pTree.getCumulativeVmem(1);
++          long curRssMemUsageOfAgedProcesses = pTree.getCumulativeRssmem(1);
+           long limit = ptInfo.getMemLimit();
++          long limitPhysical = ptInfo.getMemLimitPhysical();
+           LOG.info(String.format(MEMORY_USAGE_STRING, 
+-                                pId, tid.toString(), currentMemUsage, limit));
+-
+-          if (isProcessTreeOverLimit(tid.toString(), currentMemUsage, 
++                                pId, tid.toString(), currentMemUsage, limit,
++                                currentRssMemUsage, limitPhysical));
++          
++          boolean isMemoryOverLimit = false;
++          String msg = "";
++          if (doCheckVirtualMemory() &&
++              isProcessTreeOverLimit(tid.toString(), currentMemUsage, 
+                                       curMemUsageOfAgedProcesses, limit)) {
+             // Task (the root process) is still alive and overflowing memory.
+             // Dump the process-tree and then clean it up.
+-            String msg =
+-                "TaskTree [pid=" + pId + ",tipID=" + tid
++            msg = "TaskTree [pid=" + pId + ",tipID=" + tid
+                     + "] is running beyond memory-limits. Current usage : "
+                     + currentMemUsage + "bytes. Limit : " + limit
+                     + "bytes. Killing task. \nDump of the process-tree for "
+                     + tid + " : \n" + pTree.getProcessTreeDump();
++            isMemoryOverLimit = true;
++          } else if (doCheckPhysicalMemory() &&
++              isProcessTreeOverLimit(tid.toString(), currentRssMemUsage,
++                                curRssMemUsageOfAgedProcesses, limitPhysical)) {
++            // Task (the root process) is still alive and overflowing memory.
++            // Dump the process-tree and then clean it up.
++            msg = "TaskTree [pid=" + pId + ",tipID=" + tid
++                    + "] is running beyond physical memory-limits."
++                    + " Current usage : "
++                    + currentRssMemUsage + "bytes. Limit : " + limitPhysical
++                    + "bytes. Killing task. \nDump of the process-tree for "
++                    + tid + " : \n" + pTree.getProcessTreeDump();
++            isMemoryOverLimit = true;
++          }
++
++          if (isMemoryOverLimit) {
++            // Virtual or physical memory over limit. Fail the task and remove
++            // the corresponding process tree
+             LOG.warn(msg);
+             // kill the task
+-            TaskInProgress tip = taskTracker.runningTasks.get(tid);
++            TaskInProgress tip = taskTracker.getRunningTask(tid);
+             if (tip != null) {
+               String[] diag = msg.split("\n");
+               tip.getStatus().setDiagnosticInfo(diag[0]);
+@@ -236,6 +300,7 @@ class TaskMemoryManagerThread extends Thread {
+             // Accounting the total memory in usage for all tasks that are still
+             // alive and within limits.
+             memoryStillInUsage += currentMemUsage;
++            rssMemoryStillInUsage += currentRssMemUsage;
+           }
+         } catch (Exception e) {
+           // Log the exception and proceed to the next task.
+@@ -245,13 +310,23 @@ class TaskMemoryManagerThread extends Thread {
+         }
+       }
+ 
+-      if (memoryStillInUsage > maxMemoryAllowedForAllTasks) {
++      if (doCheckVirtualMemory() &&
++          memoryStillInUsage > maxMemoryAllowedForAllTasks) {
+         LOG.warn("The total memory in usage " + memoryStillInUsage
+             + " is still overflowing TTs limits "
+             + maxMemoryAllowedForAllTasks
+             + ". Trying to kill a few tasks with the least progress.");
+         killTasksWithLeastProgress(memoryStillInUsage);
+       }
++      
++      if (doCheckPhysicalMemory() &&
++          rssMemoryStillInUsage > maxRssMemoryAllowedForAllTasks) {
++        LOG.warn("The total physical memory in usage " + rssMemoryStillInUsage
++            + " is still overflowing TTs limits "
++            + maxRssMemoryAllowedForAllTasks
++            + ". Trying to kill a few tasks with the highest memory.");
++        killTasksWithMaxRssMemory(rssMemoryStillInUsage);
++      }
+     
+       // Sleep for some time before beginning next cycle
+       try {
+@@ -267,6 +342,22 @@ class TaskMemoryManagerThread extends Thread {
+   }
+ 
+   /**
++   * Is the total physical memory check enabled?
++   * @return true if total physical memory check is enabled.
++   */
++  private boolean doCheckPhysicalMemory() {
++    return !(maxRssMemoryAllowedForAllTasks == JobConf.DISABLED_MEMORY_LIMIT);
++  }
++
++  /**
++   * Is the total virtual memory check enabled?
++   * @return true if total virtual memory check is enabled.
++   */
++  private boolean doCheckVirtualMemory() {
++    return !(maxMemoryAllowedForAllTasks == JobConf.DISABLED_MEMORY_LIMIT);
++  }
++
++  /**
+    * Check whether a task's process tree's current memory usage is over limit.
+    * 
+    * When a java process exec's a program, it could momentarily account for
+@@ -331,8 +422,9 @@ class TaskMemoryManagerThread extends Thread {
+     List<TaskAttemptID> tasksToExclude = new ArrayList<TaskAttemptID>();
+     // Find tasks to kill so as to get memory usage under limits.
+     while (memoryStillInUsage > maxMemoryAllowedForAllTasks) {
+-      // Exclude tasks that are already marked for
+-      // killing.
++      // Exclude tasks that are already marked for killing.
++      // Note that we do not need to call isKillable() here because the logic
++      // is contained in taskTracker.findTaskToKill()
+       TaskInProgress task = taskTracker.findTaskToKill(tasksToExclude);
+       if (task == null) {
+         break; // couldn't find any more tasks to kill.
+@@ -359,21 +451,104 @@ class TaskMemoryManagerThread extends Thread {
+                 + "the TaskTracker " + taskTracker.localHostname 
+                 + " exceeds virtual memory limit "
+                 + maxMemoryAllowedForAllTasks + ".";
+-        TaskInProgress tip = taskTracker.runningTasks.get(tid);
++        TaskInProgress tip = taskTracker.getRunningTask(tid);
+         if (tip != null) {
+            tip.getStatus().setDiagnosticInfo(msg);
+         }
+         LOG.warn(msg);
+-        // Kill the task and mark it as killed.
+-        taskTracker.cleanUpOverMemoryTask(tid, false, msg);
+-        // Now destroy the ProcessTree, remove it from monitoring map.
+-        ProcessTreeInfo ptInfo = processTreeInfoMap.get(tid);
+-        processTreeInfoMap.remove(tid);
+-        LOG.info("Removed ProcessTree with root " + ptInfo.getPID());
++        killTask(tid, msg);
+       }
+     } else {
+       LOG.info("The total memory usage is overflowing TTs limits. "
+           + "But found no alive task to kill for freeing memory.");
+     }
+   }
++  
++  /**
++   * Return the cumulative rss memory used by a task
++   * @param tid the task attempt ID of the task
++   * @return rss memory usage in bytes. 0 if the process tree is not available
++   */
++  private long getTaskCumulativeRssmem(TaskAttemptID tid) {
++      ProcessTreeInfo ptInfo = processTreeInfoMap.get(tid);
++      ProcfsBasedProcessTree pTree = ptInfo.getProcessTree();
++      return pTree == null ? 0 : pTree.getCumulativeVmem();
++  }
++
++  /**
++   * Starting from the tasks use the highest amount of RSS memory,
++   * kill the tasks until the RSS memory meets the requirement
++   * @param rssMemoryInUsage
++   */
++  private void killTasksWithMaxRssMemory(long rssMemoryInUsage) {
++    
++    List<TaskAttemptID> tasksToKill = new ArrayList<TaskAttemptID>();
++    List<TaskAttemptID> allTasks = new ArrayList<TaskAttemptID>();
++    allTasks.addAll(processTreeInfoMap.keySet());
++    // Sort the tasks ascendingly according to RSS memory usage 
++    Collections.sort(allTasks, new Comparator<TaskAttemptID>() {
++      public int compare(TaskAttemptID tid1, TaskAttemptID tid2) {
++        return  getTaskCumulativeRssmem(tid1) < getTaskCumulativeRssmem(tid2) ?
++                -1 : 1;
++      }});
++    
++    // Kill the tasks one by one until the memory requirement is met
++    while (rssMemoryInUsage > maxRssMemoryAllowedForAllTasks &&
++           !allTasks.isEmpty()) {
++      TaskAttemptID tid = allTasks.remove(allTasks.size() - 1);
++      if (!isKillable(tid)) {
++        continue;
++      }
++      long rssmem = getTaskCumulativeRssmem(tid);
++      if (rssmem == 0) {
++        break; // Skip tasks without process tree information currently
++      }
++      tasksToKill.add(tid);
++      rssMemoryInUsage -= rssmem;
++    }
++
++    // Now kill the tasks.
++    if (!tasksToKill.isEmpty()) {
++      for (TaskAttemptID tid : tasksToKill) {
++        String msg =
++            "Killing one of the memory-consuming tasks - " + tid
++                + ", as the cumulative RSS memory usage of all the tasks on "
++                + "the TaskTracker exceeds physical memory limit "
++                + maxRssMemoryAllowedForAllTasks + ".";
++        LOG.warn(msg);
++        killTask(tid, msg);
++      }
++    } else {
++      LOG.info("The total physical memory usage is overflowing TTs limits. "
++          + "But found no alive task to kill for freeing memory.");
++    }
++  }
++
++  /**
++   * Kill the task and clean up ProcessTreeInfo
++   * @param tid task attempt ID of the task to be killed.
++   * @param msg diagnostics message
++   */
++  private void killTask(TaskAttemptID tid, String msg) {
++    // Kill the task and mark it as killed.
++    taskTracker.cleanUpOverMemoryTask(tid, false, msg);
++    // Now destroy the ProcessTree, remove it from monitoring map.
++    ProcessTreeInfo ptInfo = processTreeInfoMap.get(tid);
++    ProcfsBasedProcessTree pTree = ptInfo.getProcessTree();
++    pTree.destroy(true/*in the background*/);
++    processTreeInfoMap.remove(tid);
++    LOG.info("Removed ProcessTree with root " + ptInfo.getPID());
++  }
++
++  /**
++   * Check if a task can be killed to increase free memory
++   * @param tid task attempt ID
++   * @return true if the task can be killed
++   */
++  private boolean isKillable(TaskAttemptID tid) {
++      TaskInProgress tip = taskTracker.getRunningTask(tid);
++      return tip != null && !tip.wasKilled() &&
++             (tip.getRunState() == TaskStatus.State.RUNNING ||
++              tip.getRunState() == TaskStatus.State.COMMIT_PENDING);
++  }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index a5ba0f5..5799b04 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -133,6 +133,12 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+   @Deprecated
+   static final String MAPRED_TASKTRACKER_PMEM_RESERVED_PROPERTY =
+      "mapred.tasktracker.pmem.reserved";
++  
++  static final String TT_RESERVED_PHYSICALMEMORY_MB =
++    "mapreduce.tasktracker.reserved.physicalmemory.mb";
++  
++  static final String TT_MEMORY_MANAGER_MONITORING_INTERVAL = 
++    "mapreduce.tasktracker.taskmemorymanager.monitoringinterval";
+ 
+   static final String CONF_VERSION_KEY = "mapreduce.tasktracker.conf.version";
+   static final String CONF_VERSION_DEFAULT = "default";
+@@ -384,6 +390,7 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+   private long mapSlotMemorySizeOnTT = JobConf.DISABLED_MEMORY_LIMIT;
+   private long reduceSlotSizeMemoryOnTT = JobConf.DISABLED_MEMORY_LIMIT;
+   private long totalMemoryAllottedForTasks = JobConf.DISABLED_MEMORY_LIMIT;
++  private long reservedPhysicalMemoryOnTT = JobConf.DISABLED_MEMORY_LIMIT;
+   private ResourceCalculatorPlugin resourceCalculatorPlugin = null;
+ 
+   private UserLogManager userLogManager;
+@@ -2108,6 +2115,15 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+   }
+   
+   /**
++   * @return The amount of physical memory that will not be used for running
++   *         tasks in bytes. Returns JobConf.DISABLED_MEMORY_LIMIT if it is not
++   *         configured.
++   */
++  long getReservedPhysicalMemoryOnTT() {
++    return reservedPhysicalMemoryOnTT;
++  }
++
++  /**
+    * Check if the jobtracker directed a 'reset' of the tasktracker.
+    * 
+    * @param actions the directives of the jobtracker for the tasktracker.
+@@ -2566,12 +2582,25 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+   
+   void addToMemoryManager(TaskAttemptID attemptId, boolean isMap,
+                           JobConf conf) {
+-    if (isTaskMemoryManagerEnabled()) {
+-      taskMemoryManager.addTask(attemptId, 
+-          isMap ? conf
+-              .getMemoryForMapTask() * 1024 * 1024L : conf
+-              .getMemoryForReduceTask() * 1024 * 1024L);
++    if (!isTaskMemoryManagerEnabled()) {
++      return; // Skip this if TaskMemoryManager is not enabled.
+     }
++    // Obtain physical memory limits from the job configuration
++    long physicalMemoryLimit =
++      conf.getLong(isMap ? JobContext.MAP_MEMORY_PHYSICAL_MB :
++                   JobContext.REDUCE_MEMORY_PHYSICAL_MB,
++                   JobConf.DISABLED_MEMORY_LIMIT);
++    if (physicalMemoryLimit > 0) {
++      physicalMemoryLimit *= 1024L * 1024L;
++    }
++
++    // Obtain virtual memory limits from the job configuration
++    long virtualMemoryLimit = isMap ?
++      conf.getMemoryForMapTask() * 1024 * 1024 :
++      conf.getMemoryForReduceTask() * 1024 * 1024;
++
++    taskMemoryManager.addTask(attemptId, virtualMemoryLimit,
++                              physicalMemoryLimit);
+   }
+ 
+   void removeFromMemoryManager(TaskAttemptID attemptId) {
+@@ -4223,6 +4252,10 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+   public TaskMemoryManagerThread getTaskMemoryManager() {
+     return taskMemoryManager;
+   }
++  
++  synchronized TaskInProgress getRunningTask(TaskAttemptID tid) {
++    return runningTasks.get(tid);
++  }
+ 
+   /**
+    * Normalize the negative values in configuration
+@@ -4340,6 +4373,14 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+           + " Thrashing might happen.");
+     }
+ 
++    reservedPhysicalMemoryOnTT =
++      fConf.getLong(TT_RESERVED_PHYSICALMEMORY_MB,
++                    JobConf.DISABLED_MEMORY_LIMIT);
++    reservedPhysicalMemoryOnTT =
++      reservedPhysicalMemoryOnTT == JobConf.DISABLED_MEMORY_LIMIT ?
++      JobConf.DISABLED_MEMORY_LIMIT :
++      reservedPhysicalMemoryOnTT * 1024 * 1024; // normalize to bytes
++
+     // start the taskMemoryManager thread only if enabled
+     setTaskMemoryManagerEnabledFlag();
+     if (isTaskMemoryManagerEnabled()) {
+@@ -4357,10 +4398,12 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+       return;
+     }
+ 
+-    if (totalMemoryAllottedForTasks == JobConf.DISABLED_MEMORY_LIMIT) {
++    if (reservedPhysicalMemoryOnTT == JobConf.DISABLED_MEMORY_LIMIT
++        && totalMemoryAllottedForTasks == JobConf.DISABLED_MEMORY_LIMIT) {
+       taskMemoryManagerEnabled = false;
+-      LOG.warn("TaskTracker's totalMemoryAllottedForTasks is -1."
+-          + " TaskMemoryManager is disabled.");
++      LOG.warn("TaskTracker's totalMemoryAllottedForTasks is -1 and " +
++               "reserved physical memory is not configured. " +
++               "TaskMemoryManager is disabled.");
+       return;
+     }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/JobContext.java b/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
+index eb752a7..3e30f79 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/JobContext.java
+@@ -70,6 +70,11 @@ public class JobContext {
+   public static final String MAPREDUCE_TASK_CLASSPATH_PRECEDENCE = 
+     "mapreduce.task.classpath.user.precedence";
+   
++  public static final String MAP_MEMORY_PHYSICAL_MB =
++    "mapreduce.map.memory.physical.mb";
++  public static final String REDUCE_MEMORY_PHYSICAL_MB = 
++     "mapreduce.reduce.memory.physical.mb";
++  
+   /**
+    * The UserGroupInformation object that has a reference to the current user
+    */
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskTrackerMemoryManager.java b/src/test/org/apache/hadoop/mapred/TestTaskTrackerMemoryManager.java
+index 8376b47..ac6d25d 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTaskTrackerMemoryManager.java
++++ b/src/test/org/apache/hadoop/mapred/TestTaskTrackerMemoryManager.java
+@@ -33,6 +33,8 @@ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.hdfs.server.namenode.NameNode;
+ import org.apache.hadoop.examples.SleepJob;
++import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.util.LinuxResourceCalculatorPlugin;
+ import org.apache.hadoop.util.MemoryCalculatorPlugin;
+ import org.apache.hadoop.util.ProcfsBasedProcessTree;
+ import org.apache.hadoop.util.StringUtils;
+@@ -55,7 +57,7 @@ public class TestTaskTrackerMemoryManager extends TestCase {
+   private MiniMRCluster miniMRCluster;
+ 
+   private String taskOverLimitPatternString =
+-      "TaskTree \\[pid=[0-9]*,tipID=.*\\] is running beyond memory-limits. "
++      "TaskTree \\[pid=[0-9]*,tipID=.*\\] is running beyond.*memory-limits. "
+           + "Current usage : [0-9]*bytes. Limit : %sbytes. Killing task.";
+ 
+   private void startCluster(JobConf conf)
+@@ -179,11 +181,16 @@ public class TestTaskTrackerMemoryManager extends TestCase {
+     fConf.setLong(
+         JobTracker.MAPRED_CLUSTER_REDUCE_MEMORY_MB_PROPERTY,
+         2 * 1024L);
++    // Reserve only 1 mb of the memory on TaskTrackers
++    fConf.setLong(TaskTracker.TT_RESERVED_PHYSICALMEMORY_MB, 1L);
+     startCluster(new JobConf());
+ 
+     JobConf conf = new JobConf(miniMRCluster.createJobConf());
+     conf.setMemoryForMapTask(PER_TASK_LIMIT);
+     conf.setMemoryForReduceTask(PER_TASK_LIMIT);
++    // Set task physical memory limits
++    conf.setLong(JobContext.MAP_MEMORY_PHYSICAL_MB, PER_TASK_LIMIT);
++    conf.setLong(JobContext.REDUCE_MEMORY_PHYSICAL_MB, PER_TASK_LIMIT);
+     runAndCheckSuccessfulJob(conf);
+   }
+ 
+@@ -211,7 +218,31 @@ public class TestTaskTrackerMemoryManager extends TestCase {
+         JobTracker.MAPRED_CLUSTER_REDUCE_MEMORY_MB_PROPERTY,
+         2 * 1024);
+     startCluster(fConf);
+-    runJobExceedingMemoryLimit();
++    runJobExceedingMemoryLimit(false);
++  }
++  
++  /**
++   * Test for verifying that tasks that go beyond physical limits get killed.
++   * 
++   * @throws Exception
++   */
++  public void testTasksBeyondPhysicalLimits()
++      throws Exception {
++
++    // Run the test only if memory management is enabled
++    if (!isProcfsBasedTreeAvailable()) {
++      return;
++    }
++
++    // Start cluster with proper configuration.
++    JobConf fConf = new JobConf();
++    // very small value, so that no task escapes to successful completion.
++    fConf.set(TaskTracker.TT_MEMORY_MANAGER_MONITORING_INTERVAL,
++        String.valueOf(300));
++    // Reserve only 1 mb of the memory on TaskTrackers
++    fConf.setLong(TaskTracker.TT_RESERVED_PHYSICALMEMORY_MB, 1L);
++    startCluster(fConf);
++    runJobExceedingMemoryLimit(true);
+   }
+   
+   /**
+@@ -241,15 +272,18 @@ public class TestTaskTrackerMemoryManager extends TestCase {
+     fConf.setLong(JobConf.UPPER_LIMIT_ON_TASK_VMEM_PROPERTY, 
+         (3L * 1024L * 1024L * 1024L));
+     startCluster(fConf);
+-    runJobExceedingMemoryLimit();
++    runJobExceedingMemoryLimit(false);
+   }
+ 
+   /**
+    * Runs a job which should fail the when run by the memory monitor.
+    * 
++   * @param doPhysicalMemory If it is true, use physical memory limit.
++   *                         Otherwise use virtual memory limit.
+    * @throws IOException
+    */
+-  private void runJobExceedingMemoryLimit() throws IOException {
++  private void runJobExceedingMemoryLimit(boolean doPhysicalMemory)
++    throws IOException {
+     long PER_TASK_LIMIT = 1L; // Low enough to kill off sleepJob tasks.
+ 
+     Pattern taskOverLimitPattern =
+@@ -259,8 +293,13 @@ public class TestTaskTrackerMemoryManager extends TestCase {
+ 
+     // Set up job.
+     JobConf conf = new JobConf(miniMRCluster.createJobConf());
+-    conf.setMemoryForMapTask(PER_TASK_LIMIT);
+-    conf.setMemoryForReduceTask(PER_TASK_LIMIT);
++    if (doPhysicalMemory) {
++      conf.setLong(JobContext.MAP_MEMORY_PHYSICAL_MB, PER_TASK_LIMIT);
++      conf.setLong(JobContext.REDUCE_MEMORY_PHYSICAL_MB, PER_TASK_LIMIT);
++    } else {
++      conf.setMemoryForMapTask(PER_TASK_LIMIT);
++      conf.setMemoryForReduceTask(PER_TASK_LIMIT);
++    }
+     conf.setMaxMapAttempts(1);
+     conf.setMaxReduceAttempts(1);
+ 
+@@ -484,4 +523,87 @@ public class TestTaskTrackerMemoryManager extends TestCase {
+       FileUtil.fullyDelete(procfsRootDir);
+     }
+   }
++
++  /**
++   * Test for verifying that tasks causing cumulative usage of physical memory
++   * to go beyond TT's limit get killed.
++   *
++   * @throws Exception
++   */
++  public void testTasksCumulativelyExceedingTTPhysicalLimits()
++      throws Exception {
++
++    // Run the test only if memory management is enabled
++    if (!isProcfsBasedTreeAvailable()) {
++      return;
++    }
++
++    // Start cluster with proper configuration.
++    JobConf fConf = new JobConf();
++
++    // very small value, so that no task escapes to successful completion.
++    fConf.set("mapred.tasktracker.taskmemorymanager.monitoring-interval",
++        String.valueOf(300));
++    
++    // reserve almost all memory on TT so that the job will exceed memory limits
++    LinuxResourceCalculatorPlugin memoryCalculatorPlugin =
++            new LinuxResourceCalculatorPlugin();
++    long totalPhysicalMemory = memoryCalculatorPlugin.getPhysicalMemorySize();
++    long reservedPhysicalMemory = (totalPhysicalMemory - 1) / (1024 * 1024);
++    fConf.setLong(TaskTracker.TT_RESERVED_PHYSICALMEMORY_MB,
++                  reservedPhysicalMemory);
++    long maxRssMemoryAllowedForAllTasks = totalPhysicalMemory -
++                                          reservedPhysicalMemory * 1024 * 1024L;
++    Pattern physicalMemoryOverLimitPattern = Pattern.compile(
++        "Killing one of the memory-consuming tasks - .*"
++          + ", as the cumulative RSS memory usage of all the tasks on "
++          + "the TaskTracker exceeds physical memory limit "
++          + maxRssMemoryAllowedForAllTasks + ".");
++
++    startCluster(fConf);
++    Matcher mat = null;
++
++    // Set up job.
++    JobConf conf = new JobConf(miniMRCluster.createJobConf());
++    // Set per task physical memory limits to be a higher value
++    conf.setLong(JobContext.MAP_MEMORY_PHYSICAL_MB, 2 * 1024L);
++    conf.setLong(JobContext.REDUCE_MEMORY_PHYSICAL_MB, 2 * 1024L);
++    JobClient jClient = new JobClient(conf);
++    SleepJob sleepJob = new SleepJob();
++    sleepJob.setConf(conf);
++    // Start the job
++    JobConf job = sleepJob.setupJobConf(1, 1, 100000, 1, 100000, 1);
++    RunningJob runningJob = jClient.submitJob(job);
++    boolean TTOverFlowMsgPresent = false;
++    while (true) {
++      List<TaskReport> allTaskReports = new ArrayList<TaskReport>();
++      allTaskReports.addAll(Arrays.asList(jClient
++          .getSetupTaskReports((org.apache.hadoop.mapred.JobID) runningJob.getID())));
++      allTaskReports.addAll(Arrays.asList(jClient
++          .getMapTaskReports((org.apache.hadoop.mapred.JobID) runningJob.getID())));
++      for (TaskReport tr : allTaskReports) {
++        String[] diag = tr.getDiagnostics();
++        for (String str : diag) {
++          mat = physicalMemoryOverLimitPattern.matcher(str);
++          if (mat.find()) {
++            TTOverFlowMsgPresent = true;
++          }
++        }
++      }
++      if (TTOverFlowMsgPresent) {
++        break;
++      }
++      assertFalse("Job should not finish successfully", runningJob.isSuccessful());
++      try {
++        Thread.sleep(1000);
++      } catch (InterruptedException e) {
++        // nothing
++      }
++    }
++    // If it comes here without a test-timeout, it means there was a task that
++    // was killed because of crossing cumulative TT limit.
++
++    // Test succeeded, kill the job.
++    runningJob.killJob();
++  }
+ }
+-- 
+1.7.0.4
+

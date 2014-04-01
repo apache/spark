@@ -1,0 +1,84 @@
+From ba0fc48b0d49ba1c03ef50ddb289580e61e0d689 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 2 Mar 2010 23:04:42 +0000
+Subject: [PATCH 0526/1179] HADOOP-6569. FsShell#cat should avoid calling unecessary getFileStatus before opening a file to read
+
+Patch: http://issues.apache.org/jira/secure/attachment/12437633/optimizeCat-yahoo2.patch
+Author: Hairong Kuang
+Ref: YDH
+---
+ src/core/org/apache/hadoop/fs/FsShell.java     |    5 +----
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java |    2 +-
+ src/test/org/apache/hadoop/cli/testConf.xml    |    6 +++---
+ 3 files changed, 5 insertions(+), 8 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/FsShell.java b/src/core/org/apache/hadoop/fs/FsShell.java
+index ea4f2de..3c14b06 100644
+--- a/src/core/org/apache/hadoop/fs/FsShell.java
++++ b/src/core/org/apache/hadoop/fs/FsShell.java
+@@ -335,7 +335,7 @@ public class FsShell extends Configured implements Tool {
+    * @exception: IOException
+    * @see org.apache.hadoop.fs.FileSystem.globStatus 
+    */
+-  void cat(String src, boolean verifyChecksum) throws IOException {
++  void cat(final String src, boolean verifyChecksum) throws IOException {
+     //cat behavior in Linux
+     //  [~/1207]$ ls ?.txt
+     //  x.txt  z.txt
+@@ -348,9 +348,6 @@ public class FsShell extends Configured implements Tool {
+     new DelayedExceptionThrowing() {
+       @Override
+       void process(Path p, FileSystem srcFs) throws IOException {
+-        if (srcFs.getFileStatus(p).isDir()) {
+-          throw new IOException("Source must be a file.");
+-        }
+         printToStdout(srcFs.open(p));
+       }
+     }.globAndProcess(srcPattern, getSrcFileSystem(srcPattern, verifyChecksum));
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index f6e6ab3..613904a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -1552,7 +1552,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     synchronized void openInfo() throws IOException {
+       LocatedBlocks newInfo = callGetBlockLocations(namenode, src, 0, prefetchSize);
+       if (newInfo == null) {
+-        throw new IOException("Cannot open filename " + src);
++        throw new FileNotFoundException("File does not exist: " + src);
+       }
+ 
+       // I think this check is not correct. A file could have been appended to
+diff --git a/src/test/org/apache/hadoop/cli/testConf.xml b/src/test/org/apache/hadoop/cli/testConf.xml
+index 13603a7..2d4e45d 100644
+--- a/src/test/org/apache/hadoop/cli/testConf.xml
++++ b/src/test/org/apache/hadoop/cli/testConf.xml
+@@ -2314,7 +2314,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^cat: File does not exist: file</expected-output>
++          <expected-output>^cat: File does not exist: /user/[a-z]*/file</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -2331,7 +2331,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^cat: Source must be a file.</expected-output>
++          <expected-output>^cat: File does not exist: /dir1</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+@@ -2348,7 +2348,7 @@
+       <comparators>
+         <comparator>
+           <type>RegexpComparator</type>
+-          <expected-output>^cat: File does not exist: dir</expected-output>
++          <expected-output>^cat: File does not exist: /user/[a-z]*/dir</expected-output>
+         </comparator>
+       </comparators>
+     </test>
+-- 
+1.7.0.4
+

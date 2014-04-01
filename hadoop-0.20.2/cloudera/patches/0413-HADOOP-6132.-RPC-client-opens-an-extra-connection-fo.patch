@@ -1,0 +1,105 @@
+From c1c67ca1ab0d958c2258c8c1571adb89996f684a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 24 Dec 2009 11:46:03 -0800
+Subject: [PATCH 0413/1179] HADOOP-6132. RPC client opens an extra connection for VersionedProtocol
+
+Patch: https://issues.apache.org/jira/secure/attachment/12428925/HADOOP-6132-0_20.1.patch
+Author: Kan Zhang
+Ref: YDH
+---
+ src/core/org/apache/hadoop/ipc/RPC.java |   26 +++++++++++++++++---------
+ 1 files changed, 17 insertions(+), 9 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/RPC.java b/src/core/org/apache/hadoop/ipc/RPC.java
+index e2cccd4..22d90ef 100644
+--- a/src/core/org/apache/hadoop/ipc/RPC.java
++++ b/src/core/org/apache/hadoop/ipc/RPC.java
+@@ -198,13 +198,16 @@ public class RPC {
+   private static ClientCache CLIENTS=new ClientCache();
+   
+   private static class Invoker implements InvocationHandler {
++    private Class<? extends VersionedProtocol> protocol;
+     private InetSocketAddress address;
+     private UserGroupInformation ticket;
+     private Client client;
+     private boolean isClosed = false;
+ 
+-    public Invoker(InetSocketAddress address, UserGroupInformation ticket, 
+-                   Configuration conf, SocketFactory factory) {
++    public Invoker(Class<? extends VersionedProtocol> protocol,
++        InetSocketAddress address, UserGroupInformation ticket,
++        Configuration conf, SocketFactory factory) {
++      this.protocol = protocol;
+       this.address = address;
+       this.ticket = ticket;
+       this.client = CLIENTS.getClient(conf, factory);
+@@ -220,7 +223,7 @@ public class RPC {
+ 
+       ObjectWritable value = (ObjectWritable)
+         client.call(new Invocation(method, args), address, 
+-                    method.getDeclaringClass(), ticket);
++                    protocol, ticket);
+       if (logDebug) {
+         long callTime = System.currentTimeMillis() - startTime;
+         LOG.debug("Call: " + method.getName() + " " + callTime);
+@@ -284,7 +287,8 @@ public class RPC {
+     }
+   }
+   
+-  public static VersionedProtocol waitForProxy(Class protocol,
++  public static VersionedProtocol waitForProxy(
++      Class<? extends VersionedProtocol> protocol,
+       long clientVersion,
+       InetSocketAddress addr,
+       Configuration conf
+@@ -302,7 +306,8 @@ public class RPC {
+    * @return the proxy
+    * @throws IOException if the far end through a RemoteException
+    */
+-  static VersionedProtocol waitForProxy(Class protocol,
++  static VersionedProtocol waitForProxy(
++                      Class<? extends VersionedProtocol> protocol,
+                                                long clientVersion,
+                                                InetSocketAddress addr,
+                                                Configuration conf,
+@@ -338,7 +343,8 @@ public class RPC {
+   }
+   /** Construct a client-side proxy object that implements the named protocol,
+    * talking to a server at the named address. */
+-  public static VersionedProtocol getProxy(Class<?> protocol,
++  public static VersionedProtocol getProxy(
++      Class<? extends VersionedProtocol> protocol,
+       long clientVersion, InetSocketAddress addr, Configuration conf,
+       SocketFactory factory) throws IOException {
+     UserGroupInformation ugi = null;
+@@ -352,14 +358,15 @@ public class RPC {
+   
+   /** Construct a client-side proxy object that implements the named protocol,
+    * talking to a server at the named address. */
+-  public static VersionedProtocol getProxy(Class<?> protocol,
++  public static VersionedProtocol getProxy(
++      Class<? extends VersionedProtocol> protocol,
+       long clientVersion, InetSocketAddress addr, UserGroupInformation ticket,
+       Configuration conf, SocketFactory factory) throws IOException {    
+ 
+     VersionedProtocol proxy =
+         (VersionedProtocol) Proxy.newProxyInstance(
+             protocol.getClassLoader(), new Class[] { protocol },
+-            new Invoker(addr, ticket, conf, factory));
++            new Invoker(protocol, addr, ticket, conf, factory));
+     long serverVersion = proxy.getProtocolVersion(protocol.getName(), 
+                                                   clientVersion);
+     if (serverVersion == clientVersion) {
+@@ -380,7 +387,8 @@ public class RPC {
+    * @return a proxy instance
+    * @throws IOException
+    */
+-  public static VersionedProtocol getProxy(Class<?> protocol,
++  public static VersionedProtocol getProxy(
++      Class<? extends VersionedProtocol> protocol,
+       long clientVersion, InetSocketAddress addr, Configuration conf)
+       throws IOException {
+ 
+-- 
+1.7.0.4
+

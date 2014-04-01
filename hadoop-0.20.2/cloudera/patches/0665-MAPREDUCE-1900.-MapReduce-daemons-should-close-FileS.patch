@@ -1,0 +1,384 @@
+From 9d3d402301267201d771becef005864e48ea5b82 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 28 Jun 2010 12:05:46 -0700
+Subject: [PATCH 0665/1179] MAPREDUCE-1900. MapReduce daemons should close FileSystems that are not needed anymore
+
+Patch: https://issues.apache.org/jira/secure/attachment/12448230/mapred-fs-close.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12448509/fs-close-delta.patch
+Author: Kan Zhang
+Reason: Secured MR daemons often open DFS instances on behalf of a given user, which then
+        end up stored in the FS Cache data structure. This patch allows those cache
+        entries to be collected, preventing possible OOME scenario.
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/fs/FileSystem.java      |   26 +++
+ .../org/apache/hadoop/mapred/JobInProgress.java    |  198 +++++++++++---------
+ .../org/apache/hadoop/mapred/JobTracker.java       |   12 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    7 +
+ src/test/org/apache/hadoop/fs/TestFileSystem.java  |   28 +++
+ 5 files changed, 178 insertions(+), 93 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/fs/FileSystem.java b/src/core/org/apache/hadoop/fs/FileSystem.java
+index f4d3365..d3581ba 100644
+--- a/src/core/org/apache/hadoop/fs/FileSystem.java
++++ b/src/core/org/apache/hadoop/fs/FileSystem.java
+@@ -1599,6 +1599,32 @@ public abstract class FileSystem extends Configured implements Closeable {
+       }
+     }
+ 
++    synchronized void closeAll(UserGroupInformation ugi) throws IOException {
++      List<FileSystem> targetFSList = new ArrayList<FileSystem>();
++      //Make a pass over the list and collect the filesystems to close
++      //we cannot close inline since close() removes the entry from the Map
++      for (Map.Entry<Key, FileSystem> entry : map.entrySet()) {
++        final Key key = entry.getKey();
++        final FileSystem fs = entry.getValue();
++        if (ugi.equals(key.ugi) && fs != null) {
++          targetFSList.add(fs);   
++        }
++      }
++      List<IOException> exceptions = new ArrayList<IOException>();
++      //now make a pass over the target list and close each
++      for (FileSystem fs : targetFSList) {
++        try {
++          fs.close();
++        }
++        catch(IOException ioe) {
++          exceptions.add(ioe);
++        }
++      }
++      if (!exceptions.isEmpty()) {
++        throw MultipleIOException.createIOException(exceptions);
++      }
++    }
++
+     /** FileSystem.Cache.Key */
+     static class Key {
+       final String scheme;
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 83c1c5c..2ee4763 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -329,98 +329,106 @@ public class JobInProgress {
+   JobInProgress(JobTracker jobtracker, final JobConf default_conf, 
+       JobInfo jobInfo, int rCount, Credentials ts) 
+   throws IOException, InterruptedException {
+-    this.restartCount = rCount;
+-    this.jobId = JobID.downgrade(jobInfo.getJobID());
+-    String url = "http://" + jobtracker.getJobTrackerMachine() + ":" 
+-        + jobtracker.getInfoPort() + "/jobdetails.jsp?jobid=" + jobId;
+-    this.jobtracker = jobtracker;
+-    this.status = new JobStatus(jobId, 0.0f, 0.0f, JobStatus.PREP);
+-    this.status.setUsername(jobInfo.getUser().toString());
+-    this.jobtracker.getInstrumentation().addPrepJob(conf, jobId);
+-    this.startTime = jobtracker.getClock().getTime();
+-    status.setStartTime(startTime);
+-    this.localFs = jobtracker.getLocalFileSystem();
+-
+-    this.tokenStorage = ts;
+-    // use the user supplied token to add user credentials to the conf
+-    jobSubmitDir = jobInfo.getJobSubmitDir();
+-    user = jobInfo.getUser().toString();
+-    userUGI = UserGroupInformation.createRemoteUser(user);
+-    if (ts != null) {
+-      for (Token<? extends TokenIdentifier> token : ts.getAllTokens()) {
+-        userUGI.addToken(token);
+-      }
+-    }
+-
+-    fs = userUGI.doAs(new PrivilegedExceptionAction<FileSystem>() {
+-      public FileSystem run() throws IOException {
+-        return jobSubmitDir.getFileSystem(default_conf);
+-      }});
+-    this.localJobFile = default_conf.getLocalPath(JobTracker.SUBDIR
+-        +"/"+jobId + ".xml");
+-    Path jobFilePath = JobSubmissionFiles.getJobConfPath(jobSubmitDir);
+-    jobFile = jobFilePath.toString();
+-    fs.copyToLocalFile(jobFilePath, localJobFile);
+-    conf = new JobConf(localJobFile);
+-    if (conf.getUser() == null) {
+-      this.conf.setUser(user);
+-    }
+-    if (!conf.getUser().equals(user)) {
+-      String desc = "The username " + conf.getUser() + " obtained from the " +
+-      		"conf doesn't match the username " + user + " the user " +
+-      				"authenticated as";
+-      AuditLogger.logFailure(user, Operation.SUBMIT_JOB.name(), conf.getUser(), 
+-          jobId.toString(), desc);
+-      throw new IOException(desc);
+-    }
+-    this.priority = conf.getJobPriority();
+-    this.status.setJobPriority(this.priority);
+-    this.profile = new JobProfile(user, jobId, 
+-                                  jobFile, url, conf.getJobName(),
+-                                  conf.getQueueName());
+-
+-    this.numMapTasks = conf.getNumMapTasks();
+-    this.numReduceTasks = conf.getNumReduceTasks();
+-    
+-    this.memoryPerMap = conf.getMemoryForMapTask();
+-    this.memoryPerReduce = conf.getMemoryForReduceTask();
+-    
+-    this.taskCompletionEvents = new ArrayList<TaskCompletionEvent>
+-       (numMapTasks + numReduceTasks + 10);
+-
+-    // Construct the jobACLs
+-    status.setJobACLs(jobtracker.getJobACLsManager().constructJobACLs(conf));
++    try {
++      this.restartCount = rCount;
++      this.jobId = JobID.downgrade(jobInfo.getJobID());
++      String url = "http://" + jobtracker.getJobTrackerMachine() + ":" 
++      + jobtracker.getInfoPort() + "/jobdetails.jsp?jobid=" + jobId;
++      this.jobtracker = jobtracker;
++      this.status = new JobStatus(jobId, 0.0f, 0.0f, JobStatus.PREP);
++      this.status.setUsername(jobInfo.getUser().toString());
++      this.jobtracker.getInstrumentation().addPrepJob(conf, jobId);
++      this.startTime = jobtracker.getClock().getTime();
++      status.setStartTime(startTime);
++      this.localFs = jobtracker.getLocalFileSystem();
++
++      this.tokenStorage = ts;
++      // use the user supplied token to add user credentials to the conf
++      jobSubmitDir = jobInfo.getJobSubmitDir();
++      user = jobInfo.getUser().toString();
++      userUGI = UserGroupInformation.createRemoteUser(user);
++      if (ts != null) {
++        for (Token<? extends TokenIdentifier> token : ts.getAllTokens()) {
++          userUGI.addToken(token);
++        }
++      }
+ 
+-    this.mapFailuresPercent = conf.getMaxMapTaskFailuresPercent();
+-    this.reduceFailuresPercent = conf.getMaxReduceTaskFailuresPercent();
++      fs = userUGI.doAs(new PrivilegedExceptionAction<FileSystem>() {
++        public FileSystem run() throws IOException {
++          return jobSubmitDir.getFileSystem(default_conf);
++        }});
++      this.localJobFile = default_conf.getLocalPath(JobTracker.SUBDIR
++          +"/"+jobId + ".xml");
++      Path jobFilePath = JobSubmissionFiles.getJobConfPath(jobSubmitDir);
++      jobFile = jobFilePath.toString();
++      fs.copyToLocalFile(jobFilePath, localJobFile);
++      conf = new JobConf(localJobFile);
++      if (conf.getUser() == null) {
++        this.conf.setUser(user);
++      }
++      if (!conf.getUser().equals(user)) {
++        String desc = "The username " + conf.getUser() + " obtained from the " +
++        "conf doesn't match the username " + user + " the user " +
++        "authenticated as";
++        AuditLogger.logFailure(user, Operation.SUBMIT_JOB.name(), conf.getUser(), 
++            jobId.toString(), desc);
++        throw new IOException(desc);
++      }
++      this.priority = conf.getJobPriority();
++      this.status.setJobPriority(this.priority);
++      this.profile = new JobProfile(user, jobId, 
++          jobFile, url, conf.getJobName(),
++          conf.getQueueName());
++
++      this.numMapTasks = conf.getNumMapTasks();
++      this.numReduceTasks = conf.getNumReduceTasks();
++
++      this.memoryPerMap = conf.getMemoryForMapTask();
++      this.memoryPerReduce = conf.getMemoryForReduceTask();
++
++      this.taskCompletionEvents = new ArrayList<TaskCompletionEvent>
++      (numMapTasks + numReduceTasks + 10);
+ 
+-    this.maxMapsPerNode = conf.getMaxMapsPerNode();
+-    this.maxReducesPerNode = conf.getMaxReducesPerNode();
+-    this.runningMapLimit = conf.getRunningMapLimit();
+-    this.runningReduceLimit = conf.getRunningReduceLimit();
+-        
+-    this.maxTaskFailuresPerTracker = conf.getMaxTaskFailuresPerTracker();
+-    
+-    MetricsContext metricsContext = MetricsUtil.getContext("mapred");
+-    this.jobMetrics = MetricsUtil.createRecord(metricsContext, "job");
+-    this.jobMetrics.setTag("user", conf.getUser());
+-    this.jobMetrics.setTag("sessionId", conf.getSessionId());
+-    this.jobMetrics.setTag("jobName", conf.getJobName());
+-    this.jobMetrics.setTag("jobId", jobId.toString());
+-    hasSpeculativeMaps = conf.getMapSpeculativeExecution();
+-    hasSpeculativeReduces = conf.getReduceSpeculativeExecution();
+-    this.maxLevel = jobtracker.getNumTaskCacheLevels();
+-    this.anyCacheLevel = this.maxLevel+1;
+-    this.nonLocalMaps = new LinkedList<TaskInProgress>();
+-    this.nonLocalRunningMaps = new LinkedHashSet<TaskInProgress>();
+-    this.runningMapCache = new IdentityHashMap<Node, Set<TaskInProgress>>();
+-    this.nonRunningReduces = new LinkedList<TaskInProgress>();    
+-    this.runningReduces = new LinkedHashSet<TaskInProgress>();
+-    this.resourceEstimator = new ResourceEstimator(this);
+-    
+-    // register job's tokens for renewal
+-    DelegationTokenRenewal.registerDelegationTokensForRenewal(
+-         jobInfo.getJobID(), ts, this.conf);
++      // Construct the jobACLs
++      status.setJobACLs(jobtracker.getJobACLsManager().constructJobACLs(conf));
++
++      this.mapFailuresPercent = conf.getMaxMapTaskFailuresPercent();
++      this.reduceFailuresPercent = conf.getMaxReduceTaskFailuresPercent();
++
++      this.maxMapsPerNode = conf.getMaxMapsPerNode();
++      this.maxReducesPerNode = conf.getMaxReducesPerNode();
++      this.runningMapLimit = conf.getRunningMapLimit();
++      this.runningReduceLimit = conf.getRunningReduceLimit();
++
++      this.maxTaskFailuresPerTracker = conf.getMaxTaskFailuresPerTracker();
++
++      MetricsContext metricsContext = MetricsUtil.getContext("mapred");
++      this.jobMetrics = MetricsUtil.createRecord(metricsContext, "job");
++      this.jobMetrics.setTag("user", conf.getUser());
++      this.jobMetrics.setTag("sessionId", conf.getSessionId());
++      this.jobMetrics.setTag("jobName", conf.getJobName());
++      this.jobMetrics.setTag("jobId", jobId.toString());
++      hasSpeculativeMaps = conf.getMapSpeculativeExecution();
++      hasSpeculativeReduces = conf.getReduceSpeculativeExecution();
++      this.maxLevel = jobtracker.getNumTaskCacheLevels();
++      this.anyCacheLevel = this.maxLevel+1;
++      this.nonLocalMaps = new LinkedList<TaskInProgress>();
++      this.nonLocalRunningMaps = new LinkedHashSet<TaskInProgress>();
++      this.runningMapCache = new IdentityHashMap<Node, Set<TaskInProgress>>();
++      this.nonRunningReduces = new LinkedList<TaskInProgress>();    
++      this.runningReduces = new LinkedHashSet<TaskInProgress>();
++      this.resourceEstimator = new ResourceEstimator(this);
++
++      // register job's tokens for renewal
++      DelegationTokenRenewal.registerDelegationTokensForRenewal(
++          jobInfo.getJobID(), ts, jobtracker.getConf());
++    } finally {
++      //close all FileSystems that was created above for the current user
++      //At this point, this constructor is called in the context of an RPC, and
++      //hence the "current user" is actually referring to the kerberos
++      //authenticated user (if security is ON).
++      FileSystem.closeAllForUGI(UserGroupInformation.getCurrentUser());
++    }
+   }
+ 
+   public boolean hasSpeculativeMaps() {
+@@ -2998,6 +3006,14 @@ public class JobInProgress {
+     if(conf.getBoolean(JobContext.JOB_CANCEL_DELEGATION_TOKEN, true)) {
+       DelegationTokenRenewal.removeDelegationTokenRenewalForJob(jobId);
+     } // else don't remove it.May be used by spawned tasks
++
++    //close the user's FS
++    try {
++      fs.close();
++    } catch (IOException ie) {
++      LOG.warn("Ignoring exception " + StringUtils.stringifyException(ie) + 
++          " while closing FileSystem for " + userUGI);
++    }
+   }
+ 
+   /**
+@@ -3255,7 +3271,7 @@ public class JobInProgress {
+     TokenCache.setJobToken(token, tokenStorage);
+         
+     // write TokenStorage out
+-    tokenStorage.writeTokenStorageFile(keysFile, conf);
++    tokenStorage.writeTokenStorageFile(keysFile, jobtracker.getConf());
+     LOG.info("jobToken generated and stored with users keys in "
+         + keysFile.toUri().getPath());
+   }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 813ab6e..520df5f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -1987,6 +1987,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   // Some jobs are stored in a local system directory.  We can delete
+   // the files when we're done with the job.
+   static final String SUBDIR = "jobTracker";
++  final LocalFileSystem localFs;
+   FileSystem fs = null;
+   Path systemDir = null;
+   JobConf conf;
+@@ -2173,6 +2174,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     // ... ensure we have the correct info
+     this.port = interTrackerServer.getListenerAddress().getPort();
+     this.conf.set("mapred.job.tracker", (this.localMachine + ":" + this.port));
++    this.localFs = FileSystem.getLocal(conf);
+     LOG.info("JobTracker up at: " + this.port);
+     this.infoPort = this.infoServer.getPort();
+     this.conf.set("mapred.job.tracker.http.address", 
+@@ -2356,7 +2358,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+    * localizing job files to the local disk.
+    */
+   LocalFileSystem getLocalFileSystem() throws IOException {
+-    return FileSystem.getLocal(conf);
++    return localFs;
+   }
+ 
+   public static Class<? extends JobTrackerInstrumentation> getInstrumentationClass(Configuration conf) {
+@@ -3651,7 +3653,13 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     return fs.getUri().toString();
+   }
+ 
+-
++  /**
++   * Returns a handle to the JobTracker's Configuration
++   */
++  public JobConf getConf() {
++    return conf;
++  }
++  
+   public void reportTaskTrackerError(String taskTracker,
+                                      String errorClass,
+                                      String errorMessage) throws IOException {
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index fc6a36f..315832f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -1870,6 +1870,13 @@ public class TaskTracker
+ 
+         // Remove this job 
+         rjob.tasks.clear();
++        // Close all FileSystems for this job
++        try {
++          FileSystem.closeAllForUGI(rjob.getUGI());
++        } catch (IOException ie) {
++          LOG.warn("Ignoring exception " + StringUtils.stringifyException(ie) + 
++              " while closing FileSystem for " + rjob.getUGI());
++        }
+       }
+     }
+ 
+diff --git a/src/test/org/apache/hadoop/fs/TestFileSystem.java b/src/test/org/apache/hadoop/fs/TestFileSystem.java
+index d33b559..a7fcba7 100644
+--- a/src/test/org/apache/hadoop/fs/TestFileSystem.java
++++ b/src/test/org/apache/hadoop/fs/TestFileSystem.java
+@@ -731,4 +731,32 @@ public class TestFileSystem extends TestCase {
+     // file system.
+     assertSame(fsA, fsA1);
+   }
++  
++  public void testCloseAllForUGI() throws Exception {
++    final Configuration conf = new Configuration();
++    conf.set("fs.cachedfile.impl", conf.get("fs.file.impl"));
++    UserGroupInformation ugiA = UserGroupInformation.createRemoteUser("foo");
++    FileSystem fsA = ugiA.doAs(new PrivilegedExceptionAction<FileSystem>() {
++      public FileSystem run() throws Exception {
++        return FileSystem.get(new URI("cachedfile://a"), conf);
++      }
++    });
++    //Now we should get the cached filesystem
++    FileSystem fsA1 = ugiA.doAs(new PrivilegedExceptionAction<FileSystem>() {
++      public FileSystem run() throws Exception {
++        return FileSystem.get(new URI("cachedfile://a"), conf);
++      }
++    });
++    assertSame(fsA, fsA1);
++    
++    FileSystem.closeAllForUGI(ugiA);
++    
++    //Now we should get a different (newly created) filesystem
++    fsA1 = ugiA.doAs(new PrivilegedExceptionAction<FileSystem>() {
++      public FileSystem run() throws Exception {
++        return FileSystem.get(new URI("cachedfile://a"), conf);
++      }
++    });
++    assertNotSame(fsA, fsA1);
++  }
+ }
+-- 
+1.7.0.4
+

@@ -1,0 +1,90 @@
+From 0faf23ca0a9b6b8a90282a3b266db278a28394fa Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sat, 25 Jun 2011 16:10:55 -0700
+Subject: [PATCH 0996/1179] HDFS-1692. In secure mode, Datanode process doesn't exit when disks fail.
+
+Reason: Bug
+Author: Bharath Mundlapudi
+Ref: CDH-3064
+---
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    9 ++++++++-
+ .../hdfs/server/datanode/DataXceiverServer.java    |   14 ++++++++++----
+ .../hadoop/hdfs/server/datanode/FSDataset.java     |    1 +
+ 3 files changed, 19 insertions(+), 5 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 75faf1b..cb18976 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -1625,7 +1625,14 @@ public class DataNode extends Configured
+     } catch (Throwable e) {
+       LOG.error(StringUtils.stringifyException(e));
+       System.exit(-1);
+-    }   
++    } finally {
++      // We need to add System.exit here because either shutdown was called or
++      // some disk related conditions like volumes tolerated or volumes required
++      // condition was not met. Also, In secure mode, control will go to Jsvc an
++      // the process hangs without System.exit.
++      LOG.info("Exiting Datanode");
++      System.exit(0);
++    }
+   }
+   
+   public static void main(String args[]) {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiverServer.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiverServer.java
+index dcc5033..6b27807 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiverServer.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiverServer.java
+@@ -21,6 +21,7 @@ import java.io.IOException;
+ import java.net.ServerSocket;
+ import java.net.Socket;
+ import java.net.SocketTimeoutException;
++import java.nio.channels.AsynchronousCloseException;
+ import java.util.Collections;
+ import java.util.HashMap;
+ import java.util.Iterator;
+@@ -132,9 +133,13 @@ class DataXceiverServer implements Runnable, FSConstants {
+         new DataXceiver(s, datanode, this).start();
+       } catch (SocketTimeoutException ignored) {
+         // wake up to see if should continue to run
++      } catch (AsynchronousCloseException ace) {
++          LOG.warn(datanode.dnRegistration + ":DataXceiveServer:"
++                  + StringUtils.stringifyException(ace));
++          datanode.shouldRun = false;
+       } catch (IOException ie) {
+-        LOG.warn(datanode.dnRegistration + ":DataXceiveServer: " 
+-                                + StringUtils.stringifyException(ie));
++        LOG.warn(datanode.dnRegistration + ":DataXceiveServer: IOException due to:"
++                                 + StringUtils.stringifyException(ie));
+       } catch (Throwable te) {
+         LOG.error(datanode.dnRegistration + ":DataXceiveServer: Exiting due to:" 
+                                  + StringUtils.stringifyException(te));
+@@ -144,9 +149,10 @@ class DataXceiverServer implements Runnable, FSConstants {
+     try {
+       ss.close();
+     } catch (IOException ie) {
+-      LOG.warn(datanode.dnRegistration + ":DataXceiveServer: " 
+-                              + StringUtils.stringifyException(ie));
++      LOG.warn(datanode.dnRegistration + ":DataXceiveServer: Close exception due to: "
++                               + StringUtils.stringifyException(ie));
+     }
++    LOG.info("Exiting DataXceiveServer");
+   }
+   
+   void kill() {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+index 5114c3b..72f39bf 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDataset.java
+@@ -689,6 +689,7 @@ public class FSDataset implements FSConstants, FSDatasetInterface {
+             removed_vols = new ArrayList<FSVolume>(1);
+           }
+           removed_vols.add(volumes[idx]);
++          volumes[idx].dfsUsage.shutdown(); //Shutdown the running DU thread
+           volumes[idx] = null; //remove the volume
+           numFailedVolumes++;
+         }
+-- 
+1.7.0.4
+

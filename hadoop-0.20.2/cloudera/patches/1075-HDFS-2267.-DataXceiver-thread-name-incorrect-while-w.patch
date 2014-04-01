@@ -1,0 +1,35 @@
+From 45504c489dfa7255be40ecf2f2a7a8c60cece01b Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 26 Oct 2011 17:57:22 -0700
+Subject: [PATCH 1075/1179] HDFS-2267. DataXceiver thread name incorrect while waiting on op during keepalive.
+
+Reason: trivial bug fix for thread names after HDFS-941
+Author: Todd Lipcon
+Ref: CDH-3777
+---
+ .../hadoop/hdfs/server/datanode/DataXceiver.java   |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+index 802dd5b..21d965b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+@@ -107,13 +107,14 @@ class DataXceiver extends Thread implements Runnable, FSConstants {
+           new BufferedInputStream(NetUtils.getInputStream(s), 
+                                   SMALL_BUFFER_SIZE));
+       boolean local = s.getInetAddress().equals(s.getLocalAddress());
+-      updateThreadName("waiting for operation");
+       int stdTimeout = s.getSoTimeout();
+ 
+       // We process requests in a loop, and stay around for a short timeout.
+       // This optimistic behaviour allows the other end to reuse connections.
+       // Setting keepalive timeout to 0 disable this behavior.
+       do {
++        updateThreadName("Waiting for operation #" + (opsProcessed + 1));
++
+         byte op;
+         try {
+           if (opsProcessed != 0) {
+-- 
+1.7.0.4
+

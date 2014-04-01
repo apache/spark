@@ -1,0 +1,43 @@
+From dccf120c3796312b1a67481daaa0366b13d471fe Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 4 Oct 2010 16:32:24 -0700
+Subject: [PATCH 0725/1179] CLOUDERA-BUILD. Amend Task Controller for sbin-located task-controller
+
+Reason: earlier commit moved task-controller to an sbin directory, this updates
+	the java side
+Author: Todd Lipcon
+---
+ .../apache/hadoop/mapred/LinuxTaskController.java  |    8 +++++---
+ 1 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+index c750c35..ca66191 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+@@ -35,6 +35,7 @@ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.mapred.CleanupQueue.PathDeletionContext;
+ import org.apache.hadoop.mapred.JvmManager.JvmEnv;
++import org.apache.hadoop.util.PlatformName;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.Shell.ExitCodeException;
+ import org.apache.hadoop.util.Shell.ShellCommandExecutor;
+@@ -71,11 +72,12 @@ class LinuxTaskController extends TaskController {
+   private static String taskControllerExe;
+   
+   static {
+-    // the task-controller is expected to be under the $HADOOP_HOME/bin
++    // the task-controller is expected to be under the $HADOOP_HOME/sbin/platform
+     // directory.
+-    File hadoopBin = new File(System.getenv("HADOOP_HOME"), "bin");
++    File hadoopSbin = new File(System.getenv("HADOOP_HOME"), "sbin");
++    File nativeSbin = new File(hadoopSbin, PlatformName.getPlatformName());
+     taskControllerExe = 
+-        new File(hadoopBin, "task-controller").getAbsolutePath();
++        new File(nativeSbin, "task-controller").getAbsolutePath();
+   }
+   
+   public LinuxTaskController() {
+-- 
+1.7.0.4
+

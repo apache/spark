@@ -1,0 +1,481 @@
+From a04c9e2a6bd20dcb50e7242b1c0fb35e5614d1cc Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 18 Dec 2011 14:05:30 -0800
+Subject: [PATCH 1115/1179] HDFS-2702. A single failed name dir can cause the NN to exit.
+
+There's a bug in FSEditLog#rollEditLog which results in the NN process
+exiting if a single name dir has failed.
+
+Reason: Bug
+Author: Eli Collins
+Ref: CDH-3921
+---
+ .../hadoop/hdfs/server/namenode/FSDirectory.java   |    2 +-
+ .../hadoop/hdfs/server/namenode/FSEditLog.java     |   56 ++++--
+ .../hadoop/hdfs/server/namenode/FSImage.java       |   16 +-
+ .../hdfs/server/namenode/TestCheckpoint.java       |   11 +
+ .../namenode/TestStorageDirectoryFailure.java      |  201 ++++++++++++++++++++
+ 5 files changed, 259 insertions(+), 27 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageDirectoryFailure.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
+index cb9e8b8..ebafaf6 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSDirectory.java
+@@ -60,7 +60,7 @@ class FSDirectory implements FSConstants, Closeable {
+   FSDirectory(FSNamesystem ns, Configuration conf) {
+     this(new FSImage(), ns, conf);
+     if (conf.getBoolean("dfs.name.dir.restore", false)) {
+-      NameNode.LOG.info("set FSImage.restoreFailedStorage");
++      NameNode.LOG.info("Enabling dfs.name.dir storage restoration");
+       fsImage.setRestoreFailedStorage(true);
+     }
+     fsImage.setCheckpointDirectories(FSImage.getCheckpointDirs(conf, null),
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+index af6934e..1ade6df 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+@@ -371,6 +371,7 @@ public class FSEditLog {
+         it.remove();
+       }
+     }
++    exitIfNoStreams();
+   }
+ 
+   public synchronized void createEditLogFile(File name) throws IOException {
+@@ -405,17 +406,27 @@ public class FSEditLog {
+     editStreams.clear();
+   }
+ 
++  void fatalExit(String msg) {
++    FSNamesystem.LOG.fatal(msg, new Exception(msg));
++    Runtime.getRuntime().exit(-1);
++  }
++
++  /**
++   * Exit the NN process if the edit streams have not yet been
++   * initialized, eg we failed while opening.
++   */
++  private void exitIfStreamsNotSet() {
++    if (editStreams == null) {
++      fatalExit("Edit streams not yet initialized");
++    }
++  }
++
+   /**
+-   * Exit the NN process if there will be no valid edit streams
+-   * remaining after removing one. This method is called before
+-   * removing the stream which is why we fail even if there is
+-   * still one stream.
++   * Exit the NN process if there are no edit streams to log to.
+    */
+-  private void exitIfInvalidStreams() {
+-    if (editStreams == null || editStreams.size() <= 1) {
+-      FSNamesystem.LOG.fatal(
+-        "Fatal Error: No edit streams are inaccessible."); 
+-      Runtime.getRuntime().exit(-1);
++  void exitIfNoStreams() {
++    if (editStreams == null || editStreams.isEmpty()) {
++      fatalExit("No edit streams are accessible");
+     }
+   }
+ 
+@@ -431,10 +442,9 @@ public class FSEditLog {
+ 
+   /**
+    * Remove the given edits stream and its containing storage dir.
+-   * Exit the NN process if we have insufficient streams.
+    */
+   synchronized void removeEditsAndStorageDir(int idx) {
+-    exitIfInvalidStreams();
++    exitIfStreamsNotSet();
+ 
+     assert idx < getNumStorageDirs();
+     assert getNumStorageDirs() == editStreams.size();
+@@ -454,15 +464,13 @@ public class FSEditLog {
+   
+   /**
+    * Remove all edits streams for the given storage directory.
+-   * Exit the NN process if we have insufficient streams.
+    */
+   synchronized void removeEditsForStorageDir(StorageDirectory sd) {
++    exitIfStreamsNotSet();
++
+     if (!sd.getStorageDirType().isOfType(NameNodeDirType.EDITS)) {
+       return;
+     }
+-
+-    exitIfInvalidStreams();
+-
+     for (int idx = 0; idx < editStreams.size(); idx++) {
+       File parentStorageDir = ((EditLogFileOutputStream)editStreams
+                                        .get(idx)).getFile()
+@@ -486,9 +494,7 @@ public class FSEditLog {
+     for (EditLogOutputStream errorStream : errorStreams) {
+       int idx = editStreams.indexOf(errorStream);
+       if (-1 == idx) {
+-        FSNamesystem.LOG.error(
+-            "Fatal Error: Unable to find edits stream with IO error");
+-        Runtime.getRuntime().exit(-1);
++        fatalExit("Unable to find edits stream with IO error");
+       }
+       removeEditsAndStorageDir(idx);
+     }
+@@ -955,7 +961,9 @@ public class FSEditLog {
+    * store yet.
+    */
+   synchronized void logEdit(byte op, Writable ... writables) {
+-    assert this.getNumEditStreams() > 0 : "no editlog streams";
++    if (getNumEditStreams() < 1) {
++      throw new AssertionError("No edit streams to log to");
++    }
+     long start = FSNamesystem.now();
+     for (int idx = 0; idx < editStreams.size(); idx++) {
+       EditLogOutputStream eStream = editStreams.get(idx);
+@@ -966,6 +974,7 @@ public class FSEditLog {
+         idx--; 
+       }
+     }
++    exitIfNoStreams();
+     // get a new transactionId
+     txid++;
+ 
+@@ -1092,13 +1101,14 @@ public class FSEditLog {
+           errorStreams = new ArrayList<EditLogOutputStream>(1);
+         }
+         errorStreams.add(eStream);
+-        FSNamesystem.LOG.error("Unable to sync "+eStream.getName());
++        FSNamesystem.LOG.error("Unable to sync "+eStream.getName(), ioe);
+       }
+     }
+     long elapsed = FSNamesystem.now() - start;
+ 
+     synchronized (this) {
+        removeEditsStreamsAndStorageDirs(errorStreams);
++       exitIfNoStreams();
+        synctxid = syncStart;
+        isSyncRunning = false;
+        this.notifyAll();
+@@ -1306,6 +1316,8 @@ public class FSEditLog {
+         assert (size == 0 || size == curSize) : "All streams must be the same";
+         size = curSize;
+       } catch (IOException ioe) {
++        FSNamesystem.LOG.warn(
++            "Unable to determine edit log length. Removing log.", ioe);
+         removeEditsAndStorageDir(idx);
+       }
+     }
+@@ -1362,6 +1374,7 @@ public class FSEditLog {
+     if (failedSd) {
+       fsimage.incrementCheckpointTime();  // update time for the valid ones
+     }
++    exitIfNoStreams();
+   }
+ 
+   /**
+@@ -1391,7 +1404,8 @@ public class FSEditLog {
+         //
+         getEditFile(sd).delete();
+         if (!getEditNewFile(sd).renameTo(getEditFile(sd))) {
+-          // Should we also remove from edits
++          sd.unlock();
++          removeEditsForStorageDir(sd);
+           fsimage.updateRemovedDirs(sd, null);
+           it.remove(); 
+         }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+index 022c0e8..56eeca9 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+@@ -639,6 +639,7 @@ public class FSImage extends Storage {
+         it.remove();
+       }
+     }
++    editLog.exitIfNoStreams();
+   }
+   
+   /**
+@@ -664,6 +665,11 @@ public class FSImage extends Storage {
+     return editLog;
+   }
+ 
++  /** Testing hook */
++  public void setEditLog(FSEditLog newLog) {
++    editLog = newLog;
++  }
++
+   public boolean isConversionNeeded(StorageDirectory sd) throws IOException {
+     File oldImageDir = new File(sd.getRoot(), "image");
+     if (!oldImageDir.exists()) {
+@@ -1485,6 +1491,7 @@ public class FSImage extends Storage {
+         }
+       }
+     }
++    editLog.exitIfNoStreams();
+ 
+     //
+     // Updates the fstime file on all directories (fsimage and edits)
+@@ -1576,7 +1583,7 @@ public class FSImage extends Storage {
+    * See if any of the removed storages dirs are writable and can be restored.
+    */
+   void attemptRestoreRemovedStorage() {
+-    if (!restoreFailedStorage || removedStorageDirs.size() == 0) {
++    if (!restoreFailedStorage || removedStorageDirs.isEmpty()) {
+       return;
+     }
+ 
+@@ -1584,12 +1591,11 @@ public class FSImage extends Storage {
+     while (it.hasNext()) {
+       StorageDirectory sd = it.next();
+       File root = sd.getRoot();
+-      LOG.info("Restore " + root.getAbsolutePath() + " type=" +
++      LOG.info("Try restore " + root.getAbsolutePath() + " type=" +
+           sd.getStorageDirType() + " canwrite=" + root.canWrite());
+       try {
+-        if (root.exists() && root.canWrite()) { 
+-          // Remove all the data with saving current in-memory state
+-          // which could have changed.
++        if (root.exists() && root.canWrite()) {
++          // The directory will get re-populated during checkpoint
+           sd.clearDirectory();
+           addStorageDir(sd);
+           it.remove();
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckpoint.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckpoint.java
+index 1742ffc..065de1a 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckpoint.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckpoint.java
+@@ -25,6 +25,10 @@ import java.util.List;
+ import java.util.Iterator;
+ import java.util.Random;
+ 
++import static org.mockito.Mockito.anyString;
++import static org.mockito.Mockito.doNothing;
++import static org.mockito.Mockito.spy;
++
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.DistributedFileSystem;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+@@ -188,6 +192,13 @@ public class TestCheckpoint extends TestCase {
+       assertTrue("Couldn't remove directory " + filePath1.getAbsolutePath(),
+                  FileUtil.fullyDelete(filePath1));
+     }
++
++    // Stub out fatalExit as we'll trigger it below, incrementCheckpointTime
++    // will notice there are no edit streams.
++    FSEditLog spyLog = spy(nnStorage.getEditLog());
++    doNothing().when(spyLog).fatalExit(anyString());
++    nnStorage.setEditLog(spyLog);
++
+     // Just call setCheckpointTimeInStorage using any random number
+     nnStorage.incrementCheckpointTime();
+     List<StorageDirectory> listRsd = nnStorage.getRemovedStorageDirs();
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageDirectoryFailure.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageDirectoryFailure.java
+new file mode 100644
+index 0000000..7ee15ae
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestStorageDirectoryFailure.java
+@@ -0,0 +1,201 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++
++import java.io.File;
++import java.io.FileNotFoundException;
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.List;
++
++import org.junit.Test;
++import org.junit.Before;
++import org.junit.After;
++import static org.junit.Assert.*;
++
++import static org.mockito.Mockito.anyString;
++import static org.mockito.Mockito.atLeastOnce;
++import static org.mockito.Mockito.doNothing;
++import static org.mockito.Mockito.spy;
++import static org.mockito.Mockito.verify;
++
++import org.apache.commons.lang.StringUtils;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FSDataInputStream;
++import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.FileUtil;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.hdfs.server.common.Storage.StorageDirectory;
++
++/**
++ * Test that the NN stays up as long as it has a valid storage directory and
++ * exits when there are no more valid storage directories.
++ */
++public class TestStorageDirectoryFailure {
++
++  MiniDFSCluster cluster = null;
++  FileSystem fs;
++  SecondaryNameNode secondaryNN;
++  ArrayList<String> nameDirs;
++
++  @Before
++  public void setUp() throws Exception {
++    Configuration conf = new Configuration();
++
++    String baseDir = System.getProperty("test.build.data", "/tmp");
++    File dfsDir = new File(baseDir, "dfs");
++    nameDirs = new ArrayList<String>();
++    nameDirs.add(new File(dfsDir, "name1").getPath());
++    nameDirs.add(new File(dfsDir, "name2").getPath());
++    nameDirs.add(new File(dfsDir, "name3").getPath());
++
++    conf.set("dfs.name.dir", StringUtils.join(nameDirs, ","));
++    conf.set("dfs.data.dir", new File(dfsDir, "data").getPath());
++    conf.set("fs.checkpoint.dir", new File(dfsDir, "secondary").getPath());
++    conf.set("fs.default.name", "hdfs://localhost:0");
++    conf.set("dfs.http.address", "0.0.0.0:0");
++    conf.set("dfs.secondary.http.address", "0.0.0.0:0");
++    cluster = new MiniDFSCluster(0, conf, 1, true, false, true, null, null,
++        null, null);
++    cluster.waitActive();
++    fs = cluster.getFileSystem();
++    secondaryNN = new SecondaryNameNode(conf);
++  }
++
++  @After
++  public void tearDown() throws Exception {
++    if (cluster != null) {
++      cluster.shutdown();
++    }
++    if (secondaryNN != null) {
++      secondaryNN.shutdown();
++    }
++  }
++
++  private List<StorageDirectory> getRemovedDirs() {
++    return cluster.getNameNode().getFSImage().getRemovedStorageDirs();
++  }
++
++  private int numRemovedDirs() {
++    return getRemovedDirs().size();
++  }
++
++  private void writeFile(String name, byte[] buff) throws IOException {
++    FSDataOutputStream writeStream = fs.create(new Path(name));
++    writeStream.write(buff, 0, buff.length);
++    writeStream.close();
++  }
++
++  private byte[] readFile(String name, int len) throws IOException {
++    FSDataInputStream readStream = fs.open(new Path(name));
++    byte[] buff = new byte[len];
++    readStream.readFully(buff);
++    readStream.close();
++    return buff;
++  }
++
++  /** Assert that we can create and read a file */
++  private void checkFileCreation(String name) throws IOException {
++    byte[] buff = "some bytes".getBytes();
++    writeFile(name, buff);
++    assertTrue(Arrays.equals(buff, readFile(name, buff.length)));
++  }
++
++  /** Assert that we can read a file we created */
++  private void checkFileContents(String name) throws IOException {
++    byte[] buff = "some bytes".getBytes();
++    assertTrue(Arrays.equals(buff, readFile(name, buff.length)));
++  }
++
++  @Test
++  /** Remove storage dirs and checkpoint to trigger detection */
++  public void testCheckpointAfterFailingFirstNamedir() throws IOException {
++    assertEquals(0, numRemovedDirs());
++
++    checkFileCreation("file0");
++
++    // Remove the 1st storage dir
++    FileUtil.fullyDelete(new File(nameDirs.get(0)));
++    secondaryNN.doCheckpoint();
++    assertEquals(1, numRemovedDirs());
++    assertEquals(nameDirs.get(0), getRemovedDirs().get(0).getRoot().getPath());
++
++    checkFileCreation("file1");
++
++    // Remove the 2nd
++    FileUtil.fullyDelete(new File(nameDirs.get(1)));
++    secondaryNN.doCheckpoint();
++    assertEquals(2, numRemovedDirs());
++    assertEquals(nameDirs.get(1), getRemovedDirs().get(1).getRoot().getPath());
++
++    checkFileCreation("file2");
++
++    // Remove the last one. Prevent the NN from exiting the process when
++    // it notices this via the checkpoint.
++    FSEditLog spyLog = spy(cluster.getNameNode().getFSImage().getEditLog());
++    doNothing().when(spyLog).fatalExit(anyString());
++    cluster.getNameNode().getFSImage().setEditLog(spyLog);
++
++    // After the checkpoint, we should be dead. Verify fatalExit was
++    // called and that eg a checkpoint fails.
++    FileUtil.fullyDelete(new File(nameDirs.get(2)));
++    try {
++      secondaryNN.doCheckpoint();
++      fail("There's no storage to retrieve an image from");
++    } catch (FileNotFoundException fnf) {
++      // Expected
++    }
++    verify(spyLog, atLeastOnce()).fatalExit(anyString());
++
++    // Check that we can't mutate state without any edit streams
++    try {
++      checkFileCreation("file3");
++      fail("Created a file w/o edit streams");
++    } catch (IOException ioe) {
++      // Expected
++      assertTrue(ioe.getMessage().contains(
++          "java.lang.AssertionError: No edit streams to log to"));
++    }
++  }
++
++  @Test
++  /** Test that we can restart OK after removing a failed dir */
++  public void testRestartAfterFailingStorageDir() throws IOException {
++    assertEquals(0, numRemovedDirs());
++
++    checkFileCreation("file0");
++
++    FileUtil.fullyDelete(new File(nameDirs.get(0)));
++    secondaryNN.doCheckpoint();
++    assertEquals(1, numRemovedDirs());
++    assertEquals(nameDirs.get(0), getRemovedDirs().get(0).getRoot().getPath());
++    
++    checkFileCreation("file1");
++
++    new File(nameDirs.get(0)).mkdir();
++    cluster.restartNameNode();
++
++    // The dir was restored, is no longer considered removed
++    assertEquals(0, numRemovedDirs());
++    checkFileContents("file0");
++    checkFileContents("file1");
++  }
++}
+-- 
+1.7.0.4
+

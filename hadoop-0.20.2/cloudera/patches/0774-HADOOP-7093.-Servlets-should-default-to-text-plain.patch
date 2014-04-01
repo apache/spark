@@ -1,0 +1,372 @@
+From 5ebec5b74ea0b6fe9270cc40f770bf4cf4f7d4a7 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 13 Jan 2011 17:33:24 -0800
+Subject: [PATCH 0774/1179] HADOOP-7093. Servlets should default to text/plain.
+
+Reason: fix /stacks and /metrics to be usable again
+Author: Todd Lipcon
+Ref: DISTRO-72
+---
+ build.xml                                          |    5 ++
+ src/core/org/apache/hadoop/conf/ConfServlet.java   |    6 +-
+ src/core/org/apache/hadoop/http/HttpServer.java    |   56 ++++++++++++-------
+ .../org/apache/hadoop/metrics/MetricsServlet.java  |   19 +++++--
+ .../org/apache/hadoop/http/TestHttpServer.java     |   56 +++++++++++++++++---
+ src/test/test-webapps/static/test.css              |   21 +++++++
+ src/test/test-webapps/test/testjsp.jsp             |   21 +++++++
+ 7 files changed, 147 insertions(+), 37 deletions(-)
+ create mode 100644 src/test/test-webapps/static/test.css
+ create mode 100644 src/test/test-webapps/test/testjsp.jsp
+
+diff --git a/build.xml b/build.xml
+index 6608cdf..e1bb146 100644
+--- a/build.xml
++++ b/build.xml
+@@ -112,6 +112,7 @@
+   <property name="test.build.extraconf" value="${test.build.dir}/extraconf"/>
+   <property name="test.build.javadoc" value="${test.build.dir}/docs/api"/>
+   <property name="test.build.javadoc.dev" value="${test.build.dir}/docs/dev-api"/>
++  <property name="test.build.webapps" value="${build.dir}/test/webapps"/>
+   <property name="test.include" value="Test*"/>
+   <property name="test.classpath.id" value="test.classpath"/>
+   <property name="test.output" value="no"/>
+@@ -279,6 +280,7 @@
+     <pathelement location="${test.build.extraconf}"/>
+     <pathelement location="${test.build.classes}" />
+     <pathelement location="${test.src.dir}"/>
++    <pathelement location="${test.build.dir}"/>
+     <pathelement location="${build.dir}"/>
+     <pathelement location="${build.examples}"/>
+     <pathelement location="${build.tools}"/>
+@@ -923,6 +925,9 @@
+             todir="@{test.dir}/extraconf" />
+       <copy file="${test.src.dir}/fi-site.xml"
+             todir="@{test.dir}/extraconf" />
++      <copy todir="${test.build.webapps}">
++        <fileset dir="${test.src.dir}/test-webapps" includes="**/*" />
++      </copy>
+       <junit showoutput="${test.output}"
+              printsummary="${test.junit.printsummary}"
+              haltonfailure="${test.junit.haltonfailure}"
+diff --git a/src/core/org/apache/hadoop/conf/ConfServlet.java b/src/core/org/apache/hadoop/conf/ConfServlet.java
+index 1dba8c8..09b74de 100644
+--- a/src/core/org/apache/hadoop/conf/ConfServlet.java
++++ b/src/core/org/apache/hadoop/conf/ConfServlet.java
+@@ -58,12 +58,12 @@ public class ConfServlet extends HttpServlet {
+     }
+ 
+     if (FORMAT_XML.equals(format)) {
+-      response.setContentType("text/xml");
++      response.setContentType("text/xml; charset=utf-8");
+     } else if (FORMAT_JSON.equals(format)) {
+-      response.setContentType("text/javascript");
++      response.setContentType("application/json; charset=utf-8");
+     }
+ 
+-    OutputStreamWriter out = new OutputStreamWriter(response.getOutputStream());
++    Writer out = response.getWriter();
+     try {
+       writeResponse(getConfFromContext(), out, format);
+     } catch (BadFormatException bfe) {
+diff --git a/src/core/org/apache/hadoop/http/HttpServer.java b/src/core/org/apache/hadoop/http/HttpServer.java
+index 9419e18..4ffb0c4 100644
+--- a/src/core/org/apache/hadoop/http/HttpServer.java
++++ b/src/core/org/apache/hadoop/http/HttpServer.java
+@@ -17,6 +17,7 @@
+  */
+ package org.apache.hadoop.http;
+ 
++import java.io.FileNotFoundException;
+ import java.io.IOException;
+ import java.io.PrintWriter;
+ import java.net.BindException;
+@@ -158,7 +159,7 @@ public class HttpServer implements FilterContainer {
+ 
+     webServer.setThreadPool(new QueuedThreadPool());
+ 
+-    final String appDir = getWebAppsPath();
++    final String appDir = getWebAppsPath(name);
+     ContextHandlerCollection contexts = new ContextHandlerCollection();
+     webServer.setHandler(contexts);
+ 
+@@ -433,14 +434,17 @@ public class HttpServer implements FilterContainer {
+ 
+   /**
+    * Get the pathname to the webapps files.
++   * @param appName eg "secondary" or "datanode"
+    * @return the pathname as a URL
+-   * @throws IOException if 'webapps' directory cannot be found on CLASSPATH.
++   * @throws FileNotFoundException if 'webapps' directory cannot be found on CLASSPATH.
+    */
+-  protected String getWebAppsPath() throws IOException {
+-    URL url = getClass().getClassLoader().getResource("webapps");
+-    if (url == null) 
+-      throw new IOException("webapps not found in CLASSPATH"); 
+-    return url.toString();
++  private String getWebAppsPath(String appName) throws FileNotFoundException {
++    URL url = getClass().getClassLoader().getResource("webapps/" + appName);
++    if (url == null)
++      throw new FileNotFoundException("webapps/" + appName
++          + " not found in CLASSPATH");
++    String urlString = url.toString();
++    return urlString.substring(0, urlString.lastIndexOf('/'));
+   }
+ 
+   /**
+@@ -690,8 +694,7 @@ public class HttpServer implements FilterContainer {
+         return;
+       }
+ 
+-      PrintWriter out = new PrintWriter
+-                    (HtmlQuoting.quoteOutputStream(response.getOutputStream()));
++      PrintWriter out = response.getWriter();
+       ReflectionUtils.printThreadInfo(out, "");
+       out.close();
+       ReflectionUtils.logThreadInfo(LOG, "jsp requested", 1);      
+@@ -808,22 +811,33 @@ public class HttpServer implements FilterContainer {
+         new RequestQuoter((HttpServletRequest) request);
+       final HttpServletResponse httpResponse = (HttpServletResponse) response;
+ 
+-      // Infer the content type based on the path of the request.
++      String mime = inferMimeType(request);
++      if (mime == null) {
++        httpResponse.setContentType("text/plain; charset=utf-8");
++      } else if (mime.startsWith("text/html")) {
++        // HTML with unspecified encoding, we want to
++        // force HTML with utf-8 encoding
++        // This is to avoid the following security issue:
++        // http://openmya.hacker.jp/hasegawa/security/utf7cs.html
++        httpResponse.setContentType("text/html; charset=utf-8");
++      } else if (mime.startsWith("application/xml")) {
++        httpResponse.setContentType("text/xml; charset=utf-8");
++      }
++
++      chain.doFilter(quoted, httpResponse);
++    }
++
++    /**
++     * Infer the mime type for the response based on the extension of the request
++     * URI. Returns null if unknown.
++     */
++    private String inferMimeType(ServletRequest request) {
+       String path = ((HttpServletRequest)request).getRequestURI();
+       ContextHandler.SContext sContext = (ContextHandler.SContext)config.getServletContext();
+       MimeTypes mimes = sContext.getContextHandler().getMimeTypes();
+       Buffer mimeBuffer = mimes.getMimeByExtension(path);
+-      String mime = mimeBuffer != null ? mimeBuffer.toString() : "text/html";
+-
+-      // If it is HTML (default), force the character set to utf-8.
+-      // This is to avoid the following security issue:
+-      // http://openmya.hacker.jp/hasegawa/security/utf7cs.html
+-      if (mime.startsWith("text/html")) {
+-        httpResponse.setContentType(mime + "; charset=utf-8");
+-      } else {
+-        httpResponse.setContentType(mime);
+-      }
+-      chain.doFilter(quoted, httpResponse);
++      return (mimeBuffer == null) ? null : mimeBuffer.toString();
+     }
++
+   }
+ }
+diff --git a/src/core/org/apache/hadoop/metrics/MetricsServlet.java b/src/core/org/apache/hadoop/metrics/MetricsServlet.java
+index 44c0bd3..2d82139 100644
+--- a/src/core/org/apache/hadoop/metrics/MetricsServlet.java
++++ b/src/core/org/apache/hadoop/metrics/MetricsServlet.java
+@@ -100,17 +100,26 @@ public class MetricsServlet extends HttpServlet {
+   @Override
+   public void doGet(HttpServletRequest request, HttpServletResponse response)
+       throws ServletException, IOException {
+-    PrintWriter out = new PrintWriter(response.getOutputStream());
+     String format = request.getParameter("format");
+     Collection<MetricsContext> allContexts = 
+       ContextFactory.getFactory().getAllContexts();
+     if ("json".equals(format)) {
+-      // Uses Jetty's built-in JSON support to convert the map into JSON.
+-      out.print(new JSON().toJSON(makeMap(allContexts)));
++      response.setContentType("application/json; charset=utf-8");
++      PrintWriter out = response.getWriter();
++      try {
++        // Uses Jetty's built-in JSON support to convert the map into JSON.
++        out.print(new JSON().toJSON(makeMap(allContexts)));
++      } finally {
++        out.close();
++      }
+     } else {
+-      printMap(out, makeMap(allContexts));
++      PrintWriter out = response.getWriter();
++      try {
++        printMap(out, makeMap(allContexts));
++      } finally {
++        out.close();
++      }
+     }
+-    out.close();
+   }
+   
+   /**
+diff --git a/src/test/org/apache/hadoop/http/TestHttpServer.java b/src/test/org/apache/hadoop/http/TestHttpServer.java
+index eb07e38..3c6f974 100644
+--- a/src/test/org/apache/hadoop/http/TestHttpServer.java
++++ b/src/test/org/apache/hadoop/http/TestHttpServer.java
+@@ -23,6 +23,7 @@ import java.io.File;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.io.PrintStream;
++import java.io.PrintWriter;
+ import java.net.URLConnection;
+ import java.net.HttpURLConnection;
+ import java.net.URL;
+@@ -67,7 +68,7 @@ public class TestHttpServer {
+     public void doGet(HttpServletRequest request, 
+                       HttpServletResponse response
+                       ) throws ServletException, IOException {
+-      PrintStream out = new PrintStream(response.getOutputStream());
++      PrintWriter out = response.getWriter();
+       Map<String, String[]> params = request.getParameterMap();
+       SortedSet<String> keys = new TreeSet(params.keySet());
+       for(String key: keys) {
+@@ -94,7 +95,7 @@ public class TestHttpServer {
+     public void doGet(HttpServletRequest request, 
+                       HttpServletResponse response
+                       ) throws ServletException, IOException {
+-      PrintStream out = new PrintStream(response.getOutputStream());
++      PrintWriter out = response.getWriter();
+       SortedSet<String> sortedKeys = new TreeSet();
+       Enumeration<String> keys = request.getParameterNames();
+       while(keys.hasMoreElements()) {
+@@ -110,6 +111,20 @@ public class TestHttpServer {
+     }    
+   }
+ 
++  @SuppressWarnings("serial")
++  public static class HtmlContentServlet extends HttpServlet {
++    @SuppressWarnings("unchecked")
++    @Override
++    public void doGet(HttpServletRequest request, 
++                      HttpServletResponse response
++                      ) throws ServletException, IOException {
++      response.setContentType("text/html");
++      PrintWriter out = response.getWriter();
++      out.print("hello world");
++      out.close();
++    }
++  }
++
+   private String readOutput(URL url) throws IOException {
+     StringBuilder out = new StringBuilder();
+     InputStream in = url.openConnection().getInputStream();
+@@ -123,11 +138,10 @@ public class TestHttpServer {
+   }
+   
+   @Before public void setup() throws Exception {
+-    new File(System.getProperty("build.webapps", "build/webapps") + "/test"
+-             ).mkdirs();
+     server = new HttpServer("test", "0.0.0.0", 0, true);
+     server.addServlet("echo", "/echo", EchoServlet.class);
+     server.addServlet("echomap", "/echomap", EchoMapServlet.class);
++    server.addServlet("htmlcontent", "/htmlcontent", HtmlContentServlet.class);
+     server.start();
+     int port = server.getPort();
+     baseUrl = new URL("http://localhost:" + port + "/");
+@@ -154,13 +168,39 @@ public class TestHttpServer {
+ 
+   @Test public void testContentTypes() throws Exception {
+     // Static CSS files should have text/css
+-    URL cssUrl = new URL(baseUrl, "/static/hadoop.css");
+-    URLConnection conn = cssUrl.openConnection();
++    URL cssUrl = new URL(baseUrl, "/static/test.css");
++    HttpURLConnection conn = (HttpURLConnection)cssUrl.openConnection();
++    conn.connect();
++    assertEquals(200, conn.getResponseCode());
+     assertEquals("text/css", conn.getContentType());
+ 
+-    // Servlets should have text/html with proper encoding
++    // Servlets should have text/plain with proper encoding by default
+     URL servletUrl = new URL(baseUrl, "/echo?a=b");
+-    conn = servletUrl.openConnection();
++    conn = (HttpURLConnection)servletUrl.openConnection();
++    conn.connect();
++    assertEquals(200, conn.getResponseCode());
++    assertEquals("text/plain; charset=utf-8", conn.getContentType());
++
++    // We should ignore parameters for mime types - ie a parameter
++    // ending in .css should not change mime type
++    servletUrl = new URL(baseUrl, "/echo?a=b.css");
++    conn = (HttpURLConnection)servletUrl.openConnection();
++    conn.connect();
++    assertEquals(200, conn.getResponseCode());
++    assertEquals("text/plain; charset=utf-8", conn.getContentType());
++
++    // Servlets that specify text/html should get that content type
++    servletUrl = new URL(baseUrl, "/htmlcontent");
++    conn = (HttpURLConnection)servletUrl.openConnection();
++    conn.connect();
++    assertEquals(200, conn.getResponseCode());
++    assertEquals("text/html; charset=utf-8", conn.getContentType());
++
++    // JSPs should default to text/html with utf8
++    servletUrl = new URL(baseUrl, "/testjsp.jsp");
++    conn = (HttpURLConnection)servletUrl.openConnection();
++    conn.connect();
++    assertEquals(200, conn.getResponseCode());
+     assertEquals("text/html; charset=utf-8", conn.getContentType());
+   }
+ 
+diff --git a/src/test/test-webapps/static/test.css b/src/test/test-webapps/static/test.css
+new file mode 100644
+index 0000000..ae43828
+--- /dev/null
++++ b/src/test/test-webapps/static/test.css
+@@ -0,0 +1,21 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++/**
++ * Test CSS file for content type handling - empty, since we just check
++ * returned content type!
++ */
+diff --git a/src/test/test-webapps/test/testjsp.jsp b/src/test/test-webapps/test/testjsp.jsp
+new file mode 100644
+index 0000000..23465da
+--- /dev/null
++++ b/src/test/test-webapps/test/testjsp.jsp
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="UTF-8"?><%!
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file 
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++%>
++<%@ page contentType="text/html; charset=UTF-8" %> 
++Hello world!
+-- 
+1.7.0.4
+

@@ -1,0 +1,130 @@
+From 696642abf31b303d3aef95fd651a2fdf2a5e4142 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@apache.org>
+Date: Mon, 26 Mar 2012 22:05:43 +0000
+Subject: [PATCH 1159/1179] HDFS-3129. NetworkTopology: getLeaf should check for invalid topologies. Contributed by Colin Patrick McCabe
+
+Reason: improvement
+Author: Colin McCabe
+Ref: CDH-3897
+---
+ .../org/apache/hadoop/net/NetworkTopology.java     |   23 ++++++++++++++++++++
+ .../apache/hadoop/mapred/TestJobInProgress.java    |    8 +------
+ .../org/apache/hadoop/net/TestNetworkTopology.java |   19 ++++++++++++++++
+ 3 files changed, 43 insertions(+), 7 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/net/NetworkTopology.java b/src/core/org/apache/hadoop/net/NetworkTopology.java
+index 863ec93..3ec9e7e 100644
+--- a/src/core/org/apache/hadoop/net/NetworkTopology.java
++++ b/src/core/org/apache/hadoop/net/NetworkTopology.java
+@@ -42,6 +42,13 @@ public class NetworkTopology {
+   public static final Log LOG = 
+     LogFactory.getLog(NetworkTopology.class);
+     
++  public static class InvalidTopologyException extends RuntimeException {
++    private static final long serialVersionUID = 1L;
++    public InvalidTopologyException(String msg) {
++      super(msg);
++    }
++  }
++
+   /* Inner Node represent a switch/router of a data center or rack.
+    * Different from a leave node, it has non-null children.
+    */
+@@ -296,6 +303,8 @@ public class NetworkTopology {
+   } // end of InnerNode
+     
+   InnerNode clusterMap = new InnerNode(InnerNode.ROOT); // the root
++  /** Depth of all leaf nodes */
++  private int depthOfAllLeaves = -1;
+   private int numOfRacks = 0;  // rack counter
+   private ReadWriteLock netlock;
+     
+@@ -312,6 +321,7 @@ public class NetworkTopology {
+    */
+   public void add(Node node) {
+     if (node==null) return;
++    String oldTopoStr = this.toString();
+     if( node instanceof InnerNode ) {
+       throw new IllegalArgumentException(
+         "Not allow to add an inner node: "+NodeBase.getPath(node));
+@@ -329,6 +339,19 @@ public class NetworkTopology {
+         if (rack == null) {
+           numOfRacks++;
+         }
++        if (!(node instanceof InnerNode)) {
++          if (depthOfAllLeaves == -1) {
++            depthOfAllLeaves = node.getLevel();
++          } else {
++            if (depthOfAllLeaves != node.getLevel()) {
++              LOG.error("Error: can't add leaf node at depth " +
++                  node.getLevel() + " to topology:\n" + oldTopoStr);
++              throw new InvalidTopologyException("Invalid network topology. " +
++                  "You cannot have a rack and a non-rack node at the same " +
++                  "level of the network topology.");
++            }
++          }
++        }
+       }
+       LOG.debug("NetworkTopology became:\n" + this.toString());
+     } finally {
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobInProgress.java b/src/test/org/apache/hadoop/mapred/TestJobInProgress.java
+index 83021f5..29dee66 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobInProgress.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobInProgress.java
+@@ -228,13 +228,9 @@ public class TestJobInProgress {
+     Node r2n3 = new NodeBase("/default/rack2/node3");
+     nt.add(r2n3);
+ 
+-    Node r2n4 = new NodeBase("/default/rack2/s1/node4");
+-    nt.add(r2n4);
+-
+     LOG.debug("r1n1 parent: " + r1n1.getParent() + "\n" +
+               "r1n2 parent: " + r1n2.getParent() + "\n" +
+-              "r2n3 parent: " + r2n3.getParent() + "\n" +
+-              "r2n4 parent: " + r2n4.getParent());
++              "r2n3 parent: " + r2n3.getParent());
+ 
+     // Same host
+     assertEquals(0, JobInProgress.getMatchingLevelForNodes(r1n1, r1n1, 3));
+@@ -242,8 +238,6 @@ public class TestJobInProgress {
+     assertEquals(1, JobInProgress.getMatchingLevelForNodes(r1n1, r1n2, 3));
+     // Different rack
+     assertEquals(2, JobInProgress.getMatchingLevelForNodes(r1n1, r2n3, 3));
+-    // Different rack at different depth
+-    assertEquals(3, JobInProgress.getMatchingLevelForNodes(r1n1, r2n4, 3));
+   }
+ 
+   @AfterClass
+diff --git a/src/test/org/apache/hadoop/net/TestNetworkTopology.java b/src/test/org/apache/hadoop/net/TestNetworkTopology.java
+index 0fead9e..b02d85d 100644
+--- a/src/test/org/apache/hadoop/net/TestNetworkTopology.java
++++ b/src/test/org/apache/hadoop/net/TestNetworkTopology.java
+@@ -58,6 +58,25 @@ public class TestNetworkTopology extends TestCase {
+     assertEquals(cluster.getNumOfLeaves(), dataNodes.length);
+   }
+ 
++  public void testCreateInvalidTopology() throws Exception {
++    NetworkTopology invalCluster = new NetworkTopology();
++    DatanodeDescriptor invalDataNodes[] = new DatanodeDescriptor[] {
++      new DatanodeDescriptor(new DatanodeID("h1:5020"), "/d1/r1"),
++      new DatanodeDescriptor(new DatanodeID("h2:5020"), "/d1/r1"),
++      new DatanodeDescriptor(new DatanodeID("h3:5020"), "/d1")
++    };
++    invalCluster.add(invalDataNodes[0]);
++    invalCluster.add(invalDataNodes[1]);
++    try {
++      invalCluster.add(invalDataNodes[2]);
++      fail("expected InvalidTopologyException");
++    } catch (NetworkTopology.InvalidTopologyException e) {
++      assertEquals(e.getMessage(), "Invalid network topology. " +
++          "You cannot have a rack and a non-rack node at the same " +
++          "level of the network topology.");
++    }
++  }
++
+   public void testRacks() throws Exception {
+     assertEquals(cluster.getNumOfRacks(), 3);
+     assertTrue(cluster.isOnSameRack(dataNodes[0], dataNodes[1]));
+-- 
+1.7.0.4
+

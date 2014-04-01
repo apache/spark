@@ -1,0 +1,948 @@
+From bb55a89bf7a3decd9846989f31d93cb4ed8588b5 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:51 -0800
+Subject: [PATCH 0834/1179] HADOOP-6864. Provide a JNI-based implementation of ShellBasedUnixGroupsNetgroupMapping
+
+Author: Boris Shkolnik
+Ref: CDH-2622
+---
+ .../security/GroupMappingServiceProvider.java      |   11 ++
+ src/core/org/apache/hadoop/security/Groups.java    |   13 ++
+ .../hadoop/security/JniBasedUnixGroupsMapping.java |   12 ++-
+ .../JniBasedUnixGroupsNetgroupMapping.java         |  104 ++++++++++++
+ .../org/apache/hadoop/security/NetgroupCache.java  |   90 ++++++++++
+ .../security/ShellBasedUnixGroupsMapping.java      |   10 +
+ .../ShellBasedUnixGroupsNetgroupMapping.java       |  173 ++++++++++++++++++++
+ .../security/authorize/AccessControlList.java      |   53 ++++--
+ src/core/org/apache/hadoop/util/Shell.java         |    5 +
+ .../security/JniBasedUnixGroupsNetgroupMapping.c   |  138 ++++++++++++++++
+ ...lBasedUnixGroupsNetgroupMappingTestWrapper.java |   57 +++++++
+ .../TestMapredGroupMappingServiceRefresh.java      |    9 +
+ .../hadoop/security/TestRefreshUserMappings.java   |    9 +
+ .../security/authorize/TestAccessControlList.java  |   50 ++++++
+ 14 files changed, 717 insertions(+), 17 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/security/JniBasedUnixGroupsNetgroupMapping.java
+ create mode 100644 src/core/org/apache/hadoop/security/NetgroupCache.java
+ create mode 100644 src/core/org/apache/hadoop/security/ShellBasedUnixGroupsNetgroupMapping.java
+ create mode 100644 src/native/src/org/apache/hadoop/security/JniBasedUnixGroupsNetgroupMapping.c
+ create mode 100644 src/test/org/apache/hadoop/security/ShellBasedUnixGroupsNetgroupMappingTestWrapper.java
+
+diff --git a/src/core/org/apache/hadoop/security/GroupMappingServiceProvider.java b/src/core/org/apache/hadoop/security/GroupMappingServiceProvider.java
+index 37ed487..6e1118e 100644
+--- a/src/core/org/apache/hadoop/security/GroupMappingServiceProvider.java
++++ b/src/core/org/apache/hadoop/security/GroupMappingServiceProvider.java
+@@ -34,4 +34,15 @@ interface GroupMappingServiceProvider {
+    * @throws IOException
+    */
+   public List<String> getGroups(String user) throws IOException;
++  /**
++   * Refresh the cache of groups and user mapping
++   * @throws IOException
++   */
++  public void cacheGroupsRefresh() throws IOException;
++  /**
++   * Caches the group user information
++   * @param groups list of groups to add to cache
++   * @throws IOException
++   */
++  public void cacheGroupsAdd(List<String> groups) throws IOException;
+ }
+diff --git a/src/core/org/apache/hadoop/security/Groups.java b/src/core/org/apache/hadoop/security/Groups.java
+index 386d711..83af2c4 100644
+--- a/src/core/org/apache/hadoop/security/Groups.java
++++ b/src/core/org/apache/hadoop/security/Groups.java
+@@ -87,8 +87,21 @@ public class Groups {
+    */
+   public void refresh() {
+     LOG.info("clearing userToGroupsMap cache");
++    try {
++      impl.cacheGroupsRefresh();
++    } catch (IOException e) {
++      LOG.warn("Error refreshing groups cache", e);
++    }
+     userToGroupsMap.clear();
+   }
++
++  public void cacheGroupsAdd(List<String> groups) {
++    try {
++      impl.cacheGroupsAdd(groups);
++    } catch (IOException e) {
++      LOG.warn("Error caching groups", e);
++    }
++  }
+   
+   private static class CachedGroups {
+     final long timestamp;
+diff --git a/src/core/org/apache/hadoop/security/JniBasedUnixGroupsMapping.java b/src/core/org/apache/hadoop/security/JniBasedUnixGroupsMapping.java
+index caa780e..c76d9cb 100644
+--- a/src/core/org/apache/hadoop/security/JniBasedUnixGroupsMapping.java
++++ b/src/core/org/apache/hadoop/security/JniBasedUnixGroupsMapping.java
+@@ -33,7 +33,8 @@ import org.apache.hadoop.util.NativeCodeLoader;
+  */
+ public class JniBasedUnixGroupsMapping implements GroupMappingServiceProvider {
+   
+-  private static final Log LOG = LogFactory.getLog(ShellBasedUnixGroupsMapping.class);
++  private static final Log LOG = LogFactory.getLog(
++    JniBasedUnixGroupsMapping.class);
+   
+   native String[] getGroupForUser(String user);
+   
+@@ -58,4 +59,13 @@ public class JniBasedUnixGroupsMapping implements GroupMappingServiceProvider {
+     }
+     return Arrays.asList(new String[0]);
+   }
++  @Override
++  public void cacheGroupsRefresh() throws IOException {
++    // does nothing in this provider of user to groups mapping
++  }
++
++  @Override
++  public void cacheGroupsAdd(List<String> groups) throws IOException {
++    // does nothing in this provider of user to groups mapping
++  }
+ }
+diff --git a/src/core/org/apache/hadoop/security/JniBasedUnixGroupsNetgroupMapping.java b/src/core/org/apache/hadoop/security/JniBasedUnixGroupsNetgroupMapping.java
+new file mode 100644
+index 0000000..0d2a7f3
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/JniBasedUnixGroupsNetgroupMapping.java
+@@ -0,0 +1,104 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++import java.io.IOException;
++import java.util.Arrays;
++import java.util.List;
++import java.util.LinkedList;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.util.NativeCodeLoader;
++
++import org.apache.hadoop.security.NetgroupCache;
++
++/**
++ * A JNI-based implementation of {@link GroupMappingServiceProvider} 
++ * that invokes libC calls to get the group
++ * memberships of a given user.
++ */
++public class JniBasedUnixGroupsNetgroupMapping
++  extends JniBasedUnixGroupsMapping {
++  
++  private static final Log LOG = LogFactory.getLog(
++    JniBasedUnixGroupsNetgroupMapping.class);
++
++  private static final NetgroupCache netgroupCache = new NetgroupCache();
++
++  native String[] getUsersForNetgroupJNI(String group);
++  
++  /**
++   * Gets unix groups and netgroups for the user.
++   *
++   * It gets all unix groups as returned by id -Gn but it
++   * only returns netgroups that are used in ACLs (there is
++   * no way to get all netgroups for a given user, see
++   * documentation for getent netgroup)
++   */
++  @Override
++  public List<String> getGroups(String user) throws IOException {
++    // parent gets unix groups
++    List<String> groups = new LinkedList<String>(super.getGroups(user));
++    netgroupCache.getNetgroups(user, groups);
++    return groups;
++  }
++
++  @Override
++  public void cacheGroupsRefresh() throws IOException {
++    List<String> groups = netgroupCache.getNetgroupNames();
++    netgroupCache.clear();
++    cacheGroupsAdd(groups);
++  }
++
++  @Override
++  public void cacheGroupsAdd(List<String> groups) throws IOException {
++    for(String group: groups) {
++      if(group.length() == 0) {
++        // better safe than sorry (should never happen)
++      } else if(group.charAt(0) == '@') {
++        if(!netgroupCache.isCached(group)) {
++          netgroupCache.add(group, getUsersForNetgroup(group));
++        }
++      } else {
++        // unix group, not caching
++      }
++    }
++  }
++
++  /**
++   * Calls JNI function to get users for a netgroup, since C functions
++   * are not reentrant we need to make this synchronized (see
++   * documentation for setnetgrent, getnetgrent and endnetgrent)
++   */
++  protected synchronized List<String> getUsersForNetgroup(String netgroup) {
++    String[] users = null;
++    try {
++      // JNI code does not expect '@' at the begining of the group name
++      users = getUsersForNetgroupJNI(netgroup.substring(1));
++    } catch (Exception e) {
++      LOG.warn("Got exception while trying to obtain the users for netgroup ["
++        + netgroup + "] [" + e + "]");
++    }
++    if (users != null && users.length != 0) {
++      return Arrays.asList(users);
++    }
++    return new LinkedList<String>();
++  }
++}
+diff --git a/src/core/org/apache/hadoop/security/NetgroupCache.java b/src/core/org/apache/hadoop/security/NetgroupCache.java
+new file mode 100644
+index 0000000..5e4d1c9
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/NetgroupCache.java
+@@ -0,0 +1,90 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.security;
++
++import java.util.LinkedList;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
++import java.util.HashSet;
++import java.util.concurrent.ConcurrentHashMap;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++
++/**
++ * Class that caches the netgroups and inverts group-to-user map
++ * to user-to-group map
++ */
++public class NetgroupCache {
++
++  private static final Log LOG = LogFactory.getLog(NetgroupCache.class);
++
++  private static boolean netgroupToUsersMapUpdated = true;
++  private static Map<String, Set<String>> netgroupToUsersMap =
++    new ConcurrentHashMap<String, Set<String>>();
++
++  private static Map<String, Set<String>> userToNetgroupsMap =
++    new ConcurrentHashMap<String, Set<String>>();
++
++
++  public void getNetgroups(final String user,
++      List<String> groups) {
++    if(netgroupToUsersMapUpdated) {
++      netgroupToUsersMapUpdated = false; // at the beginning to avoid race
++      //update userToNetgroupsMap
++      for(String netgroup : netgroupToUsersMap.keySet()) {
++        for(String netuser : netgroupToUsersMap.get(netgroup)) {
++          // add to userToNetgroupsMap
++          if(!userToNetgroupsMap.containsKey(netuser)) {
++            userToNetgroupsMap.put(netuser, new HashSet<String>());
++          }
++          userToNetgroupsMap.get(netuser).add(netgroup);
++        }
++      }
++    }
++    if(userToNetgroupsMap.containsKey(user)) {
++      for(String netgroup : userToNetgroupsMap.get(user)) {
++        groups.add(netgroup);
++      }
++    }
++  }
++
++  public List<String> getNetgroupNames() {
++    return new LinkedList<String>(netgroupToUsersMap.keySet());
++  }
++
++  public boolean isCached(String group) {
++    return netgroupToUsersMap.containsKey(group);
++  }
++
++  public void clear() {
++    netgroupToUsersMap.clear();
++  }
++
++  public void add(String group, List<String> users) {
++    if(!isCached(group)) {
++      netgroupToUsersMap.put(group, new HashSet<String>());
++      for(String user: users) {
++        netgroupToUsersMap.get(group).add(user);
++      }
++    }
++    netgroupToUsersMapUpdated = true; // at the end to avoid race
++  }
++}
+diff --git a/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsMapping.java b/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsMapping.java
+index 7125214..f164e03 100644
+--- a/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsMapping.java
++++ b/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsMapping.java
+@@ -43,6 +43,16 @@ public class ShellBasedUnixGroupsMapping implements GroupMappingServiceProvider
+     return getUnixGroups(user);
+   }
+ 
++  @Override
++  public void cacheGroupsRefresh() throws IOException {
++    // does nothing in this provider of user to groups mapping
++  }
++
++  @Override
++  public void cacheGroupsAdd(List<String> groups) throws IOException {
++    // does nothing in this provider of user to groups mapping
++  }
++
+   /** 
+    * Get the current user's group list from Unix by running the command 'groups'
+    * NOTE. For non-existing user it will return EMPTY list
+diff --git a/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsNetgroupMapping.java b/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsNetgroupMapping.java
+new file mode 100644
+index 0000000..05f85b0
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsNetgroupMapping.java
+@@ -0,0 +1,173 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.security;
++
++import java.io.IOException;
++import java.util.LinkedList;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
++import java.util.HashSet;
++import java.util.StringTokenizer;
++import java.util.concurrent.ConcurrentHashMap;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.util.Shell;
++import org.apache.hadoop.util.Shell.ExitCodeException;
++
++/**
++ * A simple shell-based implementation of {@link GroupMappingServiceProvider} 
++ * that exec's the <code>groups</code> shell command to fetch the group
++ * memberships of a given user.
++ */
++public class ShellBasedUnixGroupsNetgroupMapping extends ShellBasedUnixGroupsMapping {
++  
++  private static final Log LOG = LogFactory.getLog(ShellBasedUnixGroupsNetgroupMapping.class);
++
++  protected static boolean netgroupToUsersMapUpdated = true;
++  protected static Map<String, Set<String>> netgroupToUsersMap =
++    new ConcurrentHashMap<String, Set<String>>();
++
++  protected static Map<String, Set<String>> userToNetgroupsMap =
++    new ConcurrentHashMap<String, Set<String>>();
++  
++  @Override
++  public List<String> getGroups(String user) throws IOException {
++    List<String> groups = new LinkedList<String>();
++    getUnixGroups(user, groups);
++    getNetgroups(user, groups);
++    return groups;
++  }
++
++  @Override
++  public void cacheGroupsRefresh() throws IOException {
++    List<String> groups = new LinkedList<String>(netgroupToUsersMap.keySet());
++    netgroupToUsersMap.clear();
++    cacheGroupsAdd(groups);
++    netgroupToUsersMapUpdated = true; // at the end to avoid race
++  }
++
++  @Override
++  public void cacheGroupsAdd(List<String> groups) throws IOException {
++    for(String group: groups) {
++      if(group.length() == 0) {
++        // better safe than sorry (should never happen)
++      } else if(group.charAt(0) == '@') {
++        cacheNetgroup(group);
++      } else {
++        // unix group, not caching
++      }
++    }
++  }
++
++  protected void cacheNetgroup(String group) throws IOException {
++    if(netgroupToUsersMap.containsKey(group)) {
++      return;
++    } else {
++      // returns a string similar to this:
++      // group               ( , user, ) ( domain, user1, host.com )
++      String usersRaw = execShellGetUserForNetgroup(group);
++      // get rid of spaces, makes splitting much easier
++      usersRaw = usersRaw.replaceAll(" +", "");
++      // remove netgroup name at the beginning of the string
++      usersRaw = usersRaw.replaceFirst(
++        group.replaceFirst("@", "") + "[()]+",
++        "");
++      // split string into user infos
++      String[] userInfos = usersRaw.split("[()]+");
++      for(String userInfo : userInfos) {
++        // userInfo: xxx,user,yyy (xxx, yyy can be empty strings)
++        // get rid of everything before first and after last comma
++        String user = userInfo.replaceFirst("[^,]*,", "");
++        user = user.replaceFirst(",.*$", "");
++        // voila! got username!
++        if(!netgroupToUsersMap.containsKey(group)) {
++          netgroupToUsersMap.put(group, new HashSet<String>());
++        }
++        netgroupToUsersMap.get(group).add(user);
++      }
++      netgroupToUsersMapUpdated = true; // at the end to avoid race
++    }
++  }
++
++  /** 
++   * Get the current user's group list from Unix by running the command 'groups'
++   * NOTE. For non-existing user it will return EMPTY list
++   * @param user user name
++   * @return the groups list that the <code>user</code> belongs to
++   * @throws IOException if encounter any error when running the command
++   */
++  private void getUnixGroups(final String user,
++      List<String> groups) throws IOException {
++    String result = execShellGetUnixGroups(user);
++
++    StringTokenizer tokenizer = new StringTokenizer(result);
++    while (tokenizer.hasMoreTokens()) {
++      groups.add(tokenizer.nextToken());
++    }
++  }
++
++  protected void getNetgroups(final String user,
++      List<String> groups) throws IOException {
++    if(netgroupToUsersMapUpdated) {
++      netgroupToUsersMapUpdated = false; // at the beginning to avoid race
++      //update userToNetgroupsMap
++      for(String netgroup : netgroupToUsersMap.keySet()) {
++        for(String netuser : netgroupToUsersMap.get(netgroup)) {
++          // add to userToNetgroupsMap
++          if(!userToNetgroupsMap.containsKey(netuser)) {
++            userToNetgroupsMap.put(netuser, new HashSet<String>());
++          }
++          userToNetgroupsMap.get(netuser).add(netgroup);
++        }
++      }
++    }
++    if(userToNetgroupsMap.containsKey(user)) {
++      for(String netgroup : userToNetgroupsMap.get(user)) {
++        groups.add(netgroup);
++      }
++    }
++  }
++
++  protected String execShellGetUnixGroups(final String user)
++      throws IOException {
++    String result = "";
++    try {
++      result = Shell.execCommand(Shell.getGroupsForUserCommand(user));
++    } catch (ExitCodeException e) {
++      // if we didn't get the group - just return empty list;
++      LOG.warn("error while getting groups for user " + user, e);
++    }
++    return result;
++  }
++
++  protected String execShellGetUserForNetgroup(final String netgroup)
++      throws IOException {
++    String result = "";
++    try {
++      // shell command does not expect '@' at the begining of the group name
++      result = Shell.execCommand(
++        Shell.getUsersForNetgroupCommand(netgroup.substring(1)));
++    } catch (ExitCodeException e) {
++      // if we didn't get the group - just return empty list;
++      LOG.warn("error while getting users for netgroup " + netgroup, e);
++    }
++    return result;
++  }
++}
+diff --git a/src/core/org/apache/hadoop/security/authorize/AccessControlList.java b/src/core/org/apache/hadoop/security/authorize/AccessControlList.java
+index d9c4180..aeb6ff8 100644
+--- a/src/core/org/apache/hadoop/security/authorize/AccessControlList.java
++++ b/src/core/org/apache/hadoop/security/authorize/AccessControlList.java
+@@ -17,17 +17,25 @@
+  */
+ package org.apache.hadoop.security.authorize;
+ 
++import java.util.Iterator;
++
+ import java.io.DataInput;
+ import java.io.DataOutput;
+ import java.io.IOException;
+ import java.util.Set;
+ import java.util.TreeSet;
++import java.util.Arrays;
++import java.util.List;
++import java.util.LinkedList;
++import java.util.ListIterator;
+ 
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.io.WritableFactories;
+ import org.apache.hadoop.io.WritableFactory;
+ import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.Groups;
++import org.apache.hadoop.conf.Configuration;
+ 
+ /**
+  * Class representing a configured access control list.
+@@ -82,19 +90,22 @@ public class AccessControlList implements Writable {
+     } else {
+       allAllowed = false;
+       String[] userGroupStrings = aclString.split(" ", 2);
+-      
++      Configuration conf = new Configuration();
++      Groups groupsMapping = Groups.getUserToGroupsMappingService(conf);
++
+       if (userGroupStrings.length >= 1) {
+-        String[] usersStr = userGroupStrings[0].split(",");
+-        if (usersStr.length >= 1) {
+-          addToSet(users, usersStr);
+-        }
++        List<String> usersList = new LinkedList<String>(
++          Arrays.asList(userGroupStrings[0].split(",")));
++        cleanupList(usersList);
++        addToSet(users, usersList);
+       }
+       
+       if (userGroupStrings.length == 2) {
+-        String[] groupsStr = userGroupStrings[1].split(",");
+-        if (groupsStr.length >= 1) {
+-          addToSet(groups, groupsStr);
+-        }
++        List<String> groupsList = new LinkedList<String>(
++          Arrays.asList(userGroupStrings[1].split(",")));
++        cleanupList(groupsList);
++        addToSet(groups, groupsList);
++        groupsMapping.cacheGroupsAdd(groupsList);
+       }
+     }
+   }
+@@ -135,16 +146,26 @@ public class AccessControlList implements Writable {
+     }
+     return false;
+   }
+-  
+-  private static final void addToSet(Set<String> set, String[] strings) {
+-    for (String s : strings) {
+-      s = s.trim();
+-      if (s.length() > 0) {
+-        set.add(s);
++
++  private static final void cleanupList(List<String> list) {
++    ListIterator<String> i = list.listIterator();
++    while(i.hasNext()) {
++      String s = i.next();
++      if(s.length() == 0) {
++        i.remove();
++      } else {
++        s = s.trim();
++        i.set(s);
+       }
+     }
+   }
+   
++  private static final void addToSet(Set<String> set, List<String> list) {
++    for(String s : list) {
++      set.add(s);
++    }
++  }
++  
+   @Override
+   public String toString() {
+     String str = null;
+@@ -235,4 +256,4 @@ public class AccessControlList implements Writable {
+     }
+     return sb.toString();
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/src/core/org/apache/hadoop/util/Shell.java b/src/core/org/apache/hadoop/util/Shell.java
+index e593132..6ea69e6 100644
+--- a/src/core/org/apache/hadoop/util/Shell.java
++++ b/src/core/org/apache/hadoop/util/Shell.java
+@@ -52,6 +52,11 @@ abstract public class Shell {
+     //'groups username' command return is non-consistent across different unixes
+     return new String [] {"bash", "-c", "id -Gn " + user};
+   }
++  /** a Unix command to get a given netgroup's user list */
++  public static String[] getUsersForNetgroupCommand(final String netgroup) {
++    //'groups username' command return is non-consistent across different unixes
++    return new String [] {"bash", "-c", "getent netgroup " + netgroup};
++  }
+   /** a Unix command to set permission */
+   public static final String SET_PERMISSION_COMMAND = "chmod";
+   /** a Unix command to set owner */
+diff --git a/src/native/src/org/apache/hadoop/security/JniBasedUnixGroupsNetgroupMapping.c b/src/native/src/org/apache/hadoop/security/JniBasedUnixGroupsNetgroupMapping.c
+new file mode 100644
+index 0000000..a6ddcc3
+--- /dev/null
++++ b/src/native/src/org/apache/hadoop/security/JniBasedUnixGroupsNetgroupMapping.c
+@@ -0,0 +1,138 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++#include <jni.h>
++#include <sys/types.h>
++#include <sys/ipc.h>
++#include <sys/shm.h>
++#include <sys/mman.h>
++#include <sys/stat.h>
++#include <fcntl.h>
++#include <unistd.h>
++#include <stdlib.h>
++#include <errno.h>
++#include <grp.h>
++#include <stdio.h>
++#include <pwd.h>
++#include <string.h>
++
++#include <netdb.h>
++
++#include "org_apache_hadoop_security_JniBasedUnixGroupsNetgroupMapping.h"
++#include "org_apache_hadoop.h"
++
++struct listElement {
++   char * string;
++   struct listElement * next;
++};
++
++typedef struct listElement UserList;
++
++JNIEXPORT jobjectArray JNICALL 
++Java_org_apache_hadoop_security_JniBasedUnixGroupsNetgroupMapping_getUsersForNetgroupJNI
++(JNIEnv *env, jobject jobj, jstring jgroup) {
++
++  // pointers to free at the end
++  const char *cgroup  = NULL;
++  jobjectArray jusers = NULL;
++
++  // do we need to end the group lookup?
++  int setnetgrentCalledFlag = 0;
++
++  // if not NULL then THROW exception
++  char *errorMessage = NULL;
++
++  cgroup = (*env)->GetStringUTFChars(env, jgroup, NULL);
++  if (cgroup == NULL) {
++    goto END;
++  }
++
++  //--------------------------------------------------
++  // get users
++  // see man pages for setnetgrent, getnetgrent and endnetgrent
++
++  UserList *userListHead = NULL;
++  int       userListSize = 0;
++
++  // set the name of the group for subsequent calls to getnetgrent
++  // note that we want to end group lokup regardless whether setnetgrent
++  // was successfull or not (as long as it was called we need to call
++  // endnetgrent)
++  setnetgrentCalledFlag = 1;
++  if(setnetgrent(cgroup) == 1) {
++    UserList *current = NULL;
++    // three pointers are for host, user, domain, we only care
++    // about user now
++    char *p[3];
++    while(getnetgrent(p, p + 1, p + 2)) {
++      if(p[1]) {
++        current = (UserList *)malloc(sizeof(UserList));
++        current->string = malloc(strlen(p[1]) + 1);
++        strcpy(current->string, p[1]);
++        current->next = userListHead;
++        userListHead = current;
++        userListSize++;
++      }
++    }
++  }
++
++  //--------------------------------------------------
++  // build return data (java array)
++
++  jusers = (jobjectArray)(*env)->NewObjectArray(env,
++    userListSize, 
++    (*env)->FindClass(env, "java/lang/String"),
++    NULL);
++  if (jusers == NULL) {
++    errorMessage = "java/lang/OutOfMemoryError";
++    goto END;
++  }
++
++  UserList * current = NULL;
++
++  // note that the loop iterates over list but also over array (i)
++  int i = 0;
++  for(current = userListHead; current != NULL; current = current->next) {
++    jstring juser = (*env)->NewStringUTF(env, current->string);
++    if (juser == NULL) {
++      errorMessage = "java/lang/OutOfMemoryError";
++      goto END;
++    }
++    (*env)->SetObjectArrayElement(env, jusers, i++, juser);
++  }
++
++
++END:
++
++  // cleanup
++  if(cgroup) { (*env)->ReleaseStringUTFChars(env, jgroup, cgroup); }
++  if(setnetgrentCalledFlag) { endnetgrent(); }
++  while(userListHead) {
++    UserList *current = userListHead;
++    userListHead = userListHead->next;
++    if(current->string) { free(current->string); }
++    free(current);
++  }
++
++  // return results or THROW
++  if(errorMessage) {
++    THROW(env, errorMessage, NULL);
++    return NULL;
++  } else {
++    return jusers;
++  }
++}
+diff --git a/src/test/org/apache/hadoop/security/ShellBasedUnixGroupsNetgroupMappingTestWrapper.java b/src/test/org/apache/hadoop/security/ShellBasedUnixGroupsNetgroupMappingTestWrapper.java
+new file mode 100644
+index 0000000..9346541
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/ShellBasedUnixGroupsNetgroupMappingTestWrapper.java
+@@ -0,0 +1,57 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.security;
++
++import java.io.IOException;
++
++/**
++ * A wrapper for ShellBasedUnixGroupsMapping that replaces functions
++ * that call external programs (to get users/groups) by static stubs
++ * for the purposes of testing
++ *
++ * Keep in sync with TestAccessControlList.java
++ */
++public class ShellBasedUnixGroupsNetgroupMappingTestWrapper
++    extends ShellBasedUnixGroupsNetgroupMapping {
++  
++  @Override
++  protected String execShellGetUnixGroups(final String user)
++      throws IOException {
++    if(user.equals("ja")) {
++      return "my";
++    } else if(user.equals("sinatra")) {
++      return "ratpack";
++    } else if(user.equals("elvis")) {
++      return "users otherGroup";
++    }
++    return "";
++  }
++
++  @Override
++  protected String execShellGetUserForNetgroup(final String netgroup)
++      throws IOException {
++    if(netgroup.equals("@lasVegas")) {
++      return "lasVegas               ( , sinatra, ) ( domain, elvis, host.com)";
++    } else if(netgroup.equals("@somenetgroup")) {
++      return "somenetgroup           ( , nobody, )";
++    } else {
++      return "";
++    }
++  }  
++
++}
+diff --git a/src/test/org/apache/hadoop/security/TestMapredGroupMappingServiceRefresh.java b/src/test/org/apache/hadoop/security/TestMapredGroupMappingServiceRefresh.java
+index 80ecc2b..b508b21 100644
+--- a/src/test/org/apache/hadoop/security/TestMapredGroupMappingServiceRefresh.java
++++ b/src/test/org/apache/hadoop/security/TestMapredGroupMappingServiceRefresh.java
+@@ -71,6 +71,15 @@ public class TestMapredGroupMappingServiceRefresh {
+       i++;
+       return l;
+     }
++
++    @Override
++    public void cacheGroupsRefresh() throws IOException {
++    }
++
++    @Override
++    public void cacheGroupsAdd(List<String> groups) throws IOException {
++    }
++
+   }
+   
+   @Before
+diff --git a/src/test/org/apache/hadoop/security/TestRefreshUserMappings.java b/src/test/org/apache/hadoop/security/TestRefreshUserMappings.java
+index 39dcfc2..d149a6f 100644
+--- a/src/test/org/apache/hadoop/security/TestRefreshUserMappings.java
++++ b/src/test/org/apache/hadoop/security/TestRefreshUserMappings.java
+@@ -66,6 +66,15 @@ public class TestRefreshUserMappings {
+       i++;
+       return l;
+     }
++
++    @Override
++    public void cacheGroupsRefresh() throws IOException {
++    }
++
++    @Override
++    public void cacheGroupsAdd(List<String> groups) throws IOException {
++    }
++
+   }
+   
+   @Before
+diff --git a/src/test/org/apache/hadoop/security/authorize/TestAccessControlList.java b/src/test/org/apache/hadoop/security/authorize/TestAccessControlList.java
+index ea359c6..5dedc49 100644
+--- a/src/test/org/apache/hadoop/security/authorize/TestAccessControlList.java
++++ b/src/test/org/apache/hadoop/security/authorize/TestAccessControlList.java
+@@ -17,9 +17,13 @@
+  */
+ package org.apache.hadoop.security.authorize;
+ 
++import java.util.List;
+ import java.util.Iterator;
+ import java.util.Set;
+ 
++import org.apache.hadoop.conf.Configuration;
++
++import org.apache.hadoop.security.Groups;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.AccessControlList;
+ 
+@@ -27,6 +31,52 @@ import org.apache.hadoop.security.authorize.AccessControlList;
+ import junit.framework.TestCase;
+ 
+ public class TestAccessControlList extends TestCase {
++
++  /**
++   * test the netgroups (groups in ACL rules that start with @),
++   */
++  public void testNetgroups() throws Exception {
++    // set the config for Groups (test mapping class)
++    // we rely on hardcoded groups and netgroups in
++    // ShellBasedUnixGroupsMappingTestWrapper
++    Configuration conf = new Configuration();
++    conf.set("hadoop.security.group.mapping",
++      "org.apache.hadoop.security.ShellBasedUnixGroupsNetgroupMappingTestWrapper");
++
++    Groups groups = Groups.getUserToGroupsMappingService(conf);
++
++    AccessControlList acl;
++
++    // create these ACLs to populate groups cache
++    acl = new AccessControlList("ja my"); // plain
++    acl = new AccessControlList("sinatra ratpack,@lasVegas"); // netgroup
++    acl = new AccessControlList(" somegroups,@somenetgroup"); // no user
++
++    // check that the netgroups are working
++    List<String> elvisGroups = groups.getGroups("elvis");
++    assertTrue(elvisGroups.contains("@lasVegas"));
++
++    // refresh cache - not testing this directly but if the results are ok
++    // after the refresh that means it worked fine (very likely)
++    groups.refresh();
++
++    // create an ACL with netgroups (@xxx)
++    acl = new AccessControlList("ja ratpack,@lasVegas");
++    // elvis is in @lasVegas
++    UserGroupInformation elvis = 
++      UserGroupInformation.createRemoteUser("elvis");
++    // ja's groups are not in ACL
++    UserGroupInformation ja = 
++      UserGroupInformation.createRemoteUser("ja");
++    // unwanted and unwanted's grops are not in ACL
++    UserGroupInformation unwanted = 
++      UserGroupInformation.createRemoteUser("unwanted");
++
++    // test the ACLs!
++    assertUserAllowed(elvis, acl);
++    assertUserAllowed(ja, acl);
++    assertUserNotAllowed(unwanted, acl);
++  }
+   
+   public void testWildCardAccessControlList() throws Exception {
+     AccessControlList acl;
+-- 
+1.7.0.4
+

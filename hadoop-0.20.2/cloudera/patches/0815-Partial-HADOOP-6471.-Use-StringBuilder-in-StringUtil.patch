@@ -1,0 +1,30 @@
+From e8b759460ab487e98093292be7fa90afa65f47ec Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 10 Feb 2011 14:27:45 -0800
+Subject: [PATCH 0815/1179] Partial HADOOP-6471. Use StringBuilder in StringUtils.join
+
+Author: Yahoo Eng
+Ref: CDH-2622
+---
+ src/core/org/apache/hadoop/util/StringUtils.java |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/util/StringUtils.java b/src/core/org/apache/hadoop/util/StringUtils.java
+index b9e93e4..9b5d288 100644
+--- a/src/core/org/apache/hadoop/util/StringUtils.java
++++ b/src/core/org/apache/hadoop/util/StringUtils.java
+@@ -718,9 +718,10 @@ public class StringUtils {
+    *
+    * @param separator Separator to join with.
+    * @param strings Strings to join.
++   * @return  the joined string
+    */
+   public static String join(CharSequence separator, Iterable<String> strings) {
+-    StringBuffer sb = new StringBuffer();
++    StringBuilder sb = new StringBuilder();
+     boolean first = true;
+     for (String s : strings) {
+       if (first) {
+-- 
+1.7.0.4
+

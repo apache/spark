@@ -1,0 +1,53 @@
+From 52f7ba19fcd24172f1576b7c19db1c45427fe85d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 3 Mar 2010 18:53:33 -0800
+Subject: [PATCH 0532/1179] MAPREDUCE-1559. The DelegationTokenRenewal timer task should use the jobtracker's credentials to create the filesystem
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437821/mr-1559.patch
+Author: Devaraj Das
+Ref: CDH-648
+---
+ .../security/token/DelegationTokenRenewal.java     |   17 ++++++++++++++---
+ 1 files changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java b/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
+index ba7cbd6..a6687a4 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/token/DelegationTokenRenewal.java
+@@ -21,6 +21,9 @@ package org.apache.hadoop.mapreduce.security.token;
+ import java.io.IOException;
+ import java.net.URI;
+ import org.apache.hadoop.security.AccessControlException;
++import org.apache.hadoop.security.UserGroupInformation;
++
++import java.security.PrivilegedExceptionAction;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.Collections;
+@@ -194,12 +197,20 @@ public class DelegationTokenRenewal {
+   }
+   
+   private static DistributedFileSystem getDFSForToken(
+-      Token<DelegationTokenIdentifier> token, Configuration conf) 
++      Token<DelegationTokenIdentifier> token, final Configuration conf) 
+   throws Exception {
+     DistributedFileSystem dfs = null;
+     try {
+-      URI uri = new URI (SCHEME + "://" + token.getService().toString());
+-      dfs =  (DistributedFileSystem) FileSystem.get(uri, conf);
++      final URI uri = new URI (SCHEME + "://" + token.getService().toString());
++      dfs = (DistributedFileSystem)
++      UserGroupInformation.getLoginUser().doAs(
++          new PrivilegedExceptionAction<DistributedFileSystem>() {
++        public DistributedFileSystem run() throws IOException {
++          return (DistributedFileSystem) FileSystem.get(uri, conf);  
++        }
++      });
++
++      
+     } catch (Exception e) {
+       LOG.warn("Failed to create a dfs to renew for:" + token.getService(), e);
+       throw e;
+-- 
+1.7.0.4
+

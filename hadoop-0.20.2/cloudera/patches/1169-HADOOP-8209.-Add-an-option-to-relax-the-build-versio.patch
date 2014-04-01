@@ -1,0 +1,657 @@
+From a130de520d2226ca81c6c8370218650ddd012bf2 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Thu, 12 Apr 2012 12:20:04 -0700
+Subject: [PATCH 1169/1179] HADOOP-8209. Add an option to relax the build version check.
+
+Changes the behavior of datanodes and tasktrackers to only check for a version match (eg "0.20.2-cdh3u4") but ignore the other
+build fields (revision, user, and source checksum) when checking for compatibility with namenodes and jobtrackers. In previous
+releases datanodes refused to connect to namenodes if their build revision (svn revision) did not match, and tasktrackers refused
+to connect to jobtrackers if their build version (version, revision, user, and source checksum) did not match. This behavior can
+be restored by setting hadoop.relaxed.worker.version.check to false in core-site.xml
+
+Author: Eli Collins
+Reason: Enable rolling upgrades of slave hosts within an update
+Ref: CDH-5027
+---
+ src/core/core-default.xml                          |   16 +++
+ .../apache/hadoop/fs/CommonConfigurationKeys.java  |    4 +
+ src/core/org/apache/hadoop/util/VersionInfo.java   |    4 +-
+ .../apache/hadoop/hdfs/server/common/Storage.java  |    7 -
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   48 +++++++--
+ .../hdfs/server/protocol/DatanodeProtocol.java     |    5 +-
+ .../hadoop/hdfs/server/protocol/NamespaceInfo.java |   25 +++--
+ .../apache/hadoop/mapred/InterTrackerProtocol.java |   11 ++-
+ .../org/apache/hadoop/mapred/JobTracker.java       |    9 +-
+ .../org/apache/hadoop/mapred/TaskTracker.java      |   50 +++++++-
+ .../server/datanode/TestDataNodeVersionCheck.java  |  119 ++++++++++++++++++++
+ .../hadoop/mapred/TestTaskTrackerVersionCheck.java |   91 +++++++++++++++
+ 12 files changed, 349 insertions(+), 40 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVersionCheck.java
+ create mode 100644 src/test/org/apache/hadoop/mapred/TestTaskTrackerVersionCheck.java
+
+diff --git a/src/core/core-default.xml b/src/core/core-default.xml
+index 85e2bb0..b66a34e 100644
+--- a/src/core/core-default.xml
++++ b/src/core/core-default.xml
+@@ -582,4 +582,20 @@
+   </description>
+ </property>
+ 
++<property>
++  <name>hadoop.relaxed.worker.version.check</name>
++  <value>true</value>
++  <description>
++    This option changes the behavior of datanodes and tasktrackers to
++    only check for a version match (eg "0.20.2-cdh3u4") but ignore the
++    other build fields (revision, user, and source checksum) when
++    checking for compatibility with namenodes and jobtrackers. In
++    previous releases datanodes refused to connect to namenodes if
++    their build revision (svn revision) did not match, and
++    tasktrackers refused to connect to jobtrackers if their build
++    version (version, revision, user, and source checksum) did not
++    match. This behavior can be restored by disabling this option.
++  </description>
++</property>
++
+ </configuration>
+diff --git a/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java b/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
+index df17861..db878c7 100644
+--- a/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
++++ b/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
+@@ -54,5 +54,9 @@ public class CommonConfigurationKeys {
+   public static final int IO_COMPRESSION_CODEC_SNAPPY_BUFFERSIZE_DEFAULT =
+       256 * 1024;
+ 
++  /** See src/core/core-default.xml */
++  public static final String HADOOP_RELAXED_VERSION_CHECK_KEY =
++      "hadoop.relaxed.worker.version.check";
++  public static final boolean HADOOP_RELAXED_VERSION_CHECK_DEFAULT = true;
+ }
+ 
+diff --git a/src/core/org/apache/hadoop/util/VersionInfo.java b/src/core/org/apache/hadoop/util/VersionInfo.java
+index 6ef563d..d5e093b 100644
+--- a/src/core/org/apache/hadoop/util/VersionInfo.java
++++ b/src/core/org/apache/hadoop/util/VersionInfo.java
+@@ -97,8 +97,8 @@ public class VersionInfo {
+   }
+   
+   /**
+-   * Returns the buildVersion which includes version, 
+-   * revision, user and date. 
++   * Returns the full version string containing version,
++   * revision, user and source checksum. 
+    */
+   public static String getBuildVersion(){
+     return VersionInfo.getVersion() + 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/common/Storage.java b/src/hdfs/org/apache/hadoop/hdfs/server/common/Storage.java
+index c373f00..f3017bb 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/common/Storage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/common/Storage.java
+@@ -35,9 +35,6 @@ import org.apache.hadoop.hdfs.protocol.FSConstants;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants.NodeType;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants.StartupOption;
+ import org.apache.hadoop.fs.FileUtil;
+-import org.apache.hadoop.util.VersionInfo;
+-
+-
+ 
+ /**
+  * Storage information file.
+@@ -834,10 +831,6 @@ public abstract class Storage extends StorageInfo {
+     return false;
+   }
+ 
+-  public static String getBuildVersion() {
+-    return VersionInfo.getRevision();
+-  }
+-
+   public static String getRegistrationID(StorageInfo storage) {
+     return "NS-" + Integer.toString(storage.getNamespaceID())
+       + "-" + Integer.toString(storage.getLayoutVersion())
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index aa94971..3e3cd33 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -75,10 +75,8 @@ import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
+ import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager;
+ import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager.AccessMode;
+ import org.apache.hadoop.hdfs.security.token.block.ExportedBlockKeys;
+-import org.apache.hadoop.hdfs.server.common.GenerationStamp;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants;
+ import org.apache.hadoop.hdfs.server.common.IncorrectVersionException;
+-import org.apache.hadoop.hdfs.server.common.Storage;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants.StartupOption;
+ import org.apache.hadoop.hdfs.server.datanode.FSDataset.VolumeInfo;
+ import org.apache.hadoop.hdfs.server.datanode.SecureDataNodeStarter.SecureResources;
+@@ -229,6 +227,7 @@ public class DataNode extends Configured
+   int writePacketSize = 0;
+   private boolean supportAppends;
+   private boolean connectToDnViaHostname;
++  private boolean relaxedVersionCheck;
+   
+   /**
+    * Testing hook that allows tests to delay the sending of blockReceived
+@@ -372,6 +371,10 @@ public class DataNode extends Configured
+         DFSConfigKeys.DFS_DATANODE_DROP_CACHE_BEHIND_READS_KEY,
+         DFSConfigKeys.DFS_DATANODE_DROP_CACHE_BEHIND_READS_DEFAULT);
+ 
++    this.relaxedVersionCheck = conf.getBoolean(
++        CommonConfigurationKeys.HADOOP_RELAXED_VERSION_CHECK_KEY,
++        CommonConfigurationKeys.HADOOP_RELAXED_VERSION_CHECK_DEFAULT);
++
+     InetSocketAddress socAddr = DataNode.getStreamingAddr(conf);
+     int tmpPort = socAddr.getPort();
+     storage = new DataStorage();
+@@ -569,6 +572,34 @@ public class DataNode extends Configured
+            SocketChannel.open().socket() : new Socket();                                   
+   }
+   
++  /**
++   * @return true if this datanode is permitted to connect to
++   *    the given namenode version
++   */
++  boolean isPermittedVersion(NamespaceInfo nsInfo) {
++    boolean versionMatch =
++      nsInfo.getVersion().equals(VersionInfo.getVersion());
++    boolean revisionMatch =
++      nsInfo.getRevision().equals(VersionInfo.getRevision());
++
++    if (revisionMatch && !versionMatch) {
++      throw new AssertionError("Invalid build. The revisions match" +
++          " but the NN version is " + nsInfo.getVersion() +
++          " and the DN version is " + VersionInfo.getVersion());
++    }
++    if (relaxedVersionCheck) {
++      if (versionMatch && !revisionMatch) {
++        LOG.info("Permitting datanode revision " + VersionInfo.getRevision() +
++            " to connect to namenode revision " + nsInfo.getRevision() +
++            " because " + CommonConfigurationKeys.HADOOP_RELAXED_VERSION_CHECK_KEY +
++            " is enabled");
++      }
++      return versionMatch;
++    } else {
++      return revisionMatch;
++    }
++  }
++
+   private NamespaceInfo handshake() throws IOException {
+     NamespaceInfo nsInfo = new NamespaceInfo();
+     while (shouldRun) {
+@@ -582,12 +613,13 @@ public class DataNode extends Configured
+         } catch (InterruptedException ie) {}
+       }
+     }
+-    String errorMsg = null;
+-    // verify build version
+-    if( ! nsInfo.getBuildVersion().equals( Storage.getBuildVersion() )) {
+-      errorMsg = "Incompatible build versions: namenode BV = " 
+-        + nsInfo.getBuildVersion() + "; datanode BV = "
+-        + Storage.getBuildVersion();
++    if (!isPermittedVersion(nsInfo)) {
++      String errorMsg = "Incompatible versions: namenode version " +
++        nsInfo.getVersion() + " revision " + nsInfo.getRevision() +
++        " datanode version " + VersionInfo.getVersion() + " revision " +
++        VersionInfo.getRevision() + " and " +
++        CommonConfigurationKeys.HADOOP_RELAXED_VERSION_CHECK_KEY +
++        " is " + (relaxedVersionCheck ? "enabled" : "not enabled");
+       LOG.fatal(errorMsg);
+       notifyNamenode(DatanodeProtocol.NOTIFY, errorMsg);
+       throw new IOException(errorMsg);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
+index 3b75803..0c7f267 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/DatanodeProtocol.java
+@@ -41,10 +41,9 @@ import org.apache.hadoop.security.KerberosInfo;
+     clientPrincipal = DFSConfigKeys.DFS_DATANODE_USER_NAME_KEY)
+ public interface DatanodeProtocol extends VersionedProtocol {
+   /**
+-   * 27: nextGenerationStamp has a new parameter indicating if it is for
+-   * NameNode initiated lease recovery or not
++   * 28: Added an additional member to NamespaceInfo
+    */
+-  public static final long versionID = 27L;
++  public static final long versionID = 28L;
+ 
+   // error code
+   final static int NOTIFY = 0;
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/NamespaceInfo.java b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/NamespaceInfo.java
+index e47bcf3..df4cb51 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/protocol/NamespaceInfo.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/protocol/NamespaceInfo.java
+@@ -23,12 +23,12 @@ import java.io.DataOutput;
+ import java.io.IOException;
+ 
+ import org.apache.hadoop.hdfs.protocol.FSConstants;
+-import org.apache.hadoop.hdfs.server.common.Storage;
+ import org.apache.hadoop.hdfs.server.common.StorageInfo;
+ import org.apache.hadoop.io.UTF8;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.io.WritableFactories;
+ import org.apache.hadoop.io.WritableFactory;
++import org.apache.hadoop.util.VersionInfo;
+ 
+ /**
+  * NamespaceInfo is returned by the name-node in reply 
+@@ -36,22 +36,27 @@ import org.apache.hadoop.io.WritableFactory;
+  * 
+  */
+ public class NamespaceInfo extends StorageInfo implements Writable {
+-  String  buildVersion;
++  String revision;
++  String version;
+   int distributedUpgradeVersion;
+ 
+   public NamespaceInfo() {
+     super();
+-    buildVersion = null;
+   }
+   
+   public NamespaceInfo(int nsID, long cT, int duVersion) {
+-    super(FSConstants.LAYOUT_VERSION, nsID, cT);
+-    buildVersion = Storage.getBuildVersion();
++    super(FSConstants.LAYOUT_VERSION, nsID, cT); 
++    version = VersionInfo.getVersion();
++    revision = VersionInfo.getRevision();
+     this.distributedUpgradeVersion = duVersion;
+   }
+   
+-  public String getBuildVersion() {
+-    return buildVersion;
++  public String getVersion() {
++    return version;
++  }
++
++  public String getRevision() {
++    return revision;
+   }
+ 
+   public int getDistributedUpgradeVersion() {
+@@ -70,7 +75,8 @@ public class NamespaceInfo extends StorageInfo implements Writable {
+   }
+ 
+   public void write(DataOutput out) throws IOException {
+-    UTF8.writeString(out, getBuildVersion());
++    UTF8.writeString(out, getVersion());
++    UTF8.writeString(out, getRevision());
+     out.writeInt(getLayoutVersion());
+     out.writeInt(getNamespaceID());
+     out.writeLong(getCTime());
+@@ -78,7 +84,8 @@ public class NamespaceInfo extends StorageInfo implements Writable {
+   }
+ 
+   public void readFields(DataInput in) throws IOException {
+-    buildVersion = UTF8.readString(in);
++    version = UTF8.readString(in);
++    revision = UTF8.readString(in);
+     layoutVersion = in.readInt();
+     namespaceID = in.readInt();
+     cTime = in.readLong();
+diff --git a/src/mapred/org/apache/hadoop/mapred/InterTrackerProtocol.java b/src/mapred/org/apache/hadoop/mapred/InterTrackerProtocol.java
+index 404df26..cfe17d0 100644
+--- a/src/mapred/org/apache/hadoop/mapred/InterTrackerProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/InterTrackerProtocol.java
+@@ -72,8 +72,9 @@ interface InterTrackerProtocol extends VersionedProtocol {
+    * Version 29: Adding available memory and CPU usage information on TT to
+    *             TaskTrackerStatus for MAPREDUCE-1218
+    * Version 30: Adding disk failure to TaskTrackerStatus for MAPREDUCE-3015
++   * Version 31: Adding version methods for HADOOP-8209
+    */
+-  public static final long versionID = 30L;
++  public static final long versionID = 31L;
+   
+   public final static int TRACKERS_OK = 0;
+   public final static int UNKNOWN_TASKTRACKER = 1;
+@@ -144,9 +145,13 @@ interface InterTrackerProtocol extends VersionedProtocol {
+    */
+   public String getSystemDir();
+   
+-  
+   /**
+-   * Returns the buildVersion of the JobTracker 
++   * Returns the VersionInfo build version of the JobTracker 
+    */
+   public String getBuildVersion() throws IOException;
++
++  /**
++   * Returns the VersionInfo version of the JobTracker
++   */
++  public String getVIVersion() throws IOException;
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 41752a4..6470e91 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -3116,8 +3116,13 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   ////////////////////////////////////////////////////
+   // InterTrackerProtocol
+   ////////////////////////////////////////////////////
+-  
+-  public String getBuildVersion() throws IOException{
++
++  // Just returns the VersionInfo version (unlike MXBean#getVersion)
++  public String getVIVersion() throws IOException {
++    return VersionInfo.getVersion();
++  }
++
++  public String getBuildVersion() throws IOException {
+     return VersionInfo.getBuildVersion();
+   }
+ 
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 3519263..2dec650 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -61,6 +61,7 @@ import org.apache.hadoop.filecache.TaskDistributedCacheManager;
+ import org.apache.hadoop.filecache.TrackerDistributedCacheManager;
+ import org.apache.hadoop.mapreduce.server.tasktracker.*;
+ import org.apache.hadoop.mapreduce.server.tasktracker.userlogs.*;
++import org.apache.hadoop.fs.CommonConfigurationKeys;
+ import org.apache.hadoop.fs.DF;
+ import org.apache.hadoop.fs.CommonConfigurationKeys;
+ import org.apache.hadoop.fs.FileStatus;
+@@ -447,6 +448,11 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+    */
+   private long diskHealthCheckInterval;
+ 
++  /**
++   * Whether the TT performs a full or relaxed version check with the JT.
++   */
++  private boolean relaxedVersionCheck;
++
+   /*
+    * A list of commitTaskActions for whom commit response has been received 
+    */
+@@ -1579,6 +1585,9 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+    */
+   public TaskTracker(JobConf conf) throws IOException, InterruptedException {
+     originalConf = conf;
++    relaxedVersionCheck = conf.getBoolean(
++        CommonConfigurationKeys.HADOOP_RELAXED_VERSION_CHECK_KEY,
++        CommonConfigurationKeys.HADOOP_RELAXED_VERSION_CHECK_DEFAULT);
+     FILE_CACHE_SIZE = conf.getInt("mapred.tasktracker.file.cache.size", 2000);
+     maxMapSlots = conf.getInt(
+                   "mapred.tasktracker.map.tasks.maximum", 2);
+@@ -1713,6 +1722,32 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+   }
+ 
+   /**
++   * @return true if this tasktracker is permitted to connect to
++   *    the given jobtracker version
++   */
++  boolean isPermittedVersion(String jtBuildVersion, String jtVersion) {
++    boolean buildVersionMatch =
++      jtBuildVersion.equals(VersionInfo.getBuildVersion());
++    boolean versionMatch = jtVersion.equals(VersionInfo.getVersion());
++    if (buildVersionMatch && !versionMatch) {
++      throw new AssertionError("Invalid build. The build versions match" +
++          " but the JT version is " + jtVersion +
++          " and the TT version is " + VersionInfo.getVersion());
++    }
++    if (relaxedVersionCheck) {
++      if (!buildVersionMatch && versionMatch) {
++        LOG.info("Permitting tasktracker revision " + VersionInfo.getRevision() +
++            " to connect to jobtracker " + jtBuildVersion + " because " +
++            CommonConfigurationKeys.HADOOP_RELAXED_VERSION_CHECK_KEY +
++            " is enabled");
++      }
++      return versionMatch;
++    } else {
++      return buildVersionMatch;
++    }
++  }
++
++  /**
+    * Main service loop.  Will stay in this loop forever.
+    */
+   State offerService() throws Exception {
+@@ -1735,15 +1770,18 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+         }
+ 
+         // If the TaskTracker is just starting up:
+-        // 1. Verify the buildVersion
++        // 1. Verify the versions matches with the JobTracker
+         // 2. Get the system directory & filesystem
+         if(justInited) {
+-          String jobTrackerBV = jobClient.getBuildVersion();
+-          if(!VersionInfo.getBuildVersion().equals(jobTrackerBV)) {
++          String jtBuildVersion = jobClient.getBuildVersion();
++          String jtVersion = jobClient.getVIVersion();
++          if (!isPermittedVersion(jtBuildVersion, jtVersion)) {
+             String msg = "Shutting down. Incompatible buildVersion." +
+-            "\nJobTracker's: " + jobTrackerBV + 
+-            "\nTaskTracker's: "+ VersionInfo.getBuildVersion();
+-            LOG.error(msg);
++              "\nJobTracker's: " + jtBuildVersion + 
++              "\nTaskTracker's: "+ VersionInfo.getBuildVersion() +
++              " and " + CommonConfigurationKeys.HADOOP_RELAXED_VERSION_CHECK_KEY +
++              " is " + (relaxedVersionCheck ? "enabled" : "not enabled");
++            LOG.fatal(msg);
+             try {
+               jobClient.reportTaskTrackerError(taskTrackerName, null, msg);
+             } catch(Exception e ) {
+diff --git a/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVersionCheck.java b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVersionCheck.java
+new file mode 100644
+index 0000000..ff807b4
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/datanode/TestDataNodeVersionCheck.java
+@@ -0,0 +1,119 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.datanode;
++
++import java.io.IOException;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.CommonConfigurationKeys;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
++
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++/**
++ * Test the version check the DN performs when connecting to the NN
++ */
++public class TestDataNodeVersionCheck {
++
++  /**
++   * Test the strict DN version checking
++   */
++  @Test
++  public void testStrictVersionCheck() throws IOException {
++    MiniDFSCluster cluster = null;
++    try {
++      Configuration conf = new Configuration();
++      conf.setBoolean(
++          CommonConfigurationKeys.HADOOP_RELAXED_VERSION_CHECK_KEY, false);
++      cluster = new MiniDFSCluster(conf, 1, true, null);
++
++      DataNode dn = cluster.getDataNodes().get(0);
++    
++      final NamespaceInfo currInfo = new NamespaceInfo(0, 0, 0);
++      assertTrue(dn.isPermittedVersion(currInfo));
++
++      // Different revisions are not permitted
++      NamespaceInfo infoDiffRev = new NamespaceInfo(0, 0, 0) {
++                @Override public String getRevision() { return "bogus"; }
++      };      
++      assertFalse("Different revision is not permitted",
++          dn.isPermittedVersion(infoDiffRev));
++
++      // Different versions are not permitted
++      NamespaceInfo infoDiffVersion = new NamespaceInfo(0, 0, 0) {
++        @Override public String getVersion() { return "bogus"; }
++        @Override public String getRevision() { return "bogus"; }
++      };
++      assertFalse("Different version is not permitted",
++          dn.isPermittedVersion(infoDiffVersion));
++
++      // A bogus version (matching revision but not version)
++      NamespaceInfo bogusVersion = new NamespaceInfo(0, 0, 0) {
++        @Override public String getVersion() { return "bogus"; }
++      };
++      try {
++        dn.isPermittedVersion(bogusVersion);
++        fail("Matched revision with mismatched version");
++      } catch (AssertionError ae) {
++        // Expected
++      }
++    } finally {
++      if (cluster != null) {
++        cluster.shutdown();
++      }
++    }
++  }
++  
++  /**
++   * Test the "relaxed" DN version checking
++   */
++  @Test
++  public void testRelaxedVersionCheck() throws IOException {
++    MiniDFSCluster cluster = null;
++    try {
++      Configuration conf = new Configuration();
++      cluster = new MiniDFSCluster(conf, 1, true, null);
++      
++      DataNode dn = cluster.getDataNodes().get(0);
++    
++      final NamespaceInfo currInfo = new NamespaceInfo(0, 0, 0);
++      assertTrue(dn.isPermittedVersion(currInfo));
++
++      // Different revisions are permitted
++      NamespaceInfo infoDiffRev = new NamespaceInfo(0, 0, 0) {
++        @Override public String getRevision() { return "bogus"; }
++      };      
++      assertTrue("Different revisions should be permitted",
++          dn.isPermittedVersion(infoDiffRev));
++
++      // Different versions are not permitted
++      NamespaceInfo infoDiffVersion = new NamespaceInfo(0, 0, 0) {
++        @Override public String getVersion() { return "bogus"; }
++        @Override public String getRevision() { return "bogus"; }
++      };
++      assertFalse("Different version is not permitted",
++          dn.isPermittedVersion(infoDiffVersion));
++    } finally {
++      if (cluster != null) {
++        cluster.shutdown();
++      }
++    }
++  }
++}
+\ No newline at end of file
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskTrackerVersionCheck.java b/src/test/org/apache/hadoop/mapred/TestTaskTrackerVersionCheck.java
+new file mode 100644
+index 0000000..4914fda
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapred/TestTaskTrackerVersionCheck.java
+@@ -0,0 +1,91 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mapred;
++
++import java.io.IOException;
++
++import org.apache.hadoop.fs.CommonConfigurationKeys;
++import org.apache.hadoop.util.VersionInfo;
++
++import org.junit.Test;
++import static org.junit.Assert.*;
++
++/**
++ * Test the version check the TT performs when connecting to the JT
++ */
++public class TestTaskTrackerVersionCheck {
++
++  /**
++   * Test the strict TT version checking
++   */
++  @Test
++  public void testDefaultVersionCheck() throws IOException {
++    MiniMRCluster mr = null;
++    try {
++      JobConf jtConf = new JobConf();
++      jtConf.setBoolean(
++          CommonConfigurationKeys.HADOOP_RELAXED_VERSION_CHECK_KEY, false);
++      mr = new MiniMRCluster(1, "file:///", 1, null, null, jtConf);
++      TaskTracker tt = mr.getTaskTrackerRunner(0).getTaskTracker();
++      String currBuildVersion = VersionInfo.getBuildVersion();
++      String currVersion = VersionInfo.getVersion();
++
++      assertTrue(tt.isPermittedVersion(currBuildVersion, currVersion));
++      assertFalse("We disallow different versions",
++          tt.isPermittedVersion(currBuildVersion+"x", currVersion+"x"));
++      assertFalse("We disallow different full versions with same version",
++          tt.isPermittedVersion(currBuildVersion+"x", currVersion));      
++      try {
++        tt.isPermittedVersion(currBuildVersion, currVersion+"x");
++        fail("Matched full version with mismatched version");
++      } catch (AssertionError ae) {
++        // Expected. The versions should always match if the full
++        // versions match as the full version contains the version.
++      }
++    } finally {
++      if (mr != null) {
++        mr.shutdown();
++      }
++    }
++  }
++
++  /**
++   * Test the "relaxed" TT version checking
++   */
++  @Test
++  public void testRelaxedVersionCheck() throws IOException {
++    MiniMRCluster mr = null;
++    try {
++      JobConf jtConf = new JobConf();
++      mr = new MiniMRCluster(1, "file:///", 1, null, null, jtConf);
++      TaskTracker tt = mr.getTaskTrackerRunner(0).getTaskTracker();
++      String currFullVersion = VersionInfo.getBuildVersion();
++      String currVersion = VersionInfo.getVersion();
++
++      assertTrue(tt.isPermittedVersion(currFullVersion, currVersion));
++      assertFalse("We dissallow different versions",
++          tt.isPermittedVersion(currFullVersion+"x", currVersion+"x"));
++      assertTrue("We allow different full versions with same version",
++          tt.isPermittedVersion(currFullVersion+"x", currVersion));
++    } finally {
++      if (mr != null) {
++        mr.shutdown();
++      }
++    }
++  }
++}
+-- 
+1.7.0.4
+

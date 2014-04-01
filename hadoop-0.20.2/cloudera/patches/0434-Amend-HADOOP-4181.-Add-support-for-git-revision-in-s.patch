@@ -1,0 +1,47 @@
+From 6b6fdbe4b79d6e623fdbcc60f052749cf99b0c32 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 21 Jan 2010 12:30:20 -0800
+Subject: [PATCH 0434/1179] Amend HADOOP-4181. Add support for git revision in saveVersion.sh
+
+Author: Owen O'Malley
+Reason: Support git revisions without explicitly passing them in
+Ref: YDH
+---
+ src/saveVersion.sh |   19 +++++++++++--------
+ 1 files changed, 11 insertions(+), 8 deletions(-)
+
+diff --git a/src/saveVersion.sh b/src/saveVersion.sh
+index fb81bb6..675c9a7 100755
+--- a/src/saveVersion.sh
++++ b/src/saveVersion.sh
+@@ -19,16 +19,19 @@
+ # This file is used to generate the BuildStamp.java class that
+ # records the user, url, revision and timestamp.
+ version=$1
+-revision=$HADOOP_REVISION
+-if [ -z "$revision" ] ; then
+-  revision=`svn info | sed -n -e 's/Last Changed Rev: \(.*\)/\1/p'`
+-fi
+-if [ -z "$revision" ]  ; then
+-  revision=`git rev-parse HEAD`
+-fi
+-url=`svn info | sed -n -e 's/URL: \(.*\)/\1/p'`
+ user=`whoami`
+ date=`date`
++if [ -d .git ]; then
++  revision=`git log -1 --pretty=format:"%H"`
++  hostname=`hostname`
++  branch=`git branch | sed -n -e 's/^* //p'`
++  url="git://$hostname/$cwd on branch $branch"
++else
++  revision=`svn info | sed -n -e 's/Last Changed Rev: \(.*\)/\1/p'`
++  url=`svn info | sed -n -e 's/URL: \(.*\)/\1/p'`
++fi
++# allow override of revision using environment variable
++revision=${HADOOP_REVISION:-$revision}
+ srcChecksum=`find src -name '*.java' | LC_ALL=C sort | xargs md5sum | md5sum | cut -d ' ' -f 1`
+ 
+ mkdir -p build/src/org/apache/hadoop
+-- 
+1.7.0.4
+

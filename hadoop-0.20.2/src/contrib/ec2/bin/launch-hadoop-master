@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Launch an EC2 Hadoop master.
+
+if [ -z $1 ]; then
+  echo "Cluster name required!"
+  exit -1
+fi
+
+CLUSTER=$1
+
+# Import variables
+bin=`dirname "$0"`
+bin=`cd "$bin"; pwd`
+. "$bin"/hadoop-ec2-env.sh
+
+if [ -z $AWS_ACCOUNT_ID ]; then
+  echo "Please set AWS_ACCOUNT_ID in $bin/hadoop-ec2-env.sh."
+  exit -1
+fi
+
+echo "Testing for existing master in group: $CLUSTER"
+MASTER_EC2_HOST=`ec2-describe-instances | awk '"RESERVATION" == $1 && "'$CLUSTER_MASTER'" == $4, "RESERVATION" == $1 && "'$CLUSTER_MASTER'" != $4'`
+MASTER_EC2_HOST=`echo "$MASTER_EC2_HOST" | awk '"INSTANCE" == $1 && "running" == $6 {print $4}'`
+
+if [ ! -z "$MASTER_EC2_HOST" ]; then
+  echo "Master already running on: $MASTER_EC2_HOST"
+  MASTER_HOST=`ec2-describe-instances $INSTANCE | grep INSTANCE | grep running | grep $MASTER_EC2_HOST | awk '{print $5}'`
+  echo $MASTER_HOST > $MASTER_PRIVATE_IP_PATH
+  echo $MASTER_EC2_HOST > $MASTER_IP_PATH
+  exit 0
+fi
+
+ec2-describe-group | egrep "[[:space:]]$CLUSTER_MASTER[[:space:]]" > /dev/null
+if [ ! $? -eq 0 ]; then
+  echo "Creating group $CLUSTER_MASTER"
+  ec2-add-group $CLUSTER_MASTER -d "Group for Hadoop Master."
+  ec2-authorize $CLUSTER_MASTER -o $CLUSTER_MASTER -u $AWS_ACCOUNT_ID
+  ec2-authorize $CLUSTER_MASTER -p 22    # ssh
+
+  if [ $ENABLE_WEB_PORTS == "true" ]; then
+    ec2-authorize $CLUSTER_MASTER -p 50030 # JobTracker web interface
+    ec2-authorize $CLUSTER_MASTER -p 50060 # TaskTracker web interface
+    ec2-authorize $CLUSTER_MASTER -p 50070 # NameNode web interface
+    ec2-authorize $CLUSTER_MASTER -p 50075 # DataNode web interface
+  fi
+fi
+
+ec2-describe-group | egrep "[[:space:]]$CLUSTER[[:space:]]" > /dev/null
+if [ ! $? -eq 0 ]; then
+  echo "Creating group $CLUSTER"
+  ec2-add-group $CLUSTER -d "Group for Hadoop Slaves."
+  ec2-authorize $CLUSTER -o $CLUSTER -u $AWS_ACCOUNT_ID
+  ec2-authorize $CLUSTER -p 22    # ssh
+
+  if [ $ENABLE_WEB_PORTS == "true" ]; then
+    ec2-authorize $CLUSTER -p 50030 # JobTracker web interface
+    ec2-authorize $CLUSTER -p 50060 # TaskTracker web interface
+    ec2-authorize $CLUSTER -p 50070 # NameNode web interface
+    ec2-authorize $CLUSTER -p 50075 # DataNode web interface
+  fi
+
+  ec2-authorize $CLUSTER_MASTER -o $CLUSTER -u $AWS_ACCOUNT_ID
+  ec2-authorize $CLUSTER -o $CLUSTER_MASTER -u $AWS_ACCOUNT_ID
+fi
+
+# Finding Hadoop image
+AMI_IMAGE=`ec2-describe-images -a | grep $S3_BUCKET | grep $HADOOP_VERSION | grep $ARCH | grep available | awk '{print $2}'`
+
+# Start a master
+echo "Starting master with AMI $AMI_IMAGE"
+USER_DATA="MASTER_HOST=master,MAX_MAP_TASKS=$MAX_MAP_TASKS,MAX_REDUCE_TASKS=$MAX_REDUCE_TASKS,COMPRESS=$COMPRESS"
+INSTANCE=`ec2-run-instances $AMI_IMAGE -n 1 -g $CLUSTER_MASTER -k $KEY_NAME -f "$bin"/$USER_DATA_FILE -t $INSTANCE_TYPE $KERNEL_ARG | grep INSTANCE | awk '{print $2}'`
+echo "Waiting for instance $INSTANCE to start"
+while true; do
+  printf "."
+  # get private dns
+  MASTER_HOST=`ec2-describe-instances $INSTANCE | grep running | awk '{print $5}'`
+  if [ ! -z $MASTER_HOST ]; then
+    echo "Started as $MASTER_HOST"
+    break;
+  fi
+  sleep 1
+done
+
+MASTER_EC2_HOST=`ec2-describe-instances $INSTANCE | grep INSTANCE | grep running | grep $MASTER_HOST | awk '{print $4}'`
+echo $MASTER_HOST > $MASTER_PRIVATE_IP_PATH
+echo $MASTER_EC2_HOST > $MASTER_IP_PATH
+MASTER_EC2_ZONE=`ec2-describe-instances $INSTANCE | grep INSTANCE | grep running | grep $MASTER_HOST | awk '{print $11}'`
+echo $MASTER_EC2_ZONE > $MASTER_ZONE_PATH
+
+while true; do
+  REPLY=`ssh $SSH_OPTS "root@$MASTER_EC2_HOST" 'echo "hello"'`
+  if [ ! -z $REPLY ]; then
+   break;
+  fi
+  sleep 5
+done
+
+echo "Copying private key to master"
+scp $SSH_OPTS $PRIVATE_KEY_PATH "root@$MASTER_EC2_HOST:/root/.ssh/id_rsa"
+ssh $SSH_OPTS "root@$MASTER_EC2_HOST" "chmod 600 /root/.ssh/id_rsa"
+
+MASTER_IP=`dig +short $MASTER_EC2_HOST`
+echo "Master is $MASTER_EC2_HOST, ip is $MASTER_IP, zone is $MASTER_EC2_ZONE."

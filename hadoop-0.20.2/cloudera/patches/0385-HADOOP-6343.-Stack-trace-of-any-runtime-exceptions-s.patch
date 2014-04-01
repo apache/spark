@@ -1,0 +1,29 @@
+From 6c2dc76b06cb9967d89e6ab94465e0668b921dfa Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 5 Nov 2009 14:46:23 -0800
+Subject: [PATCH 0385/1179] HADOOP-6343. Stack trace of any runtime exceptions should be recorded in the server logs.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12424150/HADOOP-6343.0-20.patch
+Author: Jitendra Nath Pandey
+Ref: YDH
+---
+ src/core/org/apache/hadoop/ipc/RPC.java |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/RPC.java b/src/core/org/apache/hadoop/ipc/RPC.java
+index 2f7101f..e2cccd4 100644
+--- a/src/core/org/apache/hadoop/ipc/RPC.java
++++ b/src/core/org/apache/hadoop/ipc/RPC.java
+@@ -549,6 +549,9 @@ public class RPC {
+           throw ioe;
+         }
+       } catch (Throwable e) {
++        if (!(e instanceof IOException)) {
++          LOG.error("Unexpected throwable object ", e);
++        }
+         IOException ioe = new IOException(e.toString());
+         ioe.setStackTrace(e.getStackTrace());
+         throw ioe;
+-- 
+1.7.0.4
+

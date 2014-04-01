@@ -1,0 +1,130 @@
+From 8c19066cdc5f6605e65d07127649a77309f2943a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 9 Mar 2010 12:54:42 -0800
+Subject: [PATCH 0544/1179] HADOOP-6620. NPE if renewer is passed as null in getDelegationToken
+
+Patch: https://issues.apache.org/jira/secure/attachment/12438072/HADOOP-6620-y20.1.patch
+Author: Jitendra Nath Pandey
+Ref: CDH-648
+---
+ .../AbstractDelegationTokenIdentifier.java         |   22 ++++++++++++++++++-
+ .../AbstractDelegationTokenSecretManager.java      |   11 +++++++--
+ .../token/delegation/TestDelegationToken.java      |   20 ++++++++++++++++++
+ 3 files changed, 48 insertions(+), 5 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenIdentifier.java b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenIdentifier.java
+index 04321bf..6f932cf 100644
+--- a/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenIdentifier.java
++++ b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenIdentifier.java
+@@ -49,8 +49,16 @@ extends TokenIdentifier {
+   }
+   
+   public AbstractDelegationTokenIdentifier(Text owner, Text renewer, Text realUser) {
+-    this.owner = owner;
+-    this.renewer = renewer;
++    if (owner == null) {
++      this.owner = new Text();
++    } else {
++      this.owner = owner;
++    }
++    if (renewer == null) {
++      this.renewer = new Text();
++    } else {
++      this.renewer = renewer;
++    }
+     if (realUser == null) {
+       this.realUser = new Text();
+     } else {
+@@ -170,4 +178,14 @@ extends TokenIdentifier {
+     WritableUtils.writeVInt(out, sequenceNumber);
+     WritableUtils.writeVInt(out, masterKeyId);
+   }
++  
++  public String toString() {
++    StringBuilder buffer = new StringBuilder();
++    buffer
++        .append("owner=" + owner + ", renewer=" + renewer + ", realUser="
++            + realUser + ", issueDate=" + issueDate + ", maxDate=" + maxDate
++            + ", sequenceNumber=" + sequenceNumber + ", masterKeyId="
++            + masterKeyId);
++    return buffer.toString();
++  }
+ }
+diff --git a/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java
+index 1e2af15..4e81de5 100644
+--- a/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java
++++ b/src/core/org/apache/hadoop/security/token/delegation/AbstractDelegationTokenSecretManager.java
+@@ -178,6 +178,7 @@ extends AbstractDelegationTokenIdentifier>
+   
+   @Override
+   protected synchronized byte[] createPassword(TokenIdent identifier) {
++    LOG.info("Creating password for identifier: "+identifier);
+     int sequenceNum;
+     long now = System.currentTimeMillis();
+     sequenceNum = ++delegationTokenSequenceNumber;
+@@ -220,12 +221,13 @@ extends AbstractDelegationTokenIdentifier>
+     DataInputStream in = new DataInputStream(buf);
+     TokenIdent id = createIdentifier();
+     id.readFields(in);
+-
++    LOG.info("Token renewal requested for identifier: "+id);
++    
+     if (id.getMaxDate() < now) {
+       throw new InvalidToken("User " + renewer + 
+                              " tried to renew an expired token");
+     }
+-    if (id.getRenewer() == null) {
++    if ((id.getRenewer() == null) || ("".equals(id.getRenewer().toString()))) {
+       throw new AccessControlException("User " + renewer + 
+                                        " tried to renew a token without " +
+                                        "a renewer");
+@@ -271,13 +273,16 @@ extends AbstractDelegationTokenIdentifier>
+     DataInputStream in = new DataInputStream(buf);
+     TokenIdent id = createIdentifier();
+     id.readFields(in);
++    LOG.info("Token cancelation requested for identifier: "+id);
++    
+     if (id.getUser() == null) {
+       throw new InvalidToken("Token with no owner");
+     }
+     String owner = id.getUser().getUserName();
+     Text renewer = id.getRenewer();
+     if (!canceller.equals(owner)
+-        && (renewer == null || !canceller.equals(renewer.toString()))) {
++        && (renewer == null || "".equals(renewer.toString()) || !canceller
++            .equals(renewer.toString()))) {
+       throw new AccessControlException(canceller
+           + " is not authorized to cancel the token");
+     }
+diff --git a/src/test/org/apache/hadoop/security/token/delegation/TestDelegationToken.java b/src/test/org/apache/hadoop/security/token/delegation/TestDelegationToken.java
+index 962a2f0..22cfb3d 100644
+--- a/src/test/org/apache/hadoop/security/token/delegation/TestDelegationToken.java
++++ b/src/test/org/apache/hadoop/security/token/delegation/TestDelegationToken.java
+@@ -365,4 +365,24 @@ public class TestDelegationToken {
+       dtSecretManager.stopThreads();
+     }
+   }
++  
++  @Test 
++  public void testDelegationTokenNullRenewer() throws Exception {
++    TestDelegationTokenSecretManager dtSecretManager = 
++      new TestDelegationTokenSecretManager(24*60*60*1000,
++        10*1000,1*1000,3600000);
++    dtSecretManager.startThreads();
++    TestDelegationTokenIdentifier dtId = new TestDelegationTokenIdentifier(new Text(
++        "theuser"), null, null);
++    Token<TestDelegationTokenIdentifier> token = new Token<TestDelegationTokenIdentifier>(
++        dtId, dtSecretManager);
++    Assert.assertTrue(token != null);
++    try {
++      dtSecretManager.renewToken(token, "");
++      Assert.fail("Renewal must not succeed");
++    } catch (IOException e) {
++      //PASS
++    }
++  }
++
+ }
+-- 
+1.7.0.4
+

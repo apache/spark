@@ -1,0 +1,640 @@
+From 927d00941693e7774174c795b91bba1811d801bd Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Tue, 19 Apr 2011 14:19:58 -0700
+Subject: [PATCH 0948/1179] MAPREDUCE-1813. NPE in PipeMapred.MRErrorThread
+
+Reason: Bug
+Author: Ravi Gummadi
+Ref: CDH-2154
+---
+ .../org/apache/hadoop/streaming/PipeMapRed.java    |    4 +-
+ .../org/apache/hadoop/streaming/PipeMapRunner.java |    2 -
+ .../hadoop/streaming/TestStreamingStatus.java      |  295 +++++++++++++++++---
+ .../hadoop/streaming/TestStreamingTaskLog.java     |    4 +-
+ .../org/apache/hadoop/streaming/TestUlimit.java    |    4 +-
+ .../apache/hadoop/mapred/NotificationTestCase.java |    3 +-
+ .../apache/hadoop/mapred/TestFieldSelection.java   |    4 +-
+ .../apache/hadoop/mapred/TestJobSysDirWithDFS.java |    3 +-
+ .../apache/hadoop/mapred/TestMiniMRLocalFS.java    |    3 +-
+ .../apache/hadoop/mapred/TestMiniMRWithDFS.java    |   28 +--
+ .../mapred/lib/aggregate/TestAggregates.java       |    4 +-
+ .../org/apache/hadoop/mapred/pipes/TestPipes.java  |    4 +-
+ .../apache/hadoop/mapreduce/MapReduceTestUtil.java |    3 +-
+ 13 files changed, 281 insertions(+), 80 deletions(-)
+
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/PipeMapRed.java b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/PipeMapRed.java
+index 56e2b62..132c0c0 100644
+--- a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/PipeMapRed.java
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/PipeMapRed.java
+@@ -222,8 +222,6 @@ public abstract class PipeMapRed {
+       clientErr_ = new DataInputStream(new BufferedInputStream(sim.getErrorStream()));
+       startTime_ = System.currentTimeMillis();
+ 
+-      errThread_ = new MRErrorThread();
+-      errThread_.start();
+     } catch (Exception e) {
+       logStackTrace(e);
+       LOG.error("configuration exception", e);
+@@ -334,7 +332,9 @@ public abstract class PipeMapRed {
+     outReader_ = createOutputReader();
+     outThread_ = new MROutputThread(outReader_, output, reporter);
+     outThread_.start();
++    errThread_ = new MRErrorThread();
+     errThread_.setReporter(reporter);
++    errThread_.start();
+   }
+   
+   void waitOutputThreads() throws IOException {
+diff --git a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/PipeMapRunner.java b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/PipeMapRunner.java
+index 0a38600..da2790b 100644
+--- a/src/contrib/streaming/src/java/org/apache/hadoop/streaming/PipeMapRunner.java
++++ b/src/contrib/streaming/src/java/org/apache/hadoop/streaming/PipeMapRunner.java
+@@ -25,8 +25,6 @@ import org.apache.hadoop.mapred.OutputCollector;
+ 
+ import java.io.IOException;
+ 
+-import org.apache.hadoop.util.ReflectionUtils;
+-
+ public class PipeMapRunner<K1, V1, K2, V2> extends MapRunner<K1, V1, K2, V2> {
+   public void run(RecordReader<K1, V1> input, OutputCollector<K2, V2> output,
+                   Reporter reporter)
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingStatus.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingStatus.java
+index 69370e3..1269449 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingStatus.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingStatus.java
+@@ -22,80 +22,299 @@ import java.io.DataOutputStream;
+ import java.io.IOException;
+ import java.io.File;
+ 
+-import junit.framework.TestCase;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Test;
++import static org.junit.Assert.*;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.mapred.Counters;
++import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapred.MiniMRCluster;
++import org.apache.hadoop.mapred.TaskAttemptID;
++import org.apache.hadoop.mapred.TaskID;
++import org.apache.hadoop.mapred.TaskLog;
+ import org.apache.hadoop.mapred.TaskReport;
++import org.apache.hadoop.mapred.TestMiniMRMapRedDebugScript;
++import org.apache.hadoop.mapreduce.TaskType;
++import org.apache.hadoop.mapreduce.MapReduceTestUtil;
+ 
+ /**
+- * Tests for the ability of a streaming task to set the status
+- * by writing "reporter:status:" lines to stderr. Uses MiniMR
+- * since the local jobtracker doesn't track status.
++  * Tests if mapper/reducer with empty/nonempty input works properly if
++  * reporting is done using lines like "reporter:status:" and
++  * "reporter:counter:" before map()/reduce() method is called.
++  * Validates the task's log of STDERR if messages are written to stderr before
++  * map()/reduce() is called.
++  * Also validates job output.
++  * Uses MiniMR since the local jobtracker doesn't track task status. 
+  */
+-public class TestStreamingStatus extends TestCase {
+-  private static String TEST_ROOT_DIR =
+-    new File(System.getProperty("test.build.data","/tmp"))
++public class TestStreamingStatus {
++   protected static String TEST_ROOT_DIR =
++     new File(System.getProperty("test.build.data","/tmp"),
++     TestStreamingStatus.class.getSimpleName())
+     .toURI().toString().replace(' ', '+');
+   protected String INPUT_FILE = TEST_ROOT_DIR + "/input.txt";
+   protected String OUTPUT_DIR = TEST_ROOT_DIR + "/out";
+   protected String input = "roses.are.red\nviolets.are.blue\nbunnies.are.pink\n";
+-  protected String map = StreamUtil.makeJavaCommand(StderrApp.class, new String[]{"3", "0", "0", "true"});
++  protected String map = null;
++  protected String reduce = null;
++    
++  protected String scriptFile = TEST_ROOT_DIR + "/perlScript.pl";
++  protected String scriptFileName = new Path(scriptFile).toUri().getPath();
+ 
+-  protected String[] genArgs(int jobtrackerPort) {
++
++  String expectedStderr = "my error msg before consuming input\n" +
++      "my error msg after consuming input\n";
++  String expectedOutput = null;// inited in setUp()
++  String expectedStatus = "before consuming input";
++
++  // This script does the following
++  // (a) setting task status before reading input
++  // (b) writing to stderr before reading input and after reading input
++  // (c) writing to stdout before reading input
++  // (d) incrementing user counter before reading input and after reading input
++  // Write lines to stdout before reading input{(c) above} is to validate
++  // the hanging task issue when input to task is empty(because of not starting
++  // output thread).
++  protected String script =
++    "#!/usr/bin/perl\n" +
++    "print STDERR \"reporter:status:" + expectedStatus + "\\n\";\n" +
++    "print STDERR \"reporter:counter:myOwnCounterGroup,myOwnCounter,1\\n\";\n" +
++    "print STDERR \"my error msg before consuming input\\n\";\n" +
++    "for($count = 1500; $count >= 1; $count--) {print STDOUT \"$count \";}" +
++    "while(<STDIN>) {chomp;}\n" +
++    "print STDERR \"my error msg after consuming input\\n\";\n" +
++    "print STDERR \"reporter:counter:myOwnCounterGroup,myOwnCounter,1\\n\";\n";
++
++  MiniMRCluster mr = null;
++  FileSystem fs = null;
++  JobConf conf = null;
++
++  /**
++   * Start the cluster and create input file before running the actual test.
++   *
++   * @throws IOException
++   */
++  @Before
++  public void setUp() throws IOException {
++    conf = new JobConf();
++
++    mr = new MiniMRCluster(1, "file:///", 3, null , null, conf);
++
++    Path inFile = new Path(INPUT_FILE);
++    fs = inFile.getFileSystem(mr.createJobConf());
++    clean(fs);
++
++    buildExpectedJobOutput();
++  }
++
++  /**
++   * Kill the cluster after the test is done.
++   */
++  @After
++  public void tearDown() {
++    if (fs != null) { clean(fs); }
++    if (mr != null) { mr.shutdown(); }
++  }
++
++  // Updates expectedOutput to have the expected job output as a string
++  void buildExpectedJobOutput() {
++    if (expectedOutput == null) {
++      expectedOutput = "";
++      for(int i = 1500; i >= 1; i--) {
++        expectedOutput = expectedOutput.concat(Integer.toString(i) + " ");
++      }
++      expectedOutput = expectedOutput.trim();
++    }
++  }
++
++  // Create empty/nonempty input file.
++  // Create script file with the specified content.
++  protected void createInputAndScript(boolean isEmptyInput,
++      String script) throws IOException {
++    makeInput(fs, isEmptyInput ? "" : input);
++
++    // create script file
++    DataOutputStream file = fs.create(new Path(scriptFileName));
++    file.writeBytes(script);
++    file.close();
++  }
++
++  protected String[] genArgs(int jobtrackerPort, String mapper, String reducer)
++  {
+     return new String[] {
+       "-input", INPUT_FILE,
+       "-output", OUTPUT_DIR,
+-      "-mapper", map,
++      "-mapper", mapper,
++      "-reducer", reducer,
+       "-jobconf", "mapred.map.tasks=1",
+-      "-jobconf", "mapred.reduce.tasks=0",      
++      "-jobconf", "mapred.reduce.tasks=1",
+       "-jobconf", "keep.failed.task.files=true",
+-      "-jobconf", "stream.tmpdir="+System.getProperty("test.build.data","/tmp"),
++      "-jobconf", "stream.tmpdir=" + new Path(TEST_ROOT_DIR).toUri().getPath(),
+       "-jobconf", "mapred.job.tracker=localhost:"+jobtrackerPort,
+       "-jobconf", "fs.default.name=file:///"
+     };
+   }
+-  
+-  public void makeInput(FileSystem fs) throws IOException {
++
++  // create input file with the given content
++  public void makeInput(FileSystem fs, String input) throws IOException {
+     Path inFile = new Path(INPUT_FILE);
+     DataOutputStream file = fs.create(inFile);
+     file.writeBytes(input);
+     file.close();
+   }
+ 
+-  public void clean(FileSystem fs) {
++  // Delete output directory
++  protected void deleteOutDir(FileSystem fs) {
+     try {
+       Path outDir = new Path(OUTPUT_DIR);
+       fs.delete(outDir, true);
+     } catch (Exception e) {}
+-    try {
+-      Path inFile = new Path(INPUT_FILE);    
+-      fs.delete(inFile, false);
+-    } catch (Exception e) {}
+   }
+-  
+-  public void testStreamingStatus() throws Exception {
+-    MiniMRCluster mr = null;
+-    FileSystem fs = null;
++
++  // Delete input file, script file and output directory
++  public void clean(FileSystem fs) {
++    deleteOutDir(fs);
+     try {
+-      mr = new MiniMRCluster(1, "file:///", 3);
++      Path file = new Path(INPUT_FILE);
++      if (fs.exists(file)) {
++        fs.delete(file, false);
++      }
++      file = new Path(scriptFile);
++      if (fs.exists(file)) {
++        fs.delete(file, false);
++      }
++    } catch (Exception e) {
++      e.printStackTrace();
++    }
++  }
++
++  /**
++   * Check if mapper/reducer with empty/nonempty input works properly if
++   * reporting is done using lines like "reporter:status:" and
++   * "reporter:counter:" before map()/reduce() method is called.
++   * Validate the task's log of STDERR if messages are written
++   * to stderr before map()/reduce() is called.
++   * Also validate job output.
++   *
++   * @throws IOException
++   */
++  @Test
++  public void testReporting() throws Exception {
++    testStreamJob(false);// nonempty input
++    testStreamJob(true);// empty input
++  }
++
++  /**
++   * Run a streaming job with the given script as mapper and validate.
++   * Run another streaming job with the given script as reducer and validate.
++   *
++   * @param isEmptyInput Should the input to the script be empty ?
++   * @param script The content of the script that will run as the streaming task
++   */
++  private void testStreamJob(boolean isEmptyInput)
++      throws IOException {
++
++      createInputAndScript(isEmptyInput, script);
+ 
+-      Path inFile = new Path(INPUT_FILE);
+-      fs = inFile.getFileSystem(mr.createJobConf());
++      // Check if streaming mapper works as expected
++      map = scriptFileName;
++      reduce = "/bin/cat";
++      runStreamJob(TaskType.MAP, isEmptyInput);
++      deleteOutDir(fs);
++
++      // Check if streaming reducer works as expected.
++      map = "/bin/cat";
++      reduce = scriptFileName;
++      runStreamJob(TaskType.REDUCE, isEmptyInput);
+       clean(fs);
+-      makeInput(fs);
+-      
+-      StreamJob job = new StreamJob();
+-      int failed = job.run(genArgs(mr.getJobTrackerPort()));
+-      assertEquals(0, failed);
+-
+-      TaskReport[] reports = job.jc_.getMapTaskReports(job.jobId_);
+-      assertEquals(1, reports.length);
+-      assertEquals("starting echo", reports[0].getState());
+-    } finally {
+-      if (fs != null) { clean(fs); }
+-      if (mr != null) { mr.shutdown(); }
++  }
++
++  // Run streaming job for the specified input file, mapper and reducer and
++  // (1) Validate if the job succeeds.
++  // (2) Validate if user counter is incremented properly for the cases of
++  //   (a) nonempty input to map
++  //   (b) empty input to map and
++  //   (c) nonempty input to reduce
++  // (3) Validate task status for the cases of (2)(a),(2)(b),(2)(c).
++  //     Because empty input to reduce task => reporter is dummy and ignores
++  //     all "reporter:status" and "reporter:counter" lines. 
++  // (4) Validate stderr of task of given task type.
++  // (5) Validate job output
++  void runStreamJob(TaskType type, boolean isEmptyInput) throws IOException {
++    boolean mayExit = false;
++    StreamJob job = new StreamJob(genArgs(
++        mr.getJobTrackerPort(), map, reduce), mayExit);
++    int returnValue = job.go();
++    assertEquals(0, returnValue);
++
++    // If input to reducer is empty, dummy reporter(which ignores all
++    // reporting lines) is set for MRErrorThread in waitOutputThreads(). So
++    // expectedCounterValue is 0 for empty-input-to-reducer case.
++    // Output of reducer is also empty for empty-input-to-reducer case.
++    int expectedCounterValue = 0;
++    if (type == TaskType.MAP || !isEmptyInput) {
++      validateTaskStatus(job, type);
++      // output is from "print STDOUT" statements in perl script
++      validateJobOutput(job.getConf());
++      expectedCounterValue = 2;
++    }
++    validateUserCounter(job, expectedCounterValue);
++    validateTaskStderr(job, type);
++
++    deleteOutDir(fs);
++  }
++
++  // validate task status of task of given type(validates 1st task of that type)
++  void validateTaskStatus(StreamJob job, TaskType type) throws IOException {
++    // Map Task has 1 phase: map (note that in 0.21 onwards it has a sort phase too)
++    // Reduce Task has 3 phases: copy, sort, reduce
++    String finalPhaseInTask = null;
++    TaskReport[] reports;
++    if (type == TaskType.MAP) {
++      reports = job.jc_.getMapTaskReports(job.jobId_);
++    } else {// reduce task
++      reports = job.jc_.getReduceTaskReports(job.jobId_);
++      finalPhaseInTask = "reduce";
+     }
++    assertEquals(1, reports.length);
++    assertEquals(expectedStatus +
++        (finalPhaseInTask == null ? "" : " > " + finalPhaseInTask),
++        reports[0].getState());
++  }
++
++  // Validate the job output
++  void validateJobOutput(Configuration conf)
++      throws IOException {
++
++    String output = MapReduceTestUtil.readOutput(
++        new Path(OUTPUT_DIR), conf).trim();
++
++    assertTrue(output.equals(expectedOutput));
++  }
++
++  // Validate stderr task log of given task type(validates 1st
++  // task of that type).
++  void validateTaskStderr(StreamJob job, TaskType type)
++      throws IOException {
++    TaskAttemptID attemptId =
++        new TaskAttemptID(new TaskID(job.jobId_, type == TaskType.MAP, 0), 0);
++
++    String log = TestMiniMRMapRedDebugScript.readTaskLog(TaskLog.LogName.STDERR,
++        attemptId, false);
++
++    // trim() is called on expectedStderr here because the method
++    // MapReduceTestUtil.readTaskLog() returns trimmed String.
++    assertTrue(log.equals(expectedStderr.trim()));
++  }
++
++  // Validate if user counter is incremented properly
++  void validateUserCounter(StreamJob job, int expectedCounterValue)
++      throws IOException {
++    Counters counters = job.running_.getCounters();
++    assertEquals(expectedCounterValue, counters.findCounter(
++        "myOwnCounterGroup", "myOwnCounter").getValue());
+   }
+ }
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingTaskLog.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingTaskLog.java
+index 5581e0f..8e55b12 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingTaskLog.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingTaskLog.java
+@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapred.MiniMRCluster;
+-import org.apache.hadoop.mapred.TestMiniMRWithDFS;
++import org.apache.hadoop.mapreduce.MapReduceTestUtil;
+ import org.apache.hadoop.util.Shell;
+ 
+ import junit.framework.TestCase;
+@@ -128,7 +128,7 @@ public class TestStreamingTaskLog extends TestCase {
+     assertEquals("StreamJob failed.", 0, returnStatus);
+     
+     // validate environment variables set for the child(script) of java process
+-    String env = TestMiniMRWithDFS.readOutput(outputPath, mr.createJobConf());
++    String env = MapReduceTestUtil.readOutput(outputPath, mr.createJobConf());
+     long logSize = USERLOG_LIMIT_KB * 1024;
+     assertTrue("environment set for child is wrong", env.contains("INFO,TLA")
+                && env.contains("-Dhadoop.tasklog.taskid=attempt_")
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestUlimit.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestUlimit.java
+index 14d8508..c555e2e 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestUlimit.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestUlimit.java
+@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapred.MiniMRCluster;
+-import org.apache.hadoop.mapred.TestMiniMRWithDFS;
++import org.apache.hadoop.mapreduce.MapReduceTestUtil;
+ import org.apache.hadoop.util.StringUtils;
+ 
+ import junit.framework.TestCase;
+@@ -118,7 +118,7 @@ public class TestUlimit extends TestCase {
+     boolean mayExit = false;
+     StreamJob job = new StreamJob(genArgs(memLimit), mayExit);
+     job.go();
+-    String output = TestMiniMRWithDFS.readOutput(outputPath,
++    String output = MapReduceTestUtil.readOutput(outputPath,
+                                         mr.createJobConf());
+     assertEquals("output is wrong", SET_MEMORY_LIMIT,
+                                     output.trim());
+diff --git a/src/test/org/apache/hadoop/mapred/NotificationTestCase.java b/src/test/org/apache/hadoop/mapred/NotificationTestCase.java
+index 790f1b8..9565c96 100644
+--- a/src/test/org/apache/hadoop/mapred/NotificationTestCase.java
++++ b/src/test/org/apache/hadoop/mapred/NotificationTestCase.java
+@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.io.IntWritable;
++import org.apache.hadoop.mapreduce.MapReduceTestUtil;
+ 
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpServletResponse;
+@@ -237,7 +238,7 @@ public abstract class NotificationTestCase extends HadoopTestCase {
+     conf.setNumMapTasks(numMaps);
+     conf.setNumReduceTasks(numReduces);
+     JobClient.runJob(conf);
+-    return TestMiniMRWithDFS.readOutput(outDir, conf);
++    return MapReduceTestUtil.readOutput(outDir, conf);
+   }
+ 
+ }
+diff --git a/src/test/org/apache/hadoop/mapred/TestFieldSelection.java b/src/test/org/apache/hadoop/mapred/TestFieldSelection.java
+index 7df7599..125d948 100644
+--- a/src/test/org/apache/hadoop/mapred/TestFieldSelection.java
++++ b/src/test/org/apache/hadoop/mapred/TestFieldSelection.java
+@@ -20,6 +20,8 @@ package org.apache.hadoop.mapred;
+ import org.apache.hadoop.fs.*;
+ import org.apache.hadoop.io.*;
+ import org.apache.hadoop.mapred.lib.*;
++import org.apache.hadoop.mapreduce.MapReduceTestUtil;
++
+ import junit.framework.TestCase;
+ import java.text.NumberFormat;
+ 
+@@ -113,7 +115,7 @@ private static NumberFormat idFormat = NumberFormat.getInstance();
+     //
+     boolean success = true;
+     Path outPath = new Path(OUTPUT_DIR, "part-00000");
+-    String outdata = TestMiniMRWithDFS.readOutput(outPath,job);
++    String outdata = MapReduceTestUtil.readOutput(outPath,job);
+ 
+     assertEquals(expectedOutput.toString(),outdata);
+     fs.delete(OUTPUT_DIR, true);
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobSysDirWithDFS.java b/src/test/org/apache/hadoop/mapred/TestJobSysDirWithDFS.java
+index dde7f7f..f879bb5 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobSysDirWithDFS.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobSysDirWithDFS.java
+@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.IntWritable;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.MapReduceTestUtil;
+ 
+ /**
+  * A JUnit test to test Job System Directory with Mini-DFS.
+@@ -93,7 +94,7 @@ public class TestJobSysDirWithDFS extends TestCase {
+     System.out.println("Job sys dir -->" + sysDir);
+     assertFalse(sysDir.contains("/tmp/subru/mapred/system"));
+     assertTrue(sysDir.contains("custom"));
+-    return new TestResult(job, TestMiniMRWithDFS.readOutput(outDir, conf));
++    return new TestResult(job, MapReduceTestUtil.readOutput(outDir, conf));
+   }
+ 
+  static void runWordCount(MiniMRCluster mr, JobConf jobConf, String sysDir)
+diff --git a/src/test/org/apache/hadoop/mapred/TestMiniMRLocalFS.java b/src/test/org/apache/hadoop/mapred/TestMiniMRLocalFS.java
+index 7e1c227..0756581 100644
+--- a/src/test/org/apache/hadoop/mapred/TestMiniMRLocalFS.java
++++ b/src/test/org/apache/hadoop/mapred/TestMiniMRLocalFS.java
+@@ -42,6 +42,7 @@ import org.apache.hadoop.io.WritableComparable;
+ import org.apache.hadoop.io.WritableUtils;
+ import org.apache.hadoop.mapred.MRCaching.TestResult;
+ import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.MapReduceTestUtil;
+ import org.apache.hadoop.mapreduce.TestMapReduceLocal;
+ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+@@ -124,7 +125,7 @@ public class TestMiniMRLocalFS extends TestCase {
+     try {
+       JobClient.runJob(job);
+       String result = 
+-        TestMiniMRWithDFS.readOutput(outDir, job);
++        MapReduceTestUtil.readOutput(outDir, job);
+       assertEquals("output", ("aunt annie\t1\n" +
+                               "bumble boat\t4\n" +
+                               "crocodile pants\t0\n" +
+diff --git a/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFS.java b/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFS.java
+index c011dd8..44da2c3 100644
+--- a/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFS.java
++++ b/src/test/org/apache/hadoop/mapred/TestMiniMRWithDFS.java
+@@ -41,6 +41,7 @@ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.IntWritable;
+ import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.MapReduceTestUtil;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.util.StringUtils;
+ 
+@@ -95,32 +96,7 @@ public class TestMiniMRWithDFS extends TestCase {
+     conf.setNumMapTasks(numMaps);
+     conf.setNumReduceTasks(numReduces);
+     RunningJob job = JobClient.runJob(conf);
+-    return new TestResult(job, readOutput(outDir, conf));
+-  }
+-
+-  public static String readOutput(Path outDir, 
+-                                  JobConf conf) throws IOException {
+-    FileSystem fs = outDir.getFileSystem(conf);
+-    StringBuffer result = new StringBuffer();
+-    {
+-      
+-      Path[] fileList = FileUtil.stat2Paths(fs.listStatus(outDir,
+-          new Utils.OutputFileUtils.OutputFilesFilter()));
+-
+-      for(int i=0; i < fileList.length; ++i) {
+-        LOG.info("File list[" + i + "]" + ": "+ fileList[i]);
+-        BufferedReader file = 
+-          new BufferedReader(new InputStreamReader(fs.open(fileList[i])));
+-        String line = file.readLine();
+-        while (line != null) {
+-          result.append(line);
+-          result.append("\n");
+-          line = file.readLine();
+-        }
+-        file.close();
+-      }
+-    }
+-    return result.toString();
++    return new TestResult(job, MapReduceTestUtil.readOutput(outDir, conf));
+   }
+ 
+   /**
+diff --git a/src/test/org/apache/hadoop/mapred/lib/aggregate/TestAggregates.java b/src/test/org/apache/hadoop/mapred/lib/aggregate/TestAggregates.java
+index 626c0aa..6da96ce 100644
+--- a/src/test/org/apache/hadoop/mapred/lib/aggregate/TestAggregates.java
++++ b/src/test/org/apache/hadoop/mapred/lib/aggregate/TestAggregates.java
+@@ -21,6 +21,8 @@ import org.apache.hadoop.fs.*;
+ import org.apache.hadoop.io.*;
+ import org.apache.hadoop.mapred.*;
+ import org.apache.hadoop.mapred.lib.*;
++import org.apache.hadoop.mapreduce.MapReduceTestUtil;
++
+ import junit.framework.TestCase;
+ import java.io.*;
+ import java.util.*;
+@@ -107,7 +109,7 @@ public class TestAggregates extends TestCase {
+     //
+     boolean success = true;
+     Path outPath = new Path(OUTPUT_DIR, "part-00000");
+-    String outdata = TestMiniMRWithDFS.readOutput(outPath,job);
++    String outdata = MapReduceTestUtil.readOutput(outPath,job);
+     System.out.println("full out data:");
+     System.out.println(outdata.toString());
+     outdata = outdata.substring(0, expectedOutput.toString().length());
+diff --git a/src/test/org/apache/hadoop/mapred/pipes/TestPipes.java b/src/test/org/apache/hadoop/mapred/pipes/TestPipes.java
+index e20e045..2e9323d 100644
+--- a/src/test/org/apache/hadoop/mapred/pipes/TestPipes.java
++++ b/src/test/org/apache/hadoop/mapred/pipes/TestPipes.java
+@@ -40,9 +40,9 @@ import org.apache.hadoop.mapred.FileOutputFormat;
+ import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapred.MiniMRCluster;
+ import org.apache.hadoop.mapred.RunningJob;
+-import org.apache.hadoop.mapred.TestMiniMRWithDFS;
+ import org.apache.hadoop.mapred.Utils;
+ import org.apache.hadoop.mapred.Counters.Counter;
++import org.apache.hadoop.mapreduce.MapReduceTestUtil;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.ToolRunner;
+ 
+@@ -198,7 +198,7 @@ public class TestPipes extends TestCase {
+     List<String> results = new ArrayList<String>();
+     for (Path p:FileUtil.stat2Paths(dfs.getFileSystem().listStatus(outputPath,
+         new Utils.OutputFileUtils.OutputFilesFilter()))) {
+-      results.add(TestMiniMRWithDFS.readOutput(p, job));
++      results.add(MapReduceTestUtil.readOutput(p, job));
+     }
+     assertEquals("number of reduces is wrong", 
+                  expectedResults.length, results.size());
+diff --git a/src/test/org/apache/hadoop/mapreduce/MapReduceTestUtil.java b/src/test/org/apache/hadoop/mapreduce/MapReduceTestUtil.java
+index 5026d42..4dc663c 100644
+--- a/src/test/org/apache/hadoop/mapreduce/MapReduceTestUtil.java
++++ b/src/test/org/apache/hadoop/mapreduce/MapReduceTestUtil.java
+@@ -392,7 +392,8 @@ public class MapReduceTestUtil {
+       }
+     };
+   }
+-  
++
++  // Return output of MR job by reading from the given output directory
+   public static String readOutput(Path outDir, Configuration conf) 
+       throws IOException {
+     FileSystem fs = outDir.getFileSystem(conf);
+-- 
+1.7.0.4
+

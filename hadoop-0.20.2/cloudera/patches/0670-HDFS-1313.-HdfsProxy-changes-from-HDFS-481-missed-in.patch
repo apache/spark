@@ -1,0 +1,125 @@
+From bef7c171a5fd2663b5d16bdbba4477ee54947df6 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 2 Aug 2010 17:42:36 -0700
+Subject: [PATCH 0670/1179] HDFS-1313. HdfsProxy changes from HDFS-481 missed in y20.1xx
+
+Author: Rohini Palaniswamy
+Reason: Changes accidentally ommitted from HDFS-481 YDH backport, fixes hdfsproxy
+Ref: YDH
+---
+ src/contrib/hdfsproxy/build.xml                    |    4 ++++
+ .../apache/hadoop/hdfsproxy/LdapIpDirFilter.java   |    2 ++
+ .../apache/hadoop/hdfsproxy/ProxyStreamFile.java   |   11 +++++++++++
+ .../hadoop/hdfs/server/namenode/StreamFile.java    |   16 ++++++++++++----
+ 4 files changed, 29 insertions(+), 4 deletions(-)
+
+diff --git a/src/contrib/hdfsproxy/build.xml b/src/contrib/hdfsproxy/build.xml
+index fcc43d8..14736ae 100644
+--- a/src/contrib/hdfsproxy/build.xml
++++ b/src/contrib/hdfsproxy/build.xml
+@@ -127,6 +127,8 @@
+         <include name="slf4j-api-${slf4j-api.version}.jar"/>
+         <include name="slf4j-log4j12-${slf4j-log4j12.version}.jar"/>
+         <include name="xmlenc-${xmlenc.version}.jar"/>
++	<include name="jetty-${jetty.version}.jar"/>
++	<include name="jetty-util-${jetty-util.version}.jar"/>
+       </lib>
+       <lib dir="${hadoop.root}/lib">
+         <include name="hadoop-core-*.jar"/>
+@@ -181,6 +183,8 @@
+         <include name="slf4j-log4j12-${slf4j-log4j12.version}.jar"/>
+         <include name="xmlenc-${xmlenc.version}.jar"/>
+         <include name="core-${core.vesion}.jar"/>
++	<include name="jetty-${jetty.version}.jar"/>
++        <include name="jetty-util-${jetty-util.version}.jar"/>
+       </lib>
+       <lib dir="${hadoop.root}/lib">
+         <include name="hadoop-core-*.jar"/>
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/LdapIpDirFilter.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/LdapIpDirFilter.java
+index f8aff5c..a51d0da 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/LdapIpDirFilter.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/LdapIpDirFilter.java
+@@ -21,6 +21,7 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.server.namenode.JspHelper;
+ import org.apache.hadoop.net.NetUtils;
+ 
+ import javax.naming.NamingEnumeration;
+@@ -95,6 +96,7 @@ public class LdapIpDirFilter implements Filter {
+     InetSocketAddress nAddr = NetUtils.createSocketAddr(nn);
+     context.setAttribute("name.node.address", nAddr);
+     context.setAttribute("name.conf", conf);
++    context.setAttribute(JspHelper.CURRENT_CONF, conf);
+ 
+     // for storing hostname <--> cluster mapping to decide which source cluster
+     // to forward
+diff --git a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyStreamFile.java b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyStreamFile.java
+index 0522979..dc5492a 100644
+--- a/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyStreamFile.java
++++ b/src/contrib/hdfsproxy/src/java/org/apache/hadoop/hdfsproxy/ProxyStreamFile.java
+@@ -26,6 +26,7 @@ import javax.servlet.http.HttpServletRequest;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.DFSClient;
++import org.apache.hadoop.hdfs.server.namenode.JspHelper;
+ import org.apache.hadoop.hdfs.server.namenode.StreamFile;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+@@ -42,4 +43,14 @@ public class ProxyStreamFile extends StreamFile {
+         .getAttribute("org.apache.hadoop.hdfsproxy.authorized.userID");
+     return ProxyUtil.getProxyUGIFor(userID);
+   }
++
++  @Override
++  protected DFSClient getDFSClient(HttpServletRequest request) throws IOException, InterruptedException {
++    ServletContext context = getServletContext();
++    Configuration conf = (Configuration) context.getAttribute(JspHelper.CURRENT_CONF);
++    UserGroupInformation ugi = getUGI(request, conf);
++    final InetSocketAddress nameNodeAddr = (InetSocketAddress) context.getAttribute("name.node.address");
++
++    return JspHelper.getDFSClient(ugi, nameNodeAddr, conf);
++  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
+index 3335fbb..11fd32d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/StreamFile.java
+@@ -36,11 +36,20 @@ public class StreamFile extends DfsServlet {
+       nameNodeAddr = datanode.getNameNodeAddr();
+     }
+   }
++
++  /** getting a client for connecting to dfs */
++  protected DFSClient getDFSClient(HttpServletRequest request)
++      throws IOException, InterruptedException {
++
++    Configuration conf =
++      (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
++    UserGroupInformation ugi = getUGI(request, conf);
++
++    return JspHelper.getDFSClient(ugi, nameNodeAddr, conf);
++  }
+   
+   public void doGet(HttpServletRequest request, HttpServletResponse response)
+     throws ServletException, IOException {
+-    Configuration conf = 
+-      (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
+     String filename = request.getParameter("filename");
+     if (filename == null || filename.length() == 0) {
+       response.setContentType("text/plain");
+@@ -50,9 +59,8 @@ public class StreamFile extends DfsServlet {
+     }
+     
+     DFSClient dfs;
+-    UserGroupInformation ugi = getUGI(request, conf);
+     try {
+-      dfs = JspHelper.getDFSClient(ugi, nameNodeAddr, conf);
++      dfs = getDFSClient(request);
+     } catch (InterruptedException e) {
+       response.sendError(400, e.getMessage());
+       return;
+-- 
+1.7.0.4
+

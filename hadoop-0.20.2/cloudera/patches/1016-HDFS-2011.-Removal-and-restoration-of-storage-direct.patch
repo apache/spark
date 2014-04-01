@@ -1,0 +1,163 @@
+From 8eff3591387814abe8e079f2689bf9a38aa498f2 Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Tue, 5 Jul 2011 18:15:17 -0700
+Subject: [PATCH 1016/1179] HDFS-2011. Removal and restoration of storage directories on checkpointing failure doesn't work properly
+
+Reason: Bug
+Author: Ravi Prakash
+Ref: CDH-3315
+---
+ .../hadoop/hdfs/server/namenode/FSEditLog.java     |   36 +++++++----
+ .../hdfs/server/namenode/TestCheckpoint.java       |   65 ++++++++++++++++++++
+ 2 files changed, 88 insertions(+), 13 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+index 0f0e6d2..2338bfb 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSEditLog.java
+@@ -121,7 +121,7 @@ public class FSEditLog {
+    * An implementation of the abstract class {@link EditLogOutputStream},
+    * which stores edits in a local file.
+    */
+-  static private class EditLogFileOutputStream extends EditLogOutputStream {
++  static class EditLogFileOutputStream extends EditLogOutputStream {
+     private File file;
+     private FileOutputStream fp;    // file stream for storing edit logs 
+     private FileChannel fc;         // channel of the file stream for sync
+@@ -183,20 +183,30 @@ public class FSEditLog {
+     public void close() throws IOException {
+       // close should have been called after all pending transactions 
+       // have been flushed & synced.
+-      int bufSize = bufCurrent.size();
+-      if (bufSize != 0) {
+-        throw new IOException("FSEditStream has " + bufSize +
+-                              " bytes still to be flushed and cannot " +
+-                              "be closed.");
+-      } 
+-      bufCurrent.close();
+-      bufReady.close();
++      if (bufCurrent != null) {
++        int bufSize = bufCurrent.size();
++        if (bufSize != 0) {
++          throw new IOException("FSEditStream has " + bufSize +
++                                " bytes still to be flushed and cannot " +
++                                "be closed.");
++        } 
++        bufCurrent.close();
++        bufCurrent = null;
++      }
++      
++      if (bufReady != null) {
++        bufReady.close();
++        bufReady = null;
++      }
+ 
+       // remove the last INVALID marker from transaction log.
+-      fc.truncate(fc.position());
+-      fp.close();
+-      
+-      bufCurrent = bufReady = null;
++      if (fc != null && fc.isOpen()) {
++        fc.truncate(fc.position());
++        fc.close();
++      }
++      if (fp != null) {
++        fp.close();
++      }
+     }
+ 
+     /**
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckpoint.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckpoint.java
+index 51069b7..e32653b 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckpoint.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestCheckpoint.java
+@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.namenode;
+ 
+ import junit.framework.TestCase;
+ import java.io.*;
++import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.List;
+ import java.util.Iterator;
+@@ -29,6 +30,7 @@ import org.apache.hadoop.hdfs.DistributedFileSystem;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.hdfs.protocol.FSConstants.SafeModeAction;
+ import org.apache.hadoop.hdfs.server.common.Storage;
++import org.apache.hadoop.hdfs.server.namenode.FSEditLog.EditLogFileOutputStream;
+ import org.apache.hadoop.hdfs.server.namenode.FSImage.NameNodeFile;
+ import org.apache.hadoop.hdfs.server.namenode.SecondaryNameNode.ErrorSimulator;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants.StartupOption;
+@@ -130,7 +132,70 @@ public class TestCheckpoint extends TestCase {
+     }
+     resurrectNameDir(first); // put back namedir
+   }
++  /**
++   * Tests EditLogFileOutputStream doesn't throw NullPointerException on being
++   * closed twice.
++   * See https://issues.apache.org/jira/browse/HDFS-2011
++   */
++  public void testEditLogFileOutputStreamCloses()
++    throws IOException,NullPointerException {
++    System.out.println("Testing EditLogFileOutputStream doesn't throw " +
++                       "NullPointerException on being closed twice");
++    File editLogStreamFile = null;
++    try {
++      editLogStreamFile = new File(System.getProperty("test.build.data","/tmp"),
++                                   "editLogStream.dat");
++      EditLogFileOutputStream editLogStream =
++                             new EditLogFileOutputStream(editLogStreamFile);
++      editLogStream.close();
++      //Closing an twice should not throw a NullPointerException
++      editLogStream.close();
++    } finally {
++      if (editLogStreamFile != null)
++        // Cleanup the editLogStream.dat file we created
++          editLogStreamFile.delete();
++    }
++    System.out.println("Successfully tested EditLogFileOutputStream doesn't " +
++           "throw NullPointerException on being closed twice");
++  }
+ 
++  /**
++   * Checks that an IOException in NNStorage.setCheckpointTimeInStorage is handled
++   * correctly (by removing the storage directory)
++   * See https://issues.apache.org/jira/browse/HDFS-2011
++   */
++  public void testSetCheckpointTimeInStorageHandlesIOException() throws Exception {
++    System.out.println("Check IOException handled correctly by setCheckpointTimeInStorage");
++    FSImage nnStorage = new FSImage();
++    ArrayList<File> fsImageDirs = new ArrayList<File>();
++    ArrayList<File> editsDirs = new ArrayList<File>();
++    File filePath1 =
++      new File(System.getProperty("test.build.data", "/tmp"), "storageDirToCheck");
++    assertTrue("Couldn't create directory storageDirToCheck",
++               filePath1.exists() || filePath1.mkdirs());
++    try {
++      fsImageDirs.add(filePath1);
++      // Initialize NNStorage
++      nnStorage.setStorageDirectories(fsImageDirs, editsDirs);
++      assertTrue("List of storage directories didn't have storageDirToCheck.",
++                 nnStorage.dirIterator(NameNodeDirType.EDITS).next().getRoot().
++                 toString().indexOf("storageDirToCheck") != -1);
++      assertTrue("List of removed storage directories wasn't empty",
++                 nnStorage.getRemovedStorageDirs().isEmpty());
++    } finally {
++      // Delete storage directory to cause IOException in setCheckpointTimeInStorage
++      assertTrue("Couldn't remove directory " + filePath1.getAbsolutePath(),
++                 FileUtil.fullyDelete(filePath1));
++    }
++    // Just call setCheckpointTimeInStorage using any random number
++    nnStorage.incrementCheckpointTime();
++    List<StorageDirectory> listRsd = nnStorage.getRemovedStorageDirs();
++    assertTrue("Removed directory wasn't what was expected",
++               listRsd.size() > 0 && listRsd.get(listRsd.size() - 1).getRoot().
++               toString().indexOf("storageDirToCheck") != -1);
++    System.out.println("Successfully checked IOException is handled correctly "
++                       + "by setCheckpointTimeInStorage");
++  }
+   /*
+    * Simulate namenode crashing after rolling edit log.
+    */
+-- 
+1.7.0.4
+

@@ -1,0 +1,173 @@
+From 87c3e693adb3912b5c2755cf7e31f9c1b9973273 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 12 Apr 2010 16:48:37 -0700
+Subject: [PATCH 0602/1179] MAPREDUCE-1683. Removes JNI calls to get jvm current/max heap usage in ClusterStatus by default.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12441563/MAPREDUCE-1683_yhadoop_20_S.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12441978/MAPREDUCE-1683_part2_yhadoop_20_10.patch
+Reason: Performance improvement
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/ClusterStatus.java    |   41 ++++++++++++-------
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |    2 +-
+ .../hadoop/mapred/JobSubmissionProtocol.java       |    2 +-
+ .../apache/hadoop/mapred/TestClusterStatus.java    |   28 +++++++++++++
+ src/webapps/job/jobtracker.jsp                     |    2 +-
+ 5 files changed, 57 insertions(+), 18 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/ClusterStatus.java b/src/mapred/org/apache/hadoop/mapred/ClusterStatus.java
+index eff0414..3f96b69 100644
+--- a/src/mapred/org/apache/hadoop/mapred/ClusterStatus.java
++++ b/src/mapred/org/apache/hadoop/mapred/ClusterStatus.java
+@@ -68,8 +68,10 @@ public class ClusterStatus implements Writable {
+   private int max_map_tasks;
+   private int max_reduce_tasks;
+   private JobTracker.State state;
+-  private long used_memory;
+-  private long max_memory;
++
++  public static final long UNINITIALIZED_MEMORY_VALUE = -1;
++  private long used_memory = UNINITIALIZED_MEMORY_VALUE;
++  private long max_memory = UNINITIALIZED_MEMORY_VALUE;
+ 
+   ClusterStatus() {}
+   
+@@ -125,17 +127,9 @@ public class ClusterStatus implements Writable {
+   ClusterStatus(int trackers, int blacklists, long ttExpiryInterval, 
+                 int maps, int reduces, int maxMaps, int maxReduces, 
+                 JobTracker.State state, int numDecommissionedNodes) {
+-    numActiveTrackers = trackers;
+-    numBlacklistedTrackers = blacklists;
+-    this.numExcludedNodes = numDecommissionedNodes;
+-    this.ttExpiryInterval = ttExpiryInterval;
+-    map_tasks = maps;
+-    reduce_tasks = reduces;
+-    max_map_tasks = maxMaps;
+-    max_reduce_tasks = maxReduces;
+-    this.state = state;
+-    used_memory = Runtime.getRuntime().totalMemory();
+-    max_memory = Runtime.getRuntime().maxMemory();
++    this(trackers, blacklists, ttExpiryInterval, maps, reduces, 
++         maxMaps, maxReduces, state, numDecommissionedNodes, 
++         UNINITIALIZED_MEMORY_VALUE, UNINITIALIZED_MEMORY_VALUE);
+   }
+ 
+   /**
+@@ -159,6 +153,23 @@ public class ClusterStatus implements Writable {
+          maxMaps, maxReduces, state, 0);
+   }
+ 
++  ClusterStatus(int trackers, int blacklists, long ttExpiryInterval, 
++      int maps, int reduces, int maxMaps, int maxReduces, 
++      JobTracker.State state, int numDecommissionedNodes,
++      long used_memory, long max_memory) {
++    numActiveTrackers = trackers;
++    numBlacklistedTrackers = blacklists;
++    this.numExcludedNodes = numDecommissionedNodes;
++    this.ttExpiryInterval = ttExpiryInterval;
++    map_tasks = maps;
++    reduce_tasks = reduces;
++    max_map_tasks = maxMaps;
++    max_reduce_tasks = maxReduces;
++    this.state = state;
++    this.used_memory = used_memory;
++    this.max_memory = max_memory;
++  }
++  
+   /**
+    * Construct a new cluster status. 
+    * @param activeTrackers active tasktrackers in the cluster
+@@ -176,12 +187,12 @@ public class ClusterStatus implements Writable {
+                 int maps, int reduces, int maxMaps, int maxReduces, 
+                 JobTracker.State state, int numDecommissionNodes) {
+     this(activeTrackers.size(), blacklistedTrackers.size(), ttExpiryInterval, 
+-        maps, reduces, maxMaps, maxReduces, state, numDecommissionNodes);
++        maps, reduces, maxMaps, maxReduces, state, numDecommissionNodes, 
++        Runtime.getRuntime().totalMemory(), Runtime.getRuntime().maxMemory());
+     this.activeTrackers = activeTrackers;
+     this.blacklistedTrackers = blacklistedTrackers;
+   }
+ 
+-
+   /**
+    * Get the number of task trackers in the cluster.
+    * 
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index b3422ee..ef6d800 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -1116,7 +1116,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+    * Get status information about the Map-Reduce cluster.
+    *  
+    * @param  detailed if true then get a detailed status including the
+-   *         tracker names
++   *         tracker names and memory usage of the JobTracker
+    * @return the status information about the Map-Reduce cluster as an object
+    *         of {@link ClusterStatus}.
+    * @throws IOException
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+index 5727784..79d1a24 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+@@ -96,7 +96,7 @@ interface JobSubmissionProtocol extends VersionedProtocol {
+ 
+   /**
+    * Get the current status of the cluster
+-   * @param detailed if true then report tracker names as well
++   * @param detailed if true then report tracker names and memory usage
+    * @return summary of the state of the cluster
+    */
+   public ClusterStatus getClusterStatus(boolean detailed) throws IOException;
+diff --git a/src/test/org/apache/hadoop/mapred/TestClusterStatus.java b/src/test/org/apache/hadoop/mapred/TestClusterStatus.java
+index 57fa1fb..bd6b55d 100644
+--- a/src/test/org/apache/hadoop/mapred/TestClusterStatus.java
++++ b/src/test/org/apache/hadoop/mapred/TestClusterStatus.java
+@@ -307,4 +307,32 @@ public class TestClusterStatus extends TestCase {
+     assertEquals("reduce slots should have been unreserved",
+         0, metrics.getReservedReduceSlots());
+   }
++  
++  public void testClusterStatus() throws Exception {
++    ClusterStatus clusterStatus = client.getClusterStatus();
++    assertEquals("JobTracker used-memory is " + clusterStatus.getUsedMemory() + 
++                 ", expected " + ClusterStatus.UNINITIALIZED_MEMORY_VALUE, 
++                 ClusterStatus.UNINITIALIZED_MEMORY_VALUE, clusterStatus.getUsedMemory());
++    assertEquals("JobTracker max-memory is " + clusterStatus.getMaxMemory() + 
++        ", expected " + ClusterStatus.UNINITIALIZED_MEMORY_VALUE, 
++        ClusterStatus.UNINITIALIZED_MEMORY_VALUE, clusterStatus.getMaxMemory());
++    
++    clusterStatus = client.getClusterStatus(false);
++    assertEquals("JobTracker used-memory is " + clusterStatus.getUsedMemory() + 
++                 ", expected " + ClusterStatus.UNINITIALIZED_MEMORY_VALUE, 
++                 ClusterStatus.UNINITIALIZED_MEMORY_VALUE, clusterStatus.getUsedMemory());
++    assertEquals("JobTracker max-memory is " + clusterStatus.getMaxMemory() + 
++                 ", expected " + ClusterStatus.UNINITIALIZED_MEMORY_VALUE, 
++                 ClusterStatus.UNINITIALIZED_MEMORY_VALUE, clusterStatus.getMaxMemory());
++    
++    clusterStatus = client.getClusterStatus(true);
++    if (ClusterStatus.UNINITIALIZED_MEMORY_VALUE == clusterStatus.getUsedMemory()) {
++      assertEquals("JobTracker used-memory is " + clusterStatus.getUsedMemory(), 
++                   true, false);
++    }
++    if (ClusterStatus.UNINITIALIZED_MEMORY_VALUE == clusterStatus.getMaxMemory()) {
++      assertEquals("JobTracker max-memory is " + clusterStatus.getMaxMemory(),
++                    true, false);
++    }
++  }
+ }
+diff --git a/src/webapps/job/jobtracker.jsp b/src/webapps/job/jobtracker.jsp
+index 9d400b6..1088a50 100644
+--- a/src/webapps/job/jobtracker.jsp
++++ b/src/webapps/job/jobtracker.jsp
+@@ -106,7 +106,7 @@
+ <b>Identifier:</b> <%= tracker.getTrackerIdentifier()%><br>                 
+                    
+ <hr>
+-<h2>Cluster Summary (Heap Size is <%= StringUtils.byteDesc(status.getUsedMemory()) %>/<%= StringUtils.byteDesc(status.getMaxMemory()) %>)</h2>
++<h2>Cluster Summary (Heap Size is <%= StringUtils.byteDesc(Runtime.getRuntime().totalMemory()) %>/<%= StringUtils.byteDesc(Runtime.getRuntime().maxMemory()) %>)</h2>
+ <% 
+  generateSummaryTable(out, metrics, tracker); 
+ %>
+-- 
+1.7.0.4
+

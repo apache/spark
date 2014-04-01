@@ -1,0 +1,31 @@
+From ca36717c2b3bc9d610ba2a049b98f798b9d8c1c1 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 5 Oct 2010 15:33:11 -0700
+Subject: [PATCH 0727/1179] CLOUDERA-BUILD. No need to restrict jsvc usage to secure clusters
+
+Reason: It is simpler to always start the DN as root and let it drop privileges
+        when jsvc is available. This is OK even if kerberos auth is off.
+Author: Todd Lipcon
+---
+ .../server/datanode/SecureDataNodeStarter.java     |    5 +----
+ 1 files changed, 1 insertions(+), 4 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/SecureDataNodeStarter.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/SecureDataNodeStarter.java
+index 35fdb08..3a10221 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/SecureDataNodeStarter.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/SecureDataNodeStarter.java
+@@ -58,10 +58,7 @@ public class SecureDataNodeStarter implements Daemon {
+   @Override
+   public void init(DaemonContext context) throws Exception {
+     System.err.println("Initializing secure datanode resources");
+-    // We should only start up a secure datanode in a Kerberos-secured cluster
+-    Configuration conf = new Configuration(); // Skip UGI method to not log in
+-    if(!conf.get(HADOOP_SECURITY_AUTHENTICATION).equals("kerberos"))
+-      throw new RuntimeException("Cannot start secure datanode in unsecure cluster");
++    Configuration conf = new Configuration();
+     
+     // Stash command-line arguments for regular datanode
+     args = context.getArguments();
+-- 
+1.7.0.4
+

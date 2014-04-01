@@ -1,0 +1,83 @@
+From 776a20d37142534751178b060285d2813cc66c1c Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 25 May 2010 13:09:30 -0700
+Subject: [PATCH 0256/1179] HADOOP-6724. IPC doesn't properly handle IOEs thrown by socket factory.
+
+Description: If the socket factory throws an IOE inside
+setupIOStreams, then handleConnectionFailure will be called with
+socket still null, and thus generate an NPE on socket.close(). This
+ends up orphaning clients, etc.
+
+Reason: Bug fix
+Author: Eli Collins
+Ref: CDH-1132
+---
+ src/core/org/apache/hadoop/ipc/Client.java  |   10 ++++++----
+ src/test/org/apache/hadoop/ipc/TestIPC.java |   21 +++++++++++++++++++++
+ 2 files changed, 27 insertions(+), 4 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index 070278f..79cd142 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -347,10 +347,12 @@ public class Client {
+     private void handleConnectionFailure(
+         int curRetries, int maxRetries, IOException ioe) throws IOException {
+       // close the current connection
+-      try {
+-        socket.close();
+-      } catch (IOException e) {
+-        LOG.warn("Not able to close a socket", e);
++      if (socket != null) {
++        try {
++          socket.close();
++        } catch (IOException e) {
++          LOG.warn("Not able to close a socket", e);
++        }
+       }
+       // set socket to null so that the next call to setupIOstreams
+       // can start the process of connect all over again.
+diff --git a/src/test/org/apache/hadoop/ipc/TestIPC.java b/src/test/org/apache/hadoop/ipc/TestIPC.java
+index 617a10f..e8bc96d 100644
+--- a/src/test/org/apache/hadoop/ipc/TestIPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestIPC.java
+@@ -29,8 +29,10 @@ import java.util.Random;
+ import java.io.DataInput;
+ import java.io.IOException;
+ import java.net.InetSocketAddress;
++import javax.net.SocketFactory;
+ 
+ import junit.framework.TestCase;
++import static org.mockito.Mockito.*;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ 
+@@ -308,6 +310,25 @@ public class TestIPC extends TestCase {
+     }
+   }
+ 
++  /**
++   * Test that, if the socket factory throws an IOE, it properly propagates
++   * to the client.
++   */
++  public void testSocketFactoryException() throws Exception {
++    SocketFactory mockFactory = mock(SocketFactory.class);
++    doThrow(new IOException("Injected fault")).when(mockFactory).createSocket();
++    Client client = new Client(LongWritable.class, conf, mockFactory);
++    
++    InetSocketAddress address = new InetSocketAddress("127.0.0.1", 10);
++    try {
++      client.call(new LongWritable(RANDOM.nextLong()),
++              address, null, null);
++      fail("Expected an exception to have been thrown");
++    } catch (IOException e) {
++      assertTrue(e.getMessage().contains("Injected fault"));
++    }
++  }
++
+   public static void main(String[] args) throws Exception {
+ 
+     //new TestIPC("test").testSerial(5, false, 2, 10, 1000);
+-- 
+1.7.0.4
+

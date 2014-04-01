@@ -1,0 +1,30 @@
+From 84bbaaca1521811875b9926d98658259421be1f6 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sat, 19 Nov 2011 18:59:15 -0800
+Subject: [PATCH 1089/1179] HDFS-2541. For a sufficiently large value of blocks, the DN Scanner
+ may request a random number with a negative seed value.
+
+Author: Harsh J
+Ref: CDH-3803
+---
+ .../hdfs/server/datanode/DataBlockScanner.java     |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataBlockScanner.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataBlockScanner.java
+index da8becc..6dcc765 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataBlockScanner.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataBlockScanner.java
+@@ -248,8 +248,9 @@ class DataBlockScanner implements Runnable {
+      */
+     long period = Math.min(scanPeriod, 
+                            Math.max(blockMap.size(),1) * 600 * 1000L);
++    int periodInt = Math.abs((int)period);
+     return System.currentTimeMillis() - scanPeriod + 
+-           random.nextInt((int)period);    
++           random.nextInt(periodInt);
+   }
+ 
+   /** Adds block to list of blocks */
+-- 
+1.7.0.4
+

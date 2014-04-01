@@ -1,0 +1,47 @@
+From 478ebff927c0a45f72c531952bcaf7632e990a12 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 22 Jan 2010 17:17:08 -0800
+Subject: [PATCH 0436/1179] HADOOP-6495. Identifier should be serialized after the password is created In Token constructor
+
+Patch: https://issues.apache.org/jira/secure/attachment/12431145/HADOOP-6495-0_20.2.patch
+Author: Jitendra Nath Pandey
+Ref: CDH-648
+---
+ .../hadoop/security/token/SecretManager.java       |    3 ++-
+ .../org/apache/hadoop/security/token/Token.java    |    2 +-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/token/SecretManager.java b/src/core/org/apache/hadoop/security/token/SecretManager.java
+index 7517fe3..e350211 100644
+--- a/src/core/org/apache/hadoop/security/token/SecretManager.java
++++ b/src/core/org/apache/hadoop/security/token/SecretManager.java
+@@ -45,10 +45,11 @@ public abstract class SecretManager<T extends TokenIdentifier> {
+   
+   /**
+    * Create the password for the given identifier.
++   * identifier may be modified inside this method.
+    * @param identifier the identifier to use
+    * @return the new password
+    */
+-  public abstract byte[] createPassword(T identifier);
++  protected abstract byte[] createPassword(T identifier);
+   
+   /**
+    * Retrieve the password for the given token identifier. Should check the date
+diff --git a/src/core/org/apache/hadoop/security/token/Token.java b/src/core/org/apache/hadoop/security/token/Token.java
+index 2fa1a93..743db44 100644
+--- a/src/core/org/apache/hadoop/security/token/Token.java
++++ b/src/core/org/apache/hadoop/security/token/Token.java
+@@ -42,8 +42,8 @@ public class Token<T extends TokenIdentifier> implements Writable {
+    * @param mgr the secret manager
+    */
+   public Token(T id, SecretManager<T> mgr) {
+-    identifier = id.getBytes();
+     password = mgr.createPassword(id);
++    identifier = id.getBytes();
+     kind = id.getKind();
+     service = new Text();
+   }
+-- 
+1.7.0.4
+

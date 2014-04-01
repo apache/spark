@@ -1,0 +1,60 @@
+From e1d94a529d7adac4012854703ea4b10d21f8829b Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 15 Mar 2011 15:00:27 -0700
+Subject: [PATCH 0937/1179] MAPREDUCE-1563. TaskDiagnosticInfo may be missed sometime
+
+Reason: Bug fix via 0.20-security-203
+Author: Krishna Ramachandran
+Ref: CDH-2772
+---
+ .../hadoop/mapred/TaskMemoryManagerThread.java     |   12 +++++++++++-
+ .../mapred/TestTaskTrackerMemoryManager.java       |    2 +-
+ 2 files changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskMemoryManagerThread.java b/src/mapred/org/apache/hadoop/mapred/TaskMemoryManagerThread.java
+index 4542a8f..b069c28 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskMemoryManagerThread.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskMemoryManagerThread.java
+@@ -223,6 +223,11 @@ class TaskMemoryManagerThread extends Thread {
+                     + tid + " : \n" + pTree.getProcessTreeDump();
+             LOG.warn(msg);
+             // kill the task
++            TaskInProgress tip = taskTracker.runningTasks.get(tid);
++            if (tip != null) {
++              String[] diag = msg.split("\n");
++              tip.getStatus().setDiagnosticInfo(diag[0]);
++            }
+             taskTracker.cleanUpOverMemoryTask(tid, true, msg);
+ 
+             it.remove();
+@@ -351,8 +356,13 @@ class TaskMemoryManagerThread extends Thread {
+         String msg =
+             "Killing one of the least progress tasks - " + tid
+                 + ", as the cumulative memory usage of all the tasks on "
+-                + "the TaskTracker exceeds virtual memory limit "
++                + "the TaskTracker " + taskTracker.localHostname 
++                + " exceeds virtual memory limit "
+                 + maxMemoryAllowedForAllTasks + ".";
++        TaskInProgress tip = taskTracker.runningTasks.get(tid);
++        if (tip != null) {
++           tip.getStatus().setDiagnosticInfo(msg);
++        }
+         LOG.warn(msg);
+         // Kill the task and mark it as killed.
+         taskTracker.cleanUpOverMemoryTask(tid, false, msg);
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskTrackerMemoryManager.java b/src/test/org/apache/hadoop/mapred/TestTaskTrackerMemoryManager.java
+index 738a43f..8376b47 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTaskTrackerMemoryManager.java
++++ b/src/test/org/apache/hadoop/mapred/TestTaskTrackerMemoryManager.java
+@@ -351,7 +351,7 @@ public class TestTaskTrackerMemoryManager extends TestCase {
+       Pattern
+           .compile("Killing one of the least progress tasks - .*, as "
+               + "the cumulative memory usage of all the tasks on the TaskTracker"
+-              + " exceeds virtual memory limit " + TASK_TRACKER_LIMIT + ".");
++              + " .* exceeds virtual memory limit " + TASK_TRACKER_LIMIT + ".");
+     Matcher mat = null;
+ 
+     // Set up job.
+-- 
+1.7.0.4
+

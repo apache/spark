@@ -1,0 +1,344 @@
+From 80fd3539d82c6e4e97f57828c1c647520d180694 Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Wed, 21 Mar 2012 15:33:34 -0700
+Subject: [PATCH 1157/1179] HADOOP-7030. Add TableMapping topology implementation to read host to rack mapping from a file.
+
+Reason: Operator improvement
+Author: Patrick Angeles and Tom White
+Ref: CDH-3899
+---
+ src/core/core-default.xml                          |   13 ++
+ src/core/org/apache/hadoop/net/TableMapping.java   |  138 ++++++++++++++++++
+ .../org/apache/hadoop/net/TestTableMapping.java    |  151 ++++++++++++++++++++
+ 3 files changed, 302 insertions(+), 0 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/net/TableMapping.java
+ create mode 100644 src/test/org/apache/hadoop/net/TestTableMapping.java
+
+diff --git a/src/core/core-default.xml b/src/core/core-default.xml
+index e17cbdc..85e2bb0 100644
+--- a/src/core/core-default.xml
++++ b/src/core/core-default.xml
+@@ -494,6 +494,19 @@
+ </property>
+ 
+ <property>
++  <name>net.topology.table.file.name</name>
++  <value></value>
++  <description> The file name for a topology file, which is used when the
++    topology.script.file.name property is set to
++    org.apache.hadoop.net.TableMapping. The file format is a two column text
++    file, with columns separated by whitespace. The first column is a DNS or
++    IP address and the second column specifies the rack where the address maps.
++    If no entry corresponding to a host in the cluster is found, then 
++    /default-rack is assumed.
++  </description>
++</property>
++
++<property>
+   <name>hadoop.security.uid.cache.secs</name>
+   <value>14400</value>
+   <description> NativeIO maintains a cache from UID to UserName. This is
+diff --git a/src/core/org/apache/hadoop/net/TableMapping.java b/src/core/org/apache/hadoop/net/TableMapping.java
+new file mode 100644
+index 0000000..f65ca31
+--- /dev/null
++++ b/src/core/org/apache/hadoop/net/TableMapping.java
+@@ -0,0 +1,138 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.net;
++
++import java.io.BufferedReader;
++import java.io.FileReader;
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.List;
++import java.util.Map;
++
++import org.apache.commons.lang.StringUtils;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.conf.Configured;
++
++/**
++ * <p>
++ * Simple {@link DNSToSwitchMapping} implementation that reads a 2 column text
++ * file. The columns are separated by whitespace. The first column is a DNS or
++ * IP address and the second column specifies the rack where the address maps.
++ * </p>
++ * <p>
++ * This class uses the configuration parameter {@code
++ * net.topology.table.file.name} to locate the mapping file.
++ * </p>
++ * <p>
++ * Calls to {@link #resolve(List)} will look up the address as defined in the
++ * mapping file. If no entry corresponding to the address is found, the value
++ * {@code /default-rack} is returned.
++ * </p>
++ */
++public class TableMapping extends CachedDNSToSwitchMapping {
++  public static final String MAPPING_FILE = "net.topology.table.file.name";
++  private static final Log LOG = LogFactory.getLog(TableMapping.class);
++  
++  public TableMapping() {
++    super(new RawTableMapping());
++  }
++  
++  private RawTableMapping getRawMapping() {
++    return (RawTableMapping) rawMapping;
++  }
++
++  public Configuration getConf() {
++    return getRawMapping().getConf();
++  }
++
++  public void setConf(Configuration conf) {
++    getRawMapping().setConf(conf);
++  }
++  
++  private static final class RawTableMapping extends Configured
++      implements DNSToSwitchMapping {
++    
++    private final Map<String, String> map = new HashMap<String, String>();
++    private boolean initialized = false;
++  
++    private synchronized void load() {
++      map.clear();
++  
++      String filename = getConf().get(MAPPING_FILE, null);
++      if (StringUtils.isBlank(filename)) {
++        LOG.warn(MAPPING_FILE + " not configured. "
++            + NetworkTopology.DEFAULT_RACK + " will be returned.");
++        return;
++      }
++  
++      BufferedReader reader = null;
++      try {
++        reader = new BufferedReader(new FileReader(filename));
++        String line = reader.readLine();
++        while (line != null) {
++          line = line.trim();
++          if (line.length() != 0 && line.charAt(0) != '#') {
++            String[] columns = line.split("\\s+");
++            if (columns.length == 2) {
++              map.put(columns[0], columns[1]);
++            } else {
++              LOG.warn("Line does not have two columns. Ignoring. " + line);
++            }
++          }
++          line = reader.readLine();
++        }
++      } catch (Exception e) {
++        LOG.warn(filename + " cannot be read. " + NetworkTopology.DEFAULT_RACK
++            + " will be returned.", e);
++        map.clear();
++      } finally {
++        if (reader != null) {
++          try {
++            reader.close();
++          } catch (IOException e) {
++            LOG.warn(filename + " cannot be read. "
++                + NetworkTopology.DEFAULT_RACK + " will be returned.", e);
++            map.clear();
++          }
++        }
++      }
++    }
++  
++    public synchronized List<String> resolve(List<String> names) {
++      if (!initialized) {
++        initialized = true;
++        load();
++      }
++  
++      List<String> results = new ArrayList<String>(names.size());
++      for (String name : names) {
++        String result = map.get(name);
++        if (result != null) {
++          results.add(result);
++        } else {
++          results.add(NetworkTopology.DEFAULT_RACK);
++        }
++      }
++      return results;
++    }
++    
++  }
++}
+diff --git a/src/test/org/apache/hadoop/net/TestTableMapping.java b/src/test/org/apache/hadoop/net/TestTableMapping.java
+new file mode 100644
+index 0000000..3cfeb57
+--- /dev/null
++++ b/src/test/org/apache/hadoop/net/TestTableMapping.java
+@@ -0,0 +1,151 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.net;
++
++import static org.junit.Assert.assertEquals;
++
++import java.io.File;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.IOUtils;
++import org.junit.Before;
++import org.junit.Test;
++
++public class TestTableMapping {
++  
++  private File mappingFile;
++  
++  @Before
++  public void setUp() throws IOException {
++    mappingFile = File.createTempFile(getClass().getSimpleName(), ".txt");
++    writeFile("a.b.c /rack1\n" +
++              "1.2.3\t/rack2\n", mappingFile);
++    mappingFile.deleteOnExit();
++  }
++  
++  private void writeFile(String content, File file) throws IOException {
++    FileOutputStream out = new FileOutputStream(file);
++    try {
++       out.write(content.getBytes("UTF-8"));
++    } finally {
++      IOUtils.closeStream(out);
++    }
++  }
++
++  @Test
++  public void testResolve() throws IOException {
++    TableMapping mapping = new TableMapping();
++
++    Configuration conf = new Configuration();
++    conf.set(TableMapping.MAPPING_FILE, mappingFile.getCanonicalPath());
++    mapping.setConf(conf);
++
++    List<String> names = new ArrayList<String>();
++    names.add("a.b.c");
++    names.add("1.2.3");
++
++    List<String> result = mapping.resolve(names);
++    assertEquals(names.size(), result.size());
++    assertEquals("/rack1", result.get(0));
++    assertEquals("/rack2", result.get(1));
++  }
++
++  @Test
++  public void testTableCaching() throws IOException {
++    TableMapping mapping = new TableMapping();
++
++    Configuration conf = new Configuration();
++    conf.set(TableMapping.MAPPING_FILE, mappingFile.getCanonicalPath());
++    mapping.setConf(conf);
++
++    List<String> names = new ArrayList<String>();
++    names.add("a.b.c");
++    names.add("1.2.3");
++
++    List<String> result1 = mapping.resolve(names);
++    assertEquals(names.size(), result1.size());
++    assertEquals("/rack1", result1.get(0));
++    assertEquals("/rack2", result1.get(1));
++
++    // unset the file, see if it gets read again
++    conf.set(TableMapping.MAPPING_FILE, "some bad value for a file");
++
++    List<String> result2 = mapping.resolve(names);
++    assertEquals(result1, result2);
++  }
++
++  @Test
++  public void testNoFile() {
++    TableMapping mapping = new TableMapping();
++
++    Configuration conf = new Configuration();
++    mapping.setConf(conf);
++
++    List<String> names = new ArrayList<String>();
++    names.add("a.b.c");
++    names.add("1.2.3");
++
++    List<String> result = mapping.resolve(names);
++    assertEquals(names.size(), result.size());
++    assertEquals(NetworkTopology.DEFAULT_RACK, result.get(0));
++    assertEquals(NetworkTopology.DEFAULT_RACK, result.get(1));
++  }
++
++  @Test
++  public void testFileDoesNotExist() {
++    TableMapping mapping = new TableMapping();
++
++    Configuration conf = new Configuration();
++    conf.set(TableMapping.MAPPING_FILE, "/this/file/does/not/exist");
++    mapping.setConf(conf);
++
++    List<String> names = new ArrayList<String>();
++    names.add("a.b.c");
++    names.add("1.2.3");
++
++    List<String> result = mapping.resolve(names);
++    assertEquals(names.size(), result.size());
++    assertEquals(result.get(0), NetworkTopology.DEFAULT_RACK);
++    assertEquals(result.get(1), NetworkTopology.DEFAULT_RACK);
++  }
++
++  @Test
++  public void testBadFile() throws IOException {
++    writeFile("bad contents", mappingFile);
++    
++    TableMapping mapping = new TableMapping();
++
++    Configuration conf = new Configuration();
++    conf.set(TableMapping.MAPPING_FILE, mappingFile.getCanonicalPath());
++    mapping.setConf(conf);
++
++    List<String> names = new ArrayList<String>();
++    names.add("a.b.c");
++    names.add("1.2.3");
++
++    List<String> result = mapping.resolve(names);
++    assertEquals(names.size(), result.size());
++    assertEquals(result.get(0), NetworkTopology.DEFAULT_RACK);
++    assertEquals(result.get(1), NetworkTopology.DEFAULT_RACK);
++  }
++
++}
+-- 
+1.7.0.4
+

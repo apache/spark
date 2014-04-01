@@ -1,0 +1,129 @@
+From 4e30197fdddc64b48c0a3fb4575cdea4e5eaaf9b Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 15 Dec 2009 18:52:33 +0530
+Subject: [PATCH 0403/1179] MAPREDUCE-1143. runningMapTasks counter is not properly decremented in case of failed Tasks.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12427898/MAPRED-1143-ydist-9.patch
+Author: rahul k singh
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobInProgress.java    |   40 ++++++++++++++-----
+ .../org/apache/hadoop/mapred/TaskInProgress.java   |    9 ++++
+ 2 files changed, 38 insertions(+), 11 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 92fe97b..a3d30b3 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -857,7 +857,8 @@ public class JobInProgress {
+     boolean wasComplete = tip.isComplete();
+     boolean wasPending = tip.isOnlyCommitPending();
+     TaskAttemptID taskid = status.getTaskID();
+-    
++    boolean wasAttemptRunning = tip.isAttemptRunning(taskid);
++
+     // If the TIP is already completed and the task reports as SUCCEEDED then 
+     // mark the task as KILLED.
+     // In case of task with no promotion the task tracker will mark the task 
+@@ -953,7 +954,7 @@ public class JobInProgress {
+         
+         // Tell the job to fail the relevant task
+         failedTask(tip, taskid, status, taskTracker,
+-                   wasRunning, wasComplete);
++                   wasRunning, wasComplete, wasAttemptRunning);
+ 
+         // Did the task failure lead to tip failure?
+         TaskCompletionEvent.Status taskCompletionStatus = 
+@@ -2605,8 +2606,8 @@ public class JobInProgress {
+    */
+   private void failedTask(TaskInProgress tip, TaskAttemptID taskid, 
+                           TaskStatus status, 
+-                          TaskTracker taskTracker,
+-                          boolean wasRunning, boolean wasComplete) {
++                          TaskTracker taskTracker, boolean wasRunning,
++                          boolean wasComplete, boolean wasAttemptRunning) {
+     final JobTrackerInstrumentation metrics = jobtracker.getInstrumentation();
+     // check if the TIP is already failed
+     boolean wasFailed = tip.isFailed();
+@@ -2616,6 +2617,30 @@ public class JobInProgress {
+    
+     boolean isRunning = tip.isRunning();
+     boolean isComplete = tip.isComplete();
++    
++    if (wasAttemptRunning) {
++      // We are decrementing counters without looking for isRunning ,
++      // because we increment the counters when we obtain
++      // new map task attempt or reduce task attempt.We do not really check
++      // for tip being running.
++      // Whenever we obtain new task attempt following counters are incremented.
++      //      ++runningMapTasks;
++      //.........
++      //      metrics.launchMap(id);
++      // hence we are decrementing the same set.
++      if (!tip.isJobCleanupTask() && !tip.isJobSetupTask()) {
++        if (tip.isMapTask()) {
++          runningMapTasks -= 1;
++          metrics.failedMap(taskid);
++        } else {
++          runningReduceTasks -= 1;
++          metrics.failedReduce(taskid);
++        }
++      }
++      
++      // Metering
++      meterTaskAttempt(tip, status);
++    }
+         
+     //update running  count on task failure.
+     if (wasRunning && !isRunning) {
+@@ -2624,8 +2649,6 @@ public class JobInProgress {
+       } else if (tip.isJobSetupTask()) {
+         launchedSetup = false;
+       } else if (tip.isMapTask()) {
+-        runningMapTasks -= 1;
+-        metrics.failedMap(taskid);
+         // remove from the running queue and put it in the non-running cache
+         // if the tip is not complete i.e if the tip still needs to be run
+         if (!isComplete) {
+@@ -2633,8 +2656,6 @@ public class JobInProgress {
+           failMap(tip);
+         }
+       } else {
+-        runningReduceTasks -= 1;
+-        metrics.failedReduce(taskid);
+         // remove from the running queue and put in the failed queue if the tip
+         // is not complete
+         if (!isComplete) {
+@@ -2642,9 +2663,6 @@ public class JobInProgress {
+           failReduce(tip);
+         }
+       }
+-      
+-      // Metering
+-      meterTaskAttempt(tip, status);
+     }
+         
+     // The case when the map was complete but the task tracker went down.
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+index b5ed80d..1cb24b1 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskInProgress.java
+@@ -303,6 +303,15 @@ public class TaskInProgress {
+   public boolean isRunning() {
+     return !activeTasks.isEmpty();
+   }
++
++  /**
++   * Is this attempt currently running ?
++   * @param  taskId task attempt id.
++   * @return true if attempt taskId is running
++   */
++  boolean isAttemptRunning(TaskAttemptID taskId) {
++    return activeTasks.containsKey(taskId);
++  }
+     
+   TaskAttemptID getSuccessfulTaskid() {
+     return successfulTaskId;
+-- 
+1.7.0.4
+

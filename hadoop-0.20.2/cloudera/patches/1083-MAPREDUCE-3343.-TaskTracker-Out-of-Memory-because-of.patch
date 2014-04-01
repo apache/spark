@@ -1,0 +1,86 @@
+From e732b3c97a9232182d3a28917ca3f9006f968ac9 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Fri, 18 Nov 2011 15:45:26 -0800
+Subject: [PATCH 1083/1179] MAPREDUCE-3343. TaskTracker Out of Memory because of distributed cache.
+
+This Out of Memory happens when you run large number of jobs (using
+the distributed cache) on a TaskTracker.
+
+Author: Zhao Yunjiong
+Ref: CDH-3798
+---
+ .../filecache/TrackerDistributedCacheManager.java  |   12 ++++++++++++
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    5 +++--
+ .../TestTrackerDistributedCacheManager.java        |   19 +++++++++++++++++++
+ 3 files changed, 34 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java b/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java
+index ff7af8c..32b69d7 100644
+--- a/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java
++++ b/src/mapred/org/apache/hadoop/filecache/TrackerDistributedCacheManager.java
+@@ -762,6 +762,18 @@ public class TrackerDistributedCacheManager {
+     }
+   }
+ 
++  public void removeTaskDistributedCacheManager(JobID jobId) {
++    jobArchives.remove(jobId);
++  }
++
++  /*
++   * This method is called from unit tests.
++   */
++  protected TaskDistributedCacheManager getTaskDistributedCacheManager(
++      JobID jobId) {
++    return jobArchives.get(jobId);
++  }
++
+   /**
+    * Determines timestamps of files to be cached, and stores those
+    * in the configuration.  This is intended to be used internally by JobClient
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 0236d8b..46b8e13 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -2068,8 +2068,9 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+       runningJobs.remove(jobId);
+     }
+     getJobTokenSecretManager().removeTokenForJob(jobId.toString());  
+-  }      
+-    
++    distributedCacheManager.removeTaskDistributedCacheManager(jobId);
++  }
++
+   /**
+    * This job's files are no longer needed on this TT, remove them.
+    *
+diff --git a/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java b/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
+index 724a50e..13c81cb 100644
+--- a/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
++++ b/src/test/org/apache/hadoop/filecache/TestTrackerDistributedCacheManager.java
+@@ -881,4 +881,23 @@ public class TestTrackerDistributedCacheManager extends TestCase {
+     }
+   }
+ 
++  public void testRemoveTaskDistributedCacheManager() throws Exception {
++    if (!canRun()) {
++      return;
++    }
++    TrackerDistributedCacheManager manager = new TrackerDistributedCacheManager(
++        conf, taskController);
++    JobID jobId = new JobID("jobtracker", 1);
++    manager.newTaskDistributedCacheManager(jobId, conf);
++
++    TaskDistributedCacheManager taskDistributedCacheManager = manager
++        .getTaskDistributedCacheManager(jobId);
++    assertNotNull(taskDistributedCacheManager);
++
++    manager.removeTaskDistributedCacheManager(jobId);
++
++    taskDistributedCacheManager = manager.getTaskDistributedCacheManager(jobId);
++    assertNull(taskDistributedCacheManager);
++  }
++
+ }
+-- 
+1.7.0.4
+

@@ -1,0 +1,165 @@
+From 68250308093f335bac63e65171ae22db03412c13 Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Fri, 17 Jun 2011 12:30:43 -0700
+Subject: [PATCH 0971/1179] HADOOP-3741. SecondaryNameNode has http server on dfs.secondary.http.address but without any contents
+
+Reason: New Feature
+Author: Tsz Wo (Nicholas), SZE
+Ref: CDH-1695
+---
+ build.xml                                          |    7 +++++++
+ .../hadoop/hdfs/server/namenode/JspHelper.java     |    9 +++++++++
+ .../hdfs/server/namenode/SecondaryNameNode.java    |   17 ++++++++++++++++-
+ src/webapps/secondary/index.html                   |   13 +++++++++++++
+ src/webapps/secondary/status.jsp                   |   20 ++++++++++++++++++++
+ 5 files changed, 65 insertions(+), 1 deletions(-)
+ create mode 100644 src/webapps/secondary/index.html
+ create mode 100644 src/webapps/secondary/status.jsp
+
+diff --git a/build.xml b/build.xml
+index 13deada..107f091 100644
+--- a/build.xml
++++ b/build.xml
+@@ -517,6 +517,13 @@
+      package="org.apache.hadoop.hdfs.server.datanode"
+      webxml="${build.webapps}/datanode/WEB-INF/web.xml">
+     </jsp-compile>
++
++    <jsp-compile
++     uriroot="${src.webapps}/secondary"
++     outputdir="${build.src}"
++     package="org.apache.hadoop.hdfs.server.namenode"
++     webxml="${build.webapps}/secondary/WEB-INF/web.xml">
++    </jsp-compile>
+     
+     <!-- generate package-info annotation file. This has to be done here
+       so that the timestamp of package-info.java is newer than the timestamp
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+index c9114d0..d3db4bb 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/JspHelper.java
+@@ -57,6 +57,7 @@ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.util.StringUtils;
++import org.apache.hadoop.util.VersionInfo;
+ import org.apache.hadoop.net.NetUtils;
+ 
+ public class JspHelper {
+@@ -498,4 +499,12 @@ public class JspHelper {
+   public static int getDefaultChunkSize(Configuration conf) {
+     return conf.getInt("dfs.default.chunk.view.size", 32 * 1024);
+   }
++
++  /** Return a table containing version information. */
++  public static String getVersionTable() {
++    return "<div id='dfstable'><table>"       
++        + "\n  <tr><td id='col1'>Version:</td><td>" + VersionInfo.getVersion() + ", " + VersionInfo.getRevision()
++        + "\n  <tr><td id='col1'>Compiled:</td><td>" + VersionInfo.getDate() + " by " + VersionInfo.getUser() + " from " + VersionInfo.getBranch()
++        + "\n</table></div>";
++  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index f84e2f9..086aa50 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -26,6 +26,7 @@ import java.security.PrivilegedAction;
+ import java.security.PrivilegedExceptionAction;
+ import java.util.ArrayList;
+ import java.util.Collection;
++import java.util.Date;
+ import java.util.Iterator;
+ 
+ import org.apache.commons.logging.Log;
+@@ -71,6 +72,9 @@ public class SecondaryNameNode implements Runnable {
+   public static final Log LOG = 
+     LogFactory.getLog(SecondaryNameNode.class.getName());
+ 
++  private final long starttime = System.currentTimeMillis();
++  private volatile long lastCheckpointTime = 0;
++
+   private String fsName;
+   private CheckpointStorage checkpointImage;
+ 
+@@ -88,6 +92,17 @@ public class SecondaryNameNode implements Runnable {
+   private long checkpointPeriod;	// in seconds
+   private long checkpointSize;    // size (in MB) of current Edit Log
+ 
++  /** {@inheritDoc} */
++  public String toString() {
++    return getClass().getSimpleName() + " Status" 
++      + "\nName Node Address    : " + nameNodeAddr   
++      + "\nStart Time           : " + new Date(starttime)
++      + "\nLast Checkpoint Time : " + (lastCheckpointTime == 0? "--": new Date(lastCheckpointTime))
++      + "\nCheckpoint Period    : " + checkpointPeriod + " seconds"
++      + "\nCheckpoint Size      : " + checkpointSize + " MB"
++      + "\nCheckpoint Dirs      : " + checkpointDirs
++      + "\nCheckpoint Edits Dirs: " + checkpointEditsDirs;
++  }
+   /**
+    * Utility class to facilitate junit test error simulation.
+    */
+@@ -210,6 +225,7 @@ public class SecondaryNameNode implements Runnable {
+             infoServer.addSslListener(secInfoSocAddr, conf, false, true);
+           }
+           
++          infoServer.setAttribute("secondary.name.node", this);
+           infoServer.setAttribute("name.system.image", checkpointImage);
+           infoServer.setAttribute(JspHelper.CURRENT_CONF, conf);
+           infoServer.addInternalServlet("getimage", "/getimage",
+@@ -286,7 +302,6 @@ public class SecondaryNameNode implements Runnable {
+     // pending edit log.
+     //
+     long period = 5 * 60;              // 5 minutes
+-    long lastCheckpointTime = 0;
+     if (checkpointPeriod < period) {
+       period = checkpointPeriod;
+     }
+diff --git a/src/webapps/secondary/index.html b/src/webapps/secondary/index.html
+new file mode 100644
+index 0000000..76c6804
+--- /dev/null
++++ b/src/webapps/secondary/index.html
+@@ -0,0 +1,13 @@
++<meta HTTP-EQUIV="REFRESH" content="0;url=status.jsp"/>
++<html>
++<head><title>Hadoop Administration</title></head>
++
++<body>
++<h1>Hadoop Administration</h1>
++
++<ul> 
++  <li><a href="status.jsp">Status</a></li> 
++</ul>
++
++</body> 
++</html>
+diff --git a/src/webapps/secondary/status.jsp b/src/webapps/secondary/status.jsp
+new file mode 100644
+index 0000000..f1040fb
+--- /dev/null
++++ b/src/webapps/secondary/status.jsp
+@@ -0,0 +1,20 @@
++<%@ page
++  contentType="text/html; charset=UTF-8"
++  import="org.apache.hadoop.util.*"
++%>
++
++<html>
++<link rel="stylesheet" type="text/css" href="/static/hadoop.css">
++<title>Hadoop SecondaryNameNode</title>
++    
++<body>
++<h1>SecondaryNameNode</h1>
++<%= JspHelper.getVersionTable() %>
++<hr />
++<pre>
++<%= application.getAttribute("secondary.name.node").toString() %>
++</pre>
++
++<br />
++<b><a href="/logs/">Logs</a></b>
++<%= ServletUtil.htmlFooter() %>
+-- 
+1.7.0.4
+

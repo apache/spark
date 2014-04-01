@@ -1,0 +1,31 @@
+From 2a243d114e14d80a036c6a614672df0a88f6f8f7 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Mar 2011 13:18:32 -0800
+Subject: [PATCH 0922/1179] Amend MAPREDUCE-2178. Fix compilation failure due to unchecked return code on gcc 4.4.4
+
+Reason: Fix test on Ubuntu Maverick
+Author: Todd Lipcon
+Ref: CDH-2813
+---
+ .../task-controller/test/test-task-controller.c    |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
+
+diff --git a/src/c++/task-controller/test/test-task-controller.c b/src/c++/task-controller/test/test-task-controller.c
+index 6bbf028..ca482ab 100644
+--- a/src/c++/task-controller/test/test-task-controller.c
++++ b/src/c++/task-controller/test/test-task-controller.c
+@@ -694,7 +694,10 @@ int main(int argc, char **argv) {
+   int my_username = 0;
+ 
+   // clean up any junk from previous run
+-  system("chmod -R u=rwx " TEST_ROOT "; rm -fr " TEST_ROOT);
++  if (system("chmod -R u=rwx " TEST_ROOT "; rm -fr " TEST_ROOT)) {
++    perror("Warning, couldn't clean " TEST_ROOT);
++    // but maybe it just didn't exist, so keep going.
++  }
+   
+   if (mkdirs(TEST_ROOT "/logs/userlogs", 0755) != 0) {
+     exit(1);
+-- 
+1.7.0.4
+

@@ -1,0 +1,45 @@
+From 72b0b791cd347e760807a44f5197599f57afde03 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:23:39 -0800
+Subject: [PATCH 0143/1179] CLOUDERA-BUILD. Make bin/hadoop-config.sh work with dev builds
+
+Author: Eli Collins
+---
+ bin/hadoop-config.sh |   18 ++++++++----------
+ 1 files changed, 8 insertions(+), 10 deletions(-)
+
+diff --git a/bin/hadoop-config.sh b/bin/hadoop-config.sh
+index 9c0e799..2f957a5 100644
+--- a/bin/hadoop-config.sh
++++ b/bin/hadoop-config.sh
+@@ -41,19 +41,17 @@ if [ -z "$HADOOP_HOME" ]; then
+   export HADOOP_HOME=`dirname "$this"`/..
+ fi
+ 
+-# double check that our HADOOP_HOME looks reasonable
++# double check that our HADOOP_HOME looks reasonable.
+ # cding to / here verifies that we have an absolute path, which is
+ # necessary for the daemons to function properly
+-if [ -z $(cd / && ls $HADOOP_HOME/hadoop-*-core.jar 2>/dev/null) ]; then
++if [ -z "$(cd / && ls $HADOOP_HOME/hadoop-*-core.jar $HADOOP_HOME/build 2>/dev/null)" ]; then
+   cat 1>&2 <<EOF
+-+======================================================================+
+-|      Error: HADOOP_HOME is not set and could not be guessed          |
+-+----------------------------------------------------------------------+
+-| This script attempts to find HADOOP_HOME based on its location, but  |
+-| could not locate it. If you have a nonstandard install, please set   |
+-| your HADOOP_HOME variable to the absolute path of the directory that |
+-| contains hadoop-VERSION-core.jar                                     |
+-+======================================================================+
+++================================================================+
++|      Error: HADOOP_HOME is not set correctly                   |
+++----------------------------------------------------------------+
++| Please set your HADOOP_HOME variable to the absolute path of   |
++| the directory that contains hadoop-VERSION-core.jar            |
+++================================================================+
+ EOF
+   exit 1
+ fi
+-- 
+1.7.0.4
+

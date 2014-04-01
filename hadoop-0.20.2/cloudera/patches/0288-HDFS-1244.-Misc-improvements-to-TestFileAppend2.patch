@@ -1,0 +1,233 @@
+From b7f908bc77d9344c36dcc409bbfe92709b98cf88 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 6 May 2010 08:52:18 -0700
+Subject: [PATCH 0288/1179] HDFS-1244. Misc improvements to TestFileAppend2
+
+Description: Improvements made to a test case to enable it to be run
+             from the command line, with the various test parameters
+             available in arguments.
+Reason: Enable long-running stress tests of append functionality.
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ .../org/apache/hadoop/hdfs/TestFileAppend2.java    |  113 +++++++++++++++++---
+ 1 files changed, 96 insertions(+), 17 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileAppend2.java b/src/test/org/apache/hadoop/hdfs/TestFileAppend2.java
+index 0d8b0c6..058db5d 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileAppend2.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileAppend2.java
+@@ -20,8 +20,10 @@ package org.apache.hadoop.hdfs;
+ import java.io.IOException;
+ import java.util.ArrayList;
+ import java.util.Arrays;
++import java.util.concurrent.atomic.AtomicReference;
+ 
+-import junit.framework.TestCase;
++import org.junit.Test;
++import static org.junit.Assert.*;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FSDataInputStream;
+@@ -39,14 +41,23 @@ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.UnixUserGroupInformation;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
++import org.apache.commons.cli.CommandLine;
++import org.apache.commons.cli.CommandLineParser;
++import org.apache.commons.cli.GnuParser;
++import org.apache.commons.cli.HelpFormatter;
++import org.apache.commons.cli.OptionBuilder;
++import org.apache.commons.cli.Options;
++import org.apache.commons.cli.ParseException;
+ import org.apache.commons.logging.impl.Log4JLogger;
+ import org.apache.log4j.Level;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
+ 
+ /**
+  * This class tests the building blocks that are needed to
+  * support HDFS appends.
+  */
+-public class TestFileAppend2 extends TestCase {
++public class TestFileAppend2 {
+ 
+   {
+     ((Log4JLogger)NameNode.stateChangeLog).getLogger().setLevel(Level.ALL);
+@@ -56,6 +67,8 @@ public class TestFileAppend2 extends TestCase {
+     ((Log4JLogger)DFSClient.LOG).getLogger().setLevel(Level.ALL);
+   }
+ 
++  static Log LOG = LogFactory.getLog(TestFileAppend2.class);
++
+   static final int blockSize = 1024;
+   static final int numBlocks = 5;
+   static final int fileSize = numBlocks * blockSize + 1;
+@@ -67,6 +80,7 @@ public class TestFileAppend2 extends TestCase {
+   int numberOfFiles = 50;
+   int numThreads = 10;
+   int numAppendsPerThread = 20;
++  long sleepBetweenSizeChecks = 5000;
+ /***
+   int numberOfFiles = 1;
+   int numThreads = 1;
+@@ -74,7 +88,8 @@ public class TestFileAppend2 extends TestCase {
+ ****/
+   Workload[] workload = null;
+   ArrayList<Path> testFiles = new ArrayList<Path>();
+-  volatile static boolean globalStatus = true;
++  AtomicReference<Throwable> err = new AtomicReference<Throwable>();
++
+ 
+   //
+   // create a buffer that contains the entire test file data.
+@@ -122,6 +137,7 @@ public class TestFileAppend2 extends TestCase {
+    * Reopens the same file for appending, write all blocks and then close.
+    * Verify that all data exists in file.
+    */ 
++  @Test(timeout=200000)
+   public void testSimpleAppend() throws IOException {
+     Configuration conf = new Configuration();
+     if (simulatedStorage) {
+@@ -282,7 +298,7 @@ public class TestFileAppend2 extends TestCase {
+     // create a bunch of files. Write to them and then verify.
+     public void run() {
+       System.out.println("Workload " + id + " starting... ");
+-      for (int i = 0; i < numAppendsPerThread; i++) {
++      for (int i = 0; i < numAppendsPerThread && err.get() == null; i++) {
+    
+         // pick a file at random and remove it from pool
+         Path testfile = null;
+@@ -327,6 +343,7 @@ public class TestFileAppend2 extends TestCase {
+           stm.close();
+ 
+           // wait for the file size to be reflected in the namenode metadata
++          long startWaitTime = System.currentTimeMillis();
+           while (fs.getFileStatus(testfile).getLen() != (len + sizeToAppend)) {
+             try {
+               System.out.println("Workload thread " + id +
+@@ -334,7 +351,11 @@ public class TestFileAppend2 extends TestCase {
+                                  " size " + fs.getFileStatus(testfile).getLen() +
+                                  " expected size " + (len + sizeToAppend) +
+                                  " waiting for namenode metadata update.");
+-              Thread.sleep(5000);
++              Thread.sleep(sleepBetweenSizeChecks);
++              assertTrue("Timed out waiting for len " + (len + sizeToAppend) +
++                " in file " + testfile + " (cur len is " +
++                fs.getFileStatus(testfile).getLen() + ")",
++                System.currentTimeMillis() - startWaitTime < 60000);
+             } catch (InterruptedException e) { 
+             }
+           }
+@@ -346,16 +367,10 @@ public class TestFileAppend2 extends TestCase {
+ 
+           checkFile(fs, testfile, (int)(len + sizeToAppend));
+         } catch (Throwable e) {
+-          globalStatus = false;
+-          if (e != null && e.toString() != null) {
+-            System.out.println("Workload exception " + id + 
+-                               " testfile " + testfile +
+-                               " " + e);
+-            e.printStackTrace();
+-          }
+-          assertTrue("Workload exception " + id + " testfile " + testfile +
+-                     " expected size " + (len + sizeToAppend),
+-                     false);
++          err.compareAndSet(null, e);
++          LOG.error("Workload exception " + id + " testfile " + testfile +
++                     " expected size " + (len + sizeToAppend), e);
++          return;
+         }
+ 
+         // Add testfile back to the pool of files.
+@@ -369,7 +384,8 @@ public class TestFileAppend2 extends TestCase {
+   /**
+    * Test that appends to files at random offsets.
+    */
+-  public void testComplexAppend() throws IOException {
++  @Test
++  public void testComplexAppend() throws Throwable {
+     initBuffer(fileSize);
+     Configuration conf = new Configuration();
+     conf.setInt("heartbeat.recheck.interval", 2000);
+@@ -401,6 +417,7 @@ public class TestFileAppend2 extends TestCase {
+       workload = new Workload[numThreads];
+       for (int i = 0; i < numThreads; i++) {
+         workload[i] = new Workload(cluster, i);
++        workload[i].setDaemon(true);
+         workload[i].start();
+       }
+ 
+@@ -422,6 +439,68 @@ public class TestFileAppend2 extends TestCase {
+     // If any of the worker thread failed in their job, indicate that
+     // this test failed.
+     //
+-    assertTrue("testComplexAppend Worker encountered exceptions.", globalStatus);
++    if (err.get() != null) {
++      throw err.get();
++    }
++  }
++  
++  public static final String OPT_NUM_DNS = "numDataNodes";
++  public static final String OPT_NUM_FILES = "numFiles";
++  public static final String OPT_NUM_THREADS = "numThreads";
++  public static final String OPT_NUM_APPENDS = "appendsPerThread";
++
++  @SuppressWarnings("static-access")
++  public static void main(String []args) throws Throwable {
++    Options options = new Options();
++    options.addOption(OptionBuilder
++      .withLongOpt(OPT_NUM_DNS).hasArg()
++      .withDescription("Number of DNs to start")
++      .create());
++    options.addOption(OptionBuilder
++        .withLongOpt(OPT_NUM_THREADS).hasArg()
++        .withDescription("number of threads to append from")
++        .create());
++    options.addOption(OptionBuilder
++        .withLongOpt(OPT_NUM_FILES).hasArg()
++        .withDescription("number of files to append to")
++        .create());
++    options.addOption(OptionBuilder
++        .withLongOpt(OPT_NUM_APPENDS).hasArg()
++        .withDescription("number of appends per thread")
++        .create());
++    CommandLineParser parser = new GnuParser();
++    CommandLine line;
++    try {
++      line = parser.parse( options, args );
++      if (line.getArgs().length != 0) {
++        throw new ParseException("Unexpected options");
++      }
++    } catch (ParseException pe) {
++      HelpFormatter formatter = new HelpFormatter();
++      formatter.printHelp("TestFileAppend2", options);
++      throw pe;
++    }
++            
++    TestFileAppend2 tfa2 = new TestFileAppend2();
++    tfa2.numDatanodes = Integer.parseInt(
++        line.getOptionValue(OPT_NUM_DNS, "1"));
++    tfa2.numThreads = Integer.parseInt(
++        line.getOptionValue(OPT_NUM_THREADS, "30"));
++    tfa2.numberOfFiles = Integer.parseInt(
++        line.getOptionValue(OPT_NUM_FILES, "1"));
++    tfa2.numAppendsPerThread = Integer.parseInt(
++        line.getOptionValue(OPT_NUM_APPENDS, "1000"));
++    
++    // Make workload more aggressive
++    tfa2.sleepBetweenSizeChecks = 10;
++   
++    try {
++      tfa2.testComplexAppend();
++    } catch (Throwable t) {
++      LOG.error("FAILED", t);
++      System.exit(1);
++    }
++    // Something doesn't shut down right about the minicluster
++    System.exit(0);
+   }
+ }
+-- 
+1.7.0.4
+

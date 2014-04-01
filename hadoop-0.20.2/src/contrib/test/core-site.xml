@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Values used when running unit tests.  This is mostly empty, to -->
+<!-- use of the default values, overriding the potentially -->
+<!-- user-editted core-site.xml in the conf/ directory.  -->
+
+<configuration>
+
+<property>
+  <name>hadoop.tmp.dir</name>
+  <value>${build.test}</value>
+  <description>A base for other temporary directories.</description>
+</property>
+
+</configuration>

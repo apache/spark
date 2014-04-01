@@ -1,0 +1,57 @@
+From ec1f09b887a729a7682047248c624a42584d7233 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 16 Nov 2009 19:35:16 +0000
+Subject: [PATCH 0388/1179] HADOOP-5675. DistCp should not launch a job if it is not necessary
+
+Patch: https://issues.apache.org/jira/secure/attachment/12406687/5675_20090428.patch
+Author: Tsz Wo (Nicholas), SZE
+Ref: YDH
+---
+ src/tools/org/apache/hadoop/tools/DistCp.java |   13 +++++++++----
+ 1 files changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/src/tools/org/apache/hadoop/tools/DistCp.java b/src/tools/org/apache/hadoop/tools/DistCp.java
+index 8a4e415..886970e 100644
+--- a/src/tools/org/apache/hadoop/tools/DistCp.java
++++ b/src/tools/org/apache/hadoop/tools/DistCp.java
+@@ -647,8 +647,9 @@ public class DistCp implements Tool {
+     
+     //Initialize the mapper
+     try {
+-      setup(conf, job, args);
+-      JobClient.runJob(job);
++      if (setup(conf, job, args)) {
++        JobClient.runJob(job);
++      }
+       finalize(conf, job, args.dst, args.preservedAttributes);
+     } finally {
+       //delete tmp
+@@ -971,8 +972,9 @@ public class DistCp implements Tool {
+    * @param conf : The dfs/mapred configuration.
+    * @param jobConf : The handle to the jobConf object to be initialized.
+    * @param args Arguments
++   * @return true if it is necessary to launch a job.
+    */
+-  private static void setup(Configuration conf, JobConf jobConf,
++  private static boolean setup(Configuration conf, JobConf jobConf,
+                             final Arguments args)
+       throws IOException {
+     jobConf.set(DST_DIR_LABEL, args.dst.toUri().toString());
+@@ -1155,10 +1157,13 @@ public class DistCp implements Tool {
+     // up by fullyDelete() later.
+     tmpDir.getFileSystem(conf).mkdirs(tmpDir);
+ 
+-    LOG.info("srcCount=" + srcCount);
++    LOG.info("sourcePathsCount=" + srcCount);
++    LOG.info("filesToCopyCount=" + fileCount);
++    LOG.info("bytesToCopyCount=" + StringUtils.humanReadableInt(byteCount));
+     jobConf.setInt(SRC_COUNT_LABEL, srcCount);
+     jobConf.setLong(TOTAL_SIZE_LABEL, byteCount);
+     setMapCount(byteCount, jobConf);
++    return fileCount > 0;
+   }
+ 
+   /**
+-- 
+1.7.0.4
+

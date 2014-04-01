@@ -1,0 +1,29 @@
+From 6e99c7e2a12eea782629337f5fb5734e8e5e5865 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@lipcon.org>
+Date: Wed, 2 Jun 2010 22:32:45 -0700
+Subject: [PATCH 0298/1179] HDFS-1210. DFSClient should print IOE that caused recovery failure
+
+Description: Adds an extra WARN message during DFS client error recovery
+Reason: Makes it easier to debug/diagnose recovery issues
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 611374e..1d78f02 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -2628,6 +2628,8 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+           primary = createClientDatanodeProtocolProxy(primaryNode, conf);
+           newBlock = primary.recoverBlock(block, isAppend, newnodes);
+         } catch (IOException e) {
++          LOG.warn("Failed recovery attempt #" + recoveryErrorCount +
++              " from primary datanode " + primaryNode, e);
+           recoveryErrorCount++;
+           if (recoveryErrorCount > maxRecoveryErrorCount) {
+             if (nodes.length > 1) {
+-- 
+1.7.0.4
+

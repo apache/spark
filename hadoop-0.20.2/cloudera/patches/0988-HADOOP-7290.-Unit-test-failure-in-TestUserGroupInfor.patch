@@ -1,0 +1,49 @@
+From c216ea863bcca97efc8220bf1a7507bcd4b12ca5 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 28 Jun 2011 17:35:32 -0700
+Subject: [PATCH 0988/1179] HADOOP-7290. Unit test failure in TestUserGroupInformation.
+
+Reason: Bug
+Author: Eli Collins
+Ref: DISTRO-266
+---
+ .../hadoop/security/TestUserGroupInformation.java  |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+index f383912..bbeda64 100644
+--- a/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
++++ b/src/test/org/apache/hadoop/security/TestUserGroupInformation.java
+@@ -25,9 +25,9 @@ import java.io.BufferedReader;
+ import java.io.IOException;
+ import java.io.InputStreamReader;
+ import java.security.PrivilegedExceptionAction;
+-import java.util.ArrayList;
+ import java.util.Collection;
+-import java.util.List;
++import java.util.LinkedHashSet;
++import java.util.Set;
+ 
+ import javax.security.auth.Subject;
+ import javax.security.auth.login.AppConfigurationEntry;
+@@ -81,7 +81,7 @@ public class TestUserGroupInformation {
+     String line = br.readLine();
+     System.out.println(userName + ":" + line);
+    
+-    List<String> groups = new ArrayList<String> ();    
++    Set<String> groups = new LinkedHashSet<String> ();    
+     for(String s: line.split("[\\s]")) {
+       groups.add(s);
+     }
+@@ -91,7 +91,7 @@ public class TestUserGroupInformation {
+     String[] gi = login.getGroupNames();
+     assertEquals(groups.size(), gi.length);
+     for(int i=0; i < gi.length; i++) {
+-      assertEquals(groups.get(i), gi[i]);
++      assertTrue(groups.contains(gi[i]));
+     }
+     
+     final UserGroupInformation fakeUser = 
+-- 
+1.7.0.4
+

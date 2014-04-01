@@ -1,0 +1,44 @@
+From 9b72d268a0b590b4fd7d13aca17c1c453f8bc957 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 27 Jun 2010 18:42:45 -0700
+Subject: [PATCH 0320/1179] CLOUDERA-BUILD. Make symlinks so old hadoop jar names are preserved (CDH-1543).
+
+---
+ cloudera/install_hadoop.sh |   16 +++++++++++++---
+ 1 files changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index ae65ae6..04426cc 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -1,4 +1,4 @@
+-#!/bin/sh -x
++#!/bin/bash -x
+ # Copyright 2009 Cloudera, inc.
+ 
+ set -ex
+@@ -111,9 +111,19 @@ INSTALLED_LIB_DIR=${INSTALLED_LIB_DIR:-/usr/lib/hadoop-$APACHE_BRANCH}
+ HADOOP_SRC_DIR=$BUILD_DIR/../../src
+ 
+ mkdir -p $LIB_DIR
+-(cd ${BUILD_DIR} && tar cf - .) | (cd $LIB_DIR && tar xf - )
+-# Take out things we've installed elsewhere
++(cd $BUILD_DIR && tar cf - .) | (cd $LIB_DIR && tar xf - )
++
++# Create symlinks to preserve old jar names
++(cd $LIB_DIR &&
++for j in hadoop-*.jar; do
++  if [[ $j =~ hadoop-([a-zA-Z]+)-([0-9+\.-]+).jar ]]; then
++    name=${BASH_REMATCH[1]}
++    ver=${BASH_REMATCH[2]}
++    ln -s hadoop-$name-$ver.jar hadoop-$ver-$name.jar
++  fi
++done)
+ 
++# Take out things we've installed elsewhere
+ for x in docs lib/native c++ src conf usr/bin/fuse_dfs contrib/fuse ; do
+   rm -rf $LIB_DIR/$x 
+ done
+-- 
+1.7.0.4
+

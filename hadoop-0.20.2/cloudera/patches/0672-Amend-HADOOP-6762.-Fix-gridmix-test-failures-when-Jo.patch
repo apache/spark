@@ -1,0 +1,28 @@
+From ab1f3a96c00e2eb53569c1ba682d73ed10bfb4b5 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 25 Aug 2010 11:33:35 -0700
+Subject: [PATCH 0672/1179] Amend HADOOP-6762. Fix gridmix test failures when JobMonitor RPC is interrupted
+
+Reason: HADOOP-6762 added a new exception cause when outbound RPCs are Interrupted.
+        This patch fixes gridmix to be aware of InterruptedExceptions.
+---
+ .../apache/hadoop/mapred/gridmix/JobMonitor.java   |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobMonitor.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobMonitor.java
+index c55e46e..53820ca 100644
+--- a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobMonitor.java
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/JobMonitor.java
+@@ -177,7 +177,8 @@ class JobMonitor implements Gridmix.Component<Job> {
+                 continue;
+               }
+             } catch (IOException e) {
+-              if (e.getCause() instanceof ClosedByInterruptException) {
++              if (e.getCause() instanceof ClosedByInterruptException ||
++                  e.getCause() instanceof InterruptedException) {
+                 // Job doesn't throw InterruptedException, but RPC socket layer
+                 // is blocking and may throw a wrapped Exception if this thread
+                 // is interrupted. Since the lower level cleared the flag,
+-- 
+1.7.0.4
+

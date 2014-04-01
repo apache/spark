@@ -1,0 +1,567 @@
+From 06b43c680556c94120774e2c22279086654f50ee Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sat, 27 Feb 2010 15:03:15 +0530
+Subject: [PATCH 0515/1179] HADOOP-6568. Authorization for default servlets
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437323/HADOOP-6568-20100226.1-ydist.patch
+Author: Vinod K V
+Ref: CDH-648
+---
+ src/core/core-default.xml                          |   10 +
+ .../apache/hadoop/fs/CommonConfigurationKeys.java  |    7 +
+ .../apache/hadoop/http/AdminAuthorizedServlet.java |   46 +++++
+ src/core/org/apache/hadoop/http/HttpServer.java    |   75 ++++++++-
+ src/core/org/apache/hadoop/ipc/Server.java         |    4 +-
+ src/core/org/apache/hadoop/log/LogLevel.java       |    8 +
+ .../authorize/ServiceAuthorizationManager.java     |    5 +
+ .../org/apache/hadoop/http/TestHttpServer.java     |  173 ++++++++++++++++++++
+ src/test/org/apache/hadoop/ipc/TestRPC.java        |    5 +-
+ 9 files changed, 325 insertions(+), 8 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/http/AdminAuthorizedServlet.java
+
+diff --git a/src/core/core-default.xml b/src/core/core-default.xml
+index 43e54dc..6b993f9 100644
+--- a/src/core/core-default.xml
++++ b/src/core/core-default.xml
+@@ -32,6 +32,16 @@
+ </property>
+ 
+ <property>
++  <name>hadoop.cluster.administrators</name>
++  <value>${user.name}</value>
++  <description>Users and/or groups who are designated as the administrators of a
++  hadoop cluster. For specifying a list of users and groups the format to use
++  is "user1,user2 group1,group2". If set to '*', it allows all users/groups to
++  do administrative operations of the cluster. If set to '', it allows none.
++  </description>
++</property>
++
++<property>
+   <name>hadoop.security.authorization</name>
+   <value>false</value>
+   <description>Is service-level authorization enabled?</description>
+diff --git a/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java b/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
+index e887231..7a1dc50 100644
+--- a/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
++++ b/src/core/org/apache/hadoop/fs/CommonConfigurationKeys.java
+@@ -129,5 +129,12 @@ public class CommonConfigurationKeys {
+   public static final String  HADOOP_SECURITY_GROUP_MAPPING = "hadoop.security.group.mapping";
+   public static final String  HADOOP_SECURITY_GROUPS_CACHE_SECS = "hadoop.security.groups.cache.secs";
+   public static final String  HADOOP_SECURITY_AUTHENTICATION = "hadoop.security.authentication";
++  public static final String HADOOP_SECURITY_AUTHORIZATION =
++      "hadoop.security.authorization";
++  /**
++   * ACL denoting the administrator ACLs for a hadoop cluster.
++   */
++  public final static String HADOOP_CLUSTER_ADMINISTRATORS_PROPERTY =
++      "hadoop.cluster.administrators";
+ }
+ 
+diff --git a/src/core/org/apache/hadoop/http/AdminAuthorizedServlet.java b/src/core/org/apache/hadoop/http/AdminAuthorizedServlet.java
+new file mode 100644
+index 0000000..9e318ae
+--- /dev/null
++++ b/src/core/org/apache/hadoop/http/AdminAuthorizedServlet.java
+@@ -0,0 +1,46 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.http;
++
++import java.io.IOException;
++
++import javax.servlet.ServletException;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++
++import org.mortbay.jetty.servlet.DefaultServlet;
++
++/**
++ * General servlet which is admin-authorized.
++ *
++ */
++public class AdminAuthorizedServlet extends DefaultServlet {
++
++  private static final long serialVersionUID = 1L;
++
++  @Override
++  protected void doGet(HttpServletRequest request, HttpServletResponse response)
++ throws ServletException, IOException {
++    // Do the authorization
++    if (HttpServer.hasAdministratorAccess(getServletContext(), request,
++        response)) {
++      // Authorization is done. Just call super.
++      super.doGet(request, response);
++    }
++  }
++}
+diff --git a/src/core/org/apache/hadoop/http/HttpServer.java b/src/core/org/apache/hadoop/http/HttpServer.java
+index 9f06b9b..bc4dd00 100644
+--- a/src/core/org/apache/hadoop/http/HttpServer.java
++++ b/src/core/org/apache/hadoop/http/HttpServer.java
+@@ -27,11 +27,11 @@ import java.util.Enumeration;
+ import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
+-import java.util.Random;
+ 
+ import javax.servlet.Filter;
+ import javax.servlet.FilterChain;
+ import javax.servlet.FilterConfig;
++import javax.servlet.ServletContext;
+ import javax.servlet.ServletException;
+ import javax.servlet.ServletRequest;
+ import javax.servlet.ServletResponse;
+@@ -45,7 +45,10 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.log.LogLevel;
+ import org.apache.hadoop.metrics.MetricsServlet;
++import org.apache.hadoop.security.UserGroupInformation;
++import org.apache.hadoop.security.authorize.AccessControlList;
+ import org.apache.hadoop.util.ReflectionUtils;
++import org.apache.hadoop.fs.CommonConfigurationKeys;
+ 
+ import org.mortbay.jetty.Connector;
+ import org.mortbay.jetty.Handler;
+@@ -77,6 +80,10 @@ public class HttpServer implements FilterContainer {
+   static final String FILTER_INITIALIZER_PROPERTY
+       = "hadoop.http.filter.initializers";
+ 
++  // The ServletContext attribute where the daemon Configuration
++  // gets stored.
++  static final String CONF_CONTEXT_ATTRIBUTE = "hadoop.conf";
++
+   protected final Server webServer;
+   protected final Connector listener;
+   protected final WebAppContext webAppContext;
+@@ -85,6 +92,7 @@ public class HttpServer implements FilterContainer {
+       new HashMap<Context, Boolean>();
+   protected final List<String> filterNames = new ArrayList<String>();
+   private static final int MAX_RETRIES = 10;
++  private final Configuration conf;
+ 
+   /** Same as this(name, bindAddress, port, findPort, null); */
+   public HttpServer(String name, String bindAddress, int port, boolean findPort
+@@ -105,6 +113,7 @@ public class HttpServer implements FilterContainer {
+       boolean findPort, Configuration conf) throws IOException {
+     webServer = new Server();
+     this.findPort = findPort;
++    this.conf = conf;
+ 
+     listener = createBaseListener(conf);
+     listener.setHost(bindAddress);
+@@ -118,12 +127,14 @@ public class HttpServer implements FilterContainer {
+     webServer.setHandler(contexts);
+ 
+     webAppContext = new WebAppContext();
++    webAppContext.setDisplayName("WepAppsContext");
+     webAppContext.setContextPath("/");
+     webAppContext.setWar(appDir + "/" + name);
++    webAppContext.getServletContext().setAttribute(CONF_CONTEXT_ATTRIBUTE, conf);
+     webServer.addHandler(webAppContext);
+ 
+     addDefaultApps(contexts, appDir);
+-
++    
+     addGlobalFilter("safety", QuotingInputFilter.class.getName(), null);
+     final FilterInitializer[] initializers = getFilterInitializers(conf); 
+     if (initializers != null) {
+@@ -180,13 +191,17 @@ public class HttpServer implements FilterContainer {
+     if (logDir != null) {
+       Context logContext = new Context(parent, "/logs");
+       logContext.setResourceBase(logDir);
+-      logContext.addServlet(DefaultServlet.class, "/");
++      logContext.addServlet(AdminAuthorizedServlet.class, "/");
++      logContext.setDisplayName("logs");
++      logContext.getServletContext().setAttribute(CONF_CONTEXT_ATTRIBUTE, conf);
+       defaultContexts.put(logContext, true);
+     }
+     // set up the context for "/static/*"
+     Context staticContext = new Context(parent, "/static");
+     staticContext.setResourceBase(appDir + "/static");
+     staticContext.addServlet(DefaultServlet.class, "/*");
++    staticContext.setDisplayName("static");
++    staticContext.getServletContext().setAttribute(CONF_CONTEXT_ATTRIBUTE, conf);
+     defaultContexts.put(staticContext, true);
+   }
+   
+@@ -268,6 +283,8 @@ public class HttpServer implements FilterContainer {
+ 
+     final String[] USER_FACING_URLS = { "*.html", "*.jsp" };
+     defineFilter(webAppContext, name, classname, parameters, USER_FACING_URLS);
++    LOG.info("Added filter " + name + " (class=" + classname
++        + ") to context " + webAppContext.getDisplayName());
+     final String[] ALL_URLS = { "/*" };
+     for (Map.Entry<Context, Boolean> e : defaultContexts.entrySet()) {
+       if (e.getValue()) {
+@@ -532,6 +549,50 @@ public class HttpServer implements FilterContainer {
+   }
+ 
+   /**
++   * Does the user sending the HttpServletRequest has the administrator ACLs? If
++   * it isn't the case, response will be modified to send an error to the user.
++   * 
++   * @param servletContext
++   * @param request
++   * @param response
++   * @return true if admin-authorized, false otherwise
++   * @throws IOException
++   */
++  public static boolean hasAdministratorAccess(
++      ServletContext servletContext, HttpServletRequest request,
++      HttpServletResponse response) throws IOException {
++    Configuration conf =
++        (Configuration) servletContext.getAttribute(CONF_CONTEXT_ATTRIBUTE);
++
++    // If there is no authorization, anybody has administrator access.
++    if (!conf.getBoolean(
++        CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, false)) {
++      return true;
++    }
++
++    String remoteUser = request.getRemoteUser();
++    if (remoteUser == null) {
++      return true;
++    }
++
++    String adminsAclString =
++        conf.get(
++            CommonConfigurationKeys.HADOOP_CLUSTER_ADMINISTRATORS_PROPERTY,
++            "*");
++    AccessControlList adminsAcl = new AccessControlList(adminsAclString);
++    UserGroupInformation remoteUserUGI =
++        UserGroupInformation.createRemoteUser(remoteUser);
++    if (!adminsAcl.isUserAllowed(remoteUserUGI)) {
++      response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "User "
++          + remoteUser + " is unauthorized to access this page. "
++          + "Only superusers/supergroup \"" + adminsAclString
++          + "\" can access this page.");
++      return false;
++    }
++    return true;
++  }
++
++  /**
+    * A very simple servlet to serve up a text representation of the current
+    * stack traces. It both returns the stacks to the caller and logs them.
+    * Currently the stack traces are done sequentially rather than exactly the
+@@ -543,7 +604,13 @@ public class HttpServer implements FilterContainer {
+     @Override
+     public void doGet(HttpServletRequest request, HttpServletResponse response)
+       throws ServletException, IOException {
+-      
++
++      // Do the authorization
++      if (!HttpServer.hasAdministratorAccess(getServletContext(), request,
++          response)) {
++        return;
++      }
++
+       PrintWriter out = new PrintWriter
+                     (HtmlQuoting.quoteOutputStream(response.getOutputStream()));
+       ReflectionUtils.printThreadInfo(out, "");
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 5805f22..bbdaa19 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -61,6 +61,7 @@ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.io.BytesWritable;
+ import org.apache.hadoop.io.IntWritable;
++import static org.apache.hadoop.fs.CommonConfigurationKeys.*;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.io.WritableUtils;
+ import org.apache.hadoop.ipc.metrics.RpcDetailedMetrics;
+@@ -1348,8 +1349,7 @@ public abstract class Server {
+     this.thresholdIdleConnections = conf.getInt("ipc.client.idlethreshold", 4000);
+     this.secretManager = (SecretManager<TokenIdentifier>) secretManager;
+     this.authorize = 
+-      conf.getBoolean(ServiceAuthorizationManager.SERVICE_AUTHORIZATION_CONFIG, 
+-                      false);
++      conf.getBoolean(HADOOP_SECURITY_AUTHORIZATION, false);
+     this.isSecurityEnabled = UserGroupInformation.isSecurityEnabled();
+     
+     // Start the listener here and let it bind to the port
+diff --git a/src/core/org/apache/hadoop/log/LogLevel.java b/src/core/org/apache/hadoop/log/LogLevel.java
+index 99fd3d0..389c9ce 100644
+--- a/src/core/org/apache/hadoop/log/LogLevel.java
++++ b/src/core/org/apache/hadoop/log/LogLevel.java
+@@ -26,6 +26,7 @@ import javax.servlet.http.*;
+ 
+ import org.apache.commons.logging.*;
+ import org.apache.commons.logging.impl.*;
++import org.apache.hadoop.http.HttpServer;
+ import org.apache.hadoop.util.ServletUtil;
+ 
+ /**
+@@ -86,6 +87,13 @@ public class LogLevel {
+ 
+     public void doGet(HttpServletRequest request, HttpServletResponse response
+         ) throws ServletException, IOException {
++
++      // Do the authorization
++      if (!HttpServer.hasAdministratorAccess(getServletContext(), request,
++          response)) {
++        return;
++      }
++
+       PrintWriter out = ServletUtil.initHTML(response, "Log Level");
+       String logName = ServletUtil.getParameter(request, "log");
+       String level = ServletUtil.getParameter(request, "level");
+diff --git a/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java b/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
+index 6bed847..dac8f3b 100644
+--- a/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
++++ b/src/core/org/apache/hadoop/security/authorize/ServiceAuthorizationManager.java
+@@ -38,7 +38,12 @@ public class ServiceAuthorizationManager {
+   
+   /**
+    * Configuration key for controlling service-level authorization for Hadoop.
++   * 
++   * @deprecated Use
++   *             {@link CommonConfigurationKeys#HADOOP_SECURITY_AUTHORIZATION}
++   *             Instead.
+    */
++  @Deprecated
+   public static final String SERVICE_AUTHORIZATION_CONFIG = 
+     "hadoop.security.authorization";
+   
+diff --git a/src/test/org/apache/hadoop/http/TestHttpServer.java b/src/test/org/apache/hadoop/http/TestHttpServer.java
+index 55cc92d..d657f8a 100644
+--- a/src/test/org/apache/hadoop/http/TestHttpServer.java
++++ b/src/test/org/apache/hadoop/http/TestHttpServer.java
+@@ -23,17 +23,33 @@ import java.io.File;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.io.PrintStream;
++import java.net.HttpURLConnection;
+ import java.net.URL;
++import java.util.Arrays;
+ import java.util.Enumeration;
++import java.util.HashMap;
++import java.util.List;
+ import java.util.Map;
+ import java.util.SortedSet;
+ import java.util.TreeSet;
+ 
++import javax.servlet.Filter;
++import javax.servlet.FilterChain;
++import javax.servlet.FilterConfig;
+ import javax.servlet.ServletException;
++import javax.servlet.ServletRequest;
++import javax.servlet.ServletResponse;
+ import javax.servlet.http.HttpServlet;
+ import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletRequestWrapper;
+ import javax.servlet.http.HttpServletResponse;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.CommonConfigurationKeys;
++import org.apache.hadoop.security.Groups;
++import org.apache.hadoop.security.ShellBasedUnixGroupsMapping;
+ import org.junit.After;
+ import org.junit.Before;
+ import org.junit.Test;
+@@ -134,4 +150,161 @@ public class TestHttpServer {
+                  readOutput(new URL(baseUrl, "/echomap?a=b&c<=d&a=>")));
+   }
+ 
++  /**
++   * Dummy filter that mimics as an authentication filter. Obtains user identity
++   * from the request parameter user.name. Wraps around the request so that
++   * request.getRemoteUser() returns the user identity.
++   * 
++   */
++  public static class DummyServletFilter implements Filter {
++
++    private static final Log LOG = LogFactory.getLog(
++        DummyServletFilter.class);
++    @Override
++    public void destroy() { }
++
++    @Override
++    public void doFilter(ServletRequest request, ServletResponse response,
++        FilterChain filterChain) throws IOException, ServletException {
++      final String userName = request.getParameter("user.name");
++      ServletRequest requestModified =
++        new HttpServletRequestWrapper((HttpServletRequest) request) {
++        @Override
++        public String getRemoteUser() {
++          return userName;
++        }
++      };
++      filterChain.doFilter(requestModified, response);
++    }
++
++    @Override
++    public void init(FilterConfig arg0) throws ServletException { }
++  }
++
++  /**
++   * FilterInitializer that initialized the DummyFilter.
++   *
++   */
++  public static class DummyFilterInitializer extends FilterInitializer {
++    public DummyFilterInitializer() {
++    }
++
++    @Override
++    public void initFilter(FilterContainer container, Configuration conf) {
++      container.addFilter("DummyFilter", DummyServletFilter.class.getName(), null);
++    }
++  }
++
++  /**
++   * Access a URL and get the corresponding return Http status code. The URL
++   * will be accessed as the passed user, by sending user.name request
++   * parameter.
++   * 
++   * @param urlstring
++   * @param userName
++   * @return
++   * @throws IOException
++   */
++  static int getHttpStatusCode(String urlstring, String userName)
++      throws IOException {
++    URL url = new URL(urlstring + "?user.name=" + userName);
++    System.out.println("Accessing " + url + " as user " + userName);
++    HttpURLConnection connection = (HttpURLConnection)url.openConnection();
++    connection.connect();
++    return connection.getResponseCode();
++  }
++
++  /**
++   * Custom user->group mapping service.
++   */
++  public static class MyGroupsProvider extends ShellBasedUnixGroupsMapping {
++    static Map<String, List<String>> mapping = new HashMap<String, List<String>>();
++
++    static void clearMapping() {
++      mapping.clear();
++    }
++
++    @Override
++    public List<String> getGroups(String user) throws IOException {
++      return mapping.get(user);
++    }
++  }
++
++  /**
++   * Verify the access for /logs, /stacks, /conf, /logLevel and /metrics
++   * servlets, when authentication filters are set, but authorization is not
++   * enabled.
++   * @throws Exception 
++   */
++  @Test
++  public void testDisabledAuthorizationOfDefaultServlets() throws Exception {
++
++    Configuration conf = new Configuration();
++
++    // Authorization is disabled by default
++    conf.set(HttpServer.FILTER_INITIALIZER_PROPERTY,
++        DummyFilterInitializer.class.getName());
++    conf.set(CommonConfigurationKeys.HADOOP_SECURITY_GROUP_MAPPING,
++        MyGroupsProvider.class.getName());
++    Groups.getUserToGroupsMappingService(conf);
++    MyGroupsProvider.clearMapping();
++    MyGroupsProvider.mapping.put("userA", Arrays.asList("groupA"));
++    MyGroupsProvider.mapping.put("userB", Arrays.asList("groupB"));
++
++    HttpServer myServer = new HttpServer("test", "0.0.0.0", 0, true, conf);
++    myServer.setAttribute(HttpServer.CONF_CONTEXT_ATTRIBUTE, conf);
++    myServer.start();
++    int port = myServer.getPort();
++    String serverURL = "http://localhost:" + port + "/";
++    for (String servlet : new String[] { "logs", "stacks", "logLevel" }) {
++      for (String user : new String[] { "userA", "userB" }) {
++        assertEquals(HttpURLConnection.HTTP_OK, getHttpStatusCode(serverURL
++            + servlet, user));
++      }
++    }
++    myServer.stop();
++  }
++
++  /**
++   * Verify the administrator access for /logs, /stacks, /conf, /logLevel and
++   * /metrics servlets.
++   * 
++   * @throws Exception
++   */
++  @Test
++  public void testAuthorizationOfDefaultServlets() throws Exception {
++    Configuration conf = new Configuration();
++    conf.setBoolean(CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION,
++        true);
++    conf.set(
++        CommonConfigurationKeys.HADOOP_CLUSTER_ADMINISTRATORS_PROPERTY,
++        "userA,userB groupC,groupD");
++    conf.set(HttpServer.FILTER_INITIALIZER_PROPERTY,
++        DummyFilterInitializer.class.getName());
++
++    conf.set(CommonConfigurationKeys.HADOOP_SECURITY_GROUP_MAPPING,
++        MyGroupsProvider.class.getName());
++    Groups.getUserToGroupsMappingService(conf);
++    MyGroupsProvider.clearMapping();
++    MyGroupsProvider.mapping.put("userA", Arrays.asList("groupA"));
++    MyGroupsProvider.mapping.put("userB", Arrays.asList("groupB"));
++    MyGroupsProvider.mapping.put("userC", Arrays.asList("groupC"));
++    MyGroupsProvider.mapping.put("userD", Arrays.asList("groupD"));
++    MyGroupsProvider.mapping.put("userE", Arrays.asList("groupE"));
++
++    HttpServer myServer = new HttpServer("test", "0.0.0.0", 0, true, conf);
++    myServer.setAttribute(HttpServer.CONF_CONTEXT_ATTRIBUTE, conf);
++    myServer.start();
++    int port = myServer.getPort();
++    String serverURL = "http://localhost:" + port + "/";
++    for (String servlet : new String[] { "logs", "stacks", "logLevel" }) {
++      for (String user : new String[] { "userA", "userB", "userC", "userD" }) {
++        assertEquals(HttpURLConnection.HTTP_OK, getHttpStatusCode(serverURL
++            + servlet, user));
++      }
++      assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED, getHttpStatusCode(
++          serverURL + servlet, "userE"));
++    }
++    myServer.stop();
++  }
+ }
+diff --git a/src/test/org/apache/hadoop/ipc/TestRPC.java b/src/test/org/apache/hadoop/ipc/TestRPC.java
+index d808a7e..dc1ada6 100644
+--- a/src/test/org/apache/hadoop/ipc/TestRPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestRPC.java
+@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
+ import org.apache.commons.logging.*;
+ 
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.CommonConfigurationKeys;
+ import org.apache.hadoop.io.UTF8;
+ import org.apache.hadoop.io.Writable;
+ 
+@@ -414,8 +415,8 @@ public class TestRPC extends TestCase {
+   
+   public void testAuthorization() throws Exception {
+     Configuration conf = new Configuration();
+-    conf.setBoolean(
+-        ServiceAuthorizationManager.SERVICE_AUTHORIZATION_CONFIG, true);
++    conf.setBoolean(CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION,
++        true);
+     
+     // Expect to succeed
+     conf.set(ACL_CONFIG, "*");
+-- 
+1.7.0.4
+

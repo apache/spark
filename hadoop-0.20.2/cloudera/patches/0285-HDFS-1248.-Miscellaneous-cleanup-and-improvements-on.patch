@@ -1,0 +1,212 @@
+From 77ac4f46fb5c011b5ac7c5fedb4c51b31580c9ba Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@lipcon.org>
+Date: Tue, 15 Jun 2010 18:33:58 -0700
+Subject: [PATCH 0285/1179] HDFS-1248. Miscellaneous cleanup and improvements on 0.20 append branch
+
+Description: Miscellaneous code cleanup and logging changes, including:
+ - Slight cleanup to recoverFile() function in TestFileAppend4
+ - Improve error messages on OP_READ_BLOCK
+ - Some comment cleanup in FSNamesystem
+ - Remove toInodeUnderConstruction (was not used)
+ - Add some checks for null blocks in FSNamesystem to avoid a possible NPE
+ - Only log "inconsistent size" warnings at WARN level for non-under-construction blocks.
+ - Redundant addStoredBlock calls are also not worthy of WARN level
+ - Add some extra information to a warning in ReplicationTargetChooser
+Reason: Improves diagnosis of error cases and clarity of code
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ src/core/org/apache/hadoop/util/StringUtils.java   |   21 +++++++++++++++++
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |    4 ++-
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   24 +++++++++++++++++--
+ .../hadoop/hdfs/server/namenode/INodeFile.java     |   12 ----------
+ .../namenode/INodeFileUnderConstruction.java       |    3 +-
+ .../server/namenode/ReplicationTargetChooser.java  |    5 +++-
+ .../org/apache/hadoop/hdfs/TestFileAppend4.java    |    9 +------
+ 7 files changed, 52 insertions(+), 26 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/util/StringUtils.java b/src/core/org/apache/hadoop/util/StringUtils.java
+index 32a7344..4c11b2b 100644
+--- a/src/core/org/apache/hadoop/util/StringUtils.java
++++ b/src/core/org/apache/hadoop/util/StringUtils.java
+@@ -728,5 +728,26 @@ public class StringUtils {
+     }
+     return sb.toString();
+   }
++  
++  /**
++   * Concatenates stringified objects, using a separator.
++   *
++   * @param separator Separator to join with.
++   * @param objects Objects to join.
++   */
++  public static String joinObjects(
++	  CharSequence separator, Iterable<? extends Object> objects) {
++    StringBuffer sb = new StringBuffer();
++    boolean first = true;
++    for (Object o : objects) {
++      if (first) {
++        first = false;
++      } else {
++        sb.append(separator);
++      }
++      sb.append(String.valueOf(o));
++    }
++    return sb.toString();
++  }  
+ 
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index ec8a9ff..a6e8613 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -1377,7 +1377,9 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       
+       if ( in.readShort() != DataTransferProtocol.OP_STATUS_SUCCESS ) {
+         throw new IOException("Got error in response to OP_READ_BLOCK " +
+-                              "for file " + file + 
++                              "self=" + sock.getLocalSocketAddress() +
++                              ", remote=" + sock.getRemoteSocketAddress() + 
++                              " for file " + file + 
+                               " for block " + blockId);
+       }
+       DataChecksum checksum = DataChecksum.newDataChecksum( in );
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index efd2b52..a6cf8ff 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -2017,6 +2017,10 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       List<DatanodeDescriptor> descriptorsList =
+         new ArrayList<DatanodeDescriptor>(newtargets.length);
+       for(int i = 0; i < newtargets.length; i++) {
++        // We don't use getDatanode here since that method can
++        // throw. If we were to throw an exception during this commit
++        // process, we'd fall out of sync since DNs have already finalized
++        // the block with the new GS.
+         DatanodeDescriptor node =
+           datanodeMap.get(newtargets[i].getStorageID());
+         if (node != null) {
+@@ -3081,10 +3085,17 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+         if (cursize == 0) {
+           storedBlock.setNumBytes(block.getNumBytes());
+         } else if (cursize != block.getNumBytes()) {
+-          LOG.warn("Inconsistent size for block " + block + 
++          String logMsg = "Inconsistent size for block " + block + 
+                    " reported from " + node.getName() + 
+                    " current size is " + cursize +
+-                   " reported size is " + block.getNumBytes());
++                   " reported size is " + block.getNumBytes();
++          // If the block is still under construction this isn't likely
++          // to be a problem, so just log at INFO level.
++          if (underConstruction) {
++            LOG.info(logMsg);
++          } else {
++            LOG.warn(logMsg);
++          }
+           try {
+             if (cursize > block.getNumBytes()) {
+               // new replica is smaller in size than existing block.
+@@ -3163,7 +3174,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+                                       +"blockMap updated: "+node.getName()+" is added to "+block+" size "+block.getNumBytes());
+       }
+     } else {
+-      NameNode.stateChangeLog.warn("BLOCK* NameSystem.addStoredBlock: "
++      NameNode.stateChangeLog.info("BLOCK* NameSystem.addStoredBlock: "
+                                    + "Redundant addStoredBlock request received for " 
+                                    + block + " on " + node.getName()
+                                    + " size " + block.getNumBytes());
+@@ -3187,6 +3198,13 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     if (fileINode.isUnderConstruction()) {
+       INodeFileUnderConstruction cons = (INodeFileUnderConstruction) fileINode;
+       Block[] blocks = fileINode.getBlocks();
++      if (blocks == null || blocks.length == 0) {
++        // This should never happen, but better to handle it properly than to throw
++        // an NPE below.
++        LOG.error("Null blocks for reported block=" + block + " stored=" + storedBlock +
++          " inode=" + fileINode);
++        return block;
++      }
+       // If this is the last block of this
+       // file, then set targets. This enables lease recovery to occur.
+       // This is especially important after a restart of the NN.
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INodeFile.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INodeFile.java
+index 84603e1..0d350e5 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INodeFile.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INodeFile.java
+@@ -179,16 +179,4 @@ class INodeFile extends INode {
+     }
+     return blocks[blocks.length - 2];
+   }
+-
+-  INodeFileUnderConstruction toINodeFileUnderConstruction(
+-      String clientName, String clientMachine, DatanodeDescriptor clientNode
+-      ) throws IOException {
+-    if (isUnderConstruction()) {
+-      return (INodeFileUnderConstruction)this;
+-    }
+-    return new INodeFileUnderConstruction(name,
+-        blockReplication, modificationTime, preferredBlockSize,
+-        blocks, getPermissionStatus(),
+-        clientName, clientMachine, clientNode);
+-  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INodeFileUnderConstruction.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INodeFileUnderConstruction.java
+index 4aea650..27cac7b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INodeFileUnderConstruction.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INodeFileUnderConstruction.java
+@@ -203,7 +203,8 @@ class INodeFileUnderConstruction extends INodeFile {
+     }
+ 
+     int previous = primaryNodeIndex;
+-    //find an alive datanode beginning from previous
++    // find an alive datanode beginning from previous.
++    // This causes us to cycle through the targets on successive retries.
+     for(int i = 1; i <= targets.length; i++) {
+       int j = (previous + i)%targets.length;
+       if (targets[j].isAlive) {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ReplicationTargetChooser.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ReplicationTargetChooser.java
+index ba64e4f..f37aa6f 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ReplicationTargetChooser.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/ReplicationTargetChooser.java
+@@ -24,6 +24,8 @@ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+ import org.apache.hadoop.net.NetworkTopology;
+ import org.apache.hadoop.net.Node;
+ import org.apache.hadoop.net.NodeBase;
++import org.apache.hadoop.util.StringUtils;
++
+ import java.util.*;
+ 
+ /** The class is responsible for choosing the desired number of targets
+@@ -182,7 +184,8 @@ class ReplicationTargetChooser {
+       }
+     } catch (NotEnoughReplicasException e) {
+       FSNamesystem.LOG.warn("Not able to place enough replicas, still in need of "
+-               + numOfReplicas);
++               + numOfReplicas + "(excluded: " +
++               StringUtils.joinObjects(", ", excludedNodes) + ")");
+     }
+     return writer;
+   }
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+index ab9bdc7..c087d56 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+@@ -167,14 +167,7 @@ public class TestFileAppend4 extends TestCase {
+       }
+     }
+     if (out != null) {
+-      try {
+-        out.close();
+-        LOG.info("Successfully obtained lease");
+-      } catch (IOException e) {
+-        LOG.info("Unable to close file after opening for appends. " + e);
+-        recovered = false;
+-      }
+-//      out.close();
++      out.close();
+     }
+     if (!recovered) {
+       fail((tries > 0) ? "Recovery failed" : "Recovery should take < 1 min");
+-- 
+1.7.0.4
+

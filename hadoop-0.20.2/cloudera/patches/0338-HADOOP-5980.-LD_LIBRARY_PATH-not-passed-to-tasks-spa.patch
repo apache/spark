@@ -1,0 +1,50 @@
+From 7a6862110776544476ac1066e3dbade4d1456567 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 30 Jul 2009 17:40:31 -0700
+Subject: [PATCH 0338/1179] HADOOP-5980. LD_LIBRARY_PATH not passed to tasks spawned off by LinuxTaskController
+
+Reason: Security
+Author: Sreekanth Ramakrishnan
+Ref: CDH-648
+---
+ .../apache/hadoop/mapred/LinuxTaskController.java  |   15 +++++++++++++--
+ 1 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+index f74c70b..2a13a01 100644
+--- a/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
++++ b/src/mapred/org/apache/hadoop/mapred/LinuxTaskController.java
+@@ -24,6 +24,8 @@ import java.io.IOException;
+ import java.io.PrintWriter;
+ import java.util.ArrayList;
+ import java.util.List;
++import java.util.Set;
++import java.util.Map.Entry;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -125,10 +127,19 @@ class LinuxTaskController extends TaskController {
+     String cmdLine = 
+       TaskLog.buildCommandLine(env.setup, env.vargs, env.stdout, env.stderr,
+           env.logSize, env.pidFile);
++    StringBuffer sb = new StringBuffer();
++    //export out all the environment variable before child command.
++    for(Entry<String, String> entry : env.env.entrySet()) {
++      sb.append("export ");
++      sb.append(entry.getKey());
++      sb.append("=");
++      sb.append(entry.getValue());
++      sb.append("\n");
++    }
++    sb.append(cmdLine);
+     // write the command to a file in the
+     // task specific cache directory
+-    writeCommand(cmdLine, getTaskCacheDirectory(context));
+-    
++    writeCommand(sb.toString(), getTaskCacheDirectory(context));
+     // Call the taskcontroller with the right parameters.
+     List<String> launchTaskJVMArgs = buildTaskCommandArgs(context);
+     ShellCommandExecutor shExec =  buildTaskControllerExecutor(
+-- 
+1.7.0.4
+

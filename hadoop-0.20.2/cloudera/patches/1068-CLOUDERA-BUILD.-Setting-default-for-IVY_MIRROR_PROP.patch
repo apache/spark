@@ -1,0 +1,24 @@
+From f2d1ba670c2ede6b02f4ee86ca57fed7cedfc38f Mon Sep 17 00:00:00 2001
+From: Andrew Bayer <andrew@cloudera.com>
+Date: Wed, 9 Nov 2011 09:47:23 -0800
+Subject: [PATCH 1068/1179] CLOUDERA-BUILD. Setting default for IVY_MIRROR_PROP.
+
+---
+ cloudera/do-release-build |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index 7a45cb0..f255f1d 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -24,6 +24,7 @@ fi
+ 
+ JAVA32_HOME=${JAVA32_HOME:-$JAVA_HOME}
+ JAVA64_HOME=${JAVA64_HOME:-$JAVA_HOME}
++IVY_MIRROR_PROP=${IVY_MIRROR_PROP:-http://repo1.maven.org/maven2/}
+ 
+ # Do the build
+ BIN_DIR=$(readlink -f $(dirname $0))
+-- 
+1.7.0.4
+

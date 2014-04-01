@@ -1,0 +1,32 @@
+From 9459e990a858f2452f04de02fce4cd011c1a8c6d Mon Sep 17 00:00:00 2001
+From: Alejandro Abdelnur <tucu@cloudera.com>
+Date: Thu, 25 Aug 2011 08:46:06 -0700
+Subject: [PATCH 1042/1179] HADOOP-7507. jvm metrics all use the same namespace.
+
+  Reason: Bug
+  Author: Alejandro Abdelnur
+  Ref: CDH-3297
+---
+ .../hadoop/metrics/ganglia/GangliaContext.java     |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/metrics/ganglia/GangliaContext.java b/src/core/org/apache/hadoop/metrics/ganglia/GangliaContext.java
+index 4d04c25..0ca54dd 100644
+--- a/src/core/org/apache/hadoop/metrics/ganglia/GangliaContext.java
++++ b/src/core/org/apache/hadoop/metrics/ganglia/GangliaContext.java
+@@ -114,6 +114,12 @@ public class GangliaContext extends AbstractMetricsContext {
+     StringBuilder sb = new StringBuilder();
+     sb.append(contextName);
+     sb.append('.');
++
++    if (contextName.equals("jvm") && outRec.getTag("processName") != null) {
++      sb.append(outRec.getTag("processName"));
++      sb.append('.');
++    }
++
+     sb.append(recordName);
+     sb.append('.');
+     int sbBaseLen = sb.length();
+-- 
+1.7.0.4
+

@@ -1,0 +1,359 @@
+From f2f02dce3f12d9fe445f62c6a28a7e89c1f33efa Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 15 Oct 2009 15:47:51 +0530
+Subject: [PATCH 0370/1179] MAPREDUCE-144. TaskMemoryManager should log process-tree's status while killing tasks.
+
+Patch: http://issues.apache.org/jira/secure/attachment/12418917/MAPREDUCE-144-20090907.internal.txt
+Author: Vinod K V
+Reason: This helps a lot in debugging why a particular task has gone beyond memory limits.
+Ref: YDH
+---
+ .../apache/hadoop/util/ProcfsBasedProcessTree.java |   86 ++++++++++++--
+ .../hadoop/mapred/TaskMemoryManagerThread.java     |    5 +-
+ .../hadoop/util/TestProcfsBasedProcessTree.java    |  132 +++++++++++++++++++-
+ 3 files changed, 210 insertions(+), 13 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/util/ProcfsBasedProcessTree.java b/src/core/org/apache/hadoop/util/ProcfsBasedProcessTree.java
+index d74cb4f..13123b2 100644
+--- a/src/core/org/apache/hadoop/util/ProcfsBasedProcessTree.java
++++ b/src/core/org/apache/hadoop/util/ProcfsBasedProcessTree.java
+@@ -43,7 +43,7 @@ import org.apache.hadoop.util.Shell.ShellCommandExecutor;
+  */
+ public class ProcfsBasedProcessTree extends ProcessTree {
+ 
+-  private static final Log LOG = LogFactory
++  static final Log LOG = LogFactory
+       .getLog(ProcfsBasedProcessTree.class);
+ 
+   private static final String PROCFS = "/proc/";
+@@ -52,6 +52,9 @@ public class ProcfsBasedProcessTree extends ProcessTree {
+   private static final Pattern PROCFS_STAT_FILE_FORMAT = Pattern
+       .compile("^([0-9-]+)\\s([^\\s]+)\\s[^\\s]\\s([0-9-]+)\\s([0-9-]+)\\s([0-9-]+)\\s([0-9-]+\\s){16}([0-9]+)(\\s[0-9-]+){16}");
+ 
++  static final String PROCFS_STAT_FILE = "stat";
++  static final String PROCFS_CMDLINE_FILE = "cmdline";
++
+   // to enable testing, using this variable which can be configured
+   // to a test directory.
+   private String procfsDir;
+@@ -271,7 +274,6 @@ public class ProcfsBasedProcessTree extends ProcessTree {
+     if (pid == -1) {
+       return;
+     }
+-
+     if (isAlive(pid.toString())) {
+       if (isSetsidAvailable && setsidUsed) {
+         // In this case, we know that pid got created using setsid. So kill the
+@@ -291,6 +293,30 @@ public class ProcfsBasedProcessTree extends ProcessTree {
+     }
+   }
+ 
++  private static final String PROCESSTREE_DUMP_FORMAT =
++      "\t|- %d %d %d %d %s %d %s\n";
++
++  /**
++   * Get a dump of the process-tree.
++   * 
++   * @return a string concatenating the dump of information of all the processes
++   *         in the process-tree
++   */
++  public String getProcessTreeDump() {
++    StringBuilder ret = new StringBuilder();
++    // The header.
++    ret.append(String.format("\t|- PID PPID PGRPID SESSID CMD_NAME "
++        + "VMEM_USAGE(BYTES) FULL_CMD_LINE\n"));
++    for (ProcessInfo p : processTree.values()) {
++      if (p != null) {
++        ret.append(String.format(PROCESSTREE_DUMP_FORMAT, p.getPid(), p
++            .getPpid(), p.getPgrpId(), p.getSessionId(), p.getName(), p
++            .getVmem(), p.getCmdLine(procfsDir)));
++      }
++    }
++    return ret.toString();
++  }
++
+   /**
+    * Get the cumulative virtual memory used by all the processes in the
+    * process-tree.
+@@ -384,7 +410,7 @@ public class ProcfsBasedProcessTree extends ProcessTree {
+     FileReader fReader = null;
+     try {
+       File pidDir = new File(procfsDir, String.valueOf(pinfo.getPid()));
+-      fReader = new FileReader(new File(pidDir, "/stat"));
++      fReader = new FileReader(new File(pidDir, PROCFS_STAT_FILE));
+       in = new BufferedReader(fReader);
+     } catch (FileNotFoundException f) {
+       // The process vanished in the interim!
+@@ -408,13 +434,9 @@ public class ProcfsBasedProcessTree extends ProcessTree {
+     } finally {
+       // Close the streams
+       try {
+-        if (fReader != null) {
+-          fReader.close();
+-        }
++        fReader.close();
+         try {
+-          if (in != null) {
+-            in.close();
+-          }
++          in.close();
+         } catch (IOException i) {
+           LOG.warn("Error closing the stream " + in);
+         }
+@@ -568,5 +590,51 @@ public class ProcfsBasedProcessTree extends ProcessTree {
+     public List<ProcessInfo> getChildren() {
+       return children;
+     }
++
++    public String getCmdLine(String procfsDir) {
++      String ret = "N/A";
++      if (pid == null) {
++        return ret;
++      }
++      BufferedReader in = null;
++      FileReader fReader = null;
++      try {
++        fReader =
++            new FileReader(new File(new File(procfsDir, pid.toString()),
++                PROCFS_CMDLINE_FILE));
++      } catch (FileNotFoundException f) {
++        // The process vanished in the interim!
++        return ret;
++      }
++
++      in = new BufferedReader(fReader);
++
++      try {
++        ret = in.readLine(); // only one line
++        ret = ret.replace('\0', ' '); // Replace each null char with a space
++        if (ret.equals("")) {
++          // The cmdline might be empty because the process is swapped out or is
++          // a zombie.
++          ret = "N/A";
++        }
++      } catch (IOException io) {
++        LOG.warn("Error reading the stream " + io);
++        ret = "N/A";
++      } finally {
++        // Close the streams
++        try {
++          fReader.close();
++          try {
++            in.close();
++          } catch (IOException i) {
++            LOG.warn("Error closing the stream " + in);
++          }
++        } catch (IOException i) {
++          LOG.warn("Error closing the stream " + fReader);
++        }
++      }
++
++      return ret;
++    }
+   }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskMemoryManagerThread.java b/src/mapred/org/apache/hadoop/mapred/TaskMemoryManagerThread.java
+index d41c994..257f629 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskMemoryManagerThread.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskMemoryManagerThread.java
+@@ -216,12 +216,13 @@ class TaskMemoryManagerThread extends Thread {
+           if (isProcessTreeOverLimit(tid.toString(), currentMemUsage, 
+                                       curMemUsageOfAgedProcesses, limit)) {
+             // Task (the root process) is still alive and overflowing memory.
+-            // Clean up.
++            // Dump the process-tree and then clean it up.
+             String msg =
+                 "TaskTree [pid=" + pId + ",tipID=" + tid
+                     + "] is running beyond memory-limits. Current usage : "
+                     + currentMemUsage + "bytes. Limit : " + limit
+-                    + "bytes. Killing task.";
++                    + "bytes. Killing task. \nDump of the process-tree for "
++                    + tid + " : \n" + pTree.getProcessTreeDump();
+             LOG.warn(msg);
+             taskTracker.cleanUpOverMemoryTask(tid, true, msg);
+ 
+diff --git a/src/test/org/apache/hadoop/util/TestProcfsBasedProcessTree.java b/src/test/org/apache/hadoop/util/TestProcfsBasedProcessTree.java
+index 968b8c7..1ffc875 100644
+--- a/src/test/org/apache/hadoop/util/TestProcfsBasedProcessTree.java
++++ b/src/test/org/apache/hadoop/util/TestProcfsBasedProcessTree.java
+@@ -24,13 +24,16 @@ import java.io.FileWriter;
+ import java.io.IOException;
+ import java.util.Random;
+ import java.util.Vector;
++import java.util.regex.Matcher;
++import java.util.regex.Pattern;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.fs.FileUtil;
+ import org.apache.hadoop.fs.Path;
+-import org.apache.hadoop.mapred.UtilsForTests;
++import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.util.Shell.ExitCodeException;
++import org.apache.hadoop.mapred.UtilsForTests;
+ import org.apache.hadoop.util.Shell.ShellCommandExecutor;
+ 
+ import junit.framework.TestCase;
+@@ -160,6 +163,10 @@ public class TestProcfsBasedProcessTree extends TestCase {
+     
+     p = p.getProcessTree(); // reconstruct
+     LOG.info("ProcessTree: " + p.toString());
++
++    // Get the process-tree dump
++    String processTreeDump = p.getProcessTreeDump();
++
+     // destroy the map task and all its subprocesses
+     p.destroy(true/*in the background*/);
+     if(ProcessTree.isSetsidAvailable) {// whole processtree should be gone
+@@ -168,6 +175,21 @@ public class TestProcfsBasedProcessTree extends TestCase {
+     else {// process should be gone
+       assertEquals(false, p.isAlive());
+     }
++
++    LOG.info("Process-tree dump follows: \n" + processTreeDump);
++    assertTrue("Process-tree dump doesn't start with a proper header",
++        processTreeDump.startsWith("\t|- PID PPID PGRPID SESSID CMD_NAME "
++            + "VMEM_USAGE(BYTES) FULL_CMD_LINE\n"));
++    for (int i = N; i >= 0; i--) {
++      String cmdLineDump =
++          "\\|- [0-9]+ [0-9]+ [0-9]+ [0-9]+ \\(sh\\) [0-9]+ sh " + shellScript
++              + " " + i;
++      Pattern pat = Pattern.compile(cmdLineDump);
++      Matcher mat = pat.matcher(processTreeDump);
++      assertTrue("Process-tree dump doesn't contain the cmdLineDump of " + i
++          + "th process!", mat.find());
++    }
++
+     // Not able to join thread sometimes when forking with large N.
+     try {
+       t.join(2000);
+@@ -351,6 +373,88 @@ public class TestProcfsBasedProcessTree extends TestCase {
+   }
+ 
+   /**
++   * Test the correctness of process-tree dump.
++   * 
++   * @throws IOException
++   */
++  public void testProcessTreeDump()
++      throws IOException {
++
++    String[] pids = { "100", "200", "300", "400", "500", "600" };
++
++    File procfsRootDir = new File(TEST_ROOT_DIR, "proc");
++
++    try {
++      setupProcfsRootDir(procfsRootDir);
++      setupPidDirs(procfsRootDir, pids);
++
++      int numProcesses = pids.length;
++      // Processes 200, 300, 400 and 500 are descendants of 100. 600 is not.
++      ProcessStatInfo[] procInfos = new ProcessStatInfo[numProcesses];
++      procInfos[0] =
++          new ProcessStatInfo(new String[] { "100", "proc1", "1", "100",
++              "100", "100000" });
++      procInfos[1] =
++          new ProcessStatInfo(new String[] { "200", "proc2", "100", "100",
++              "100", "200000" });
++      procInfos[2] =
++          new ProcessStatInfo(new String[] { "300", "proc3", "200", "100",
++              "100", "300000" });
++      procInfos[3] =
++          new ProcessStatInfo(new String[] { "400", "proc4", "200", "100",
++              "100", "400000" });
++      procInfos[4] =
++          new ProcessStatInfo(new String[] { "500", "proc5", "400", "100",
++              "100", "400000" });
++      procInfos[5] =
++          new ProcessStatInfo(new String[] { "600", "proc6", "1", "1", "1",
++              "400000" });
++
++      String[] cmdLines = new String[numProcesses];
++      cmdLines[0] = "proc1 arg1 arg2";
++      cmdLines[1] = "proc2 arg3 arg4";
++      cmdLines[2] = "proc3 arg5 arg6";
++      cmdLines[3] = "proc4 arg7 arg8";
++      cmdLines[4] = "proc5 arg9 arg10";
++      cmdLines[5] = "proc6 arg11 arg12";
++
++      writeStatFiles(procfsRootDir, pids, procInfos);
++      writeCmdLineFiles(procfsRootDir, pids, cmdLines);
++
++      ProcfsBasedProcessTree processTree =
++          new ProcfsBasedProcessTree("100", procfsRootDir.getAbsolutePath());
++      // build the process tree.
++      processTree.getProcessTree();
++
++      // Get the process-tree dump
++      String processTreeDump = processTree.getProcessTreeDump();
++
++      LOG.info("Process-tree dump follows: \n" + processTreeDump);
++      assertTrue("Process-tree dump doesn't start with a proper header",
++          processTreeDump.startsWith("\t|- PID PPID PGRPID SESSID CMD_NAME "
++              + "VMEM_USAGE(BYTES) FULL_CMD_LINE\n"));
++      for (int i = 0; i < 5; i++) {
++        ProcessStatInfo p = procInfos[i];
++        assertTrue(
++            "Process-tree dump doesn't contain the cmdLineDump of process "
++                + p.pid, processTreeDump.contains("\t|- " + p.pid + " "
++                + p.ppid + " " + p.pgrpId + " " + p.session + " (" + p.name
++                + ") " + p.vmem + " " + cmdLines[i]));
++      }
++
++      // 600 should not be in the dump
++      ProcessStatInfo p = procInfos[5];
++      assertFalse(
++          "Process-tree dump shouldn't contain the cmdLineDump of process "
++              + p.pid, processTreeDump.contains("\t|- " + p.pid + " " + p.ppid
++              + " " + p.pgrpId + " " + p.session + " (" + p.name + ") "
++              + p.vmem + " " + cmdLines[5]));
++    } finally {
++      FileUtil.fullyDelete(procfsRootDir);
++    }
++  }
++
++  /**
+    * Create a directory to mimic the procfs file system's root.
+    * @param procfsRootDir root directory to create.
+    * @throws IOException if could not delete the procfs root directory
+@@ -398,7 +502,9 @@ public class TestProcfsBasedProcessTree extends TestCase {
+   public static void writeStatFiles(File procfsRootDir, String[] pids, 
+                               ProcessStatInfo[] procs) throws IOException {
+     for (int i=0; i<pids.length; i++) {
+-      File statFile = new File(new File(procfsRootDir, pids[i]), "stat");
++      File statFile =
++          new File(new File(procfsRootDir, pids[i]),
++              ProcfsBasedProcessTree.PROCFS_STAT_FILE);
+       BufferedWriter bw = null;
+       try {
+         FileWriter fw = new FileWriter(statFile);
+@@ -414,4 +520,26 @@ public class TestProcfsBasedProcessTree extends TestCase {
+       }
+     }
+   }
++
++  private static void writeCmdLineFiles(File procfsRootDir, String[] pids,
++      String[] cmdLines)
++      throws IOException {
++    for (int i = 0; i < pids.length; i++) {
++      File statFile =
++          new File(new File(procfsRootDir, pids[i]),
++              ProcfsBasedProcessTree.PROCFS_CMDLINE_FILE);
++      BufferedWriter bw = null;
++      try {
++        bw = new BufferedWriter(new FileWriter(statFile));
++        bw.write(cmdLines[i]);
++        LOG.info("wrote command-line file for " + pids[i] + " with contents: "
++            + cmdLines[i]);
++      } finally {
++        // not handling exception - will throw an error and fail the test.
++        if (bw != null) {
++          bw.close();
++        }
++      }
++    }
++  }
+ }
+-- 
+1.7.0.4
+

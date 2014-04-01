@@ -1,0 +1,143 @@
+From aea067a20e16345f307de7efe80935dd7addbe6b Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 14 May 2010 19:19:56 -0700
+Subject: [PATCH 0293/1179] HDFS-1204. LeaseManager expiring leases should only expire the single file, not entire lease
+
+Reason: Logic bug in lease recovery could cause incorrectly interrupted
+        writers
+Author: Sam Rash
+Ref: CDH-659
+---
+ .../hadoop/hdfs/server/namenode/LeaseManager.java  |    4 +-
+ .../hdfs/server/namenode/TestLeaseManager.java     |   96 ++++++++++++++++++++
+ 2 files changed, 98 insertions(+), 2 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/namenode/TestLeaseManager.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/LeaseManager.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/LeaseManager.java
+index 2b7ebe3..61e22eb 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/LeaseManager.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/LeaseManager.java
+@@ -370,7 +370,7 @@ public class LeaseManager {
+   }
+ 
+   /** Check the leases beginning from the oldest. */
+-  private synchronized void checkLeases() {
++  synchronized void checkLeases() {
+     for(; sortedLeases.size() > 0; ) {
+       final Lease oldest = sortedLeases.first();
+       if (!oldest.expiredHardLimit()) {
+@@ -388,7 +388,7 @@ public class LeaseManager {
+       oldest.getPaths().toArray(leasePaths);
+       for(String p : leasePaths) {
+         try {
+-          fsnamesystem.internalReleaseLease(oldest, p);
++          fsnamesystem.internalReleaseLeaseOne(oldest, p);
+         } catch (IOException e) {
+           LOG.error("Cannot release the path "+p+" in the lease "+oldest, e);
+           removing.add(p);
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestLeaseManager.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestLeaseManager.java
+new file mode 100644
+index 0000000..77eda7b
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestLeaseManager.java
+@@ -0,0 +1,96 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++
++import junit.framework.TestCase;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.DistributedFileSystem;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.util.Daemon;
++import org.mockito.invocation.InvocationOnMock;
++import org.mockito.stubbing.Answer;
++
++import java.io.IOException;
++
++import static org.mockito.Matchers.anyObject;
++import static org.mockito.Matchers.anyString;
++import static org.mockito.Mockito.doAnswer;
++import static org.mockito.Mockito.spy;
++
++public class TestLeaseManager extends TestCase {
++  public static final Log LOG = LogFactory.getLog(TestLeaseManager.class);
++
++  /*
++   * test case: two leases are added for a singler holder, should use
++   * the internalReleaseOne method
++   */
++  public void testMultiPathLeaseRecovery()
++    throws IOException, InterruptedException {
++    Configuration conf = new Configuration();
++    MiniDFSCluster cluster = new MiniDFSCluster(conf, 3, true, null);
++    NameNode namenode = cluster.getNameNode();
++    FSNamesystem spyNamesystem = spy(namenode.getNamesystem());
++    LeaseManager leaseManager = new LeaseManager(spyNamesystem);
++    
++    spyNamesystem.leaseManager = leaseManager;
++    spyNamesystem.lmthread.interrupt();
++    
++    String holder = "client-1";
++    String path1 = "/file-1";
++    String path2 = "/file-2";
++    
++    CalledAnswer internalReleaseCalled = new CalledAnswer();
++    CalledAnswer internalReleaseOneCalled = new CalledAnswer();
++    doAnswer(internalReleaseCalled)
++        .when(spyNamesystem)
++        .internalReleaseLease((LeaseManager.Lease) anyObject(), anyString());
++    doAnswer(internalReleaseOneCalled)
++        .when(spyNamesystem)
++        .internalReleaseLeaseOne((LeaseManager.Lease) anyObject(), anyString());
++    
++    leaseManager.setLeasePeriod(1, 2);
++    leaseManager.addLease(holder, path1);
++    leaseManager.addLease(holder, path2);
++    Thread.sleep(1000);
++
++    synchronized (spyNamesystem) { // checkLeases is always called with FSN lock
++      leaseManager.checkLeases();
++    }
++    
++    assertTrue("internalReleaseOne not called", internalReleaseOneCalled.isCalled());
++    assertFalse("internalRelease called", internalReleaseCalled.isCalled());
++  }
++  
++  private static class CalledAnswer<T> implements Answer<T>{
++    private volatile boolean called = false;
++
++    @Override
++    public T answer(InvocationOnMock invocationOnMock) throws Throwable {
++      called = true;
++      
++      return (T)invocationOnMock.callRealMethod();
++    }
++
++    public boolean isCalled() {
++      return called;
++    }
++  }
++}
+\ No newline at end of file
+-- 
+1.7.0.4
+

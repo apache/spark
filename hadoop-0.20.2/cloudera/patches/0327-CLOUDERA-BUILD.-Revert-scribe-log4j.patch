@@ -1,0 +1,900 @@
+From 2a37b553b8f446f03cb3610b2f7a84f54064f812 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 24 Aug 2010 14:01:25 -0700
+Subject: [PATCH 0327/1179] CLOUDERA-BUILD. Revert scribe log4j.
+
+Revert "CLOUDERA-BUILD. Apply Scribe patches to Hadoop"
+
+This reverts commit cb7a3677942c1d2f9e0d2a75dbffa09fa6125e61.
+
+Conflicts:
+
+	src/contrib/scribe-log4j/ivy.xml
+
+Ref: CDH-742
+---
+ conf/log4j.properties                              |   19 -
+ src/contrib/scribe-log4j/README                    |    4 -
+ src/contrib/scribe-log4j/build.xml                 |    6 -
+ src/contrib/scribe-log4j/ivy.xml                   |   23 --
+ .../hadoop/scribe_log4j/AsyncScribeAppender.java   |   68 ----
+ .../apache/hadoop/scribe_log4j/ScribeAppender.java |  158 ---------
+ .../hadoop/scribe_log4j/thrift/LogEntry.java       |  159 ---------
+ .../hadoop/scribe_log4j/thrift/ResultCode.java     |   12 -
+ .../apache/hadoop/scribe_log4j/thrift/scribe.java  |  349 --------------------
+ 9 files changed, 0 insertions(+), 798 deletions(-)
+ delete mode 100644 src/contrib/scribe-log4j/README
+ delete mode 100644 src/contrib/scribe-log4j/build.xml
+ delete mode 100644 src/contrib/scribe-log4j/ivy.xml
+ delete mode 100644 src/contrib/scribe-log4j/ivy/libraries.properties
+ delete mode 100644 src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/AsyncScribeAppender.java
+ delete mode 100644 src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/ScribeAppender.java
+ delete mode 100644 src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/thrift/LogEntry.java
+ delete mode 100644 src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/thrift/ResultCode.java
+ delete mode 100644 src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/thrift/scribe.java
+
+diff --git a/conf/log4j.properties b/conf/log4j.properties
+index d2efcd0..d797df6 100644
+--- a/conf/log4j.properties
++++ b/conf/log4j.properties
+@@ -40,25 +40,6 @@ log4j.appender.console.layout=org.apache.log4j.PatternLayout
+ log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{2}: %m%n
+ 
+ #
+-# scribe
+-# Add "scribe" to rootlogger above if you want to use this.
+-# You need to add the Scribe/Log4j libraries to Hadoop's classpath.
+-#
+-
+-log4j.appender.scribe=org.apache.hadoop.scribe_log4j.AsyncScribeAppender
+-
+-# Hostname defaults to the host's FQDN, but may be overridden by setting this
+-# property
+-#log4j.appender.scribe.hostname=
+-
+-log4j.appender.scribe.scribeHost=127.0.0.1
+-log4j.appender.scribe.scribePort=1463
+-log4j.appender.scribe.scribeCategory=hadoop
+-
+-log4j.appender.scribe.layout=org.apache.log4j.PatternLayout
+-log4j.appender.scribe.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{2}: %m%n
+-
+-#
+ # TaskLog Appender
+ #
+ 
+diff --git a/src/contrib/scribe-log4j/README b/src/contrib/scribe-log4j/README
+deleted file mode 100644
+index aba758c..0000000
+--- a/src/contrib/scribe-log4j/README
++++ /dev/null
+@@ -1,4 +0,0 @@
+-This contrib package provides an Apache Log4j appender that sends log events
+-to a scribe server.
+-
+-See conf/log4j.properties for how to configure the appender.
+diff --git a/src/contrib/scribe-log4j/build.xml b/src/contrib/scribe-log4j/build.xml
+deleted file mode 100644
+index 04f97df..0000000
+--- a/src/contrib/scribe-log4j/build.xml
++++ /dev/null
+@@ -1,6 +0,0 @@
+-<?xml version="1.0"?>
+-<project name="scribe-log4j" default="jar">
+-
+-  <import file="../build-contrib.xml"/>
+-
+-</project>
+diff --git a/src/contrib/scribe-log4j/ivy.xml b/src/contrib/scribe-log4j/ivy.xml
+deleted file mode 100644
+index b51d9d9..0000000
+--- a/src/contrib/scribe-log4j/ivy.xml
++++ /dev/null
+@@ -1,23 +0,0 @@
+-<?xml version="1.0" ?>
+-<ivy-module version="1.0">
+-  <info organisation="org.apache.hadoop" module="${ant.project.name}">
+-    <license name="Apache 2.0"/>
+-    <ivyauthor name="Apache Hadoop Team" url="http://hadoop.apache.org"/>
+-    <description>
+-        Apache Hadoop 
+-    </description>
+-  </info>
+-  <configurations defaultconfmapping="default">
+-    <!--these match the Maven configurations-->
+-    <conf name="default" extends="master,runtime"/>
+-    <conf name="master" description="contains the artifact but no dependencies"/>
+-    <conf name="runtime" description="runtime but not the artifact" />
+-    <!--Private configurations. -->
+-
+-    <conf name="common" visibility="private" 
+-      description="artifacts needed to compile/test the application"/>
+-    <conf name="test" visibility="private" extends="runtime"/>
+-  </configurations>
+-  <dependencies>
+-  </dependencies>
+-</ivy-module>
+diff --git a/src/contrib/scribe-log4j/ivy/libraries.properties b/src/contrib/scribe-log4j/ivy/libraries.properties
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/AsyncScribeAppender.java b/src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/AsyncScribeAppender.java
+deleted file mode 100644
+index 3d1cc29..0000000
+--- a/src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/AsyncScribeAppender.java
++++ /dev/null
+@@ -1,68 +0,0 @@
+-package org.apache.hadoop.scribe_log4j;
+-
+-import org.apache.log4j.AsyncAppender;
+-
+-/*
+- * An asynchronous version of {@link ScribeAppender}, which extends
+- * Log4j's AsyncAppender.
+- */
+-public class AsyncScribeAppender extends AsyncAppender {
+-
+-  private String hostname;
+-  private String scribeHost;
+-  private int scribePort;
+-  private String scribeCategory;
+-
+-  public String getHostname() {
+-    return hostname;
+-  }
+-
+-  public void setHostname(String hostname) {
+-    this.hostname = hostname;
+-  }
+-
+-  public String getScribeHost() {
+-    return scribeHost;
+-  }
+-
+-  public void setScribeHost(String scribeHost) {
+-    this.scribeHost = scribeHost;
+-  }
+-
+-  public int getScribePort() {
+-    return scribePort;
+-  }
+-
+-  public void setScribePort(int scribePort) {
+-    this.scribePort = scribePort;
+-  }
+-
+-  public String getScribeCategory() {
+-    return scribeCategory;
+-  }
+-
+-  public void setScribeCategory(String scribeCategory) {
+-    this.scribeCategory = scribeCategory;
+-  }
+-
+-  @Override
+-  public void activateOptions() {
+-    super.activateOptions();
+-    synchronized(this) {
+-      ScribeAppender scribeAppender = new ScribeAppender();
+-      scribeAppender.setLayout(getLayout());
+-      scribeAppender.setHostname(getHostname());
+-      scribeAppender.setScribeHost(getScribeHost());
+-      scribeAppender.setScribePort(getScribePort());
+-      scribeAppender.setScribeCategory(getScribeCategory());
+-      scribeAppender.activateOptions();
+-      addAppender(scribeAppender);
+-    }
+-  }
+-
+-  @Override
+-  public boolean requiresLayout() {
+-    return true;
+-  }
+-
+-}
+\ No newline at end of file
+diff --git a/src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/ScribeAppender.java b/src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/ScribeAppender.java
+deleted file mode 100644
+index 4353fa2..0000000
+--- a/src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/ScribeAppender.java
++++ /dev/null
+@@ -1,158 +0,0 @@
+-package org.apache.hadoop.scribe_log4j;
+-
+-import com.facebook.thrift.protocol.TBinaryProtocol;
+-import com.facebook.thrift.transport.TSocket;
+-import com.facebook.thrift.transport.TFramedTransport;
+-import com.facebook.thrift.transport.TTransportException;
+-import com.facebook.thrift.TException;
+-
+-import org.apache.hadoop.scribe_log4j.thrift.scribe.Client;
+-import org.apache.hadoop.scribe_log4j.thrift.LogEntry;
+-import org.apache.hadoop.util.StringUtils;
+-
+-import org.apache.log4j.AppenderSkeleton;
+-import org.apache.log4j.spi.LoggingEvent;
+-import org.apache.log4j.spi.LocationInfo;
+-
+-import java.util.List;
+-import java.util.ArrayList;
+-import java.net.Socket;
+-import java.net.UnknownHostException;
+-import java.net.InetAddress;
+-import java.io.IOException;
+-import java.io.BufferedReader;
+-import java.io.InputStreamReader;
+-
+-/*
+- * A Log4j Appender that writes log entries to a Scribe server.
+- * By default the Scribe server is expected to run on localhost, port 1463.
+- * Messages are written with a category of "hadoop".
+- */
+-public class ScribeAppender extends AppenderSkeleton {
+-
+-  public static final String DEFAULT_SCRIBE_HOST = "127.0.0.1";
+-  public static final int DEFAULT_SCRIBE_PORT = 1463;
+-  public static final String DEFAULT_SCRIBE_CATEGORY = "hadoop";
+-
+-  private String hostname;
+-  private String scribeHost;
+-  private int scribePort;
+-  private String scribeCategory;
+-
+-  // NOTE: logEntries, client, and transport are all protected by a lock on 'this.'
+-
+-  // The Scribe interface for sending log messages accepts a list.  This list is created
+-  // once and cleared and appended when new logs are created.  The list is always size 1.
+-  private List<LogEntry> logEntries;
+-
+-  private Client client;
+-  private TFramedTransport transport;
+-
+-  public String getHostname() {
+-    return hostname;
+-  }
+-
+-  public void setHostname(String hostname) {
+-    this.hostname = hostname;
+-  }
+-
+-  public String getScribeHost() {
+-    return scribeHost;
+-  }
+-
+-  public void setScribeHost(String scribeHost) {
+-    this.scribeHost = scribeHost;
+-  }
+-
+-  public int getScribePort() {
+-    return scribePort;
+-  }
+-
+-  public void setScribePort(int scribePort) {
+-    this.scribePort = scribePort;
+-  }
+-
+-  public String getScribeCategory() {
+-    return scribeCategory;
+-  }
+-
+-  public void setScribeCategory(String scribeCategory) {
+-    this.scribeCategory = scribeCategory;
+-  }
+-
+-  /*
+-   * Activates this Appender by opening
+-   * a transport to the Scribe server.
+-   */
+-  @Override
+-  public void activateOptions() {
+-    try {
+-      synchronized(this) {
+-        if (hostname == null) {
+-          try {
+-            hostname = InetAddress.getLocalHost().getCanonicalHostName();
+-          } catch (UnknownHostException e) {
+-            // can't get hostname
+-          }
+-        }
+-        if (scribeHost == null) {
+-          scribeHost = DEFAULT_SCRIBE_HOST;
+-        }
+-        if (scribePort == 0) {
+-          scribePort = DEFAULT_SCRIBE_PORT;
+-        }
+-        if (scribeCategory == null) {
+-          scribeCategory = DEFAULT_SCRIBE_CATEGORY;
+-        }
+-        // Thrift boilerplate code
+-        logEntries = new ArrayList<LogEntry>(1);
+-        TSocket sock = new TSocket(new Socket(scribeHost, scribePort));
+-        transport = new TFramedTransport(sock);
+-        TBinaryProtocol protocol = new TBinaryProtocol(transport, false, false);
+-        client = new Client(protocol, protocol);
+-        // This is commented out because it was throwing Exceptions for no good reason.
+-//        transport.open();
+-      }
+-    } catch (TTransportException e) {
+-      System.err.println(StringUtils.stringifyException(e));
+-    } catch (UnknownHostException e) {
+-      System.err.println(StringUtils.stringifyException(e));
+-    } catch (IOException e) {
+-      System.err.println(StringUtils.stringifyException(e));
+-    } catch (Exception e) {
+-      System.err.println(StringUtils.stringifyException(e));
+-    }
+-  }
+-
+-  /*
+-   * Appends a log message to Scribe
+-   */
+-  @Override
+-  public void append(LoggingEvent event) {
+-    synchronized(this) {
+-      try {
+-        String message = String.format("%s %s", hostname, layout.format(event));
+-        LogEntry entry = new LogEntry(scribeCategory, message);
+-
+-        logEntries.add(entry);
+-        client.Log(logEntries);
+-      } catch (Exception e) {
+-        System.err.println(StringUtils.stringifyException(e));
+-      } finally {
+-        logEntries.clear();
+-      }
+-    }
+-  }
+-
+-  @Override
+-  public void close() {
+-    if (transport != null) {
+-      transport.close();
+-    }
+-  }
+-
+-  @Override
+-  public boolean requiresLayout() {
+-    return true;
+-  }
+-}
+\ No newline at end of file
+diff --git a/src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/thrift/LogEntry.java b/src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/thrift/LogEntry.java
+deleted file mode 100644
+index 15b6086..0000000
+--- a/src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/thrift/LogEntry.java
++++ /dev/null
+@@ -1,159 +0,0 @@
+-/**
+- * Autogenerated by Thrift
+- *
+- * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
+- */
+-package org.apache.hadoop.scribe_log4j.thrift;
+-
+-import java.util.List;
+-import java.util.ArrayList;
+-import java.util.Map;
+-import java.util.HashMap;
+-import java.util.Set;
+-import java.util.HashSet;
+-import com.facebook.thrift.*;
+-
+-import com.facebook.thrift.protocol.*;
+-import com.facebook.thrift.transport.*;
+-
+-public class LogEntry implements TBase, java.io.Serializable {
+-  public String category;
+-  public static final int CATEGORY = 1;
+-  public String message;
+-  public static final int MESSAGE = 2;
+-
+-  public final Isset __isset = new Isset();
+-  public static final class Isset implements java.io.Serializable {
+-    public boolean category = false;
+-    public boolean message = false;
+-  }
+-
+-  public LogEntry() {
+-  }
+-
+-  public LogEntry(
+-    String category,
+-    String message)
+-  {
+-    this();
+-    this.category = category;
+-    this.__isset.category = (category != null);
+-    this.message = message;
+-    this.__isset.message = (message != null);
+-  }
+-
+-  public boolean equals(Object that) {
+-    if (that == null)
+-      return false;
+-    if (that instanceof LogEntry)
+-      return this.equals((LogEntry)that);
+-    return false;
+-  }
+-
+-  public boolean equals(LogEntry that) {
+-    if (that == null)
+-      return false;
+-
+-    boolean this_present_category = true && (this.category != null);
+-    boolean that_present_category = true && (that.category != null);
+-    if (this_present_category || that_present_category) {
+-      if (!(this_present_category && that_present_category))
+-        return false;
+-      if (!this.category.equals(that.category))
+-        return false;
+-    }
+-
+-    boolean this_present_message = true && (this.message != null);
+-    boolean that_present_message = true && (that.message != null);
+-    if (this_present_message || that_present_message) {
+-      if (!(this_present_message && that_present_message))
+-        return false;
+-      if (!this.message.equals(that.message))
+-        return false;
+-    }
+-
+-    return true;
+-  }
+-
+-  public int hashCode() {
+-    return 0;
+-  }
+-
+-  public void read(TProtocol iprot) throws TException {
+-    TField field;
+-    iprot.readStructBegin();
+-    while (true)
+-    {
+-      field = iprot.readFieldBegin();
+-      if (field.type == TType.STOP) {
+-        break;
+-      }
+-      switch (field.id)
+-      {
+-        case CATEGORY:
+-          if (field.type == TType.STRING) {
+-            this.category = iprot.readString();
+-            this.__isset.category = true;
+-          } else {
+-            TProtocolUtil.skip(iprot, field.type);
+-          }
+-          break;
+-        case MESSAGE:
+-          if (field.type == TType.STRING) {
+-            this.message = iprot.readString();
+-            this.__isset.message = true;
+-          } else {
+-            TProtocolUtil.skip(iprot, field.type);
+-          }
+-          break;
+-        default:
+-          TProtocolUtil.skip(iprot, field.type);
+-          break;
+-      }
+-      iprot.readFieldEnd();
+-    }
+-    iprot.readStructEnd();
+-  }
+-
+-  public void write(TProtocol oprot) throws TException {
+-    TStruct struct = new TStruct("LogEntry");
+-    oprot.writeStructBegin(struct);
+-    TField field = new TField();
+-    if (this.category != null) {
+-      field.name = "category";
+-      field.type = TType.STRING;
+-      field.id = CATEGORY;
+-      oprot.writeFieldBegin(field);
+-      oprot.writeString(this.category);
+-      oprot.writeFieldEnd();
+-    }
+-    if (this.message != null) {
+-      field.name = "message";
+-      field.type = TType.STRING;
+-      field.id = MESSAGE;
+-      oprot.writeFieldBegin(field);
+-      oprot.writeString(this.message);
+-      oprot.writeFieldEnd();
+-    }
+-    oprot.writeFieldStop();
+-    oprot.writeStructEnd();
+-  }
+-
+-  public String toString() {
+-    StringBuilder sb = new StringBuilder("LogEntry(");
+-    boolean first = true;
+-
+-    if (!first) sb.append(", ");
+-    sb.append("category:");
+-    sb.append(this.category);
+-    first = false;
+-    if (!first) sb.append(", ");
+-    sb.append("message:");
+-    sb.append(this.message);
+-    first = false;
+-    sb.append(")");
+-    return sb.toString();
+-  }
+-
+-}
+-
+diff --git a/src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/thrift/ResultCode.java b/src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/thrift/ResultCode.java
+deleted file mode 100644
+index f5ef456..0000000
+--- a/src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/thrift/ResultCode.java
++++ /dev/null
+@@ -1,12 +0,0 @@
+-/**
+- * Autogenerated by Thrift
+- *
+- * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
+- */
+-package org.apache.hadoop.scribe_log4j.thrift;
+-
+-
+-public class ResultCode {
+-  public static final int OK = 0;
+-  public static final int TRY_LATER = 1;
+-}
+diff --git a/src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/thrift/scribe.java b/src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/thrift/scribe.java
+deleted file mode 100644
+index 1d981e5..0000000
+--- a/src/contrib/scribe-log4j/src/java/org/apache/hadoop/scribe_log4j/thrift/scribe.java
++++ /dev/null
+@@ -1,349 +0,0 @@
+-/**
+- * Autogenerated by Thrift
+- *
+- * DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
+- */
+-package org.apache.hadoop.scribe_log4j.thrift;
+-
+-import java.util.List;
+-import java.util.ArrayList;
+-import java.util.Map;
+-import java.util.HashMap;
+-import java.util.Set;
+-import java.util.HashSet;
+-import com.facebook.thrift.*;
+-
+-import com.facebook.thrift.protocol.*;
+-import com.facebook.thrift.transport.*;
+-
+-public class scribe {
+-
+-  public interface Iface extends com.facebook.fb303.FacebookService.Iface {
+-
+-    public int Log(List<LogEntry> messages) throws TException;
+-
+-  }
+-
+-  public static class Client extends com.facebook.fb303.FacebookService.Client implements Iface {
+-    public Client(TProtocol prot)
+-    {
+-      this(prot, prot);
+-    }
+-
+-    public Client(TProtocol iprot, TProtocol oprot)
+-    {
+-      super(iprot, oprot);
+-    }
+-
+-    public int Log(List<LogEntry> messages) throws TException
+-    {
+-      send_Log(messages);
+-      return recv_Log();
+-    }
+-
+-    public void send_Log(List<LogEntry> messages) throws TException
+-    {
+-      oprot_.writeMessageBegin(new TMessage("Log", TMessageType.CALL, seqid_));
+-      Log_args args = new Log_args();
+-      args.messages = messages;
+-      args.write(oprot_);
+-      oprot_.writeMessageEnd();
+-      oprot_.getTransport().flush();
+-    }
+-
+-    public int recv_Log() throws TException
+-    {
+-      TMessage msg = iprot_.readMessageBegin();
+-      if (msg.type == TMessageType.EXCEPTION) {
+-        TApplicationException x = TApplicationException.read(iprot_);
+-        iprot_.readMessageEnd();
+-        throw x;
+-      }
+-      Log_result result = new Log_result();
+-      result.read(iprot_);
+-      iprot_.readMessageEnd();
+-      if (result.__isset.success) {
+-        return result.success;
+-      }
+-      throw new TApplicationException(TApplicationException.MISSING_RESULT, "Log failed: unknown result");
+-    }
+-
+-  }
+-  public static class Processor extends com.facebook.fb303.FacebookService.Processor implements TProcessor {
+-    public Processor(Iface iface)
+-    {
+-      super(iface);
+-      iface_ = iface;
+-      processMap_.put("Log", new Log());
+-    }
+-
+-    private Iface iface_;
+-
+-    public boolean process(TProtocol iprot, TProtocol oprot) throws TException
+-    {
+-      TMessage msg = iprot.readMessageBegin();
+-      ProcessFunction fn = processMap_.get(msg.name);
+-      if (fn == null) {
+-        TProtocolUtil.skip(iprot, TType.STRUCT);
+-        iprot.readMessageEnd();
+-        TApplicationException x = new TApplicationException(TApplicationException.UNKNOWN_METHOD, "Invalid method name: '"+msg.name+"'");
+-        oprot.writeMessageBegin(new TMessage(msg.name, TMessageType.EXCEPTION, msg.seqid));
+-        x.write(oprot);
+-        oprot.writeMessageEnd();
+-        oprot.getTransport().flush();
+-        return true;
+-      }
+-      fn.process(msg.seqid, iprot, oprot);
+-      return true;
+-    }
+-
+-    private class Log implements ProcessFunction {
+-      public void process(int seqid, TProtocol iprot, TProtocol oprot) throws TException
+-      {
+-        Log_args args = new Log_args();
+-        args.read(iprot);
+-        iprot.readMessageEnd();
+-        Log_result result = new Log_result();
+-        result.success = iface_.Log(args.messages);
+-        result.__isset.success = true;
+-        oprot.writeMessageBegin(new TMessage("Log", TMessageType.REPLY, seqid));
+-        result.write(oprot);
+-        oprot.writeMessageEnd();
+-        oprot.getTransport().flush();
+-      }
+-
+-    }
+-
+-  }
+-
+-  public static class Log_args implements TBase, java.io.Serializable   {
+-    public List<LogEntry> messages;
+-    public static final int MESSAGES = 1;
+-
+-    public final Isset __isset = new Isset();
+-    public static final class Isset implements java.io.Serializable {
+-      public boolean messages = false;
+-    }
+-
+-    public Log_args() {
+-    }
+-
+-    public Log_args(
+-      List<LogEntry> messages)
+-    {
+-      this();
+-      this.messages = messages;
+-      this.__isset.messages = (messages != null);
+-    }
+-
+-    public boolean equals(Object that) {
+-      if (that == null)
+-        return false;
+-      if (that instanceof Log_args)
+-        return this.equals((Log_args)that);
+-      return false;
+-    }
+-
+-    public boolean equals(Log_args that) {
+-      if (that == null)
+-        return false;
+-
+-      boolean this_present_messages = true && (this.messages != null);
+-      boolean that_present_messages = true && (that.messages != null);
+-      if (this_present_messages || that_present_messages) {
+-        if (!(this_present_messages && that_present_messages))
+-          return false;
+-        if (!this.messages.equals(that.messages))
+-          return false;
+-      }
+-
+-      return true;
+-    }
+-
+-    public int hashCode() {
+-      return 0;
+-    }
+-
+-    public void read(TProtocol iprot) throws TException {
+-      TField field;
+-      iprot.readStructBegin();
+-      while (true)
+-      {
+-        field = iprot.readFieldBegin();
+-        if (field.type == TType.STOP) {
+-          break;
+-        }
+-        switch (field.id)
+-        {
+-          case MESSAGES:
+-            if (field.type == TType.LIST) {
+-              {
+-                TList _list0 = iprot.readListBegin();
+-                this.messages = new ArrayList<LogEntry>(_list0.size);
+-                for (int _i1 = 0; _i1 < _list0.size; ++_i1)
+-                {
+-                  LogEntry _elem2 = new LogEntry();
+-                  _elem2 = new LogEntry();
+-                  _elem2.read(iprot);
+-                  this.messages.add(_elem2);
+-                }
+-                iprot.readListEnd();
+-              }
+-              this.__isset.messages = true;
+-            } else {
+-              TProtocolUtil.skip(iprot, field.type);
+-            }
+-            break;
+-          default:
+-            TProtocolUtil.skip(iprot, field.type);
+-            break;
+-        }
+-        iprot.readFieldEnd();
+-      }
+-      iprot.readStructEnd();
+-    }
+-
+-    public void write(TProtocol oprot) throws TException {
+-      TStruct struct = new TStruct("Log_args");
+-      oprot.writeStructBegin(struct);
+-      TField field = new TField();
+-      if (this.messages != null) {
+-        field.name = "messages";
+-        field.type = TType.LIST;
+-        field.id = MESSAGES;
+-        oprot.writeFieldBegin(field);
+-        {
+-          oprot.writeListBegin(new TList(TType.STRUCT, this.messages.size()));
+-          for (LogEntry _iter3 : this.messages)          {
+-            _iter3.write(oprot);
+-          }
+-          oprot.writeListEnd();
+-        }
+-        oprot.writeFieldEnd();
+-      }
+-      oprot.writeFieldStop();
+-      oprot.writeStructEnd();
+-    }
+-
+-    public String toString() {
+-      StringBuilder sb = new StringBuilder("Log_args(");
+-      boolean first = true;
+-
+-      if (!first) sb.append(", ");
+-      sb.append("messages:");
+-      sb.append(this.messages);
+-      first = false;
+-      sb.append(")");
+-      return sb.toString();
+-    }
+-
+-  }
+-
+-  public static class Log_result implements TBase, java.io.Serializable   {
+-    public int success;
+-    public static final int SUCCESS = 0;
+-
+-    public final Isset __isset = new Isset();
+-    public static final class Isset implements java.io.Serializable {
+-      public boolean success = false;
+-    }
+-
+-    public Log_result() {
+-    }
+-
+-    public Log_result(
+-      int success)
+-    {
+-      this();
+-      this.success = success;
+-      this.__isset.success = true;
+-    }
+-
+-    public boolean equals(Object that) {
+-      if (that == null)
+-        return false;
+-      if (that instanceof Log_result)
+-        return this.equals((Log_result)that);
+-      return false;
+-    }
+-
+-    public boolean equals(Log_result that) {
+-      if (that == null)
+-        return false;
+-
+-      boolean this_present_success = true;
+-      boolean that_present_success = true;
+-      if (this_present_success || that_present_success) {
+-        if (!(this_present_success && that_present_success))
+-          return false;
+-        if (this.success != that.success)
+-          return false;
+-      }
+-
+-      return true;
+-    }
+-
+-    public int hashCode() {
+-      return 0;
+-    }
+-
+-    public void read(TProtocol iprot) throws TException {
+-      TField field;
+-      iprot.readStructBegin();
+-      while (true)
+-      {
+-        field = iprot.readFieldBegin();
+-        if (field.type == TType.STOP) {
+-          break;
+-        }
+-        switch (field.id)
+-        {
+-          case SUCCESS:
+-            if (field.type == TType.I32) {
+-              this.success = iprot.readI32();
+-              this.__isset.success = true;
+-            } else {
+-              TProtocolUtil.skip(iprot, field.type);
+-            }
+-            break;
+-          default:
+-            TProtocolUtil.skip(iprot, field.type);
+-            break;
+-        }
+-        iprot.readFieldEnd();
+-      }
+-      iprot.readStructEnd();
+-    }
+-
+-    public void write(TProtocol oprot) throws TException {
+-      TStruct struct = new TStruct("Log_result");
+-      oprot.writeStructBegin(struct);
+-      TField field = new TField();
+-
+-      if (this.__isset.success) {
+-        field.name = "success";
+-        field.type = TType.I32;
+-        field.id = SUCCESS;
+-        oprot.writeFieldBegin(field);
+-        oprot.writeI32(this.success);
+-        oprot.writeFieldEnd();
+-      }
+-      oprot.writeFieldStop();
+-      oprot.writeStructEnd();
+-    }
+-
+-    public String toString() {
+-      StringBuilder sb = new StringBuilder("Log_result(");
+-      boolean first = true;
+-
+-      if (!first) sb.append(", ");
+-      sb.append("success:");
+-      sb.append(this.success);
+-      first = false;
+-      sb.append(")");
+-      return sb.toString();
+-    }
+-
+-  }
+-
+-}
+-- 
+1.7.0.4
+

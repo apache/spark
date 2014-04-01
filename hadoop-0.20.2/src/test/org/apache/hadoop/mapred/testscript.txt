@@ -1,0 +1,2 @@
+echo 'Test Script'
+cat $2

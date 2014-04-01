@@ -1,0 +1,503 @@
+From c62d6f0ed1c6d9e48db909acade2683830ebf37c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 5 Mar 2010 15:18:03 -0800
+Subject: [PATCH 0541/1179] MAPREDUCE-1566. Mechanism to import tokens and secrets from a file in to the submitted job.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12438122/mr-1566-1.patch (bugfixes for testcases on top of the patch committed earlier)
+Patch: https://issues.apache.org/jira/secure/attachment/12438376/mr-1566-1.1.patch
+Author: Jitendra Nath Pandey
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/io/WritableUtils.java   |    3 +-
+ .../org/apache/hadoop/security/Credentials.java    |   86 ++++++++++++++++----
+ .../hadoop/security/UserGroupInformation.java      |   16 +++-
+ .../apache/hadoop/util/GenericOptionsParser.java   |    3 +-
+ .../hadoop/hdfs/tools/DelegationTokenFetcher.java  |    7 +-
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |   15 +++-
+ .../org/apache/hadoop/mapred/JobInProgress.java    |   12 +--
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    1 -
+ .../hadoop/mapreduce/security/TokenCache.java      |   28 +++++--
+ .../hadoop/mapred/TestTaskTrackerLocalization.java |   11 +--
+ .../hadoop/mapreduce/security/TestTokenCache.java  |    2 +-
+ .../hadoop/tools/TestDelegationTokenFetcher.java   |    3 +-
+ .../hadoop/util/TestGenericOptionsParser.java      |    2 +-
+ 13 files changed, 136 insertions(+), 53 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/io/WritableUtils.java b/src/core/org/apache/hadoop/io/WritableUtils.java
+index e49ea92..a30101f 100644
+--- a/src/core/org/apache/hadoop/io/WritableUtils.java
++++ b/src/core/org/apache/hadoop/io/WritableUtils.java
+@@ -53,7 +53,8 @@ public final class WritableUtils  {
+     }
+   }
+ 
+-  public static int  writeCompressedByteArray(DataOutput out, byte[] bytes) throws IOException {
++  public static int  writeCompressedByteArray(DataOutput out, 
++                                              byte[] bytes) throws IOException {
+     if (bytes != null) {
+       ByteArrayOutputStream bos =  new ByteArrayOutputStream();
+       GZIPOutputStream gzout = new GZIPOutputStream(bos);
+diff --git a/src/core/org/apache/hadoop/security/Credentials.java b/src/core/org/apache/hadoop/security/Credentials.java
+index 66cdfed..2f1c00a 100644
+--- a/src/core/org/apache/hadoop/security/Credentials.java
++++ b/src/core/org/apache/hadoop/security/Credentials.java
+@@ -19,21 +19,24 @@
+ package org.apache.hadoop.security;
+ 
+ import java.io.DataInput;
++import java.io.DataInputStream;
+ import java.io.DataOutput;
++import java.io.DataOutputStream;
+ import java.io.IOException;
++import java.util.Arrays;
+ import java.util.Collection;
+ import java.util.HashMap;
+ import java.util.Map;
+ 
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FSDataInputStream;
+-import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.io.WritableUtils;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+-import org.apache.hadoop.conf.Configuration;
+ 
+ /**
+  * A class that provides the facilities of reading and writing 
+@@ -103,24 +106,59 @@ public class Credentials implements Writable {
+   }
+  
+   /**
+-   * Convenience method for reading a file, and loading the Tokens
++   * Convenience method for reading a token storage file, and loading the Tokens
+    * therein in the passed UGI
+    * @param filename
+    * @param conf
+-   * @param ugi
+    * @throws IOException
+    */
+-  public static void readTokensAndLoadInUGI(String filename, Configuration conf, 
+-      UserGroupInformation ugi) throws IOException {
+-    Path localTokensFile = new Path (filename);
+-    FileSystem localFS = FileSystem.getLocal(conf);
+-    FSDataInputStream in = localFS.open(localTokensFile);
+-    Credentials ts = new Credentials();
+-    ts.readFields(in);
+-    for (Token<? extends TokenIdentifier> token : ts.getAllTokens()) {
+-      ugi.addToken(token);
++  public void readTokenStorageFile(Path filename, 
++                                   Configuration conf) throws IOException {
++    FSDataInputStream in = filename.getFileSystem(conf).open(filename);
++    try {
++    readTokenStorageStream(in);
++    } catch(IOException ioe) {
++      throw new IOException("Exception reading " + filename, ioe);
++    } finally {
++      in.close();
++    }
++  }
++  
++  /**
++   * Convenience method for reading a token storage file directly from a 
++   * datainputstream
++   */
++  public void readTokenStorageStream(DataInputStream in) throws IOException {
++    byte[] magic = new byte[TOKEN_STORAGE_MAGIC.length];
++    in.readFully(magic);
++    if (!Arrays.equals(magic, TOKEN_STORAGE_MAGIC)) {
++      throw new IOException("Bad header found in token storage.");
++    }
++    byte version = in.readByte();
++    if (version != TOKEN_STORAGE_VERSION) {
++      throw new IOException("Unknown version " + version + 
++                            " in token storage.");
+     }
++    readFields(in);
++  }
++  
++  private static final byte[] TOKEN_STORAGE_MAGIC = "HDTS".getBytes();
++  private static final byte TOKEN_STORAGE_VERSION = 0;
++  
++  public void writeTokenStorageToStream(DataOutputStream os)
++    throws IOException {
++    os.write(TOKEN_STORAGE_MAGIC);
++    os.write(TOKEN_STORAGE_VERSION);
++    write(os);
++  }
++
++  public void writeTokenStorageFile(Path filename, 
++                                    Configuration conf) throws IOException {
++    FSDataOutputStream os = filename.getFileSystem(conf).create(filename);
++    writeTokenStorageToStream(os);
++    os.close();
+   }
++
+   /**
+    * Stores all the keys to DataOutput
+    * @param out
+@@ -140,7 +178,8 @@ public class Credentials implements Writable {
+     WritableUtils.writeVInt(out, secretKeysMap.size());
+     for(Map.Entry<Text, byte[]> e : secretKeysMap.entrySet()) {
+       e.getKey().write(out);
+-      WritableUtils.writeCompressedByteArray(out, e.getValue());  
++      WritableUtils.writeVInt(out, e.getValue().length);
++      out.write(e.getValue());
+     }
+   }
+   
+@@ -167,8 +206,23 @@ public class Credentials implements Writable {
+     for(int i=0; i<size; i++) {
+       Text alias = new Text();
+       alias.readFields(in);
+-      byte[] key = WritableUtils.readCompressedByteArray(in);
+-      secretKeysMap.put(alias, key);
++      int len = WritableUtils.readVInt(in);
++      byte[] value = new byte[len];
++      in.readFully(value);
++      secretKeysMap.put(alias, value);
++    }
++  }
++ 
++  /**
++   * Copy all of the credentials from one credential object into another.
++   * @param other the credentials to copy
++   */
++  public void addAll(Credentials other) {
++    for(Map.Entry<Text, byte[]> secret: other.secretKeysMap.entrySet()) {
++      secretKeysMap.put(secret.getKey(), secret.getValue());
++    }
++    for(Map.Entry<Text, Token<?>> token: other.tokenMap.entrySet()){
++      tokenMap.put(token.getKey(), token.getValue());
+     }
+   }
+ }
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index dbae56e..66b2a3a 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -48,6 +48,7 @@ import javax.security.auth.spi.LoginModule;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.security.token.TokenIdentifier;
+@@ -129,6 +130,8 @@ public class UserGroupInformation {
+   private static Groups groups;
+   /** The last authentication time */
+   private static long lastUnsuccessfulAuthenticationAttemptTime;
++  /** The configuration to use */
++  private static Configuration conf;
+   
+   public static final long MIN_TIME_BEFORE_RELOGIN = 10 * 60 * 1000L;
+   
+@@ -171,6 +174,7 @@ public class UserGroupInformation {
+     javax.security.auth.login.Configuration.setConfiguration
+         (new HadoopConfiguration());
+     isInitialized = true;
++    UserGroupInformation.conf = conf;
+   }
+ 
+   /**
+@@ -364,9 +368,15 @@ public class UserGroupInformation {
+         }
+         login.login();
+         loginUser = new UserGroupInformation(login.getSubject());
+-        String tokenFile = System.getenv(HADOOP_TOKEN_FILE_LOCATION);
+-        if (tokenFile != null && isSecurityEnabled()) {
+-          Credentials.readTokensAndLoadInUGI(tokenFile, new Configuration(), loginUser);
++        String fileLocation = System.getenv(HADOOP_TOKEN_FILE_LOCATION);
++        if (fileLocation != null && isSecurityEnabled()) {
++          // load the token storage file and put all of the tokens into the
++          // user.
++          Credentials cred = new Credentials();
++          cred.readTokenStorageFile(new Path("file:///" + fileLocation), conf);
++          for (Token<?> token: cred.getAllTokens()) {
++            loginUser.addToken(token);
++          }
+         }
+       } catch (LoginException le) {
+         throw new IOException("failure to login", le);
+diff --git a/src/core/org/apache/hadoop/util/GenericOptionsParser.java b/src/core/org/apache/hadoop/util/GenericOptionsParser.java
+index 415a57d..cc70082 100644
+--- a/src/core/org/apache/hadoop/util/GenericOptionsParser.java
++++ b/src/core/org/apache/hadoop/util/GenericOptionsParser.java
+@@ -308,7 +308,8 @@ public class GenericOptionsParser {
+         }
+ 
+         LOG.debug("setting conf tokensFile: " + fileName);
+-        conf.set("tokenCacheFile", localFs.makeQualified(p).toString());
++        conf.set("mapreduce.job.credentials.json", 
++                 localFs.makeQualified(p).toString());
+       } catch (IOException e) {
+         throw new RuntimeException(e);
+       }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java b/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java
+index 6697790..05de6f3 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/DelegationTokenFetcher.java
+@@ -126,7 +126,7 @@ public class DelegationTokenFetcher {
+     
+     Credentials ts = new Credentials();
+     ts.addToken(new Text(shortName), token);
+-    ts.write(out);
++    ts.writeTokenStorageToStream(out);
+   }
+ 
+   /**
+@@ -137,7 +137,6 @@ public class DelegationTokenFetcher {
+   throws IOException {
+     // Enable Kerberos sockets
+    System.setProperty("https.cipherSuites", "TLS_KRB5_WITH_3DES_EDE_CBC_SHA");
+-   DataOutputStream file = null;
+    DataInputStream dis = null;
+    
+    try {
+@@ -162,7 +161,6 @@ public class DelegationTokenFetcher {
+      throw new IOException("Unable to obtain remote token", e);
+    } finally {
+      if(dis != null) dis.close();
+-     if(file != null) file.close();
+    }
+  }
+   /**
+@@ -173,8 +171,9 @@ public class DelegationTokenFetcher {
+   static private void getDTfromRemoteIntoFile(String nnAddr, String filename) 
+   throws IOException {
+     Credentials ts = getDTfromRemote(nnAddr, null); 
++
+     DataOutputStream file = new DataOutputStream(new FileOutputStream(filename));
+-    ts.write(file);
++    ts.writeTokenStorageToStream(file);
+     file.flush();
+     System.out.println("Successfully wrote token of " + file.size() 
+         + " bytes  to " + filename);
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index 6298e20..100b566 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -800,6 +800,13 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+         jobCopy.set("mapreduce.job.dir", submitJobDir.toString());
+         JobStatus status = null;
+         try {
++          // load the binary file, if the user has one
++          String binaryTokenFilename = 
++            jobCopy.get("mapreduce.job.credentials.binary");
++          if (binaryTokenFilename != null) {
++            jobCopy.getCredentials().readTokenStorageFile
++               (new Path("file:///" +  binaryTokenFilename), jobCopy);
++          }
+ 
+           copyAndConfigureFiles(jobCopy, submitJobDir);
+ 
+@@ -856,7 +863,8 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+         } finally {
+           if (status == null) {
+             LOG.info("Cleaning up the staging area " + submitJobDir);
+-            fs.delete(submitJobDir, true);
++            if (fs != null && submitJobDir != null)
++              fs.delete(submitJobDir, true);
+           }
+         }
+       }
+@@ -1964,7 +1972,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+   private void populateTokenCache(Configuration conf, Credentials credentials) 
+   throws IOException{
+     // create TokenStorage object with user secretKeys
+-    String tokensFileName = conf.get("tokenCacheFile");
++    String tokensFileName = conf.get("mapreduce.job.credentials.json");
+     if(tokensFileName != null) {
+       LOG.info("loading user's secret keys from " + tokensFileName);
+       String localFileName = new Path(tokensFileName).toUri().getPath();
+@@ -1988,7 +1996,8 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+       if(json_error)
+         LOG.warn("couldn't parse Token Cache JSON file with user secret keys");
+     }
+-
++    
++ 
+     // add the delegation tokens from configuration
+     String [] nameNodes = conf.getStrings(JobContext.JOB_NAMENODES);
+     LOG.info("adding the following namenodes' delegation tokens:" + Arrays.toString(nameNodes));
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 75cf0d5..5f14de7 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -3274,8 +3274,9 @@ public class JobInProgress {
+   private void generateAndStoreTokens() throws IOException {
+     Path jobDir = jobtracker.getSystemDirectoryForJob(jobId);
+     Path keysFile = new Path(jobDir, TokenCache.JOB_TOKEN_HDFS_FILE);
+-    // we need to create this file using the jobtracker's filesystem
+-    FSDataOutputStream os = jobtracker.getFileSystem().create(keysFile);
++    if (tokenStorage == null) {
++      tokenStorage = new Credentials();
++    }
+     //create JobToken file and write token to it
+     JobTokenIdentifier identifier = new JobTokenIdentifier(new Text(jobId
+         .toString()));
+@@ -3283,15 +3284,10 @@ public class JobInProgress {
+         jobtracker.getJobTokenSecretManager());
+     token.setService(identifier.getJobId());
+     
+-    // add this token to the tokenStorage
+-    if(tokenStorage == null)
+-      tokenStorage = new Credentials();
+-
+     TokenCache.setJobToken(token, tokenStorage);
+         
+     // write TokenStorage out
+-    tokenStorage.write(os);
+-    os.close();
++    tokenStorage.writeTokenStorageFile(keysFile, conf);
+     LOG.info("jobToken generated and stored with users keys in "
+         + keysFile.toUri().getPath());
+   }
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 954bc72..2c370d4 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -1029,7 +1029,6 @@ public class TaskTracker
+     String localJobTokenFile = localizeJobTokenFile(t.getUser(), jobId);
+     rjob.ugi = UserGroupInformation.createRemoteUser(t.getUser());
+     
+-    
+     Credentials ts = TokenCache.loadTokens(localJobTokenFile, fConf);
+     Token<JobTokenIdentifier> jt = TokenCache.getJobToken(ts);
+     if (jt != null) { //could be null in the case of some unit tests
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+index e2816c3..3e34ced 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/security/TokenCache.java
+@@ -87,7 +87,10 @@ public class TokenCache {
+   throws IOException {
+     // get jobtracker principal id (for the renewer)
+     Text jtCreds = new Text(conf.get(JobTracker.JT_USER_NAME, ""));
++    boolean notReadFile = true;
+     for(Path p: ps) {
++      //TODO: Connecting to the namenode is not required in the case,
++      //where we already have the credentials in the file
+       FileSystem fs = FileSystem.get(p.toUri(), conf);
+       if(fs instanceof DistributedFileSystem) {
+         DistributedFileSystem dfs = (DistributedFileSystem)fs;
+@@ -101,6 +104,21 @@ public class TokenCache {
+           LOG.debug("DT for " + token.getService()  + " is already present");
+           continue;
+         }
++        if (notReadFile) { //read the file only once
++          String binaryTokenFilename =
++            conf.get("mapreduce.job.credentials.binary");
++          if (binaryTokenFilename != null) {
++            credentials.readTokenStorageFile(new Path("file:///" +  
++                binaryTokenFilename), conf);
++          }
++          notReadFile = false;
++          token = 
++            TokenCache.getDelegationToken(credentials, fs_addr); 
++          if(token != null) {
++            LOG.debug("DT for " + token.getService()  + " is already present");
++            continue;
++          }
++        }
+         // get the token
+         token = dfs.getDelegationToken(jtCreds);
+         if(token==null) 
+@@ -160,18 +178,16 @@ public class TokenCache {
+   //@InterfaceAudience.Private
+   public static Credentials loadTokens(String jobTokenFile, JobConf conf) 
+   throws IOException {
+-    Path localJobTokenFile = new Path (jobTokenFile);
+-    FileSystem localFS = FileSystem.getLocal(conf);
+-    FSDataInputStream in = localFS.open(localJobTokenFile);
++    Path localJobTokenFile = new Path ("file:///" + jobTokenFile);
+     
+     Credentials ts = new Credentials();
+-    ts.readFields(in);
++    ts.readTokenStorageFile(localJobTokenFile, conf);
+ 
+     if(LOG.isDebugEnabled()) {
+       LOG.debug("Task: Loaded jobTokenFile from: "+localJobTokenFile.toUri().getPath() 
+-        +"; num of sec keys  = " + ts.numberOfSecretKeys());
++        +"; num of sec keys  = " + ts.numberOfSecretKeys() + " Number of tokens " + 
++        ts.numberOfTokens());
+     }
+-    in.close();
+     return ts;
+   }
+ 
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java b/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
+index d30318c..d325f2d 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
++++ b/src/test/org/apache/hadoop/mapred/TestTaskTrackerLocalization.java
+@@ -41,6 +41,7 @@ import org.apache.hadoop.mapred.UtilsForTests.InlineCleanupQueue;
+ import org.apache.hadoop.mapreduce.security.TokenCache;
+ import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
+ import org.apache.hadoop.mapreduce.server.tasktracker.Localizer;
++import org.apache.hadoop.security.Credentials;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.token.Token;
+ import org.apache.hadoop.util.Shell;
+@@ -209,13 +210,9 @@ public class TestTaskTrackerLocalization extends TestCase {
+     File dir = new File(TEST_ROOT_DIR, jobId.toString());
+     if(!dir.exists())
+       assertTrue("faild to create dir="+dir.getAbsolutePath(), dir.mkdirs());
+-
+-    File jobTokenFile = new File(dir, TokenCache.JOB_TOKEN_HDFS_FILE);
+-    FileOutputStream fos = new FileOutputStream(jobTokenFile);
+-    java.io.DataOutputStream out = new java.io.DataOutputStream(fos);
+-    Token<JobTokenIdentifier> jt = new Token<JobTokenIdentifier>();
+-    jt.write(out); // writing empty file, we don't need the keys for this test
+-    out.close();
++    // writing empty file, we don't need the keys for this test
++    new Credentials().writeTokenStorageFile(new Path("file:///" + dir, 
++        TokenCache.JOB_TOKEN_HDFS_FILE), new Configuration());
+   }
+ 
+   @Override
+diff --git a/src/test/org/apache/hadoop/mapreduce/security/TestTokenCache.java b/src/test/org/apache/hadoop/mapreduce/security/TestTokenCache.java
+index ca2f6e5..2635e3e 100644
+--- a/src/test/org/apache/hadoop/mapreduce/security/TestTokenCache.java
++++ b/src/test/org/apache/hadoop/mapreduce/security/TestTokenCache.java
+@@ -244,7 +244,7 @@ public class TestTokenCache {
+   public void testLocalJobTokenCache() throws NoSuchAlgorithmException, IOException {
+     // this is local job
+     String[] args = {"-m", "1", "-r", "1", "-mt", "1", "-rt", "1"}; 
+-    jConf.set("tokenCacheFile", tokenFileName.toString());
++    jConf.set("mapreduce.job.credentials.json", tokenFileName.toString());
+ 
+     int res = -1;
+     try {
+diff --git a/src/test/org/apache/hadoop/tools/TestDelegationTokenFetcher.java b/src/test/org/apache/hadoop/tools/TestDelegationTokenFetcher.java
+index ab90f92..e9a5d2b 100644
+--- a/src/test/org/apache/hadoop/tools/TestDelegationTokenFetcher.java
++++ b/src/test/org/apache/hadoop/tools/TestDelegationTokenFetcher.java
+@@ -83,7 +83,8 @@ public class TestDelegationTokenFetcher {
+     Credentials ts = new Credentials();
+     DataInputStream dis = 
+       new DataInputStream(new ByteArrayInputStream(baos.toByteArray()));
+-    ts.readFields(dis);
++    
++    ts.readTokenStorageStream(dis);
+     Token<? extends TokenIdentifier> newToken = ts.getToken(new Text(SHORT_NAME));
+     
+     assertEquals("Should only be one token in storage", ts.numberOfTokens(), 1);
+diff --git a/src/test/org/apache/hadoop/util/TestGenericOptionsParser.java b/src/test/org/apache/hadoop/util/TestGenericOptionsParser.java
+index e487f51..a4fccff 100644
+--- a/src/test/org/apache/hadoop/util/TestGenericOptionsParser.java
++++ b/src/test/org/apache/hadoop/util/TestGenericOptionsParser.java
+@@ -80,7 +80,7 @@ public class TestGenericOptionsParser extends TestCase {
+     Path tmpPath = new Path(tmpFile.toString());
+     localFs.create(tmpPath);
+     new GenericOptionsParser(conf, args);
+-    String fileName = conf.get("tokenCacheFile");
++    String fileName = conf.get("mapreduce.job.credentials.json");
+     assertNotNull("files is null", fileName);
+     assertEquals("files option does not match",
+       localFs.makeQualified(tmpPath).toString(), fileName);
+-- 
+1.7.0.4
+

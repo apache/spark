@@ -1,0 +1,139 @@
+From 4c3c667f54a058d0f2e746ceb2e744f56dd9515a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 30 Jul 2009 17:40:24 -0700
+Subject: [PATCH 0336/1179] HADOOP-5801. JobTracker should refresh the hosts list upon recovery
+
+Reason: YDH
+Author: Amar Kamat
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobTracker.java       |   10 ++-
+ .../org/apache/hadoop/mapred/TestNodeRefresh.java  |   79 ++++++++++++++++++++
+ 2 files changed, 88 insertions(+), 1 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index e35a373..d0c73f5 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -1964,6 +1964,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     } catch (Throwable t) {
+       LOG.warn("Recovery manager crashed! Ignoring.", t);
+     }
++    // refresh the node list as the recovery manager might have added 
++    // disallowed trackers
++    refreshHosts();
+     
+     this.expireTrackersThread = new Thread(this.expireTrackers,
+                                           "expireTrackers");
+@@ -3931,7 +3934,12 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   public synchronized void refreshNodes() throws IOException {
+     // check access
+     PermissionChecker.checkSuperuserPrivilege(mrOwner, supergroup);
+-
++    
++    // call the actual api
++    refreshHosts();
++  }
++  
++  private synchronized void refreshHosts() throws IOException {
+     // Reread the config to get mapred.hosts and mapred.hosts.exclude filenames.
+     // Update the file names and refresh internal includes and excludes list
+     LOG.info("Refreshing hosts information");
+diff --git a/src/test/org/apache/hadoop/mapred/TestNodeRefresh.java b/src/test/org/apache/hadoop/mapred/TestNodeRefresh.java
+index b52e7aa..7bc7101 100644
+--- a/src/test/org/apache/hadoop/mapred/TestNodeRefresh.java
++++ b/src/test/org/apache/hadoop/mapred/TestNodeRefresh.java
+@@ -30,6 +30,7 @@ import junit.framework.TestCase;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.net.NetUtils;
+@@ -375,4 +376,82 @@ public class TestNodeRefresh extends TestCase {
+     
+     stopCluster();
+   }
++
++  /** 
++    * Check if excluded hosts are decommissioned across restart   
++    */ 
++   public void testMRExcludeHostsAcrossRestarts() throws IOException { 
++     // start a cluster with 2 hosts and empty exclude-hosts file 
++     Configuration conf = new Configuration(); 
++     conf.setBoolean("mapred.jobtracker.restart.recover", true); 
++  
++     File file = new File("hosts.exclude"); 
++     file.delete(); 
++     startCluster(2, 1, 0, conf); 
++     String hostToDecommission = getHostname(1); 
++     conf = mr.createJobConf(new JobConf(conf)); 
++  
++     // submit a job 
++     Path inDir = new Path("input"); 
++     Path outDir = new Path("output"); 
++     Path signalFilename = new Path("share"); 
++     JobConf newConf = new JobConf(conf); 
++     UtilsForTests.configureWaitingJobConf(newConf, inDir, outDir, 30, 1,  
++         "restart-decommission", signalFilename.toString(),  
++         signalFilename.toString()); 
++      
++     JobClient jobClient = new JobClient(newConf); 
++     RunningJob job = jobClient.submitJob(newConf); 
++     JobID id = job.getID(); 
++      
++     // wait for 50% 
++     while (job.mapProgress() < 0.5f) { 
++       UtilsForTests.waitFor(100); 
++     } 
++      
++     // change the exclude-hosts file to include one host 
++     FileOutputStream out = new FileOutputStream(file); 
++     LOG.info("Writing excluded nodes to log file " + file.toString()); 
++     BufferedWriter writer = null; 
++     try { 
++       writer = new BufferedWriter(new OutputStreamWriter(out)); 
++       writer.write( hostToDecommission + "\n"); // decommission first host 
++     } finally { 
++       if (writer != null) { 
++         writer.close(); 
++       } 
++       out.close(); 
++     } 
++     file.deleteOnExit(); 
++  
++     // restart the jobtracker 
++     mr.stopJobTracker(); 
++     mr.startJobTracker(); 
++     // Wait for the JT to be ready 
++     UtilsForTests.waitForJobTracker(jobClient); 
++  
++     jt = mr.getJobTrackerRunner().getJobTracker(); 
++     UtilsForTests.signalTasks(dfs, dfs.getFileSystem(),  
++         signalFilename.toString(), signalFilename.toString(), 1); 
++  
++     assertTrue("Decommissioning of tracker has no effect restarted job",  
++         jt.getJob(job.getID()).failedMapTasks > 0); 
++      
++     // check the cluster status and tracker size 
++     assertEquals("Tracker is not lost upon host decommissioning",  
++                  1, jt.getClusterStatus(false).getTaskTrackers()); 
++     assertEquals("Excluded node count is incorrect",  
++                  1, jt.getClusterStatus(false).getNumExcludedNodes()); 
++      
++     // check if the host is disallowed 
++     for (TaskTrackerStatus status : jt.taskTrackers()) { 
++       assertFalse("Tracker from decommissioned host still exist",  
++                   status.getHost().equals(hostToDecommission)); 
++     } 
++  
++     // wait for the job 
++     job.waitForCompletion(); 
++  
++     stopCluster(); 
++   } 
+ }
+-- 
+1.7.0.4
+

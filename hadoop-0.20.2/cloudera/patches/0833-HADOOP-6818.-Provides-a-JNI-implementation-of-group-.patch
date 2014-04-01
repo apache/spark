@@ -1,0 +1,448 @@
+From 2780f0d352553b1a5c177fe20afdea223bd1e405 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:51 -0800
+Subject: [PATCH 0833/1179] HADOOP-6818. Provides a JNI implementation of group resolution.
+
+Author: Devaraj Das
+Ref: CDH-2622
+---
+ .../hadoop/security/JniBasedUnixGroupsMapping.java |   61 +++++++
+ src/native/Makefile.am                             |    4 -
+ src/native/Makefile.in                             |   24 ++--
+ .../hadoop/security/JniBasedUnixGroupsMapping.c    |  110 ++++++++++++
+ .../src/org/apache/hadoop/security/getGroup.c      |  177 ++++++++++++++++++++
+ 5 files changed, 359 insertions(+), 17 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/security/JniBasedUnixGroupsMapping.java
+ create mode 100644 src/native/src/org/apache/hadoop/security/JniBasedUnixGroupsMapping.c
+ create mode 100644 src/native/src/org/apache/hadoop/security/getGroup.c
+
+diff --git a/src/core/org/apache/hadoop/security/JniBasedUnixGroupsMapping.java b/src/core/org/apache/hadoop/security/JniBasedUnixGroupsMapping.java
+new file mode 100644
+index 0000000..caa780e
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/JniBasedUnixGroupsMapping.java
+@@ -0,0 +1,61 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++import java.io.IOException;
++import java.util.Arrays;
++import java.util.List;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.util.NativeCodeLoader;
++
++/**
++ * A JNI-based implementation of {@link GroupMappingServiceProvider} 
++ * that invokes libC calls to get the group
++ * memberships of a given user.
++ */
++public class JniBasedUnixGroupsMapping implements GroupMappingServiceProvider {
++  
++  private static final Log LOG = LogFactory.getLog(ShellBasedUnixGroupsMapping.class);
++  
++  native String[] getGroupForUser(String user);
++  
++  static {
++    if (!NativeCodeLoader.isNativeCodeLoaded()) {
++      LOG.info("Bailing out since native library couldn't be loaded");
++      throw new RuntimeException();
++    }
++    LOG.info("Using JniBasedUnixGroupsMapping for Group resolution");
++  }
++
++  @Override
++  public List<String> getGroups(String user) throws IOException {
++    String[] groups = null;
++    try {
++      groups = getGroupForUser(user);
++    } catch (Exception e) {
++      LOG.warn("Got exception while trying to obtain the groups for user " + user);
++    }
++    if (groups != null && groups.length != 0) {
++      return Arrays.asList(groups);
++    }
++    return Arrays.asList(new String[0]);
++  }
++}
+diff --git a/src/native/Makefile.am b/src/native/Makefile.am
+index ad0c787..ded661c 100644
+--- a/src/native/Makefile.am
++++ b/src/native/Makefile.am
+@@ -17,10 +17,6 @@
+ #
+ 
+ #
+-# Top-level makefile template for native hadoop code
+-#
+-
+-#
+ # Notes: 
+ # 1. This makefile is designed to do the actual builds in $(HADOOP_HOME)/build/native/${os.name}-${os-arch}.
+ # 2. This makefile depends on the following environment variables to function correctly:
+diff --git a/src/native/Makefile.in b/src/native/Makefile.in
+index 07aa5f0..84cbb99 100644
+--- a/src/native/Makefile.in
++++ b/src/native/Makefile.in
+@@ -34,10 +34,6 @@
+ #
+ 
+ #
+-# Top-level makefile template for native hadoop code
+-#
+-
+-#
+ # Notes: 
+ # 1. This makefile is designed to do the actual builds in $(HADOOP_HOME)/build/native/${os.name}-${os-arch}.
+ # 2. This makefile depends on the following environment variables to function correctly:
+@@ -632,19 +628,21 @@ distcleancheck: distclean
+ 	       $(distcleancheck_listfiles) ; \
+ 	       exit 1; } >&2
+ check-am: all-am
+-check: check-recursive
+-all-am: Makefile config.h
+-installdirs: installdirs-recursive
+-installdirs-am:
+-install: install-recursive
+-install-exec: install-exec-recursive
+-install-data: install-data-recursive
+-uninstall: uninstall-recursive
++check: check-am
++all-am: Makefile $(LTLIBRARIES) config.h
++installdirs:
++	for dir in "$(DESTDIR)$(libdir)"; do \
++	  test -z "$$dir" || $(mkdir_p) "$$dir"; \
++	done
++install: install-am
++install-exec: install-exec-am
++install-data: install-data-am
++uninstall: uninstall-am
+ 
+ install-am: all-am
+ 	@$(MAKE) $(AM_MAKEFLAGS) install-exec-am install-data-am
+ 
+-installcheck: installcheck-recursive
++installcheck: installcheck-am
+ install-strip:
+ 	$(MAKE) $(AM_MAKEFLAGS) INSTALL_PROGRAM="$(INSTALL_STRIP_PROGRAM)" \
+ 	  install_sh_PROGRAM="$(INSTALL_STRIP_PROGRAM)" INSTALL_STRIP_FLAG=-s \
+diff --git a/src/native/src/org/apache/hadoop/security/JniBasedUnixGroupsMapping.c b/src/native/src/org/apache/hadoop/security/JniBasedUnixGroupsMapping.c
+new file mode 100644
+index 0000000..30a1581
+--- /dev/null
++++ b/src/native/src/org/apache/hadoop/security/JniBasedUnixGroupsMapping.c
+@@ -0,0 +1,110 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++#include <jni.h>
++#include <sys/types.h>
++#include <sys/ipc.h>
++#include <sys/shm.h>
++#include <sys/mman.h>
++#include <sys/stat.h>
++#include <fcntl.h>
++#include <unistd.h>
++#include <stdlib.h>
++#include <errno.h>
++#include <grp.h>
++#include <stdio.h>
++#include <pwd.h>
++#include <string.h>
++
++#include "org_apache_hadoop_security_JniBasedUnixGroupsMapping.h"
++#include "org_apache_hadoop.h"
++
++#define CHECK_ERROR_AND_RETURN() \
++{\
++  if (error == ENOMEM) {\
++    THROW(env, "java/lang/OutOfMemoryError", NULL);\
++  }\
++  if (error == ENOENT) {\
++    THROW(env, "java/io/IOException", "No entry for user");\
++  }\
++  freeObjs(grpBuf, groups, env, juser, cuser);\
++  return NULL;\
++}
++
++JNIEXPORT jobjectArray JNICALL 
++Java_org_apache_hadoop_security_JniBasedUnixGroupsMapping_getGroupForUser 
++(JNIEnv *env, jobject jobj, jstring juser) {
++  void freeObjs(char *grpBuf, gid_t *groups, JNIEnv *env, jstring juser, 
++                const char *cuser);
++  extern int getGroupIDList(const char *user, int *ngroups, gid_t **groups);
++  extern int getGroupDetails(gid_t group, char **grpBuf);
++
++  char *grpBuf = NULL;
++  const char *cuser = (*env)->GetStringUTFChars(env, juser, NULL);
++  if (cuser == NULL) {
++    return NULL;
++  }
++
++  /*Get the number of the groups, and their IDs, this user belongs to*/
++  gid_t *groups = NULL;
++  int ngroups = 0;
++  int error = getGroupIDList(cuser, &ngroups, &groups);
++  if (error != 0) {
++    CHECK_ERROR_AND_RETURN();
++  }
++
++  jobjectArray jgroups = (jobjectArray)(*env)->NewObjectArray(env, ngroups, 
++            (*env)->FindClass(env, "java/lang/String"), NULL);
++  if (jgroups == NULL) {
++    freeObjs(grpBuf, groups, env, juser, cuser);
++    THROW(env, "java/lang/OutOfMemoryError", NULL);
++    return NULL;
++  }
++
++  /*Iterate over the groupIDs and get the group structure for each*/
++  int i = 0;
++  for (i = 0; i < ngroups; i++) {
++    error = getGroupDetails(groups[i],&grpBuf);
++    if (error != 0) {
++      CHECK_ERROR_AND_RETURN();
++    }
++    jstring jgrp = (*env)->NewStringUTF(env, ((struct group*)grpBuf)->gr_name);
++    if (jgrp == NULL) {
++      freeObjs(grpBuf, groups, env, juser, cuser);
++      THROW(env, "java/lang/OutOfMemoryError", NULL);
++      return NULL;
++    }
++    (*env)->SetObjectArrayElement(env, jgroups,i,jgrp);
++    free(grpBuf);
++    grpBuf = NULL;
++  }
++
++  freeObjs(grpBuf, groups, env, juser, cuser);
++  return jgroups;
++}
++
++void freeObjs(char *grpBuf, gid_t *groups, JNIEnv *env, jstring juser, const char *cuser ) {
++  if (groups != NULL) {
++    free(groups);
++    groups = NULL;
++  }
++  if (grpBuf != NULL) {
++    free(grpBuf);
++    grpBuf = NULL;
++  }
++  (*env)->ReleaseStringUTFChars(env, juser, cuser);
++}
+diff --git a/src/native/src/org/apache/hadoop/security/getGroup.c b/src/native/src/org/apache/hadoop/security/getGroup.c
+new file mode 100644
+index 0000000..ff92aff
+--- /dev/null
++++ b/src/native/src/org/apache/hadoop/security/getGroup.c
+@@ -0,0 +1,177 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++#include <grp.h>
++#include <stdio.h>
++#include <unistd.h>
++#include <pwd.h>
++#include <errno.h>
++#include <string.h>
++#include <stdlib.h>
++
++#define MAX(a, b) (a > b ? a : b)
++/*Helper functions for the JNI implementation of unix group mapping service*/
++
++
++/**
++ * Gets the group IDs for a given user. The groups argument is allocated
++ * internally, and it contains the list of groups. The ngroups is updated to 
++ * the number of groups
++ * Returns 0 on success (on success, the caller must free the memory allocated
++ * internally)
++ */
++int getGroupIDList(const char *user, int *ngroups, gid_t **groups) {
++  *ngroups = 0;
++  char *pwbuf = NULL;
++  *groups = NULL;
++  /*Look up the password database first*/
++  int error = getPW(user, &pwbuf);
++  if (error != 0) {
++    if (pwbuf != NULL) {
++      free(pwbuf);
++    }
++    return error;
++  } 
++  struct passwd *pw = (struct passwd*)pwbuf;
++  int ng = 0;
++  /*Get the groupIDs that this user belongs to*/
++  if (getgrouplist(user, pw->pw_gid, NULL, &ng) < 0) {
++    *ngroups = ng;
++    *groups = (gid_t *) malloc(ng * sizeof (gid_t));
++    if (!*groups) {
++      free(pwbuf);
++      return ENOMEM;
++    }
++    if (getgrouplist(user, pw->pw_gid, *groups, &ng) < 0) {
++      free(pwbuf);
++      free(*groups);
++      *groups = NULL;
++      return ENOENT;
++    }
++  }
++  free(pwbuf);
++  return 0;
++}
++
++/**
++ * Gets the group structure for a given group ID. 
++ * The grpBuf argument is allocated internally and it contains the 
++ * struct group for the given group ID. 
++ * Returns 0 on success (on success, the caller must free the memory allocated
++ * internally)
++ */
++int getGroupDetails(gid_t group, char **grpBuf) {
++  struct group * grp = NULL;
++  size_t currBufferSize = MAX(sysconf(_SC_GETGR_R_SIZE_MAX), 2048);
++  *grpBuf = NULL; 
++  char *buf = (char*)malloc(sizeof(char) * currBufferSize);
++
++  if (!buf) {
++    return ENOMEM;
++  }
++  int error;
++  for (;;) {
++    error = getgrgid_r(group, (struct group*)buf,
++                       buf + sizeof(struct group),
++                       currBufferSize - sizeof(struct group), &grp);
++    if(error != ERANGE) {
++       break;
++    }
++    free(buf);
++    currBufferSize *= 2;
++    buf = malloc(sizeof(char) * currBufferSize);
++    if(!buf) {
++      return ENOMEM;
++    }
++  }
++  if(!grp && !error) {
++    free(buf);
++    return ENOENT;
++  } else  if (error) {
++    free(buf);
++    return error;
++  }
++  *grpBuf = buf;
++  return 0;
++}
++
++/**
++ * Gets the password database entry for a given user. 
++ * The pwbuf argument is allocated internally and it contains the 
++ * broken out fields for the password database entry
++ * Returns 0 on success (on success, the caller must free the memory allocated 
++ * internally).
++ */
++int getPW(const char *user, char **pwbuf) {
++  struct passwd *pwbufp = NULL;
++  size_t currBufferSize = MAX(sysconf(_SC_GETPW_R_SIZE_MAX), 2048);
++  *pwbuf = NULL;
++  char *buf = (char*)malloc(sizeof(char) * currBufferSize);
++  
++  if (!buf) {
++    return ENOMEM;
++  } 
++  int error;
++  
++  for (;;) {
++    error = getpwnam_r(user, (struct passwd*)buf, buf + sizeof(struct passwd),
++                       currBufferSize - sizeof(struct passwd), &pwbufp);
++    if (error != ERANGE) {
++      break;
++    }
++    free(buf);
++    currBufferSize *= 2;
++    buf = (char*)malloc(sizeof(char) * currBufferSize);
++    if (!buf) {
++      return ENOMEM;
++    }
++  } 
++  if (!pwbufp && !error) {
++    free(buf);
++    return ENOENT;
++  } else  if (error) {
++    free(buf);
++    return error;
++  }
++  *pwbuf = buf;
++  return 0;
++} 
++
++#undef TESTING
++
++#ifdef TESTING
++int main(int argc, char **argv) {
++  int ngroups;
++  gid_t *groups = NULL;
++  char *user = "ddas";
++  if (argc == 2) user = argv[1];
++  int error = getGroupIDList(user, &ngroups, &groups);
++  if (error != 0) {
++    printf("Couldn't obtain grp for user %s", user);
++    return;
++  }
++  int i;
++  for (i = 0; i < ngroups; i++) {
++    char *grpbuf = NULL;
++    error = getGroupDetails(groups[i], &grpbuf);
++    printf("grps[%d]: %s ",i, ((struct group*)grpbuf)->gr_name);
++    free(grpbuf);
++  }
++  free(groups);
++  return 0;
++}
++#endif
+-- 
+1.7.0.4
+

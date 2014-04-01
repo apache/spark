@@ -1,0 +1,128 @@
+From b301746d45bde2759535549f87c6485f4ee577b2 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 15:02:38 -0800
+Subject: [PATCH 0096/1179] HADOOP-4936. Improvements to TestSafeMode
+
+Description: TestSafeMode
+<ul class="alternate" type="square">
+	<li>needs a detailed description of the test case</li>
+	<li>should not use direct calls to the name-node rather call <tt>DistributedFileSystem</tt> methods.</li>
+</ul>
+
+Reason: Test coverage improvement
+Author: Konstantin Shvachko
+Ref: UNKNOWN
+---
+ src/test/org/apache/hadoop/hdfs/TestSafeMode.java |   48 ++++++++++++++-------
+ 1 files changed, 32 insertions(+), 16 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/hdfs/TestSafeMode.java b/src/test/org/apache/hadoop/hdfs/TestSafeMode.java
+index ecb3371..14f0a59 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestSafeMode.java
++++ b/src/test/org/apache/hadoop/hdfs/TestSafeMode.java
+@@ -23,24 +23,37 @@ import java.io.IOException;
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.hdfs.protocol.FSConstants.SafeModeAction;
+-import org.apache.hadoop.hdfs.server.namenode.NameNode;
+ 
+ import junit.framework.TestCase;
+ 
+ /**
+- * This test makes sure that if SafeMode is manually entered, NameNode does not
+- * come out of safe mode even after the startup safemode conditions are met.
++ * Tests to verify safe mode correctness.
+  */
+ public class TestSafeMode extends TestCase {
+   
+   static Log LOG = LogFactory.getLog(TestSafeMode.class);
+-  
++
++  /**
++   * This test verifies that if SafeMode is manually entered, name-node does not
++   * come out of safe mode even after the startup safe mode conditions are met.
++   * <ol>
++   * <li>Start cluster with 1 data-node.</li>
++   * <li>Create 2 files with replication 1.</li>
++   * <li>Re-start cluster with 0 data-nodes. 
++   * Name-node should stay in automatic safe-mode.</li>
++   * <li>Enter safe mode manually.</li>
++   * <li>Start the data-node.</li>
++   * <li>Wait longer than <tt>dfs.safemode.extension</tt> and 
++   * verify that the name-node is still in safe mode.</li>
++   * </ol>
++   *  
++   * @throws IOException
++   */
+   public void testManualSafeMode() throws IOException {
+     MiniDFSCluster cluster = null;
+-    FileSystem fs = null;
++    DistributedFileSystem fs = null;
+     try {
+       Configuration conf = new Configuration();
+       // disable safemode extension to make the test run faster.
+@@ -48,7 +61,7 @@ public class TestSafeMode extends TestCase {
+       cluster = new MiniDFSCluster(conf, 1, true, null);
+       cluster.waitActive();
+       
+-      fs = cluster.getFileSystem();
++      fs = (DistributedFileSystem)cluster.getFileSystem();
+       Path file1 = new Path("/tmp/testManualSafeMode/file1");
+       Path file2 = new Path("/tmp/testManualSafeMode/file2");
+       
+@@ -56,37 +69,40 @@ public class TestSafeMode extends TestCase {
+       
+       // create two files with one block each.
+       DFSTestUtil.createFile(fs, file1, 1000, (short)1, 0);
+-      DFSTestUtil.createFile(fs, file2, 2000, (short)1, 0);    
++      DFSTestUtil.createFile(fs, file2, 2000, (short)1, 0);
++      fs.close();
+       cluster.shutdown();
+       
+       // now bring up just the NameNode.
+       cluster = new MiniDFSCluster(conf, 0, false, null);
+       cluster.waitActive();
++      fs = (DistributedFileSystem)cluster.getFileSystem();
+       
+       LOG.info("Restarted cluster with just the NameNode");
+       
+-      NameNode namenode = cluster.getNameNode();
+-      
+       assertTrue("No datanode is started. Should be in SafeMode", 
+-                 namenode.isInSafeMode());
++                 fs.setSafeMode(SafeModeAction.SAFEMODE_GET));
+       
+       // manually set safemode.
+-      namenode.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
++      fs.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+       
+       // now bring up the datanode and wait for it to be active.
+       cluster.startDataNodes(conf, 1, true, null, null);
+       cluster.waitActive();
+       
+       LOG.info("Datanode is started.");
+-      
++
++      // wait longer than dfs.safemode.extension
+       try {
+         Thread.sleep(2000);
+       } catch (InterruptedException ignored) {}
+       
+-      assertTrue("should still be in SafeMode", namenode.isInSafeMode());
++      assertTrue("should still be in SafeMode",
++          fs.setSafeMode(SafeModeAction.SAFEMODE_GET));
+       
+-      namenode.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
+-      assertFalse("should not be in SafeMode", namenode.isInSafeMode());
++      fs.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
++      assertFalse("should not be in SafeMode",
++          fs.setSafeMode(SafeModeAction.SAFEMODE_GET));
+     } finally {
+       if(fs != null) fs.close();
+       if(cluster!= null) cluster.shutdown();
+-- 
+1.7.0.4
+

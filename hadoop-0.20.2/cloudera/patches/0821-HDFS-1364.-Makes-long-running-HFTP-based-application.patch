@@ -1,0 +1,69 @@
+From f879e570e2fe88776d15de04a8597898d06f3f77 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 10 Feb 2011 14:27:45 -0800
+Subject: [PATCH 0821/1179] HDFS-1364. Makes long running HFTP-based applications do relogins if necessary.
+
+Author: Jitendra Pandey
+Ref: CDH-2622
+---
+ .../hadoop/security/UserGroupInformation.java      |   19 +++++++++++++++++++
+ .../org/apache/hadoop/hdfs/HftpFileSystem.java     |    5 ++++-
+ 2 files changed, 23 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index 294559b..e1bd4e4 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -712,6 +712,25 @@ public class UserGroupInformation {
+       if(oldKeytabPrincipal != null) keytabPrincipal = oldKeytabPrincipal;
+     }
+   }
++
++  /**
++   * Re-login a user from keytab if TGT is expired or is close to expiry.
++   * 
++   * @throws IOException
++   */
++  public synchronized void checkTGTAndReloginFromKeytab() throws IOException {
++    //TODO: The method reloginFromKeytab should be refactored to use this
++    //      implementation.
++    if (!isSecurityEnabled()
++        || user.getAuthenticationMethod() != AuthenticationMethod.KERBEROS
++        || !isKeytab)
++      return;
++    KerberosTicket tgt = getTGT();
++    if (tgt != null && System.currentTimeMillis() < getRefreshTime(tgt)) {
++      return;
++    }
++    reloginFromKeytab();
++  }
+   
+   /**
+    * Re-Login a user in from a keytab file. Loads a user identity from a keytab
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+index fa93e1c..b7bd7e5 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/HftpFileSystem.java
+@@ -173,8 +173,10 @@ public class HftpFileSystem extends FileSystem {
+   }
+   
+   @Override
+-  public Token<?> getDelegationToken(final String renewer) throws IOException {
++  public synchronized Token<?> getDelegationToken(final String renewer) throws IOException {
+     try {
++      //Renew TGT if needed
++      ugi.checkTGTAndReloginFromKeytab();
+       return ugi.doAs(new PrivilegedExceptionAction<Token<?>>() {
+         public Token<?> run() throws IOException {
+           Credentials c;
+@@ -630,6 +632,7 @@ public class HftpFileSystem extends FileSystem {
+       final HftpFileSystem fs = weakFs.get();
+       if (fs != null) {
+         synchronized (fs) {
++          fs.ugi.checkTGTAndReloginFromKeytab();
+           fs.ugi.doAs(new PrivilegedExceptionAction<Void>() {
+ 
+             @Override
+-- 
+1.7.0.4
+

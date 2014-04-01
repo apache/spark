@@ -1,0 +1,638 @@
+From 3ad9f29cdcc14fbf41c6642b746ee04afaa92ff5 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sat, 12 Feb 2011 19:24:07 -0800
+Subject: [PATCH 0875/1179] MAPREDUCE-2323. Add metrics to the fair scheduler
+
+Reason: Necessary for CMON, useful for monitoring
+Author: Todd Lipcon
+Ref: OPSAPS-2076
+---
+ conf/hadoop-metrics.properties                     |   16 +++
+ .../org/apache/hadoop/mapred/FairScheduler.java    |   39 ++++++-
+ .../org/apache/hadoop/mapred/JobSchedulable.java   |   21 ++++
+ .../src/java/org/apache/hadoop/mapred/Pool.java    |    6 +
+ .../java/org/apache/hadoop/mapred/PoolManager.java |    7 +
+ .../org/apache/hadoop/mapred/PoolSchedulable.java  |   29 ++++-
+ .../java/org/apache/hadoop/mapred/Schedulable.java |   42 +++++++-
+ .../org/apache/hadoop/mapred/FakeSchedulable.java  |   16 +++
+ .../apache/hadoop/mapred/TestFairScheduler.java    |  127 +++++++++++++++++++-
+ .../documentation/content/xdocs/fair_scheduler.xml |   18 +++
+ 10 files changed, 314 insertions(+), 7 deletions(-)
+
+diff --git a/conf/hadoop-metrics.properties b/conf/hadoop-metrics.properties
+index cab2cd0..f74a9e3 100644
+--- a/conf/hadoop-metrics.properties
++++ b/conf/hadoop-metrics.properties
+@@ -46,3 +46,19 @@ mapred.class=org.apache.hadoop.metrics.spi.NullContext
+ 
+ # Configuration of the "ugi" context for null
+ ugi.class=org.apache.hadoop.metrics.spi.NullContext
++
++
++# Configuration of the "fairscheduler" context for null
++#fairscheduler.class=org.apache.hadoop.metrics.spi.NullContext
++
++# Configuration of the "fairscheduler" context for file
++#fairscheduler.class=org.apache.hadoop.metrics.file.FileContext
++#fairscheduler.period=10
++#fairscheduler.fileName=/tmp/fairschedulermetrics.log
++
++# Configuration of the "fairscheduler" context for ganglia
++# fairscheduler.class=org.apache.hadoop.metrics.ganglia.GangliaContext
++# fairscheduler.period=10
++# fairscheduler.servers=localhost:8649
++#
++
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+index 040f43f..22637df 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+@@ -36,6 +36,9 @@ import org.apache.hadoop.http.HttpServer;
+ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker;
+ import org.apache.hadoop.mapreduce.TaskType;
++import org.apache.hadoop.metrics.MetricsContext;
++import org.apache.hadoop.metrics.MetricsUtil;
++import org.apache.hadoop.metrics.Updater;
+ 
+ /**
+  * A {@link TaskScheduler} that implements fair sharing.
+@@ -68,6 +71,7 @@ public class FairScheduler extends TaskScheduler {
+   protected Map<JobInProgress, JobInfo> infos = // per-job scheduling variables
+     new HashMap<JobInProgress, JobInfo>();
+   protected long lastUpdateTime;           // Time when we last updated infos
++  protected long lastPreemptionUpdateTime; // Time when we last updated preemption vars
+   protected boolean initialized;  // Are we initialized?
+   protected volatile boolean running; // Are we running?
+   protected boolean assignMultiple; // Simultaneously assign map and reduce?
+@@ -91,7 +95,6 @@ public class FairScheduler extends TaskScheduler {
+   protected long lastDumpTime;       // Time when we last dumped state to log
+   protected long lastHeartbeatTime;  // Time we last ran assignTasks 
+   private long lastPreemptCheckTime; // Time we last ran preemptTasksIfNecessary
+-   
+ 
+   /**
+    * A class for holding per-job scheduler variables. These always contain the
+@@ -210,6 +213,9 @@ public class FairScheduler extends TaskScheduler {
+         infoServer.addServlet("scheduler", "/scheduler",
+             FairSchedulerServlet.class);
+       }
++      
++      initMetrics();
++      
+       eventLog.log("INITIALIZED");
+     } catch (Exception e) {
+       // Can't load one of the managers - crash the JobTracker now while it is
+@@ -219,6 +225,15 @@ public class FairScheduler extends TaskScheduler {
+     LOG.info("Successfully configured FairScheduler");
+   }
+ 
++  /**
++   * Register metrics for the fair scheduler, and start a thread
++   * to update them periodically.
++   */
++  private void initMetrics() {
++    MetricsContext context = MetricsUtil.getContext("fairscheduler");
++    context.registerUpdater(new MetricsUpdater());
++  }
++
+   @Override
+   public void terminate() throws IOException {
+     if (eventLog != null)
+@@ -231,6 +246,20 @@ public class FairScheduler extends TaskScheduler {
+     if (eventLog != null)
+       eventLog.shutdown();
+   }
++
++  /**
++   * Responsible for updating metrics when the metrics context requests it.
++   */
++  private class MetricsUpdater implements Updater {
++    @Override
++    public void doUpdates(MetricsContext context) {
++      updateMetrics();
++    }    
++  }
++  
++  synchronized void updateMetrics() {
++    poolMgr.updateMetrics();
++  }
+   
+   /**
+    * Used to listen for jobs added/removed by our {@link TaskTrackerManager}.
+@@ -685,6 +714,7 @@ public class FairScheduler extends TaskScheduler {
+    */
+   private void updatePreemptionVariables() {
+     long now = clock.getTime();
++    lastPreemptionUpdateTime = now;
+     for (TaskType type: MAP_AND_REDUCE) {
+       for (PoolSchedulable sched: getPoolSchedulables(type)) {
+         if (!isStarvedForMinShare(sched)) {
+@@ -987,4 +1017,11 @@ public class FairScheduler extends TaskScheduler {
+   public JobInfo getJobInfo(JobInProgress job) {
+     return infos.get(job);
+   }
++  
++  boolean isPreemptionEnabled() {
++    return preemptionEnabled;
++  }
++  long getLastPreemptionUpdateTime() {
++    return lastPreemptionUpdateTime;
++  }
+ }
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/JobSchedulable.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/JobSchedulable.java
+index 65deb6e..b3941a6 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/JobSchedulable.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/JobSchedulable.java
+@@ -35,6 +35,13 @@ public class JobSchedulable extends Schedulable {
+     this.scheduler = scheduler;
+     this.job = job;
+     this.taskType = taskType;
++    
++    initMetrics();
++  }
++  
++  @Override
++  public TaskType getTaskType() {
++    return taskType;
+   }
+   
+   @Override
+@@ -142,4 +149,18 @@ public class JobSchedulable extends Schedulable {
+       return null;
+     }
+   }
++
++  
++  @Override
++  protected String getMetricsContextName() {
++    return "jobs";
++  }
++  
++  @Override
++  void updateMetrics() {
++    assert metrics != null;
++    
++    super.setMetricValues(metrics);
++    metrics.update();
++  }
+ }
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/Pool.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/Pool.java
+index ca0b82f..f0b9595 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/Pool.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/Pool.java
+@@ -22,6 +22,7 @@ import java.util.ArrayList;
+ import java.util.Collection;
+ 
+ import org.apache.hadoop.mapreduce.TaskType;
++import org.apache.hadoop.metrics.MetricsContext;
+ 
+ /**
+  * A schedulable pool of jobs.
+@@ -91,4 +92,9 @@ public class Pool {
+   public PoolSchedulable getSchedulable(TaskType type) {
+     return type == TaskType.MAP ? mapSchedulable : reduceSchedulable;
+   }
++
++  public void updateMetrics() {
++    mapSchedulable.updateMetrics();
++    reduceSchedulable.updateMetrics();
++  }
+ }
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
+index a417728..8eb9eb8 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolManager.java
+@@ -35,6 +35,7 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.mapreduce.TaskType;
++import org.apache.hadoop.metrics.MetricsContext;
+ import org.w3c.dom.Document;
+ import org.w3c.dom.Element;
+ import org.w3c.dom.Node;
+@@ -508,4 +509,10 @@ public class PoolManager {
+   public long getFairSharePreemptionTimeout() {
+     return fairSharePreemptionTimeout;
+   }
++
++  synchronized void updateMetrics() {
++    for (Pool pool : pools.values()) {
++      pool.updateMetrics();
++    }
++  }
+ }
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolSchedulable.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolSchedulable.java
+index 3fbcab3..d835980 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolSchedulable.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolSchedulable.java
+@@ -41,11 +41,11 @@ public class PoolSchedulable extends Schedulable {
+   private PoolManager poolMgr;
+   private List<JobSchedulable> jobScheds = new LinkedList<JobSchedulable>();
+   private int demand = 0;
+-  
++
+   // Variables used for preemption
+   long lastTimeAtMinShare;
+   long lastTimeAtHalfFairShare;
+-
++  
+   public PoolSchedulable(FairScheduler scheduler, Pool pool, TaskType type) {
+     this.scheduler = scheduler;
+     this.pool = pool;
+@@ -54,6 +54,8 @@ public class PoolSchedulable extends Schedulable {
+     long currentTime = scheduler.getClock().getTime();
+     this.lastTimeAtMinShare = currentTime;
+     this.lastTimeAtHalfFairShare = currentTime;
++    
++    initMetrics();
+   }
+ 
+   public void addJob(JobInProgress job) {
+@@ -67,6 +69,7 @@ public class PoolSchedulable extends Schedulable {
+       JobSchedulable jobSched = it.next();
+       if (jobSched.getJob() == job) {
+         it.remove();
++        jobSched.cleanupMetrics();
+         break;
+       }
+     }
+@@ -171,6 +174,7 @@ public class PoolSchedulable extends Schedulable {
+     return pool;
+   }
+ 
++  @Override
+   public TaskType getTaskType() {
+     return taskType;
+   }
+@@ -194,4 +198,25 @@ public class PoolSchedulable extends Schedulable {
+   public void setLastTimeAtHalfFairShare(long lastTimeAtHalfFairShare) {
+     this.lastTimeAtHalfFairShare = lastTimeAtHalfFairShare;
+   }
++
++  protected String getMetricsContextName() {
++    return "pools";
++  }
++  
++  @Override
++  public void updateMetrics() {
++    super.setMetricValues(metrics);
++    
++    if (scheduler.isPreemptionEnabled()) {
++      // These won't be set if preemption is off
++      long lastCheck = scheduler.getLastPreemptionUpdateTime();
++      metrics.setMetric("millisSinceAtMinShare", lastCheck - lastTimeAtMinShare);
++      metrics.setMetric("millisSinceAtHalfFairShare", lastCheck - lastTimeAtHalfFairShare);
++    }
++    metrics.update();
++
++    for (JobSchedulable job : jobScheds) {
++      job.updateMetrics();
++    }
++  }
+ }
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/Schedulable.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/Schedulable.java
+index c4922f9..bb36e39 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/Schedulable.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/Schedulable.java
+@@ -21,6 +21,11 @@ package org.apache.hadoop.mapred;
+ import java.io.IOException;
+ import java.util.Collection;
+ 
++import org.apache.hadoop.mapreduce.TaskType;
++import org.apache.hadoop.metrics.MetricsContext;
++import org.apache.hadoop.metrics.MetricsRecord;
++import org.apache.hadoop.metrics.MetricsUtil;
++
+ /**
+  * A Schedulable represents an entity that can launch tasks, such as a job
+  * or a pool. It provides a common interface so that algorithms such as fair
+@@ -53,7 +58,8 @@ import java.util.Collection;
+ abstract class Schedulable {
+   /** Fair share assigned to this Schedulable */
+   private double fairShare = 0;
+-
++  protected MetricsRecord metrics;
++  
+   /**
+    * Name of job/pool, used for debugging as well as for breaking ties in
+    * scheduling order deterministically. 
+@@ -61,6 +67,11 @@ abstract class Schedulable {
+   public abstract String getName();
+   
+   /**
++   * @return the type of tasks that this pool schedules
++   */
++  public abstract TaskType getTaskType();
++  
++  /**
+    * Maximum number of tasks required by this Schedulable. This is defined as
+    * number of currently running tasks + number of unlaunched tasks (tasks that
+    * are either not yet launched or need to be speculated).
+@@ -122,6 +133,35 @@ abstract class Schedulable {
+     return fairShare;
+   }
+   
++  /** Return the name of the metrics context for this schedulable */
++  protected abstract String getMetricsContextName();
++  
++  /**
++   * Set up metrics context
++   */
++  protected void initMetrics() {
++    MetricsContext metricsContext = MetricsUtil.getContext("fairscheduler");
++    this.metrics = MetricsUtil.createRecord(metricsContext,
++        getMetricsContextName());
++    metrics.setTag("name", getName());
++    metrics.setTag("taskType", getTaskType().toString());
++  }
++
++  void cleanupMetrics() {
++    metrics.remove();
++    metrics = null;
++  }
++
++  protected void setMetricValues(MetricsRecord metrics) {
++    metrics.setMetric("fairShare", (float)getFairShare());
++    metrics.setMetric("minShare", getMinShare());
++    metrics.setMetric("demand", getDemand());
++    metrics.setMetric("weight", (float)getWeight());
++    metrics.setMetric("runningTasks", getRunningTasks());
++  }
++  
++  abstract void updateMetrics();
++  
+   /** Convenient toString implementation for debugging. */
+   @Override
+   public String toString() {
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/FakeSchedulable.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/FakeSchedulable.java
+index f457ae2..a615c4f 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/FakeSchedulable.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/FakeSchedulable.java
+@@ -21,6 +21,8 @@ package org.apache.hadoop.mapred;
+ import java.io.IOException;
+ import java.util.Collection;
+ 
++import org.apache.hadoop.mapreduce.TaskType;
++
+ /**
+  * Dummy implementation of Schedulable for unit testing.
+  */
+@@ -105,4 +107,18 @@ public class FakeSchedulable extends Schedulable {
+ 
+   @Override
+   public void updateDemand() {}
++
++  @Override
++  public TaskType getTaskType() {
++    return TaskType.MAP;
++  }
++
++  @Override
++  protected String getMetricsContextName() {
++    return "fake";
++  }
++
++  @Override
++  void updateMetrics() {
++  }
+ }
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+index aa0b1f7..9f75ebe 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+@@ -45,6 +45,11 @@ import org.apache.hadoop.mapreduce.Job;
+ import org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker;
+ import org.apache.hadoop.mapreduce.split.JobSplit;
+ import org.apache.hadoop.mapred.UtilsForTests.FakeClock;
++import org.apache.hadoop.metrics.ContextFactory;
++import org.apache.hadoop.metrics.MetricsContext;
++import org.apache.hadoop.metrics.MetricsUtil;
++import org.apache.hadoop.metrics.spi.NoEmitMetricsContext;
++import org.apache.hadoop.metrics.spi.OutputRecord;
+ 
+ public class TestFairScheduler extends TestCase {
+   final static String TEST_DIR = new File(System.getProperty("test.build.data",
+@@ -509,7 +514,10 @@ public class TestFairScheduler extends TestCase {
+   }
+ 
+   private void setUpCluster(int numRacks, int numNodesPerRack,
+-      boolean assignMultiple) {
++      boolean assignMultiple) throws IOException {
++    
++    resetMetrics();
++    
+     conf = new JobConf();
+     conf.set("mapred.fairscheduler.allocation.file", ALLOC_FILE);
+     conf.set("mapred.fairscheduler.poolnameproperty", POOL_PROPERTY);
+@@ -526,6 +534,20 @@ public class TestFairScheduler extends TestCase {
+     scheduler.start();
+   }
+   
++  /**
++   * Set up a metrics context that doesn't emit anywhere but stores the data
++   * so we can verify it. Also clears it of any data so that different test
++   * cases don't pollute each other.
++   */
++  private void resetMetrics() throws IOException {
++    ContextFactory factory = ContextFactory.getFactory();
++    factory.setAttribute("fairscheduler.class",
++        NoEmitMetricsContext.class.getName());
++    
++    MetricsUtil.getContext("fairscheduler").createRecord("jobs").remove();
++    MetricsUtil.getContext("fairscheduler").createRecord("pools").remove();
++  }
++
+   @Override
+   protected void tearDown() throws Exception {
+     if (scheduler != null) {
+@@ -674,7 +696,8 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(1,    info1.reduceSchedulable.getDemand());
+     assertEquals(2.0,  info1.mapSchedulable.getFairShare());
+     assertEquals(1.0,  info1.reduceSchedulable.getFairShare());
+-    
++    verifyMetrics();
++
+     // Advance time before submitting another job j2, to make j1 run before j2
+     // deterministically.
+     advanceTime(100);
+@@ -694,6 +717,7 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(2,    info2.reduceSchedulable.getDemand());
+     assertEquals(1.0,  info2.mapSchedulable.getFairShare());
+     assertEquals(2.0,  info2.reduceSchedulable.getFairShare());
++    verifyMetrics();
+     
+     // Assign tasks and check that jobs alternate in filling slots
+     checkAssignment("tt1", "attempt_test_0001_m_000000_0 on tt1");
+@@ -714,8 +738,8 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(2,  info2.reduceSchedulable.getRunningTasks());
+     assertEquals(1, info2.mapSchedulable.getDemand());
+     assertEquals(2, info2.reduceSchedulable.getDemand());
++    verifyMetrics();
+   }
+-  
+   /**
+    * This test is identical to testSmallJobs but sets assignMultiple to
+    * true so that multiple tasks can be assigned per heartbeat.
+@@ -733,6 +757,7 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(1,    info1.reduceSchedulable.getDemand());
+     assertEquals(2.0,  info1.mapSchedulable.getFairShare());
+     assertEquals(1.0,  info1.reduceSchedulable.getFairShare());
++    verifyMetrics();
+     
+     // Advance time before submitting another job j2, to make j1 run before j2
+     // deterministically.
+@@ -753,6 +778,7 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(2,    info2.reduceSchedulable.getDemand());
+     assertEquals(1.0,  info2.mapSchedulable.getFairShare());
+     assertEquals(2.0,  info2.reduceSchedulable.getFairShare());
++    verifyMetrics();
+     
+     // Assign tasks and check that jobs alternate in filling slots
+     checkAssignment("tt1", "attempt_test_0001_m_000000_0 on tt1",
+@@ -773,6 +799,7 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(2,  info2.reduceSchedulable.getRunningTasks());
+     assertEquals(1, info2.mapSchedulable.getDemand());
+     assertEquals(2, info2.reduceSchedulable.getDemand());
++    verifyMetrics();
+   }
+   
+   /**
+@@ -1607,6 +1634,7 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(0.28,  info3.reduceSchedulable.getFairShare(), 0.01);
+     assertEquals(0.28,  info4.mapSchedulable.getFairShare(), 0.01);
+     assertEquals(0.28,  info4.reduceSchedulable.getFairShare(), 0.01);
++    verifyMetrics();    
+   }
+ 
+   /**
+@@ -2724,4 +2752,97 @@ public class TestFairScheduler extends TestCase {
+     for (int i = 0; i < tasks.size(); i++)
+       assertEquals("assignment " + i, expectedTasks[i], tasks.get(i).toString());
+   }
++  
++  
++  /**
++   * Ask scheduler to update metrics and then verify that they're all
++   * correctly published to the metrics context
++   */
++  private void verifyMetrics() {
++    scheduler.updateMetrics();
++    verifyPoolMetrics();
++    verifyJobMetrics();
++  }
++  
++  /**
++   * Verify that pool-level metrics match internal data
++   */
++  private void verifyPoolMetrics() {
++    MetricsContext ctx = MetricsUtil.getContext("fairscheduler");
++    Collection<OutputRecord> records = ctx.getAllRecords().get("pools");
++    assertEquals(scheduler.getPoolSchedulables(TaskType.MAP).size() * 2,
++        records.size());
++    
++    Map<String, OutputRecord> byPoolAndType =
++      new HashMap<String, OutputRecord>();
++    for (OutputRecord rec : records) {
++      String pool = (String)rec.getTag("name");
++      String type = (String)rec.getTag("taskType");
++      assertNotNull(pool);
++      assertNotNull(type);
++      byPoolAndType.put(pool + "_" + type, rec);
++    }
++    
++    List<PoolSchedulable> poolScheds = new ArrayList<PoolSchedulable>();
++    poolScheds.addAll(scheduler.getPoolSchedulables(TaskType.MAP));
++    poolScheds.addAll(scheduler.getPoolSchedulables(TaskType.REDUCE));
++    
++    for (PoolSchedulable pool : poolScheds) {
++      String poolName = pool.getName();
++      OutputRecord metrics = byPoolAndType.get(
++          poolName + "_" + pool.getTaskType().toString());
++      assertNotNull("Need metrics for " + pool, metrics);
++      
++      verifySchedulableMetrics(pool, metrics);
++    }
++    
++  }
++  
++  /**
++   * Verify that the job-level metrics match internal data
++   */
++  private void verifyJobMetrics() {
++    MetricsContext ctx = MetricsUtil.getContext("fairscheduler");
++    Collection<OutputRecord> records = ctx.getAllRecords().get("jobs");
++    
++    System.out.println("Checking job metrics...");
++    Map<String, OutputRecord> byJobIdAndType =
++      new HashMap<String, OutputRecord>();
++    for (OutputRecord rec : records) {
++      String jobId = (String)rec.getTag("name");
++      String type = (String)rec.getTag("taskType");
++      assertNotNull(jobId);
++      assertNotNull(type);
++      byJobIdAndType.put(jobId + "_" + type, rec);
++      System.out.println("Got " + type + " metrics for job: " + jobId);
++    }
++    assertEquals(scheduler.infos.size() * 2, byJobIdAndType.size());
++    
++    for (Map.Entry<JobInProgress, JobInfo> entry :
++            scheduler.infos.entrySet()) {
++      JobInfo info = entry.getValue();
++      String jobId = entry.getKey().getJobID().toString();
++      
++      OutputRecord mapMetrics = byJobIdAndType.get(jobId + "_MAP");
++      assertNotNull("Job " + jobId + " should have map metrics", mapMetrics);
++      verifySchedulableMetrics(info.mapSchedulable, mapMetrics);
++      
++      OutputRecord reduceMetrics = byJobIdAndType.get(jobId + "_REDUCE");
++      assertNotNull("Job " + jobId + " should have reduce metrics", reduceMetrics);
++      verifySchedulableMetrics(info.reduceSchedulable, reduceMetrics);
++    }
++  }
++
++  /**
++   * Verify that the metrics for a given Schedulable are correct
++   */
++  private void verifySchedulableMetrics(
++      Schedulable sched, OutputRecord metrics) {
++    assertEquals(sched.getRunningTasks(), metrics.getMetric("runningTasks"));
++    assertEquals(sched.getDemand(), metrics.getMetric("demand"));
++    assertEquals(sched.getFairShare(),
++        metrics.getMetric("fairShare").doubleValue(), .001);
++    assertEquals(sched.getWeight(),
++        metrics.getMetric("weight").doubleValue(), .001);
++  }
+ }
+diff --git a/src/docs/src/documentation/content/xdocs/fair_scheduler.xml b/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
+index aaba607..8018eb0 100644
+--- a/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
++++ b/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
+@@ -488,6 +488,24 @@
+      <em>NewJobWeightBooster</em> are enabled.</li>
+      </ul>
+     </section>
++    <section>
++      <title>Metrics</title>
++      <p>
++        The fair scheduler can export metrics using the Hadoop metrics interface.
++        This can be enabled by adding an entry to <code>hadoop-metrics.properties</code>
++        to enable the <code>fairscheduler</code> metrics context. For example, to
++        simply retain the metrics in memory so they may be viewed in the <code>/metrics</code>
++        servlet:
++      </p>
++      <p>
++        <code>fairscheduler.class=org.apache.hadoop.metrics.spi.NoEmitMetricsContext</code>
++      </p>
++      <p>
++        Metrics are generated for each pool and job, and contain the same information that
++        is visible on the <code>/scheduler</code> web page.
++      </p>
++    </section>
++
+     <!--
+     <section>
+     <title>Implementation</title>
+-- 
+1.7.0.4
+

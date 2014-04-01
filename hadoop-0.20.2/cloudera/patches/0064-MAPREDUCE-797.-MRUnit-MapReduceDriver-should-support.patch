@@ -1,0 +1,217 @@
+From 20d5bf205e9f2864f3da53d30408ba97763a46e9 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:51:40 -0800
+Subject: [PATCH 0064/1179] MAPREDUCE-797. MRUnit MapReduceDriver should support combiners
+
+Description: The MapReduceDriver allows you to specify a mapper and a reducer class with a simple sort/"shuffle" between the passes. It would be nice to also support another Reducer implementation being used as a combiner in the middle.
+Reason: New feature
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/mrunit/MapReduceDriver.java  |   87 ++++++++++++++++---
+ .../apache/hadoop/mrunit/TestMapReduceDriver.java  |   41 +++++++++
+ 2 files changed, 114 insertions(+), 14 deletions(-)
+
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapReduceDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapReduceDriver.java
+index 007d5f2..82e86c1 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapReduceDriver.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapReduceDriver.java
+@@ -35,6 +35,7 @@ import org.apache.hadoop.mrunit.types.Pair;
+ 
+ /**
+  * Harness that allows you to test a Mapper and a Reducer instance together
++ * (along with an optional combiner).
+  * You provide the input key and value that should be sent to the Mapper, and
+  * outputs you expect to be sent by the Reducer to the collector for those
+  * inputs. By calling runTest(), the harness will deliver the input to the
+@@ -42,6 +43,9 @@ import org.apache.hadoop.mrunit.types.Pair;
+  * them), and will check the Reducer's outputs against the expected results.
+  * This is designed to handle a single (k, v)* -> (k, v)* case from the
+  * Mapper/Reducer pair, representing a single unit test.
++ *
++ * If a combiner is specified, then it will be run exactly once after
++ * the Mapper and before the Reducer.
+  */
+ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+     extends TestDriver<K1, V1, K3, V3> {
+@@ -50,6 +54,7 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+ 
+   private Mapper<K1, V1, K2, V2> myMapper;
+   private Reducer<K2, V2, K3, V3> myReducer;
++  private Reducer<K2, V2, K2, V2> myCombiner;
+ 
+   private List<Pair<K1, V1>> inputList;
+ 
+@@ -60,6 +65,15 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+     inputList = new ArrayList<Pair<K1, V1>>();
+   }
+ 
++  public MapReduceDriver(final Mapper<K1, V1, K2, V2> m,
++                         final Reducer<K2, V2, K3, V3> r,
++                         final Reducer<K2, V2, K2, V2> c) {
++    myMapper = m;
++    myReducer = r;
++    myCombiner = c;
++    inputList = new ArrayList<Pair<K1, V1>>();
++  }
++
+   public MapReduceDriver() {
+     inputList = new ArrayList<Pair<K1, V1>>();
+   }
+@@ -111,6 +125,32 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+   }
+ 
+   /**
++   * Sets the reducer object to use as a combiner for this test
++   * @param c The combiner object to use
++   */
++  public void setCombiner(Reducer<K2, V2, K2, V2> c) {
++    myCombiner = c;
++  }
++
++  /**
++   * Identical to setCombiner(), but with fluent programming style
++   * @param c The Combiner to use
++   * @return this
++   */
++  public MapReduceDriver<K1, V1, K2, V2, K3, V3> withCombiner(
++          Reducer<K2, V2, K2, V2> c) {
++    setCombiner(c);
++    return this;
++  }
++
++  /**
++   * @return the Combiner object being used for this test
++   */
++  public Reducer<K2, V2, K2, V2> getCombiner() {
++    return myCombiner;
++  }
++
++  /**
+    * Adds an input to send to the mapper
+    * @param key
+    * @param val
+@@ -257,6 +297,31 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+     return this;
+   }
+ 
++  /** The private class to manage starting the reduce phase is used for type
++      genericity reasons. This class is used in the run() method. */
++  private class ReducePhaseRunner<OUTKEY, OUTVAL> {
++    private List<Pair<OUTKEY, OUTVAL>> runReduce(
++        List<Pair<K2, List<V2>>> inputs, Reducer<K2, V2, OUTKEY, OUTVAL> reducer)
++        throws IOException {
++
++      List<Pair<OUTKEY, OUTVAL>> reduceOutputs = new ArrayList<Pair<OUTKEY, OUTVAL>>();
++
++      for (Pair<K2, List<V2>> input : inputs) {
++        K2 inputKey = input.getFirst();
++        List<V2> inputValues = input.getSecond();
++        StringBuilder sb = new StringBuilder();
++        formatValueList(inputValues, sb);
++        LOG.debug("Reducing input (" + inputKey.toString() + ", "
++            + sb.toString() + ")");
++
++        reduceOutputs.addAll(new ReduceDriver<K2, V2, OUTKEY, OUTVAL>(reducer)
++                .withInputKey(inputKey).withInputValues(inputValues).run());
++      }
++
++      return reduceOutputs;
++    }
++  }
++
+   public List<Pair<K3, V3>> run() throws IOException {
+ 
+     List<Pair<K2, V2>> mapOutputs = new ArrayList<Pair<K2, V2>>();
+@@ -269,22 +334,16 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+               input).run());
+     }
+ 
+-    List<Pair<K2, List<V2>>> reduceInputs = shuffle(mapOutputs);
+-    List<Pair<K3, V3>> reduceOutputs = new ArrayList<Pair<K3, V3>>();
+-
+-    for (Pair<K2, List<V2>> input : reduceInputs) {
+-      K2 inputKey = input.getFirst();
+-      List<V2> inputValues = input.getSecond();
+-      StringBuilder sb = new StringBuilder();
+-      formatValueList(inputValues, sb);
+-      LOG.debug("Reducing input (" + inputKey.toString() + ", "
+-          + sb.toString() + ")");
+-
+-      reduceOutputs.addAll(new ReduceDriver<K2, V2, K3, V3>(myReducer)
+-              .withInputKey(inputKey).withInputValues(inputValues).run());
++    if (myCombiner != null) {
++      // User has specified a combiner. Run this and replace the mapper outputs
++      // with the result of the combiner.
++      LOG.debug("Starting combine phase with combiner: " + myCombiner);
++      mapOutputs = new ReducePhaseRunner<K2, V2>().runReduce(shuffle(mapOutputs), myCombiner);
+     }
+ 
+-    return reduceOutputs;
++    // Run the reduce phase.
++    LOG.debug("Starting reduce phase with reducer: " + myReducer);
++    return new ReducePhaseRunner<K3, V3>().runReduce(shuffle(mapOutputs), myReducer);
+   }
+ 
+   @Override
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestMapReduceDriver.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestMapReduceDriver.java
+index 7a0a45a..6629a4a 100644
+--- a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestMapReduceDriver.java
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/TestMapReduceDriver.java
+@@ -31,6 +31,7 @@ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.mapred.Mapper;
+ import org.apache.hadoop.mapred.Reducer;
+ import org.apache.hadoop.mapred.lib.IdentityMapper;
++import org.apache.hadoop.mapred.lib.IdentityReducer;
+ import org.apache.hadoop.mapred.lib.LongSumReducer;
+ import org.apache.hadoop.mrunit.types.Pair;
+ import org.junit.Before;
+@@ -233,5 +234,45 @@ public class TestMapReduceDriver extends TestCase {
+     assertListEquals(expected, outputs);
+   }
+ 
++  // Test "combining" with an IdentityReducer. Result should be the same.
++  @Test
++  public void testIdentityCombiner() {
++    driver
++            .withCombiner(new IdentityReducer<Text, LongWritable>())
++            .withInput(new Text("foo"), new LongWritable(FOO_IN_A))
++            .withInput(new Text("foo"), new LongWritable(FOO_IN_B))
++            .withInput(new Text("bar"), new LongWritable(BAR_IN))
++            .withOutput(new Text("bar"), new LongWritable(BAR_IN))
++            .withOutput(new Text("foo"), new LongWritable(FOO_OUT))
++            .runTest();
++  }
++
++  // Test "combining" with another LongSumReducer. Result should be the same.
++  @Test
++  public void testLongSumCombiner() {
++    driver
++            .withCombiner(new LongSumReducer<Text>())
++            .withInput(new Text("foo"), new LongWritable(FOO_IN_A))
++            .withInput(new Text("foo"), new LongWritable(FOO_IN_B))
++            .withInput(new Text("bar"), new LongWritable(BAR_IN))
++            .withOutput(new Text("bar"), new LongWritable(BAR_IN))
++            .withOutput(new Text("foo"), new LongWritable(FOO_OUT))
++            .runTest();
++  }
++
++  // Test "combining" with another LongSumReducer, and with the Reducer
++  // set to IdentityReducer. Result should be the same.
++  @Test
++  public void testLongSumCombinerAndIdentityReduce() {
++    driver
++            .withCombiner(new LongSumReducer<Text>())
++            .withReducer(new IdentityReducer<Text, LongWritable>())
++            .withInput(new Text("foo"), new LongWritable(FOO_IN_A))
++            .withInput(new Text("foo"), new LongWritable(FOO_IN_B))
++            .withInput(new Text("bar"), new LongWritable(BAR_IN))
++            .withOutput(new Text("bar"), new LongWritable(BAR_IN))
++            .withOutput(new Text("foo"), new LongWritable(FOO_OUT))
++            .runTest();
++  }
+ }
+ 
+-- 
+1.7.0.4
+

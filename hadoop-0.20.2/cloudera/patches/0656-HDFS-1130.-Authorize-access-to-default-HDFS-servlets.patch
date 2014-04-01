@@ -1,0 +1,121 @@
+From a8b230d68070e829a2717805c8d3f7c995bf0ae0 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 14 May 2010 22:05:38 -0700
+Subject: [PATCH 0656/1179] HDFS-1130. Authorize access to default HDFS servlets with a DFS administrator ACL
+
+Patch: https://issues.apache.org/jira/secure/attachment/12444565/hdfs-1130.3.patch
+Author: Devaraj Das
+Ref: CDH-648
+---
+ .../org/apache/hadoop/security/SecurityUtil.java   |   21 ++++++++++++++++++++
+ src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java |    1 +
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    6 +++-
+ .../hadoop/hdfs/server/namenode/NameNode.java      |    4 +-
+ .../hdfs/server/namenode/SecondaryNameNode.java    |    3 +-
+ 5 files changed, 30 insertions(+), 5 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/SecurityUtil.java b/src/core/org/apache/hadoop/security/SecurityUtil.java
+index edb7331..a58e10d 100644
+--- a/src/core/org/apache/hadoop/security/SecurityUtil.java
++++ b/src/core/org/apache/hadoop/security/SecurityUtil.java
+@@ -31,6 +31,7 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.authorize.AccessControlList;
+ 
+ import sun.security.jgss.krb5.Krb5Util;
+ import sun.security.krb5.Credentials;
+@@ -214,4 +215,24 @@ public class SecurityUtil {
+     sb.append(NetUtils.normalizeHostName(uri.getHost())).append(":").append(port);
+     return sb.toString();
+   }
++  
++  /**
++   * Get the ACL object representing the cluster administrators
++   * The user who starts the daemon is automatically added as an admin
++   * @param conf
++   * @param configKey the key that holds the ACL string in its value
++   * @return AccessControlList instance
++   */
++  public static AccessControlList getAdminAcls(Configuration conf, 
++      String configKey) {
++    try {
++      AccessControlList adminAcl = 
++        new AccessControlList(conf.get(configKey, " "));
++      adminAcl.addUser(UserGroupInformation.getCurrentUser().
++                       getShortUserName());
++      return adminAcl;
++    } catch (Exception ex) {
++      throw new RuntimeException(ex);
++    }
++  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+index 66af1ee..b40580e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+@@ -82,6 +82,7 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final String  DFS_PERMISSIONS_ENABLED_KEY = "dfs.permissions.enabled";
+   public static final boolean DFS_PERMISSIONS_ENABLED_DEFAULT = true;
+   public static final String  DFS_PERMISSIONS_SUPERUSERGROUP_KEY = "dfs.permissions.superusergroup";
++  public static final String  DFS_ADMIN = "dfs.cluster.administrators";
+   public static final String  DFS_PERMISSIONS_SUPERUSERGROUP_DEFAULT = "supergroup";
+   public static final String  DFS_SERVER_HTTPS_KEYSTORE_RESOURCE_KEY = "dfs.https.server.keystore.resource";
+   public static final String  DFS_SERVER_HTTPS_KEYSTORE_RESOURCE_DEFAULT = "ssl-server.xml";
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 45032f4..9042200 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -417,8 +417,10 @@ public class DataNode extends Configured
+     String infoHost = infoSocAddr.getHostName();
+     int tmpInfoPort = infoSocAddr.getPort();
+     this.infoServer = (secureResources == null) 
+-       ? new HttpServer("datanode", infoHost, tmpInfoPort, tmpInfoPort == 0, conf)
+-       : new HttpServer("datanode", infoHost, tmpInfoPort, tmpInfoPort == 0, conf, 
++       ? new HttpServer("datanode", infoHost, tmpInfoPort, tmpInfoPort == 0, 
++           conf, SecurityUtil.getAdminAcls(conf, DFSConfigKeys.DFS_ADMIN))
++       : new HttpServer("datanode", infoHost, tmpInfoPort, tmpInfoPort == 0,
++           conf, SecurityUtil.getAdminAcls(conf, DFSConfigKeys.DFS_ADMIN),
+            secureResources.getListener());
+     if (conf.getBoolean("dfs.https.enable", false)) {
+       boolean needClientAuth = conf.getBoolean("dfs.https.need.client.auth", false);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 677a3cd..06c02fc 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -26,7 +26,6 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.permission.FsPermission;
+ import org.apache.hadoop.fs.permission.PermissionStatus;
+ import org.apache.hadoop.hdfs.DFSConfigKeys;
+-import org.apache.hadoop.hdfs.DFSUtil;
+ import org.apache.hadoop.hdfs.HDFSPolicyProvider;
+ import org.apache.hadoop.hdfs.protocol.*;
+ import org.apache.hadoop.hdfs.server.common.HdfsConstants.StartupOption;
+@@ -294,7 +293,8 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+           String infoHost = infoSocAddr.getHostName();
+           int infoPort = infoSocAddr.getPort();
+           httpServer = new HttpServer("hdfs", infoHost, infoPort, 
+-              infoPort == 0, conf);
++              infoPort == 0, conf, 
++              SecurityUtil.getAdminAcls(conf, DFSConfigKeys.DFS_ADMIN));
+           
+           boolean certSSL = conf.getBoolean("dfs.https.enable", false);
+           boolean useKrb = UserGroupInformation.isSecurityEnabled();
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index 56c13c9..f86a47d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -197,7 +197,8 @@ public class SecondaryNameNode implements Runnable {
+ 
+           int tmpInfoPort = infoSocAddr.getPort();
+           infoServer = new HttpServer("secondary", infoBindAddress, tmpInfoPort,
+-              tmpInfoPort == 0, conf);
++              tmpInfoPort == 0, conf, 
++              SecurityUtil.getAdminAcls(conf, DFSConfigKeys.DFS_ADMIN));
+           
+           if(UserGroupInformation.isSecurityEnabled()) {
+             System.setProperty("https.cipherSuites", 
+-- 
+1.7.0.4
+

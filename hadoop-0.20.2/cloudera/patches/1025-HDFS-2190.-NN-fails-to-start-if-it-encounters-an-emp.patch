@@ -1,0 +1,253 @@
+From 33a9d3f31ae34a873890b2a8b16bfb49808dc537 Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Mon, 8 Aug 2011 15:05:11 -0700
+Subject: [PATCH 1025/1179] HDFS-2190. NN fails to start if it encounters an empty or malformed fstime file
+
+Reason: Bug
+Author: Aaron T. Myers
+Ref: CDH-3331
+---
+ .../hadoop/hdfs/server/namenode/FSImage.java       |   13 ++--
+ .../hadoop/hdfs/util/AtomicFileOutputStream.java   |   94 ++++++++++++++++++++
+ .../namenode/TestNameNodeCorruptionRecovery.java   |   73 +++++++++++++++
+ 3 files changed, 173 insertions(+), 7 deletions(-)
+ create mode 100644 src/hdfs/org/apache/hadoop/hdfs/util/AtomicFileOutputStream.java
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeCorruptionRecovery.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+index a56dcb0..a5c3bd1 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSImage.java
+@@ -61,6 +61,7 @@ import org.apache.hadoop.hdfs.server.common.InconsistentFSStateException;
+ import org.apache.hadoop.hdfs.server.common.Storage;
+ import org.apache.hadoop.hdfs.server.common.StorageInfo;
+ import org.apache.hadoop.hdfs.server.common.UpgradeManager;
++import org.apache.hadoop.hdfs.util.AtomicFileOutputStream;
+ 
+ /**
+  * FSImage handles checkpointing and logging of the namespace edits.
+@@ -249,10 +250,6 @@ public class FSImage extends Storage {
+     return getFileNames(NameNodeFile.EDITS, NameNodeDirType.EDITS);
+   }
+ 
+-  File[] getTimeFiles() {
+-    return getFileNames(NameNodeFile.TIME, null);
+-  }
+-
+   /**
+    * Analyze storage directories.
+    * Recover from previous transitions if required. 
+@@ -569,6 +566,8 @@ public class FSImage extends Storage {
+       DataInputStream in = new DataInputStream(new FileInputStream(timeFile));
+       try {
+         timeStamp = in.readLong();
++      } catch (IOException e) {
++        LOG.info("Could not read fstime file in storage directory " + sd, e);
+       } finally {
+         in.close();
+       }
+@@ -609,9 +608,8 @@ public class FSImage extends Storage {
+     if (checkpointTime < 0L)
+       return; // do not write negative time
+     File timeFile = getImageFile(sd, NameNodeFile.TIME);
+-    if (timeFile.exists()) { timeFile.delete(); }
+     DataOutputStream out = new DataOutputStream(
+-                                                new FileOutputStream(timeFile));
++        new AtomicFileOutputStream(timeFile));
+     try {
+       out.writeLong(checkpointTime);
+     } finally {
+@@ -637,8 +635,9 @@ public class FSImage extends Storage {
+       } catch(IOException e) {
+         // Close any edits stream associated with this dir and remove directory
+         LOG.warn("incrementCheckpointTime failed on " + sd.getRoot().getPath() + ";type="+sd.getStorageDirType());
+-        if (sd.getStorageDirType().isOfType(NameNodeDirType.EDITS))
++        if (sd.getStorageDirType().isOfType(NameNodeDirType.EDITS)) {
+           editLog.processIOError(sd);
++        }
+ 
+         //add storage to the removed list
+         removedStorageDirs.add(sd);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/util/AtomicFileOutputStream.java b/src/hdfs/org/apache/hadoop/hdfs/util/AtomicFileOutputStream.java
+new file mode 100644
+index 0000000..9ac4861
+--- /dev/null
++++ b/src/hdfs/org/apache/hadoop/hdfs/util/AtomicFileOutputStream.java
+@@ -0,0 +1,94 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.util;
++
++import java.io.File;
++import java.io.FileNotFoundException;
++import java.io.FileOutputStream;
++import java.io.FilterOutputStream;
++import java.io.IOException;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.io.IOUtils;
++
++/**
++ * A FileOutputStream that has the property that it will only show
++ * up at its destination once it has been entirely written and flushed
++ * to disk. While being written, it will use a .tmp suffix.
++ * 
++ * When the output stream is closed, it is flushed, fsynced, and
++ * will be moved into place, overwriting any file that already
++ * exists at that location.
++ * 
++ * <b>NOTE</b>: on Windows platforms, it will not atomically
++ * replace the target file - instead the target file is deleted
++ * before this one is moved into place.
++ */
++public class AtomicFileOutputStream extends FilterOutputStream {
++
++  private static final String TMP_EXTENSION = ".tmp";
++  
++  private final static Log LOG = LogFactory.getLog(
++      AtomicFileOutputStream.class);
++  
++  private final File origFile;
++  private final File tmpFile;
++  
++  public AtomicFileOutputStream(File f) throws FileNotFoundException {
++    // Code unfortunately must be duplicated below since we can't assign anything
++    // before calling super
++    super(new FileOutputStream(new File(f.getParentFile(), f.getName() + TMP_EXTENSION)));
++    origFile = f.getAbsoluteFile();
++    tmpFile = new File(f.getParentFile(), f.getName() + TMP_EXTENSION).getAbsoluteFile();
++  }
++
++  @Override
++  public void close() throws IOException {
++    boolean triedToClose = false, success = false;
++    try {
++      flush();
++      ((FileOutputStream)out).getChannel().force(true);
++
++      triedToClose = true;
++      super.close();
++      success = true;
++    } finally {
++      if (success) {
++        boolean renamed = tmpFile.renameTo(origFile);
++        if (!renamed) {
++          // On windows, renameTo does not replace.
++          if (!origFile.delete() || !tmpFile.renameTo(origFile)) {
++            throw new IOException("Could not rename temporary file " +
++                tmpFile + " to " + origFile);
++          }
++        }
++      } else {
++        if (!triedToClose) {
++          // If we failed when flushing, try to close it to not leak an FD
++          IOUtils.closeStream(out);
++        }
++        // close wasn't successful, try to delete the tmp file
++        if (!tmpFile.delete()) {
++          LOG.warn("Unable to delete tmp file " + tmpFile);
++        }
++      }
++    }
++  }
++
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeCorruptionRecovery.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeCorruptionRecovery.java
+new file mode 100644
+index 0000000..70ce7d7
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestNameNodeCorruptionRecovery.java
+@@ -0,0 +1,73 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++
++import static org.junit.Assert.*;
++
++import java.io.File;
++import java.io.IOException;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.hdfs.server.namenode.FSImage.NameNodeFile;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Test;
++
++/**
++ * Test the name node's ability to recover from partially corrupted storage
++ * directories.
++ */
++public class TestNameNodeCorruptionRecovery {
++  
++  private MiniDFSCluster cluster;
++  
++  @Before
++  public void setUpCluster() throws IOException {
++    cluster = new MiniDFSCluster(new Configuration(), 0, true, null);
++    cluster.waitActive();
++  }
++  
++  @After
++  public void tearDownCluster() {
++    cluster.shutdown();
++  }
++
++  /**
++   * Test that a corrupted fstime file in a single storage directory does not
++   * prevent the NN from starting up.
++   */
++  @Test
++  public void testFsTimeFileCorrupt() throws IOException, InterruptedException {
++    assertEquals(cluster.getNameDirs().size(), 2);
++    // Get the first fstime file and truncate it.
++    truncateStorageDirFile(cluster, NameNodeFile.TIME, 0);
++    // Make sure we can start up despite the fact the fstime file is corrupted.
++    cluster.restartNameNode();
++  }
++  
++  private static void truncateStorageDirFile(MiniDFSCluster cluster,
++      NameNodeFile f, int storageDirIndex) throws IOException {
++    File currentDir = cluster.getNameNode().getFSImage()
++        .getStorageDir(storageDirIndex).getCurrentDir();
++    File nameNodeFile = new File(currentDir, f.getName());
++    assertTrue(nameNodeFile.isFile());
++    assertTrue(nameNodeFile.delete());
++    assertTrue(nameNodeFile.createNewFile());
++  }
++}
+\ No newline at end of file
+-- 
+1.7.0.4
+

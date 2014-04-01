@@ -1,0 +1,29 @@
+From f37d58671d0e9d601cfd446e6966b3a906d95029 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 16 Apr 2010 14:43:28 +0530
+Subject: [PATCH 0605/1179] MAPREDUCE-587. Fix TestStreamingExitStatus failure case on OSX
+
+Patch: https://issues.apache.org/jira/secure/attachment/12414990/MAPREDUCE-587-v1.0.patch.
+Author: Amar Kamat
+Ref: YDH
+---
+ .../hadoop/streaming/TestStreamingExitStatus.java  |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingExitStatus.java b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingExitStatus.java
+index 5cc741c..09a4624 100644
+--- a/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingExitStatus.java
++++ b/src/contrib/streaming/src/test/org/apache/hadoop/streaming/TestStreamingExitStatus.java
+@@ -55,7 +55,8 @@ public class TestStreamingExitStatus extends TestCase
+       "-reducer", (failMap ? echoTask : failingTask),
+       "-jobconf", "keep.failed.task.files=true",
+       "-jobconf", "stream.non.zero.exit.is.failure=" + exitStatusIsFailure,
+-      "-jobconf", "stream.tmpdir="+System.getProperty("test.build.data","/tmp")
++      "-jobconf", "stream.tmpdir="+System.getProperty("test.build.data","/tmp"),
++      "-jobconf", "io.sort.mb=10"
+     };
+   }
+ 
+-- 
+1.7.0.4
+

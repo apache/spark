@@ -1,0 +1,1513 @@
+From 0045482b56026f2858bdd983d09ab2a38e06bfa8 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 8 Jan 2010 18:49:32 -0800
+Subject: [PATCH 0420/1179] HADOOP-4656, HDFS-685, MAPREDUCE-1083. Add a user to groups mapping service
+
+Patch: https://issues.apache.org/jira/secure/attachment/12429805/MR-1083-0_20.2.patch
+Author: Boris Shkolnik
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/ipc/Server.java         |   12 ++-
+ .../security/GroupMappingServiceProvider.java      |   37 +++++
+ src/core/org/apache/hadoop/security/Groups.java    |  111 +++++++++++++++
+ .../RefreshUserToGroupMappingsProtocol.java        |   42 ++++++
+ .../org/apache/hadoop/security/SecurityUtil.java   |   60 ++++++++-
+ .../security/ShellBasedUnixGroupsMapping.java      |   76 +++++++++++
+ .../hadoop/security/UnixUserGroupInformation.java  |    9 +-
+ src/core/org/apache/hadoop/util/Shell.java         |    5 +
+ .../org/apache/hadoop/hdfs/HDFSPolicyProvider.java |    3 +
+ .../hadoop/hdfs/server/namenode/NameNode.java      |   13 ++-
+ .../org/apache/hadoop/hdfs/tools/DFSAdmin.java     |   45 ++++++-
+ .../org/apache/hadoop/mapred/JobTracker.java       |   14 ++-
+ .../hadoop/mapred/MapReducePolicyProvider.java     |    3 +
+ .../org/apache/hadoop/mapred/tools/MRAdmin.java    |   43 ++++++-
+ src/test/org/apache/hadoop/hdfs/DFSTestUtil.java   |   84 ++++++++++++
+ .../org/apache/hadoop/hdfs/TestDFSPermission.java  |   21 +++-
+ .../org/apache/hadoop/hdfs/TestLeaseRecovery2.java |   15 ++-
+ .../org/apache/hadoop/mapred/TestNodeRefresh.java  |   13 ++-
+ .../security/TestGroupMappingServiceRefresh.java   |  117 ++++++++++++++++
+ .../TestMapredGroupMappingServiceRefresh.java      |  142 ++++++++++++++++++++
+ .../security/TestUnixUserGroupInformation.java     |   81 +++++++++++-
+ 21 files changed, 920 insertions(+), 26 deletions(-)
+ create mode 100644 src/core/org/apache/hadoop/security/GroupMappingServiceProvider.java
+ create mode 100644 src/core/org/apache/hadoop/security/Groups.java
+ create mode 100644 src/core/org/apache/hadoop/security/RefreshUserToGroupMappingsProtocol.java
+ create mode 100644 src/core/org/apache/hadoop/security/ShellBasedUnixGroupsMapping.java
+ create mode 100644 src/test/org/apache/hadoop/security/TestGroupMappingServiceRefresh.java
+ create mode 100644 src/test/org/apache/hadoop/security/TestMapredGroupMappingServiceRefresh.java
+
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 4d717eb..f6c49f0 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -67,6 +67,7 @@ import org.apache.hadoop.util.ReflectionUtils;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.ipc.metrics.RpcMetrics;
+ import org.apache.hadoop.security.authorize.AuthorizationException;
++import org.apache.hadoop.security.UserGroupInformation;
+ 
+ /** An abstract IPC service.  IPC calls take a single {@link Writable} as a
+  * parameter, and return a {@link Writable} as their value.  A service runs on
+@@ -898,8 +899,13 @@ public abstract class Server {
+       }
+       
+       // TODO: Get the user name from the GSS API for Kerberbos-based security
+-      // Create the user subject
+-      user = SecurityUtil.getSubject(header.getUgi());
++      // Create the user subject; however use the groups as defined on the
++      // server-side, don't trust the user groups provided by the client
++      UserGroupInformation ugi = header.getUgi();
++      user = null;
++      if(ugi != null) {
++        user = SecurityUtil.getSubject(conf, header.getUgi().getUserName());
++      }
+     }
+     
+     private void processData() throws  IOException, InterruptedException {
+@@ -910,7 +916,7 @@ public abstract class Server {
+       if (LOG.isDebugEnabled())
+         LOG.debug(" got #" + id);
+ 
+-      Writable param = ReflectionUtils.newInstance(paramClass, conf);           // read param
++      Writable param = ReflectionUtils.newInstance(paramClass, conf);//read param
+       param.readFields(dis);        
+         
+       Call call = new Call(id, param, this);
+diff --git a/src/core/org/apache/hadoop/security/GroupMappingServiceProvider.java b/src/core/org/apache/hadoop/security/GroupMappingServiceProvider.java
+new file mode 100644
+index 0000000..420770f
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/GroupMappingServiceProvider.java
+@@ -0,0 +1,37 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.security;
++
++import java.io.IOException;
++import java.util.List;
++
++/**
++ * An interface for the implementation of a user-to-groups mapping service
++ * used by {@link Groups}.
++ */
++interface GroupMappingServiceProvider {
++  
++  /**
++   * Get all various {@link Group} memberships of a given {@link User}.
++   * Returns EMPTY list in case of non-existing user
++   * @param user <code>User</code> name
++   * @return <code>Group</code> memberships of <code>user</code>
++   * @throws IOException
++   */
++  public List<String> getGroups(String user) throws IOException;
++}
+diff --git a/src/core/org/apache/hadoop/security/Groups.java b/src/core/org/apache/hadoop/security/Groups.java
+new file mode 100644
+index 0000000..e59ff5a
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/Groups.java
+@@ -0,0 +1,111 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.security;
++
++import java.io.IOException;
++import java.util.List;
++import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.util.ReflectionUtils;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
++/**
++ * A user-to-groups mapping service.
++ * 
++ * {@link Groups} allows for server to get the various {@link Group} memberships
++ * of a given {@link User} via the {@link #getGroups(String)} call, thus ensuring 
++ * a consistent user-to-groups mapping and protects against vagaries of different 
++ * mappings on servers and clients in a Hadoop cluster. 
++ */
++public class Groups {
++  private static final Log LOG = LogFactory.getLog(Groups.class);
++  
++  private final GroupMappingServiceProvider impl;
++  
++  private final Map<String, CachedGroups> userToGroupsMap = 
++    new ConcurrentHashMap<String, CachedGroups>();
++  private final long cacheTimeout;
++
++  public Groups(Configuration conf) {
++    impl = 
++      ReflectionUtils.newInstance(
++          conf.getClass("hadoop.security.group.mapping",
++                        ShellBasedUnixGroupsMapping.class, 
++                        GroupMappingServiceProvider.class), 
++          conf);
++    
++    cacheTimeout = 
++      conf.getLong("hadoop.security.groups.cache.secs", 5*60) * 1000;
++    
++    LOG.info("Group mapping impl=" + impl.getClass().getName() + 
++        "; cacheTimeout=" + cacheTimeout);
++  }
++  
++  /**
++   * Get the {@link Group} memberships of a given {@link User}.
++   * @param user <code>User</code> name
++   * @return the <code>Group</code> memberships of <code>user</code>
++   * @throws IOException
++   */
++  public List<String> getGroups(String user) throws IOException {
++    // Return cached value if available
++    CachedGroups groups = userToGroupsMap.get(user);
++    long now = System.currentTimeMillis();
++    // if cache has a value and it hasn't expired
++    if (groups != null && (groups.getTimestamp() + cacheTimeout > now)) {
++      LOG.info("Returning cached groups for '" + user + "'");
++      return groups.getGroups();
++    }
++    
++    // Create and cache user's groups
++    groups = new CachedGroups(impl.getGroups(user));
++    userToGroupsMap.put(user, groups);
++    LOG.info("Returning fetched groups for '" + user + "'");
++    return groups.getGroups();
++  }
++  
++  /**
++   * Refresh all user-to-groups mappings.
++   */
++  public void refresh() {
++    LOG.info("clearing userToGroupsMap cache");
++    userToGroupsMap.clear();
++  }
++  
++  private static class CachedGroups {
++    final long timestamp;
++    final List<String> groups;
++    
++    CachedGroups(List<String> groups) {
++      this.groups = groups;
++      this.timestamp = System.currentTimeMillis();
++    }
++
++    public long getTimestamp() {
++      return timestamp;
++    }
++
++    public List<String> getGroups() {
++      return groups;
++    }
++  }
++}
+diff --git a/src/core/org/apache/hadoop/security/RefreshUserToGroupMappingsProtocol.java b/src/core/org/apache/hadoop/security/RefreshUserToGroupMappingsProtocol.java
+new file mode 100644
+index 0000000..fb88755
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/RefreshUserToGroupMappingsProtocol.java
+@@ -0,0 +1,42 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.security;
++
++import java.io.IOException;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.ipc.VersionedProtocol;
++
++/**
++ * Protocol use 
++ *
++ */
++public interface RefreshUserToGroupMappingsProtocol extends VersionedProtocol {
++  
++  /**
++   * Version 1: Initial version.
++   */
++  public static final long versionID = 1L;
++
++  /**
++   * Refresh {@link User} to {@link Group} mappings.
++   * @param conf
++   * @throws IOException
++   */
++  public void refreshUserToGroupsMappings(Configuration conf) throws IOException;
++}
+diff --git a/src/core/org/apache/hadoop/security/SecurityUtil.java b/src/core/org/apache/hadoop/security/SecurityUtil.java
+index 94b6825..7bcf48e 100644
+--- a/src/core/org/apache/hadoop/security/SecurityUtil.java
++++ b/src/core/org/apache/hadoop/security/SecurityUtil.java
+@@ -17,9 +17,11 @@
+  */
+ package org.apache.hadoop.security;
+ 
++import java.io.IOException;
+ import java.security.Policy;
+ import java.security.Principal;
+ import java.util.HashSet;
++import java.util.List;
+ import java.util.Set;
+ import java.util.TreeSet;
+ 
+@@ -41,6 +43,8 @@ public class SecurityUtil {
+                                    PolicyProvider.DEFAULT_POLICY_PROVIDER));
+   }
+   
++  private static Groups GROUPS = null;
++  
+   /**
+    * Set the global security policy for Hadoop.
+    * 
+@@ -62,6 +66,18 @@ public class SecurityUtil {
+   }
+   
+   /**
++   * Get the {@link Groups} being used to map user-to-groups.
++   * @return the <code>Groups</code> being used to map user-to-groups.
++   */
++  public static Groups getUserToGroupsMappingService(Configuration conf) {
++    if(GROUPS == null) {
++      LOG.info(" Creating new Groups object");
++      GROUPS = new Groups(conf);
++    }
++    return GROUPS;
++  }
++  
++  /**
+    * Get the {@link Subject} for the user identified by <code>ugi</code>.
+    * @param ugi user
+    * @return the {@link Subject} for the user identified by <code>ugi</code>
+@@ -70,9 +86,9 @@ public class SecurityUtil {
+     if (ugi == null) {
+       return null;
+     }
+-    
+-    Set<Principal> principals =       // Number of principals = username + #groups 
+-      new HashSet<Principal>(ugi.getGroupNames().length+1);
++    // Number of principals = username + #groups + ugi
++    Set<Principal> principals =   
++      new HashSet<Principal>(ugi.getGroupNames().length+1+1);
+     User userPrincipal = new User(ugi.getUserName()); 
+     principals.add(userPrincipal);
+     for (String group : ugi.getGroupNames()) {
+@@ -87,6 +103,44 @@ public class SecurityUtil {
+   }
+   
+   /**
++   * Get the {@link Subject} for the user identified by <code>userName</code>.
++   * @param userName user name
++   * @return the {@link Subject} for the user identified by <code>userName</code>
++   * @throws IOException
++   */
++  public static Subject getSubject(Configuration conf, String userName) 
++    throws IOException {
++    if (userName == null) {
++      return null;
++    }
++    
++    Set<Principal> principals = new HashSet<Principal>();
++    User userPrincipal = new User(userName); 
++    principals.add(userPrincipal);
++    
++    // Get user's groups
++    List<String> groups = getUserToGroupsMappingService(conf).getGroups(userName);
++    StringBuffer sb = new StringBuffer("Groups for '" + userName + "': <");
++    for (String group : groups) {
++      Group groupPrincipal = new Group(group);
++      principals.add(groupPrincipal);
++      sb.append(group + " ");
++    }
++    sb.append(">");
++    LOG.info(sb);
++    
++    // Create the ugi with the right groups
++    UserGroupInformation ugi = 
++      new UnixUserGroupInformation(userName, 
++                                   groups.toArray(new String[groups.size()]));
++    principals.add(ugi);
++    Subject user = 
++      new Subject(false, principals, new HashSet<Object>(), new HashSet<Object>());
++    
++    return user;
++  }
++  
++  /**
+    * Class representing a configured access control list.
+    */
+   public static class AccessControlList {
+diff --git a/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsMapping.java b/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsMapping.java
+new file mode 100644
+index 0000000..8acdb51
+--- /dev/null
++++ b/src/core/org/apache/hadoop/security/ShellBasedUnixGroupsMapping.java
+@@ -0,0 +1,76 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.security;
++
++import java.io.IOException;
++import java.util.LinkedList;
++import java.util.List;
++import java.util.Map;
++import java.util.StringTokenizer;
++import java.util.concurrent.ConcurrentHashMap;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.util.Shell;
++import org.apache.hadoop.util.Shell.ExitCodeException;
++
++/**
++ * A simple shell-based implementation of {@link GroupMappingServiceProvider} which
++ * exec's the <code>groups</code> shell command to fetch the {@link Group}
++ * memberships of a given {@link User}.
++ */
++public class ShellBasedUnixGroupsMapping implements GroupMappingServiceProvider {
++  Map<String, List<String>> userGroups = 
++    new ConcurrentHashMap<String, List<String>>();
++  
++  private static final Log LOG = LogFactory.getLog(ShellBasedUnixGroupsMapping.class);
++  
++  @Override
++  public List<String> getGroups(String user) throws IOException {
++    List<String> groups = userGroups.get(user);
++    if (groups == null) {
++      groups = getUnixGroups(user);
++      userGroups.put(user, groups);
++    }
++    return groups;
++  }
++
++  /** 
++   * Get the current user's group list from Unix by running the command 'groups'
++   * NOTE. For non-existing user it will return EMPTY list
++   * @param user user name
++   * @return the groups list that the <code>user</code> belongs to
++   * @throws IOException if encounter any error when running the command
++   */
++  private static List<String> getUnixGroups(final String user) throws IOException {
++    String result = "";
++    try {
++      result = Shell.execCommand(Shell.getGROUPS_FOR_USER_COMMAND(user));
++    } catch (ExitCodeException e) {
++      // if we didn't get the group - just return empty list;
++      LOG.warn("got exception trying to get groups for user " + user, e);
++    }
++    
++    StringTokenizer tokenizer = new StringTokenizer(result);
++    List<String> groups = new LinkedList<String>();
++    while (tokenizer.hasMoreTokens()) {
++      groups.add(tokenizer.nextToken());
++    }
++    return groups;
++  }
++}
+diff --git a/src/core/org/apache/hadoop/security/UnixUserGroupInformation.java b/src/core/org/apache/hadoop/security/UnixUserGroupInformation.java
+index dcb13b9..f06bda5 100644
+--- a/src/core/org/apache/hadoop/security/UnixUserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UnixUserGroupInformation.java
+@@ -95,10 +95,13 @@ public class UnixUserGroupInformation extends UserGroupInformation {
+    * @exception IllegalArgumentException if any argument is null
+    */
+   private void setUserGroupNames(String userName, String[] groupNames) {
+-    if (userName==null || userName.length()==0 ||
+-        groupNames== null || groupNames.length==0) {
++    if (userName==null || userName.length()==0) {
+       throw new IllegalArgumentException(
+-          "Parameters should not be null or an empty string/array");
++          "username should not be null nor empty");
++    }
++    if(groupNames == null) {
++      throw new IllegalArgumentException(
++      "group names array should not be null");
+     }
+     for (int i=0; i<groupNames.length; i++) {
+       if(groupNames[i] == null || groupNames[i].length() == 0) {
+diff --git a/src/core/org/apache/hadoop/util/Shell.java b/src/core/org/apache/hadoop/util/Shell.java
+index d14d3cc..8fdf178 100644
+--- a/src/core/org/apache/hadoop/util/Shell.java
++++ b/src/core/org/apache/hadoop/util/Shell.java
+@@ -47,6 +47,11 @@ abstract public class Shell {
+   public static String[] getGROUPS_COMMAND() {
+     return new String[]{"bash", "-c", "groups"};
+   }
++  /** a Unix command to get a given user's groups list */
++  public static String[] getGROUPS_FOR_USER_COMMAND(final String user) {
++    //'groups username' command return is non-consistent across different unixes
++    return new String [] {"bash", "-c", "id -Gn " + user};
++  }
+   /** a Unix command to set permission */
+   public static final String SET_PERMISSION_COMMAND = "chmod";
+   /** a Unix command to set owner */
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/HDFSPolicyProvider.java b/src/hdfs/org/apache/hadoop/hdfs/HDFSPolicyProvider.java
+index b43f669..6048df8 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/HDFSPolicyProvider.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/HDFSPolicyProvider.java
+@@ -22,6 +22,7 @@ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+ import org.apache.hadoop.hdfs.server.protocol.DatanodeProtocol;
+ import org.apache.hadoop.hdfs.server.protocol.InterDatanodeProtocol;
+ import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocol;
++import org.apache.hadoop.security.RefreshUserToGroupMappingsProtocol;
+ import org.apache.hadoop.security.authorize.PolicyProvider;
+ import org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol;
+ import org.apache.hadoop.security.authorize.Service;
+@@ -41,6 +42,8 @@ public class HDFSPolicyProvider extends PolicyProvider {
+     new Service("security.namenode.protocol.acl", NamenodeProtocol.class),
+     new Service("security.refresh.policy.protocol.acl", 
+                 RefreshAuthorizationPolicyProtocol.class),
++    new Service("security.refresh.usertogroups.mappings.protocol.acl", 
++                RefreshUserToGroupMappingsProtocol.class),
+   };
+   
+   @Override
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 22e94a0..0533eb1 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -52,6 +52,7 @@ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.net.NetworkTopology;
+ import org.apache.hadoop.net.Node;
+ import org.apache.hadoop.hdfs.security.ExportedAccessKeys;
++import org.apache.hadoop.security.RefreshUserToGroupMappingsProtocol;
+ import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.AuthorizationException;
+@@ -104,7 +105,8 @@ import java.util.List;
+  **********************************************************/
+ public class NameNode implements ClientProtocol, DatanodeProtocol,
+                                  NamenodeProtocol, FSConstants,
+-                                 RefreshAuthorizationPolicyProtocol {
++                                 RefreshAuthorizationPolicyProtocol,
++                                 RefreshUserToGroupMappingsProtocol {
+   static{
+     Configuration.addDefaultResource("hdfs-default.xml");
+     Configuration.addDefaultResource("hdfs-site.xml");
+@@ -120,6 +122,8 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+       return NamenodeProtocol.versionID;
+     } else if (protocol.equals(RefreshAuthorizationPolicyProtocol.class.getName())){
+       return RefreshAuthorizationPolicyProtocol.versionID;
++    } else if (protocol.equals(RefreshUserToGroupMappingsProtocol.class.getName())){
++      return RefreshUserToGroupMappingsProtocol.versionID;
+     } else {
+       throw new IOException("Unknown protocol to name node: " + protocol);
+     }
+@@ -947,6 +951,13 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     SecurityUtil.getPolicy().refresh();
+   }
+ 
++  @Override
++  public void refreshUserToGroupsMappings(Configuration conf) throws IOException {
++    LOG.info("Refreshing all user-to-groups mappings. Requested by user: " + 
++             UserGroupInformation.getCurrentUGI().getUserName());
++    SecurityUtil.getUserToGroupsMappingService(conf).refresh();
++  }
++
+   private static void printUsage() {
+     System.err.println(
+       "Usage: java NameNode [" +
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/tools/DFSAdmin.java b/src/hdfs/org/apache/hadoop/hdfs/tools/DFSAdmin.java
+index 0d337e8..dfcd94a 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/tools/DFSAdmin.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/tools/DFSAdmin.java
+@@ -39,6 +39,7 @@ import org.apache.hadoop.fs.shell.CommandFormat;
+ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.RefreshUserToGroupMappingsProtocol;
+ import org.apache.hadoop.security.UnixUserGroupInformation;
+ import org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol;
+ import org.apache.hadoop.util.StringUtils;
+@@ -428,6 +429,7 @@ public class DFSAdmin extends FsShell {
+       "\t[" + SetSpaceQuotaCommand.USAGE + "]\n" +
+       "\t[" + ClearSpaceQuotaCommand.USAGE +"]\n" +
+       "\t[-refreshServiceAcl]\n" +
++      "\t[-refreshUserToGroupsMappings]\n" +
+       "\t[-help [cmd]]\n";
+ 
+     String report ="-report: \tReports basic filesystem information and statistics.\n";
+@@ -476,6 +478,9 @@ public class DFSAdmin extends FsShell {
+ 
+     String refreshServiceAcl = "-refreshServiceAcl: Reload the service-level authorization policy file\n" +
+       "\t\tNamenode will reload the authorization policy file.\n";
++
++    String refreshUserToGroupsMappings =
++      "-refreshUserToGroupsMappings: Refresh user-to-groups mappings\n";
+     
+     String help = "-help [cmd]: \tDisplays help for the given command or all commands if none\n" +
+       "\t\tis specified.\n";
+@@ -504,6 +509,8 @@ public class DFSAdmin extends FsShell {
+       System.out.println(ClearSpaceQuotaCommand.DESCRIPTION);
+     } else if ("refreshServiceAcl".equals(cmd)) {
+       System.out.println(refreshServiceAcl);
++    } else if ("refreshUserToGroupsMappings".equals(cmd)) {
++      System.out.println(refreshUserToGroupsMappings);
+     } else if ("help".equals(cmd)) {
+       System.out.println(help);
+     } else {
+@@ -520,6 +527,7 @@ public class DFSAdmin extends FsShell {
+       System.out.println(SetSpaceQuotaCommand.DESCRIPTION);
+       System.out.println(ClearSpaceQuotaCommand.DESCRIPTION);
+       System.out.println(refreshServiceAcl);
++      System.out.println(refreshUserToGroupsMappings);
+       System.out.println(help);
+       System.out.println();
+       ToolRunner.printGenericCommandUsage(System.out);
+@@ -640,6 +648,30 @@ public class DFSAdmin extends FsShell {
+   }
+   
+   /**
++   * Refresh the user-to-groups mappings on the {@link NameNode}.
++   * @return exitcode 0 on success, non-zero on failure
++   * @throws IOException
++   */
++  public int refreshUserToGroupsMappings() throws IOException {
++    // Get the current configuration
++    Configuration conf = getConf();
++    
++    // Create the client
++    RefreshUserToGroupMappingsProtocol refreshProtocol = 
++      (RefreshUserToGroupMappingsProtocol) 
++      RPC.getProxy(RefreshUserToGroupMappingsProtocol.class, 
++                   RefreshUserToGroupMappingsProtocol.versionID, 
++                   NameNode.getAddress(conf), getUGI(conf), conf,
++                   NetUtils.getSocketFactory(conf, 
++                                             RefreshUserToGroupMappingsProtocol.class));
++    
++    // Refresh the user-to-groups mappings
++    refreshProtocol.refreshUserToGroupsMappings(conf);
++    
++    return 0;
++  }
++  
++  /**
+    * Displays format of commands.
+    * @param cmd The command that is being executed.
+    */
+@@ -680,6 +712,9 @@ public class DFSAdmin extends FsShell {
+     } else if ("-refreshServiceAcl".equals(cmd)) {
+       System.err.println("Usage: java DFSAdmin"
+                          + " [-refreshServiceAcl]");
++    } else if ("-refreshUserToGroupsMappings".equals(cmd)) {
++      System.err.println("Usage: java DFSAdmin"
++                         + " [-refreshUserToGroupsMappings]");
+     } else {
+       System.err.println("Usage: java DFSAdmin");
+       System.err.println("           [-report]");
+@@ -690,10 +725,11 @@ public class DFSAdmin extends FsShell {
+       System.err.println("           [-upgradeProgress status | details | force]");
+       System.err.println("           [-metasave filename]");
+       System.err.println("           [-refreshServiceAcl]");
++      System.err.println("           [-refreshUserToGroupsMappings]");
+       System.err.println("           ["+SetQuotaCommand.USAGE+"]");
+       System.err.println("           ["+ClearQuotaCommand.USAGE+"]");
+       System.err.println("           ["+SetSpaceQuotaCommand.USAGE+"]");
+-      System.err.println("           ["+ClearSpaceQuotaCommand.USAGE+"]");      
++      System.err.println("           ["+ClearSpaceQuotaCommand.USAGE+"]");
+       System.err.println("           [-help [cmd]]");
+       System.err.println();
+       ToolRunner.printGenericCommandUsage(System.err);
+@@ -760,6 +796,11 @@ public class DFSAdmin extends FsShell {
+         printUsage(cmd);
+         return exitCode;
+       }
++    } else if ("-refreshUserToGroupsMappings".equals(cmd)) {
++      if (argv.length != 1) {
++        printUsage(cmd);
++        return exitCode;
++      }
+     }
+     
+     // initialize DFSAdmin
+@@ -800,6 +841,8 @@ public class DFSAdmin extends FsShell {
+         exitCode = new SetSpaceQuotaCommand(argv, i, fs).runAll();
+       } else if ("-refreshServiceAcl".equals(cmd)) {
+         exitCode = refreshServiceAcl();
++      } else if ("-refreshUserToGroupsMappings".equals(cmd)) {
++        exitCode = refreshUserToGroupsMappings();
+       } else if ("-help".equals(cmd)) {
+         if (i < argv.length) {
+           printHelp(argv[i]);
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index af244d8..3254f01 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -85,6 +85,7 @@ import org.apache.hadoop.net.NodeBase;
+ import org.apache.hadoop.net.ScriptBasedMapping;
+ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.PermissionChecker;
++import org.apache.hadoop.security.RefreshUserToGroupMappingsProtocol;
+ import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.UnixUserGroupInformation;
+ import org.apache.hadoop.security.UserGroupInformation;
+@@ -111,7 +112,7 @@ import org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker;
+  *
+  *******************************************************/
+ public class JobTracker implements MRConstants, InterTrackerProtocol,
+-    JobSubmissionProtocol, TaskTrackerManager,
++    JobSubmissionProtocol, TaskTrackerManager, RefreshUserToGroupMappingsProtocol,
+     RefreshAuthorizationPolicyProtocol, AdminOperationsProtocol {
+ 
+   static{
+@@ -283,6 +284,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       return RefreshAuthorizationPolicyProtocol.versionID;
+     } else if (protocol.equals(AdminOperationsProtocol.class.getName())){
+       return AdminOperationsProtocol.versionID;
++    } else if (protocol.equals(RefreshUserToGroupMappingsProtocol.class.getName())){
++      return RefreshUserToGroupMappingsProtocol.versionID;
+     } else {
+       throw new IOException("Unknown protocol to job tracker: " + protocol);
+     }
+@@ -4560,6 +4563,15 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+             limitMaxMemForReduceTasks).append(")"));
+   }
+ 
++   
++  @Override
++  public void refreshUserToGroupsMappings(Configuration conf) throws IOException {
++    LOG.info("Refreshing all user-to-groups mappings. Requested by user: " + 
++             UserGroupInformation.getCurrentUGI().getUserName());
++    
++    SecurityUtil.getUserToGroupsMappingService(conf).refresh();
++  }
++  
+   private boolean perTaskMemoryConfigurationSetOnJT() {
+     if (limitMaxMemForMapTasks == JobConf.DISABLED_MEMORY_LIMIT
+         || limitMaxMemForReduceTasks == JobConf.DISABLED_MEMORY_LIMIT
+diff --git a/src/mapred/org/apache/hadoop/mapred/MapReducePolicyProvider.java b/src/mapred/org/apache/hadoop/mapred/MapReducePolicyProvider.java
+index bbffa98..6f58453 100644
+--- a/src/mapred/org/apache/hadoop/mapred/MapReducePolicyProvider.java
++++ b/src/mapred/org/apache/hadoop/mapred/MapReducePolicyProvider.java
+@@ -17,6 +17,7 @@
+  */
+ package org.apache.hadoop.mapred;
+ 
++import org.apache.hadoop.security.RefreshUserToGroupMappingsProtocol;
+ import org.apache.hadoop.security.authorize.PolicyProvider;
+ import org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol;
+ import org.apache.hadoop.security.authorize.Service;
+@@ -35,6 +36,8 @@ public class MapReducePolicyProvider extends PolicyProvider {
+                   TaskUmbilicalProtocol.class),
+       new Service("security.refresh.policy.protocol.acl", 
+                   RefreshAuthorizationPolicyProtocol.class),
++      new Service("security.refresh.usertogroups.mappings.protocol.acl", 
++                  RefreshUserToGroupMappingsProtocol.class),
+   };
+   
+   @Override
+diff --git a/src/mapred/org/apache/hadoop/mapred/tools/MRAdmin.java b/src/mapred/org/apache/hadoop/mapred/tools/MRAdmin.java
+index 0284660..8bffff8 100644
+--- a/src/mapred/org/apache/hadoop/mapred/tools/MRAdmin.java
++++ b/src/mapred/org/apache/hadoop/mapred/tools/MRAdmin.java
+@@ -28,6 +28,7 @@ import org.apache.hadoop.ipc.RemoteException;
+ import org.apache.hadoop.mapred.JobTracker;
+ import org.apache.hadoop.mapred.AdminOperationsProtocol;
+ import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.RefreshUserToGroupMappingsProtocol;
+ import org.apache.hadoop.security.UnixUserGroupInformation;
+ import org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol;
+ import org.apache.hadoop.util.StringUtils;
+@@ -54,8 +55,8 @@ public class MRAdmin extends Configured implements Tool {
+   private static void printHelp(String cmd) {
+     String summary = "hadoop mradmin is the command to execute Map-Reduce administrative commands.\n" +
+     "The full syntax is: \n\n" +
+-    "hadoop mradmin [-refreshServiceAcl] [-refreshQueueAcls] [-help [cmd]] "
+-    + "[-refreshNodes]\n"; 
++    "hadoop mradmin [-refreshServiceAcl] [-refreshQueueAcls] " +
++    "[-refreshNodes] [-refreshUserToGroupsMappings] [-help [cmd]]\n";
+ 
+   String refreshServiceAcl = "-refreshServiceAcl: Reload the service-level authorization policy file\n" +
+     "\t\tJobtracker will reload the authorization policy file.\n";
+@@ -64,6 +65,9 @@ public class MRAdmin extends Configured implements Tool {
+         "-refreshQueueAcls: Reload the queue acls\n"
+             + "\t\tJobTracker will reload the mapred-queue-acls.xml file.\n";
+ 
++  String refreshUserToGroupsMappings = 
++    "-refreshUserToGroupsMappings: Refresh user-to-groups mappings\n";
++  
+   String refreshNodes =
+     "-refreshNodes: Refresh the hosts information at the jobtracker.\n";
+   
+@@ -74,6 +78,8 @@ public class MRAdmin extends Configured implements Tool {
+     System.out.println(refreshServiceAcl);
+   } else if ("refreshQueueAcls".equals(cmd)) {
+     System.out.println(refreshQueueAcls);
++  } else if ("refreshUserToGroupsMappings".equals(cmd)) {
++    System.out.println(refreshUserToGroupsMappings);
+   }  else if ("refreshNodes".equals(cmd)) {
+     System.out.println(refreshNodes);
+   } else if ("help".equals(cmd)) {
+@@ -82,6 +88,7 @@ public class MRAdmin extends Configured implements Tool {
+     System.out.println(summary);
+     System.out.println(refreshServiceAcl);
+     System.out.println(refreshQueueAcls);
++    System.out.println(refreshUserToGroupsMappings);
+     System.out.println(refreshNodes);
+     System.out.println(help);
+     System.out.println();
+@@ -99,12 +106,15 @@ public class MRAdmin extends Configured implements Tool {
+       System.err.println("Usage: java MRAdmin" + " [-refreshServiceAcl]");
+     } else if ("-refreshQueueAcls".equals(cmd)) {
+       System.err.println("Usage: java MRAdmin" + " [-refreshQueueAcls]");
++    } else if ("-refreshUserToGroupsMappings".equals(cmd)) {
++      System.err.println("Usage: java MRAdmin" + " [-refreshUserToGroupsMappings]");
+     } else if ("-refreshNodes".equals(cmd)) {
+       System.err.println("Usage: java MRAdmin" + " [-refreshNodes]");
+     } else {
+       System.err.println("Usage: java MRAdmin");
+       System.err.println("           [-refreshServiceAcl]");
+       System.err.println("           [-refreshQueueAcls]");
++      System.err.println("           [-refreshUserToGroupsMappings]");
+       System.err.println("           [-refreshNodes]");
+       System.err.println("           [-help [cmd]]");
+       System.err.println();
+@@ -186,7 +196,30 @@ public class MRAdmin extends Configured implements Tool {
+     
+     return 0;
+   }
+-  
++
++  /**
++   * Refresh the user-to-groups mappings on the {@link JobTracker}.
++   * @return exitcode 0 on success, non-zero on failure
++   * @throws IOException
++   */
++  private int refreshUserToGroupsMappings() throws IOException {
++    // Get the current configuration
++    Configuration conf = getConf();
++    // Create the client
++    RefreshUserToGroupMappingsProtocol refreshProtocol =
++      (RefreshUserToGroupMappingsProtocol)
++      RPC.getProxy(RefreshUserToGroupMappingsProtocol.class,
++                   RefreshUserToGroupMappingsProtocol.versionID,
++                   JobTracker.getAddress(conf), getUGI(conf), conf,
++                   NetUtils.getSocketFactory(conf,
++                                             RefreshUserToGroupMappingsProtocol.class));
++
++    // Refresh the user-to-groups mappings
++    refreshProtocol.refreshUserToGroupsMappings(conf);
++
++    return 0;
++  }
++
+   @Override
+   public int run(String[] args) throws Exception {
+     if (args.length < 1) {
+@@ -202,7 +235,7 @@ public class MRAdmin extends Configured implements Tool {
+     // verify that we have enough command line parameters
+     //
+     if ("-refreshServiceAcl".equals(cmd) || "-refreshQueueAcls".equals(cmd)
+-        || "-refreshNodes".equals(cmd)) {
++        || "-refreshNodes".equals(cmd) || "-refreshUserToGroupsMappings".equals(cmd)) {
+       if (args.length != 1) {
+         printUsage(cmd);
+         return exitCode;
+@@ -215,6 +248,8 @@ public class MRAdmin extends Configured implements Tool {
+         exitCode = refreshAuthorizationPolicy();
+       } else if ("-refreshQueueAcls".equals(cmd)) {
+         exitCode = refreshQueueAcls();
++      } else if ("-refreshUserToGroupsMappings".equals(cmd)) {
++        exitCode = refreshUserToGroupsMappings();
+       } else if ("-refreshNodes".equals(cmd)) {
+         exitCode = refreshNodes();
+       } else if ("-help".equals(cmd)) {
+diff --git a/src/test/org/apache/hadoop/hdfs/DFSTestUtil.java b/src/test/org/apache/hadoop/hdfs/DFSTestUtil.java
+index acace37..2899304 100644
+--- a/src/test/org/apache/hadoop/hdfs/DFSTestUtil.java
++++ b/src/test/org/apache/hadoop/hdfs/DFSTestUtil.java
+@@ -25,7 +25,10 @@ import java.io.FileReader;
+ import java.io.IOException;
+ import java.net.URL;
+ import java.net.URLConnection;
++import java.util.ArrayList;
++import java.util.HashMap;
+ import java.util.List;
++import java.util.Map;
+ import java.util.Random;
+ import org.apache.hadoop.hdfs.DFSClient.DFSDataInputStream;
+ import org.apache.hadoop.hdfs.protocol.Block;
+@@ -38,6 +41,7 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.BlockLocation;
+ import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.security.ShellBasedUnixGroupsMapping;
+ import org.apache.hadoop.security.UnixUserGroupInformation;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+@@ -303,4 +307,84 @@ public class DFSTestUtil {
+         new UnixUserGroupInformation(username, groups));
+     return c;
+   }
++  
++  
++  /**
++   * modify conf to contain fake users with fake group
++   * @param conf to modify
++   * @throws IOException
++   */
++  static public void updateConfigurationWithFakeUsername(Configuration conf) {
++    // fake users
++    String username="fakeUser1";
++    String[] groups = {"fakeGroup1"};
++    // mapping to groups
++    Map<String, String[]> u2g_map = new HashMap<String, String[]>(1);
++    u2g_map.put(username, groups);
++    updateConfWithFakeGroupMapping(conf, u2g_map);
++    
++    UnixUserGroupInformation.saveToConf(conf,
++        UnixUserGroupInformation.UGI_PROPERTY_NAME,
++        new UnixUserGroupInformation(username, groups));
++  }
++  
++  /**
++   * mock class to get group mapping for fake users
++   * 
++   */
++  static class MockUnixGroupsMapping extends ShellBasedUnixGroupsMapping {
++    static Map<String, String []> fakeUser2GroupsMap;
++    private static final List<String> defaultGroups;
++    static {
++      defaultGroups = new ArrayList<String>(1);
++      defaultGroups.add("supergroup");
++      fakeUser2GroupsMap = new HashMap<String, String[]>();
++    }
++  
++    @Override
++    public List<String> getGroups(String user) throws IOException {
++      boolean found = false;
++      
++      // check to see if this is one of fake users
++      List<String> l = new ArrayList<String>();
++      for(String u : fakeUser2GroupsMap.keySet()) {  
++        if(user.equals(u)) {
++          found = true;
++          for(String gr : fakeUser2GroupsMap.get(u)) {
++            l.add(gr);
++          }
++        }
++      }
++      
++      // default
++      if(!found) {
++        l =  super.getGroups(user);
++        if(l.size() == 0) {
++          System.out.println("failed to get real group for " + user + 
++              "; using default");
++          return defaultGroups;
++        }
++      }
++      return l;
++    }
++  }
++  
++  /**
++   * update the configuration with fake class for mapping user to groups
++   * @param conf
++   * @param map - user to groups mapping
++   */
++  static public void updateConfWithFakeGroupMapping
++    (Configuration conf, Map<String, String []> map) {
++    if(map!=null) {
++      MockUnixGroupsMapping.fakeUser2GroupsMap = map;
++    }
++    
++    // fake mapping user to groups
++    conf.setClass("hadoop.security.group.mapping",
++        DFSTestUtil.MockUnixGroupsMapping.class,
++        ShellBasedUnixGroupsMapping.class);
++    
++  }
++  
+ }
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDFSPermission.java b/src/test/org/apache/hadoop/hdfs/TestDFSPermission.java
+index fd3a1ce..a8f8966 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDFSPermission.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDFSPermission.java
+@@ -18,16 +18,24 @@
+ package org.apache.hadoop.hdfs;
+ 
+ import java.io.IOException;
++import java.util.HashMap;
++import java.util.Map;
+ import java.util.Random;
+ 
+ import javax.security.auth.login.LoginException;
+ 
+-import org.apache.commons.logging.*;
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.fs.FSDataInputStream;
++import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.FileStatus;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.fs.permission.FsPermission;
++
+ import org.apache.hadoop.hdfs.server.common.Util;
+-import org.apache.hadoop.fs.*;
+-import org.apache.hadoop.fs.permission.*;
+ import org.apache.hadoop.security.AccessControlException;
+ import org.apache.hadoop.security.UnixUserGroupInformation;
+ 
+@@ -80,6 +88,13 @@ public class TestDFSPermission extends TestCase {
+       // explicitly turn on permission checking
+       conf.setBoolean("dfs.permissions", true);
+       
++      // create fake mapping for the groups
++      Map<String, String[]> u2g_map = new HashMap<String, String[]> (3);
++      u2g_map.put(USER1_NAME, new String[] {GROUP1_NAME, GROUP2_NAME });
++      u2g_map.put(USER2_NAME, new String[] {GROUP2_NAME, GROUP3_NAME });
++      u2g_map.put(USER3_NAME, new String[] {GROUP3_NAME, GROUP4_NAME });
++      DFSTestUtil.updateConfWithFakeGroupMapping(conf, u2g_map);
++      
+       // Initiate all four users
+       SUPERUSER = UnixUserGroupInformation.login(conf);
+       USER1 = new UnixUserGroupInformation(USER1_NAME, new String[] {
+diff --git a/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery2.java b/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery2.java
+index 3fd6cdf..e04fbad 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery2.java
++++ b/src/test/org/apache/hadoop/hdfs/TestLeaseRecovery2.java
+@@ -18,6 +18,8 @@
+ package org.apache.hadoop.hdfs;
+ 
+ import java.io.IOException;
++import java.util.HashMap;
++import java.util.Map;
+ 
+ import org.apache.commons.logging.impl.Log4JLogger;
+ import org.apache.hadoop.conf.Configuration;
+@@ -44,6 +46,9 @@ public class TestLeaseRecovery2 extends junit.framework.TestCase {
+   static final int FILE_SIZE = 1024*16;
+   static final short REPLICATION_NUM = (short)3;
+   static byte[] buffer = new byte[FILE_SIZE];
++  
++  static private String fakeUsername = "fakeUser1";
++  static private String fakeGroup = "supergroup";
+ 
+   public void testBlockSynchronization() throws Exception {
+     final long softLease = 1000;
+@@ -55,6 +60,13 @@ public class TestLeaseRecovery2 extends junit.framework.TestCase {
+     conf.setInt("dfs.heartbeat.interval", 1);
+   //  conf.setInt("io.bytes.per.checksum", 16);
+ 
++    // create fake mapping user to group and set it to the conf
++    // NOTE. this must be done at the beginning, before first call to mapping
++    // functions
++    Map<String, String []> u2g_map = new HashMap<String, String []>(1);
++    u2g_map.put(fakeUsername, new String[] {fakeGroup});
++    DFSTestUtil.updateConfWithFakeGroupMapping(conf, u2g_map);
++
+     MiniDFSCluster cluster = null;
+     byte[] actual = new byte[FILE_SIZE];
+ 
+@@ -91,10 +103,9 @@ public class TestLeaseRecovery2 extends junit.framework.TestCase {
+       // should fail but will trigger lease recovery.
+       {
+         Configuration conf2 = new Configuration(conf);
+-        String username = UserGroupInformation.getCurrentUGI().getUserName()+"_1";
+         UnixUserGroupInformation.saveToConf(conf2,
+             UnixUserGroupInformation.UGI_PROPERTY_NAME,
+-            new UnixUserGroupInformation(username, new String[]{"supergroup"}));
++            new UnixUserGroupInformation(fakeUsername, new String[]{fakeGroup}));
+         FileSystem dfs2 = FileSystem.get(conf2);
+   
+         boolean done = false;
+diff --git a/src/test/org/apache/hadoop/mapred/TestNodeRefresh.java b/src/test/org/apache/hadoop/mapred/TestNodeRefresh.java
+index 7bc7101..c679d23 100644
+--- a/src/test/org/apache/hadoop/mapred/TestNodeRefresh.java
++++ b/src/test/org/apache/hadoop/mapred/TestNodeRefresh.java
+@@ -22,7 +22,9 @@ import java.io.File;
+ import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.io.OutputStreamWriter;
++import java.util.HashMap;
+ import java.util.HashSet;
++import java.util.Map;
+ import java.util.Set;
+ 
+ import junit.framework.TestCase;
+@@ -31,6 +33,7 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.DFSTestUtil;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.ipc.RPC;
+ import org.apache.hadoop.net.NetUtils;
+@@ -60,6 +63,14 @@ public class TestNodeRefresh extends TestCase {
+                             int numExcluded, Configuration conf) 
+   throws IOException {
+     try {
++   // create fake mapping for the groups
++      Map<String, String[]> u2g_map = new HashMap<String, String[]> (1);
++      u2g_map.put("user1", new String[] {"user1" });
++      u2g_map.put("user2", new String[] {"user2" });
++      u2g_map.put("user3", new String[] {"abc" });
++      u2g_map.put("user4", new String[] {"supergroup" });
++      DFSTestUtil.updateConfWithFakeGroupMapping(conf, u2g_map);
++      
+       conf.setBoolean("dfs.replication.considerLoad", false);
+       
+       // prepare hosts info
+@@ -166,7 +177,7 @@ public class TestNodeRefresh extends TestCase {
+     // refresh with super user
+     success = false;
+     UserGroupInformation ugi_super =
+-      TestMiniMRWithDFSWithDistinctUsers.createUGI("user2", true);
++      TestMiniMRWithDFSWithDistinctUsers.createUGI("user4", true);
+     client = getClient(conf, ugi_super);
+     try {
+       client.refreshNodes();
+diff --git a/src/test/org/apache/hadoop/security/TestGroupMappingServiceRefresh.java b/src/test/org/apache/hadoop/security/TestGroupMappingServiceRefresh.java
+new file mode 100644
+index 0000000..987d56c
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/TestGroupMappingServiceRefresh.java
+@@ -0,0 +1,117 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertFalse;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.List;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.hdfs.tools.DFSAdmin;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Test;
++import org.apache.hadoop.security.GroupMappingServiceProvider;
++
++public class TestGroupMappingServiceRefresh {
++  private MiniDFSCluster cluster;
++  Configuration config;
++  private static long groupRefreshTimeoutSec = 1;
++  
++  public static class MockUnixGroupsMapping implements GroupMappingServiceProvider {
++    private int i=0;
++    
++    @Override
++    public List<String> getGroups(String user) throws IOException {
++      String g1 = user + (10 * i + 1);
++      String g2 = user + (10 * i + 2);
++      List<String> l = new ArrayList<String>(2);
++      l.add(g1);
++      l.add(g2);
++      i++;
++      return l;
++    }
++  }
++  
++  @Before
++  public void setUp() throws Exception {
++    config = new Configuration();
++    config.setClass("hadoop.security.group.mapping",
++        TestGroupMappingServiceRefresh.MockUnixGroupsMapping.class,
++        GroupMappingServiceProvider.class);
++    config.setLong("hadoop.security.groups.cache.secs", groupRefreshTimeoutSec);
++    
++    FileSystem.setDefaultUri(config, "hdfs://localhost:" + "0");
++    cluster = new MiniDFSCluster(0, config, 1, true, true, true,  null, null, null, null);
++    cluster.waitActive();
++  }
++
++  @After
++  public void tearDown() throws Exception {
++    if(cluster!=null) {
++      cluster.shutdown();
++    }
++  }
++  
++  @Test
++  public void testGroupMappingRefresh() throws Exception {
++    DFSAdmin admin = new DFSAdmin(config);
++    String [] args =  new String[]{"-refreshUserToGroupsMappings"};
++    Groups groups = SecurityUtil.getUserToGroupsMappingService(config);
++    String user = UnixUserGroupInformation.getUnixUserName();
++    System.out.println("first attempt:");
++    List<String> g1 = groups.getGroups(user);
++    String [] str_groups = new String [g1.size()];
++    g1.toArray(str_groups);
++    System.out.println(Arrays.toString(str_groups));
++    
++    System.out.println("second attempt, should be same:");
++    List<String> g2 = groups.getGroups(user);
++    g2.toArray(str_groups);
++    System.out.println(Arrays.toString(str_groups));
++    for(int i=0; i<g2.size(); i++) {
++      assertEquals("Should be same group ", g1.get(i), g2.get(i));
++    }
++    admin.run(args);
++    System.out.println("third attempt(after refresh command), should be different:");
++    List<String> g3 = groups.getGroups(user);
++    g3.toArray(str_groups);
++    System.out.println(Arrays.toString(str_groups));
++    for(int i=0; i<g3.size(); i++) {
++      assertFalse("Should be different group ", g1.get(i).equals(g3.get(i)));
++    }
++    
++    // test time out
++    Thread.sleep(groupRefreshTimeoutSec*1100);
++    System.out.println("fourth attempt(after timeout), should be different:");
++    List<String> g4 = groups.getGroups(user);
++    g4.toArray(str_groups);
++    System.out.println(Arrays.toString(str_groups));
++    for(int i=0; i<g4.size(); i++) {
++      assertFalse("Should be different group ", g3.get(i).equals(g4.get(i)));
++    }
++  }
++}
+diff --git a/src/test/org/apache/hadoop/security/TestMapredGroupMappingServiceRefresh.java b/src/test/org/apache/hadoop/security/TestMapredGroupMappingServiceRefresh.java
+new file mode 100644
+index 0000000..b5a4eef
+--- /dev/null
++++ b/src/test/org/apache/hadoop/security/TestMapredGroupMappingServiceRefresh.java
+@@ -0,0 +1,142 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.security;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertFalse;
++
++import java.io.IOException;
++import java.net.URI;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.List;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.hdfs.MiniDFSCluster;
++import org.apache.hadoop.mapred.JobConf;
++import org.apache.hadoop.mapred.MiniMRCluster;
++import org.apache.hadoop.mapred.tools.MRAdmin;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Test;
++
++public class TestMapredGroupMappingServiceRefresh {
++  private MiniDFSCluster cluster;
++  JobConf config;
++  private static long groupRefreshTimeoutSec = 2;
++  private static final Log LOG = LogFactory
++      .getLog(TestMapredGroupMappingServiceRefresh.class);
++  
++  public static class MockUnixGroupsMapping implements GroupMappingServiceProvider {
++    private int i=0;
++    
++    @Override
++    public List<String> getGroups(String user) throws IOException {
++      String g1 = user + (10 * i + 1);
++      String g2 = user + (10 * i + 2);
++      List<String> l = new ArrayList<String>(2);
++      l.add(g1);
++      l.add(g2);
++      i++;
++      return l;
++    }
++  }
++  
++  @Before
++  public void setUp() throws Exception {
++    config = new JobConf(new Configuration());
++    
++    config.setClass("hadoop.security.group.mapping",
++        TestMapredGroupMappingServiceRefresh.MockUnixGroupsMapping.class,
++        GroupMappingServiceProvider.class);
++    config.setLong("hadoop.security.groups.cache.secs",
++        groupRefreshTimeoutSec);
++    
++    LOG.info("GROUP MAPPING class name=" + 
++        config.getClass("hadoop.security.group.mapping",
++        ShellBasedUnixGroupsMapping.class,GroupMappingServiceProvider.class).
++        getName());
++    
++    String namenodeUrl = "hdfs://localhost:" + "0";
++    FileSystem.setDefaultUri(config, namenodeUrl);
++    
++    cluster = new MiniDFSCluster(0, config, 1, true, true, true,  null, null, 
++        null, null);
++    cluster.waitActive();
++    URI uri = cluster.getFileSystem().getUri();
++    
++    MiniMRCluster miniMRCluster = new MiniMRCluster(0, uri.toString() , 
++      3, null, null, config);
++    
++    config.set("mapred.job.tracker", "localhost:"+miniMRCluster.getJobTrackerPort());
++  }
++
++  @After
++  public void tearDown() throws Exception {
++    if(cluster!=null) {
++      cluster.shutdown();
++    }
++  }
++  
++  @Test
++  public void testGroupMappingRefresh() throws Exception {
++    MRAdmin admin = new MRAdmin(config);
++    String [] args = new String[] { "-refreshUserToGroupsMappings" };
++    
++    Groups groups = SecurityUtil.getUserToGroupsMappingService(config);
++    String user = UnixUserGroupInformation.getUnixUserName();
++    System.out.println("first attempt:");
++    List<String> g1 = groups.getGroups(user);
++    String [] str_groups = new String [g1.size()];
++    g1.toArray(str_groups);
++    System.out.println(Arrays.toString(str_groups));
++    
++    System.out.println("second attempt, should be same:");
++    List<String> g2 = groups.getGroups(user);
++    g2.toArray(str_groups);
++    System.out.println(Arrays.toString(str_groups));
++    for(int i=0; i<g2.size(); i++) {
++      assertEquals("Should be same group ", g1.get(i), g2.get(i));
++    }
++    // run refresh command
++    admin.run(args);
++    
++    System.out.println("third attempt(after refresh command), should be different:");
++    List<String> g3 = groups.getGroups(user);
++    g3.toArray(str_groups);
++    System.out.println(Arrays.toString(str_groups));
++    for(int i=0; i<g3.size(); i++) {
++      assertFalse("Should be different group ", g1.get(i).equals(g3.get(i)));
++    }
++    System.out.println("");
++    
++    // test time out
++    Thread.sleep(groupRefreshTimeoutSec*1100);
++    System.out.println("fourth attempt(after timeout), should be different:");
++    List<String> g4 = groups.getGroups(user);
++    g4.toArray(str_groups);
++    System.out.println(Arrays.toString(str_groups));
++    for(int i=0; i<g4.size(); i++) {
++      assertFalse("Should be different group ", g3.get(i).equals(g4.get(i)));
++    }
++  }
++}
+diff --git a/src/test/org/apache/hadoop/security/TestUnixUserGroupInformation.java b/src/test/org/apache/hadoop/security/TestUnixUserGroupInformation.java
+index 51880c2..fd724d0 100644
+--- a/src/test/org/apache/hadoop/security/TestUnixUserGroupInformation.java
++++ b/src/test/org/apache/hadoop/security/TestUnixUserGroupInformation.java
+@@ -18,11 +18,21 @@
+ 
+ package org.apache.hadoop.security;
+ 
+-import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.io.TestWritable;
++import java.io.BufferedReader;
++import java.io.IOException;
++import java.io.InputStreamReader;
++import java.security.Principal;
++import java.util.ArrayList;
++import java.util.List;
++
++import javax.security.auth.Subject;
+ 
+ import junit.framework.TestCase;
+ 
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.TestWritable;
++import org.apache.hadoop.util.Shell;
++
+ /** Unit tests for UnixUserGroupInformation */
+ public class TestUnixUserGroupInformation extends TestCase {
+   final private static String USER_NAME = "user1";
+@@ -31,6 +41,7 @@ public class TestUnixUserGroupInformation extends TestCase {
+   final private static String GROUP3_NAME = "group3";
+   final private static String[] GROUP_NAMES = 
+                       new String[]{GROUP1_NAME, GROUP2_NAME, GROUP3_NAME};
++  final private static Configuration conf = new Configuration();
+   
+   /** Test login method */
+   public void testLogin() throws Exception {
+@@ -63,7 +74,6 @@ public class TestUnixUserGroupInformation extends TestCase {
+     testConstructorFailures(null, GROUP_NAMES);
+     testConstructorFailures("", GROUP_NAMES);
+     testConstructorFailures(USER_NAME, null);
+-    testConstructorFailures(USER_NAME, new String[0]);
+     testConstructorFailures(USER_NAME, new String[]{null});
+     testConstructorFailures(USER_NAME, new String[]{""});
+     testConstructorFailures(USER_NAME, new String[]{GROUP1_NAME, null});
+@@ -98,6 +108,69 @@ public class TestUnixUserGroupInformation extends TestCase {
+   public void testWritable() throws Exception {
+     UnixUserGroupInformation ugi = new UnixUserGroupInformation(
+         USER_NAME, GROUP_NAMES);
+-    TestWritable.testWritable(ugi, new Configuration());
++    TestWritable.testWritable(ugi, conf);
++  }
++  
++  /**
++   * given user name - get all the groups.
++   */
++  public void testGetServerSideGroups() throws IOException {
++    
++    // get the user name
++    Process pp = Runtime.getRuntime().exec("whoami");
++    BufferedReader br = new BufferedReader(new InputStreamReader(pp.getInputStream()));
++    String userName = br.readLine().trim();
++    // get the groups
++    pp = Runtime.getRuntime().exec("id -Gn");
++    br = new BufferedReader(new InputStreamReader(pp.getInputStream()));
++    String line = br.readLine();
++    System.out.println(userName + ":" + line);
++   
++    List<String> groups = new ArrayList<String> ();    
++    for(String s: line.split("[\\s]")) {
++      groups.add(s);
++    }
++    
++    boolean ugiIsIn = false;
++    
++    // get groups on the server side
++    int numberOfGroups = 0;
++    Subject subject = SecurityUtil.getSubject(conf, userName);
++    System.out.println("for user="+userName+" prinicipals are:");
++    for(Principal p : subject.getPrincipals()) {
++      if(p instanceof User) {
++        System.out.println("USER: " + p.getName());
++        assertTrue("user name is not the same as in the Subject: " + p.getName(),
++            userName.equals(p.getName()));
++      }
++      if(p instanceof Group) {
++        numberOfGroups++;
++        System.out.println("GROUP: " + p.getName());
++        assertTrue("Subject contains invalid group " + p.getName(), 
++            groups.contains(p.getName()));
++      }
++      if(p instanceof UserGroupInformation) {
++        System.out.println("UGI: " + p.getName());
++        ugiIsIn = true;
++      }
++    }
++    assertTrue("UGI object is not in the Subject", ugiIsIn);
++    assertEquals("number of groups in subject doesn't match actual # groups", 
++        numberOfGroups, groups.size());
++    
++    // negative test - get Subject for non-existing user
++    // should return empty groups
++    subject = SecurityUtil.getSubject(conf, "fakeUser");
++    for(Principal p : subject.getPrincipals()) {
++      if(p instanceof User) {
++        System.out.println("USER: " + p.getName());
++        assertTrue("user name (fakeUser) is not the same as in the Subject: " +
++            p.getName(), "fakeUser".equals(p.getName()));
++      }
++      if(p instanceof Group) {
++        fail("fakeUser should have no groups");
++      }
++    }
++    
+   }
+ }
+-- 
+1.7.0.4
+

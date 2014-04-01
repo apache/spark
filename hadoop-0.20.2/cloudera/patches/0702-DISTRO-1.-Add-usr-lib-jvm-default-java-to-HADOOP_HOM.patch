@@ -1,0 +1,30 @@
+From 0248b41179a0baf9dd7e4120137f0c24b7251e95 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 21 Sep 2010 13:54:40 -0700
+Subject: [PATCH 0702/1179] DISTRO-1. Add /usr/lib/jvm/default-java to HADOOP_HOME detection.
+
+Reason: Improvement
+Author: Eli Collins
+Ref: CDH-1979
+---
+ bin/hadoop-config.sh |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/bin/hadoop-config.sh b/bin/hadoop-config.sh
+index 087842c..7d180e5 100644
+--- a/bin/hadoop-config.sh
++++ b/bin/hadoop-config.sh
+@@ -82,7 +82,9 @@ if [ -z "$JAVA_HOME" ]; then
+     /usr/lib/j2sdk1.6-sun \
+     /usr/java/jdk1.6* \
+     /usr/java/jre1.6* \
+-    /Library/Java/Home ; do
++    /Library/Java/Home \
++    /usr/java/default \
++    /usr/lib/jvm/default-java ; do
+     if [ -e $candidate/bin/java ]; then
+       export JAVA_HOME=$candidate
+       break
+-- 
+1.7.0.4
+

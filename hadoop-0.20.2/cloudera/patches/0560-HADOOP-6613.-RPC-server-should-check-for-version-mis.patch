@@ -1,0 +1,53 @@
+From ec983446e7a1600a95fcf60bd92205f5b9318d99 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 17 Mar 2010 00:21:35 -0700
+Subject: [PATCH 0560/1179] HADOOP-6613. RPC server should check for version mismatch before authentication method
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437831/HADOOP-6613-Y20S-1.patch
+Author: Kan Zhang
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/ipc/Server.java |   20 ++++++++++----------
+ 1 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 93f407a..9dd7a48 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -1006,6 +1006,16 @@ public abstract class Server {
+           byte[] method = new byte[] {rpcHeaderBuffer.get(1)};
+           authMethod = AuthMethod.read(new DataInputStream(
+               new ByteArrayInputStream(method)));
++          dataLengthBuffer.flip();          
++          if (!HEADER.equals(dataLengthBuffer) || version != CURRENT_VERSION) {
++            //Warning is ok since this is not supposed to happen.
++            LOG.warn("Incorrect header or version mismatch from " + 
++                     hostAddress + ":" + remotePort +
++                     " got version " + version + 
++                     " expected version " + CURRENT_VERSION);
++            return -1;
++          }
++          dataLengthBuffer.clear();
+           if (authMethod == null) {
+             throw new IOException("Unable to read authentication method");
+           }
+@@ -1030,16 +1040,6 @@ public abstract class Server {
+             useSasl = true;
+           }
+           
+-          dataLengthBuffer.flip();          
+-          if (!HEADER.equals(dataLengthBuffer) || version != CURRENT_VERSION) {
+-            //Warning is ok since this is not supposed to happen.
+-            LOG.warn("Incorrect header or version mismatch from " + 
+-                     hostAddress + ":" + remotePort +
+-                     " got version " + version + 
+-                     " expected version " + CURRENT_VERSION);
+-            return -1;
+-          }
+-          dataLengthBuffer.clear();
+           rpcHeaderBuffer = null;
+           rpcHeaderRead = true;
+           continue;
+-- 
+1.7.0.4
+

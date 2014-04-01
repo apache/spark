@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+GRID_DIR=`dirname "$0"`
+GRID_DIR=`cd "$GRID_DIR"; pwd`
+source $GRID_DIR/../gridmix-env
+
+for ((i=0; i < $NUM_OF_LARGE_JOBS_PER_CLASS; i++))
+do
+    echo $i
+    CLUSTER_DIR=$CLUSTER_DIR_BASE/webdata_sort.large.$i
+    mkdir $CLUSTER_DIR
+    #hod $LARGE_JOB_HOD_OPTIONS --hod.script=$GRID_MIX_HOME/webdatasort/webdata_sort.large  2>&1 > webdata_sort.large.$i.out &
+    echo "hod script -d $CLUSTER_DIR $LARGE_JOB_HOD_OPTIONS -s $GRID_MIX_HOME/webdatasort/webdata_sort.large  "
+    hod script -d $CLUSTER_DIR $LARGE_JOB_HOD_OPTIONS -s $GRID_MIX_HOME/webdatasort/webdata_sort.large  2>&1 > webdata_sort.large.$i.out &
+    $GRID_MIX_HOME/submissionScripts/sleep_if_too_busy
+done
+    

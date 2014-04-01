@@ -1,0 +1,221 @@
+From 4c50269dda2038d202ddb890ffde38dc3fb2ead2 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Thu, 24 Jun 2010 18:25:09 -0700
+Subject: [PATCH 0319/1179] MAPREDUCE-1887. MRAsyncDiskService does not properly absolutize volume root paths.
+
+Description: In MRAsyncDiskService, volume names are sometimes specified as
+relative paths, which are not converted to absolute paths. This can cause
+errors of the form "cannot delete &lt;/full/path/to/foo&gt; since it is outside of
+&lt;relative/volume/root&gt;" even though the actual path is inside the root.
+Reason: Bug
+Author: Aaron Kimball
+Ref: CDH-1509
+---
+ .../org/apache/hadoop/util/MRAsyncDiskService.java |   28 +++--
+ .../mapreduce/util/TestMRAsyncDiskService.java     |  115 ++++++++++++++++++++
+ 2 files changed, 132 insertions(+), 11 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/util/MRAsyncDiskService.java b/src/core/org/apache/hadoop/util/MRAsyncDiskService.java
+index 1399549..d4ba3f9 100644
+--- a/src/core/org/apache/hadoop/util/MRAsyncDiskService.java
++++ b/src/core/org/apache/hadoop/util/MRAsyncDiskService.java
+@@ -60,16 +60,20 @@ public class MRAsyncDiskService {
+    * disk operations.
+    * 
+    * @param localFileSystem The localFileSystem used for deletions.
+-   * @param volumes The roots of the file system volumes.
++   * @param nonCanonicalVols The roots of the file system volumes, which may
++   * be absolte paths, or paths relative to the ${user.dir} system property
++   * ("cwd").
+    */
+-  public MRAsyncDiskService(FileSystem localFileSystem, String[] volumes)
+-      throws IOException {
++  public MRAsyncDiskService(FileSystem localFileSystem,
++      String[] nonCanonicalVols) throws IOException {
+     
+-    this.volumes = new String[volumes.length];
+-    for (int v = 0; v < volumes.length; v++) {
+-      this.volumes[v] = normalizePath(volumes[v]);
+-    }  
+     this.localFileSystem = localFileSystem;
++    this.volumes = new String[nonCanonicalVols.length];
++    for (int v = 0; v < nonCanonicalVols.length; v++) {
++      this.volumes[v] = normalizePath(nonCanonicalVols[v]);
++      LOG.debug("Normalized volume: " + nonCanonicalVols[v]
++          + " -> " + this.volumes[v]);
++    }  
+     
+     asyncDiskService = new AsyncDiskService(this.volumes);
+     
+@@ -78,7 +82,8 @@ public class MRAsyncDiskService {
+       // Create the root for file deletion
+       Path absoluteSubdir = new Path(volumes[v], TOBEDELETED);
+       if (!localFileSystem.mkdirs(absoluteSubdir)) {
+-        throw new IOException("Cannot create " + TOBEDELETED + " in " + volumes[v]);
++        throw new IOException("Cannot create " + TOBEDELETED + " in "
++            + volumes[v]);
+       }
+     }
+     
+@@ -303,8 +308,9 @@ public class MRAsyncDiskService {
+   /**
+    * Returns the normalized path of a path.
+    */
+-  private static String normalizePath(String path) {
+-    return (new Path(path)).toUri().getPath();
++  private String normalizePath(String path) {
++    return (new Path(path)).makeQualified(this.localFileSystem)
++        .toUri().getPath();
+   }
+   
+   /**
+@@ -313,7 +319,7 @@ public class MRAsyncDiskService {
+    * @param volume Root of the volume.
+    * @return null if the absolute path name is outside of the volume.
+    */
+-  private static String getRelativePathName(String absolutePathName,
++  private String getRelativePathName(String absolutePathName,
+       String volume) {
+     
+     absolutePathName = normalizePath(absolutePathName);
+diff --git a/src/test/org/apache/hadoop/mapreduce/util/TestMRAsyncDiskService.java b/src/test/org/apache/hadoop/mapreduce/util/TestMRAsyncDiskService.java
+index d613b54..b04da78 100644
+--- a/src/test/org/apache/hadoop/mapreduce/util/TestMRAsyncDiskService.java
++++ b/src/test/org/apache/hadoop/mapreduce/util/TestMRAsyncDiskService.java
+@@ -21,6 +21,10 @@ import java.io.File;
+ import java.io.IOException;
+ 
+ import junit.framework.TestCase;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+@@ -30,11 +34,122 @@ import org.apache.hadoop.util.MRAsyncDiskService;
+  * A test for MRAsyncDiskService.
+  */
+ public class TestMRAsyncDiskService extends TestCase {
++
++  public static final Log LOG = LogFactory.getLog(TestMRAsyncDiskService.class);
+   
+   private static String TEST_ROOT_DIR = new Path(System.getProperty(
+       "test.build.data", "/tmp")).toString();
+ 
+   /**
++   * Given 'pathname', compute an equivalent path relative to the cwd.
++   * @param pathname the path to a directory.
++   * @return the path to that same directory, relative to ${user.dir}.
++   */
++  private String relativeToWorking(String pathname) {
++    String cwd = System.getProperty("user.dir", "/");
++
++    // normalize pathname and cwd into full directory paths.
++    pathname = (new Path(pathname)).toUri().getPath();
++    cwd = (new Path(cwd)).toUri().getPath();
++
++    String [] cwdParts = cwd.split(File.separator);
++    String [] pathParts = pathname.split(File.separator);
++
++    // There are three possible cases:
++    // 1) pathname and cwd are equal. Return '.'
++    // 2) pathname is under cwd. Return the components that are under it.
++    //     e.g., cwd = /a/b, path = /a/b/c, return 'c'
++    // 3) pathname is outside of cwd. Find the common components, if any,
++    //    and subtract them from the returned path, then return enough '..'
++    //    components to "undo" the non-common components of cwd, then all 
++    //    the remaining parts of pathname.
++    //    e.g., cwd = /a/b, path = /a/c, return '../c'
++
++    if (cwd.equals(pathname)) {
++      LOG.info("relative to working: " + pathname + " -> .");
++      return "."; // They match exactly.
++    }
++
++    // Determine how many path components are in common between cwd and path.
++    int common = 0;
++    for (int i = 0; i < Math.min(cwdParts.length, pathParts.length); i++) {
++      if (cwdParts[i].equals(pathParts[i])) {
++        common++;
++      } else {
++        break;
++      }
++    }
++
++    // output path stringbuilder.
++    StringBuilder sb = new StringBuilder();
++
++    // For everything in cwd that isn't in pathname, add a '..' to undo it.
++    int parentDirsRequired = cwdParts.length - common;
++    for (int i = 0; i < parentDirsRequired; i++) {
++      sb.append("..");
++      sb.append(File.separator);
++    }
++
++    // Then append all non-common parts of 'pathname' itself.
++    for (int i = common; i < pathParts.length; i++) {
++      sb.append(pathParts[i]);
++      sb.append(File.separator);
++    }
++
++    // Don't end with a '/'.
++    String s = sb.toString();
++    if (s.endsWith(File.separator)) {
++      s = s.substring(0, s.length() - 1);
++    }
++
++    LOG.info("relative to working: " + pathname + " -> " + s);
++    return s;
++  }
++
++  /** Test that the relativeToWorking() method above does what we expect. */
++  public void testRelativeToWorking() {
++    assertEquals(".", relativeToWorking(System.getProperty("user.dir", ".")));
++
++    String cwd = System.getProperty("user.dir", ".");
++    Path cwdPath = new Path(cwd);
++
++    Path subdir = new Path(cwdPath, "foo");
++    assertEquals("foo", relativeToWorking(subdir.toUri().getPath()));
++
++    Path subsubdir = new Path(subdir, "bar");
++    assertEquals("foo/bar", relativeToWorking(subsubdir.toUri().getPath()));
++
++    Path parent = new Path(cwdPath, "..");
++    assertEquals("..", relativeToWorking(parent.toUri().getPath()));
++
++    Path sideways = new Path(parent, "baz");
++    assertEquals("../baz", relativeToWorking(sideways.toUri().getPath()));
++  }
++
++
++  /** Test that volumes specified as relative paths are handled properly
++   * by MRAsyncDiskService (MAPREDUCE-1887).
++   */
++  public void testVolumeNormalization() throws Throwable {
++    LOG.info("TEST_ROOT_DIR is " + TEST_ROOT_DIR);
++
++    String relativeTestRoot = relativeToWorking(TEST_ROOT_DIR);
++
++    FileSystem localFileSystem = FileSystem.getLocal(new Configuration());
++    String [] vols = new String[] { relativeTestRoot + "/0",
++        relativeTestRoot + "/1" };
++
++    // Put a file in one of the volumes to be cleared on startup.
++    Path delDir = new Path(vols[0], MRAsyncDiskService.TOBEDELETED);
++    localFileSystem.mkdirs(delDir);
++    localFileSystem.create(new Path(delDir, "foo")).close();
++
++    MRAsyncDiskService service = new MRAsyncDiskService(
++        localFileSystem, vols);
++    makeSureCleanedUp(vols, service);
++  }
++
++  /**
+    * This test creates some directories and then removes them through 
+    * MRAsyncDiskService. 
+    */
+-- 
+1.7.0.4
+

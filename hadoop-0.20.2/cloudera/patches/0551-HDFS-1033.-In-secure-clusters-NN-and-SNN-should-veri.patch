@@ -1,0 +1,203 @@
+From 6d83d8407d13f0e4b8b26f74bfbbd592b4c906ee Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 11 Mar 2010 14:38:56 -0800
+Subject: [PATCH 0551/1179] HDFS-1033. In secure clusters, NN and SNN should verify that the remote principal during image and edits transfer
+
+Patch: https://issues.apache.org/jira/secure/attachment/12438477/HDFS-1033-Y20.patch
+Author: Jakob Homan
+Ref: CDH-648
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java |   10 +++-
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    7 +--
+ .../hdfs/server/namenode/GetImageServlet.java      |   42 +++++++++++++++++++-
+ .../hadoop/hdfs/server/namenode/NameNode.java      |    6 +--
+ .../hdfs/server/namenode/SecondaryNameNode.java    |    8 ++--
+ 5 files changed, 56 insertions(+), 17 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+index d885ad9..b29ccaa 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+@@ -191,8 +191,12 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final String  DFS_WEB_UGI_KEY = "dfs.web.ugi";
+   public static final String  DFS_NAMENODE_STARTUP_KEY = "dfs.namenode.startup";
+   public static final String  DFS_DATANODE_KEYTAB_FILE_KEY = "dfs.datanode.keytab.file";
+-  public static final String  DFS_DATANODE_USER_NAME_KEY = "dfs.datanode.user.name.key";
++  public static final String  DFS_DATANODE_USER_NAME_KEY = "dfs.datanode.user.name";
+   public static final String  DFS_NAMENODE_KEYTAB_FILE_KEY = "dfs.namenode.keytab.file";
+-  public static final String  DFS_NAMENODE_USER_NAME_KEY = "dfs.namenode.user.name.key";
+-  public static final String  DFS_NAMENODE_KRB_HTTPS_USER_NAME_KEY = "dfs.namenode.krb.https.user.name.key";
++  public static final String  DFS_NAMENODE_USER_NAME_KEY = "dfs.namenode.user.name";
++  public static final String  DFS_NAMENODE_KRB_HTTPS_USER_NAME_KEY = "dfs.namenode.krb.https.user.name";
++  
++  public static final String  DFS_SECONDARY_NAMENODE_KEYTAB_FILE_KEY = "dfs.secondary.namenode.keytab.file";
++  public static final String  DFS_SECONDARY_NAMENODE_USER_NAME_KEY = "dfs.secondary.namenode.user.name";
++  public static final String  DFS_SECONDARY_NAMENODE_KRB_HTTPS_USER_NAME_KEY = "dfs.secondary.namenode.krb.https.user.name";
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index a8f40b7..af3a831 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -55,6 +55,7 @@ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.LocalFileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.fs.permission.FsPermission;
++import org.apache.hadoop.hdfs.DFSConfigKeys;
+ import org.apache.hadoop.hdfs.DFSUtil;
+ import org.apache.hadoop.hdfs.HDFSPolicyProvider;
+ import org.apache.hadoop.hdfs.protocol.Block;
+@@ -227,9 +228,6 @@ public class DataNode extends Configured
+   
+   private static final Random R = new Random();
+   
+-  private final static String KEYTAB_FILE_KEY = "dfs.datanode.keytab.file";
+-  private final static String USER_NAME_KEY = "dfs.datanode.user.name.key";
+-  
+   public static final String DATA_DIR_KEY = "dfs.data.dir";
+   public final static String DATA_DIR_PERMISSION_KEY = 
+     "dfs.datanode.data.dir.perm";
+@@ -254,7 +252,8 @@ public class DataNode extends Configured
+            final AbstractList<File> dataDirs) throws IOException {
+     super(conf);
+     UserGroupInformation.setConfiguration(conf);
+-    DFSUtil.login(conf, KEYTAB_FILE_KEY, USER_NAME_KEY);
++    DFSUtil.login(conf, DFSConfigKeys.DFS_DATANODE_KEYTAB_FILE_KEY, 
++        DFSConfigKeys.DFS_DATANODE_USER_NAME_KEY);
+ 
+     datanodeObject = this;
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
+index 937b3da..777701b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/GetImageServlet.java
+@@ -17,6 +17,11 @@
+  */
+ package org.apache.hadoop.hdfs.server.namenode;
+ 
++import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_KRB_HTTPS_USER_NAME_KEY;
++import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY;
++import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_SECONDARY_NAMENODE_KRB_HTTPS_USER_NAME_KEY;
++import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_SECONDARY_NAMENODE_USER_NAME_KEY;
++
+ import java.io.IOException;
+ import java.security.PrivilegedExceptionAction;
+ import java.util.Map;
+@@ -27,10 +32,12 @@ import javax.servlet.http.HttpServlet;
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpServletResponse;
+ 
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.util.StringUtils;
+ 
+-
+ /**
+  * This class is used in Namesystem's jetty to retrieve a file.
+  * Typically used by the Secondary NameNode to retrieve image and
+@@ -38,7 +45,7 @@ import org.apache.hadoop.util.StringUtils;
+  */
+ public class GetImageServlet extends HttpServlet {
+   private static final long serialVersionUID = -7669068179452648952L;
+-
++  private static final Log LOG = LogFactory.getLog(GetImageServlet.class);
+   @SuppressWarnings("unchecked")
+   public void doGet(final HttpServletRequest request,
+                     final HttpServletResponse response
+@@ -48,6 +55,16 @@ public class GetImageServlet extends HttpServlet {
+       ServletContext context = getServletContext();
+       final FSImage nnImage = (FSImage)context.getAttribute("name.system.image");
+       final TransferFsImage ff = new TransferFsImage(pmap, request, response);
++      Configuration conf = (Configuration)getServletContext().getAttribute("name.conf");
++      if(UserGroupInformation.isSecurityEnabled() && 
++          !isValidRequestor(request.getRemoteUser(), conf)) {
++        response.sendError(HttpServletResponse.SC_FORBIDDEN, 
++            "Only Namenode and Secondary Namenode may access this servlet");
++        LOG.warn("Received non-NN/SNN request for image or edits from " 
++            + request.getRemoteHost());
++        return;
++      }
++      
+       UserGroupInformation.getCurrentUser().doAs(new PrivilegedExceptionAction<Void>() {
+ 
+         @Override
+@@ -83,4 +100,25 @@ public class GetImageServlet extends HttpServlet {
+       response.getOutputStream().close();
+     }
+   }
++  
++  private boolean isValidRequestor(String remoteUser, Configuration conf) {
++    if(remoteUser == null) { // This really shouldn't happen...
++      LOG.warn("Received null remoteUser while authorizing access to getImage servlet");
++      return false;
++    }
++    
++    String [] validRequestors = {conf.get(DFS_NAMENODE_KRB_HTTPS_USER_NAME_KEY),
++                                 conf.get(DFS_NAMENODE_USER_NAME_KEY),
++                                 conf.get(DFS_SECONDARY_NAMENODE_KRB_HTTPS_USER_NAME_KEY),
++                                 conf.get(DFS_SECONDARY_NAMENODE_USER_NAME_KEY) };
++    
++    for(String v : validRequestors) {
++      if(v != null && v.equals(remoteUser)) {
++        if(LOG.isDebugEnabled()) LOG.debug("isValidRequestor is allowing: " + remoteUser);
++        return true;
++      }
++    }
++    if(LOG.isDebugEnabled()) LOG.debug("isValidRequestor is rejecting: " + remoteUser);
++    return false;
++  }
+ }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index 82b446d..e8ac673 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -338,9 +338,6 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+     }
+  }
+ 
+-  private final static String KEYTAB_FILE_KEY = "dfs.namenode.keytab.file";
+-  private final static String USER_NAME_KEY = "dfs.namenode.user.name.key";
+-  
+   /**
+    * Start NameNode.
+    * <p>
+@@ -365,7 +362,8 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+    */
+   public NameNode(Configuration conf) throws IOException {
+     UserGroupInformation.setConfiguration(conf);
+-    DFSUtil.login(conf, KEYTAB_FILE_KEY, USER_NAME_KEY);
++    DFSUtil.login(conf, DFSConfigKeys.DFS_NAMENODE_KEYTAB_FILE_KEY, 
++                        DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY);
+     
+     try {
+       initialize(conf);
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+index adcb121..217d3e9 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/SecondaryNameNode.java
+@@ -121,8 +121,8 @@ public class SecondaryNameNode implements Runnable {
+    */
+   public SecondaryNameNode(Configuration conf)  throws IOException {
+     DFSUtil.login(conf, 
+-        DFSConfigKeys.DFS_NAMENODE_KEYTAB_FILE_KEY,
+-        DFSConfigKeys.DFS_NAMENODE_USER_NAME_KEY);
++        DFSConfigKeys.DFS_SECONDARY_NAMENODE_KEYTAB_FILE_KEY,
++        DFSConfigKeys.DFS_SECONDARY_NAMENODE_USER_NAME_KEY);
+     try {
+       initialize(conf);
+     } catch(IOException e) {
+@@ -162,8 +162,8 @@ public class SecondaryNameNode implements Runnable {
+ 
+     // initialize the webserver for uploading files.
+     // Kerberized SSL servers must be run from the host principal...
+-    DFSUtil.login(conf, DFSConfigKeys.DFS_NAMENODE_KEYTAB_FILE_KEY, 
+-        DFSConfigKeys.DFS_NAMENODE_KRB_HTTPS_USER_NAME_KEY);
++    DFSUtil.login(conf, DFSConfigKeys.DFS_SECONDARY_NAMENODE_KEYTAB_FILE_KEY, 
++        DFSConfigKeys.DFS_SECONDARY_NAMENODE_KRB_HTTPS_USER_NAME_KEY);
+     UserGroupInformation ugi = UserGroupInformation.getLoginUser();
+     try {
+       infoServer = ugi.doAs(new PrivilegedExceptionAction<HttpServer>() {
+-- 
+1.7.0.4
+

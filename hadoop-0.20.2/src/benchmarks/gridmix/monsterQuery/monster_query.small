@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+GRID_DIR=`dirname "$0"`
+GRID_DIR=`cd "$GRID_DIR"; pwd`
+source $GRID_DIR/../gridmix-env
+
+NUM_OF_REDUCERS=$NUM_OF_REDUCERS_FOR_SMALL_JOB
+INDIR="${FIXCOMPSEQ}/{part-00000,part-00001,part-00002}"
+Date=`date +%F-%H-%M-%S-%N`
+
+OUTDIR=perf-out/mq-out-dir-small_$Date.1
+${HADOOP_HOME}/bin/hadoop dfs -rmr $OUTDIR
+
+${HADOOP_HOME}/bin/hadoop jar $APP_JAR loadgen -keepmap 10 -keepred 40 -inFormat org.apache.hadoop.mapred.SequenceFileInputFormat -outFormat org.apache.hadoop.mapred.SequenceFileOutputFormat -outKey org.apache.hadoop.io.Text -outValue org.apache.hadoop.io.Text -indir $INDIR -outdir $OUTDIR -r $NUM_OF_REDUCERS
+
+INDIR=$OUTDIR
+OUTDIR=perf-out/mq-out-dir-small_$Date.2
+${HADOOP_HOME}/bin/hadoop dfs -rmr $OUTDIR
+
+${HADOOP_HOME}/bin/hadoop jar $APP_JAR loadgen -keepmap 100 -keepred 77 -inFormat org.apache.hadoop.mapred.SequenceFileInputFormat -outFormat org.apache.hadoop.mapred.SequenceFileOutputFormat -outKey org.apache.hadoop.io.Text -outValue org.apache.hadoop.io.Text -indir $INDIR -outdir $OUTDIR -r $NUM_OF_REDUCERS
+
+INDIR=$OUTDIR
+OUTDIR=perf-out/mq-out-dir-small_$Date.3
+${HADOOP_HOME}/bin/hadoop dfs -rmr $OUTDIR
+
+${HADOOP_HOME}/bin/hadoop jar $APP_JAR loadgen -keepmap 116 -keepred 91 -inFormat org.apache.hadoop.mapred.SequenceFileInputFormat -outFormat org.apache.hadoop.mapred.SequenceFileOutputFormat -outKey org.apache.hadoop.io.Text -outValue org.apache.hadoop.io.Text -indir $INDIR -outdir $OUTDIR -r $NUM_OF_REDUCERS
+

@@ -1,0 +1,341 @@
+From 44a6c559de056b35c6eb2e2d53798c88d8c779e6 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:39:09 -0800
+Subject: [PATCH 0191/1179] HDFS-630. In DFSOutputStream.nextBlockOutputStream(), the client can exclude specific datanodes when locating the next block.
+
+Description: created from hdfs-200.
+
+<p>If during a write, the dfsclient sees that a block replica location for a newly allocated block is not-connectable, it re-requests the NN to get a fresh set of replica locations of the block. It tries this dfs.client.block.write.retries times (default 3), sleeping 6 seconds between each retry ( see DFSClient.nextBlockOutputStream).</p>
+
+<p>This setting works well when you have a reasonable size cluster; if u have few datanodes in the cluster, every retry maybe pick the dead-datanode and the above logic bails out.</p>
+
+<p>Our solution: when getting block location from namenode, we give nn the excluded datanodes. The list of dead datanodes is only for one block allocation.</p>
+Reason: bugfix (Fault tolerance improvement)
+Author: Cosmin Lehene (modified by Cloudera to not break compatibility)
+Ref: UNKNOWN
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |   40 ++++++++++++--
+ .../hadoop/hdfs/protocol/ClientProtocol.java       |   16 ++++++
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |   15 +++++-
+ .../hadoop/hdfs/server/namenode/NameNode.java      |   23 ++++++++-
+ .../hadoop/hdfs/TestDFSClientExcludedNodes.java    |   56 ++++++++++++++++++++
+ .../apache/hadoop/hdfs/TestDFSClientRetries.java   |    8 +++-
+ 6 files changed, 149 insertions(+), 9 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/TestDFSClientExcludedNodes.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 69d93ee..eef1510 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -83,7 +83,13 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+   final int writePacketSize;
+   private final FileSystem.Statistics stats;
+   private int maxBlockAcquireFailures;
+-    
++
++  /**
++   * We assume we're talking to another CDH server, which supports
++   * HDFS-630's addBlock method. If we get a RemoteException indicating
++   * it doesn't, we'll set this false and stop trying.
++   */
++  private volatile boolean serverSupportsExcludedBlockApi = true;
+  
+   public static ClientProtocol createNamenode(Configuration conf) throws IOException {
+     return createNamenode(NameNode.getAddress(conf), conf);
+@@ -2122,6 +2128,7 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+     private int packetSize = 0; // write packet size, including the header.
+     private int chunksPerPacket = 0;
+     private DatanodeInfo[] nodes = null; // list of targets for current block
++    private ArrayList<DatanodeInfo> excludedNodes = new ArrayList<DatanodeInfo>();
+     private volatile boolean hasError = false;
+     private volatile int errorIndex = 0;
+     private volatile IOException lastException = null;
+@@ -2817,7 +2824,9 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         success = false;
+                 
+         long startTime = System.currentTimeMillis();
+-        lb = locateFollowingBlock(startTime);
++
++        DatanodeInfo[] excluded = excludedNodes.toArray(new DatanodeInfo[0]);
++        lb = locateFollowingBlock(startTime, excluded.length > 0 ? excluded : null);
+         block = lb.getBlock();
+         nodes = lb.getLocations();
+   
+@@ -2830,6 +2839,11 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+           LOG.info("Abandoning block " + block);
+           namenode.abandonBlock(block, src, clientName);
+ 
++          if (errorIndex < nodes.length) {
++            LOG.debug("Excluding datanode " + nodes[errorIndex]);
++            excludedNodes.add(nodes[errorIndex]);
++          }
++
+           // Connection failed.  Let's wait a little bit and retry
+           retry = true;
+           try {
+@@ -2927,7 +2941,8 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+       }
+     }
+   
+-    private LocatedBlock locateFollowingBlock(long start
++    private LocatedBlock locateFollowingBlock(long start,
++                                              DatanodeInfo[] excludedNodes
+                                               ) throws IOException {     
+       int retries = conf.getInt("dfs.client.block.write.locateFollowingBlock.retries", 5);
+       long sleeptime = 400;
+@@ -2935,7 +2950,11 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         long localstart = System.currentTimeMillis();
+         while (true) {
+           try {
+-            return namenode.addBlock(src, clientName);
++            if (serverSupportsExcludedBlockApi) {
++              return namenode.addBlock(src, clientName, excludedNodes);
++            } else {
++              return namenode.addBlock(src, clientName);
++            }
+           } catch (RemoteException e) {
+             IOException ue = 
+               e.unwrapRemoteException(FileNotFoundException.class,
+@@ -2945,7 +2964,18 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+             if (ue != e) { 
+               throw ue; // no need to retry these exceptions
+             }
+-            
++
++            if (e.getMessage().startsWith(
++                  "java.io.IOException: java.lang.NoSuchMethodException: " +
++                  "org.apache.hadoop.hdfs.protocol.ClientProtocol.addBlock(" +
++                  "java.lang.String, java.lang.String, " +
++                  "[Lorg.apache.hadoop.hdfs.protocol.DatanodeInfo;)")) {
++              // We're talking to a server that doesn't implement HDFS-630.
++              // Mark that and try again
++              serverSupportsExcludedBlockApi = false;
++              continue;
++            }
++
+             if (NotReplicatedYetException.class.getName().
+                 equals(e.getClassName())) {
+ 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+index 2f1b5e8..f6d4fcc 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/protocol/ClientProtocol.java
+@@ -174,11 +174,27 @@ public interface ClientProtocol extends VersionedProtocol {
+    * addBlock() allocates a new block and datanodes the block data
+    * should be replicated to.
+    * 
++   * @deprecated use the 3-arg form below
+    * @return LocatedBlock allocated block information.
+    */
+   public LocatedBlock addBlock(String src, String clientName) throws IOException;
+ 
+   /**
++   * A client that wants to write an additional block to the 
++   * indicated filename (which must currently be open for writing)
++   * should call addBlock().  
++   *
++   * addBlock() allocates a new block and datanodes the block data
++   * should be replicated to.
++   *
++   * @param excludedNodes a list of nodes that should not be allocated
++   * 
++   * @return LocatedBlock allocated block information.
++   */
++  public LocatedBlock addBlock(String src, String clientName,
++                               DatanodeInfo[] excludedNodes) throws IOException;
++
++  /**
+    * The client is done writing data to the given filename, and would 
+    * like to complete it.  
+    *
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 9cf8aae..75ea19e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -37,6 +37,7 @@ import org.apache.hadoop.metrics.util.MBeanUtil;
+ import org.apache.hadoop.net.CachedDNSToSwitchMapping;
+ import org.apache.hadoop.net.DNSToSwitchMapping;
+ import org.apache.hadoop.net.NetworkTopology;
++import org.apache.hadoop.net.Node;
+ import org.apache.hadoop.net.ScriptBasedMapping;
+ import org.apache.hadoop.hdfs.server.namenode.LeaseManager.Lease;
+ import org.apache.hadoop.hdfs.server.namenode.UnderReplicatedBlocks.BlockIterator;
+@@ -1219,6 +1220,15 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   }
+ 
+   /**
++   * Stub for old callers pre-HDFS-630
++   */
++  public LocatedBlock getAdditionalBlock(String src, 
++                                         String clientName
++                                         ) throws IOException {
++    return getAdditionalBlock(src, clientName, null);
++  }
++
++  /**
+    * The client would like to obtain an additional block for the indicated
+    * filename (which is being written-to).  Return an array that consists
+    * of the block, plus a set of machines.  The first on this list should
+@@ -1230,7 +1240,8 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+    * client to "try again later".
+    */
+   public LocatedBlock getAdditionalBlock(String src, 
+-                                         String clientName
++                                         String clientName,
++                                         List<Node> excludedNodes
+                                          ) throws IOException {
+     long fileLength, blockSize;
+     int replication;
+@@ -1265,7 +1276,7 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     // choose targets for the new block tobe allocated.
+     DatanodeDescriptor targets[] = replicator.chooseTarget(replication,
+                                                            clientNode,
+-                                                           null,
++                                                           excludedNodes,
+                                                            blockSize);
+     if (targets.length < this.minReplication) {
+       throw new IOException("File " + src + " could only be replicated to " +
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+index bbd7a58..b1a63b6 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/NameNode.java
+@@ -49,6 +49,7 @@ import org.apache.hadoop.util.ServicePlugin;
+ import org.apache.hadoop.util.StringUtils;
+ import org.apache.hadoop.net.NetUtils;
+ import org.apache.hadoop.net.NetworkTopology;
++import org.apache.hadoop.net.Node;
+ import org.apache.hadoop.security.SecurityUtil;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.authorize.AuthorizationException;
+@@ -60,6 +61,8 @@ import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+ import java.io.*;
+ import java.net.*;
+ import java.util.Collection;
++import java.util.Arrays;
++import java.util.ArrayList;
+ import java.util.Iterator;
+ import java.util.List;
+ 
+@@ -426,12 +429,30 @@ public class NameNode implements ClientProtocol, DatanodeProtocol,
+   }
+ 
+   /**
++   * Stub for 0.20 clients that don't support HDFS-630
+    */
+   public LocatedBlock addBlock(String src, 
+                                String clientName) throws IOException {
++    return addBlock(src, clientName, null);
++  }
++
++  public LocatedBlock addBlock(String src,
++                               String clientName,
++                               DatanodeInfo[] excludedNodes)
++    throws IOException {
++
++    List<Node> excludedNodeList = null;
++    if (excludedNodes != null) {
++      // We must copy here, since this list gets modified later on
++      // in ReplicationTargetChooser
++      excludedNodeList = new ArrayList<Node>(
++        Arrays.<Node>asList(excludedNodes));
++    }
++
+     stateChangeLog.debug("*BLOCK* NameNode.addBlock: file "
+                          +src+" for "+clientName);
+-    LocatedBlock locatedBlock = namesystem.getAdditionalBlock(src, clientName);
++    LocatedBlock locatedBlock = namesystem.getAdditionalBlock(
++      src, clientName, excludedNodeList);
+     if (locatedBlock != null)
+       myMetrics.numAddBlockOps.inc();
+     return locatedBlock;
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDFSClientExcludedNodes.java b/src/test/org/apache/hadoop/hdfs/TestDFSClientExcludedNodes.java
+new file mode 100644
+index 0000000..01b97bf
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/TestDFSClientExcludedNodes.java
+@@ -0,0 +1,56 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs;
++
++import java.io.IOException;
++import java.io.OutputStream;
++
++import org.junit.*;
++import static org.junit.Assert.fail;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++
++
++/**
++ * These tests make sure that DFSClient retries fetching data from DFS
++ * properly in case of errors.
++ */
++public class TestDFSClientExcludedNodes {
++
++  @Test
++  public void testExcludedNodes() throws IOException {
++    Configuration conf = new Configuration();
++    MiniDFSCluster cluster = new MiniDFSCluster(conf, 3, true, null);
++    FileSystem fs = cluster.getFileSystem();
++    Path filePath = new Path("/testExcludedNodes");
++
++    // kill a datanode
++    cluster.stopDataNode(AppendTestUtil.nextInt(3));
++    OutputStream out = fs.create(filePath, true, 4096);
++    out.write(20);
++
++    try {
++      out.close();
++    } catch (Exception e) {
++      fail("DataNode failure should not result in a block abort: \n" + e.getMessage());
++    }
++  }
++  
++}
+diff --git a/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java b/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java
+index 33e0054..235f803 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java
++++ b/src/test/org/apache/hadoop/hdfs/TestDFSClientRetries.java
+@@ -145,6 +145,13 @@ public class TestDFSClientRetries extends TestCase {
+     public LocatedBlock addBlock(String src, String clientName)
+     throws IOException
+     {
++      return addBlock(src, clientName, null);
++    }
++
++
++    public LocatedBlock addBlock(String src, String clientName,
++                                 DatanodeInfo[] excludedNode)
++      throws IOException {
+       num_calls++;
+       if (num_calls > num_calls_allowed) { 
+         throw new IOException("addBlock called more times than "
+@@ -158,7 +165,6 @@ public class TestDFSClientRetries extends TestCase {
+     
+     
+     // The following methods are stub methods that are not needed by this mock class
+-
+     public LocatedBlocks  getBlockLocations(String src, long offset, long length) throws IOException { return null; }
+ 
+     public void create(String src, FsPermission masked, String clientName, boolean overwrite, short replication, long blockSize) throws IOException {}
+-- 
+1.7.0.4
+

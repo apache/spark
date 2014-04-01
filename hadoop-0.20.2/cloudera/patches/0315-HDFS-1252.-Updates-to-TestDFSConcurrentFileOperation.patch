@@ -1,0 +1,128 @@
+From 0e1d71c08923bb4c4172ef043b0b2d82f95b92fa Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sat, 19 Jun 2010 16:26:39 -0700
+Subject: [PATCH 0315/1179] HDFS-1252. Updates to TestDFSConcurrentFileOperations (test was previously broken)
+
+Description: Fixes TestDFSConcurrentFileOperations to test the correct
+             semantics for sync feature
+Reason: Test was previously flaky
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ .../org/apache/hadoop/hdfs/AppendTestUtil.java     |    8 ++--
+ .../namenode/TestDFSConcurrentFileOperations.java  |   40 +++++++++++--------
+ 2 files changed, 27 insertions(+), 21 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/hdfs/AppendTestUtil.java b/src/test/org/apache/hadoop/hdfs/AppendTestUtil.java
+index e1d0513..c06b2a7 100644
+--- a/src/test/org/apache/hadoop/hdfs/AppendTestUtil.java
++++ b/src/test/org/apache/hadoop/hdfs/AppendTestUtil.java
+@@ -39,7 +39,7 @@ import org.apache.hadoop.security.UnixUserGroupInformation;
+ import org.apache.hadoop.security.UserGroupInformation;
+ 
+ /** Utilities for append-related tests */ 
+-class AppendTestUtil {
++public class AppendTestUtil {
+   /** For specifying the random number generator seed,
+    *  change the following value:
+    */
+@@ -87,7 +87,7 @@ class AppendTestUtil {
+     }
+   }
+ 
+-  static FileSystem createHdfsWithDifferentUsername(Configuration conf
++  public static FileSystem createHdfsWithDifferentUsername(Configuration conf
+       ) throws IOException {
+     Configuration conf2 = new Configuration(conf);
+     String username = UserGroupInformation.getCurrentUGI().getUserName()+"_XXX";
+@@ -97,7 +97,7 @@ class AppendTestUtil {
+     return FileSystem.get(conf2);
+   }
+ 
+-  static void write(OutputStream out, int offset, int length) throws IOException {
++  public static void write(OutputStream out, int offset, int length) throws IOException {
+     final byte[] bytes = new byte[length];
+     for(int i = 0; i < length; i++) {
+       bytes[i] = (byte)(offset + i);
+@@ -105,7 +105,7 @@ class AppendTestUtil {
+     out.write(bytes);
+   }
+   
+-  static void check(FileSystem fs, Path p, long length) throws IOException {
++  public static void check(FileSystem fs, Path p, long length) throws IOException {
+     int i = -1;
+     try {
+       final FileStatus status = fs.getFileStatus(p);
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/TestDFSConcurrentFileOperations.java b/src/test/org/apache/hadoop/hdfs/server/namenode/TestDFSConcurrentFileOperations.java
+index 3d55e19..29e1b59 100644
+--- a/src/test/org/apache/hadoop/hdfs/server/namenode/TestDFSConcurrentFileOperations.java
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/TestDFSConcurrentFileOperations.java
+@@ -1,3 +1,20 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
+ package org.apache.hadoop.hdfs.server.namenode;
+ 
+ import junit.framework.TestCase;
+@@ -5,6 +22,7 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FSDataOutputStream;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.hdfs.AppendTestUtil;
+ import org.apache.hadoop.hdfs.DFSTestUtil;
+ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.hdfs.protocol.Block;
+@@ -63,23 +81,10 @@ public class TestDFSConcurrentFileOperations extends TestCase {
+     Path srcPath = new Path(src);
+     Path dstPath = new Path(dst);
+     FSDataOutputStream fos = fs.create(srcPath);
+-    
+-    fos.write(DFSTestUtil.generateSequentialBytes(0, writeSize));
++   
++    AppendTestUtil.write(fos, 0, writeSize);
+     fos.sync();
+     
+-    LocatedBlocks blocks;
+-    int i = 0;
+-    do {
+-      blocks = cluster
+-        .getNameNode()
+-        .getNamesystem()
+-        .getBlockLocations(src, 0, writeSize);
+-    } while (blocks.getLocatedBlocks().isEmpty() && ++i < 1000);
+-    
+-    assertTrue("failed to get block for file", i < 1000);
+-
+-    Block block = blocks.get(blocks.getLocatedBlocks().size()-1).getBlock();
+-    
+     // renaming a file out from under a client will cause close to fail
+     // and result in the lease remaining while the blocks are finalized on
+     // the DNs
+@@ -92,7 +97,8 @@ public class TestDFSConcurrentFileOperations extends TestCase {
+       //expected
+     }
+ 
+-    // simulate what lease recovery does--tries to update block and finalize
+-    cluster.getDataNodes().get(0).updateBlock(block, block, true);
++    FileSystem fs2 = AppendTestUtil.createHdfsWithDifferentUsername(conf);
++    AppendTestUtil.recoverFile(cluster, fs2, dstPath);
++    AppendTestUtil.check(fs2, dstPath, writeSize);
+   }
+ }
+-- 
+1.7.0.4
+

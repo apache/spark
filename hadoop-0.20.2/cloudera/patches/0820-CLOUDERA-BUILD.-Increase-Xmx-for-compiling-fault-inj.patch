@@ -1,0 +1,26 @@
+From ce9aa5ef9dfc5c4fb8e85f9e9e47e67a4b724296 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 9 Feb 2011 17:10:49 -0800
+Subject: [PATCH 0820/1179] CLOUDERA-BUILD. Increase Xmx for compiling fault injection tests
+
+Ref: CDH-2622
+---
+ src/test/aop/build/aop.xml |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/test/aop/build/aop.xml b/src/test/aop/build/aop.xml
+index 34508c6..d18a77c 100644
+--- a/src/test/aop/build/aop.xml
++++ b/src/test/aop/build/aop.xml
+@@ -60,7 +60,7 @@
+       source="${javac.version}"
+       deprecation="${javac.deprecation}"
+       fork="true"
+-      maxmem="256m"
++      maxmem="1024m"
+       >
+ 
+       <classpath>
+-- 
+1.7.0.4
+

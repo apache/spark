@@ -1,0 +1,42 @@
+From 975647b6c3a6644cabbd48bf14e074a0efda2cb9 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:17:15 -0800
+Subject: [PATCH 0125/1179] CLOUDERA-BUILD. Sqoop documentation is now part of the generated tarball. Updated the install script to reflect that change.
+
+Author: Matt Massie
+---
+ cloudera/install_hadoop.sh |   11 +----------
+ 1 files changed, 1 insertions(+), 10 deletions(-)
+
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index 687b606..13a952b 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -150,12 +150,6 @@ cp -a $HADOOP_SRC_DIR/examples/* $EXAMPLE_DIR/src
+ mkdir -p $DOC_DIR
+ cp -r ${BUILD_DIR}/../../docs/* $DOC_DIR
+ 
+-mkdir -p $DOC_DIR/sqoop
+-# TODO(csm): This .. is a hack because for some odd reason the sqoop docs
+-# get built in build/contrib vs build/hadoop-.../contrib. We'll need to
+-# fix this
+-cp ${BUILD_DIR}/../contrib/sqoop/doc/SqoopUserGuide.html $DOC_DIR/sqoop
+-               
+ # Install source
+ mkdir -p $SRC_DIR
+ cp -a ${HADOOP_SRC_DIR}/* $SRC_DIR/
+@@ -183,10 +177,7 @@ done
+ # man pages
+ mkdir -p $MAN_DIR/man1
+ cp ${CLOUDERA_SOURCE_DIR}/hadoop-$APACHE_BRANCH.1.gz $MAN_DIR/man1/
+-# TODO(csm): This .. is a hack because for some odd reason the sqoop docs
+-# get built in build/contrib vs build/hadoop-.../contrib. We'll need to
+-# fix this
+-cp ${BUILD_DIR}/../contrib/sqoop/doc/sqoop.1.gz $MAN_DIR/man1/sqoop-$APACHE_BRANCH.1.gz
++cp ${BUILD_DIR}/../../docs/sqoop/sqoop.1.gz $MAN_DIR/man1/sqoop-$APACHE_BRANCH.1.gz
+ 
+ ############################################################
+ # ARCH DEPENDENT STUFF
+-- 
+1.7.0.4
+

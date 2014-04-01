@@ -1,0 +1,140 @@
+From a7f154b738ffdb129eb07be88abc925e447d6b00 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 17 Jun 2011 17:04:09 -0700
+Subject: [PATCH 0969/1179] Amend MAPREDUCE-2323. Fix bug causing NPE when the "set pool" option is used twice on the same job.
+
+Reason: important bug fix
+Ref: CDH-3036
+Author: Todd Lipcon
+---
+ .../org/apache/hadoop/mapred/FairScheduler.java    |   16 ++++-
+ .../org/apache/hadoop/mapred/PoolSchedulable.java  |    1 -
+ .../apache/hadoop/mapred/TestFairScheduler.java    |   59 ++++++++++++++++++++
+ 3 files changed, 71 insertions(+), 5 deletions(-)
+
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+index c7f5088..c2f60cb 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/FairScheduler.java
+@@ -289,8 +289,7 @@ public class FairScheduler extends TaskScheduler {
+     public void jobRemoved(JobInProgress job) {
+       synchronized (FairScheduler.this) {
+         eventLog.log("JOB_REMOVED", job.getJobID());
+-        poolMgr.removeJob(job);
+-        infos.remove(job);
++        jobNoLongerRunning(job);
+       }
+     }
+   
+@@ -603,8 +602,7 @@ public class FairScheduler extends TaskScheduler {
+           }
+         }
+         for (JobInProgress job: toRemove) {
+-          infos.remove(job);
+-          poolMgr.removeJob(job);
++          jobNoLongerRunning(job);
+         }
+ 
+         updateRunnability(); // Set job runnability based on user/pool limits 
+@@ -634,6 +632,16 @@ public class FairScheduler extends TaskScheduler {
+       }
+     }
+   }
++
++  private void jobNoLongerRunning(JobInProgress job) {
++    assert Thread.holdsLock(this);
++    JobInfo info = infos.remove(job);
++    if (info != null) {
++      info.mapSchedulable.cleanupMetrics();
++      info.reduceSchedulable.cleanupMetrics();
++    }
++    poolMgr.removeJob(job);
++  }
+   
+   public List<PoolSchedulable> getPoolSchedulables(TaskType type) {
+     List<PoolSchedulable> scheds = new ArrayList<PoolSchedulable>();
+diff --git a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolSchedulable.java b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolSchedulable.java
+index d835980..251dfee 100644
+--- a/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolSchedulable.java
++++ b/src/contrib/fairscheduler/src/java/org/apache/hadoop/mapred/PoolSchedulable.java
+@@ -69,7 +69,6 @@ public class PoolSchedulable extends Schedulable {
+       JobSchedulable jobSched = it.next();
+       if (jobSched.getJob() == job) {
+         it.remove();
+-        jobSched.cleanupMetrics();
+         break;
+       }
+     }
+diff --git a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+index 8a927bd..cd5315f 100644
+--- a/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
++++ b/src/contrib/fairscheduler/src/test/org/apache/hadoop/mapred/TestFairScheduler.java
+@@ -2731,6 +2731,65 @@ public class TestFairScheduler extends TestCase {
+     assertEquals(33,   poolA.getMapSchedulable().getDemand());
+     assertEquals(39,   poolA.getReduceSchedulable().getDemand());
+   }
++
++
++  /**
++   * Test switching a job from one pool to another, then back to the original
++   * one. This is a regression test for a bug seen during development of
++   * MAPREDUCE-2323 (fair scheduler metrics).
++   */
++  public void testSetPoolTwice() throws Exception {
++    // Set up pools file
++    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
++    out.println("<?xml version=\"1.0\"?>");
++    out.println("<allocations>");
++    out.println("<pool name=\"default\">");
++    out.println("<schedulingMode>fair</schedulingMode>");
++    out.println("</pool>");
++    out.println("<pool name=\"poolA\">");
++    out.println("<schedulingMode>fair</schedulingMode>");
++    out.println("</pool>");
++    out.println("</allocations>");
++    out.close();
++    scheduler.getPoolManager().reloadAllocs();
++    Pool defaultPool = scheduler.getPoolManager().getPool("default");
++    Pool poolA = scheduler.getPoolManager().getPool("poolA");
++
++    // Submit a job to the default pool.  All specifications take default values.
++    JobInProgress job1 = submitJob(JobStatus.RUNNING, 1, 3);
++    assertEquals(1,    defaultPool.getMapSchedulable().getDemand());
++    assertEquals(3,    defaultPool.getReduceSchedulable().getDemand());
++    assertEquals(0,    poolA.getMapSchedulable().getDemand());
++    assertEquals(0,    poolA.getReduceSchedulable().getDemand());
++
++    // Move job to poolA and make sure demand moves with it
++    scheduler.getPoolManager().setPool(job1, "poolA");
++    assertEquals("poolA", scheduler.getPoolManager().getPoolName(job1));
++
++    defaultPool.getMapSchedulable().updateDemand();
++    defaultPool.getReduceSchedulable().updateDemand();
++    poolA.getMapSchedulable().updateDemand();
++    poolA.getReduceSchedulable().updateDemand();
++
++    assertEquals(0,    defaultPool.getMapSchedulable().getDemand());
++    assertEquals(0,    defaultPool.getReduceSchedulable().getDemand());
++    assertEquals(1,    poolA.getMapSchedulable().getDemand());
++    assertEquals(3,    poolA.getReduceSchedulable().getDemand());
++
++    // Move back to default pool and make sure demand goes back
++    scheduler.getPoolManager().setPool(job1, "default");
++    assertEquals("default", scheduler.getPoolManager().getPoolName(job1));
++
++    defaultPool.getMapSchedulable().updateDemand();
++    defaultPool.getReduceSchedulable().updateDemand();
++    poolA.getMapSchedulable().updateDemand();
++    poolA.getReduceSchedulable().updateDemand();
++
++    assertEquals(1,    defaultPool.getMapSchedulable().getDemand());
++    assertEquals(3,    defaultPool.getReduceSchedulable().getDemand());
++    assertEquals(0,    poolA.getMapSchedulable().getDemand());
++    assertEquals(0,    poolA.getReduceSchedulable().getDemand());
++  }
+   
+   private void advanceTime(long time) {
+     clock.advance(time);
+-- 
+1.7.0.4
+

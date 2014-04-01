@@ -1,0 +1,227 @@
+From 32330fbadb4aed16627397979b90d52f2474ef38 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Mon, 29 Mar 2010 15:50:20 -0700
+Subject: [PATCH 0232/1179] MAPREDUCE-1423. Improve performance of CombineFileInputFormat when multiple pools are configured
+
+Description: I have a map-reduce job that is using CombineFileInputFormat. It has configured 10000
+pools and 30000 files. The time to create the splits takes more than an hour. The reaosn being that
+CombineFileInputFormat.getSplits() converts the same path from String to Path object multiple times,
+one for each instance of a pool. Similarly, it calls Path.toUri(0 multiple times. This code can be
+optimized.
+
+Reason: Improves CombineFileInputFormat performance (used by Sqoop); needed to apply MAPREDUCE-1480 cleanly
+Author: Dhruba Borthakur
+Ref: CDH-811
+---
+ .../lib/input/CombineFileInputFormat.java          |   46 ++++++++++---------
+ .../lib/input/TestCombineFileInputFormat.java      |   43 ++++++++++++++++++
+ 2 files changed, 67 insertions(+), 22 deletions(-)
+ delete mode 100644 src/test/org/apache/hadoop/mapred/lib/TestCombineFileInputFormat.java
+
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/input/CombineFileInputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/input/CombineFileInputFormat.java
+index 86b988d..0c55200 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/input/CombineFileInputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/input/CombineFileInputFormat.java
+@@ -20,6 +20,7 @@ package org.apache.hadoop.mapreduce.lib.input;
+ 
+ import java.io.IOException;
+ import java.util.ArrayList;
++import java.util.LinkedList;
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.HashMap;
+@@ -78,7 +79,7 @@ public abstract class CombineFileInputFormat<K, V>
+   private ArrayList<MultiPathFilter> pools = new  ArrayList<MultiPathFilter>();
+ 
+   // mapping from a rack name to the set of Nodes in the rack 
+-  private static HashMap<String, Set<String>> rackToNodes = 
++  private HashMap<String, Set<String>> rackToNodes = 
+                             new HashMap<String, Set<String>>();
+   /**
+    * Specify the maximum size (in bytes) of each split. Each split is
+@@ -187,6 +188,16 @@ public abstract class CombineFileInputFormat<K, V>
+       return splits;    
+     }
+ 
++    // Convert them to Paths first. This is a costly operation and 
++    // we should do it first, otherwise we will incur doing it multiple
++    // times, one time each for each pool in the next loop.
++    List<Path> newpaths = new LinkedList<Path>();
++    for (int i = 0; i < paths.length; i++) {
++      Path p = new Path(paths[i].toUri().getPath());
++      newpaths.add(p);
++    }
++    paths = null;
++
+     // In one single iteration, process all the paths in a single pool.
+     // Processing one pool at a time ensures that a split contains paths
+     // from a single pool only.
+@@ -195,14 +206,11 @@ public abstract class CombineFileInputFormat<K, V>
+       
+       // pick one input path. If it matches all the filters in a pool,
+       // add it to the output set
+-      for (int i = 0; i < paths.length; i++) {
+-        if (paths[i] == null) {  // already processed
+-          continue;
+-        }
+-        Path p = new Path(paths[i].toUri().getPath());
++      for (Iterator<Path> iter = newpaths.iterator(); iter.hasNext();) {
++        Path p = iter.next();
+         if (onepool.accept(p)) {
+-          myPaths.add(paths[i]); // add it to my output set
+-          paths[i] = null;       // already processed
++          myPaths.add(p); // add it to my output set
++          iter.remove();
+         }
+       }
+       // create splits for all files in this pool.
+@@ -210,16 +218,8 @@ public abstract class CombineFileInputFormat<K, V>
+                     maxSize, minSizeNode, minSizeRack, splits);
+     }
+ 
+-    // Finally, process all paths that do not belong to any pool.
+-    ArrayList<Path> myPaths = new ArrayList<Path>();
+-    for (int i = 0; i < paths.length; i++) {
+-      if (paths[i] == null) {  // already processed
+-        continue;
+-      }
+-      myPaths.add(paths[i]);
+-    }
+     // create splits for all files that are not in any pool.
+-    getMoreSplits(conf, myPaths.toArray(new Path[myPaths.size()]), 
++    getMoreSplits(conf, newpaths.toArray(new Path[newpaths.size()]), 
+                   maxSize, minSizeNode, minSizeRack, splits);
+ 
+     // free up rackToNodes map
+@@ -259,7 +259,7 @@ public abstract class CombineFileInputFormat<K, V>
+     long totLength = 0;
+     for (int i = 0; i < paths.length; i++) {
+       files[i] = new OneFileInfo(paths[i], conf, 
+-                                 rackToBlocks, blockToNodes, nodeToBlocks);
++                                 rackToBlocks, blockToNodes, nodeToBlocks, rackToNodes);
+       totLength += files[i].getLength();
+     }
+ 
+@@ -457,7 +457,8 @@ public abstract class CombineFileInputFormat<K, V>
+     OneFileInfo(Path path, Configuration conf,
+                 HashMap<String, List<OneBlockInfo>> rackToBlocks,
+                 HashMap<OneBlockInfo, String[]> blockToNodes,
+-                HashMap<String, List<OneBlockInfo>> nodeToBlocks)
++                HashMap<String, List<OneBlockInfo>> nodeToBlocks,
++                HashMap<String, Set<String>> rackToNodes)
+                 throws IOException {
+       this.fileSize = 0;
+ 
+@@ -494,7 +495,7 @@ public abstract class CombineFileInputFormat<K, V>
+             }
+             blklist.add(oneblock);
+             // Add this host to rackToNodes map
+-            addHostToRack(oneblock.racks[j], oneblock.hosts[j]);
++            addHostToRack(rackToNodes, oneblock.racks[j], oneblock.hosts[j]);
+          }
+ 
+           // add this block to the node --> block map
+@@ -558,7 +559,8 @@ public abstract class CombineFileInputFormat<K, V>
+     }
+   }
+ 
+-  private static void addHostToRack(String rack, String host) {
++  private static void addHostToRack(HashMap<String, Set<String>> rackToNodes,
++                                    String rack, String host) {
+     Set<String> hosts = rackToNodes.get(rack);
+     if (hosts == null) {
+       hosts = new HashSet<String>();
+@@ -567,7 +569,7 @@ public abstract class CombineFileInputFormat<K, V>
+     hosts.add(host);
+   }
+   
+-  private static List<String> getHosts(List<String> racks) {
++  private List<String> getHosts(List<String> racks) {
+     List<String> hosts = new ArrayList<String>();
+     for (String rack : racks) {
+       hosts.addAll(rackToNodes.get(rack));
+diff --git a/src/test/org/apache/hadoop/mapred/lib/TestCombineFileInputFormat.java b/src/test/org/apache/hadoop/mapred/lib/TestCombineFileInputFormat.java
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/src/test/org/apache/hadoop/mapreduce/lib/input/TestCombineFileInputFormat.java b/src/test/org/apache/hadoop/mapreduce/lib/input/TestCombineFileInputFormat.java
+index d8ace14..98c74dc 100644
+--- a/src/test/org/apache/hadoop/mapreduce/lib/input/TestCombineFileInputFormat.java
++++ b/src/test/org/apache/hadoop/mapreduce/lib/input/TestCombineFileInputFormat.java
+@@ -19,10 +19,12 @@ package org.apache.hadoop.mapreduce.lib.input;
+ 
+ import java.io.IOException;
+ import java.util.List;
++import java.util.ArrayList;
+ 
+ import junit.framework.TestCase;
+ 
+ import org.apache.hadoop.fs.FSDataOutputStream;
++import org.apache.hadoop.fs.FileStatus;
+ import org.apache.hadoop.fs.FileSystem;
+ import org.apache.hadoop.fs.Path;
+ import org.apache.hadoop.io.Text;
+@@ -33,6 +35,7 @@ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.PathFilter;
+ import org.apache.hadoop.mapreduce.InputSplit;
+ import org.apache.hadoop.mapreduce.Job;
++import org.apache.hadoop.mapreduce.JobContext;
+ import org.apache.hadoop.mapreduce.RecordReader;
+ import org.apache.hadoop.mapreduce.TaskAttemptContext;
+ 
+@@ -75,6 +78,24 @@ public class TestCombineFileInputFormat extends TestCase{
+     }
+   }
+ 
++  /** Dummy class to extend CombineFileInputFormat. It allows 
++   * non-existent files to be passed into the CombineFileInputFormat, allows
++   * for easy testing without having to create real files.
++   */
++  private class DummyInputFormat1 extends DummyInputFormat {
++    @Override
++    protected List<FileStatus> listStatus(JobContext job) throws IOException {
++      Path[] files = getInputPaths(job);
++      List<FileStatus> results = new ArrayList<FileStatus>();
++      for (int i = 0; i < files.length; i++) {
++        Path p = files[i];
++        FileSystem fs = p.getFileSystem(job.getConfiguration());
++        results.add(fs.getFileStatus(p));
++      }
++      return results;
++    }
++  }
++
+   public void testSplitPlacement() throws IOException {
+     MiniDFSCluster dfs = null;
+     FileSystem fileSys = null;
+@@ -410,6 +431,28 @@ public class TestCombineFileInputFormat extends TestCase{
+       assertEquals(fileSplit.getNumPaths(), 6);
+       assertEquals(fileSplit.getLocations().length, 1);
+       assertEquals(fileSplit.getLocations()[0], hosts3[0]); // should be on r3
++
++      // measure performance when there are multiple pools and
++      // many files in each pool.
++      int numPools = 100;
++      int numFiles = 1000;
++      DummyInputFormat1 inFormat1 = new DummyInputFormat1();
++      for (int i = 0; i < numFiles; i++) {
++        FileInputFormat.setInputPaths(job, file1);
++      }
++      inFormat1.setMinSplitSizeRack(1); // everything is at least rack local
++      final Path dirNoMatch1 = new Path(inDir, "/dirxx");
++      final Path dirNoMatch2 = new Path(inDir, "/diryy");
++      for (int i = 0; i < numPools; i++) {
++        inFormat1.createPool(new TestFilter(dirNoMatch1), 
++                            new TestFilter(dirNoMatch2));
++      }
++      long start = System.currentTimeMillis();
++      splits = inFormat1.getSplits(job);
++      long end = System.currentTimeMillis();
++      System.out.println("Elapsed time for " + numPools + " pools " +
++                         " and " + numFiles + " files is " + 
++                         ((end - start)/1000) + " seconds.");
+     } finally {
+       if (dfs != null) {
+         dfs.shutdown();
+-- 
+1.7.0.4
+

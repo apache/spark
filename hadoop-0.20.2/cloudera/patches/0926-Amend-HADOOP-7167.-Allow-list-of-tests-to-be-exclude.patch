@@ -1,0 +1,34 @@
+From 0863f15d727e1ad6e96a0887a93a82f315c8f734 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Mar 2011 16:33:05 -0800
+Subject: [PATCH 0926/1179] Amend HADOOP-7167. Allow list of tests to be excluded during build.
+
+No longer uses /dev/null as a canonical empty file, since it causes
+the build to fail on Cygwin.
+
+Author: Todd Lipcon
+Ref: CDH-2777
+---
+ build.xml           |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+ create mode 100644 src/test/empty-file
+
+diff --git a/build.xml b/build.xml
+index d9c48c0..fccca36 100644
+--- a/build.xml
++++ b/build.xml
+@@ -152,7 +152,7 @@
+   
+   <property name="test.commit.tests.file" value="${test.src.dir}/commit-tests" />
+   <property name="test.all.tests.file" value="${test.src.dir}/all-tests" />
+-  <property name="test.exclude.file" value="/dev/null" />
++  <property name="test.exclude.file" value="${test.src.dir}/empty-file" />
+ 
+   <property name="test.libhdfs.conf.dir" value="${c++.libhdfs.src}/tests/conf"/>
+   <property name="test.libhdfs.dir" value="${test.build.dir}/libhdfs"/>
+diff --git a/src/test/empty-file b/src/test/empty-file
+new file mode 100644
+index 0000000..e69de29
+-- 
+1.7.0.4
+

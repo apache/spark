@@ -1,0 +1,90 @@
+From 42eeb4540850278563e76841f0c6b369933d5b70 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:30:43 -0800
+Subject: [PATCH 0167/1179] HADOOP-5222. Add offset in client trace
+
+Description: By adding offset in client trace, the client trace information can provide more accurately information about I/O.<br/>
+It is useful for performance analyzing.
+
+<p>Since there is  no random write now, the offset of writing is always zero.</p>
+Reason: Logging improvement
+Author: Lei Xu
+Ref: UNKNOWN
+---
+ .../hadoop/hdfs/server/datanode/BlockReceiver.java |   10 ++++++----
+ .../hadoop/hdfs/server/datanode/BlockSender.java   |    2 +-
+ .../hadoop/hdfs/server/datanode/DataNode.java      |    1 +
+ .../hadoop/hdfs/server/datanode/DataXceiver.java   |    2 +-
+ 4 files changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
+index 9146cfc..1698331 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockReceiver.java
+@@ -807,9 +807,10 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+                     DataNode.EMPTY_DEL_HINT);
+                 if (ClientTraceLog.isInfoEnabled() &&
+                     receiver.clientName.length() > 0) {
++                  long offset = 0;
+                   ClientTraceLog.info(String.format(DN_CLIENTTRACE_FORMAT,
+-                        receiver.inAddr, receiver.myAddr, block.getNumBytes(),
+-                        "HDFS_WRITE", receiver.clientName,
++                        receiver.inAddr, receiver.myAddr, block.getNumBytes(), 
++                        "HDFS_WRITE", receiver.clientName, offset,
+                         datanode.dnRegistration.getStorageID(), block));
+                 } else {
+                   LOG.info("Received block " + block + 
+@@ -943,9 +944,10 @@ class BlockReceiver implements java.io.Closeable, FSConstants {
+                   DataNode.EMPTY_DEL_HINT);
+               if (ClientTraceLog.isInfoEnabled() &&
+                   receiver.clientName.length() > 0) {
++                long offset = 0;
+                 ClientTraceLog.info(String.format(DN_CLIENTTRACE_FORMAT,
+-                      receiver.inAddr, receiver.myAddr, block.getNumBytes(),
+-                      "HDFS_WRITE", receiver.clientName,
++                      receiver.inAddr, receiver.myAddr, block.getNumBytes(), 
++                      "HDFS_WRITE", receiver.clientName, offset, 
+                       datanode.dnRegistration.getStorageID(), block));
+               } else {
+                 LOG.info("Received block " + block + 
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java
+index 32b0269..87dc71c 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/BlockSender.java
+@@ -412,7 +412,7 @@ class BlockSender implements java.io.Closeable, FSConstants {
+       }
+     } finally {
+       if (clientTraceFmt != null) {
+-        ClientTraceLog.info(String.format(clientTraceFmt, totalRead));
++        ClientTraceLog.info(String.format(clientTraceFmt, totalRead, initialOffset));
+       }
+       close();
+     }
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index b571438..ca1be5b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -142,6 +142,7 @@ public class DataNode extends Configured
+         ", bytes: %s" +  // byte count
+         ", op: %s" +     // operation
+         ", cliID: %s" +  // DFSClient id
++        ", offset: %s" + // offset
+         ", srvID: %s" +  // DatanodeRegistration
+         ", blockid: %s"; // block id
+   static final Log ClientTraceLog =
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+index d752290..391bd5b 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataXceiver.java
+@@ -163,7 +163,7 @@ class DataXceiver implements Runnable, FSConstants {
+     final String clientTraceFmt =
+       clientName.length() > 0 && ClientTraceLog.isInfoEnabled()
+         ? String.format(DN_CLIENTTRACE_FORMAT, localAddress, remoteAddress,
+-            "%d", "HDFS_READ", clientName,
++            "%d", "HDFS_READ", clientName, "%d", 
+             datanode.dnRegistration.getStorageID(), block)
+         : datanode.dnRegistration + " Served block " + block + " to " +
+             s.getInetAddress();
+-- 
+1.7.0.4
+

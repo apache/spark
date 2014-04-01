@@ -1,0 +1,3219 @@
+From 59677d22261974560117fa82e74d9a7f80f804d5 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:52:06 -0800
+Subject: [PATCH 0066/1179] MAPREDUCE-800. MRUnit should support the new API
+
+Description: MRUnit's TestDriver implementations use the old org.apache.hadoop.mapred-based classes. TestDrivers and associated mock object implementations are required for org.apache.hadoop.mapreduce-based code.
+Reason: New feature (API Compatibility)
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../java/org/apache/hadoop/mrunit/MapDriver.java   |  150 +-------------
+ .../org/apache/hadoop/mrunit/MapDriverBase.java    |  194 ++++++++++++++++
+ .../org/apache/hadoop/mrunit/MapReduceDriver.java  |  145 +------------
+ .../apache/hadoop/mrunit/MapReduceDriverBase.java  |  195 ++++++++++++++++
+ .../org/apache/hadoop/mrunit/ReduceDriver.java     |  158 +-------------
+ .../org/apache/hadoop/mrunit/ReduceDriverBase.java |  195 ++++++++++++++++
+ .../java/org/apache/hadoop/mrunit/TestDriver.java  |    2 +-
+ .../apache/hadoop/mrunit/mapreduce/MapDriver.java  |  189 ++++++++++++++++
+ .../hadoop/mrunit/mapreduce/MapReduceDriver.java   |  208 +++++++++++++++++
+ .../hadoop/mrunit/mapreduce/ReduceDriver.java      |  194 ++++++++++++++++
+ .../mrunit/mapreduce/mock/MockInputSplit.java      |   48 ++++
+ .../mapreduce/mock/MockMapContextWrapper.java      |  133 +++++++++++
+ .../mrunit/mapreduce/mock/MockOutputCommitter.java |   51 +++++
+ .../mapreduce/mock/MockRawKeyValueIterator.java    |   50 ++++
+ .../mapreduce/mock/MockReduceContextWrapper.java   |  196 ++++++++++++++++
+ .../test/org/apache/hadoop/mrunit/AllTests.java    |    1 +
+ .../apache/hadoop/mrunit/mapreduce/AllTests.java   |   42 ++++
+ .../hadoop/mrunit/mapreduce/TestMapDriver.java     |  186 ++++++++++++++++
+ .../mrunit/mapreduce/TestMapReduceDriver.java      |  235 ++++++++++++++++++++
+ .../hadoop/mrunit/mapreduce/TestReduceDriver.java  |  227 +++++++++++++++++++
+ 20 files changed, 2351 insertions(+), 448 deletions(-)
+ create mode 100644 src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapDriverBase.java
+ create mode 100644 src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapReduceDriverBase.java
+ create mode 100644 src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/ReduceDriverBase.java
+ create mode 100644 src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapDriver.java
+ create mode 100644 src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapReduceDriver.java
+ create mode 100644 src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/ReduceDriver.java
+ create mode 100644 src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockInputSplit.java
+ create mode 100644 src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockMapContextWrapper.java
+ create mode 100644 src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockOutputCommitter.java
+ create mode 100644 src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockRawKeyValueIterator.java
+ create mode 100644 src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java
+ create mode 100644 src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/AllTests.java
+ create mode 100644 src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestMapDriver.java
+ create mode 100644 src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestMapReduceDriver.java
+ create mode 100644 src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestReduceDriver.java
+
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapDriver.java
+index 9fbeb65..7c940a3 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapDriver.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapDriver.java
+@@ -38,15 +38,12 @@ import org.apache.hadoop.mrunit.types.Pair;
+  * single (k, v) -> (k, v)* case from the Mapper, representing a single unit
+  * test. Multiple input (k, v) pairs should go in separate unit tests.
+  */
+-public class MapDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
++public class MapDriver<K1, V1, K2, V2> extends MapDriverBase<K1, V1, K2, V2> {
+ 
+   public static final Log LOG = LogFactory.getLog(MapDriver.class);
+ 
+   private Mapper<K1, V1, K2, V2> myMapper;
+ 
+-  private K1 inputKey;
+-  private V1 inputVal;
+-
+   public MapDriver(final Mapper<K1, V1, K2, V2> m) {
+     myMapper = m;
+   }
+@@ -54,7 +51,6 @@ public class MapDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   public MapDriver() {
+   }
+ 
+-
+   /**
+    * Set the Mapper instance to use with this test driver
+    *
+@@ -78,18 +74,6 @@ public class MapDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   /**
+-   * Sets the input key to send to the mapper
+-   *
+-   */
+-  public void setInputKey(K1 key) {
+-    inputKey = key;
+-  }
+-
+-  public K1 getInputKey() {
+-    return inputKey;
+-  }
+-
+-  /**
+    * Identical to setInputKey() but with fluent programming style
+    *
+    * @return this
+@@ -100,19 +84,6 @@ public class MapDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   /**
+-   * Sets the input value to send to the mapper
+-   *
+-   * @param val
+-   */
+-  public void setInputValue(V1 val) {
+-    inputVal = val;
+-  }
+-
+-  public V1 getInputValue() {
+-    return inputVal;
+-  }
+-
+-  /**
+    * Identical to setInputValue() but with fluent programming style
+    *
+    * @param val
+@@ -124,15 +95,6 @@ public class MapDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   /**
+-   * Sets the input to send to the mapper
+-   *
+-   */
+-  public void setInput(K1 key, V1 val) {
+-    setInputKey(key);
+-    setInputValue(val);
+-  }
+-
+-  /**
+    * Identical to setInput() but returns self for fluent programming style
+    *
+    * @return this
+@@ -143,21 +105,6 @@ public class MapDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   /**
+-   * Sets the input to send to the mapper
+-   *
+-   * @param inputRecord
+-   *          a (key, val) pair
+-   */
+-  public void setInput(Pair<K1, V1> inputRecord) {
+-    if (null != inputRecord) {
+-      setInputKey(inputRecord.getFirst());
+-      setInputValue(inputRecord.getSecond());
+-    } else {
+-      throw new IllegalArgumentException("null inputRecord in setInput()");
+-    }
+-  }
+-
+-  /**
+    * Identical to setInput() but returns self for fluent programming style
+    *
+    * @param inputRecord
+@@ -169,20 +116,6 @@ public class MapDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   /**
+-   * Adds an output (k, v) pair we expect from the Mapper
+-   *
+-   * @param outputRecord
+-   *          The (k, v) pair to add
+-   */
+-  public void addOutput(Pair<K2, V2> outputRecord) {
+-    if (null != outputRecord) {
+-      expectedOutputs.add(outputRecord);
+-    } else {
+-      throw new IllegalArgumentException("Tried to add null outputRecord");
+-    }
+-  }
+-
+-  /**
+    * Works like addOutput(), but returns self for fluent style
+    *
+    * @param outputRecord
+@@ -194,14 +127,6 @@ public class MapDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   /**
+-   * Adds a (k, v) pair we expect as output from the mapper
+-   *
+-   */
+-  public void addOutput(K2 key, V2 val) {
+-    addOutput(new Pair<K2, V2>(key, val));
+-  }
+-
+-  /**
+    * Functions like addOutput() but returns self for fluent programming
+    * style
+    *
+@@ -213,30 +138,6 @@ public class MapDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   /**
+-   * Expects an input of the form "key \t val" Forces the Mapper input types
+-   * to Text.
+-   *
+-   * @param input
+-   *          A string of the form "key \t val".
+-   */
+-  public void setInputFromString(String input) {
+-    if (null == input) {
+-      throw new IllegalArgumentException("null input given to setInputFromString");
+-    } else {
+-      Pair<Text, Text> inputPair = parseTabbedPair(input);
+-      if (null != inputPair) {
+-        // I know this is not type-safe, but I don't know a better way to do
+-        // this.
+-        setInputKey((K1) inputPair.getFirst());
+-        setInputValue((V1) inputPair.getSecond());
+-      } else {
+-        throw new IllegalArgumentException(
+-            "Could not parse input pair in setInputFromString");
+-      }
+-    }
+-  }
+-
+-  /**
+    * Identical to setInputFromString, but with a fluent programming style
+    *
+    * @param input
+@@ -249,28 +150,6 @@ public class MapDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   /**
+-   * Expects an input of the form "key \t val" Forces the Mapper output types
+-   * to Text.
+-   *
+-   * @param output
+-   *          A string of the form "key \t val". Trims any whitespace.
+-   */
+-  public void addOutputFromString(String output) {
+-    if (null == output) {
+-      throw new IllegalArgumentException("null input given to setOutput");
+-    } else {
+-      Pair<Text, Text> outputPair = parseTabbedPair(output);
+-      if (null != outputPair) {
+-        // I know this is not type-safe, but I don't know a better way to do
+-        // this.
+-        addOutput((Pair<K2, V2>) outputPair);
+-      } else {
+-        throw new IllegalArgumentException("Could not parse output pair in setOutput");
+-      }
+-    }
+-  }
+-
+-  /**
+    * Identical to addOutputFromString, but with a fluent programming style
+    *
+    * @param output
+@@ -294,33 +173,6 @@ public class MapDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   @Override
+-  public void runTest() throws RuntimeException {
+-    String inputKeyStr = "(null)";
+-    String inputValStr = "(null)";
+-
+-    if (null != inputKey) {
+-      inputKeyStr = inputKey.toString();
+-    }
+-
+-    if (null != inputVal) {
+-      inputValStr = inputVal.toString();
+-    }
+-
+-    LOG.debug("Mapping input (" + inputKeyStr + ", " + inputValStr + ")");
+-
+-    List<Pair<K2, V2>> outputs = null;
+-
+-    try {
+-      outputs = run();
+-      validate(outputs);
+-    } catch (IOException ioe) {
+-      LOG.error("IOException in mapper: " + ioe.toString());
+-      LOG.debug("Setting success to false based on IOException");
+-      throw new RuntimeException();
+-    }
+-  }
+-
+-  @Override
+   public String toString() {
+     return "MapDriver (" + myMapper + ")";
+   }
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapDriverBase.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapDriverBase.java
+new file mode 100644
+index 0000000..3701cce
+--- /dev/null
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapDriverBase.java
+@@ -0,0 +1,194 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mrunit;
++
++
++import java.io.IOException;
++import java.util.List;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mrunit.mock.MockOutputCollector;
++import org.apache.hadoop.mrunit.mock.MockReporter;
++import org.apache.hadoop.mrunit.types.Pair;
++
++/**
++ * Harness that allows you to test a Mapper instance. You provide the input
++ * key and value that should be sent to the Mapper, and outputs you expect to
++ * be sent by the Mapper to the collector for those inputs. By calling
++ * runTest(), the harness will deliver the input to the Mapper and will check
++ * its outputs against the expected results. This is designed to handle a
++ * single (k, v) -> (k, v)* case from the Mapper, representing a single unit
++ * test. Multiple input (k, v) pairs should go in separate unit tests.
++ */
++public abstract class MapDriverBase<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
++
++  public static final Log LOG = LogFactory.getLog(MapDriverBase.class);
++
++  protected K1 inputKey;
++  protected V1 inputVal;
++
++
++  /**
++   * Sets the input key to send to the mapper
++   *
++   */
++  public void setInputKey(K1 key) {
++    inputKey = key;
++  }
++
++  public K1 getInputKey() {
++    return inputKey;
++  }
++
++  /**
++   * Sets the input value to send to the mapper
++   *
++   * @param val
++   */
++  public void setInputValue(V1 val) {
++    inputVal = val;
++  }
++
++  public V1 getInputValue() {
++    return inputVal;
++  }
++
++  /**
++   * Sets the input to send to the mapper
++   *
++   */
++  public void setInput(K1 key, V1 val) {
++    setInputKey(key);
++    setInputValue(val);
++  }
++
++  /**
++   * Sets the input to send to the mapper
++   *
++   * @param inputRecord
++   *          a (key, val) pair
++   */
++  public void setInput(Pair<K1, V1> inputRecord) {
++    if (null != inputRecord) {
++      setInputKey(inputRecord.getFirst());
++      setInputValue(inputRecord.getSecond());
++    } else {
++      throw new IllegalArgumentException("null inputRecord in setInput()");
++    }
++  }
++
++  /**
++   * Adds an output (k, v) pair we expect from the Mapper
++   *
++   * @param outputRecord
++   *          The (k, v) pair to add
++   */
++  public void addOutput(Pair<K2, V2> outputRecord) {
++    if (null != outputRecord) {
++      expectedOutputs.add(outputRecord);
++    } else {
++      throw new IllegalArgumentException("Tried to add null outputRecord");
++    }
++  }
++
++  /**
++   * Adds a (k, v) pair we expect as output from the mapper
++   *
++   */
++  public void addOutput(K2 key, V2 val) {
++    addOutput(new Pair<K2, V2>(key, val));
++  }
++
++  /**
++   * Expects an input of the form "key \t val" Forces the Mapper input types
++   * to Text.
++   *
++   * @param input
++   *          A string of the form "key \t val".
++   */
++  public void setInputFromString(String input) {
++    if (null == input) {
++      throw new IllegalArgumentException("null input given to setInputFromString");
++    } else {
++      Pair<Text, Text> inputPair = parseTabbedPair(input);
++      if (null != inputPair) {
++        // I know this is not type-safe, but I don't know a better way to do
++        // this.
++        setInputKey((K1) inputPair.getFirst());
++        setInputValue((V1) inputPair.getSecond());
++      } else {
++        throw new IllegalArgumentException(
++            "Could not parse input pair in setInputFromString");
++      }
++    }
++  }
++
++  /**
++   * Expects an input of the form "key \t val" Forces the Mapper output types
++   * to Text.
++   *
++   * @param output
++   *          A string of the form "key \t val". Trims any whitespace.
++   */
++  public void addOutputFromString(String output) {
++    if (null == output) {
++      throw new IllegalArgumentException("null input given to setOutput");
++    } else {
++      Pair<Text, Text> outputPair = parseTabbedPair(output);
++      if (null != outputPair) {
++        // I know this is not type-safe, but I don't know a better way to do
++        // this.
++        addOutput((Pair<K2, V2>) outputPair);
++      } else {
++        throw new IllegalArgumentException("Could not parse output pair in setOutput");
++      }
++    }
++  }
++
++  public abstract List<Pair<K2, V2>> run() throws IOException;
++
++  @Override
++  public void runTest() throws RuntimeException {
++    String inputKeyStr = "(null)";
++    String inputValStr = "(null)";
++
++    if (null != inputKey) {
++      inputKeyStr = inputKey.toString();
++    }
++
++    if (null != inputVal) {
++      inputValStr = inputVal.toString();
++    }
++
++    LOG.debug("Mapping input (" + inputKeyStr + ", " + inputValStr + ")");
++
++    List<Pair<K2, V2>> outputs = null;
++
++    try {
++      outputs = run();
++      validate(outputs);
++    } catch (IOException ioe) {
++      LOG.error("IOException in mapper: " + ioe.toString());
++      LOG.debug("Setting success to false based on IOException");
++      throw new RuntimeException();
++    }
++  }
++}
++
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapReduceDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapReduceDriver.java
+index 82e86c1..50fd524 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapReduceDriver.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapReduceDriver.java
+@@ -48,7 +48,7 @@ import org.apache.hadoop.mrunit.types.Pair;
+  * the Mapper and before the Reducer.
+  */
+ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+-    extends TestDriver<K1, V1, K3, V3> {
++    extends MapReduceDriverBase<K1, V1, K2, V2, K3, V3> {
+ 
+   public static final Log LOG = LogFactory.getLog(MapReduceDriver.class);
+ 
+@@ -56,13 +56,10 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+   private Reducer<K2, V2, K3, V3> myReducer;
+   private Reducer<K2, V2, K2, V2> myCombiner;
+ 
+-  private List<Pair<K1, V1>> inputList;
+-
+   public MapReduceDriver(final Mapper<K1, V1, K2, V2> m,
+                          final Reducer<K2, V2, K3, V3> r) {
+     myMapper = m;
+     myReducer = r;
+-    inputList = new ArrayList<Pair<K1, V1>>();
+   }
+ 
+   public MapReduceDriver(final Mapper<K1, V1, K2, V2> m,
+@@ -71,11 +68,9 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+     myMapper = m;
+     myReducer = r;
+     myCombiner = c;
+-    inputList = new ArrayList<Pair<K1, V1>>();
+   }
+ 
+   public MapReduceDriver() {
+-    inputList = new ArrayList<Pair<K1, V1>>();
+   }
+ 
+   /** Set the Mapper instance to use with this test driver
+@@ -151,15 +146,6 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+   }
+ 
+   /**
+-   * Adds an input to send to the mapper
+-   * @param key
+-   * @param val
+-   */
+-  public void addInput(K1 key, V1 val) {
+-    inputList.add(new Pair<K1, V1>(key, val));
+-  }
+-
+-  /**
+    * Identical to addInput() but returns self for fluent programming style
+    * @param key
+    * @param val
+@@ -171,18 +157,6 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+   }
+ 
+   /**
+-   * Adds an input to send to the Mapper
+-   * @param input The (k, v) pair to add to the input list.
+-   */
+-  public void addInput(Pair<K1, V1> input) {
+-    if (null == input) {
+-      throw new IllegalArgumentException("Null input in addInput()");
+-    }
+-
+-    inputList.add(input);
+-  }
+-
+-  /**
+    * Identical to addInput() but returns self for fluent programming style
+    * @param input The (k, v) pair to add
+    * @return this
+@@ -194,18 +168,6 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+   }
+ 
+   /**
+-   * Adds an output (k, v) pair we expect from the Reducer
+-   * @param outputRecord The (k, v) pair to add
+-   */
+-  public void addOutput(Pair<K3, V3> outputRecord) {
+-    if (null != outputRecord) {
+-      expectedOutputs.add(outputRecord);
+-    } else {
+-      throw new IllegalArgumentException("Tried to add null outputRecord");
+-    }
+-  }
+-
+-  /**
+    * Works like addOutput(), but returns self for fluent style
+    * @param outputRecord
+    * @return this
+@@ -217,15 +179,6 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+   }
+ 
+   /**
+-   * Adds a (k, v) pair we expect as output from the Reducer
+-   * @param key
+-   * @param val
+-   */
+-  public void addOutput(K3 key, V3 val) {
+-    addOutput(new Pair<K3, V3>(key, val));
+-  }
+-
+-  /**
+    * Functions like addOutput() but returns self for fluent programming style
+    * @param key
+    * @param val
+@@ -237,26 +190,6 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+   }
+ 
+   /**
+-   * Expects an input of the form "key \t val"
+-   * Forces the Mapper input types to Text.
+-   * @param input A string of the form "key \t val". Trims any whitespace.
+-   */
+-  public void addInputFromString(String input) {
+-    if (null == input) {
+-      throw new IllegalArgumentException("null input given to setInput");
+-    } else {
+-      Pair<Text, Text> inputPair = parseTabbedPair(input);
+-      if (null != inputPair) {
+-        // I know this is not type-safe, but I don't
+-        // know a better way to do this.
+-        addInput((Pair<K1, V1>) inputPair);
+-      } else {
+-        throw new IllegalArgumentException("Could not parse input pair in addInput");
+-      }
+-    }
+-  }
+-
+-  /**
+    * Identical to addInputFromString, but with a fluent programming style
+    * @param input A string of the form "key \t val". Trims any whitespace.
+    * @return this
+@@ -267,27 +200,6 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+   }
+ 
+   /**
+-   * Expects an input of the form "key \t val"
+-   * Forces the Reducer output types to Text.
+-   * @param output A string of the form "key \t val". Trims any whitespace.
+-   */
+-  public void addOutputFromString(String output) {
+-    if (null == output) {
+-      throw new IllegalArgumentException("null input given to setOutput");
+-    } else {
+-      Pair<Text, Text> outputPair = parseTabbedPair(output);
+-      if (null != outputPair) {
+-        // I know this is not type-safe,
+-        // but I don't know a better way to do this.
+-        addOutput((Pair<K3, V3>) outputPair);
+-      } else {
+-        throw new IllegalArgumentException(
+-            "Could not parse output pair in setOutput");
+-      }
+-    }
+-  }
+-
+-  /**
+    * Identical to addOutputFromString, but with a fluent programming style
+    * @param output A string of the form "key \t val". Trims any whitespace.
+    * @return this
+@@ -347,58 +259,7 @@ public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
+   }
+ 
+   @Override
+-  public void runTest() throws RuntimeException {
+-    List<Pair<K3, V3>> reduceOutputs = null;
+-    boolean succeeded;
+-
+-    try {
+-      reduceOutputs = run();
+-      validate(reduceOutputs);
+-    } catch (IOException ioe) {
+-      LOG.error("IOException: " + ioe.toString());
+-      LOG.debug("Setting success to false based on IOException");
+-      throw new RuntimeException();
+-    }
+-  }
+-
+-  /** Take the outputs from the Mapper, combine all values for the
+-   *  same key, and sort them by key.
+-   * @param mapOutputs An unordered list of (key, val) pairs from the mapper
+-   * @return the sorted list of (key, list(val))'s to present to the reducer
+-   */
+-  List<Pair<K2, List<V2>>> shuffle(List<Pair<K2, V2>> mapOutputs) {
+-    HashMap<K2, List<V2>> reducerInputs = new HashMap<K2, List<V2>>();
+-
+-    // step 1: condense all values with the same key into a list.
+-    for (Pair<K2, V2> mapOutput : mapOutputs) {
+-      List<V2> valuesForKey = reducerInputs.get(mapOutput.getFirst());
+-
+-      if (null == valuesForKey) {
+-        // this is the first (k, v) pair for this key. Add it to the list.
+-        valuesForKey = new ArrayList<V2>();
+-        valuesForKey.add(mapOutput.getSecond());
+-        reducerInputs.put(mapOutput.getFirst(), valuesForKey);
+-      } else {
+-        // add this value to the existing list for this key
+-        valuesForKey.add(mapOutput.getSecond());
+-      }
+-    }
+-
+-    // build a list out of these (k, list(v)) pairs
+-    List<Pair<K2, List<V2>>> finalInputs = new ArrayList<Pair<K2, List<V2>>>();
+-    Set<Map.Entry<K2, List<V2>>> entries = reducerInputs.entrySet();
+-    for (Map.Entry<K2, List<V2>> entry : entries) {
+-      K2 key = entry.getKey();
+-      List<V2> vals = entry.getValue();
+-      finalInputs.add(new Pair<K2, List<V2>>(key, vals));
+-    }
+-
+-    // and then sort the output list by key
+-    if (finalInputs.size() > 0) {
+-      Collections.sort(finalInputs,
+-              finalInputs.get(0).new FirstElemComparator());
+-    }
+-
+-    return finalInputs;
++  public String toString() {
++    return "MapReduceDriver (" + myMapper + ", " + myReducer + ")";
+   }
+ }
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapReduceDriverBase.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapReduceDriverBase.java
+new file mode 100644
+index 0000000..943e7c8
+--- /dev/null
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/MapReduceDriverBase.java
+@@ -0,0 +1,195 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mrunit;
++
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.HashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mrunit.types.Pair;
++
++/**
++ * Harness that allows you to test a Mapper and a Reducer instance together
++ * You provide the input key and value that should be sent to the Mapper, and
++ * outputs you expect to be sent by the Reducer to the collector for those
++ * inputs. By calling runTest(), the harness will deliver the input to the
++ * Mapper, feed the intermediate results to the Reducer (without checking
++ * them), and will check the Reducer's outputs against the expected results.
++ * This is designed to handle a single (k, v)* -> (k, v)* case from the
++ * Mapper/Reducer pair, representing a single unit test.
++ */
++public abstract class MapReduceDriverBase<K1, V1, K2, V2, K3, V3>
++    extends TestDriver<K1, V1, K3, V3> {
++
++  public static final Log LOG = LogFactory.getLog(MapReduceDriverBase.class);
++
++  protected List<Pair<K1, V1>> inputList;
++
++  public MapReduceDriverBase() {
++    inputList = new ArrayList<Pair<K1, V1>>();
++  }
++
++  /**
++   * Adds an input to send to the mapper
++   * @param key
++   * @param val
++   */
++  public void addInput(K1 key, V1 val) {
++    inputList.add(new Pair<K1, V1>(key, val));
++  }
++
++  /**
++   * Adds an input to send to the Mapper
++   * @param input The (k, v) pair to add to the input list.
++   */
++  public void addInput(Pair<K1, V1> input) {
++    if (null == input) {
++      throw new IllegalArgumentException("Null input in addInput()");
++    }
++
++    inputList.add(input);
++  }
++
++  /**
++   * Adds an output (k, v) pair we expect from the Reducer
++   * @param outputRecord The (k, v) pair to add
++   */
++  public void addOutput(Pair<K3, V3> outputRecord) {
++    if (null != outputRecord) {
++      expectedOutputs.add(outputRecord);
++    } else {
++      throw new IllegalArgumentException("Tried to add null outputRecord");
++    }
++  }
++
++  /**
++   * Adds a (k, v) pair we expect as output from the Reducer
++   * @param key
++   * @param val
++   */
++  public void addOutput(K3 key, V3 val) {
++    addOutput(new Pair<K3, V3>(key, val));
++  }
++
++  /**
++   * Expects an input of the form "key \t val"
++   * Forces the Mapper input types to Text.
++   * @param input A string of the form "key \t val". Trims any whitespace.
++   */
++  public void addInputFromString(String input) {
++    if (null == input) {
++      throw new IllegalArgumentException("null input given to setInput");
++    } else {
++      Pair<Text, Text> inputPair = parseTabbedPair(input);
++      if (null != inputPair) {
++        // I know this is not type-safe, but I don't
++        // know a better way to do this.
++        addInput((Pair<K1, V1>) inputPair);
++      } else {
++        throw new IllegalArgumentException("Could not parse input pair in addInput");
++      }
++    }
++  }
++
++  /**
++   * Expects an input of the form "key \t val"
++   * Forces the Reducer output types to Text.
++   * @param output A string of the form "key \t val". Trims any whitespace.
++   */
++  public void addOutputFromString(String output) {
++    if (null == output) {
++      throw new IllegalArgumentException("null input given to setOutput");
++    } else {
++      Pair<Text, Text> outputPair = parseTabbedPair(output);
++      if (null != outputPair) {
++        // I know this is not type-safe,
++        // but I don't know a better way to do this.
++        addOutput((Pair<K3, V3>) outputPair);
++      } else {
++        throw new IllegalArgumentException(
++            "Could not parse output pair in setOutput");
++      }
++    }
++  }
++
++  public abstract List<Pair<K3, V3>> run() throws IOException;
++
++  @Override
++  public void runTest() throws RuntimeException {
++    List<Pair<K3, V3>> reduceOutputs = null;
++    boolean succeeded;
++
++    try {
++      reduceOutputs = run();
++      validate(reduceOutputs);
++    } catch (IOException ioe) {
++      LOG.error("IOException: " + ioe.toString());
++      LOG.debug("Setting success to false based on IOException");
++      throw new RuntimeException();
++    }
++  }
++
++  /** Take the outputs from the Mapper, combine all values for the
++   *  same key, and sort them by key.
++   * @param mapOutputs An unordered list of (key, val) pairs from the mapper
++   * @return the sorted list of (key, list(val))'s to present to the reducer
++   */
++  public List<Pair<K2, List<V2>>> shuffle(List<Pair<K2, V2>> mapOutputs) {
++    HashMap<K2, List<V2>> reducerInputs = new HashMap<K2, List<V2>>();
++
++    // step 1: condense all values with the same key into a list.
++    for (Pair<K2, V2> mapOutput : mapOutputs) {
++      List<V2> valuesForKey = reducerInputs.get(mapOutput.getFirst());
++
++      if (null == valuesForKey) {
++        // this is the first (k, v) pair for this key. Add it to the list.
++        valuesForKey = new ArrayList<V2>();
++        valuesForKey.add(mapOutput.getSecond());
++        reducerInputs.put(mapOutput.getFirst(), valuesForKey);
++      } else {
++        // add this value to the existing list for this key
++        valuesForKey.add(mapOutput.getSecond());
++      }
++    }
++
++    // build a list out of these (k, list(v)) pairs
++    List<Pair<K2, List<V2>>> finalInputs = new ArrayList<Pair<K2, List<V2>>>();
++    Set<Map.Entry<K2, List<V2>>> entries = reducerInputs.entrySet();
++    for (Map.Entry<K2, List<V2>> entry : entries) {
++      K2 key = entry.getKey();
++      List<V2> vals = entry.getValue();
++      finalInputs.add(new Pair<K2, List<V2>>(key, vals));
++    }
++
++    // and then sort the output list by key
++    if (finalInputs.size() > 0) {
++      Collections.sort(finalInputs,
++              finalInputs.get(0).new FirstElemComparator());
++    }
++
++    return finalInputs;
++  }
++}
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/ReduceDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/ReduceDriver.java
+index 9a2abca..f559b7f 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/ReduceDriver.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/ReduceDriver.java
+@@ -40,22 +40,17 @@ import org.apache.hadoop.mrunit.types.Pair;
+  * (k, v*) -> (k, v)* case from the Reducer, representing a single unit test.
+  * Multiple input (k, v*) sets should go in separate unit tests.
+  */
+-public class ReduceDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
++public class ReduceDriver<K1, V1, K2, V2> extends ReduceDriverBase<K1, V1, K2, V2> {
+ 
+   public static final Log LOG = LogFactory.getLog(ReduceDriver.class);
+ 
+   private Reducer<K1, V1, K2, V2> myReducer;
+ 
+-  private K1 inputKey;
+-  private List<V1> inputValues;
+-
+   public ReduceDriver(final Reducer<K1, V1, K2, V2> r) {
+     myReducer = r;
+-    inputValues = new ArrayList<V1>();
+   }
+ 
+   public ReduceDriver() {
+-    inputValues = new ArrayList<V1>();
+   }
+ 
+   /**
+@@ -85,14 +80,6 @@ public class ReduceDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   /**
+-   * Sets the input key to send to the Reducer
+-   *
+-   */
+-  public void setInputKey(K1 key) {
+-    inputKey = key;
+-  }
+-
+-  /**
+    * Identical to setInputKey() but with fluent programming style
+    *
+    * @return this
+@@ -103,15 +90,6 @@ public class ReduceDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   /**
+-   * adds an input value to send to the reducer
+-   *
+-   * @param val
+-   */
+-  public void addInputValue(V1 val) {
+-    inputValues.add(val);
+-  }
+-
+-  /**
+    * Identical to addInputValue() but with fluent programming style
+    *
+    * @param val
+@@ -123,25 +101,6 @@ public class ReduceDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   /**
+-   * Sets the input values to send to the reducer; overwrites existing ones
+-   *
+-   * @param values
+-   */
+-  public void setInputValues(List<V1> values) {
+-    inputValues.clear();
+-    inputValues.addAll(values);
+-  }
+-
+-  /**
+-   * Adds a set of input values to send to the reducer
+-   *
+-   * @param values
+-   */
+-  public void addInputValues(List<V1> values) {
+-    inputValues.addAll(values);
+-  }
+-
+-  /**
+    * Identical to addInputValues() but with fluent programming style
+    *
+    * @param values
+@@ -153,16 +112,6 @@ public class ReduceDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   /**
+-   * Sets the input to send to the reducer
+-   *
+-   * @param values
+-   */
+-  public void setInput(K1 key, List<V1> values) {
+-    setInputKey(key);
+-    setInputValues(values);
+-  }
+-
+-  /**
+    * Identical to setInput() but returns self for fluent programming style
+    *
+    * @return this
+@@ -173,20 +122,6 @@ public class ReduceDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   /**
+-   * Adds an output (k, v) pair we expect from the Reducer
+-   *
+-   * @param outputRecord
+-   *          The (k, v) pair to add
+-   */
+-  public void addOutput(Pair<K2, V2> outputRecord) {
+-    if (null != outputRecord) {
+-      expectedOutputs.add(outputRecord);
+-    } else {
+-      throw new IllegalArgumentException("Tried to add null outputRecord");
+-    }
+-  }
+-
+-  /**
+    * Works like addOutput(), but returns self for fluent style
+    *
+    * @param outputRecord
+@@ -198,16 +133,6 @@ public class ReduceDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   /**
+-   * Adds an output (k, v) pair we expect from the Reducer
+-   *
+-   * @param key The key part of a (k, v) pair to add
+-   * @param val The val part of a (k, v) pair to add
+-   */
+-  public void addOutput(K2 key, V2 val) {
+-    addOutput(new Pair<K2, V2>(key, val));
+-  }
+-
+-  /**
+    * Works like addOutput(), but returns self for fluent style
+    *
+    * @param key The key part of a (k, v) pair to add
+@@ -220,31 +145,6 @@ public class ReduceDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   /**
+-   * Expects an input of the form "key \t val, val, val..." Forces the Reducer
+-   * input types to Text.
+-   *
+-   * @param input
+-   *          A string of the form "key \t val,val,val". Trims any whitespace.
+-   */
+-  public void setInputFromString(String input) {
+-    if (null == input) {
+-      throw new IllegalArgumentException("null input given to setInputFromString");
+-    } else {
+-      Pair<Text, Text> inputPair = parseTabbedPair(input);
+-      if (null != inputPair) {
+-        // I know this is not type-safe, but I don't know a better way to do
+-        // this.
+-        setInputKey((K1) inputPair.getFirst());
+-        setInputValues((List<V1>) parseCommaDelimitedList(inputPair.getSecond()
+-                .toString()));
+-      } else {
+-        throw new IllegalArgumentException(
+-            "Could not parse input pair in setInputFromString");
+-      }
+-    }
+-  }
+-
+-  /**
+    * Identical to setInput, but with a fluent programming style
+    *
+    * @param input
+@@ -257,28 +157,6 @@ public class ReduceDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   /**
+-   * Expects an input of the form "key \t val" Forces the Reducer output types
+-   * to Text.
+-   *
+-   * @param output
+-   *          A string of the form "key \t val". Trims any whitespace.
+-   */
+-  public void addOutputFromString(String output) {
+-    if (null == output) {
+-      throw new IllegalArgumentException("null input given to setOutput");
+-    } else {
+-      Pair<Text, Text> outputPair = parseTabbedPair(output);
+-      if (null != outputPair) {
+-        // I know this is not type-safe, but I don't know a better way to do
+-        // this.
+-        addOutput((Pair<K2, V2>) outputPair);
+-      } else {
+-        throw new IllegalArgumentException("Could not parse output pair in setOutput");
+-      }
+-    }
+-  }
+-
+-  /**
+    * Identical to addOutput, but with a fluent programming style
+    *
+    * @param output
+@@ -292,7 +170,6 @@ public class ReduceDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+ 
+   @Override
+   public List<Pair<K2, V2>> run() throws IOException {
+-
+     MockOutputCollector<K2, V2> outputCollector =
+       new MockOutputCollector<K2, V2>();
+     MockReporter reporter = new MockReporter(MockReporter.ReporterType.Reducer);
+@@ -305,39 +182,8 @@ public class ReduceDriver<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
+   }
+ 
+   @Override
+-  public void runTest() throws RuntimeException {
+-
+-    String inputKeyStr = "(null)";
+-
+-    if (null != inputKey) {
+-      inputKeyStr = inputKey.toString();
+-    }
+-
+-    StringBuilder sb = new StringBuilder();
+-    formatValueList(inputValues, sb);
+-
+-    LOG.debug("Reducing input (" + inputKeyStr + ", " + sb.toString() + ")");
+-
+-    List<Pair<K2, V2>> outputs = null;
+-    try {
+-      outputs = run();
+-      validate(outputs);
+-    } catch (IOException ioe) {
+-      LOG.error("IOException in reducer: " + ioe.toString());
+-      LOG.debug("Setting success to false based on IOException");
+-      throw new RuntimeException();
+-    }
+-  }
+-
+-  @Override
+   public String toString() {
+-    String reducerStr = "null";
+-
+-    if (null != myReducer) {
+-      reducerStr = myReducer.toString();
+-    }
+-
+-    return "ReduceDriver (" + reducerStr + ")";
++    return "ReduceDriver (" + myReducer + ")";
+   }
+ }
+ 
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/ReduceDriverBase.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/ReduceDriverBase.java
+new file mode 100644
+index 0000000..dc77a0d
+--- /dev/null
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/ReduceDriverBase.java
+@@ -0,0 +1,195 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mrunit;
++
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mrunit.mock.MockOutputCollector;
++import org.apache.hadoop.mrunit.mock.MockReporter;
++import org.apache.hadoop.mrunit.types.Pair;
++
++/**
++ * Harness that allows you to test a Reducer instance. You provide a key and a
++ * set of intermediate values for that key that represent inputs that should
++ * be sent to the Reducer (as if they came from a Mapper), and outputs you
++ * expect to be sent by the Reducer to the collector. By calling runTest(),
++ * the harness will deliver the input to the Reducer and will check its
++ * outputs against the expected results. This is designed to handle a single
++ * (k, v*) -> (k, v)* case from the Reducer, representing a single unit test.
++ * Multiple input (k, v*) sets should go in separate unit tests.
++ */
++public abstract class ReduceDriverBase<K1, V1, K2, V2> extends TestDriver<K1, V1, K2, V2> {
++
++  protected K1 inputKey;
++  protected List<V1> inputValues;
++
++  public ReduceDriverBase() {
++    inputValues = new ArrayList<V1>();
++  }
++
++  /**
++   * Sets the input key to send to the Reducer
++   *
++   */
++  public void setInputKey(K1 key) {
++    inputKey = key;
++  }
++
++  /**
++   * adds an input value to send to the reducer
++   *
++   * @param val
++   */
++  public void addInputValue(V1 val) {
++    inputValues.add(val);
++  }
++
++  /**
++   * Sets the input values to send to the reducer; overwrites existing ones
++   *
++   * @param values
++   */
++  public void setInputValues(List<V1> values) {
++    inputValues.clear();
++    inputValues.addAll(values);
++  }
++
++  /**
++   * Adds a set of input values to send to the reducer
++   *
++   * @param values
++   */
++  public void addInputValues(List<V1> values) {
++    inputValues.addAll(values);
++  }
++
++  /**
++   * Sets the input to send to the reducer
++   *
++   * @param values
++   */
++  public void setInput(K1 key, List<V1> values) {
++    setInputKey(key);
++    setInputValues(values);
++  }
++
++  /**
++   * Adds an output (k, v) pair we expect from the Reducer
++   *
++   * @param outputRecord
++   *          The (k, v) pair to add
++   */
++  public void addOutput(Pair<K2, V2> outputRecord) {
++    if (null != outputRecord) {
++      expectedOutputs.add(outputRecord);
++    } else {
++      throw new IllegalArgumentException("Tried to add null outputRecord");
++    }
++  }
++
++  /**
++   * Adds an output (k, v) pair we expect from the Reducer
++   *
++   * @param key The key part of a (k, v) pair to add
++   * @param val The val part of a (k, v) pair to add
++   */
++  public void addOutput(K2 key, V2 val) {
++    addOutput(new Pair<K2, V2>(key, val));
++  }
++
++  /**
++   * Expects an input of the form "key \t val, val, val..." Forces the Reducer
++   * input types to Text.
++   *
++   * @param input
++   *          A string of the form "key \t val,val,val". Trims any whitespace.
++   */
++  public void setInputFromString(String input) {
++    if (null == input) {
++      throw new IllegalArgumentException("null input given to setInputFromString");
++    } else {
++      Pair<Text, Text> inputPair = parseTabbedPair(input);
++      if (null != inputPair) {
++        // I know this is not type-safe, but I don't know a better way to do
++        // this.
++        setInputKey((K1) inputPair.getFirst());
++        setInputValues((List<V1>) parseCommaDelimitedList(inputPair.getSecond()
++                .toString()));
++      } else {
++        throw new IllegalArgumentException(
++            "Could not parse input pair in setInputFromString");
++      }
++    }
++  }
++
++  /**
++   * Expects an input of the form "key \t val" Forces the Reducer output types
++   * to Text.
++   *
++   * @param output
++   *          A string of the form "key \t val". Trims any whitespace.
++   */
++  public void addOutputFromString(String output) {
++    if (null == output) {
++      throw new IllegalArgumentException("null input given to setOutput");
++    } else {
++      Pair<Text, Text> outputPair = parseTabbedPair(output);
++      if (null != outputPair) {
++        // I know this is not type-safe, but I don't know a better way to do
++        // this.
++        addOutput((Pair<K2, V2>) outputPair);
++      } else {
++        throw new IllegalArgumentException("Could not parse output pair in setOutput");
++      }
++    }
++  }
++
++  public abstract List<Pair<K2, V2>> run() throws IOException;
++
++  @Override
++  public void runTest() throws RuntimeException {
++
++    String inputKeyStr = "(null)";
++
++    if (null != inputKey) {
++      inputKeyStr = inputKey.toString();
++    }
++
++    StringBuilder sb = new StringBuilder();
++    formatValueList(inputValues, sb);
++
++    LOG.debug("Reducing input (" + inputKeyStr + ", " + sb.toString() + ")");
++
++    List<Pair<K2, V2>> outputs = null;
++    try {
++      outputs = run();
++      validate(outputs);
++    } catch (IOException ioe) {
++      LOG.error("IOException in reducer: " + ioe.toString());
++      LOG.debug("Setting success to false based on IOException");
++      throw new RuntimeException();
++    }
++  }
++}
++
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/TestDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/TestDriver.java
+index 422ccc8..39c6cd3 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/TestDriver.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/TestDriver.java
+@@ -70,7 +70,7 @@ public abstract class TestDriver<K1, V1, K2, V2> {
+    * Split "key \t val" into Pair(Text(key), Text(val))
+    * @param tabSeparatedPair
+    */
+-  static Pair<Text, Text> parseTabbedPair(String tabSeparatedPair) {
++  public static Pair<Text, Text> parseTabbedPair(String tabSeparatedPair) {
+ 
+     String key, val;
+ 
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapDriver.java
+new file mode 100644
+index 0000000..4b88566
+--- /dev/null
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapDriver.java
+@@ -0,0 +1,189 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mrunit.mapreduce;
++
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.Mapper;
++import org.apache.hadoop.mrunit.MapDriverBase;
++import org.apache.hadoop.mrunit.mapreduce.mock.MockMapContextWrapper;
++import org.apache.hadoop.mrunit.types.Pair;
++
++/**
++ * Harness that allows you to test a Mapper instance. You provide the input
++ * key and value that should be sent to the Mapper, and outputs you expect to
++ * be sent by the Mapper to the collector for those inputs. By calling
++ * runTest(), the harness will deliver the input to the Mapper and will check
++ * its outputs against the expected results. This is designed to handle a
++ * single (k, v) -> (k, v)* case from the Mapper, representing a single unit
++ * test. Multiple input (k, v) pairs should go in separate unit tests.
++ */
++public class MapDriver<K1, V1, K2, V2> extends MapDriverBase<K1, V1, K2, V2> {
++
++  public static final Log LOG = LogFactory.getLog(MapDriver.class);
++
++  private Mapper<K1, V1, K2, V2> myMapper;
++
++  public MapDriver(final Mapper<K1, V1, K2, V2> m) {
++    myMapper = m;
++  }
++
++  public MapDriver() {
++  }
++
++
++  /**
++   * Set the Mapper instance to use with this test driver
++   *
++   * @param m the Mapper instance to use
++   */
++  public void setMapper(Mapper<K1, V1, K2, V2> m) {
++    myMapper = m;
++  }
++
++  /** Sets the Mapper instance to use and returns self for fluent style */
++  public MapDriver<K1, V1, K2, V2> withMapper(Mapper<K1, V1, K2, V2> m) {
++    setMapper(m);
++    return this;
++  }
++
++  /**
++   * @return the Mapper object being used by this test
++   */
++  public Mapper<K1, V1, K2, V2> getMapper() {
++    return myMapper;
++  }
++
++  /**
++   * Identical to setInputKey() but with fluent programming style
++   *
++   * @return this
++   */
++  public MapDriver<K1, V1, K2, V2> withInputKey(K1 key) {
++    setInputKey(key);
++    return this;
++  }
++
++  /**
++   * Identical to setInputValue() but with fluent programming style
++   *
++   * @param val
++   * @return this
++   */
++  public MapDriver<K1, V1, K2, V2> withInputValue(V1 val) {
++    setInputValue(val);
++    return this;
++  }
++
++  /**
++   * Identical to setInput() but returns self for fluent programming style
++   *
++   * @return this
++   */
++  public MapDriver<K1, V1, K2, V2> withInput(K1 key, V1 val) {
++    setInput(key, val);
++    return this;
++  }
++
++  /**
++   * Identical to setInput() but returns self for fluent programming style
++   *
++   * @param inputRecord
++   * @return this
++   */
++  public MapDriver<K1, V1, K2, V2> withInput(Pair<K1, V1> inputRecord) {
++    setInput(inputRecord);
++    return this;
++  }
++
++  /**
++   * Works like addOutput(), but returns self for fluent style
++   *
++   * @param outputRecord
++   * @return this
++   */
++  public MapDriver<K1, V1, K2, V2> withOutput(Pair<K2, V2> outputRecord) {
++    addOutput(outputRecord);
++    return this;
++  }
++
++  /**
++   * Functions like addOutput() but returns self for fluent programming
++   * style
++   *
++   * @return this
++   */
++  public MapDriver<K1, V1, K2, V2> withOutput(K2 key, V2 val) {
++    addOutput(key, val);
++    return this;
++  }
++
++  /**
++   * Identical to setInputFromString, but with a fluent programming style
++   *
++   * @param input
++   *          A string of the form "key \t val". Trims any whitespace.
++   * @return this
++   */
++  public MapDriver<K1, V1, K2, V2> withInputFromString(String input) {
++    setInputFromString(input);
++    return this;
++  }
++
++  /**
++   * Identical to addOutputFromString, but with a fluent programming style
++   *
++   * @param output
++   *          A string of the form "key \t val". Trims any whitespace.
++   * @return this
++   */
++  public MapDriver<K1, V1, K2, V2> withOutputFromString(String output) {
++    addOutputFromString(output);
++    return this;
++  }
++
++  @Override
++  public List<Pair<K2, V2>> run() throws IOException {
++    List<Pair<K1, V1>> inputs = new ArrayList<Pair<K1, V1>>();
++    inputs.add(new Pair<K1, V1>(inputKey, inputVal));
++
++    try {
++      MockMapContextWrapper<K1, V1, K2, V2> wrapper = new MockMapContextWrapper();
++      MockMapContextWrapper<K1, V1, K2, V2>.MockMapContext context =
++          wrapper.getMockContext(inputs);
++
++      myMapper.run(context);
++      return context.getOutputs();
++    } catch (InterruptedException ie) {
++      throw new IOException(ie);
++    }
++  }
++
++  @Override
++  public String toString() {
++    return "MapDriver (0.20+) (" + myMapper + ")";
++  }
++}
++
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapReduceDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapReduceDriver.java
+new file mode 100644
+index 0000000..3f0455e
+--- /dev/null
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/MapReduceDriver.java
+@@ -0,0 +1,208 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mrunit.mapreduce;
++
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.HashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.Mapper;
++import org.apache.hadoop.mapreduce.Reducer;
++import org.apache.hadoop.mrunit.MapReduceDriverBase;
++import org.apache.hadoop.mrunit.types.Pair;
++
++/**
++ * Harness that allows you to test a Mapper and a Reducer instance together
++ * You provide the input key and value that should be sent to the Mapper, and
++ * outputs you expect to be sent by the Reducer to the collector for those
++ * inputs. By calling runTest(), the harness will deliver the input to the
++ * Mapper, feed the intermediate results to the Reducer (without checking
++ * them), and will check the Reducer's outputs against the expected results.
++ * This is designed to handle a single (k, v)* -> (k, v)* case from the
++ * Mapper/Reducer pair, representing a single unit test.
++ */
++public class MapReduceDriver<K1, V1, K2, V2, K3, V3>
++    extends MapReduceDriverBase<K1, V1, K2, V2, K3, V3> {
++
++  public static final Log LOG = LogFactory.getLog(MapReduceDriver.class);
++
++  private Mapper<K1, V1, K2, V2> myMapper;
++  private Reducer<K2, V2, K3, V3> myReducer;
++
++  public MapReduceDriver(final Mapper<K1, V1, K2, V2> m,
++                         final Reducer<K2, V2, K3, V3> r) {
++    myMapper = m;
++    myReducer = r;
++  }
++
++  public MapReduceDriver() {
++  }
++
++  /** Set the Mapper instance to use with this test driver
++   * @param m the Mapper instance to use */
++  public void setMapper(Mapper<K1, V1, K2, V2> m) {
++    myMapper = m;
++  }
++
++  /** Sets the Mapper instance to use and returns self for fluent style */
++  public MapReduceDriver<K1, V1, K2, V2, K3, V3> withMapper(
++          Mapper<K1, V1, K2, V2> m) {
++    setMapper(m);
++    return this;
++  }
++
++  /**
++   * @return the Mapper object being used by this test
++   */
++  public Mapper<K1, V1, K2, V2> getMapper() {
++    return myMapper;
++  }
++
++  /**
++   * Sets the reducer object to use for this test
++   * @param r The reducer object to use
++   */
++  public void setReducer(Reducer<K2, V2, K3, V3> r) {
++    myReducer = r;
++  }
++
++  /**
++   * Identical to setReducer(), but with fluent programming style
++   * @param r The Reducer to use
++   * @return this
++   */
++  public MapReduceDriver<K1, V1, K2, V2, K3, V3> withReducer(
++          Reducer<K2, V2, K3, V3> r) {
++    setReducer(r);
++    return this;
++  }
++
++  /**
++   * @return the Reducer object being used for this test
++   */
++  public Reducer<K2, V2, K3, V3> getReducer() {
++    return myReducer;
++  }
++
++  /**
++   * Identical to addInput() but returns self for fluent programming style
++   * @param key
++   * @param val
++   * @return this
++   */
++  public MapReduceDriver<K1, V1, K2, V2, K3, V3> withInput(K1 key, V1 val) {
++    addInput(key, val);
++    return this;
++  }
++
++  /**
++   * Identical to addInput() but returns self for fluent programming style
++   * @param input The (k, v) pair to add
++   * @return this
++   */
++  public MapReduceDriver<K1, V1, K2, V2, K3, V3> withInput(
++      Pair<K1, V1> input) {
++    addInput(input);
++    return this;
++  }
++
++  /**
++   * Works like addOutput(), but returns self for fluent style
++   * @param outputRecord
++   * @return this
++   */
++  public MapReduceDriver<K1, V1, K2, V2, K3, V3> withOutput(
++          Pair<K3, V3> outputRecord) {
++    addOutput(outputRecord);
++    return this;
++  }
++
++  /**
++   * Functions like addOutput() but returns self for fluent programming style
++   * @param key
++   * @param val
++   * @return this
++   */
++  public MapReduceDriver<K1, V1, K2, V2, K3, V3> withOutput(K3 key, V3 val) {
++    addOutput(key, val);
++    return this;
++  }
++
++  /**
++   * Identical to addInputFromString, but with a fluent programming style
++   * @param input A string of the form "key \t val". Trims any whitespace.
++   * @return this
++   */
++  public MapReduceDriver<K1, V1, K2, V2, K3, V3> withInputFromString(String input) {
++    addInputFromString(input);
++    return this;
++  }
++
++  /**
++   * Identical to addOutputFromString, but with a fluent programming style
++   * @param output A string of the form "key \t val". Trims any whitespace.
++   * @return this
++   */
++  public MapReduceDriver<K1, V1, K2, V2, K3, V3> withOutputFromString(String output) {
++    addOutputFromString(output);
++    return this;
++  }
++
++  public List<Pair<K3, V3>> run() throws IOException {
++
++    List<Pair<K2, V2>> mapOutputs = new ArrayList<Pair<K2, V2>>();
++
++    // run map component
++    for (Pair<K1, V1> input : inputList) {
++      LOG.debug("Mapping input " + input.toString() + ")");
++
++      mapOutputs.addAll(new MapDriver<K1, V1, K2, V2>(myMapper).withInput(
++              input).run());
++    }
++
++    List<Pair<K2, List<V2>>> reduceInputs = shuffle(mapOutputs);
++    List<Pair<K3, V3>> reduceOutputs = new ArrayList<Pair<K3, V3>>();
++
++    for (Pair<K2, List<V2>> input : reduceInputs) {
++      K2 inputKey = input.getFirst();
++      List<V2> inputValues = input.getSecond();
++      StringBuilder sb = new StringBuilder();
++      formatValueList(inputValues, sb);
++      LOG.debug("Reducing input (" + inputKey.toString() + ", "
++          + sb.toString() + ")");
++
++      reduceOutputs.addAll(new ReduceDriver<K2, V2, K3, V3>(myReducer)
++              .withInputKey(inputKey).withInputValues(inputValues).run());
++    }
++
++    return reduceOutputs;
++  }
++
++  @Override
++  public String toString() {
++    return "MapReduceDriver (0.20+) (" + myMapper + ", " + myReducer + ")";
++  }
++}
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/ReduceDriver.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/ReduceDriver.java
+new file mode 100644
+index 0000000..537aacd
+--- /dev/null
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/ReduceDriver.java
+@@ -0,0 +1,194 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mrunit.mapreduce;
++
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.Reducer;
++import org.apache.hadoop.mrunit.ReduceDriverBase;
++import org.apache.hadoop.mrunit.mapreduce.mock.MockReduceContextWrapper;
++import org.apache.hadoop.mrunit.types.Pair;
++
++/**
++ * Harness that allows you to test a Reducer instance. You provide a key and a
++ * set of intermediate values for that key that represent inputs that should
++ * be sent to the Reducer (as if they came from a Mapper), and outputs you
++ * expect to be sent by the Reducer to the collector. By calling runTest(),
++ * the harness will deliver the input to the Reducer and will check its
++ * outputs against the expected results. This is designed to handle a single
++ * (k, v*) -> (k, v)* case from the Reducer, representing a single unit test.
++ * Multiple input (k, v*) sets should go in separate unit tests.
++ */
++public class ReduceDriver<K1, V1, K2, V2> extends ReduceDriverBase<K1, V1, K2, V2> {
++
++  public static final Log LOG = LogFactory.getLog(ReduceDriver.class);
++
++  private Reducer<K1, V1, K2, V2> myReducer;
++
++  public ReduceDriver(final Reducer<K1, V1, K2, V2> r) {
++    myReducer = r;
++  }
++
++  public ReduceDriver() {
++  }
++
++  /**
++   * Sets the reducer object to use for this test
++   *
++   * @param r
++   *          The reducer object to use
++   */
++  public void setReducer(Reducer<K1, V1, K2, V2> r) {
++    myReducer = r;
++  }
++
++  /**
++   * Identical to setReducer(), but with fluent programming style
++   *
++   * @param r
++   *          The Reducer to use
++   * @return this
++   */
++  public ReduceDriver<K1, V1, K2, V2> withReducer(Reducer<K1, V1, K2, V2> r) {
++    setReducer(r);
++    return this;
++  }
++
++  public Reducer<K1, V1, K2, V2> getReducer() {
++    return myReducer;
++  }
++
++  /**
++   * Identical to setInputKey() but with fluent programming style
++   *
++   * @return this
++   */
++  public ReduceDriver<K1, V1, K2, V2> withInputKey(K1 key) {
++    setInputKey(key);
++    return this;
++  }
++
++  /**
++   * Identical to addInputValue() but with fluent programming style
++   *
++   * @param val
++   * @return this
++   */
++  public ReduceDriver<K1, V1, K2, V2> withInputValue(V1 val) {
++    addInputValue(val);
++    return this;
++  }
++
++  /**
++   * Identical to addInputValues() but with fluent programming style
++   *
++   * @param values
++   * @return this
++   */
++  public ReduceDriver<K1, V1, K2, V2> withInputValues(List<V1> values) {
++    addInputValues(values);
++    return this;
++  }
++
++  /**
++   * Identical to setInput() but returns self for fluent programming style
++   *
++   * @return this
++   */
++  public ReduceDriver<K1, V1, K2, V2> withInput(K1 key, List<V1> values) {
++    setInput(key, values);
++    return this;
++  }
++
++  /**
++   * Works like addOutput(), but returns self for fluent style
++   *
++   * @param outputRecord
++   * @return this
++   */
++  public ReduceDriver<K1, V1, K2, V2> withOutput(Pair<K2, V2> outputRecord) {
++    addOutput(outputRecord);
++    return this;
++  }
++
++  /**
++   * Works like addOutput(), but returns self for fluent style
++   *
++   * @param key The key part of a (k, v) pair to add
++   * @param val The val part of a (k, v) pair to add
++   * @return this
++   */
++  public ReduceDriver<K1, V1, K2, V2> withOutput(K2 key, V2 val) {
++    addOutput(key, val);
++    return this;
++  }
++
++  /**
++   * Identical to setInput, but with a fluent programming style
++   *
++   * @param input
++   *          A string of the form "key \t val". Trims any whitespace.
++   * @return this
++   */
++  public ReduceDriver<K1, V1, K2, V2> withInputFromString(String input) {
++    setInputFromString(input);
++    return this;
++  }
++
++  /**
++   * Identical to addOutput, but with a fluent programming style
++   *
++   * @param output
++   *          A string of the form "key \t val". Trims any whitespace.
++   * @return this
++   */
++  public ReduceDriver<K1, V1, K2, V2> withOutputFromString(String output) {
++    addOutputFromString(output);
++    return this;
++  }
++
++  @Override
++  public List<Pair<K2, V2>> run() throws IOException {
++    List<Pair<K1, List<V1>>> inputs = new ArrayList<Pair<K1, List<V1>>>();
++    inputs.add(new Pair<K1, List<V1>>(inputKey, inputValues));
++
++    try {
++      MockReduceContextWrapper<K1, V1, K2, V2> wrapper = new MockReduceContextWrapper();
++      MockReduceContextWrapper<K1, V1, K2, V2>.MockReduceContext context =
++          wrapper.getMockContext(inputs);
++
++      myReducer.run(context);
++      return context.getOutputs();
++    } catch (InterruptedException ie) {
++      throw new IOException(ie);
++    }
++  }
++
++  @Override
++  public String toString() {
++    return "ReduceDriver (0.20+) (" + myReducer + ")";
++  }
++}
++
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockInputSplit.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockInputSplit.java
+new file mode 100644
+index 0000000..b719ed2
+--- /dev/null
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockInputSplit.java
+@@ -0,0 +1,48 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mrunit.mapreduce.mock;
++
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.mapreduce.lib.input.FileSplit;
++
++import java.io.IOException;
++
++/**
++ * Mock implementation of InputSplit that does nothing.
++ */
++public class MockInputSplit extends FileSplit {
++
++  private static final Path MOCK_PATH = new Path("somefile");
++
++  public MockInputSplit() {
++    super(MOCK_PATH, 0, 0, (String []) null);
++  }
++
++  public String toString() {
++    return "MockInputSplit";
++  }
++
++  /**
++   * Return the path object represented by this as a FileSplit.
++   */
++  public static Path getMockPath() {
++    return MOCK_PATH;
++  }
++}
++
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockMapContextWrapper.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockMapContextWrapper.java
+new file mode 100644
+index 0000000..400d2b0
+--- /dev/null
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockMapContextWrapper.java
+@@ -0,0 +1,133 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mrunit.mapreduce.mock;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.mapreduce.Counter;
++import org.apache.hadoop.mapreduce.InputSplit;
++import org.apache.hadoop.mapreduce.Mapper;
++import org.apache.hadoop.mapreduce.TaskAttemptID;
++import org.apache.hadoop.mrunit.types.Pair;
++import org.apache.hadoop.mrunit.mock.MockOutputCollector;
++
++import java.io.IOException;
++import java.util.Iterator;
++import java.util.List;
++
++/**
++ * o.a.h.mapreduce.Mapper.map() expects to use a Mapper.Context
++ * object as a parameter. We want to override the functionality
++ * of a lot of Context to have it send the results back to us, etc.
++ * But since Mapper.Context is an inner class of Mapper, we need to
++ * put any subclasses of Mapper.Context in a subclass of Mapper.
++ *
++ * This wrapper class exists for that purpose.
++ */
++public class MockMapContextWrapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
++    extends Mapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
++
++  public static final Log LOG = LogFactory.getLog(MockMapContextWrapper.class);
++
++  /**
++   * Mock context instance that provides input to and receives output from
++   * the Mapper instance under test.
++   */
++  public class MockMapContext extends Mapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>.Context {
++
++    private Iterator<Pair<KEYIN, VALUEIN>> inputIter;
++    private Pair<KEYIN, VALUEIN> curInput;
++    private MockOutputCollector<KEYOUT, VALUEOUT> output;
++
++    public MockMapContext(final List<Pair<KEYIN, VALUEIN>> in)
++        throws IOException, InterruptedException {
++
++      super(new Configuration(),
++            new TaskAttemptID("mrunit-jt", 0, true, 0, 0),
++            null, null, new MockOutputCommitter(), null, null);
++      this.inputIter = in.iterator();
++      this.output = new MockOutputCollector<KEYOUT, VALUEOUT>();
++    }
++
++    @Override
++    public InputSplit getInputSplit() {
++      return new MockInputSplit();
++    }
++
++    @Override
++    public KEYIN getCurrentKey() {
++      return curInput.getFirst();
++    }
++
++    @Override
++    public VALUEIN getCurrentValue() {
++      return curInput.getSecond();
++    }
++
++    @Override
++    public boolean nextKeyValue() throws IOException {
++      if (this.inputIter.hasNext()) {
++        this.curInput = this.inputIter.next();
++        return true;
++      } else {
++        return false;
++      }
++    }
++
++    public void write(KEYOUT key, VALUEOUT value) throws IOException {
++      output.collect(key, value);
++    }
++
++    /** This method does nothing in the mock version. */
++    public Counter getCounter(Enum<?> counterName) {
++      return null;
++    }
++
++    @Override
++    /** This method does nothing in the mock version. */
++    public Counter getCounter(String groupName, String counterName) {
++      return null;
++    }
++
++    @Override
++    /** This method does nothing in the mock version. */
++    public void progress() {
++    }
++
++    @Override
++    /** This method does nothing in the mock version. */
++    public void setStatus(String status) {
++    }
++
++    /**
++     * @return the outputs from the MockOutputCollector back to
++     * the test harness.
++     */
++    public List<Pair<KEYOUT, VALUEOUT>> getOutputs() {
++      return output.getOutputs();
++    }
++  }
++
++  public MockMapContext getMockContext(List<Pair<KEYIN, VALUEIN>> inputs)
++      throws IOException, InterruptedException {
++    return new MockMapContext(inputs);
++  }
++}
++
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockOutputCommitter.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockOutputCommitter.java
+new file mode 100644
+index 0000000..4a546a9
+--- /dev/null
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockOutputCommitter.java
+@@ -0,0 +1,51 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mrunit.mapreduce.mock;
++
++import org.apache.hadoop.mapreduce.OutputCommitter;
++import org.apache.hadoop.mapreduce.JobContext;
++import org.apache.hadoop.mapreduce.TaskAttemptContext;
++
++import java.io.IOException;
++
++/**
++ * Mock implementation of OutputCommitter that does nothing.
++ */
++public class MockOutputCommitter extends OutputCommitter {
++
++  public void setupJob(JobContext jobContext) {
++  }
++
++  public void cleanupJob(JobContext jobContext) {
++  }
++
++  public void setupTask(TaskAttemptContext taskContext) {
++  }
++
++  public boolean needsTaskCommit(TaskAttemptContext taskContext) {
++    return false;
++  }
++
++  public void commitTask(TaskAttemptContext taskContext) {
++  }
++
++  public void abortTask(TaskAttemptContext taskContext) {
++  }
++}
++
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockRawKeyValueIterator.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockRawKeyValueIterator.java
+new file mode 100644
+index 0000000..3f2d252
+--- /dev/null
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockRawKeyValueIterator.java
+@@ -0,0 +1,50 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mrunit.mapreduce.mock;
++
++import org.apache.hadoop.io.DataInputBuffer;
++import org.apache.hadoop.util.Progress;
++import org.apache.hadoop.mapred.RawKeyValueIterator;
++
++import java.io.IOException;
++
++/**
++ * Mock implementation of RawKeyValueIterator that does nothing.
++ */
++public class MockRawKeyValueIterator implements RawKeyValueIterator {
++  public DataInputBuffer getKey() {
++    return null;
++  }
++
++  public DataInputBuffer getValue() {
++    return null;
++  }
++
++  public boolean next() {
++    return false;
++  }
++
++  public void close() {
++  }
++
++  public Progress getProgress() {
++    return null;
++  }
++}
++
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java
+new file mode 100644
+index 0000000..4547236
+--- /dev/null
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java
+@@ -0,0 +1,196 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mrunit.mapreduce.mock;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.Counter;
++import org.apache.hadoop.mapreduce.Reducer;
++import org.apache.hadoop.mapreduce.ReduceContext;
++import org.apache.hadoop.mapreduce.TaskAttemptID;
++import org.apache.hadoop.mrunit.types.Pair;
++import org.apache.hadoop.mrunit.mock.MockOutputCollector;
++
++import java.io.IOException;
++import java.util.Iterator;
++import java.util.List;
++
++/**
++ * o.a.h.mapreduce.Reducer.reduce() expects to use a Reducer.Context
++ * object as a parameter. We want to override the functionality
++ * of a lot of Context to have it send the results back to us, etc.
++ * But since Reducer.Context is an inner class of Reducer, we need to
++ * put any subclasses of Reducer.Context in a subclass of Reducer.
++ *
++ * This wrapper class exists for that purpose.
++ */
++public class MockReduceContextWrapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
++    extends Reducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT> {
++
++  public static final Log LOG = LogFactory.getLog(MockReduceContextWrapper.class);
++
++  /**
++   * Mock context instance that provides input to and receives output from
++   * the Mapper instance under test.
++   */
++  public class MockReduceContext extends Reducer<KEYIN, VALUEIN, KEYOUT, VALUEOUT>.Context {
++
++    // The iterator over the input key, list(val).
++    private Iterator<Pair<KEYIN, List<VALUEIN>>> inputIter;
++
++    // The current key and list of values.
++    private KEYIN curKey;
++    private InspectableIterable curValueIterable;
++
++    private MockOutputCollector<KEYOUT, VALUEOUT> output;
++
++    public MockReduceContext(final List<Pair<KEYIN, List<VALUEIN>>> in)
++        throws IOException, InterruptedException {
++
++      super(new Configuration(),
++            new TaskAttemptID("mrunit-jt", 0, false, 0, 0),
++            new MockRawKeyValueIterator(), null, null,
++            new MockOutputCommitter(), null, null,
++            (Class) Text.class, (Class) Text.class);
++      this.inputIter = in.iterator();
++      this.output = new MockOutputCollector<KEYOUT, VALUEOUT>();
++    }
++
++
++    /**
++     * A private iterable/iterator implementation that wraps around the 
++     * underlying iterable/iterator used by the input value list. This
++     * memorizes the last value we saw so that we can return it in getCurrentValue().
++     */
++    private class InspectableIterable implements Iterable<VALUEIN> {
++      private Iterable<VALUEIN> base;
++      private VALUEIN lastVal;
++
++      public InspectableIterable(final Iterable<VALUEIN> baseCollection) {
++        this.base = baseCollection;
++      }
++
++      public Iterator<VALUEIN> iterator() {
++        return new InspectableIterator(this.base.iterator());
++      }
++
++      public VALUEIN getLastVal() {
++        return lastVal;
++      }
++
++      private class InspectableIterator 
++          extends ReduceContext<KEYIN, VALUEIN, KEYOUT, VALUEOUT>.ValueIterator
++          implements Iterator<VALUEIN> {
++        private Iterator<VALUEIN> iter;
++        public InspectableIterator(final Iterator<VALUEIN> baseIter) {
++          iter = baseIter;
++        }
++
++        public VALUEIN next() {
++          InspectableIterable.this.lastVal = iter.next();
++          return InspectableIterable.this.lastVal;
++        }
++
++        public boolean hasNext() {
++          return iter.hasNext();
++        }
++
++        public void remove() {
++          iter.remove();
++        }
++      }
++    }
++
++    @Override
++    public boolean nextKey() {
++      if (inputIter.hasNext()) {
++        // Advance to the next key and list of values
++        Pair<KEYIN, List<VALUEIN>> p = inputIter.next();
++        curKey = p.getFirst();
++
++        // Reset the value iterator
++        curValueIterable = new InspectableIterable(p.getSecond());
++        return true;
++      } else {
++        return false;
++      }
++    }
++
++    @Override
++    public boolean nextKeyValue() {
++      return nextKey();
++    }
++
++    @Override
++    public KEYIN getCurrentKey() {
++      return curKey;
++    }
++
++    @Override
++    public VALUEIN getCurrentValue() {
++      return curValueIterable.getLastVal();
++    }
++
++    @Override
++    public Iterable<VALUEIN> getValues() {
++      return curValueIterable;
++    }
++
++    public void write(KEYOUT key, VALUEOUT value) throws IOException {
++      output.collect(key, value);
++    }
++
++    /** This method does nothing in the mock version. */
++    public Counter getCounter(Enum<?> counterName) {
++      return null;
++    }
++
++    @Override
++    /** This method does nothing in the mock version. */
++    public Counter getCounter(String groupName, String counterName) {
++      return null;
++    }
++
++    @Override
++    /** This method does nothing in the mock version. */
++    public void progress() {
++    }
++
++    @Override
++    /** This method does nothing in the mock version. */
++    public void setStatus(String status) {
++    }
++
++    /**
++     * @return the outputs from the MockOutputCollector back to
++     * the test harness.
++     */
++    public List<Pair<KEYOUT, VALUEOUT>> getOutputs() {
++      return output.getOutputs();
++    }
++  }
++
++  public MockReduceContext getMockContext(List<Pair<KEYIN, List<VALUEIN>>> inputs)
++      throws IOException, InterruptedException {
++    return new MockReduceContext(inputs);
++  }
++}
++
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/AllTests.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/AllTests.java
+index 7612f6f..39bf248 100644
+--- a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/AllTests.java
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/AllTests.java
+@@ -43,6 +43,7 @@ public final class AllTests  {
+     suite.addTestSuite(TestExample.class);
+ 
+     suite.addTest(org.apache.hadoop.mrunit.types.AllTests.suite());
++    suite.addTest(org.apache.hadoop.mrunit.mapreduce.AllTests.suite());
+     return suite;
+   }
+ 
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/AllTests.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/AllTests.java
+new file mode 100644
+index 0000000..e0cb65c
+--- /dev/null
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/AllTests.java
+@@ -0,0 +1,42 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mrunit.mapreduce;
++
++import junit.framework.Test;
++import junit.framework.TestSuite;
++
++/**
++ * All tests for the new 0.20+ mapreduce API versions of the test harness.
++ */
++public final class AllTests  {
++
++  private AllTests() { }
++
++  public static Test suite() {
++    TestSuite suite = new TestSuite("Test for org.apache.hadoop.mrunit.mapreduce");
++
++    suite.addTestSuite(TestMapDriver.class);
++    suite.addTestSuite(TestReduceDriver.class);
++    suite.addTestSuite(TestMapReduceDriver.class);
++
++    return suite;
++  }
++
++}
++
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestMapDriver.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestMapDriver.java
+new file mode 100644
+index 0000000..09182b5
+--- /dev/null
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestMapDriver.java
+@@ -0,0 +1,186 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mrunit.mapreduce;
++
++import static org.apache.hadoop.mrunit.testutil.ExtendedAssert.*;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
++
++import junit.framework.TestCase;
++
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.Mapper;
++import org.apache.hadoop.mrunit.types.Pair;
++import org.junit.Before;
++import org.junit.Test;
++
++public class TestMapDriver extends TestCase {
++
++  private Mapper<Text, Text, Text, Text> mapper;
++  private MapDriver<Text, Text, Text, Text> driver;
++
++  @Before
++  public void setUp() {
++    mapper = new Mapper<Text, Text, Text, Text>(); // default action is identity mapper.
++    driver = new MapDriver<Text, Text, Text, Text>(mapper);
++  }
++
++  @Test
++  public void testRun() {
++    List<Pair<Text, Text>> out = null;
++
++    try {
++      out = driver.withInput(new Text("foo"), new Text("bar")).run();
++    } catch (IOException ioe) {
++      fail();
++    }
++
++    List<Pair<Text, Text>> expected = new ArrayList<Pair<Text, Text>>();
++    expected.add(new Pair<Text, Text>(new Text("foo"), new Text("bar")));
++
++    assertListEquals(out, expected);
++  }
++
++  @Test
++  public void testTestRun1() {
++    driver.withInput(new Text("foo"), new Text("bar"))
++            .withOutput(new Text("foo"), new Text("bar"))
++            .runTest();
++  }
++
++  @Test
++  public void testTestRun2() {
++    try {
++      driver.withInput(new Text("foo"), new Text("bar"))
++            .runTest();
++      fail();
++    } catch (RuntimeException re) {
++      // expected.
++    }
++  }
++
++  @Test
++  public void testTestRun3() {
++    try {
++      driver.withInput(new Text("foo"), new Text("bar"))
++            .withOutput(new Text("foo"), new Text("bar"))
++            .withOutput(new Text("foo"), new Text("bar"))
++            .runTest();
++      fail();
++    } catch (RuntimeException re) {
++      // expected.
++    }
++  }
++
++  @Test
++  public void testTestRun4() {
++    try {
++      driver.withInput(new Text("foo"), new Text("bar"))
++            .withOutput(new Text("foo"), new Text("bar"))
++            .withOutput(new Text("bonusfoo"), new Text("bar"))
++            .runTest();
++      fail();
++    } catch (RuntimeException re) {
++      // expected.
++    }
++
++  }
++  @Test
++  public void testTestRun5() {
++    try {
++      driver.withInput(new Text("foo"), new Text("bar"))
++            .withOutput(new Text("foo"), new Text("somethingelse"))
++            .runTest();
++      fail();
++    } catch (RuntimeException re) {
++      // expected.
++    }
++  }
++
++  @Test
++  public void testTestRun6() {
++    try {
++      driver.withInput(new Text("foo"), new Text("bar"))
++              .withOutput(new Text("someotherkey"), new Text("bar"))
++              .runTest();
++      fail();
++    } catch (RuntimeException re) {
++      // expected.
++    }
++  }
++
++  @Test
++  public void testTestRun7() {
++    try {
++      driver.withInput(new Text("foo"), new Text("bar"))
++            .withOutput(new Text("someotherkey"), new Text("bar"))
++            .withOutput(new Text("foo"), new Text("bar"))
++            .runTest();
++      fail();
++    } catch (RuntimeException re) {
++      // expected.
++    }
++  }
++
++  @Test
++  public void testSetInput() {
++    try {
++      driver.setInput(new Pair<Text, Text>(new Text("foo"), new Text("bar")));
++    } catch (Exception e) {
++      fail();
++    }
++
++    assertEquals(driver.getInputKey(), new Text("foo"));
++    assertEquals(driver.getInputValue(), new Text("bar"));
++  }
++
++  @Test
++  public void testSetInputNull() {
++    try {
++      driver.setInput((Pair<Text, Text>) null);
++      fail();
++    } catch (Exception e) {
++      // expect this.
++    }
++  }
++
++  @Test
++  public void testEmptyInput() {
++    // MapDriver will forcibly map (null, null) as undefined input;
++    // identity mapper expects (null, null) back.
++    driver.withOutput(null, null).runTest();
++  }
++
++  @Test
++  public void testEmptyInput2() {
++    // it is an error to expect no output because we expect
++    // the mapper to be fed (null, null) as an input if the
++    // user doesn't set any input.
++    try {
++      driver.runTest();
++      fail();
++    } catch (RuntimeException re) {
++      // expected.
++    }
++  }
++
++}
++
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestMapReduceDriver.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestMapReduceDriver.java
+new file mode 100644
+index 0000000..b018d64
+--- /dev/null
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestMapReduceDriver.java
+@@ -0,0 +1,235 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.mrunit.mapreduce;
++
++import static org.apache.hadoop.mrunit.testutil.ExtendedAssert.assertListEquals;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
++
++import junit.framework.TestCase;
++
++import org.apache.hadoop.io.LongWritable;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.Mapper;
++import org.apache.hadoop.mapreduce.Reducer;
++import org.apache.hadoop.mapreduce.lib.reduce.LongSumReducer;
++import org.apache.hadoop.mrunit.types.Pair;
++import org.junit.Before;
++import org.junit.Test;
++
++public class TestMapReduceDriver extends TestCase {
++
++  private static final int FOO_IN_A = 42;
++  private static final int FOO_IN_B = 10;
++  private static final int BAR_IN = 12;
++  private static final int FOO_OUT = 52;
++
++  private Mapper<Text, LongWritable, Text, LongWritable> mapper;
++  private Reducer<Text, LongWritable, Text, LongWritable> reducer;
++  private MapReduceDriver<Text, LongWritable,
++                  Text, LongWritable,
++                  Text, LongWritable> driver;
++
++  private MapReduceDriver<Text, Text, Text, Text, Text, Text> driver2;
++
++  @Before
++  public void setUp() throws Exception {
++    mapper = new Mapper<Text, LongWritable, Text, LongWritable>(); // This is the IdentityMapper
++    reducer = new LongSumReducer<Text>();
++    driver = new MapReduceDriver<Text, LongWritable,
++                                 Text, LongWritable,
++                                 Text, LongWritable>(
++                        mapper, reducer);
++    // for shuffle tests
++    driver2 = new MapReduceDriver<Text, Text, Text, Text, Text, Text>();
++  }
++
++  @Test
++  public void testRun() {
++    List<Pair<Text, LongWritable>> out = null;
++    try {
++      out = driver
++              .withInput(new Text("foo"), new LongWritable(FOO_IN_A))
++              .withInput(new Text("foo"), new LongWritable(FOO_IN_B))
++              .withInput(new Text("bar"), new LongWritable(BAR_IN))
++              .run();
++    } catch (IOException ioe) {
++      fail();
++    }
++
++    List<Pair<Text, LongWritable>> expected =
++      new ArrayList<Pair<Text, LongWritable>>();
++    expected.add(new Pair<Text, LongWritable>(new Text("bar"),
++            new LongWritable(BAR_IN)));
++    expected.add(new Pair<Text, LongWritable>(new Text("foo"),
++            new LongWritable(FOO_OUT)));
++
++    assertListEquals(out, expected);
++  }
++
++  @Test
++  public void testTestRun1() {
++    driver
++            .withInput(new Text("foo"), new LongWritable(FOO_IN_A))
++            .withInput(new Text("foo"), new LongWritable(FOO_IN_B))
++            .withInput(new Text("bar"), new LongWritable(BAR_IN))
++            .withOutput(new Text("bar"), new LongWritable(BAR_IN))
++            .withOutput(new Text("foo"), new LongWritable(FOO_OUT))
++            .runTest();
++  }
++
++  @Test
++  public void testTestRun2() {
++    driver
++            .withInput(new Text("foo"), new LongWritable(FOO_IN_A))
++            .withInput(new Text("bar"), new LongWritable(BAR_IN))
++            .withInput(new Text("foo"), new LongWritable(FOO_IN_B))
++            .withOutput(new Text("bar"), new LongWritable(BAR_IN))
++            .withOutput(new Text("foo"), new LongWritable(FOO_OUT))
++            .runTest();
++  }
++
++  @Test
++  public void testTestRun3() {
++    try {
++      driver
++            .withInput(new Text("foo"), new LongWritable(FOO_IN_A))
++            .withInput(new Text("bar"), new LongWritable(BAR_IN))
++            .withInput(new Text("foo"), new LongWritable(FOO_IN_B))
++            .withOutput(new Text("foo"), new LongWritable(FOO_OUT))
++            .withOutput(new Text("bar"), new LongWritable(BAR_IN))
++            .runTest();
++      fail();
++    } catch (RuntimeException re) {
++      // expected
++    }
++  }
++
++  @Test
++  public void testEmptyInput() {
++    driver.runTest();
++  }
++
++  @Test
++  public void testEmptyInputWithOutputFails() {
++    try {
++      driver
++              .withOutput(new Text("foo"), new LongWritable(FOO_OUT))
++              .runTest();
++      fail();
++    } catch (RuntimeException re) {
++      // expected.
++    }
++  }
++
++  @Test
++  public void testEmptyShuffle() {
++    List<Pair<Text, Text>> inputs = new ArrayList<Pair<Text, Text>>();
++    List<Pair<Text, List<Text>>> outputs = driver2.shuffle(inputs);
++    assertEquals(0, outputs.size());
++  }
++
++  // just shuffle a single (k, v) pair
++  @Test
++  public void testSingleShuffle() {
++    List<Pair<Text, Text>> inputs = new ArrayList<Pair<Text, Text>>();
++    inputs.add(new Pair<Text, Text>(new Text("a"), new Text("b")));
++
++    List<Pair<Text, List<Text>>> outputs = driver2.shuffle(inputs);
++
++    List<Pair<Text, List<Text>>> expected = new ArrayList<Pair<Text, List<Text>>>();
++    List<Text> sublist = new ArrayList<Text>();
++    sublist.add(new Text("b"));
++    expected.add(new Pair<Text, List<Text>>(new Text("a"), sublist));
++
++    assertListEquals(expected, outputs);
++  }
++
++  // shuffle multiple values from the same key.
++  @Test
++  public void testShuffleOneKey() {
++    List<Pair<Text, Text>> inputs = new ArrayList<Pair<Text, Text>>();
++    inputs.add(new Pair<Text, Text>(new Text("a"), new Text("b")));
++    inputs.add(new Pair<Text, Text>(new Text("a"), new Text("c")));
++
++    List<Pair<Text, List<Text>>> outputs = driver2.shuffle(inputs);
++
++    List<Pair<Text, List<Text>>> expected = new ArrayList<Pair<Text, List<Text>>>();
++    List<Text> sublist = new ArrayList<Text>();
++    sublist.add(new Text("b"));
++    sublist.add(new Text("c"));
++    expected.add(new Pair<Text, List<Text>>(new Text("a"), sublist));
++
++    assertListEquals(expected, outputs);
++  }
++
++  // shuffle multiple keys
++  @Test
++  public void testMultiShuffle1() {
++    List<Pair<Text, Text>> inputs = new ArrayList<Pair<Text, Text>>();
++    inputs.add(new Pair<Text, Text>(new Text("a"), new Text("x")));
++    inputs.add(new Pair<Text, Text>(new Text("b"), new Text("z")));
++    inputs.add(new Pair<Text, Text>(new Text("b"), new Text("w")));
++    inputs.add(new Pair<Text, Text>(new Text("a"), new Text("y")));
++
++    List<Pair<Text, List<Text>>> outputs = driver2.shuffle(inputs);
++
++    List<Pair<Text, List<Text>>> expected = new ArrayList<Pair<Text, List<Text>>>();
++    List<Text> sublist1 = new ArrayList<Text>();
++    sublist1.add(new Text("x"));
++    sublist1.add(new Text("y"));
++    expected.add(new Pair<Text, List<Text>>(new Text("a"), sublist1));
++
++    List<Text> sublist2 = new ArrayList<Text>();
++    sublist2.add(new Text("z"));
++    sublist2.add(new Text("w"));
++    expected.add(new Pair<Text, List<Text>>(new Text("b"), sublist2));
++
++    assertListEquals(expected, outputs);
++  }
++
++
++  // shuffle multiple keys that are out-of-order to start.
++  @Test
++  public void testMultiShuffle2() {
++    List<Pair<Text, Text>> inputs = new ArrayList<Pair<Text, Text>>();
++    inputs.add(new Pair<Text, Text>(new Text("b"), new Text("z")));
++    inputs.add(new Pair<Text, Text>(new Text("a"), new Text("x")));
++    inputs.add(new Pair<Text, Text>(new Text("b"), new Text("w")));
++    inputs.add(new Pair<Text, Text>(new Text("a"), new Text("y")));
++
++    List<Pair<Text, List<Text>>> outputs = driver2.shuffle(inputs);
++
++    List<Pair<Text, List<Text>>> expected = new ArrayList<Pair<Text, List<Text>>>();
++    List<Text> sublist1 = new ArrayList<Text>();
++    sublist1.add(new Text("x"));
++    sublist1.add(new Text("y"));
++    expected.add(new Pair<Text, List<Text>>(new Text("a"), sublist1));
++
++    List<Text> sublist2 = new ArrayList<Text>();
++    sublist2.add(new Text("z"));
++    sublist2.add(new Text("w"));
++    expected.add(new Pair<Text, List<Text>>(new Text("b"), sublist2));
++
++    assertListEquals(expected, outputs);
++  }
++
++}
++
+diff --git a/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestReduceDriver.java b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestReduceDriver.java
+new file mode 100644
+index 0000000..dc51e83
+--- /dev/null
++++ b/src/contrib/mrunit/src/test/org/apache/hadoop/mrunit/mapreduce/TestReduceDriver.java
+@@ -0,0 +1,227 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mrunit.mapreduce;
++
++import static org.apache.hadoop.mrunit.testutil.ExtendedAssert.assertListEquals;
++
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
++
++import junit.framework.TestCase;
++
++import org.apache.hadoop.io.LongWritable;
++import org.apache.hadoop.io.Text;
++import org.apache.hadoop.mapreduce.Reducer;
++import org.apache.hadoop.mapreduce.lib.reduce.LongSumReducer;
++import org.apache.hadoop.mrunit.types.Pair;
++import org.junit.Before;
++import org.junit.Test;
++
++public class TestReduceDriver extends TestCase {
++
++  private static final int IN_A = 4;
++  private static final int IN_B = 6;
++  private static final int OUT_VAL = 10;
++  private static final int INCORRECT_OUT = 12;
++  private static final int OUT_EMPTY = 0;
++
++  private Reducer<Text, LongWritable, Text, LongWritable> reducer;
++  private ReduceDriver<Text, LongWritable, Text, LongWritable> driver;
++
++  @Before
++  public void setUp() throws Exception {
++    reducer = new LongSumReducer<Text>();
++    driver = new ReduceDriver<Text, LongWritable, Text, LongWritable>(
++                   reducer);
++  }
++
++  @Test
++  public void testRun() {
++    List<Pair<Text, LongWritable>> out = null;
++
++    try {
++      out = driver.withInputKey(new Text("foo"))
++                  .withInputValue(new LongWritable(IN_A))
++                  .withInputValue(new LongWritable(IN_B))
++                  .run();
++    } catch (IOException ioe) {
++      fail();
++    }
++
++    List<Pair<Text, LongWritable>> expected =
++        new ArrayList<Pair<Text, LongWritable>>();
++    expected.add(new Pair<Text, LongWritable>(new Text("foo"),
++            new LongWritable(OUT_VAL)));
++
++    assertListEquals(out, expected);
++
++  }
++
++  @Test
++  public void testTestRun1() {
++    driver
++            .withInputKey(new Text("foo"))
++            .withOutput(new Text("foo"), new LongWritable(0))
++            .runTest();
++  }
++
++  @Test
++  public void testTestRun2() {
++    driver
++            .withInputKey(new Text("foo"))
++            .withInputValue(new LongWritable(IN_A))
++            .withInputValue(new LongWritable(IN_B))
++            .withOutput(new Text("foo"), new LongWritable(OUT_VAL))
++            .runTest();
++  }
++
++  @Test
++  public void testTestRun3() {
++    try {
++      driver
++            .withInputKey(new Text("foo"))
++            .withInputValue(new LongWritable(IN_A))
++            .withInputValue(new LongWritable(IN_B))
++            .withOutput(new Text("bar"), new LongWritable(OUT_VAL))
++            .runTest();
++      fail();
++    } catch (RuntimeException re) {
++      // expected.
++    }
++
++  }
++
++  @Test
++  public void testTestRun4() {
++    try {
++      driver
++            .withInputKey(new Text("foo"))
++            .withInputValue(new LongWritable(IN_A))
++            .withInputValue(new LongWritable(IN_B))
++            .withOutput(new Text("foo"), new LongWritable(INCORRECT_OUT))
++            .runTest();
++      fail();
++    } catch (RuntimeException re) {
++      // expected.
++    }
++  }
++
++  @Test
++  public void testTestRun5() {
++    try {
++      driver
++            .withInputKey(new Text("foo"))
++            .withInputValue(new LongWritable(IN_A))
++            .withInputValue(new LongWritable(IN_B))
++            .withOutput(new Text("foo"), new LongWritable(IN_A))
++            .runTest();
++      fail();
++    } catch (RuntimeException re) {
++      // expected.
++    }
++  }
++
++  @Test
++  public void testTestRun6() {
++    try {
++      driver
++            .withInputKey(new Text("foo"))
++            .withInputValue(new LongWritable(IN_A))
++            .withInputValue(new LongWritable(IN_B))
++            .withOutput(new Text("foo"), new LongWritable(IN_A))
++            .withOutput(new Text("foo"), new LongWritable(IN_B))
++            .runTest();
++      fail();
++    } catch (RuntimeException re) {
++      // expected.
++    }
++  }
++
++  @Test
++  public void testTestRun7() {
++    try {
++      driver
++              .withInputKey(new Text("foo"))
++              .withInputValue(new LongWritable(IN_A))
++              .withInputValue(new LongWritable(IN_B))
++              .withOutput(new Text("foo"), new LongWritable(OUT_VAL))
++              .withOutput(new Text("foo"), new LongWritable(OUT_VAL))
++              .runTest();
++      fail();
++    } catch (RuntimeException re) {
++      // expected.
++    }
++  }
++
++  @Test
++  public void testTestRun8() {
++    try {
++      driver
++            .withInputKey(new Text("foo"))
++            .withInputValue(new LongWritable(IN_A))
++            .withInputValue(new LongWritable(IN_B))
++            .withOutput(new Text("bar"), new LongWritable(OUT_VAL))
++            .withOutput(new Text("foo"), new LongWritable(OUT_VAL))
++            .runTest();
++            fail();
++    } catch (RuntimeException re) {
++      // expected.
++    }
++  }
++
++  @Test
++  public void testTestRun9() {
++    try {
++      driver
++            .withInputKey(new Text("foo"))
++            .withInputValue(new LongWritable(IN_A))
++            .withInputValue(new LongWritable(IN_B))
++            .withOutput(new Text("foo"), new LongWritable(OUT_VAL))
++            .withOutput(new Text("bar"), new LongWritable(OUT_VAL))
++            .runTest();
++      fail();
++    } catch (RuntimeException re) {
++      // expected.
++    }
++  }
++
++  @Test
++  public void testEmptyInput() {
++    // (null, <empty>) will be forcibly fed as input
++    // since we use LongSumReducer, expect (null, 0) out.
++    driver
++            .withOutput(null, new LongWritable(OUT_EMPTY))
++            .runTest();
++  }
++
++  @Test
++  public void testEmptyInput2() {
++    // because a null key with zero inputs will be fed as input
++    // to this reducer, do not accept no outputs.
++    try {
++      driver.runTest();
++      fail();
++    } catch (RuntimeException re) {
++      // expected.
++    }
++  }
++}
++
+-- 
+1.7.0.4
+

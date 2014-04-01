@@ -1,0 +1,576 @@
+From a04e3abfd58010fd99877910c0f15bbbebb1b45a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 25 Feb 2010 20:48:43 +0530
+Subject: [PATCH 0498/1179] MAPREDUCE-1354. Incremental enhancements to the JobTracker for better scalability
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437010/mr-1354-y20.patch
+Author: Dick King
+Ref: YDH
+---
+ .../hadoop/mapred/CapacityTaskScheduler.java       |   41 ++++--
+ .../org/apache/hadoop/mapred/MemoryMatcher.java    |    4 +-
+ .../org/apache/hadoop/mapred/JobInProgress.java    |   53 +++++--
+ .../org/apache/hadoop/mapred/JobTracker.java       |  168 ++++++++++++--------
+ 4 files changed, 170 insertions(+), 96 deletions(-)
+
+diff --git a/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java b/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java
+index 0c8bce5..b7c533a 100644
+--- a/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java
++++ b/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/CapacityTaskScheduler.java
+@@ -461,7 +461,24 @@ class CapacityTaskScheduler extends TaskScheduler {
+       Collections.sort(qsiForAssigningTasks, queueComparator);
+     }
+ 
+-
++    /**
++     * Ceil of result of dividing two integers.
++     * 
++     * This is *not* a utility method. 
++     * Neither <code>a</code> or <code>b</code> should be negative.
++     *  
++     * @param a
++     * @param b
++     * @return ceil of the result of a/b
++     */
++    private int divideAndCeil(int a, int b) {
++      if (b == 0) {
++        LOG.info("divideAndCeil called with a=" + a + " b=" + b);
++        return 0;
++      }
++      return (a + (b - 1)) / b;
++    }
++    
+     private boolean isUserOverLimit(JobInProgress j, QueueSchedulingInfo qsi) {
+       // what is our current capacity? It is equal to the queue-capacity if
+       // we're running below capacity. If we're running over capacity, then its
+@@ -475,13 +492,15 @@ class CapacityTaskScheduler extends TaskScheduler {
+       else {
+         currentCapacity = tsi.numSlotsOccupied + getSlotsPerTask(j);
+       }
+-      int limit = Math.max((int)(Math.ceil((double)currentCapacity/
+-          (double)qsi.numJobsByUser.size())), 
+-          (int)(Math.ceil((double)(qsi.ulMin*currentCapacity)/100.0)));
++      int limit = 
++        Math.max(divideAndCeil(currentCapacity, qsi.numJobsByUser.size()), 
++                 divideAndCeil(qsi.ulMin*currentCapacity, 100));
+       String user = j.getProfile().getUser();
+       if (tsi.numSlotsOccupiedByUser.get(user) >= limit) {
+-        LOG.debug("User " + user + " is over limit, num slots occupied = " + 
+-            tsi.numSlotsOccupiedByUser.get(user) + ", limit = " + limit);
++        if (LOG.isDebugEnabled()) {
++          LOG.debug("User " + user + " is over limit, num slots occupied=" + 
++                    tsi.numSlotsOccupiedByUser.get(user) + ", limit=" + limit);
++        }
+         return true;
+       }
+       else {
+@@ -814,8 +833,7 @@ class CapacityTaskScheduler extends TaskScheduler {
+ 
+     @Override
+     int getSlotsPerTask(JobInProgress job) {
+-      return 
+-        job.getJobConf().computeNumSlotsPerMap(scheduler.getMemSizeForMapSlot());
++      return job.getNumSlotsPerTask(TaskType.MAP);
+     }
+ 
+     @Override
+@@ -831,7 +849,7 @@ class CapacityTaskScheduler extends TaskScheduler {
+     boolean hasSpeculativeTask(JobInProgress job, TaskTrackerStatus tts) {
+       //Check if job supports speculative map execution first then 
+       //check if job has speculative maps.
+-      return (job.getJobConf().getMapSpeculativeExecution())&& (
++      return (job.getMapSpeculativeExecution())&& (
+           hasSpeculativeTask(job.getTasks(TaskType.MAP), 
+               job.getStatus().mapProgress(), tts));
+     }
+@@ -877,8 +895,7 @@ class CapacityTaskScheduler extends TaskScheduler {
+ 
+     @Override
+     int getSlotsPerTask(JobInProgress job) {
+-      return
+-        job.getJobConf().computeNumSlotsPerReduce(scheduler.getMemSizeForReduceSlot());    
++      return job.getNumSlotsPerTask(TaskType.REDUCE);    
+     }
+ 
+     @Override
+@@ -894,7 +911,7 @@ class CapacityTaskScheduler extends TaskScheduler {
+     boolean hasSpeculativeTask(JobInProgress job, TaskTrackerStatus tts) {
+       //check if the job supports reduce speculative execution first then
+       //check if the job has speculative tasks.
+-      return (job.getJobConf().getReduceSpeculativeExecution()) && (
++      return (job.getReduceSpeculativeExecution()) && (
+           hasSpeculativeTask(job.getTasks(TaskType.REDUCE), 
+               job.getStatus().reduceProgress(), tts));
+     }
+diff --git a/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/MemoryMatcher.java b/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/MemoryMatcher.java
+index 11dbd5f..e48d679 100644
+--- a/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/MemoryMatcher.java
++++ b/src/contrib/capacity-scheduler/src/java/org/apache/hadoop/mapred/MemoryMatcher.java
+@@ -106,11 +106,11 @@ class MemoryMatcher {
+     long totalMemUsableOnTT = 0;
+     long memForThisTask = 0;
+     if (taskType == TaskType.MAP) {
+-      memForThisTask = job.getJobConf().getMemoryForMapTask();
++      memForThisTask = job.getMemoryForMapTask();
+       totalMemUsableOnTT =
+           scheduler.getMemSizeForMapSlot() * taskTracker.getMaxMapSlots();
+     } else if (taskType == TaskType.REDUCE) {
+-      memForThisTask = job.getJobConf().getMemoryForReduceTask();
++      memForThisTask = job.getMemoryForReduceTask();
+       totalMemUsableOnTT =
+           scheduler.getMemSizeForReduceSlot()
+               * taskTracker.getMaxReduceSlots();
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index f9e6000..81d8e0b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -98,8 +98,11 @@ public class JobInProgress {
+   TaskInProgress setup[] = new TaskInProgress[0];
+   int numMapTasks = 0;
+   int numReduceTasks = 0;
+-  int numSlotsPerMap = 1;
+-  int numSlotsPerReduce = 1;
++  final long memoryPerMap;
++  final long memoryPerReduce;
++  volatile int numSlotsPerMap = 1;
++  volatile int numSlotsPerReduce = 1;
++  final int maxTaskFailuresPerTracker;
+   
+   // Counters to track currently running/finished/failed Map/Reduce task-attempts
+   int runningMapTasks = 0;
+@@ -213,8 +216,8 @@ public class JobInProgress {
+   private LocalFileSystem localFs;
+   private FileSystem fs;
+   private JobID jobId;
+-  private boolean hasSpeculativeMaps;
+-  private boolean hasSpeculativeReduces;
++  volatile private boolean hasSpeculativeMaps;
++  volatile private boolean hasSpeculativeReduces;
+   private long inputLength = 0;
+   private String user;
+   private String historyFile = "";
+@@ -308,6 +311,10 @@ public class JobInProgress {
+     this.status = new JobStatus(jobid, 0.0f, 0.0f, JobStatus.PREP);
+     this.profile = new JobProfile(conf.getUser(), jobid, "", "",
+                                   conf.getJobName(), conf.getQueueName());
++    this.memoryPerMap = conf.getMemoryForMapTask();
++    this.memoryPerReduce = conf.getMemoryForReduceTask();
++    this.maxTaskFailuresPerTracker = conf.getMaxTaskFailuresPerTracker();
++
+     this.taskCompletionEvents = new ArrayList<TaskCompletionEvent>
+       (numMapTasks + numReduceTasks + 10);
+     try {
+@@ -383,6 +390,10 @@ public class JobInProgress {
+ 
+     this.numMapTasks = conf.getNumMapTasks();
+     this.numReduceTasks = conf.getNumReduceTasks();
++    
++    this.memoryPerMap = conf.getMemoryForMapTask();
++    this.memoryPerReduce = conf.getMemoryForReduceTask();
++    
+     this.taskCompletionEvents = new ArrayList<TaskCompletionEvent>
+        (numMapTasks + numReduceTasks + 10);
+ 
+@@ -394,6 +405,8 @@ public class JobInProgress {
+     this.runningMapLimit = conf.getRunningMapLimit();
+     this.runningReduceLimit = conf.getRunningReduceLimit();
+         
++    this.maxTaskFailuresPerTracker = conf.getMaxTaskFailuresPerTracker();
++    
+     MetricsContext metricsContext = MetricsUtil.getContext("mapred");
+     this.jobMetrics = MetricsUtil.createRecord(metricsContext, "job");
+     this.jobMetrics.setTag("user", conf.getUser());
+@@ -517,11 +530,27 @@ public class JobInProgress {
+     return restartCount > 0;
+   }
+ 
++  boolean getMapSpeculativeExecution() {
++    return hasSpeculativeMaps;
++  }
++  
++  boolean getReduceSpeculativeExecution() {
++    return hasSpeculativeReduces;
++  }
++  
++  long getMemoryForMapTask() {
++    return memoryPerMap;
++  }
++  
++  long getMemoryForReduceTask() {
++    return memoryPerReduce;
++  }
++  
+   /**
+    * Get the number of slots required to run a single map task-attempt.
+    * @return the number of slots required to run a single map task-attempt
+    */
+-  synchronized int getNumSlotsPerMap() {
++  int getNumSlotsPerMap() {
+     return numSlotsPerMap;
+   }
+ 
+@@ -530,7 +559,7 @@ public class JobInProgress {
+    * This is typically set by schedulers which support high-ram jobs.
+    * @param slots the number of slots required to run a single map task-attempt
+    */
+-  synchronized void setNumSlotsPerMap(int numSlotsPerMap) {
++  void setNumSlotsPerMap(int numSlotsPerMap) {
+     this.numSlotsPerMap = numSlotsPerMap;
+   }
+ 
+@@ -538,7 +567,7 @@ public class JobInProgress {
+    * Get the number of slots required to run a single reduce task-attempt.
+    * @return the number of slots required to run a single reduce task-attempt
+    */
+-  synchronized int getNumSlotsPerReduce() {
++  int getNumSlotsPerReduce() {
+     return numSlotsPerReduce;
+   }
+ 
+@@ -548,7 +577,7 @@ public class JobInProgress {
+    * @param slots the number of slots required to run a single reduce 
+    *              task-attempt
+    */
+-  synchronized void setNumSlotsPerReduce(int numSlotsPerReduce) {
++  void setNumSlotsPerReduce(int numSlotsPerReduce) {
+     this.numSlotsPerReduce = numSlotsPerReduce;
+   }
+ 
+@@ -743,7 +772,7 @@ public class JobInProgress {
+     return numReduceTasks - runningReduceTasks - failedReduceTIPs - 
+     finishedReduceTasks + speculativeReduceTasks;
+   }
+-  public synchronized int getNumSlotsPerTask(TaskType taskType) {
++  public int getNumSlotsPerTask(TaskType taskType) {
+     if (taskType == TaskType.MAP) {
+       return numSlotsPerMap;
+     } else if (taskType == TaskType.REDUCE) {
+@@ -1587,7 +1616,7 @@ public class JobInProgress {
+       trackerToFailuresMap.put(trackerHostName, ++trackerFailures);
+ 
+       // Check if this tasktracker has turned 'flaky'
+-      if (trackerFailures.intValue() == conf.getMaxTaskFailuresPerTracker()) {
++      if (trackerFailures.intValue() == maxTaskFailuresPerTracker) {
+         ++flakyTaskTrackers;
+         
+         // Cancel reservations if appropriate
+@@ -1697,7 +1726,7 @@ public class JobInProgress {
+   List<String> getBlackListedTrackers() {
+     List<String> blackListedTrackers = new ArrayList<String>();
+     for (Map.Entry<String,Integer> e : trackerToFailuresMap.entrySet()) {
+-       if (e.getValue().intValue() >= conf.getMaxTaskFailuresPerTracker()) {
++       if (e.getValue().intValue() >= maxTaskFailuresPerTracker) {
+          blackListedTrackers.add(e.getKey());
+        }
+     }
+@@ -2262,7 +2291,7 @@ public class JobInProgress {
+     //
+     int taskTrackerFailedTasks = getTrackerTaskFailures(taskTracker);
+     if ((flakyTaskTrackers < (clusterSize * CLUSTER_BLACKLIST_PERCENT)) && 
+-        taskTrackerFailedTasks >= conf.getMaxTaskFailuresPerTracker()) {
++        taskTrackerFailedTasks >= maxTaskFailuresPerTracker) {
+       if (LOG.isDebugEnabled()) {
+         String flakyTracker = convertTrackerNameToHostName(taskTracker); 
+         LOG.debug("Ignoring the black-listed tasktracker: '" + flakyTracker 
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index f978356..1941b20 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -1857,7 +1857,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   //
+ 
+   // All the known jobs.  (jobid->JobInProgress)
+-  Map<JobID, JobInProgress> jobs = new TreeMap<JobID, JobInProgress>();
++  Map<JobID, JobInProgress> jobs =  
++    Collections.synchronizedMap(new TreeMap<JobID, JobInProgress>());
+ 
+   // (user -> list of JobInProgress)
+   TreeMap<String, ArrayList<JobInProgress>> userToJobsMap =
+@@ -3653,15 +3654,20 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+    * of the JobTracker.  But JobInProgress adds info that's useful for
+    * the JobTracker alone.
+    */
+-  public synchronized JobStatus submitJob(
+-      JobID jobId, String jobSubmitDir, TokenStorage ts)  throws IOException {
+-    if(jobs.containsKey(jobId)) {
+-      //job already running, don't start twice
+-      return jobs.get(jobId).getStatus();
++  public JobStatus submitJob(JobID jobId, String jobSubmitDir, TokenStorage ts)
++      throws IOException {
++    JobInfo jobInfo = null;
++    synchronized (this) {
++      if (jobs.containsKey(jobId)) {
++        // job already running, don't start twice
++        return jobs.get(jobId).getStatus();
++      }
++      UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
++      jobInfo = new JobInfo(jobId, new Text(ugi.getShortUserName()),
++          new Path(jobSubmitDir));
+     }
+-    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+-    JobInfo jobInfo = new JobInfo(jobId, new Text(ugi.getShortUserName()),
+-        new Path(jobSubmitDir));
++    // Create the JobInProgress, do not lock the JobTracker since
++    // we are about to copy job.xml from HDFS
+     JobInProgress job = null;
+     tokenStorage = ts;
+     try {
+@@ -3670,43 +3676,45 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       throw new IOException(e);
+     }
+     
+-    String queue = job.getProfile().getQueueName();
+-    if(!(queueManager.getQueues().contains(queue))) {      
+-      job.fail();
+-      throw new IOException("Queue \"" + queue + "\" does not exist");        
+-    }
++    synchronized (this) {
++      String queue = job.getProfile().getQueueName();
++      if (!(queueManager.getQueues().contains(queue))) {
++        job.fail();
++        throw new IOException("Queue \"" + queue + "\" does not exist");
++      }
+ 
+-    // check for access
+-    try {
+-      checkAccess(job, QueueManager.QueueOperation.SUBMIT_JOB);
+-    } catch (IOException ioe) {
+-       LOG.warn("Access denied for user " + job.getJobConf().getUser() 
+-                + ". Ignoring job " + jobId, ioe);
+-      job.fail();
+-      throw ioe;
+-    }
++      // check for access
++      try {
++        checkAccess(job, QueueManager.QueueOperation.SUBMIT_JOB);
++      } catch (IOException ioe) {
++        LOG.warn("Access denied for user " + job.getJobConf().getUser()
++            + ". Ignoring job " + jobId, ioe);
++        job.fail();
++        throw ioe;
++      }
+ 
+-    // Check the job if it cannot run in the cluster because of invalid memory
+-    // requirements.
+-    try {
+-      checkMemoryRequirements(job);
+-    } catch (IOException ioe) {
+-      throw ioe;
+-    }
+-    boolean recovered = true; //TODO: Once the Job recovery code is there,
+-                              //(MAPREDUCE-873) we
+-                              //must pass the "recovered" flag accurately.
+-                              //This is handled in the trunk/0.22
+-    if (!recovered) {
+-      //Store the information in a file so that the job can be recovered
+-      //later (if at all)
+-      Path jobDir = getSystemDirectoryForJob(jobId);
+-      FileSystem.mkdirs(fs, jobDir, new FsPermission(SYSTEM_DIR_PERMISSION));
+-      FSDataOutputStream out = fs.create(getSystemFileForJob(jobId));
+-      jobInfo.write(out);
+-      out.close();
++      // Check the job if it cannot run in the cluster because of invalid memory
++      // requirements.
++      try {
++        checkMemoryRequirements(job);
++      } catch (IOException ioe) {
++        throw ioe;
++      }
++      boolean recovered = true; // TODO: Once the Job recovery code is there,
++      // (MAPREDUCE-873) we
++      // must pass the "recovered" flag accurately.
++      // This is handled in the trunk/0.22
++      if (!recovered) {
++        // Store the information in a file so that the job can be recovered
++        // later (if at all)
++        Path jobDir = getSystemDirectoryForJob(jobId);
++        FileSystem.mkdirs(fs, jobDir, new FsPermission(SYSTEM_DIR_PERMISSION));
++        FSDataOutputStream out = fs.create(getSystemFileForJob(jobId));
++        jobInfo.write(out);
++        out.close();
++      }
++      return addJob(jobId, job);
+     }
+-    return addJob(jobId, job);
+   }
+ 
+   /**
+@@ -3985,10 +3993,23 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     completedJobStatusStore.store(job);
+   }
+ 
++  /**
++   * Check if the <code>job</code> has been initialized.
++   * 
++   * @param job {@link JobInProgress} to be checked
++   * @return <code>true</code> if the job has been initialized,
++   *         <code>false</code> otherwise
++   */
++  private boolean isJobInited(JobInProgress job) {
++    return job.inited(); 
++  }
++  
+   public JobProfile getJobProfile(JobID jobid) {
+     synchronized (this) {
+       JobInProgress job = jobs.get(jobid);
+       if (job != null) {
++        // Safe to call JobInProgress.getProfile while holding the lock
++        // on the JobTracker since it isn't a synchronized method
+         return job.getProfile();
+       }  else {
+         RetireJobInfo info = retireJobs.get(jobid);
+@@ -3999,6 +4020,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     }
+     return completedJobStatusStore.readJobProfile(jobid);
+   }
++  
+   public JobStatus getJobStatus(JobID jobid) {
+     if (null == jobid) {
+       LOG.warn("JobTracker.getJobStatus() cannot get status for null jobid");
+@@ -4007,6 +4029,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     synchronized (this) {
+       JobInProgress job = jobs.get(jobid);
+       if (job != null) {
++        // Safe to call JobInProgress.getStatus while holding the lock
++        // on the JobTracker since it isn't a synchronized method
+         return job.getStatus();
+       } else {
+         
+@@ -4018,19 +4042,24 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     }
+     return completedJobStatusStore.readJobStatus(jobid);
+   }
++  
++  private static final Counters EMPTY_COUNTERS = new Counters();
+   public Counters getJobCounters(JobID jobid) {
+     synchronized (this) {
+       JobInProgress job = jobs.get(jobid);
+       if (job != null) {
+-        return job.getCounters();
++        return isJobInited(job) ? job.getCounters() : EMPTY_COUNTERS;
+       } 
+     }
+     return completedJobStatusStore.readCounters(jobid);
+   }
++  
++  private static final TaskReport[] EMPTY_TASK_REPORTS = new TaskReport[0];
++  
+   public synchronized TaskReport[] getMapTaskReports(JobID jobid) {
+     JobInProgress job = jobs.get(jobid);
+-    if (job == null) {
+-      return new TaskReport[0];
++    if (job == null || !isJobInited(job)) {
++      return EMPTY_TASK_REPORTS;
+     } else {
+       Vector<TaskReport> reports = new Vector<TaskReport>();
+       Vector<TaskInProgress> completeMapTasks =
+@@ -4051,8 +4080,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+ 
+   public synchronized TaskReport[] getReduceTaskReports(JobID jobid) {
+     JobInProgress job = jobs.get(jobid);
+-    if (job == null) {
+-      return new TaskReport[0];
++    if (job == null || !isJobInited(job)) {
++      return EMPTY_TASK_REPORTS;
+     } else {
+       Vector<TaskReport> reports = new Vector<TaskReport>();
+       Vector completeReduceTasks = job.reportTasksInProgress(false, true);
+@@ -4071,8 +4100,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+ 
+   public synchronized TaskReport[] getCleanupTaskReports(JobID jobid) {
+     JobInProgress job = jobs.get(jobid);
+-    if (job == null) {
+-      return new TaskReport[0];
++    if (job == null || !isJobInited(job)) {
++      return EMPTY_TASK_REPORTS;
+     } else {
+       Vector<TaskReport> reports = new Vector<TaskReport>();
+       Vector<TaskInProgress> completeTasks = job.reportCleanupTIPs(true);
+@@ -4094,8 +4123,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+   
+   public synchronized TaskReport[] getSetupTaskReports(JobID jobid) {
+     JobInProgress job = jobs.get(jobid);
+-    if (job == null) {
+-      return new TaskReport[0];
++    if (job == null || !isJobInited(job)) {
++      return EMPTY_TASK_REPORTS;
+     } else {
+       Vector<TaskReport> reports = new Vector<TaskReport>();
+       Vector<TaskInProgress> completeTasks = job.reportSetupTIPs(true);
+@@ -4114,8 +4143,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     }
+   }
+   
+-  TaskCompletionEvent[] EMPTY_EVENTS = new TaskCompletionEvent[0];
+-
+   static final String MAPRED_CLUSTER_MAP_MEMORY_MB_PROPERTY =
+       "mapred.cluster.map.memory.mb";
+   static final String MAPRED_CLUSTER_REDUCE_MEMORY_MB_PROPERTY =
+@@ -4131,21 +4158,22 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+    * starting from fromEventId.
+    * @see org.apache.hadoop.mapred.JobSubmissionProtocol#getTaskCompletionEvents(java.lang.String, int, int)
+    */
+-  public synchronized TaskCompletionEvent[] getTaskCompletionEvents(
++  public TaskCompletionEvent[] getTaskCompletionEvents(
+       JobID jobid, int fromEventId, int maxEvents) throws IOException{
+-    synchronized (this) {
+-      JobInProgress job = this.jobs.get(jobid);
+-      if (null != job) {
+-        if (job.inited()) {
+-          return job.getTaskCompletionEvents(fromEventId, maxEvents);
+-        } else {
+-          return EMPTY_EVENTS;
+-        }
+-      }
++    JobInProgress job = this.jobs.get(jobid);
++      
++    if (null != job) {
++      return isJobInited(job) ? 
++          job.getTaskCompletionEvents(fromEventId, maxEvents) : 
++          TaskCompletionEvent.EMPTY_ARRAY;
+     }
+-    return completedJobStatusStore.readJobTaskCompletionEvents(jobid, fromEventId, maxEvents);
++
++    return completedJobStatusStore.readJobTaskCompletionEvents(jobid, 
++                                                               fromEventId, 
++                                                               maxEvents);
+   }
+ 
++  private static final String[] EMPTY_TASK_DIAGNOSTICS = new String[0];
+   /**
+    * Get the diagnostics for a given task
+    * @param taskId the id of the task
+@@ -4157,7 +4185,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     JobID jobId = taskId.getJobID();
+     TaskID tipId = taskId.getTaskID();
+     JobInProgress job = jobs.get(jobId);
+-    if (job != null) {
++    if (job != null && isJobInited(job)) {
+       TaskInProgress tip = job.getTaskInProgress(tipId);
+       if (tip != null) {
+         taskDiagnosticInfo = tip.getDiagnosticInfo(taskId);
+@@ -4165,8 +4193,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+       
+     }
+     
+-    return ((taskDiagnosticInfo == null) ? new String[0] 
+-            : taskDiagnosticInfo.toArray(new String[0]));
++    return ((taskDiagnosticInfo == null) ? EMPTY_TASK_DIAGNOSTICS :
++             taskDiagnosticInfo.toArray(new String[taskDiagnosticInfo.size()]));
+   }
+     
+   /** Get all the TaskStatuses from the tipid. */
+@@ -4766,8 +4794,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+ 
+     boolean invalidJob = false;
+     String msg = "";
+-    long maxMemForMapTask = job.getJobConf().getMemoryForMapTask();
+-    long maxMemForReduceTask = job.getJobConf().getMemoryForReduceTask();
++    long maxMemForMapTask = job.getMemoryForMapTask();
++    long maxMemForReduceTask = job.getMemoryForReduceTask();
+ 
+     if (maxMemForMapTask == JobConf.DISABLED_MEMORY_LIMIT
+         || maxMemForReduceTask == JobConf.DISABLED_MEMORY_LIMIT) {
+-- 
+1.7.0.4
+

@@ -1,0 +1,252 @@
+From 60b22e764e8d44570f900632b30b37df22855d0d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 27 Apr 2010 23:46:55 -0700
+Subject: [PATCH 0630/1179] MAPREDUCE-1711. Gridmix should provide an option to submit jobs to the same queues as specified in the trace.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12443040/MR-1711-yhadoop-20-1xx-7.patch.
+Author: rahul k singh
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/gridmix/Gridmix.java  |   25 +++++++--
+ .../apache/hadoop/mapred/gridmix/GridmixJob.java   |   18 ++++++
+ .../hadoop/mapred/gridmix/DebugJobProducer.java    |    3 +-
+ .../hadoop/mapred/gridmix/GridmixTestUtils.java    |    1 +
+ .../mapred/gridmix/TestGridmixSubmission.java      |   56 ++++++++++++++++---
+ 5 files changed, 88 insertions(+), 15 deletions(-)
+
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/Gridmix.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/Gridmix.java
+index e479c1a..114e383 100644
+--- a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/Gridmix.java
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/Gridmix.java
+@@ -398,12 +398,27 @@ public class Gridmix extends Configured implements Tool {
+     out.println("Usage: gridmix [-generate <MiB>] [-users URI] <iopath> <trace>");
+     out.println("  e.g. gridmix -generate 100m foo -");
+     out.println("Configuration parameters:");
+-    out.printf("       %-40s : Output directory\n", GRIDMIX_OUT_DIR);
+-    out.printf("       %-40s : Submitting threads\n", GRIDMIX_SUB_THR);
+-    out.printf("       %-40s : Queued job desc\n", GRIDMIX_QUE_DEP);
+-    out.printf("       %-40s : Key fraction of rec\n",
++    out.printf("       %-42s : Output directory\n", GRIDMIX_OUT_DIR);
++    out.printf("       %-42s : Submitting threads\n", GRIDMIX_SUB_THR);
++    out.printf("       %-42s : Queued job desc\n", GRIDMIX_QUE_DEP);
++    out.printf("       %-42s : Key fraction of rec\n",
+         AvgRecordFactory.GRIDMIX_KEY_FRC);
+-    out.printf("       %-40s : User resolution class\n", GRIDMIX_USR_RSV);
++    out.printf("       %-42s : User resolution class\n", GRIDMIX_USR_RSV);
++    out.printf("       %-42s : Enable/disable using queues in trace\n",
++        GridmixJob.GRIDMIX_USE_QUEUE_IN_TRACE);
++    out.printf("       %-42s : Default queue\n",
++        GridmixJob.GRIDMIX_DEFAULT_QUEUE);
++    
++    StringBuilder sb = new StringBuilder();
++    String sep = "";
++    for (GridmixJobSubmissionPolicy policy : GridmixJobSubmissionPolicy
++        .values()) {
++      sb.append(sep);
++      sb.append(policy.name());
++      sep = "|";
++    }
++    out.printf("       %-40s : Job submission policy (%s)\n",
++        GridmixJobSubmissionPolicy.JOB_SUBMISSION_POLICY, sb.toString());
+   }
+ 
+   /**
+diff --git a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/GridmixJob.java b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/GridmixJob.java
+index 52aaebd..1113f4c 100644
+--- a/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/GridmixJob.java
++++ b/src/contrib/gridmix/src/java/org/apache/hadoop/mapred/gridmix/GridmixJob.java
+@@ -34,6 +34,7 @@ import org.apache.hadoop.io.DataInputBuffer;
+ import org.apache.hadoop.io.RawComparator;
+ import org.apache.hadoop.io.WritableComparator;
+ import org.apache.hadoop.io.WritableUtils;
++import org.apache.hadoop.mapred.JobConf;
+ import org.apache.hadoop.mapreduce.InputSplit;
+ import org.apache.hadoop.mapreduce.Job;
+ import org.apache.hadoop.mapreduce.JobContext;
+@@ -75,7 +76,16 @@ abstract class GridmixJob implements Callable<Job>, Delayed {
+   private static final ConcurrentHashMap<Integer,List<InputSplit>> descCache =
+      new ConcurrentHashMap<Integer,List<InputSplit>>();
+   protected static final String GRIDMIX_JOB_SEQ = "gridmix.job.seq";
+-
++  protected static final String GRIDMIX_USE_QUEUE_IN_TRACE = 
++      "gridmix.job-submission.use-queue-in-trace";
++  protected static final String GRIDMIX_DEFAULT_QUEUE = 
++      "gridmix.job-submission.default-queue";
++
++  private static void setJobQueue(Job job, String queue) {
++    if (queue != null)
++      job.getConfiguration().set("mapred.job.queue.name", queue);
++  }
++  
+   public GridmixJob(
+     final Configuration conf, long submissionMillis, final JobStory jobdesc,
+     Path outRoot, UserGroupInformation ugi, final int seq) throws IOException {
+@@ -93,6 +103,12 @@ abstract class GridmixJob implements Callable<Job>, Delayed {
+           ret.getConfiguration().set(ORIGNAME,
+               null == jobdesc.getJobID() ? "<unknown>" : jobdesc.getJobID()
+                   .toString());
++          if (conf.getBoolean(GRIDMIX_USE_QUEUE_IN_TRACE, false)) {
++            setJobQueue(ret, jobdesc.getQueueName());
++          } else {
++            setJobQueue(ret, conf.get(GRIDMIX_DEFAULT_QUEUE));
++          }
++
+           return ret;
+         }
+       });
+@@ -120,6 +136,8 @@ abstract class GridmixJob implements Callable<Job>, Delayed {
+         public Job run() throws IOException {
+           Job ret = new Job(conf, name);
+           ret.getConfiguration().setInt("gridmix.job.seq", seq);
++          setJobQueue(ret, conf.get(GRIDMIX_DEFAULT_QUEUE));
++
+           return ret;
+         }
+       });
+diff --git a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/DebugJobProducer.java b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/DebugJobProducer.java
+index 83a300f..c1ea709 100644
+--- a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/DebugJobProducer.java
++++ b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/DebugJobProducer.java
+@@ -290,7 +290,8 @@ public class DebugJobProducer implements JobStoryProducer {
+ 
+     @Override
+     public String getQueueName() {
+-      return JobConf.DEFAULT_QUEUE_NAME;
++      String qName = "q"+((id % 2)+1);
++      return qName;
+     }
+     
+     public static void reset() {
+diff --git a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/GridmixTestUtils.java b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/GridmixTestUtils.java
+index 98d9d28..73f298a 100644
+--- a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/GridmixTestUtils.java
++++ b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/GridmixTestUtils.java
+@@ -38,6 +38,7 @@ public class GridmixTestUtils {
+ 
+   public static void initCluster() throws IOException {
+     Configuration conf = new Configuration();
++    conf.set("mapred.queue.names", "default,q1,q2");
+     dfsCluster = new MiniDFSCluster(conf, 3, true, null);
+     dfs = dfsCluster.getFileSystem();
+     mrCluster = new MiniMRCluster(
+diff --git a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestGridmixSubmission.java b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestGridmixSubmission.java
+index dad3e25..660c28d 100644
+--- a/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestGridmixSubmission.java
++++ b/src/contrib/gridmix/src/test/org/apache/hadoop/mapred/gridmix/TestGridmixSubmission.java
+@@ -66,8 +66,8 @@ public class TestGridmixSubmission {
+         ).getLogger().setLevel(Level.DEBUG);
+   }
+ 
+-  private static final int NJOBS = 2;
+-  private static final long GENDATA = 50; // in megabytes
++  private static final int NJOBS = 3;
++  private static final long GENDATA = 30; // in megabytes
+   private static final int GENSLOP = 100 * 1024; // +/- 100k for logs
+ 
+   @BeforeClass
+@@ -97,13 +97,23 @@ public class TestGridmixSubmission {
+       assertEquals("Bad job count", expected, retiredJobs.drainTo(succeeded));
+       final HashMap<String,JobStory> sub = new HashMap<String,JobStory>();
+       for (JobStory spec : submitted) {
+-        sub.put(spec.getName(), spec);
++        sub.put(spec.getJobID().toString(), spec);
+       }
+       final JobClient client = new JobClient(
+         GridmixTestUtils.mrCluster.createJobConf());
+       for (Job job : succeeded) {
+         final String jobname = job.getJobName();
+         if ("GRIDMIX_GENDATA".equals(jobname)) {
++          if (!job.getConfiguration().getBoolean(
++            GridmixJob.GRIDMIX_USE_QUEUE_IN_TRACE, true)) {
++            assertEquals(
++              " Improper queue for " + job.getJobName(),
++              job.getConfiguration().get("mapred.job.queue.name"), "q1");
++          } else {
++            assertEquals(
++              " Improper queue for " + job.getJobName(),
++              job.getConfiguration().get("mapred.job.queue.name"), "default");
++          }
+           final Path in = new Path("foo").makeQualified(GridmixTestUtils.dfs);
+           final Path out = new Path("/gridmix").makeQualified(GridmixTestUtils.dfs);
+           final ContentSummary generated = GridmixTestUtils.dfs.getContentSummary(in);
+@@ -114,8 +124,20 @@ public class TestGridmixSubmission {
+           assertEquals("Mismatched job count", NJOBS, outstat.length);
+           continue;
+         }
++        
++        if (!job.getConfiguration().getBoolean(
++          GridmixJob.GRIDMIX_USE_QUEUE_IN_TRACE, true)) {
++          assertEquals(" Improper queue for  " + job.getJobName() + " " ,
++          job.getConfiguration().get("mapred.job.queue.name"),"q1" );
++        } else {
++          assertEquals(
++            " Improper queue for  " + job.getJobName() + " ",
++            job.getConfiguration().get("mapred.job.queue.name"), sub.get(
++              job.getConfiguration().get(GridmixJob.ORIGNAME)).getQueueName());
++        }
++
+         final JobStory spec =
+-          sub.get(job.getJobName().replace("GRIDMIX", "MOCKJOB"));
++          sub.get(job.getConfiguration().get(GridmixJob.ORIGNAME));
+         assertNotNull("No spec for " + job.getJobName(), spec);
+         assertNotNull("No counters for " + job.getJobName(), job.getCounters());
+         final String specname = spec.getName();
+@@ -307,27 +329,37 @@ public class TestGridmixSubmission {
+   public void testReplaySubmit() throws Exception {
+     policy = GridmixJobSubmissionPolicy.REPLAY;
+     System.out.println(" Replay started at " + System.currentTimeMillis());
+-    doSubmission();
++    doSubmission(false);
+     System.out.println(" Replay ended at " + System.currentTimeMillis());
+   }
+-
++  
+   @Test
+   public void testStressSubmit() throws Exception {
+     policy = GridmixJobSubmissionPolicy.STRESS;
+     System.out.println(" Stress started at " + System.currentTimeMillis());
+-    doSubmission();
++    doSubmission(false);
+     System.out.println(" Stress ended at " + System.currentTimeMillis());
+   }
+ 
+   @Test
++  public void testStressSubmitWithDefaultQueue() throws Exception {
++    policy = GridmixJobSubmissionPolicy.STRESS;
++    System.out.println(
++      " Stress with default q started at " + System.currentTimeMillis());
++    doSubmission(true);
++    System.out.println(
++      " Stress with default q ended at " + System.currentTimeMillis());
++  }
++
++  @Test
+   public void testSerialSubmit() throws Exception {
+     policy = GridmixJobSubmissionPolicy.SERIAL;
+     System.out.println("Serial started at " + System.currentTimeMillis());
+-    doSubmission();
++    doSubmission(false);
+     System.out.println("Serial ended at " + System.currentTimeMillis());
+   }
+ 
+-  private void doSubmission() throws Exception {
++  private void doSubmission(boolean useDefaultQueue) throws Exception {
+     final Path in = new Path("foo").makeQualified(GridmixTestUtils.dfs);
+     final Path out = GridmixTestUtils.DEST.makeQualified(GridmixTestUtils.dfs);
+     final Path root = new Path("/user");
+@@ -344,6 +376,12 @@ public class TestGridmixSubmission {
+     DebugGridmix client = new DebugGridmix();
+     conf = new Configuration();
+       conf.setEnum(GridmixJobSubmissionPolicy.JOB_SUBMISSION_POLICY,policy);
++      if (useDefaultQueue) {
++        conf.setBoolean(GridmixJob.GRIDMIX_USE_QUEUE_IN_TRACE, false);
++        conf.set(GridmixJob.GRIDMIX_DEFAULT_QUEUE, "q1");
++      } else {
++        conf.setBoolean(GridmixJob.GRIDMIX_USE_QUEUE_IN_TRACE, true);
++      }
+     conf = GridmixTestUtils.mrCluster.createJobConf(new JobConf(conf));
+     // allow synthetic users to create home directories
+     GridmixTestUtils.dfs.mkdirs(root, new FsPermission((short)0777));
+-- 
+1.7.0.4
+

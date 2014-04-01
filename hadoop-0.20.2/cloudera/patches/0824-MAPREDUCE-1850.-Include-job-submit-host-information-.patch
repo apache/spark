@@ -1,0 +1,196 @@
+From a6b1ad67cf903e1e56963dcc64d7d7599321d386 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:51 -0800
+Subject: [PATCH 0824/1179] MAPREDUCE-1850. Include job submit host information (name and ip) in jobconf and jobdetails display
+
+Author: Krishna Ramachandran
+Ref: CDH-2622
+---
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |    9 +++-
+ src/mapred/org/apache/hadoop/mapred/JobConf.java   |   40 ++++++++++++++++++++
+ .../org/apache/hadoop/mapred/JobInProgress.java    |   18 +++++++++
+ .../org/apache/hadoop/mapred/TestEmptyJob.java     |   10 ++++-
+ src/webapps/job/jobdetails.jsp                     |    4 ++
+ 5 files changed, 78 insertions(+), 3 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index 6943c8f..2a9c65b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -659,7 +659,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     //
+ 
+     // Create a number of filenames in the JobTracker's fs namespace
+-    FileSystem fs = getFs();
++    FileSystem fs = submitJobDir.getFileSystem(job);
+     LOG.debug("default FileSystem: " + fs.getUri());
+     if (fs.exists(submitJobDir)) {
+       throw new IOException("Not submitting job. Job directory " + submitJobDir
+@@ -848,6 +848,11 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+ 
+           Path submitJobFile = JobSubmissionFiles.getJobConfPath(submitJobDir);
+           int reduces = jobCopy.getNumReduceTasks();
++          InetAddress ip = InetAddress.getLocalHost();
++          if (ip != null) {
++            job.setJobSubmitHostAddress(ip.getHostAddress());
++            job.setJobSubmitHostName(ip.getHostName());
++          }
+           JobContext context = new JobContext(jobCopy, jobId);
+ 
+           jobCopy = (JobConf)context.getConfiguration();
+@@ -864,6 +869,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+           }
+ 
+           // Create the splits for the job
++          FileSystem fs = submitJobDir.getFileSystem(jobCopy);
+           LOG.debug("Creating splits at " + fs.makeQualified(submitJobDir));
+           int maps = writeSplits(context, submitJobDir);
+           jobCopy.setNumMapTasks(maps);
+@@ -885,7 +891,6 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+           } finally {
+             out.close();
+           }
+-
+           //
+           // Now, actually submit the job (using the submit name)
+           //
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobConf.java b/src/mapred/org/apache/hadoop/mapred/JobConf.java
+index 852c41d..a011150 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobConf.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobConf.java
+@@ -1433,6 +1433,46 @@ public class JobConf extends Configuration {
+   }
+ 
+   /**
++   * Set {@link JobSubmitHostName} for this job.
++   * 
++   * @param prio the {@link JobSubmitHostName} for this job.
++   */
++  void setJobSubmitHostName(String hostname) {
++    set("mapreduce.job.submithost", hostname);
++  }
++  
++  /**
++   * Get the {@link JobSubmitHostName} for this job.
++   * 
++   * @return the {@link JobSubmitHostName} for this job.
++   */
++  String getJobSubmitHostName() {
++    String hostname = get("mapreduce.job.submithost");
++    
++    return hostname;
++  }
++
++  /**
++   * Set {@link JobSubmitHostAddress} for this job.
++   * 
++   * @param prio the {@link JobSubmitHostAddress} for this job.
++   */
++  void setJobSubmitHostAddress(String hostadd) {
++    set("mapreduce.job.submithostaddress", hostadd);
++  }
++  
++  /**
++   * Get the {@link JobSubmitHostAddress} for this job.
++   * 
++   * @return the {@link JobSubmitHostAddress} for this job.
++   */
++  String getJobSubmitHostAddress() {
++    String hostadd = get("mapreduce.job.submithostaddress");
++    
++    return hostadd;
++  }
++
++  /**
+    * Get whether the task profiling is enabled.
+    * @return true if some tasks will be profiled
+    */
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index ae9b10d..d889b75 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -228,6 +228,8 @@ public class JobInProgress {
+   volatile private boolean hasSpeculativeMaps;
+   volatile private boolean hasSpeculativeReduces;
+   private long inputLength = 0;
++  private String submitHostName;
++  private String submitHostAddress;
+   private String user;
+   private String historyFile = "";
+   private boolean historyFileCopied;
+@@ -397,6 +399,8 @@ public class JobInProgress {
+           jobFile, url, conf.getJobName(),
+           conf.getQueueName());
+ 
++      this.submitHostName = conf.getJobSubmitHostName();
++      this.submitHostAddress = conf.getJobSubmitHostAddress();
+       this.numMapTasks = conf.getNumMapTasks();
+       this.numReduceTasks = conf.getNumReduceTasks();
+ 
+@@ -3178,6 +3182,20 @@ public class JobInProgress {
+     return jobId;
+   }
+   
++  /**
++   * @return submitHostName  of this JobInProgress.
++   */
++  public String getJobSubmitHostName() {
++    return this.submitHostName;
++  }
++  
++  /**
++   * @return submitHostAddress  of this JobInProgress.
++   */
++  public String getJobSubmitHostAddress() {
++    return this.submitHostAddress;
++  }
++
+   public synchronized Object getSchedulingInfo() {
+     return this.schedulingInfo;
+   }
+diff --git a/src/test/org/apache/hadoop/mapred/TestEmptyJob.java b/src/test/org/apache/hadoop/mapred/TestEmptyJob.java
+index b36b7b7..23acf0f 100644
+--- a/src/test/org/apache/hadoop/mapred/TestEmptyJob.java
++++ b/src/test/org/apache/hadoop/mapred/TestEmptyJob.java
+@@ -21,6 +21,7 @@ package org.apache.hadoop.mapred;
+ import java.io.File;
+ import java.io.IOException;
+ import java.net.URI;
++import java.net.InetAddress;
+ 
+ import junit.framework.TestCase;
+ 
+@@ -116,7 +117,14 @@ public class TestEmptyJob extends TestCase {
+     JobClient jc = new JobClient(conf);
+     RunningJob runningJob = jc.submitJob(conf);
+     JobInProgress job = mr.getJobTrackerRunner().getJobTracker().getJob(runningJob.getID());
+-    
++
++    InetAddress ip = InetAddress.getLocalHost();
++    if (ip != null) {
++      assertTrue(job.getJobSubmitHostAddress().equalsIgnoreCase(
++          ip.getHostAddress()));
++      assertTrue(job.getJobSubmitHostName().equalsIgnoreCase(ip.getHostName()));
++    }
++
+     while (true) {
+       if (job.isCleanupLaunched()) {
+         LOG.info("Waiting for cleanup to be launched for job " 
+diff --git a/src/webapps/job/jobdetails.jsp b/src/webapps/job/jobdetails.jsp
+index 3e63ba4..b89077f 100644
+--- a/src/webapps/job/jobdetails.jsp
++++ b/src/webapps/job/jobdetails.jsp
+@@ -284,6 +284,10 @@
+         HtmlQuoting.quoteHtmlChars(profile.getJobName()) + "<br>\n");
+     out.print("<b>Job File:</b> <a href=\"jobconf.jsp?jobid=" + jobId + "\">" +
+         profile.getJobFile() + "</a><br>\n");
++    out.print("<b>Submit Host:</b> " +
++        HtmlQuoting.quoteHtmlChars(job.getJobSubmitHostName()) + "<br>\n");
++    out.print("<b>Submit Host Address:</b> " +
++        HtmlQuoting.quoteHtmlChars(job.getJobSubmitHostAddress()) + "<br>\n");
+ 
+     Map<JobACL, AccessControlList> jobAcls = status.getJobACLs();
+     JSPUtil.printJobACLs(tracker, jobAcls, out);
+-- 
+1.7.0.4
+

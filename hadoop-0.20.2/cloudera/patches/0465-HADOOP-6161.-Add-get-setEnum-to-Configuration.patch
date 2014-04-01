@@ -1,0 +1,80 @@
+From 7d2d3c129e0c1358e490d09744ce1b448e430beb Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 9 Feb 2010 11:10:54 +0530
+Subject: [PATCH 0465/1179] HADOOP-6161. Add get/setEnum to Configuration
+
+Patch: http://issues.apache.org/jira/secure/attachment/12434928/hadoop-6161-yahoo-20-v1.patch
+Author: Chris Douglas
+Ref: YDH
+---
+ src/core/org/apache/hadoop/conf/Configuration.java |   24 ++++++++++++++++++++
+ .../org/apache/hadoop/conf/TestConfiguration.java  |   18 +++++++++++++-
+ 2 files changed, 40 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/conf/Configuration.java b/src/core/org/apache/hadoop/conf/Configuration.java
+index 88e9665..943f19a 100644
+--- a/src/core/org/apache/hadoop/conf/Configuration.java
++++ b/src/core/org/apache/hadoop/conf/Configuration.java
+@@ -679,6 +679,30 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+   }
+ 
+   /**
++   * Set the value of the <code>name</code> property to the given type. This
++   * is equivalent to <code>set(&lt;name&gt;, value.toString())</code>.
++   * @param name property name
++   * @param value new value
++   */
++  public <T extends Enum<T>> void setEnum(String name, T value) {
++    set(name, value.toString());
++  }
++
++  /**
++   * Return value matching this enumerated type.
++   * @param name Property name
++   * @param defaultValue Value returned if no mapping exists
++   * @throws IllegalArgumentException If mapping is illegal for the type
++   * provided
++   */
++  public <T extends Enum<T>> T getEnum(String name, T defaultValue) {
++    final String val = get(name);
++    return null == val
++      ? defaultValue
++      : Enum.valueOf(defaultValue.getDeclaringClass(), val);
++  }
++
++  /**
+    * A class that represents a set of positive integer ranges. It parses 
+    * strings of the form: "2-3,5,7-" where ranges are separated by comma and 
+    * the lower/upper bounds are separated by dash. Either the lower or upper 
+diff --git a/src/test/org/apache/hadoop/conf/TestConfiguration.java b/src/test/org/apache/hadoop/conf/TestConfiguration.java
+index 40231f2..328d7a3 100644
+--- a/src/test/org/apache/hadoop/conf/TestConfiguration.java
++++ b/src/test/org/apache/hadoop/conf/TestConfiguration.java
+@@ -379,8 +379,22 @@ public class TestConfiguration extends TestCase {
+                  conf.getPattern("test.pattern3", defaultPattern).pattern());
+   }
+ 
+-
+-
++  enum Dingo { FOO, BAR };
++  enum Yak { RAB, FOO };
++  public void testEnum() throws IOException {
++    Configuration conf = new Configuration();
++    conf.setEnum("test.enum", Dingo.FOO);
++    assertSame(Dingo.FOO, conf.getEnum("test.enum", Dingo.BAR));
++    assertSame(Yak.FOO, conf.getEnum("test.enum", Yak.RAB));
++    boolean fail = false;
++    try {
++      conf.setEnum("test.enum", Dingo.BAR);
++      Yak y = conf.getEnum("test.enum", Yak.FOO);
++    } catch (IllegalArgumentException e) {
++      fail = true;
++    }
++    assertTrue(fail);
++  }
+ 
+   public void testReload() throws IOException {
+     out=new BufferedWriter(new FileWriter(CONFIG));
+-- 
+1.7.0.4
+

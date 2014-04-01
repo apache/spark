@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+GRID_DIR=`dirname "$0"`
+GRID_DIR=`cd "$GRID_DIR"; pwd`
+source $GRID_DIR/../gridmix-env
+
+NUM_OF_REDUCERS=$NUM_OF_REDUCERS_FOR_MEDIUM_JOB
+INDIR="${VARCOMPSEQ}/{part-0000,part-0001}"
+Date=`date +%F-%H-%M-%S-%N`
+
+OUTDIR=perf-out/webdata-sort-out-dir-medium_$Date
+${HADOOP_HOME}/bin/hadoop dfs -rmr $OUTDIR
+
+${HADOOP_HOME}/bin/hadoop jar $APP_JAR loadgen -keepmap 100 -keepred 100 -inFormat org.apache.hadoop.mapred.SequenceFileInputFormat -outFormat org.apache.hadoop.mapred.SequenceFileOutputFormat -outKey org.apache.hadoop.io.Text -outValue org.apache.hadoop.io.Text -indir $INDIR -outdir $OUTDIR -r $NUM_OF_REDUCERS
+
+

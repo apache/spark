@@ -1,0 +1,168 @@
+### "Gridmix" Benchmark ###
+
+Contents:
+
+0 Overview
+1 Getting Started
+  1.0 Build
+  1.1 Configure
+  1.2 Generate test data
+2 Running
+  2.0 General
+  2.1 Non-Hod cluster
+  2.2 Hod
+    2.2.0 Static cluster
+    2.2.1 Hod cluster
+
+
+* 0 Overview
+
+The scripts in this package model a cluster workload. The workload is
+simulated by generating random data and submitting map/reduce jobs that
+mimic observed data-access patterns in user jobs. The full benchmark
+generates approximately 2.5TB of (often compressed) input data operated on
+by the following simulated jobs:
+
+1) Three stage map/reduce job
+	   Input:      500GB compressed (2TB uncompressed) SequenceFile
+                 (k,v) = (5 words, 100 words)
+                 hadoop-env: FIXCOMPSEQ
+     Compute1:   keep 10% map, 40% reduce
+	   Compute2:   keep 100% map, 77% reduce
+                 Input from Compute1
+     Compute3:   keep 116% map, 91% reduce
+                 Input from Compute2
+     Motivation: Many user workloads are implemented as pipelined map/reduce
+                 jobs, including Pig workloads
+
+2) Large sort of variable key/value size
+     Input:      500GB compressed (2TB uncompressed) SequenceFile
+                 (k,v) = (5-10 words, 100-10000 words)
+                 hadoop-env: VARCOMPSEQ
+     Compute:    keep 100% map, 100% reduce
+     Motivation: Processing large, compressed datsets is common.
+
+3) Reference select
+     Input:      500GB compressed (2TB uncompressed) SequenceFile
+                 (k,v) = (5-10 words, 100-10000 words)
+                 hadoop-env: VARCOMPSEQ
+     Compute:    keep 0.2% map, 5% reduce
+                 1 Reducer
+     Motivation: Sampling from a large, reference dataset is common.
+
+4) Indirect Read
+     Input:      500GB compressed (2TB uncompressed) Text
+                 (k,v) = (5 words, 20 words)
+                 hadoop-env: FIXCOMPTEXT
+     Compute:    keep 50% map, 100% reduce Each map reads 1 input file,
+                 adding additional input files from the output of the
+                 previous iteration for 10 iterations
+     Motivation: User jobs in the wild will often take input data without
+                 consulting the framework. This simulates an iterative job
+                 whose input data is all "indirect," i.e. given to the
+                 framework sans locality metadata.
+
+5) API text sort (java, pipes, streaming)
+     Input:      500GB uncompressed Text
+                 (k,v) = (1-10 words, 0-200 words)
+                 hadoop-env: VARINFLTEXT
+     Compute:    keep 100% map, 100% reduce
+     Motivation: This benchmark should exercise each of the APIs to
+                 map/reduce
+
+Each of these jobs may be run individually or- using the scripts provided-
+as a simulation of user activity sized to run in approximately 4 hours on a
+480-500 node cluster using Hadoop 0.15.0. The benchmark runs a mix of small,
+medium, and large jobs simultaneously, submitting each at fixed intervals.
+
+Notes(1-4): Since input data are compressed, this means that each mapper
+outputs a lot more bytes than it reads in, typically causing map output
+spills.
+
+
+
+* 1 Getting Started
+
+1.0 Build
+
+1) Compile the examples, including the C++ sources:
+  > ant -Dcompile.c++=yes examples
+2) Copy the pipe sort example to a location in the default filesystem
+   (usually HDFS, default /gridmix/programs)
+  > $HADOOP_HOME/hadoop dfs -mkdir $GRID_MIX_PROG
+  > $HADOOP_HOME/hadoop dfs -put build/c++-examples/$PLATFORM_STR/bin/pipes-sort $GRID_MIX_PROG
+
+1.1 Configure
+
+One must modify hadoop-env to supply the following information:
+
+HADOOP_HOME     The hadoop install location
+GRID_MIX_HOME   The location of these scripts
+APP_JAR         The location of the hadoop example
+GRID_MIX_DATA   The location of the datsets for these benchmarks
+GRID_MIX_PROG   The location of the pipe-sort example
+
+Reasonable defaults are provided for all but HADOOP_HOME. The datasets used
+by each of the respective benchmarks are recorded in the Input::hadoop-env
+comment in section 0 and their location may be changed in hadoop-env. Note
+that each job expects particular input data and the parameters given to it
+must be changed in each script if a different InputFormat, keytype, or
+valuetype is desired.
+
+Note that NUM_OF_REDUCERS_FOR_*_JOB properties should be sized to the
+cluster on which the benchmarks will be run. The default assumes a large
+(450-500 node) cluster.
+
+1.2 Generate test data
+
+Test data is generated using the generateData.sh script. While one may
+modify the structure and size of the data generated here, note that many of
+the scripts- particularly for medium and small sized jobs- rely not only on
+specific InputFormats and key/value types, but also on a particular
+structure to the input data. Changing these values will likely be necessary
+to run on small and medium-sized clusters, but any modifications must be
+informed by an explicit familiarity with the underlying scripts.
+
+It is sufficient to run the script without modification, though it may
+require up to 4TB of free space in the default filesystem. Changing the size
+of the input data (COMPRESSED_DATA_BYTES, UNCOMPRESSED_DATA_BYTES,
+INDIRECT_DATA_BYTES) is safe. A 4x compression ratio for generated, block
+compressed data is typical.
+
+* 2 Running
+
+2.0 General
+
+The submissionScripts directory contains the high-level scripts submitting
+sized jobs for the gridmix benchmark. Each submits $NUM_OF_*_JOBS_PER_CLASS
+instances as specified in the gridmix-env script, where an instance is an
+invocation of a script as in $JOBTYPE/$JOBTYPE.$CLASS (e.g.
+javasort/text-sort.large). Each instance may submit one or more map/reduce
+jobs.
+
+There is a backoff script, submissionScripts/sleep_if_too_busy that can be
+modified to define throttling criteria. By default, it simply counts running
+java processes.
+
+2.1 Non-Hod cluster
+
+The submissionScripts/allToSameCluster script will invoke each of the other
+submission scripts for the gridmix benchmark. Depending on how your cluster
+manages job submission, these scripts may require modification. The details
+are very context-dependent.
+
+2.2 Hod
+
+Note that there are options in hadoop-env that control jobs sumitted thruogh
+Hod. One may specify the location of a config (HOD_CONFIG), the number of
+nodes to allocate for classes of jobs, and any additional options one wants
+to apply. The default includes an example for supplying a Hadoop tarball for
+testing platform changes (see Hod documentation).
+
+2.2.0 Static Cluster
+
+> hod --hod.script=submissionScripts/allToSameCluster -m 500
+
+2.2.1 Hod-allocated cluster
+
+> ./submissionScripts/allThroughHod

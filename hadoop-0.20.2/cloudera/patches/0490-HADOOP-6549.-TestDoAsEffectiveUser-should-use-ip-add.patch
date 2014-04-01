@@ -1,0 +1,117 @@
+From 8a4f25cf0d3631d190ecfa81e17a80bfbb019c69 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 23 Feb 2010 16:58:04 -0800
+Subject: [PATCH 0490/1179] HADOOP-6549. TestDoAsEffectiveUser should use ip address of the host for superuser ip check
+
+Patch: https://issues.apache.org/jira/secure/attachment/12436794/HADOOP-6549-0_20.1.patch
+Author: Jitendra Nath Pandey
+Ref: CDH-648
+---
+ .../hadoop/security/TestDoAsEffectiveUser.java     |   47 ++++++++++++++++----
+ 1 files changed, 38 insertions(+), 9 deletions(-)
+
+diff --git a/src/test/org/apache/hadoop/security/TestDoAsEffectiveUser.java b/src/test/org/apache/hadoop/security/TestDoAsEffectiveUser.java
+index 101ad43..4a4d409 100644
+--- a/src/test/org/apache/hadoop/security/TestDoAsEffectiveUser.java
++++ b/src/test/org/apache/hadoop/security/TestDoAsEffectiveUser.java
+@@ -18,8 +18,12 @@
+ package org.apache.hadoop.security;
+ 
+ import java.io.IOException;
++import java.net.InetAddress;
+ import java.net.InetSocketAddress;
++import java.net.NetworkInterface;
+ import java.security.PrivilegedExceptionAction;
++import java.util.ArrayList;
++import java.util.Enumeration;
+ 
+ import junit.framework.Assert;
+ 
+@@ -38,6 +42,7 @@ import org.apache.hadoop.ipc.TestSaslRPC;
+ import org.apache.hadoop.ipc.TestSaslRPC.TestTokenSecretManager;
+ import org.apache.hadoop.ipc.TestSaslRPC.TestTokenIdentifier;
+ import org.apache.hadoop.ipc.TestSaslRPC.TestTokenSelector;
++import org.apache.commons.logging.*;
+ 
+ /**
+  *
+@@ -52,7 +57,35 @@ public class TestDoAsEffectiveUser {
+       GROUP2_NAME };
+   private static final String ADDRESS = "0.0.0.0";
+   private TestProtocol proxy;
+-
++  
++  public static final Log LOG = LogFactory
++      .getLog(TestDoAsEffectiveUser.class);
++  
++  private void configureSuperUserIPAddresses(Configuration conf,
++      String superUserShortName) throws IOException {
++    ArrayList<String> ipList = new ArrayList<String>();
++    Enumeration<NetworkInterface> netInterfaceList = NetworkInterface
++        .getNetworkInterfaces();
++    while (netInterfaceList.hasMoreElements()) {
++      NetworkInterface inf = netInterfaceList.nextElement();
++      Enumeration<InetAddress> addrList = inf.getInetAddresses();
++      while (addrList.hasMoreElements()) {
++        InetAddress addr = addrList.nextElement();
++        ipList.add(addr.getHostAddress());
++      }
++    }
++    StringBuilder builder = new StringBuilder();
++    for (String ip : ipList) {
++      builder.append(ip);
++      builder.append(',');
++    }
++    builder.append("127.0.1.1,");
++    builder.append(InetAddress.getLocalHost().getCanonicalHostName());
++    LOG.info("Local Ip addresses: "+builder.toString());
++    conf.setStrings(ProxyUsers.getProxySuperuserIpConfKey(superUserShortName),
++        builder.toString());
++  }
++  
+   /**
+    * Test method for
+    * {@link org.apache.hadoop.security.UserGroupInformation#createProxyUser(java.lang.String, org.apache.hadoop.security.UserGroupInformation)}
+@@ -100,8 +133,7 @@ public class TestDoAsEffectiveUser {
+     final Configuration conf = new Configuration();
+     conf.setStrings(ProxyUsers
+         .getProxySuperuserGroupConfKey(REAL_USER_SHORT_NAME), "group1");
+-    conf.setStrings(ProxyUsers.getProxySuperuserIpConfKey(REAL_USER_SHORT_NAME),
+-        "127.0.0.1","127.0.1.1", "localhost");
++    configureSuperUserIPAddresses(conf, REAL_USER_SHORT_NAME);
+     Server server = RPC.getServer(new TestImpl(), ADDRESS,
+         0, 5, true, conf, null);
+ 
+@@ -139,8 +171,7 @@ public class TestDoAsEffectiveUser {
+   @Test
+   public void testRealUserAuthorizationSuccess() throws IOException {
+     final Configuration conf = new Configuration();
+-    conf.setStrings(ProxyUsers.getProxySuperuserIpConfKey(REAL_USER_SHORT_NAME),
+-        "127.0.0.1","127.0.1.1", "localhost");
++    configureSuperUserIPAddresses(conf, REAL_USER_SHORT_NAME);
+     conf.setStrings(ProxyUsers.getProxySuperuserGroupConfKey(REAL_USER_SHORT_NAME),
+         "group1");
+     Server server = RPC.getServer(new TestImpl(), ADDRESS,
+@@ -264,8 +295,7 @@ public class TestDoAsEffectiveUser {
+   @Test
+   public void testRealUserGroupNotSpecified() throws IOException {
+     final Configuration conf = new Configuration();
+-    conf.setStrings(ProxyUsers.getProxySuperuserIpConfKey(REAL_USER_SHORT_NAME),
+-        "127.0.0.1","127.0.1.1","localhost");
++    configureSuperUserIPAddresses(conf, REAL_USER_SHORT_NAME);
+     Server server = RPC.getServer(new TestImpl(), ADDRESS,
+         0, 2, false, conf, null);
+ 
+@@ -303,8 +333,7 @@ public class TestDoAsEffectiveUser {
+   @Test
+   public void testRealUserGroupAuthorizationFailure() throws IOException {
+     final Configuration conf = new Configuration();
+-    conf.setStrings(ProxyUsers.getProxySuperuserIpConfKey(REAL_USER_SHORT_NAME),
+-        "127.0.0.1","127.0.1.1","localhost");
++    configureSuperUserIPAddresses(conf, REAL_USER_SHORT_NAME);
+     conf.setStrings(ProxyUsers.getProxySuperuserGroupConfKey(REAL_USER_SHORT_NAME),
+         "group3");
+     Server server = RPC.getServer(new TestImpl(), ADDRESS,
+-- 
+1.7.0.4
+

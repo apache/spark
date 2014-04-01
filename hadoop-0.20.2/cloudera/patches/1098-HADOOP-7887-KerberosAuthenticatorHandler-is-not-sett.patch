@@ -1,0 +1,134 @@
+From b9bc59e6d6f024d69f7cbee65b50fc0d5f99ead4 Mon Sep 17 00:00:00 2001
+From: Alejandro Abdelnur <tucu@cloudera.com>
+Date: Wed, 7 Dec 2011 15:38:31 -0800
+Subject: [PATCH 1098/1179] HADOOP-7887 KerberosAuthenticatorHandler is not setting KerberosName name rules from configuration
+
+  Author: Alejandro Abdelnur
+  Ref: CDH-3890
+---
+ .../org/apache/hadoop/security/KerberosName.java   |   20 ++++++++++++-
+ .../server/KerberosAuthenticationHandler.java      |   10 ++++--
+ .../server/TestKerberosAuthenticationHandler.java  |   30 ++++++++++++++++++++
+ 3 files changed, 55 insertions(+), 5 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/KerberosName.java b/src/core/org/apache/hadoop/security/KerberosName.java
+index 0bb12c3..83e4840 100644
+--- a/src/core/org/apache/hadoop/security/KerberosName.java
++++ b/src/core/org/apache/hadoop/security/KerberosName.java
+@@ -335,12 +335,19 @@ public class KerberosName {
+ 
+   /**
+    * Set the static configuration to get the rules.
++   * <p/>
++   * IMPORTANT: This method does a NOP if the rules have been set already.
++   * If there is a need to reset the rules, the {@link KerberosName#setRules(String)}
++   * method should be invoked directly.
++   *
+    * @param conf the new configuration
+    * @throws IOException
+    */
+   public static void setConfiguration(Configuration conf) throws IOException {
+-    String ruleString = conf.get("hadoop.security.auth_to_local", "DEFAULT");
+-    rules = parseRules(ruleString);
++    if (!hasRulesBeenSet()) {
++      String ruleString = conf.get("hadoop.security.auth_to_local", "DEFAULT");
++      setRules(ruleString);
++    }
+   }
+   
+   /**
+@@ -394,6 +401,15 @@ public class KerberosName {
+     throw new NoMatchingRule("No rules applied to " + toString());
+   }
+ 
++  /**
++   * Indicates if the name rules have been set.
++   * 
++   * @return if the name rules have been set.
++   */
++  public static boolean hasRulesBeenSet() {
++    return rules != null;
++  }
++
+   public static void printRules() throws IOException {
+     int i = 0;
+     for(Rule r: rules) {
+diff --git a/src/core/org/apache/hadoop/security/authentication/server/KerberosAuthenticationHandler.java b/src/core/org/apache/hadoop/security/authentication/server/KerberosAuthenticationHandler.java
+index 1844c15..1e455e0 100644
+--- a/src/core/org/apache/hadoop/security/authentication/server/KerberosAuthenticationHandler.java
++++ b/src/core/org/apache/hadoop/security/authentication/server/KerberosAuthenticationHandler.java
+@@ -55,6 +55,8 @@ import java.util.Set;
+  * It does not have a default value.</li>
+  * <li>kerberos.keytab: the keytab file containing the credentials for the Kerberos principal.
+  * It does not have a default value.</li>
++ * <li>kerberos.name.rules: kerberos names rules to resolve principal names, see 
++ * {@link KerberosName#setRules(String)}</li>
+  * </ul>
+  */
+ public class KerberosAuthenticationHandler implements AuthenticationHandler {
+@@ -151,9 +153,11 @@ public class KerberosAuthenticationHandler implements AuthenticationHandler {
+         throw new ServletException("Keytab does not exist: " + keytab);
+       }
+ 
+-      String nameRules = config.getProperty(NAME_RULES, "DEFAULT");
+-      KerberosName.setRules(nameRules);
+-
++      String nameRules = config.getProperty(NAME_RULES, null);
++      if (nameRules != null) {
++        KerberosName.setRules(nameRules);
++      }
++     
+       Set<Principal> principals = new HashSet<Principal>();
+       principals.add(new KerberosPrincipal(principal));
+       Subject subject = new Subject(false, principals, new HashSet<Object>(), new HashSet<Object>());
+diff --git a/src/test/org/apache/hadoop/security/authentication/server/TestKerberosAuthenticationHandler.java b/src/test/org/apache/hadoop/security/authentication/server/TestKerberosAuthenticationHandler.java
+index fc99aac..6f38276 100644
+--- a/src/test/org/apache/hadoop/security/authentication/server/TestKerberosAuthenticationHandler.java
++++ b/src/test/org/apache/hadoop/security/authentication/server/TestKerberosAuthenticationHandler.java
+@@ -18,6 +18,7 @@ import org.apache.hadoop.security.authentication.client.AuthenticationException;
+ import org.apache.hadoop.security.authentication.client.KerberosAuthenticator;
+ import junit.framework.TestCase;
+ import org.apache.commons.codec.binary.Base64;
++import org.apache.hadoop.security.KerberosName;
+ import org.ietf.jgss.GSSContext;
+ import org.ietf.jgss.GSSManager;
+ import org.ietf.jgss.GSSName;
+@@ -62,6 +63,35 @@ public class TestKerberosAuthenticationHandler extends TestCase {
+     super.tearDown();
+   }
+ 
++  public void testNameRules() throws Exception {
++    KerberosName kn = new KerberosName(KerberosTestUtils.getServerPrincipal());
++    assertEquals(KerberosTestUtils.getRealm(), kn.getRealm());
++
++    //destroy handler created in setUp()
++    handler.destroy();
++
++    KerberosName.setRules("RULE:[1:$1@$0](.*@FOO)s/@.*//\nDEFAULT");
++    
++    handler = new KerberosAuthenticationHandler();
++    Properties props = new Properties();
++    props.setProperty(KerberosAuthenticationHandler.PRINCIPAL, KerberosTestUtils.getServerPrincipal());
++    props.setProperty(KerberosAuthenticationHandler.KEYTAB, KerberosTestUtils.getKeytabFile());
++    props.setProperty(KerberosAuthenticationHandler.NAME_RULES, "RULE:[1:$1@$0](.*@BAR)s/@.*//\nDEFAULT");
++    try {
++      handler.init(props);
++    } catch (Exception ex) {
++    }
++    kn = new KerberosName("bar@BAR");
++    assertEquals("bar", kn.getShortName());
++    kn = new KerberosName("bar@FOO");
++    try {
++      kn.getShortName();
++      fail();
++    }
++    catch (Exception ex) {      
++    }
++  }
++  
+   public void testInit() throws Exception {
+     assertEquals(KerberosTestUtils.getServerPrincipal(), handler.getPrincipal());
+     assertEquals(KerberosTestUtils.getKeytabFile(), handler.getKeytab());
+-- 
+1.7.0.4
+

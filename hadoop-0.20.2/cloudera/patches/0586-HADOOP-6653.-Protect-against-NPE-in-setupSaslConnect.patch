@@ -1,0 +1,27 @@
+From 9ecece0b50dbc523a1b9a7c48bb6330ae6e8c93e Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Sun, 21 Mar 2010 14:10:53 -0700
+Subject: [PATCH 0586/1179] HADOOP-6653. Protect against NPE in setupSaslConnection when the real user is NULL.
+
+Author: Owen O'Malley
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/ipc/Client.java |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index c61f00e..c68bb2a 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -394,7 +394,7 @@ public class Client {
+             UserGroupInformation.isLoginKeytabBased() &&
+             // relogin only in case it is the login user (e.g. JT)
+             // or superuser (like oozie).
+-            (currentUser.equals(loginUser) || realUser.equals(loginUser))) {
++            (currentUser.equals(loginUser) || loginUser.equals(realUser))) {
+           //try setting up the connection again
+           try {
+             //try re-login
+-- 
+1.7.0.4
+

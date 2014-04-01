@@ -1,0 +1,74 @@
+From ca9e1b3c59b05de9dc4fafa19f24dca80110bcc0 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 12 May 2010 19:28:56 -0700
+Subject: [PATCH 0290/1179] HDFS-1205. Make async disk service threads nameable
+
+Description: HDFS-611 moved some datanode operations to a separate thread
+             pool. This patch ensures that these worker threads have
+             clear names.
+Reason: Aids debugging/diagnosing of issues
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ .../server/datanode/FSDatasetAsyncDiskService.java |   29 +++++++++++++-------
+ 1 files changed, 19 insertions(+), 10 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetAsyncDiskService.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetAsyncDiskService.java
+index ca6665c..e623b8d 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetAsyncDiskService.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/FSDatasetAsyncDiskService.java
+@@ -58,8 +58,6 @@ class FSDatasetAsyncDiskService {
+   
+   private final ThreadGroup threadGroup = new ThreadGroup("async disk service");
+   
+-  private ThreadFactory threadFactory;
+-  
+   private HashMap<File, ThreadPoolExecutor> executors
+       = new HashMap<File, ThreadPoolExecutor>();
+   
+@@ -73,15 +71,26 @@ class FSDatasetAsyncDiskService {
+    * @param volumes The roots of the data volumes.
+    */
+   FSDatasetAsyncDiskService(File[] volumes) {
+-    
+-    threadFactory = new ThreadFactory() {
+-      public Thread newThread(Runnable r) {
+-        return new Thread(threadGroup, r);
+-      }
+-    };
+-    
++
+     // Create one ThreadPool per volume
+     for (int v = 0 ; v < volumes.length; v++) {
++      final File vol = volumes[v];
++      ThreadFactory threadFactory = new ThreadFactory() {
++          int counter = 0;
++
++          @Override
++          public Thread newThread(Runnable r) {
++            int thisIndex;
++            synchronized (this) {
++              thisIndex = counter++;
++            }
++            Thread t = new Thread(threadGroup, r);
++            t.setName("Async disk worker #" + thisIndex +
++                      " for volume " + vol);
++            return t;
++          }
++        };
++
+       ThreadPoolExecutor executor = new ThreadPoolExecutor(
+           CORE_THREADS_PER_VOLUME, MAXIMUM_THREADS_PER_VOLUME, 
+           THREADS_KEEP_ALIVE_SECONDS, TimeUnit.SECONDS, 
+@@ -89,7 +98,7 @@ class FSDatasetAsyncDiskService {
+ 
+       // This can reduce the number of running threads
+       executor.allowCoreThreadTimeOut(true);
+-      executors.put(volumes[v], executor);
++      executors.put(vol, executor);
+     }
+     
+   }
+-- 
+1.7.0.4
+

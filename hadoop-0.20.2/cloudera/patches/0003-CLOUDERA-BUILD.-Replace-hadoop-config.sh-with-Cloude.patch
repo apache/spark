@@ -1,0 +1,72 @@
+From 14256386d4cb155fea0f5745dd6c49fba74ff40f Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:20:43 -0800
+Subject: [PATCH 0003/1179] CLOUDERA-BUILD. Replace hadoop-config.sh with Cloudera version
+
+---
+ bin/hadoop-config.sh |   38 ++++++++++++++++++++------------------
+ 1 files changed, 20 insertions(+), 18 deletions(-)
+
+diff --git a/bin/hadoop-config.sh b/bin/hadoop-config.sh
+index 1f9d52d..74cd808 100644
+--- a/bin/hadoop-config.sh
++++ b/bin/hadoop-config.sh
+@@ -17,27 +17,28 @@
+ # should not be executable directly
+ # also should not be passed any arguments, since we need original $*
+ 
+-# resolve links - $0 may be a softlink
+-
+-this="$0"
+-while [ -h "$this" ]; do
+-  ls=`ls -ld "$this"`
+-  link=`expr "$ls" : '.*-> \(.*\)$'`
+-  if expr "$link" : '.*/.*' > /dev/null; then
+-    this="$link"
++# Honor the JAVA_HOME variable if set, otherwise try to find Java
++if [ -z $JAVA_HOME ]; then
++  if [ -e @JAVA_HOME@ ]; then
++	export JAVA_HOME="@JAVA_HOME@"
+   else
+-    this=`dirname "$this"`/"$link"
++	cat <<MSG
+++======================================================================+
++|      Error: JAVA_HOME is not set and Java could not be found         |
+++----------------------------------------------------------------------+
++| Please download the latest Sun JDK from the Sun Java web site        |
++|       > http://java.sun.com/javase/downloads/ <                      |
++|                                                                      |
++| NOTE: This script will find Sun Java whether you install using the   |
++|       binary or the RPM based installer.                             |
+++======================================================================+
++MSG
++	exit 1
+   fi
+-done
+-
+-# convert relative path to absolute path
+-bin=`dirname "$this"`
+-script=`basename "$this"`
+-bin=`cd "$bin"; pwd`
+-this="$bin/$script"
++fi
+ 
+ # the root of the Hadoop installation
+-export HADOOP_HOME=`dirname "$this"`/..
++export HADOOP_HOME="${HADOOP_HOME:-/usr/lib/hadoop}"
+ 
+ #check to see if the conf dir is given as an optional argument
+ if [ $# -gt 1 ]
+@@ -52,7 +53,8 @@ then
+ fi
+  
+ # Allow alternate conf dir location.
+-HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-$HADOOP_HOME/conf}"
++HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-/etc/hadoop/conf}"
++HADOOP_LOG_DIR="${HADOOP_LOG_DIR:-/var/log/hadoop}"
+ 
+ #check to see it is specified whether to use the slaves or the
+ # masters file
+-- 
+1.7.0.4
+

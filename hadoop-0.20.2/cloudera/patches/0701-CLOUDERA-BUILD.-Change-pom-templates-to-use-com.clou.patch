@@ -1,0 +1,109 @@
+From 55958019974d56fb1b66e209b49c22efe4a4aa95 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 16 Sep 2010 16:52:39 -0700
+Subject: [PATCH 0701/1179] CLOUDERA-BUILD. Change pom templates to use com.cloudera.hadoop groupId
+
+---
+ ivy/hadoop-core-pom-template.xml      |    2 +-
+ ivy/hadoop-examples-pom-template.xml  |    4 ++--
+ ivy/hadoop-streaming-pom-template.xml |    4 ++--
+ ivy/hadoop-test-pom-template.xml      |    4 ++--
+ ivy/hadoop-tools-pom-template.xml     |    4 ++--
+ 5 files changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/ivy/hadoop-core-pom-template.xml b/ivy/hadoop-core-pom-template.xml
+index c59e179..779795e 100644
+--- a/ivy/hadoop-core-pom-template.xml
++++ b/ivy/hadoop-core-pom-template.xml
+@@ -18,7 +18,7 @@
+ <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+   <modelVersion>4.0.0</modelVersion>
+-  <groupId>org.apache.hadoop</groupId>
++  <groupId>com.cloudera.hadoop</groupId>
+   <artifactId>hadoop-core</artifactId>
+   <packaging>jar</packaging>
+   <version>@version</version>
+diff --git a/ivy/hadoop-examples-pom-template.xml b/ivy/hadoop-examples-pom-template.xml
+index 4d4d518..ccecede 100644
+--- a/ivy/hadoop-examples-pom-template.xml
++++ b/ivy/hadoop-examples-pom-template.xml
+@@ -20,13 +20,13 @@
+     xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+ 
+   <modelVersion>4.0.0</modelVersion>
+-  <groupId>org.apache.hadoop</groupId>
++  <groupId>com.cloudera.hadoop</groupId>
+   <artifactId>hadoop-examples</artifactId>
+   <packaging>jar</packaging>
+   <version>@version</version>
+   <dependencies>
+     <dependency>
+-      <groupId>org.apache.hadoop</groupId>
++      <groupId>com.cloudera.hadoop</groupId>
+       <artifactId>hadoop-core</artifactId>
+       <version>@version</version>
+     </dependency>
+diff --git a/ivy/hadoop-streaming-pom-template.xml b/ivy/hadoop-streaming-pom-template.xml
+index f779ba0..68fa3de 100644
+--- a/ivy/hadoop-streaming-pom-template.xml
++++ b/ivy/hadoop-streaming-pom-template.xml
+@@ -20,13 +20,13 @@
+     xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+ 
+   <modelVersion>4.0.0</modelVersion>
+-  <groupId>org.apache.hadoop</groupId>
++  <groupId>com.cloudera.hadoop</groupId>
+   <artifactId>hadoop-streaming</artifactId>
+   <packaging>jar</packaging>
+   <version>@version</version>
+   <dependencies>
+     <dependency>
+-      <groupId>org.apache.hadoop</groupId>
++      <groupId>com.cloudera.hadoop</groupId>
+       <artifactId>hadoop-core</artifactId>
+       <version>@version</version>
+     </dependency>
+diff --git a/ivy/hadoop-test-pom-template.xml b/ivy/hadoop-test-pom-template.xml
+index 3795e54..688b739 100644
+--- a/ivy/hadoop-test-pom-template.xml
++++ b/ivy/hadoop-test-pom-template.xml
+@@ -19,13 +19,13 @@
+ <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+   <modelVersion>4.0.0</modelVersion>
+-  <groupId>org.apache.hadoop</groupId>
++  <groupId>com.cloudera.hadoop</groupId>
+   <artifactId>hadoop-test</artifactId>
+   <packaging>jar</packaging>
+   <version>@version</version>
+   <dependencies>
+     <dependency>
+-      <groupId>org.apache.hadoop</groupId>
++      <groupId>com.cloudera.hadoop</groupId>
+       <artifactId>hadoop-core</artifactId>
+       <version>@version</version>
+     </dependency>
+diff --git a/ivy/hadoop-tools-pom-template.xml b/ivy/hadoop-tools-pom-template.xml
+index 5dab238..2fa332e 100644
+--- a/ivy/hadoop-tools-pom-template.xml
++++ b/ivy/hadoop-tools-pom-template.xml
+@@ -20,13 +20,13 @@
+     xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+ 
+   <modelVersion>4.0.0</modelVersion>
+-  <groupId>org.apache.hadoop</groupId>
++  <groupId>com.cloudera.hadoop</groupId>
+   <artifactId>hadoop-tools</artifactId>
+   <packaging>jar</packaging>
+   <version>@version</version>
+   <dependencies>
+     <dependency>
+-      <groupId>org.apache.hadoop</groupId>
++      <groupId>com.cloudera.hadoop</groupId>
+       <artifactId>hadoop-core</artifactId>
+       <version>@version</version>
+     </dependency>
+-- 
+1.7.0.4
+

@@ -1,0 +1,382 @@
+From e82c781785f284d926591a91df837021f5c68fcc Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 23 Feb 2010 17:45:16 -0800
+Subject: [PATCH 0492/1179] HADOOP-6543. Allow authentication-enabled RPC clients to connect to authentication-disabled RPC servers
+
+Patch: https://issues.apache.org/jira/secure/attachment/12436797/6543-bp20.0.patch.
+Patch: https://issues.apache.org/jira/secure/attachment/12436807/6543-bp20.1.patch
+Author: Kan Zhang
+Ref: CDH-648
+---
+ src/core/org/apache/hadoop/ipc/Client.java         |   34 +++++++++++-------
+ .../org/apache/hadoop/ipc/ConnectionHeader.java    |   21 ++++-------
+ src/core/org/apache/hadoop/ipc/Server.java         |   37 ++++++++++++++++---
+ .../org/apache/hadoop/security/SaslRpcClient.java  |   20 +++++++++--
+ .../org/apache/hadoop/security/SaslRpcServer.java  |    1 +
+ src/test/findbugsExcludeFile.xml                   |    8 ++++
+ src/test/org/apache/hadoop/ipc/TestSaslRPC.java    |   34 +++++++++++-------
+ 7 files changed, 106 insertions(+), 49 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/Client.java b/src/core/org/apache/hadoop/ipc/Client.java
+index 8997787..c0c9911 100644
+--- a/src/core/org/apache/hadoop/ipc/Client.java
++++ b/src/core/org/apache/hadoop/ipc/Client.java
+@@ -214,8 +214,8 @@ public class Client {
+     private String serverPrincipal;  // server's krb5 principal name
+     private ConnectionHeader header;              // connection header
+     private final ConnectionId remoteId;                // connection id
+-    private final AuthMethod authMethod; // authentication method
+-    private final boolean useSasl;
++    private AuthMethod authMethod; // authentication method
++    private boolean useSasl;
+     private Token<? extends TokenIdentifier> token;
+     private SaslRpcClient saslRpcClient;
+     
+@@ -371,13 +371,13 @@ public class Client {
+       }
+     }
+     
+-    private synchronized void setupSaslConnection(final InputStream in2, 
++    private synchronized boolean setupSaslConnection(final InputStream in2, 
+         final OutputStream out2) 
+-    throws javax.security.sasl.SaslException,IOException,InterruptedException {
++        throws IOException {
+       try {
+         saslRpcClient = new SaslRpcClient(authMethod, token,
+             serverPrincipal);
+-        saslRpcClient.saslConnect(in2, out2);
++        return saslRpcClient.saslConnect(in2, out2);
+       } catch (javax.security.sasl.SaslException je) {
+         if (authMethod == AuthMethod.KERBEROS && 
+             UserGroupInformation.isLoginKeytabBased()) {
+@@ -385,9 +385,10 @@ public class Client {
+           UserGroupInformation.getCurrentUser().reloginFromKeytab();
+           //try setting up the connection again
+           try {
++            disposeSasl();
+             saslRpcClient = new SaslRpcClient(authMethod, token,
+                 serverPrincipal);
+-            saslRpcClient.saslConnect(in2, out2);
++            return saslRpcClient.saslConnect(in2, out2);
+           } catch (javax.security.sasl.SaslException jee) {
+             UserGroupInformation.
+             setLastUnsuccessfulAuthenticationAttemptTime
+@@ -444,15 +445,22 @@ public class Client {
+               ticket = ticket.getRealUser();
+             }
+           }
+-          ticket.doAs(new PrivilegedExceptionAction<Object>() {
++          if (ticket.doAs(new PrivilegedExceptionAction<Boolean>() {
+             @Override
+-            public Object run() throws IOException, InterruptedException {
+-              setupSaslConnection(in2, out2);
+-              return null;
++            public Boolean run() throws IOException {
++              return setupSaslConnection(in2, out2);
+             }
+-          });
+-          inStream = saslRpcClient.getInputStream(inStream);
+-          outStream = saslRpcClient.getOutputStream(outStream);
++          })) {
++            // Sasl connect is successful. Let's set up Sasl i/o streams.
++            inStream = saslRpcClient.getInputStream(inStream);
++            outStream = saslRpcClient.getOutputStream(outStream);
++          } else {
++            // fall back to simple auth because server told us so.
++            authMethod = AuthMethod.SIMPLE;
++            header = new ConnectionHeader(header.getProtocol(),
++                header.getUgi(), authMethod);
++            useSasl = false;
++          }
+         }
+         this.in = new DataInputStream(new BufferedInputStream
+             (new PingInputStream(inStream)));
+diff --git a/src/core/org/apache/hadoop/ipc/ConnectionHeader.java b/src/core/org/apache/hadoop/ipc/ConnectionHeader.java
+index 42de3f5..684177b 100644
+--- a/src/core/org/apache/hadoop/ipc/ConnectionHeader.java
++++ b/src/core/org/apache/hadoop/ipc/ConnectionHeader.java
+@@ -20,7 +20,6 @@ package org.apache.hadoop.ipc;
+ import java.io.DataInput;
+ import java.io.DataOutput;
+ import java.io.IOException;
+-import java.util.Collection;
+ 
+ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+@@ -28,8 +27,6 @@ import org.apache.hadoop.io.Text;
+ import org.apache.hadoop.io.Writable;
+ import org.apache.hadoop.security.UserGroupInformation;
+ import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
+-import org.apache.hadoop.security.token.Token;
+-import org.apache.hadoop.security.token.TokenIdentifier;
+ 
+ /**
+  * The IPC connection header sent by the client to the server
+@@ -86,16 +83,14 @@ class ConnectionHeader implements Writable {
+   public void write(DataOutput out) throws IOException {
+     Text.writeString(out, (protocol == null) ? "" : protocol);
+     if (ugi != null) {
+-      if (UserGroupInformation.isSecurityEnabled()) {
+-        if (authMethod == AuthMethod.KERBEROS) {
+-          //Send effective user for Kerberos auth
+-          out.writeBoolean(true);
+-          out.writeUTF(ugi.getUserName());
+-          out.writeBoolean(false);
+-        } else {
+-          //Don't send user for token auth
+-          out.writeBoolean(false);
+-        }
++      if (authMethod == AuthMethod.KERBEROS) {
++        // Send effective user for Kerberos auth
++        out.writeBoolean(true);
++        out.writeUTF(ugi.getUserName());
++        out.writeBoolean(false);
++      } else if (authMethod == AuthMethod.DIGEST) {
++        // Don't send user for token auth
++        out.writeBoolean(false);
+       } else {
+         //Send both effective user and real user for simple auth
+         out.writeBoolean(true);
+diff --git a/src/core/org/apache/hadoop/ipc/Server.java b/src/core/org/apache/hadoop/ipc/Server.java
+index 3478e5d..ef5a8a4 100644
+--- a/src/core/org/apache/hadoop/ipc/Server.java
++++ b/src/core/org/apache/hadoop/ipc/Server.java
+@@ -84,6 +84,7 @@ import org.apache.hadoop.util.StringUtils;
+  */
+ public abstract class Server {
+   private final boolean authorize;
++  private boolean isSecurityEnabled;
+   
+   /**
+    * The first four bytes of Hadoop RPC connections
+@@ -747,6 +748,7 @@ public abstract class Server {
+     SaslServer saslServer;
+     private AuthMethod authMethod;
+     private boolean saslContextEstablished;
++    private boolean skipInitialSaslHandshake;
+     private ByteBuffer rpcHeaderBuffer;
+     private ByteBuffer unwrappedData;
+     private ByteBuffer unwrappedDataLengthBuffer;
+@@ -930,6 +932,15 @@ public abstract class Server {
+       }
+     }
+     
++    private void askClientToUseSimpleAuth() throws IOException {
++      saslCall.connection = this;
++      saslResponse.reset();
++      DataOutputStream out = new DataOutputStream(saslResponse);
++      out.writeInt(SaslRpcServer.SWITCH_TO_SIMPLE_AUTH);
++      saslCall.setResponse(ByteBuffer.wrap(saslResponse.toByteArray()));
++      responder.doRespond(saslCall);
++    }
++    
+     public int readAndProcess() throws IOException, InterruptedException {
+       while (true) {
+         /* Read at most one RPC. If the header is not read completely yet
+@@ -958,13 +969,16 @@ public abstract class Server {
+           if (authMethod == null) {
+             throw new IOException("Unable to read authentication method");
+           }
+-          if (UserGroupInformation.isSecurityEnabled()
+-              && authMethod == AuthMethod.SIMPLE) {
++          if (isSecurityEnabled && authMethod == AuthMethod.SIMPLE) {
+             throw new IOException("Authentication is required");
+-          } 
+-          if (!UserGroupInformation.isSecurityEnabled()
+-              && authMethod != AuthMethod.SIMPLE) {
+-            throw new IOException("Authentication is not supported");
++          }
++          if (!isSecurityEnabled && authMethod != AuthMethod.SIMPLE) {
++            askClientToUseSimpleAuth();
++            authMethod = AuthMethod.SIMPLE;
++            // client has already sent the initial Sasl message and we
++            // should ignore it. Both client and server should fall back
++            // to simple auth from now on.
++            skipInitialSaslHandshake = true;
+           }
+           if (authMethod != AuthMethod.SIMPLE) {
+             useSasl = true;
+@@ -1001,6 +1015,11 @@ public abstract class Server {
+         if (data.remaining() == 0) {
+           dataLengthBuffer.clear();
+           data.flip();
++          if (skipInitialSaslHandshake) {
++            data = null;
++            skipInitialSaslHandshake = false;
++            continue;
++          }
+           boolean isHeaderRead = headerRead;
+           if (useSasl) {
+             saslReadAndProcess(data.array());
+@@ -1280,6 +1299,7 @@ public abstract class Server {
+     this.authorize = 
+       conf.getBoolean(ServiceAuthorizationManager.SERVICE_AUTHORIZATION_CONFIG, 
+                       false);
++    this.isSecurityEnabled = UserGroupInformation.isSecurityEnabled();
+     
+     // Start the listener here and let it bind to the port
+     listener = new Listener();
+@@ -1357,6 +1377,11 @@ public abstract class Server {
+     return conf;
+   }
+   
++  /** for unit testing only, should be called before server is started */ 
++  void disableSecurity() {
++    this.isSecurityEnabled = false;
++  }
++  
+   /** Sets the socket buffer size used for responding to RPCs */
+   public void setSocketSendBufSize(int size) { this.socketSendBufferSize = size; }
+ 
+diff --git a/src/core/org/apache/hadoop/security/SaslRpcClient.java b/src/core/org/apache/hadoop/security/SaslRpcClient.java
+index b061e43..7b171c5 100644
+--- a/src/core/org/apache/hadoop/security/SaslRpcClient.java
++++ b/src/core/org/apache/hadoop/security/SaslRpcClient.java
+@@ -107,9 +107,11 @@ public class SaslRpcClient {
+    *          InputStream to use
+    * @param outS
+    *          OutputStream to use
++   * @return true if connection is set up, or false if needs to switch 
++   *             to simple Auth.
+    * @throws IOException
+    */
+-  public void saslConnect(InputStream inS, OutputStream outS)
++  public boolean saslConnect(InputStream inS, OutputStream outS)
+       throws IOException {
+     DataInputStream inStream = new DataInputStream(new BufferedInputStream(inS));
+     DataOutputStream outStream = new DataOutputStream(new BufferedOutputStream(
+@@ -128,7 +130,14 @@ public class SaslRpcClient {
+               + " from initSASLContext.");
+       }
+       if (!saslClient.isComplete()) {
+-        saslToken = new byte[inStream.readInt()];
++        int len = inStream.readInt();
++        if (len == SaslRpcServer.SWITCH_TO_SIMPLE_AUTH) {
++          if (LOG.isDebugEnabled())
++            LOG.debug("Server asks us to fall back to simple auth.");
++          saslClient.dispose();
++          return false;
++        }
++        saslToken = new byte[len];
+         if (LOG.isDebugEnabled())
+           LOG.debug("Will read input token of size " + saslToken.length
+               + " for processing by initSASLContext");
+@@ -157,8 +166,13 @@ public class SaslRpcClient {
+         LOG.debug("SASL client context established. Negotiated QoP: "
+             + saslClient.getNegotiatedProperty(Sasl.QOP));
+       }
++      return true;
+     } catch (IOException e) {
+-      saslClient.dispose();
++      try {
++        saslClient.dispose();
++      } catch (SaslException ignored) {
++        // ignore further exceptions during cleanup
++      }
+       throw e;
+     }
+   }
+diff --git a/src/core/org/apache/hadoop/security/SaslRpcServer.java b/src/core/org/apache/hadoop/security/SaslRpcServer.java
+index 9aa0ce4..e8ed9d7 100644
+--- a/src/core/org/apache/hadoop/security/SaslRpcServer.java
++++ b/src/core/org/apache/hadoop/security/SaslRpcServer.java
+@@ -55,6 +55,7 @@ public class SaslRpcServer {
+     // Request mutual authentication
+     SASL_PROPS.put(Sasl.SERVER_AUTH, "true");
+   }
++  public static final int SWITCH_TO_SIMPLE_AUTH = -88;
+ 
+   static String encodeIdentifier(byte[] identifier) {
+     return new String(Base64.encodeBase64(identifier));
+diff --git a/src/test/findbugsExcludeFile.xml b/src/test/findbugsExcludeFile.xml
+index f885b08..2e652b0 100644
+--- a/src/test/findbugsExcludeFile.xml
++++ b/src/test/findbugsExcludeFile.xml
+@@ -89,6 +89,14 @@
+        <Class name="org.apache.hadoop.mapred.FileOutputCommitter" />
+        <Bug pattern="NM_WRONG_PACKAGE_INTENTIONAL" />
+      </Match>
++     <!--
++       Further SaslException should be ignored during cleanup and
++       original exception should be re-thrown.
++     -->
++     <Match>
++       <Class name="org.apache.hadoop.security.SaslRpcClient" />
++       <Bug pattern="DE_MIGHT_IGNORE" />
++     </Match>
+     <!--
+        JobTracker's static variables should be ignored
+      -->
+diff --git a/src/test/org/apache/hadoop/ipc/TestSaslRPC.java b/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
+index 11d7a70..3cfbe19 100644
+--- a/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
++++ b/src/test/org/apache/hadoop/ipc/TestSaslRPC.java
+@@ -75,20 +75,14 @@ public class TestSaslRPC {
+     final static Text KIND_NAME = new Text("test.token");
+     
+     public TestTokenIdentifier() {
+-      this.tokenid = new Text();
+-      this.realUser = new Text();
++      this(new Text(), new Text());
+     }
+     public TestTokenIdentifier(Text tokenid) {
+-      this.tokenid = tokenid;
+-      this.realUser = new Text();
++      this(tokenid, new Text());
+     }
+     public TestTokenIdentifier(Text tokenid, Text realUser) {
+-      this.tokenid = tokenid;
+-      if (realUser == null) {
+-        this.realUser = new Text();
+-      } else {
+-        this.realUser = realUser;
+-      }
++      this.tokenid = tokenid == null ? new Text() : tokenid;
++      this.realUser = realUser == null ? new Text() : realUser;
+     }
+     @Override
+     public Text getKind() {
+@@ -96,7 +90,7 @@ public class TestSaslRPC {
+     }
+     @Override
+     public UserGroupInformation getUser() {
+-      if ((realUser == null) || ("".equals(realUser.toString()))) {
++      if ("".equals(realUser.toString())) {
+         return UserGroupInformation.createRemoteUser(tokenid.toString());
+       } else {
+         UserGroupInformation realUgi = UserGroupInformation
+@@ -114,9 +108,7 @@ public class TestSaslRPC {
+     @Override
+     public void write(DataOutput out) throws IOException {
+       tokenid.write(out);
+-      if (realUser != null) {
+-        realUser.write(out);
+-      }
++      realUser.write(out);
+     }
+   }
+   
+@@ -170,6 +162,20 @@ public class TestSaslRPC {
+     final Server server = RPC.getServer(
+         new TestSaslImpl(), ADDRESS, 0, 5, true, conf, sm);
+ 
++    doDigestRpc(server, sm);
++  }
++  
++  @Test
++  public void testSecureToInsecureRpc() throws Exception {
++    Server server = RPC.getServer(
++        new TestSaslImpl(), ADDRESS, 0, 5, true, conf, null);
++    server.disableSecurity();
++    TestTokenSecretManager sm = new TestTokenSecretManager();
++    doDigestRpc(server, sm);
++  }
++  
++  private void doDigestRpc(Server server, TestTokenSecretManager sm)
++      throws Exception {
+     server.start();
+ 
+     final UserGroupInformation current = UserGroupInformation.getCurrentUser();
+-- 
+1.7.0.4
+

@@ -1,0 +1,322 @@
+From cf50e5a91e7159f7f06518162a7400cc681c7f08 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 6 May 2010 11:27:20 -0700
+Subject: [PATCH 0640/1179] HADOOP-6701. Incorrect exit codes for "dfs -chown", "dfs -chgrp"
+
+Patch: https://issues.apache.org/jira/secure/attachment/12442987/HADOOP-6701-v20.patch
+Author: Ravi Phulari
+Ref: YDH
+---
+ src/core/org/apache/hadoop/fs/FsShell.java         |   11 +-
+ .../org/apache/hadoop/fs/FsShellPermissions.java   |    4 +-
+ .../apache/hadoop/fs/TestFsShellReturnCode.java    |  240 ++++++++++++++++++++
+ 3 files changed, 251 insertions(+), 4 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/fs/TestFsShellReturnCode.java
+
+diff --git a/src/core/org/apache/hadoop/fs/FsShell.java b/src/core/org/apache/hadoop/fs/FsShell.java
+index 96e463e..225e6a1 100644
+--- a/src/core/org/apache/hadoop/fs/FsShell.java
++++ b/src/core/org/apache/hadoop/fs/FsShell.java
+@@ -1248,6 +1248,12 @@ public class FsShell extends Configured implements Tool {
+       Path srcPath = new Path(args[i]);
+       FileSystem srcFs = srcPath.getFileSystem(getConf());
+       Path[] paths = FileUtil.stat2Paths(srcFs.globStatus(srcPath), srcPath);
++      // if nothing matches to given glob pattern then increment error count
++      if(paths.length==0) {
++        System.err.println(handler.getName() + 
++            ": could not get status for '" + args[i] + "'");
++        errors++;
++      }
+       for(Path path : paths) {
+         try {
+           FileStatus file = srcFs.getFileStatus(path);
+@@ -1263,7 +1269,8 @@ public class FsShell extends Configured implements Tool {
+             (e.getCause().getMessage() != null ? 
+                 e.getCause().getLocalizedMessage() : "null"));
+           System.err.println(handler.getName() + ": could not get status for '"
+-                                        + path + "': " + msg.split("\n")[0]);        
++                                        + path + "': " + msg.split("\n")[0]);
++          errors++;
+         }
+       }
+     }
+@@ -1819,7 +1826,7 @@ public class FsShell extends Configured implements Tool {
+       } else if ("-chmod".equals(cmd) || 
+                  "-chown".equals(cmd) ||
+                  "-chgrp".equals(cmd)) {
+-        FsShellPermissions.changePermissions(fs, cmd, argv, i, this);
++        exitCode = FsShellPermissions.changePermissions(fs, cmd, argv, i, this);
+       } else if ("-ls".equals(cmd)) {
+         if (i < argv.length) {
+           exitCode = doall(cmd, argv, i);
+diff --git a/src/core/org/apache/hadoop/fs/FsShellPermissions.java b/src/core/org/apache/hadoop/fs/FsShellPermissions.java
+index da6fd86..0874952 100644
+--- a/src/core/org/apache/hadoop/fs/FsShellPermissions.java
++++ b/src/core/org/apache/hadoop/fs/FsShellPermissions.java
+@@ -150,7 +150,7 @@ class FsShellPermissions {
+     }
+   }
+ 
+-  static void changePermissions(FileSystem fs, String cmd, 
++  static int changePermissions(FileSystem fs, String cmd, 
+                                 String argv[], int startIndex, FsShell shell)
+                                 throws IOException {
+     CmdHandler handler = null;
+@@ -174,6 +174,6 @@ class FsShellPermissions {
+       handler = new ChgrpHandler(fs, argv[startIndex++]);
+     }
+ 
+-    shell.runCmdHandler(handler, argv, startIndex, recursive);
++    return shell.runCmdHandler(handler, argv, startIndex, recursive);
+   } 
+ }
+diff --git a/src/test/org/apache/hadoop/fs/TestFsShellReturnCode.java b/src/test/org/apache/hadoop/fs/TestFsShellReturnCode.java
+new file mode 100644
+index 0000000..fa29955
+--- /dev/null
++++ b/src/test/org/apache/hadoop/fs/TestFsShellReturnCode.java
+@@ -0,0 +1,240 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.fs;
++
++import org.apache.commons.logging.Log;
++import org.apache.commons.logging.LogFactory;
++import org.apache.hadoop.conf.Configuration;
++
++import org.apache.hadoop.fs.FileSystem;
++
++import org.junit.Test;
++import org.junit.Assert;
++import static org.junit.Assert.assertTrue;
++
++/**
++ * This test validates that chmod, chown, chgrp returning correct exit codes
++ * 
++ */
++public class TestFsShellReturnCode {
++  private static final Log LOG = LogFactory
++      .getLog("org.apache.hadoop.fs.TestFsShellReturnCode");
++
++  private static final Configuration conf = new Configuration();
++  private FileSystem fs;
++
++  private static String TEST_ROOT_DIR = System.getProperty("test.build.data",
++      "build/test/data/testCHReturnCode");
++
++  static void writeFile(FileSystem fs, Path name) throws Exception {
++    FSDataOutputStream stm = fs.create(name);
++    stm.writeBytes("42\n");
++    stm.close();
++  }
++
++  public void verify(FileSystem fs, String cmd, String argv[], int cmdIndex,
++      FsShell fsShell, int exitCode) throws Exception {
++    int ec;
++    ec = FsShellPermissions.changePermissions(fs, cmd, argv, cmdIndex, fsShell);
++    Assert.assertEquals(ec, exitCode);
++  }
++
++  /**
++   * Test Chmod 1. Create and write file on FS 2. Verify that exit code for
++   * chmod on existing file is 0 3. Verify that exit code for chmod on
++   * non-existing file is 1 4. Verify that exit code for chmod with glob input
++   * on non-existing file is 1 5. Verify that exit code for chmod with glob
++   * input on existing file in 0
++   * 
++   * @throws Exception
++   */
++  @Test
++  public void testChmod() throws Exception {
++
++    FsShell fsShell = new FsShell(conf);
++    if (this.fs == null) {
++      this.fs = FileSystem.get(fsShell.getConf());
++    }
++
++    final String f1 = TEST_ROOT_DIR + "/" + "testChmod/fileExists";
++    final String f2 = TEST_ROOT_DIR + "/" + "testChmod/fileDoesNotExist";
++    final String f3 = TEST_ROOT_DIR + "/" + "testChmod/nonExistingfiles*";
++
++    Path p1 = new Path(f1);
++
++    final Path p4 = new Path(TEST_ROOT_DIR + "/" + "testChmod/file1");
++    final Path p5 = new Path(TEST_ROOT_DIR + "/" + "testChmod/file2");
++    final Path p6 = new Path(TEST_ROOT_DIR + "/" + "testChmod/file3");
++
++    final String f7 = TEST_ROOT_DIR + "/" + "testChmod/file*";
++
++    FileSystem fileSys = FileSystem.getLocal(conf);
++
++    // create and write test file
++    writeFile(fileSys, p1);
++    assertTrue(fileSys.exists(p1));
++
++    // Test 1: Test 1: exit code for chmod on existing is 0
++    String argv[] = { "-chmod", "777", f1 };
++    verify(fs, "-chmod", argv, 1, fsShell, 0);
++
++    // Test 2: exit code for chmod on non-existing path is 1
++    String argv2[] = { "-chmod", "777", f2 };
++    verify(fs, "-chmod", argv2, 1, fsShell, 1);
++
++    // Test 3: exit code for chmod on non-existing path with globbed input is 1
++    String argv3[] = { "-chmod", "777", f3 };
++    verify(fs, "-chmod", argv3, 1, fsShell, 1);
++
++    // create required files
++    writeFile(fileSys, p4);
++    assertTrue(fileSys.exists(p4));
++    writeFile(fileSys, p5);
++    assertTrue(fileSys.exists(p5));
++    writeFile(fileSys, p6);
++    assertTrue(fileSys.exists(p6));
++
++    // Test 4: exit code for chmod on existing path with globbed input is 0
++    String argv4[] = { "-chmod", "777", f7 };
++    verify(fs, "-chmod", argv4, 1, fsShell, 0);
++
++  }
++
++  /**
++   * Test Chown 1. Create and write file on FS 2. Verify that exit code for
++   * Chown on existing file is 0 3. Verify that exit code for Chown on
++   * non-existing file is 1 4. Verify that exit code for Chown with glob input
++   * on non-existing file is 1 5. Verify that exit code for Chown with glob
++   * input on existing file in 0
++   * 
++   * @throws Exception
++   */
++  @Test
++  public void testChown() throws Exception {
++
++    FsShell fsShell = new FsShell(conf);
++    if (this.fs == null) {
++      this.fs = FileSystem.get(fsShell.getConf());
++    }
++
++    final String f1 = TEST_ROOT_DIR + "/" + "testChown/fileExists";
++    final String f2 = TEST_ROOT_DIR + "/" + "testChown/fileDoesNotExist";
++    final String f3 = TEST_ROOT_DIR + "/" + "testChown/nonExistingfiles*";
++
++    Path p1 = new Path(f1);
++
++    final Path p4 = new Path(TEST_ROOT_DIR + "/" + "testChown/file1");
++    final Path p5 = new Path(TEST_ROOT_DIR + "/" + "testChown/file2");
++    final Path p6 = new Path(TEST_ROOT_DIR + "/" + "testChown/file3");
++
++    final String f7 = TEST_ROOT_DIR + "/" + "testChown/file*";
++
++    FileSystem fileSys = FileSystem.getLocal(conf);
++
++    // create and write test file
++    writeFile(fileSys, p1);
++    assertTrue(fileSys.exists(p1));
++
++    // Test 1: exit code for chown on existing file is 0
++    String argv[] = { "-chown", "admin", f1 };
++    verify(fs, "-chown", argv, 1, fsShell, 0);
++
++    // Test 2: exit code for chown on non-existing path is 1
++    String argv2[] = { "-chown", "admin", f2 };
++    verify(fs, "-chown", argv2, 1, fsShell, 1);
++
++    // Test 3: exit code for chown on non-existing path with globbed input is 1
++    String argv3[] = { "-chown", "admin", f3 };
++    verify(fs, "-chown", argv3, 1, fsShell, 1);
++
++    // create required files
++    writeFile(fileSys, p4);
++    assertTrue(fileSys.exists(p4));
++    writeFile(fileSys, p5);
++    assertTrue(fileSys.exists(p5));
++    writeFile(fileSys, p6);
++    assertTrue(fileSys.exists(p6));
++
++    // Test 4: exit code for chown on existing path with globbed input is 0
++    String argv4[] = { "-chown", "admin", f7 };
++    verify(fs, "-chown", argv4, 1, fsShell, 0);
++
++  }
++
++  /**
++   * Test Chgrp 1. Create and write file on FS 2. Verify that exit code for
++   * chgrp on existing file is 0 3. Verify that exit code for chgrp on
++   * non-existing file is 1 4. Verify that exit code for chgrp with glob input
++   * on non-existing file is 1 5. Verify that exit code for chgrp with glob
++   * input on existing file in 0
++   * 
++   * @throws Exception
++   */
++  @Test
++  public void testChgrp() throws Exception {
++
++    FsShell fsShell = new FsShell(conf);
++    if (this.fs == null) {
++      this.fs = FileSystem.get(fsShell.getConf());
++    }
++
++    final String f1 = TEST_ROOT_DIR + "/" + "testChgrp/fileExists";
++    final String f2 = TEST_ROOT_DIR + "/" + "testChgrp/fileDoesNotExist";
++    final String f3 = TEST_ROOT_DIR + "/" + "testChgrp/nonExistingfiles*";
++
++    Path p1 = new Path(f1);
++
++    final Path p4 = new Path(TEST_ROOT_DIR + "/" + "testChgrp/file1");
++    final Path p5 = new Path(TEST_ROOT_DIR + "/" + "testChgrp/file2");
++    final Path p6 = new Path(TEST_ROOT_DIR + "/" + "testChgrp/file3");
++
++    final String f7 = TEST_ROOT_DIR + "/" + "testChgrp/file*";
++
++    FileSystem fileSys = FileSystem.getLocal(conf);
++
++    // create and write test file
++    writeFile(fileSys, p1);
++    assertTrue(fileSys.exists(p1));
++
++    // Test 1: exit code for chgrp on existing file is 0
++    String argv[] = { "-chgrp", "admin", f1 };
++    verify(fs, "-chgrp", argv, 1, fsShell, 0);
++
++    // Test 2: exit code for chgrp on non existing path is 1
++    String argv2[] = { "-chgrp", "admin", f2 };
++    verify(fs, "-chgrp", argv2, 1, fsShell, 1);
++
++    // Test 3: exit code for chgrp on non-existing path with globbed input is 1
++    String argv3[] = { "-chgrp", "admin", f3 };
++    verify(fs, "-chgrp", argv3, 1, fsShell, 1);
++
++    // create required files
++    writeFile(fileSys, p4);
++    assertTrue(fileSys.exists(p4));
++    writeFile(fileSys, p5);
++    assertTrue(fileSys.exists(p5));
++    writeFile(fileSys, p6);
++    assertTrue(fileSys.exists(p6));
++
++    // Test 4: exit code for chgrp on existing path with globbed input is 0
++    String argv4[] = { "-chgrp", "admin", f7 };
++    verify(fs, "-chgrp", argv4, 1, fsShell, 0);
++
++  }
++}
+\ No newline at end of file
+-- 
+1.7.0.4
+

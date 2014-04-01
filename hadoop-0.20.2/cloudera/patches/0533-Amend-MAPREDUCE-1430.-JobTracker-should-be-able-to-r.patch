@@ -1,0 +1,47 @@
+From 7187e0d7a8367e5e072b5e589db5becae0e6eb1d Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 3 Mar 2010 18:55:35 -0800
+Subject: [PATCH 0533/1179] Amend MAPREDUCE-1430. JobTracker should be able to renew delegation tokens for the jobs
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437822/1430-bp20-bugfix.patch
+Author: Devaraj Das
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobTracker.java       |    6 ++----
+ 1 files changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index 863bfe1..6c88da7 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -210,7 +210,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+ 
+   private MRAsyncDiskService asyncDiskService;
+   
+-  private Credentials tokenStorage;
+   private final JobTokenSecretManager jobTokenSecretManager
+     = new JobTokenSecretManager();
+ 
+@@ -1690,7 +1689,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+            * BACKPORTED (MAPREDUCE-873)
+            */
+           job = new JobInProgress(JobTracker.this, conf, null, 
+-                                  restartCount, tokenStorage);
++                                  restartCount, new Credentials() /*HACK*/);
+ 
+           // 2. Check if the user has appropriate access
+           // Get the user group info for the job's owner
+@@ -3691,9 +3690,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+     // Create the JobInProgress, do not lock the JobTracker since
+     // we are about to copy job.xml from HDFS
+     JobInProgress job = null;
+-    tokenStorage = ts;
+     try {
+-      job = new JobInProgress(this, this.conf, jobInfo, 0, tokenStorage);
++      job = new JobInProgress(this, this.conf, jobInfo, 0, ts);
+     } catch (Exception e) {
+       throw new IOException(e);
+     }
+-- 
+1.7.0.4
+

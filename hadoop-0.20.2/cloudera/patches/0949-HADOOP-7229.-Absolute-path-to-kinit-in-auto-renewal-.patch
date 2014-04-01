@@ -1,0 +1,50 @@
+From 71618e9eb918d8e27a57db8a40683bd8a3e0d7d1 Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Thu, 21 Apr 2011 17:35:44 -0700
+Subject: [PATCH 0949/1179] HADOOP-7229. Absolute path to kinit in auto-renewal thread
+
+Reason: Bug
+Author: Aaron T. Myers
+Ref: CDH-3024
+---
+ src/core/core-default.xml                          |   10 ++++++++++
+ .../hadoop/security/UserGroupInformation.java      |    2 +-
+ 2 files changed, 11 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/core-default.xml b/src/core/core-default.xml
+index 8cfce3f..d6fd0b2 100644
+--- a/src/core/core-default.xml
++++ b/src/core/core-default.xml
+@@ -76,6 +76,16 @@
+   </description>
+ </property>
+ 
++<property>
++  <name>hadoop.kerberos.kinit.command</name>
++  <value>kinit</value>
++  <description>Used to periodically renew Kerberos credentials when provided
++  to Hadoop. The default setting assumes that kinit is in the PATH of users
++  running the Hadoop client. Change this to the absolute path to kinit if this
++  is not the case.
++  </description>
++</property>
++
+ <!--- logging properties -->
+ 
+ <property>
+diff --git a/src/core/org/apache/hadoop/security/UserGroupInformation.java b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+index b2683b8..86565af 100644
+--- a/src/core/org/apache/hadoop/security/UserGroupInformation.java
++++ b/src/core/org/apache/hadoop/security/UserGroupInformation.java
+@@ -549,7 +549,7 @@ public class UserGroupInformation {
+ 
+           public void run() {
+             String cmd = conf.get("hadoop.kerberos.kinit.command",
+-                                  "/usr/kerberos/bin/kinit");
++                                  "kinit");
+             KerberosTicket tgt = getTGT();
+             if (tgt == null) {
+               return;
+-- 
+1.7.0.4
+

@@ -1,0 +1,705 @@
+<?xml version="1.0"?>
+<!--
+  Copyright 2002-2004 The Apache Software Foundation
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!DOCTYPE document PUBLIC "-//APACHE//DTD Documentation V2.0//EN" "http://forrest.apache.org/dtd/document-v20.dtd">
+<document>
+	<header>
+		<title>Commands Guide</title>
+	</header>
+	
+	<body>
+		<section>
+			<title>Overview</title>
+			<p>
+				All hadoop commands are invoked by the bin/hadoop script. Running the hadoop
+				script without any arguments prints the description for all commands.
+			</p>
+			<p>
+				<code>Usage: hadoop [--config confdir] [COMMAND] [GENERIC_OPTIONS] [COMMAND_OPTIONS]</code>
+			</p>
+			<p>
+				Hadoop has an option parsing framework that employs parsing generic options as well as running classes.
+			</p>
+			<table>
+			          <tr><th> COMMAND_OPTION </th><th> Description </th></tr>
+			
+			           <tr>
+			          	<td><code>--config confdir</code></td>
+			            <td>Overwrites the default Configuration directory. Default is ${HADOOP_HOME}/conf.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>GENERIC_OPTIONS</code></td>
+			            <td>The common set of options supported by multiple commands.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>COMMAND</code><br/><code>COMMAND_OPTIONS</code></td>
+			            <td>Various commands with their options are described in the following sections. The commands 
+			            have been grouped into <a href="commands_manual.html#User+Commands">User Commands</a> 
+			            and <a href="commands_manual.html#Administration+Commands">Administration Commands</a>.</td>
+			           </tr>
+			     </table>
+			 <section>
+				<title>Generic Options</title>
+				<p>
+				  The following options are supported by <a href="commands_manual.html#dfsadmin">dfsadmin</a>, 
+				  <a href="commands_manual.html#fs">fs</a>, <a href="commands_manual.html#fsck">fsck</a>, 
+				  <a href="commands_manual.html#job">job</a> and <a href="commands_manual.html#fetchdt">fetchdt</a>. 
+				  Applications should implement 
+				  <a href="ext:api/org/apache/hadoop/util/tool">Tool</a> to support
+				  <a href="ext:api/org/apache/hadoop/util/genericoptionsparser">
+				  GenericOptions</a>.
+				</p>
+			     <table>
+			          <tr><th> GENERIC_OPTION </th><th> Description </th></tr>
+			
+			           <tr>
+			          	<td><code>-conf &lt;configuration file&gt;</code></td>
+			            <td>Specify an application configuration file.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-D &lt;property=value&gt;</code></td>
+			            <td>Use value for given property.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-fs &lt;local|namenode:port&gt;</code></td>
+			            <td>Specify a namenode.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-jt &lt;local|jobtracker:port&gt;</code></td>
+			            <td>Specify a job tracker. Applies only to <a href="commands_manual.html#job">job</a>.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-files &lt;comma separated list of files&gt;</code></td>
+			            <td>Specify comma separated files to be copied to the map reduce cluster. 
+			            Applies only to <a href="commands_manual.html#job">job</a>.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-libjars &lt;comma seperated list of jars&gt;</code></td>
+			            <td>Specify comma separated jar files to include in the classpath. 
+			            Applies only to <a href="commands_manual.html#job">job</a>.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-archives &lt;comma separated list of archives&gt;</code></td>
+			            <td>Specify comma separated archives to be unarchived on the compute machines. 
+			            Applies only to <a href="commands_manual.html#job">job</a>.</td>
+			           </tr>
+				</table>
+			</section>	   
+		</section>
+		
+		<section>
+			<title> User Commands </title>
+			<p>Commands useful for users of a hadoop cluster.</p>
+			<section>
+				<title> archive </title>
+				<p>
+					Creates a hadoop archive. More information can be found at <a href="hadoop_archives.html">Hadoop Archives</a>.
+				</p>
+				<p>
+					<code>Usage: hadoop archive -archiveName NAME &lt;src&gt;* &lt;dest&gt;</code>
+				</p>
+				<table>
+			          <tr><th> COMMAND_OPTION </th><th> Description </th></tr>
+					   <tr>
+			          	<td><code>-archiveName NAME</code></td>
+			            <td>Name of the archive to be created.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>src</code></td>
+			            <td>Filesystem pathnames which work as usual with regular expressions.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>dest</code></td>
+			            <td>Destination directory which would contain the archive.</td>
+			           </tr>
+			     </table>
+			</section>
+			
+			<section>
+				<title> distcp </title>
+				<p>
+					Copy file or directories recursively. More information can be found at <a href="distcp.html">Hadoop DistCp Guide</a>.
+				</p>
+				<p>
+					<code>Usage: hadoop distcp &lt;srcurl&gt; &lt;desturl&gt;</code>
+				</p>
+				<table>
+			          <tr><th> COMMAND_OPTION </th><th> Description </th></tr>
+			
+			           <tr>
+			          	<td><code>srcurl</code></td>
+			            <td>Source Url</td>
+			           </tr>
+			           <tr>
+			          	<td><code>desturl</code></td>
+			            <td>Destination Url</td>
+			           </tr>
+			     </table>
+			</section>
+			       
+			<section>
+				<title> fs </title>
+				<p>
+					<code>Usage: hadoop fs [</code><a href="commands_manual.html#Generic+Options">GENERIC_OPTIONS</a><code>] 
+					[COMMAND_OPTIONS]</code>
+				</p>
+				<p>
+					Runs a generic filesystem user client.
+				</p>
+				<p>
+					The various COMMAND_OPTIONS can be found at <a href="file_system_shell.html">File System Shell Guide</a>.
+				</p>   
+			</section>
+			
+			<section>
+				<title> fsck </title>
+				<p>
+					Runs a HDFS filesystem checking utility. See <a href="hdfs_user_guide.html#Fsck">Fsck</a> for more info.
+				</p> 
+				<p><code>Usage: hadoop fsck [</code><a href="commands_manual.html#Generic+Options">GENERIC_OPTIONS</a><code>] 
+				&lt;path&gt; [-move | -delete | -openforwrite] [-files [-blocks 
+				[-locations | -racks]]]</code></p>
+				<table>
+			          <tr><th> COMMAND_OPTION </th><th> Description </th></tr>
+			          <tr>
+			            <td><code>&lt;path&gt;</code></td>
+			            <td>Start checking from this path.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-move</code></td>
+			            <td>Move corrupted files to /lost+found</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-delete</code></td>
+			            <td>Delete corrupted files.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-openforwrite</code></td>
+			            <td>Print out files opened for write.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-files</code></td>
+			            <td>Print out files being checked.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-blocks</code></td>
+			            <td>Print out block report.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-locations</code></td>
+			            <td>Print out locations for every block.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-racks</code></td>
+			            <td>Print out network topology for data-node locations.</td>
+			           </tr>
+					</table>
+			</section>
+			
+			<section>
+                <title> fetchdt </title>
+                <p>
+                    Gets Delegation Token from a NameNode. See <a href="hdfs_user_guide.html#fetchdt">fetchdt</a> for more info.
+                </p> 
+                <p><code>Usage: hadoop fetchdt [</code><a href="commands_manual.html#Generic+Options">GENERIC_OPTIONS</a><code>] 
+                [--webservice &lt;namenode_http_addr&gt;] &lt;path&gt; </code></p>
+                <table>
+                      <tr><th> COMMAND_OPTION </th><th> Description </th></tr>
+                      <tr>
+                        <td><code>&lt;fileName&gt;</code></td>
+                        <td>File name to store the token into.</td>
+                       </tr>
+                       <tr>
+                        <td><code>--webservice &lt;https_address&gt;</code></td>
+                        <td>use http protocol instead of RPC</td>
+                       </tr>
+                    </table>
+            </section>
+            
+			<section>
+				<title> jar </title>
+				<p>
+					Runs a jar file. Users can bundle their Map Reduce code in a jar file and execute it using this command.
+				</p> 
+				<p>
+					<code>Usage: hadoop jar &lt;jar&gt; [mainClass] args...</code>
+				</p>
+				<p>
+					The streaming jobs are run via this command. Examples can be referred from 
+					<a href="streaming.html#More+usage+examples">Streaming examples</a>
+				</p>
+				<p>
+					Word count example is also run using jar command. It can be referred from
+					<a href="mapred_tutorial.html#Usage">Wordcount example</a>
+				</p>
+			</section>
+			
+			<section>
+				<title> job </title>
+				<p>
+					Command to interact with Map Reduce Jobs.
+				</p>
+				<p>
+					<code>Usage: hadoop job [</code><a href="commands_manual.html#Generic+Options">GENERIC_OPTIONS</a><code>] 
+					[-submit &lt;job-file&gt;] | [-status &lt;job-id&gt;] | 
+					[-counter &lt;job-id&gt; &lt;group-name&gt; &lt;counter-name&gt;] | [-kill &lt;job-id&gt;] | 
+					[-events &lt;job-id&gt; &lt;from-event-#&gt; &lt;#-of-events&gt;] | [-history [all] &lt;jobOutputDir&gt;] |
+					[-list [all]] | [-kill-task &lt;task-id&gt;] | [-fail-task &lt;task-id&gt;] | 
+          [-set-priority &lt;job-id&gt; &lt;priority&gt;]</code>
+				</p>
+				<table>
+			          <tr><th> COMMAND_OPTION </th><th> Description </th></tr>
+			
+			           <tr>
+			          	<td><code>-submit &lt;job-file&gt;</code></td>
+			            <td>Submits the job.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-status &lt;job-id&gt;</code></td>
+			            <td>Prints the map and reduce completion percentage and all job counters.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-counter &lt;job-id&gt; &lt;group-name&gt; &lt;counter-name&gt;</code></td>
+			            <td>Prints the counter value.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-kill &lt;job-id&gt;</code></td>
+			            <td>Kills the job.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-events &lt;job-id&gt; &lt;from-event-#&gt; &lt;#-of-events&gt;</code></td>
+			            <td>Prints the events' details received by jobtracker for the given range.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-history [all] &lt;jobOutputDir&gt;</code></td>
+			            <td>-history &lt;jobOutputDir&gt; prints job details, failed and killed tip details. More details 
+			            about the job such as successful tasks and task attempts made for each task can be viewed by 
+			            specifying the [all] option. </td>
+			           </tr>
+			           <tr>
+			          	<td><code>-list [all]</code></td>
+			            <td>-list all displays all jobs. -list displays only jobs which are yet to complete.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-kill-task &lt;task-id&gt;</code></td>
+			            <td>Kills the task. Killed tasks are NOT counted against failed attempts.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-fail-task &lt;task-id&gt;</code></td>
+			            <td>Fails the task. Failed tasks are counted against failed attempts.</td>
+			           </tr>
+                 <tr>
+                  <td><code>-set-priority &lt;job-id&gt; &lt;priority&gt;</code></td>
+                  <td>Changes the priority of the job. 
+                  Allowed priority values are VERY_HIGH, HIGH, NORMAL, LOW, VERY_LOW</td>
+                 </tr>
+					</table>
+			</section>
+			
+			<section>
+				<title> pipes </title>
+				<p>
+					Runs a pipes job.
+				</p>
+				<p>
+					<code>Usage: hadoop pipes [-conf &lt;path&gt;] [-jobconf &lt;key=value&gt;, &lt;key=value&gt;, ...] 
+					[-input &lt;path&gt;] [-output &lt;path&gt;] [-jar &lt;jar file&gt;] [-inputformat &lt;class&gt;] 
+					[-map &lt;class&gt;] [-partitioner &lt;class&gt;] [-reduce &lt;class&gt;] [-writer &lt;class&gt;] 
+					[-program &lt;executable&gt;] [-reduces &lt;num&gt;] </code>
+				</p>
+				<table>
+			          <tr><th> COMMAND_OPTION </th><th> Description </th></tr>
+			
+			          <tr>
+			          	<td><code>-conf &lt;path&gt;</code></td>
+			            <td>Configuration for job</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-jobconf &lt;key=value&gt;, &lt;key=value&gt;, ...</code></td>
+			            <td>Add/override configuration for job</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-input &lt;path&gt;</code></td>
+			            <td>Input directory</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-output &lt;path&gt;</code></td>
+			            <td>Output directory</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-jar &lt;jar file&gt;</code></td>
+			            <td>Jar filename</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-inputformat &lt;class&gt;</code></td>
+			            <td>InputFormat class</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-map &lt;class&gt;</code></td>
+			            <td>Java Map class</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-partitioner &lt;class&gt;</code></td>
+			            <td>Java Partitioner</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-reduce &lt;class&gt;</code></td>
+			            <td>Java Reduce class</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-writer &lt;class&gt;</code></td>
+			            <td>Java RecordWriter</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-program &lt;executable&gt;</code></td>
+			            <td>Executable URI</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-reduces &lt;num&gt;</code></td>
+			            <td>Number of reduces</td>
+			           </tr>
+					</table>
+			</section>
+      <section>
+        <title> queue </title>
+        <p>
+          command to interact and view Job Queue information
+        </p>
+        <p>
+          <code>Usage : hadoop queue [-list] | [-info &lt;job-queue-name&gt; [-showJobs]] | [-showacls]</code>
+        </p>
+        <table>
+        <tr>
+          <th> COMMAND_OPTION </th><th> Description </th>
+        </tr>
+        <tr>
+          <td><code>-list</code> </td>
+          <td>Gets list of Job Queues configured in the system. Along with scheduling information
+          associated with the job queues.
+          </td>
+        </tr>
+        <tr>
+          <td><code>-info &lt;job-queue-name&gt; [-showJobs]</code></td>
+          <td>
+           Displays the job queue information and associated scheduling information of particular
+           job queue. If -showJobs options is present a list of jobs submitted to the particular job
+           queue is displayed. 
+          </td>
+        </tr>
+        <tr>
+          <td><code>-showacls</code></td>
+          <td>Displays the queue name and associated queue operations allowed for the current user.
+          The list consists of only those queues to which the user has access.
+          </td>
+          </tr>
+        </table>
+      </section>  	
+			<section>
+				<title> version </title>
+				<p>
+					Prints the version.
+				</p> 
+				<p>
+					<code>Usage: hadoop version</code>
+				</p>
+			</section>
+			<section>
+				<title> CLASSNAME </title>
+				<p>
+					 hadoop script can be used to invoke any class.
+				</p>
+				<p>
+					<code>Usage: hadoop CLASSNAME</code>
+				</p>
+				<p>
+					 Runs the class named CLASSNAME.
+				</p>
+			</section>
+			<section>
+				<title> classpath </title>
+				<p>
+					Prints the class path needed to get the Hadoop jar and the required libraries.
+				</p>
+				<p>
+					<code>Usage: hadoop classpath</code>
+				</p>
+			</section>
+    </section>
+		<section>
+			<title> Administration Commands </title>
+			<p>Commands useful for administrators of a hadoop cluster.</p>
+			<section>
+				<title> balancer </title>
+				<p>
+					Runs a cluster balancing utility. An administrator can simply press Ctrl-C to stop the 
+					rebalancing process. See <a href="hdfs_user_guide.html#Rebalancer">Rebalancer</a> for more details.
+				</p>
+				<p>
+					<code>Usage: hadoop balancer [-threshold &lt;threshold&gt;]</code>
+				</p>
+				<table>
+			          <tr><th> COMMAND_OPTION </th><th> Description </th></tr>
+			
+			           <tr>
+			          	<td><code>-threshold &lt;threshold&gt;</code></td>
+			            <td>Percentage of disk capacity. This overwrites the default threshold.</td>
+			           </tr>
+			     </table>
+			</section>
+			
+			<section>
+				<title> daemonlog </title>
+				<p>
+					 Get/Set the log level for each daemon.
+				</p> 
+				<p>
+					<code>Usage: hadoop daemonlog  -getlevel &lt;host:port&gt; &lt;name&gt;</code><br/>
+					<code>Usage: hadoop daemonlog  -setlevel &lt;host:port&gt; &lt;name&gt; &lt;level&gt;</code>
+				</p>
+				<table>
+			          <tr><th> COMMAND_OPTION </th><th> Description </th></tr>
+			
+			           <tr>
+			          	<td><code>-getlevel &lt;host:port&gt; &lt;name&gt;</code></td>
+			            <td>Prints the log level of the daemon running at &lt;host:port&gt;. 
+			            This command internally connects to http://&lt;host:port&gt;/logLevel?log=&lt;name&gt;</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-setlevel &lt;host:port&gt; &lt;name&gt; &lt;level&gt;</code></td>
+			            <td>Sets the log level of the daemon running at &lt;host:port&gt;. 
+			            This command internally connects to http://&lt;host:port&gt;/logLevel?log=&lt;name&gt;</td>
+			           </tr>
+			     </table>
+			</section>
+			
+			<section>
+				<title> datanode</title>
+				<p>
+					Runs a HDFS datanode.
+				</p> 
+				<p>
+					<code>Usage: hadoop datanode [-rollback]</code>
+				</p>
+				<table>
+			          <tr><th> COMMAND_OPTION </th><th> Description </th></tr>
+			
+			           <tr>
+			          	<td><code>-rollback</code></td>
+			            <td>Rollsback the datanode to the previous version. This should be used after stopping the datanode 
+			            and distributing the old hadoop version.</td>
+			           </tr>
+			     </table>
+			</section>
+			
+			<section>
+				<title> dfsadmin </title>
+				<p>
+					Runs a HDFS dfsadmin client.
+				</p> 
+				<p>
+					<code>Usage: hadoop dfsadmin  [</code><a href="commands_manual.html#Generic+Options">GENERIC_OPTIONS</a><code>] [-report] [-safemode enter | leave | get | wait] [-refreshNodes]
+					 [-finalizeUpgrade] [-upgradeProgress status | details | force] [-metasave filename] 
+					 [-setQuota &lt;quota&gt; &lt;dirname&gt;...&lt;dirname&gt;] [-clrQuota &lt;dirname&gt;...&lt;dirname&gt;] 
+					 [-help [cmd]]</code>
+				</p>
+				<table>
+			          <tr><th> COMMAND_OPTION </th><th> Description </th></tr>
+			
+			           <tr>
+			          	<td><code>-report</code></td>
+			            <td>Reports basic filesystem information and statistics.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-safemode enter | leave | get | wait</code></td>
+			            <td>Safe mode maintenance command.
+                Safe mode is a Namenode state in which it <br/>
+                        1.  does not accept changes to the name space (read-only) <br/> 
+                        2.  does not replicate or delete blocks. <br/>
+                Safe mode is entered automatically at Namenode startup, and
+                leaves safe mode automatically when the configured minimum
+                percentage of blocks satisfies the minimum replication
+                condition.  Safe mode can also be entered manually, but then
+                it can only be turned off manually as well.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-refreshNodes</code></td>
+			            <td>Re-read the hosts and exclude files to update the set
+                of Datanodes that are allowed to connect to the Namenode
+                and those that should be decommissioned or recommissioned.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-finalizeUpgrade</code></td>
+			            <td>Finalize upgrade of HDFS.
+                Datanodes delete their previous version working directories,
+                followed by Namenode doing the same.
+                This completes the upgrade process.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-upgradeProgress status | details | force</code></td>
+			            <td>Request current distributed upgrade status,
+                a detailed status or force the upgrade to proceed.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-metasave filename</code></td>
+			            <td>Save Namenode's primary data structures
+                to &lt;filename&gt; in the directory specified by hadoop.log.dir property.
+                &lt;filename&gt; will contain one line for each of the following <br/>
+                        1. Datanodes heart beating with Namenode<br/>
+                        2. Blocks waiting to be replicated<br/>
+                        3. Blocks currrently being replicated<br/>
+                        4. Blocks waiting to be deleted</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-setQuota &lt;quota&gt; &lt;dirname&gt;...&lt;dirname&gt;</code></td>
+			            <td>Set the quota &lt;quota&gt; for each directory &lt;dirname&gt;.
+                The directory quota is a long integer that puts a hard limit on the number of names in the directory tree.<br/>
+                Best effort for the directory, with faults reported if<br/>
+                1. N is not a positive integer, or<br/>
+                2. user is not an administrator, or<br/>
+                3. the directory does not exist or is a file, or<br/>
+                4. the directory would immediately exceed the new quota.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-clrQuota &lt;dirname&gt;...&lt;dirname&gt;</code></td>
+			            <td>Clear the quota for each directory &lt;dirname&gt;.<br/>
+                Best effort for the directory. with fault reported if<br/>
+                1. the directory does not exist or is a file, or<br/>
+                2. user is not an administrator.<br/>
+                It does not fault if the directory has no quota.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-help [cmd]</code></td>
+			            <td> Displays help for the given command or all commands if none
+                is specified.</td>
+			           </tr>
+			     </table>
+			</section>
+			<section>
+        <title>mradmin</title>
+        <p>Runs MR admin client</p>
+        <p><code>Usage: hadoop mradmin  [</code>
+        <a href="commands_manual.html#Generic+Options">GENERIC_OPTIONS</a>
+        <code>] [-refreshQueueAcls] </code></p>
+        <table>
+        <tr>
+        <th> COMMAND_OPTION </th><th> Description </th>
+        </tr>
+        <tr>
+        <td><code>-refreshQueueAcls</code></td>
+        <td> Refresh the queue acls used by hadoop, to check access during submissions
+        and administration of the job by the user. The properties present in
+        <code>mapred-queue-acls.xml</code> is reloaded by the queue manager.</td>
+        </tr>
+        </table>
+      </section>
+      <section>
+	<title> jobtracker </title>
+	<p>Runs the MapReduce job Tracker node.</p> 
+	<p><code>Usage: hadoop jobtracker [-dumpConfiguration]</code></p>
+        <table>
+        <tr>
+        <th>COMMAND_OPTION</th><th> Description</th>
+        </tr>
+        <tr>
+        <td><code>-dumpConfiguration</code></td>
+        <td> Dumps the configuration used by the JobTracker alongwith queue
+        configuration in JSON format into Standard output used by the 
+        jobtracker and exits.</td>
+        </tr>
+        </table>
+				
+      </section>
+			
+			<section>
+				<title> namenode </title>
+				<p>
+					Runs the namenode. More info about the upgrade, rollback and finalize is at 
+					<a href="hdfs_user_guide.html#Upgrade+and+Rollback">Upgrade Rollback</a>
+				</p>
+				<p>
+					<code>Usage: hadoop namenode [-format] | [-upgrade] | [-rollback] | [-finalize] | [-importCheckpoint]</code>
+				</p>
+				<table>
+			          <tr><th> COMMAND_OPTION </th><th> Description </th></tr>
+			
+			           <tr>
+			          	<td><code>-format</code></td>
+			            <td>Formats the namenode. It starts the namenode, formats it and then shut it down.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-upgrade</code></td>
+			            <td>Namenode should be started with upgrade option after the distribution of new hadoop version.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-rollback</code></td>
+			            <td>Rollsback the namenode to the previous version. This should be used after stopping the cluster 
+			            and distributing the old hadoop version.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-finalize</code></td>
+			            <td>Finalize will remove the previous state of the files system. Recent upgrade will become permanent. 
+			            Rollback option will not be available anymore. After finalization it shuts the namenode down.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-importCheckpoint</code></td>
+			            <td>Loads image from a checkpoint directory and save it into the current one. Checkpoint dir 
+			            is read from property fs.checkpoint.dir</td>
+			           </tr>
+			     </table>
+			</section>
+			
+			<section>
+				<title> secondarynamenode </title>
+				<p>
+					Runs the HDFS secondary namenode. See <a href="hdfs_user_guide.html#Secondary+Namenode">Secondary Namenode</a> 
+					for more info.
+				</p>
+				<p>
+					<code>Usage: hadoop secondarynamenode [-checkpoint [force]] | [-geteditsize]</code>
+				</p>
+				<table>
+			          <tr><th> COMMAND_OPTION </th><th> Description </th></tr>
+			
+			           <tr>
+			          	<td><code>-checkpoint [force]</code></td>
+			            <td>Checkpoints the Secondary namenode if EditLog size >= fs.checkpoint.size. 
+			            If -force is used, checkpoint irrespective of EditLog size.</td>
+			           </tr>
+			           <tr>
+			          	<td><code>-geteditsize</code></td>
+			            <td>Prints the EditLog size.</td>
+			           </tr>
+			     </table>
+			</section>
+			
+			<section>
+				<title> tasktracker </title>
+				<p>
+					Runs a MapReduce task Tracker node.
+				</p> 
+				<p>
+					<code>Usage: hadoop tasktracker</code>
+				</p>
+			</section>
+			
+		</section>
+		
+		
+		      
+
+	</body>
+</document>      

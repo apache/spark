@@ -1,0 +1,59 @@
+From 51399a0f149292ee18138646488a8070c8b7f34c Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 25 Jan 2011 15:03:29 -0800
+Subject: [PATCH 0791/1179] HADOOP-7118. Fix NullPointerException in Configuration.writeXml
+
+Reason: Bug fix
+Author: Todd Lipcon
+Ref: CDH-2558
+---
+ src/core/org/apache/hadoop/conf/Configuration.java |    2 +-
+ .../org/apache/hadoop/conf/TestConfiguration.java  |   12 +++++++++++-
+ 2 files changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/conf/Configuration.java b/src/core/org/apache/hadoop/conf/Configuration.java
+index 5554ffe..b54730f 100644
+--- a/src/core/org/apache/hadoop/conf/Configuration.java
++++ b/src/core/org/apache/hadoop/conf/Configuration.java
+@@ -1416,7 +1416,6 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+   public void writeXml(Writer out) throws IOException {
+     Document doc = asXmlDocument();
+ 
+-    Properties properties = getProps();
+     try {
+       DOMSource source = new DOMSource(doc);
+       StreamResult result = new StreamResult(out);
+@@ -1446,6 +1445,7 @@ public class Configuration implements Iterable<Map.Entry<String,String>>,
+     Element conf = doc.createElement("configuration");
+     doc.appendChild(conf);
+     conf.appendChild(doc.createTextNode("\n"));
++    getProps(); // ensure properties is set
+     for (Enumeration e = properties.keys(); e.hasMoreElements();) {
+       String name = (String)e.nextElement();
+       Object object = properties.get(name);
+diff --git a/src/test/org/apache/hadoop/conf/TestConfiguration.java b/src/test/org/apache/hadoop/conf/TestConfiguration.java
+index 20b3138..a73f23a 100644
+--- a/src/test/org/apache/hadoop/conf/TestConfiguration.java
++++ b/src/test/org/apache/hadoop/conf/TestConfiguration.java
+@@ -259,7 +259,17 @@ public class TestConfiguration extends TestCase {
+       fileResource.toString();
+     assertEquals(expectedOutput, conf.toString());
+   }
+-  
++
++  public void testWriteXml() throws IOException {
++    Configuration conf = new Configuration();
++    ByteArrayOutputStream baos = new ByteArrayOutputStream(); 
++    conf.writeXml(baos);
++    String result = baos.toString();
++    assertTrue("Result has proper header", result.startsWith(
++        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?><configuration>"));
++    assertTrue("Result has proper footer", result.endsWith("</configuration>"));
++  }
++
+   public void testIncludes() throws Exception {
+     tearDown();
+     System.out.println("XXX testIncludes");
+-- 
+1.7.0.4
+

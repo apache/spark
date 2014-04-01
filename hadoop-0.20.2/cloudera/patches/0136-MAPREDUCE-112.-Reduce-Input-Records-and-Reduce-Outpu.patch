@@ -1,0 +1,30 @@
+From b2cc8e02f37a1604bb076acefff0ebf016c249d5 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:20:40 -0800
+Subject: [PATCH 0136/1179] MAPREDUCE-112. Reduce Input Records and Reduce Output Records counters are not being set when using the new Mapreduce reducer API
+
+Description: After running the examples/wordcount (which uses the new API), the reduce input and output record counters always show 0. This is because these counters are not getting updated in the new API
+This adds counters for reduce input, output records to the new API.
+Reason: Bugfix
+Author: Jothi Padmanabhan
+Ref: UNKNOWN
+---
+ .../mapreduce/mock/MockReduceContextWrapper.java   |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java
+index f1610a1..f785a02 100644
+--- a/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java
++++ b/src/contrib/mrunit/src/java/org/apache/hadoop/mrunit/mapreduce/mock/MockReduceContextWrapper.java
+@@ -67,7 +67,7 @@ public class MockReduceContextWrapper<KEYIN, VALUEIN, KEYOUT, VALUEOUT>
+ 
+       super(new Configuration(),
+             new TaskAttemptID("mrunit-jt", 0, false, 0, 0),
+-            new MockRawKeyValueIterator(), null, null,
++            new MockRawKeyValueIterator(), null, null, null,
+             new MockOutputCommitter(), new MockReporter(counters), null,
+             (Class) Text.class, (Class) Text.class);
+       this.inputIter = in.iterator();
+-- 
+1.7.0.4
+

@@ -1,0 +1,52 @@
+From 24a779aa3f4ee27c596f26c0a524433422c91689 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 13 May 2010 19:08:04 -0700
+Subject: [PATCH 0651/1179] HADOOP-6760. WebServer shouldn't increase port number in case of negative port setting caused by Jetty's race
+
+Patch: https://issues.apache.org/jira/secure/attachment/12444455/HADOOP-6760.0.20.patch
+Author: Konstantin Boudnik
+Ref: YDH
+---
+ src/core/org/apache/hadoop/http/HttpServer.java |   26 -----------------------
+ 1 files changed, 0 insertions(+), 26 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/http/HttpServer.java b/src/core/org/apache/hadoop/http/HttpServer.java
+index bf3ee17..9b61c34 100644
+--- a/src/core/org/apache/hadoop/http/HttpServer.java
++++ b/src/core/org/apache/hadoop/http/HttpServer.java
+@@ -555,32 +555,6 @@ public class HttpServer implements FilterContainer {
+           } //Workaround end
+           LOG.info("Jetty bound to port " + port);
+           webServer.start();
+-          // Workaround for HADOOP-6386
+-          port = listener.getLocalPort();
+-          if (port < 0) {
+-            LOG.warn("Bounds port is " + port + " after webserver start");
+-            for (int i = 0; i < MAX_RETRIES/2; i++) {
+-              try {
+-                webServer.stop();
+-              } catch (Exception e) {
+-                LOG.warn("Can't stop  web-server", e);
+-              }
+-              Thread.sleep(1000);
+-              
+-              listener.setPort(oriPort == 0 ? 0 : (oriPort += 1));
+-              listener.open();
+-              Thread.sleep(100);
+-              webServer.start();
+-              LOG.info(i + "attempts to restart webserver");
+-              port = listener.getLocalPort();
+-              if (port > 0)
+-                break;
+-            }
+-            if (port < 0)
+-              throw new Exception("listener.getLocalPort() is returning " +
+-                                "less than 0 even after " +MAX_RETRIES+" resets");
+-          }
+-          // End of HADOOP-6386 workaround
+           break;
+         } catch (IOException ex) {
+           // if this is a bind exception,
+-- 
+1.7.0.4
+

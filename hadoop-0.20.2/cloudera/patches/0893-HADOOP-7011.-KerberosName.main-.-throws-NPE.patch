@@ -1,0 +1,32 @@
+From 46ff62f304a755dc4d47f595194cf2c6d01faab5 Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Mon, 28 Feb 2011 13:32:52 -0800
+Subject: [PATCH 0893/1179] HADOOP-7011. KerberosName.main(...) throws NPE
+
+Reason: Useful for debugging
+Author: Aaron T. Myers
+Ref: CDH-2673
+---
+ .../org/apache/hadoop/security/KerberosName.java   |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/security/KerberosName.java b/src/core/org/apache/hadoop/security/KerberosName.java
+index d17efff..0fff568 100644
+--- a/src/core/org/apache/hadoop/security/KerberosName.java
++++ b/src/core/org/apache/hadoop/security/KerberosName.java
+@@ -394,9 +394,10 @@ public class KerberosName {
+   }
+ 
+   public static void main(String[] args) throws Exception {
++    setConfiguration(new Configuration());
+     for(String arg: args) {
+       KerberosName name = new KerberosName(arg);
+       System.out.println("Name: " + name + " to " + name.getShortName());
+     }
+   }
+-}
+\ No newline at end of file
++}
+-- 
+1.7.0.4
+

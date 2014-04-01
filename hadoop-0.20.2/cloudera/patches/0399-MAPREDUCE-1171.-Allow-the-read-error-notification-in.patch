@@ -1,0 +1,49 @@
+From 0dbd09e5e1a6f3eaa76ad7a54815d03707da5a27 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 11 Dec 2009 13:31:45 +0530
+Subject: [PATCH 0399/1179] MAPREDUCE-1171. Allow the read-error notification in shuffle to be configurable.
+
+Patch: https://issues.apache.org/jira/secure/attachment/12427571/patch-1171-1-ydist.txt
+Author: Amareshwari Sriramadasu
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/ReduceTask.java       |    9 +++++++--
+ 1 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/ReduceTask.java b/src/mapred/org/apache/hadoop/mapred/ReduceTask.java
+index 5954166..87364f7 100644
+--- a/src/mapred/org/apache/hadoop/mapred/ReduceTask.java
++++ b/src/mapred/org/apache/hadoop/mapred/ReduceTask.java
+@@ -895,6 +895,7 @@ class ReduceTask extends Task {
+     }
+     
+     private int nextMapOutputCopierId = 0;
++    private boolean reportReadErrorImmediately;
+     
+     /**
+      * Abstraction to track a map-output.
+@@ -1837,6 +1838,8 @@ class ReduceTask extends Task {
+                                       );
+       this.random = new Random(randomSeed);
+       this.maxMapRuntime = 0;
++      this.reportReadErrorImmediately = 
++        conf.getBoolean("mapreduce.reduce.shuffle.notify.readerror", true);
+     }
+     
+     private boolean busyEnough(int numInFlight) {
+@@ -2110,8 +2113,10 @@ class ReduceTask extends Task {
+               // using a hybrid technique for notifying the jobtracker.
+               //   a. the first notification is sent after max-retries 
+               //   b. subsequent notifications are sent after 2 retries.   
+-              //   c. send notification immediately if it is a read error.   
+-              if (cr.getError().equals(CopyOutputErrorType.READ_ERROR) ||
++              //   c. send notification immediately if it is a read error and 
++              //       "mapreduce.reduce.shuffle.notify.readerror" set true.   
++              if ((reportReadErrorImmediately && cr.getError().equals(
++                  CopyOutputErrorType.READ_ERROR)) ||
+                  ((noFailedFetches >= fetchRetriesPerMap) 
+                   && ((noFailedFetches - fetchRetriesPerMap) % 2) == 0)) {
+                 synchronized (ReduceTask.this) {
+-- 
+1.7.0.4
+

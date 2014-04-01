@@ -1,0 +1,652 @@
+From a960eea40dbd6a4e87072bdf73ac3b62e772f70a Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@lipcon.org>
+Date: Sun, 13 Jun 2010 23:02:38 -0700
+Subject: [PATCH 0302/1179] HDFS-1197. Received blocks should not be added to block map prematurely for under construction files
+
+Description: Fixes a possible dataloss scenario when using append() on
+             real-life clusters. Also augments unit tests to uncover
+             similar bugs in the future by simulating latency when
+             reporting blocks received by datanodes.
+Reason: Append support dataloss bug
+Author: Todd Lipcon
+Ref: CDH-659
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java     |    6 +-
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   33 +++-
+ .../hadoop/hdfs/server/namenode/FSNamesystem.java  |  198 ++++++++++++--------
+ .../hadoop/hdfs/server/namenode/INodeFile.java     |   11 +
+ .../org/apache/hadoop/hdfs/MiniDFSCluster.java     |    4 +
+ .../org/apache/hadoop/hdfs/TestFileAppend2.java    |   10 +-
+ .../org/apache/hadoop/hdfs/TestFileAppend4.java    |  140 ++++++++++++++
+ .../hdfs/server/namenode/NameNodeAdapter.java      |   27 +++
+ 8 files changed, 339 insertions(+), 90 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/hdfs/server/namenode/NameNodeAdapter.java
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 87198cb..53623b1 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -2820,9 +2820,9 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+         nodes = lastBlock.getLocations();
+         errorIndex = -1;   // no errors yet.
+         if (nodes.length < 1) {
+-          throw new IOException("Unable to retrieve blocks locations " +
+-                                " for last block " + block +
+-                                "of file " + src);
++          throw new IOException("Unable to retrieve blocks locations" +
++                                " for append to last block " + block +
++                                " of file " + src);
+         }
+         // keep trying to setup a pipeline until you know all DNs are dead
+         while (processDatanodeError(true, true)) {
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index a37863e..af9eaba 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -193,7 +193,13 @@ public class DataNode extends Configured
+   int socketWriteTimeout = 0;  
+   boolean transferToAllowed = true;
+   int writePacketSize = 0;
+-  
++
++  /**
++   * Testing hook that allows tests to delay the sending of blockReceived
++   * RPCs to the namenode. This can help find bugs in append.
++   */
++  int artificialBlockReceivedDelay = 0;
++
+   public DataBlockScanner blockScanner = null;
+   public Daemon blockScannerThread = null;
+   
+@@ -312,7 +318,10 @@ public class DataNode extends Configured
+       this.data = new FSDataset(storage, conf);
+     }
+ 
+-      
++    // Allow configuration to delay block reports to find bugs
++    artificialBlockReceivedDelay = conf.getInt(
++      "dfs.datanode.artificialBlockReceivedDelay", 0);
++
+     // find free port
+     ServerSocket ss = (socketWriteTimeout > 0) ? 
+           ServerSocketChannel.open().socket() : new ServerSocket();
+@@ -835,6 +844,7 @@ public class DataNode extends Configured
+               receivedBlockList.wait(waitTime);
+             } catch (InterruptedException ie) {
+             }
++            delayBeforeBlockReceived();
+           }
+         } // synchronized
+       } catch(RemoteException re) {
+@@ -858,6 +868,25 @@ public class DataNode extends Configured
+   } // offerService
+ 
+   /**
++   * When a block has been received, we can delay some period of time before
++   * reporting it to the DN, for the purpose of testing. This simulates
++   * the actual latency of blockReceived on a real network (where the client
++   * may be closer to the NN than the DNs).
++   */
++  private void delayBeforeBlockReceived() {
++    if (artificialBlockReceivedDelay > 0 && !receivedBlockList.isEmpty()) {
++      try {
++        long sleepFor = (long)R.nextInt(artificialBlockReceivedDelay);
++        LOG.debug("DataNode " + dnRegistration + " sleeping for " +
++                  "artificial delay: " + sleepFor + " ms");
++        Thread.sleep(sleepFor);
++      } catch (InterruptedException ie) {
++        Thread.currentThread().interrupt();
++      }
++    }
++  }
++
++  /**
+    * Process an array of datanode commands
+    * 
+    * @param cmds an array of datanode commands
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+index 839465c..11f117e 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/FSNamesystem.java
+@@ -2021,11 +2021,17 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+         DatanodeDescriptor node =
+           datanodeMap.get(newtargets[i].getStorageID());
+         if (node != null) {
+-          node.addBlock(newblockinfo);
++          if (closeFile) {
++            // If we aren't closing the file, we shouldn't add it to the
++            // block list for the node, since the block is still under
++            // construction there. (in getAdditionalBlock, for example
++            // we don't add to the block map for the targets)
++            node.addBlock(newblockinfo);
++          }
+           descriptorsList.add(node);
+         } else {
+-          LOG.warn("commitBlockSynchronization included a target DN " +
+-            newtargets[i] + " which is not known to DN. Ignoring.");
++          LOG.error("commitBlockSynchronization included a target DN " +
++            newtargets[i] + " which is not known to NN. Ignoring.");
+         }
+       }
+       if (!descriptorsList.isEmpty()) {
+@@ -3044,41 +3050,82 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+       // then we need to do some special processing.
+       storedBlock = blocksMap.getStoredBlockWithoutMatchingGS(block);
+ 
+-      // If the block ID is valid, and it either (a) belongs to a file under
+-      // construction, or (b) the reported genstamp is higher than what we
+-      // know about, then we accept the block.
+-      if (storedBlock != null && storedBlock.getINode() != null &&
+-          (storedBlock.getGenerationStamp() <= block.getGenerationStamp() ||
+-           storedBlock.getINode().isUnderConstruction())) {
+-        NameNode.stateChangeLog.info("BLOCK* NameSystem.addStoredBlock: "
+-          + "addStoredBlock request received for " + block + " on "
+-          + node.getName() + " size " + block.getNumBytes()
+-          + " and it belongs to a file under construction. ");
+-      } else {
+-        storedBlock = null;
++      if (storedBlock == null) {
++        return rejectAddStoredBlock(
++          block, node,
++          "Block not in blockMap with any generation stamp");
++      }
++
++      INodeFile inode = storedBlock.getINode();
++      if (inode == null) {
++        return rejectAddStoredBlock(
++          block, node,
++          "Block does not correspond to any file");
++      }
++
++      boolean reportedOldGS = block.getGenerationStamp() < storedBlock.getGenerationStamp();
++      boolean reportedNewGS = block.getGenerationStamp() > storedBlock.getGenerationStamp();
++      boolean underConstruction = inode.isUnderConstruction();
++      boolean isLastBlock = inode.getLastBlock() != null &&
++        inode.getLastBlock().getBlockId() == block.getBlockId();
++
++      // We can report a stale generation stamp for the last block under construction,
++      // we just need to make sure it ends up in targets.
++      if (reportedOldGS && !(underConstruction && isLastBlock)) {
++        return rejectAddStoredBlock(
++          block, node,
++          "Reported block has old generation stamp but is not the last block of " +
++          "an under-construction file. (current generation is " +
++          storedBlock.getGenerationStamp() + ")");
++      }
++
++      // Don't add blocks to the DN when they're part of the in-progress last block
++      // and have an inconsistent generation stamp. Instead just add them to targets
++      // for recovery purposes. They will get added to the node when
++      // commitBlockSynchronization runs
++      if (underConstruction && isLastBlock && (reportedOldGS || reportedNewGS)) {
++        NameNode.stateChangeLog.info(
++          "BLOCK* NameSystem.addStoredBlock: "
++          + "Targets updated: block " + block + " on " + node.getName() +
++          " is added as a target for block " + storedBlock + " with size " +
++          block.getNumBytes());
++        ((INodeFileUnderConstruction)inode).addTarget(node);
++        return block;
+       }
+     }
+-    if(storedBlock == null || storedBlock.getINode() == null) {
+-      // If this block does not belong to anyfile, then we are done.
+-      NameNode.stateChangeLog.info("BLOCK* NameSystem.addStoredBlock: "
+-                                   + "addStoredBlock request received for " 
+-                                   + block + " on " + node.getName()
+-                                   + " size " + block.getNumBytes()
+-                                   + " But it does not belong to any file.");
+-      addToInvalidates(block, node);
+-      return block;
++
++    INodeFile fileINode = storedBlock.getINode();
++    if (fileINode == null) {
++      return rejectAddStoredBlock(
++        block, node,
++        "Block does not correspond to any file");
+     }
+-     
+-    // add block to the data-node
+-    boolean added = node.addBlock(storedBlock);
+-    
+     assert storedBlock != null : "Block must be stored by now";
+ 
++    // add block to the data-node
++    boolean added = node.addBlock(storedBlock);    
++
++
++    // Is the block being reported the last block of an underconstruction file?
++    boolean blockUnderConstruction = false;
++    if (fileINode.isUnderConstruction()) {
++      INodeFileUnderConstruction cons = (INodeFileUnderConstruction) fileINode;
++      Block last = fileINode.getLastBlock();
++      if (last == null) {
++        // This should never happen, but better to handle it properly than to throw
++        // an NPE below.
++        LOG.error("Null blocks for reported block=" + block + " stored=" + storedBlock +
++          " inode=" + fileINode);
++        return block;
++      }
++      blockUnderConstruction = last.equals(storedBlock);
++    }
++
++    // block == storedBlock when this addStoredBlock is the result of a block report
+     if (block != storedBlock) {
+       if (block.getNumBytes() >= 0) {
+         long cursize = storedBlock.getNumBytes();
+-        INodeFile file = (storedBlock != null) ? storedBlock.getINode() : null;
+-        boolean underConstruction = (file == null ? false : file.isUnderConstruction());
++        INodeFile file = storedBlock.getINode();
+         if (cursize == 0) {
+           storedBlock.setNumBytes(block.getNumBytes());
+         } else if (cursize != block.getNumBytes()) {
+@@ -3088,49 +3135,43 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+                    " reported size is " + block.getNumBytes();
+           // If the block is still under construction this isn't likely
+           // to be a problem, so just log at INFO level.
+-          if (underConstruction) {
++          if (blockUnderConstruction) {
+             LOG.info(logMsg);
+           } else {
+             LOG.warn(logMsg);
+           }
++          
+           try {
+-            if (cursize > block.getNumBytes()) {
++            if (cursize > block.getNumBytes() && !blockUnderConstruction) {
+               // new replica is smaller in size than existing block.
+               // Mark the new replica as corrupt.
+-              if (!underConstruction) {
+-                LOG.warn("Mark new replica " + block + " from " + node.getName() + 
+-                    "as corrupt because its length is shorter than existing ones");
++              LOG.warn("Mark new replica " + block + " from " + node.getName() + 
++                "as corrupt because its length is shorter than existing ones");
+                 markBlockAsCorrupt(block, node);
+-              }
+             } else {
+               // new replica is larger in size than existing block.
+-              // Mark pre-existing replicas as corrupt.
+-              int numNodes = blocksMap.numNodes(block);
+-              int count = 0;
+-              DatanodeDescriptor nodes[] = new DatanodeDescriptor[numNodes];
+-              Iterator<DatanodeDescriptor> it = blocksMap.nodeIterator(block);
+-              for (; it != null && it.hasNext(); ) {
+-                DatanodeDescriptor dd = it.next();
+-                if (!dd.equals(node)) {
+-                  nodes[count++] = dd;
++              if (!blockUnderConstruction) {
++                // Mark pre-existing replicas as corrupt.
++                int numNodes = blocksMap.numNodes(block);
++                int count = 0;
++                DatanodeDescriptor nodes[] = new DatanodeDescriptor[numNodes];
++                Iterator<DatanodeDescriptor> it = blocksMap.nodeIterator(block);
++                for (; it != null && it.hasNext(); ) {
++                  DatanodeDescriptor dd = it.next();
++                  if (!dd.equals(node)) {
++                    nodes[count++] = dd;
++                  }
++                }
++                for (int j = 0; j < count; j++) {
++                  LOG.warn("Mark existing replica " + block + " from " + node.getName() + 
++                  " as corrupt because its length is shorter than the new one");
++                  markBlockAsCorrupt(block, nodes[j]);
+                 }
+-              }
+-              for (int j = 0; j < count && !underConstruction; j++) {
+-                LOG.warn("Mark existing replica " + block + " from " + node.getName() + 
+-                " as corrupt because its length is shorter than the new one");
+-                markBlockAsCorrupt(block, nodes[j]);
+               }
+               //
+               // change the size of block in blocksMap
+               //
+-              storedBlock = blocksMap.getStoredBlock(block); //extra look up!
+-              if (storedBlock == null) {
+-                LOG.warn("Block " + block + 
+-                   " reported from " + node.getName() + 
+-                   " does not exist in blockMap. Surprise! Surprise!");
+-              } else {
+-                storedBlock.setNumBytes(block.getNumBytes());
+-              }
++              storedBlock.setNumBytes(block.getNumBytes());
+             }
+           } catch (IOException e) {
+             LOG.warn("Error in deleting bad block " + block + e);
+@@ -3190,28 +3231,9 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+     // if file is being actively written to, then do not check 
+     // replication-factor here. It will be checked when the file is closed.
+     //
+-    INodeFile fileINode = null;
+-    fileINode = storedBlock.getINode();
+-    if (fileINode.isUnderConstruction()) {
+-      INodeFileUnderConstruction cons = (INodeFileUnderConstruction) fileINode;
+-      Block[] blocks = fileINode.getBlocks();
+-      if (blocks == null || blocks.length == 0) {
+-        // This should never happen, but better to handle it properly than to throw
+-        // an NPE below.
+-        LOG.error("Null blocks for reported block=" + block + " stored=" + storedBlock +
+-          " inode=" + fileINode);
+-        return block;
+-      }
+-      // If this is the last block of this
+-      // file, then set targets. This enables lease recovery to occur.
+-      // This is especially important after a restart of the NN.
+-      Block last = blocks[blocks.length-1];
+-      if (last.equals(storedBlock)) {
+-        Iterator<DatanodeDescriptor> it = blocksMap.nodeIterator(last);
+-        for (int i = 0; it != null && it.hasNext(); i++) {
+-          cons.addTarget(it.next());
+-        }
+-      }
++    if (blockUnderConstruction) {
++      INodeFileUnderConstruction cons = (INodeFileUnderConstruction)fileINode;
++      cons.addTarget(node);
+       return block;
+     }
+ 
+@@ -3245,6 +3267,22 @@ public class FSNamesystem implements FSConstants, FSNamesystemMBean {
+   }
+ 
+   /**
++   * Log a rejection of an addStoredBlock RPC, invalidate the reported block,
++   * and return it.
++   */
++  private Block rejectAddStoredBlock(Block block,
++                                     DatanodeDescriptor node,
++                                     String msg) {
++      NameNode.stateChangeLog.info("BLOCK* NameSystem.addStoredBlock: "
++                                   + "addStoredBlock request received for " 
++                                   + block + " on " + node.getName()
++                                   + " size " + block.getNumBytes()
++                                   + " but was rejected: " + msg);
++      addToInvalidates(block, node);
++      return block;
++  }
++
++  /**
+    * Invalidate corrupt replicas.
+    * <p>
+    * This will remove the replicas from the block's location list,
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INodeFile.java b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INodeFile.java
+index 0d350e5..330dbed 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INodeFile.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/namenode/INodeFile.java
+@@ -89,6 +89,17 @@ class INodeFile extends INode {
+   }
+ 
+   /**
++   * Return the last block in this file, or null
++   * if there are no blocks.
++   */
++  Block getLastBlock() {
++    if (this.blocks == null ||
++        this.blocks.length == 0)
++      return null;
++    return this.blocks[this.blocks.length - 1];
++  }
++
++  /**
+    * add a block to the block list
+    */
+   void addBlock(BlockInfo newblock) {
+diff --git a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+index e6a543b..c9d868f 100644
+--- a/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
++++ b/src/test/org/apache/hadoop/hdfs/MiniDFSCluster.java
+@@ -260,6 +260,10 @@ public class MiniDFSCluster {
+     conf.setInt("dfs.replication", Math.min(replication, numDataNodes));
+     conf.setInt("dfs.safemode.extension", 0);
+     conf.setInt("dfs.namenode.decommission.interval", 3); // 3 second
++
++    // Set a small delay on blockReceived in the minicluster to approximate
++    // a real cluster a little better and suss out bugs.
++    conf.setInt("dfs.datanode.artificialBlockReceivedDelay", 5);
+     
+     // Format and clean out DataNode directories
+     if (format) {
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileAppend2.java b/src/test/org/apache/hadoop/hdfs/TestFileAppend2.java
+index 058db5d..0e15d99 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileAppend2.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileAppend2.java
+@@ -80,12 +80,9 @@ public class TestFileAppend2 {
+   int numberOfFiles = 50;
+   int numThreads = 10;
+   int numAppendsPerThread = 20;
++  int artificialBlockReceivedDelay = 50;
+   long sleepBetweenSizeChecks = 5000;
+-/***
+-  int numberOfFiles = 1;
+-  int numThreads = 1;
+-  int numAppendsPerThread = 2000;
+-****/
++
+   Workload[] workload = null;
+   ArrayList<Path> testFiles = new ArrayList<Path>();
+   AtomicReference<Throwable> err = new AtomicReference<Throwable>();
+@@ -394,11 +391,14 @@ public class TestFileAppend2 {
+     conf.setInt("dfs.socket.timeout", 30000);
+     conf.setInt("dfs.datanode.socket.write.timeout", 30000);
+     conf.setInt("dfs.datanode.handler.count", 50);
++    conf.setInt("dfs.datanode.artificialBlockReceivedDelay",
++                artificialBlockReceivedDelay);
+     conf.setBoolean("dfs.support.append", true);
+ 
+     MiniDFSCluster cluster = new MiniDFSCluster(conf, numDatanodes, 
+                                                 true, null);
+     cluster.waitActive();
++
+     FileSystem fs = cluster.getFileSystem();
+ 
+     try {
+diff --git a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+index eb31cd9..a13e3ff 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
++++ b/src/test/org/apache/hadoop/hdfs/TestFileAppend4.java
+@@ -101,6 +101,9 @@ public class TestFileAppend4 extends TestCase {
+     // (for cluster.shutdown(); fs.close() idiom)
+     conf.setInt("ipc.client.connect.max.retries", 1);
+     conf.setInt("dfs.client.block.recovery.retries", 1);
++    // Delay blockReceived calls from DNs to be more similar to a real
++    // cluster. 10ms is enough so that client often gets there first.
++    conf.setInt("dfs.datanode.artificialBlockReceivedDelay", 10);
+   }
+ 
+   @Override
+@@ -456,10 +459,12 @@ public class TestFileAppend4 extends TestCase {
+       LOG.info("START second instance.");
+ 
+       recoverFile(fs1);
++      LOG.info("Recovered file");
+       
+       // the 2 DNs with the larger sequence number should win
+       BlockLocation[] bl = fs1.getFileBlockLocations(
+           fs1.getFileStatus(file1), 0, BLOCK_SIZE);
++      LOG.info("Checking blocks");
+       assertTrue("Should have one block", bl.length == 1);
+       assertTrue("Should have 2 replicas for that block, not " + 
+                  bl[0].getNames().length, bl[0].getNames().length == 2);  
+@@ -467,6 +472,7 @@ public class TestFileAppend4 extends TestCase {
+       assertFileSize(fs1, BLOCK_SIZE*3/4);
+       checkFile(fs1, BLOCK_SIZE*3/4);
+ 
++      LOG.info("Checking replication");
+       // verify that, over time, the block has been replicated to 3 DN
+       cluster.getNameNode().getNamesystem().restartReplicationWork();
+       waitForBlockReplication(fs1, file1.toString(), 3, 20);
+@@ -1129,7 +1135,141 @@ public class TestFileAppend4 extends TestCase {
+       cluster.shutdown();
+     }    
+   }
++  
++  /**
++   * Test that a file is not considered complete when it only has in-progress
++   * blocks. This ensures that when a block is appended to, it is converted
++   * back into the right kind of "in progress" state.
++   */
++  public void testNotPrematurelyComplete() throws Exception {
++    LOG.info("START");
++    cluster = new MiniDFSCluster(conf, 3, true, null);
++    FileSystem fs1 = cluster.getFileSystem();
++    try {
++      int halfBlock = (int)BLOCK_SIZE/2;
++      short rep = 3; // replication
++      assertTrue(BLOCK_SIZE%4 == 0);
++
++      file1 = new Path("/delayedReceiveBlock");
++
++      // write 1/2 block & close
++      stm = fs1.create(file1, true, (int)BLOCK_SIZE*2, rep, BLOCK_SIZE);
++      AppendTestUtil.write(stm, 0, halfBlock);
++      stm.close();
++
++      NameNode nn = cluster.getNameNode();
++      LOG.info("======== Appending");
++      stm = fs1.append(file1);
++      LOG.info("======== Writing");
++      AppendTestUtil.write(stm, 0, halfBlock/2);
++      LOG.info("======== Checking progress");
++      assertFalse(NameNodeAdapter.checkFileProgress(nn.namesystem, "/delayedReceiveBlock", true));
++      LOG.info("======== Closing");
++      stm.close();
++
++    } finally {
++      LOG.info("======== Cleaning up");
++      fs1.close();
++      cluster.shutdown();
++    }
++  }
++
++  /**
++   * Test that the restart of a DN and the subsequent pipeline recovery do not cause
++   * a file to become prematurely considered "complete". (ie that the block
++   * synchronization as part of pipeline recovery doesn't add the block to the
++   * nodes taking part in recovery)
++   */
++  public void testNotPrematurelyCompleteWithFailure() throws Exception {
++    LOG.info("START");
++    cluster = new MiniDFSCluster(conf, 3, true, null);
++    FileSystem fs1 = cluster.getFileSystem();
++    try {
++      int halfBlock = (int)BLOCK_SIZE/2;
++      short rep = 3; // replication
++      assertTrue(BLOCK_SIZE%4 == 0);
++
++      file1 = new Path("/delayedReceiveBlock");
++
++      // write 1/2 block & close
++      stm = fs1.create(file1, true, (int)BLOCK_SIZE*2, rep, BLOCK_SIZE);
++      AppendTestUtil.write(stm, 0, halfBlock);
++      stm.close();
+ 
++      NameNode nn = cluster.getNameNode();
++      LOG.info("======== Appending");
++      stm = fs1.append(file1);
++      LOG.info("======== Writing");
++      AppendTestUtil.write(stm, 0, halfBlock/4);
++
++      // restart one of the datanodes and wait for a few of its heartbeats
++      // so that it will report the recovered replica
++      MiniDFSCluster.DataNodeProperties dnprops = cluster.stopDataNode(0);
++      stm.sync();
++      assertTrue(cluster.restartDataNode(dnprops));
++      for (int i = 0; i < 2; i++) {
++        cluster.waitForDNHeartbeat(0, 3000);
++      }
++
++      AppendTestUtil.write(stm, 0, halfBlock/4);
++
++      LOG.info("======== Checking progress");
++      assertFalse(NameNodeAdapter.checkFileProgress(nn.namesystem, "/delayedReceiveBlock", true));
++      LOG.info("======== Closing");
++      stm.close();
++
++    } finally {
++      LOG.info("======== Cleaning up");
++      fs1.close();
++      cluster.shutdown();
++    }
++  }
++
++  /**
++   * Test that the restart of a DN and the subsequent pipeline recovery do not cause
++   * a file to become prematurely considered "complete", when it's a fresh file
++   * with no .append() called.
++   */
++  public void testNotPrematurelyCompleteWithFailureNotReopened() throws Exception {
++    LOG.info("START");
++    cluster = new MiniDFSCluster(conf, 3, true, null);
++    NameNode nn = cluster.getNameNode();
++    FileSystem fs1 = cluster.getFileSystem();
++    try {
++      short rep = 3; // replication
++
++      file1 = new Path("/delayedReceiveBlock");
++
++      stm = fs1.create(file1, true, (int)BLOCK_SIZE*2, rep, 64*1024*1024);
++      LOG.info("======== Writing");
++      AppendTestUtil.write(stm, 0, 1024*1024);
++
++      LOG.info("======== Waiting for a block allocation");
++      waitForBlockReplication(fs1, "/delayedReceiveBlock", 0, 3000);
++
++      LOG.info("======== Checking not complete");
++      assertFalse(NameNodeAdapter.checkFileProgress(nn.namesystem, "/delayedReceiveBlock", true));
++
++      // Stop one of the DNs, don't restart
++      MiniDFSCluster.DataNodeProperties dnprops = cluster.stopDataNode(0);
++
++      // Write some more data
++      AppendTestUtil.write(stm, 0, 1024*1024);
++
++      // Make sure we don't see the file as complete
++      LOG.info("======== Checking progress");
++      assertFalse(NameNodeAdapter.checkFileProgress(nn.namesystem, "/delayedReceiveBlock", true));
++      LOG.info("======== Closing");
++      stm.close();
++
++    } finally {
++      LOG.info("======== Cleaning up");
++      fs1.close();
++      cluster.shutdown();
++    }
++  }
++
++  
+   /**
+    * Mockito answer helper that triggers one latch as soon as the
+    * method is called, then waits on another before continuing.
+diff --git a/src/test/org/apache/hadoop/hdfs/server/namenode/NameNodeAdapter.java b/src/test/org/apache/hadoop/hdfs/server/namenode/NameNodeAdapter.java
+new file mode 100644
+index 0000000..55ff19e
+--- /dev/null
++++ b/src/test/org/apache/hadoop/hdfs/server/namenode/NameNodeAdapter.java
+@@ -0,0 +1,27 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.hadoop.hdfs.server.namenode;
++import java.io.IOException;
++
++public abstract class NameNodeAdapter {
++  public static boolean checkFileProgress(FSNamesystem fsn, String path, boolean checkall) throws IOException {
++    INodeFile f = fsn.dir.getFileINode(path);
++    return fsn.checkFileProgress(f, checkall);
++  }
++}
++
+-- 
+1.7.0.4
+

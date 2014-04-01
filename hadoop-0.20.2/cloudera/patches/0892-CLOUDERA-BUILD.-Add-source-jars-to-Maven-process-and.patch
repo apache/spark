@@ -1,0 +1,426 @@
+From 3fd1dd275427012b93dab53d8e9b3c78aed1fc6f Mon Sep 17 00:00:00 2001
+From: Andrew Bayer <andrew.bayer@gmail.com>
+Date: Fri, 25 Feb 2011 15:31:51 -0800
+Subject: [PATCH 0892/1179] CLOUDERA-BUILD. Add source jars to Maven process, and add
+ hadoop-mrunit to Mavenization.
+
+* This is for KITCHEN-866 - and I discovered that in CDH2, we'd been
+deploying hadoop-mrunit, but hadn't been in CDH3B4. So I've added that.
+---
+ cloudera/do-release-build                         |    2 +-
+ cloudera/maven-packaging/hadoop-core/pom.xml      |   39 +++++++
+ cloudera/maven-packaging/hadoop-examples/pom.xml  |   37 +++++++
+ cloudera/maven-packaging/hadoop-mrunit/pom.xml    |  117 +++++++++++++++++++++
+ cloudera/maven-packaging/hadoop-streaming/pom.xml |   37 +++++++
+ cloudera/maven-packaging/hadoop-test/pom.xml      |   37 +++++++
+ cloudera/maven-packaging/hadoop-tools/pom.xml     |   37 +++++++
+ cloudera/maven-packaging/pom.xml                  |    2 +
+ 8 files changed, 307 insertions(+), 1 deletions(-)
+ create mode 100644 cloudera/maven-packaging/hadoop-mrunit/pom.xml
+
+diff --git a/cloudera/do-release-build b/cloudera/do-release-build
+index 9ccfc26..aa90701 100755
+--- a/cloudera/do-release-build
++++ b/cloudera/do-release-build
+@@ -110,5 +110,5 @@ if [ -z "$SKIP_MVN_EXPLICIT" ]; then
+ # Change to cloudera/maven directory, and install
+ # (and if called from CDH nightly build, deploy) artifacts into Maven repository
+ cd $BIN_DIR/maven-packaging
+-mvn -Dnot.cdh.release.build=false install $DO_MAVEN_DEPLOY
++mvn -Dnot.cdh.release.build=false source:jar install $DO_MAVEN_DEPLOY
+ fi
+diff --git a/cloudera/maven-packaging/hadoop-core/pom.xml b/cloudera/maven-packaging/hadoop-core/pom.xml
+index 867dc33..f9460fb 100644
+--- a/cloudera/maven-packaging/hadoop-core/pom.xml
++++ b/cloudera/maven-packaging/hadoop-core/pom.xml
+@@ -150,6 +150,44 @@
+   <build>
+     <plugins>
+       <plugin>
++        <groupId>org.codehaus.mojo</groupId>
++        <artifactId>build-helper-maven-plugin</artifactId>
++        <executions>
++          <execution>
++            <id>add-source</id>
++            <phase>generate-sources</phase>
++            <goals>
++              <goal>add-source</goal>
++            </goals>
++            <configuration>
++              <sources>
++                <source>${basedir}/../../../src</source>
++              </sources>
++            </configuration>
++          </execution>
++        </executions>
++      </plugin>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-source-plugin</artifactId>
++        <configuration>
++          <includes>
++            <include>core/**/*</include>
++            <include>mapred/**/*</include>
++            <include>hdfs/**/*</include>
++          </includes>
++        </configuration>
++      </plugin>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-compiler-plugin</artifactId>
++        <configuration>
++          <excludes>
++            <exclude>**/*.java</exclude>
++          </excludes>
++        </configuration>
++      </plugin>
++      <plugin>
+         <groupId>org.apache.maven.plugins</groupId>
+         <artifactId>maven-antrun-plugin</artifactId>
+         <inherited>false</inherited>
+@@ -173,6 +211,7 @@
+           </execution>
+         </executions>
+       </plugin>
++      
+     </plugins>
+   </build>
+   
+diff --git a/cloudera/maven-packaging/hadoop-examples/pom.xml b/cloudera/maven-packaging/hadoop-examples/pom.xml
+index 41e845f..eb855e7 100644
+--- a/cloudera/maven-packaging/hadoop-examples/pom.xml
++++ b/cloudera/maven-packaging/hadoop-examples/pom.xml
+@@ -50,6 +50,43 @@
+   <build>
+     <plugins>
+       <plugin>
++        <groupId>org.codehaus.mojo</groupId>
++        <artifactId>build-helper-maven-plugin</artifactId>
++        <executions>
++          <execution>
++            <id>add-source</id>
++            <phase>generate-sources</phase>
++            <goals>
++              <goal>add-source</goal>
++            </goals>
++            <configuration>
++              <sources>
++                <source>${basedir}/../../../src</source>
++              </sources>
++            </configuration>
++          </execution>
++        </executions>
++      </plugin>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-source-plugin</artifactId>
++        <configuration>
++          <includes>
++            <include>examples/**/*</include>
++          </includes>
++        </configuration>
++      </plugin>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-compiler-plugin</artifactId>
++        <configuration>
++          <excludes>
++            <exclude>**/*.java</exclude>
++          </excludes>
++        </configuration>
++      </plugin>
++
++      <plugin>
+         <groupId>org.apache.maven.plugins</groupId>
+         <artifactId>maven-antrun-plugin</artifactId>
+         <inherited>false</inherited>
+diff --git a/cloudera/maven-packaging/hadoop-mrunit/pom.xml b/cloudera/maven-packaging/hadoop-mrunit/pom.xml
+new file mode 100644
+index 0000000..f7c56a6
+--- /dev/null
++++ b/cloudera/maven-packaging/hadoop-mrunit/pom.xml
+@@ -0,0 +1,117 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!--
++   Licensed to the Apache Software Foundation (ASF) under one or more
++   contributor license agreements.  See the NOTICE file distributed with
++   this work for additional information regarding copyright ownership.
++   The ASF licenses this file to You under the Apache License, Version 2.0
++   (the "License"); you may not use this file except in compliance with
++   the License.  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++-->
++
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
++
++  <modelVersion>4.0.0</modelVersion>
++
++  <parent>
++    <groupId>com.cloudera.cdh</groupId>
++    <artifactId>hadoop-root</artifactId>
++    <version>3.0-SNAPSHOT</version>
++  </parent>
++  
++  <groupId>org.apache.hadoop</groupId>
++  <artifactId>hadoop-mrunit</artifactId>
++  <version>0.20.2-cdh3u0-SNAPSHOT</version>
++  <packaging>jar</packaging>
++  
++  <name>hadoop-streaming</name>
++  
++  <dependencies>
++    <dependency>
++      <groupId>com.cloudera.cdh</groupId>
++      <artifactId>hadoop-ant</artifactId>
++      <type>pom</type>
++    </dependency>
++    
++    <dependency>
++      <groupId>org.apache.hadoop</groupId>
++      <artifactId>hadoop-core</artifactId>
++    </dependency>
++  </dependencies>
++  
++  <build>
++    <plugins>
++       <plugin>
++        <groupId>org.codehaus.mojo</groupId>
++        <artifactId>build-helper-maven-plugin</artifactId>
++        <executions>
++          <execution>
++            <id>add-source</id>
++            <phase>generate-sources</phase>
++            <goals>
++              <goal>add-source</goal>
++            </goals>
++            <configuration>
++              <sources>
++                <source>${basedir}/../../../src/contrib</source>
++              </sources>
++            </configuration>
++          </execution>
++        </executions>
++      </plugin>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-source-plugin</artifactId>
++        <configuration>
++          <includes>
++            <include>mrunit/**/*</include>
++          </includes>
++        </configuration>
++      </plugin>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-compiler-plugin</artifactId>
++        <configuration>
++          <excludes>
++            <exclude>**/*.java</exclude>
++          </excludes>
++        </configuration>
++      </plugin>
++
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-antrun-plugin</artifactId>
++        <inherited>false</inherited>
++        <executions>
++          <execution>
++            <id>compile</id>
++            <configuration>
++              <target>
++                <copy todir="${basedir}/target">
++                  <fileset dir="${basedir}/../../../build/contrib/mrunit" includes="hadoop-mrunit-${project.version}.jar" />
++                </copy>
++                <unzip dest="${basedir}/target/classes">
++                  <fileset dir="${basedir}/target" includes="hadoop-mrunit-${project.version}.jar" />
++                </unzip>
++              </target>
++            </configuration>
++            <goals>
++              <goal>run</goal>
++            </goals>
++            <phase>compile</phase>
++          </execution>
++        </executions>
++      </plugin>
++    </plugins>
++  </build>
++  
++</project>
++
+diff --git a/cloudera/maven-packaging/hadoop-streaming/pom.xml b/cloudera/maven-packaging/hadoop-streaming/pom.xml
+index 8560213..99eace4 100644
+--- a/cloudera/maven-packaging/hadoop-streaming/pom.xml
++++ b/cloudera/maven-packaging/hadoop-streaming/pom.xml
+@@ -50,6 +50,43 @@
+   <build>
+     <plugins>
+       <plugin>
++        <groupId>org.codehaus.mojo</groupId>
++        <artifactId>build-helper-maven-plugin</artifactId>
++        <executions>
++          <execution>
++            <id>add-source</id>
++            <phase>generate-sources</phase>
++            <goals>
++              <goal>add-source</goal>
++            </goals>
++            <configuration>
++              <sources>
++                <source>${basedir}/../../../src/contrib</source>
++              </sources>
++            </configuration>
++          </execution>
++        </executions>
++      </plugin>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-source-plugin</artifactId>
++        <configuration>
++          <includes>
++            <include>streaming/**/*</include>
++          </includes>
++        </configuration>
++      </plugin>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-compiler-plugin</artifactId>
++        <configuration>
++          <excludes>
++            <exclude>**/*.java</exclude>
++          </excludes>
++        </configuration>
++      </plugin>
++
++      <plugin>
+         <groupId>org.apache.maven.plugins</groupId>
+         <artifactId>maven-antrun-plugin</artifactId>
+         <inherited>false</inherited>
+diff --git a/cloudera/maven-packaging/hadoop-test/pom.xml b/cloudera/maven-packaging/hadoop-test/pom.xml
+index 9f28b15..ffceaa9 100644
+--- a/cloudera/maven-packaging/hadoop-test/pom.xml
++++ b/cloudera/maven-packaging/hadoop-test/pom.xml
+@@ -67,6 +67,43 @@
+   <build>
+     <plugins>
+       <plugin>
++        <groupId>org.codehaus.mojo</groupId>
++        <artifactId>build-helper-maven-plugin</artifactId>
++        <executions>
++          <execution>
++            <id>add-source</id>
++            <phase>generate-sources</phase>
++            <goals>
++              <goal>add-source</goal>
++            </goals>
++            <configuration>
++              <sources>
++                <source>${basedir}/../../../src</source>
++              </sources>
++            </configuration>
++          </execution>
++        </executions>
++      </plugin>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-source-plugin</artifactId>
++        <configuration>
++          <includes>
++            <include>test/**/*</include>
++          </includes>
++        </configuration>
++      </plugin>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-compiler-plugin</artifactId>
++        <configuration>
++          <excludes>
++            <exclude>**/*.java</exclude>
++          </excludes>
++        </configuration>
++      </plugin>
++
++      <plugin>
+         <groupId>org.apache.maven.plugins</groupId>
+         <artifactId>maven-antrun-plugin</artifactId>
+         <inherited>false</inherited>
+diff --git a/cloudera/maven-packaging/hadoop-tools/pom.xml b/cloudera/maven-packaging/hadoop-tools/pom.xml
+index 57865af..26533a5 100644
+--- a/cloudera/maven-packaging/hadoop-tools/pom.xml
++++ b/cloudera/maven-packaging/hadoop-tools/pom.xml
+@@ -51,6 +51,43 @@
+   <build>
+     <plugins>
+       <plugin>
++        <groupId>org.codehaus.mojo</groupId>
++        <artifactId>build-helper-maven-plugin</artifactId>
++        <executions>
++          <execution>
++            <id>add-source</id>
++            <phase>generate-sources</phase>
++            <goals>
++              <goal>add-source</goal>
++            </goals>
++            <configuration>
++              <sources>
++                <source>${basedir}/../../../src</source>
++              </sources>
++            </configuration>
++          </execution>
++        </executions>
++      </plugin>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-source-plugin</artifactId>
++        <configuration>
++          <includes>
++            <include>tools/**/*</include>
++          </includes>
++        </configuration>
++      </plugin>
++      <plugin>
++        <groupId>org.apache.maven.plugins</groupId>
++        <artifactId>maven-compiler-plugin</artifactId>
++        <configuration>
++          <excludes>
++            <exclude>**/*.java</exclude>
++          </excludes>
++        </configuration>
++      </plugin>
++
++      <plugin>
+         <groupId>org.apache.maven.plugins</groupId>
+         <artifactId>maven-antrun-plugin</artifactId>
+         <inherited>false</inherited>
+diff --git a/cloudera/maven-packaging/pom.xml b/cloudera/maven-packaging/pom.xml
+index 709cc7f..3b72e38 100644
+--- a/cloudera/maven-packaging/pom.xml
++++ b/cloudera/maven-packaging/pom.xml
+@@ -58,6 +58,7 @@
+         <module>../../cloudera-pom.xml</module>
+         <module>hadoop-core</module>
+         <module>hadoop-streaming</module>
++        <module>hadoop-mrunit</module>
+         <module>hadoop-examples</module>
+         <module>hadoop-test</module>
+         <module>hadoop-tools</module>
+@@ -76,6 +77,7 @@
+         <module>../../cloudera-pom.xml</module>
+         <module>hadoop-core</module>
+         <module>hadoop-streaming</module>
++        <module>hadoop-mrunit</module>
+         <module>hadoop-examples</module>
+         <module>hadoop-test</module>
+         <module>hadoop-tools</module>
+-- 
+1.7.0.4
+

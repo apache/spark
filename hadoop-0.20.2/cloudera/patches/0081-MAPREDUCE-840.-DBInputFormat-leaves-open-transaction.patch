@@ -1,0 +1,28 @@
+From be7f1dc031e17dc4f53ebe76d27c1b9242105785 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 14:56:26 -0800
+Subject: [PATCH 0081/1179] MAPREDUCE-840. DBInputFormat leaves open transaction
+
+Description: (Reapplied after HADOOP-4687)
+Reason: MISSING: Reason for inclusion
+Author: Aaron Kimball
+Ref: UNKNOWN
+---
+ .../hadoop/mapreduce/lib/db/DBInputFormat.java     |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBInputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBInputFormat.java
+index 4e8b037..0032ce1 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBInputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBInputFormat.java
+@@ -248,6 +248,7 @@ public class DBInputFormat<T extends DBWritable>
+         splits.add(split);
+       }
+ 
++      connection.commit();
+       return splits;
+     } catch (SQLException e) {
+       try {
+-- 
+1.7.0.4
+

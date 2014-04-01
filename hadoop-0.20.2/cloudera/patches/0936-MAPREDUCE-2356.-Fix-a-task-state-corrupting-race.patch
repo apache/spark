@@ -1,0 +1,35 @@
+From 244bc14fd518142b015ef1b539ec899daeb18e77 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Tue, 15 Mar 2011 14:55:38 -0700
+Subject: [PATCH 0936/1179] MAPREDUCE-2356. Fix a task state corrupting race
+
+Reason: can cause a task to succeed even though all attempts were errors
+Author: Luke Lu
+Ref: CDH-2772
+---
+ .../org/apache/hadoop/mapred/TaskTracker.java      |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+index 0abfba5..e415d93 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskTracker.java
+@@ -2488,12 +2488,13 @@ public class TaskTracker implements MRConstants, TaskUmbilicalProtocol,
+           ((this.taskStatus.getRunState() == TaskStatus.State.COMMIT_PENDING ||
+            this.taskStatus.getRunState() == TaskStatus.State.FAILED_UNCLEAN ||
+            this.taskStatus.getRunState() == TaskStatus.State.KILLED_UNCLEAN) &&
+-           taskStatus.getRunState() == TaskStatus.State.RUNNING)) {
++           (taskStatus.getRunState() == TaskStatus.State.RUNNING ||
++            taskStatus.getRunState() == TaskStatus.State.UNASSIGNED))) {
+         //make sure we ignore progress messages after a task has 
+         //invoked TaskUmbilicalProtocol.done() or if the task has been
+         //KILLED/FAILED/FAILED_UNCLEAN/KILLED_UNCLEAN
+         //Also ignore progress update if the state change is from 
+-        //COMMIT_PENDING/FAILED_UNCLEAN/KILLED_UNCLEA to RUNNING
++        //COMMIT_PENDING/FAILED_UNCLEAN/KILLED_UNCLEA to RUNNING or UNASSIGNED
+         LOG.info(task.getTaskID() + " Ignoring status-update since " +
+                  ((this.done) ? "task is 'done'" : 
+                                 ("runState: " + this.taskStatus.getRunState()))
+-- 
+1.7.0.4
+

@@ -1,0 +1,446 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta content="Apache Forrest" name="Generator">
+<meta name="Forrest-version" content="0.8">
+<meta name="Forrest-skin-name" content="pelt">
+<title>Gridmix</title>
+<link type="text/css" href="skin/basic.css" rel="stylesheet">
+<link media="screen" type="text/css" href="skin/screen.css" rel="stylesheet">
+<link media="print" type="text/css" href="skin/print.css" rel="stylesheet">
+<link type="text/css" href="skin/profile.css" rel="stylesheet">
+<script src="skin/getBlank.js" language="javascript" type="text/javascript"></script><script src="skin/getMenu.js" language="javascript" type="text/javascript"></script><script src="skin/fontsize.js" language="javascript" type="text/javascript"></script>
+<link rel="shortcut icon" href="images/favicon.ico">
+</head>
+<body onload="init()">
+<script type="text/javascript">ndeSetTextSize();</script>
+<div id="top">
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+<a href="http://www.apache.org/">Apache</a> &gt; <a href="http://hadoop.apache.org/">Hadoop</a> &gt; <a href="http://hadoop.apache.org/core/">Core</a><script src="skin/breadcrumbs.js" language="JavaScript" type="text/javascript"></script>
+</div>
+<!--+
+    |header
+    +-->
+<div class="header">
+<!--+
+    |start group logo
+    +-->
+<div class="grouplogo">
+<a href="http://hadoop.apache.org/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo.jpg" title="Apache Hadoop"></a>
+</div>
+<!--+
+    |end group logo
+    +-->
+<!--+
+    |start Project Logo
+    +-->
+<div class="projectlogo">
+<a href="http://hadoop.apache.org/core/"><img class="logoImage" alt="Hadoop" src="images/hadoop-logo-2.gif" title="Scalable Computing Platform"></a>
+</div>
+<!--+
+    |end Project Logo
+    +-->
+<!--+
+    |start Search
+    +-->
+<div class="searchbox">
+<form action="http://www.google.com/search" method="get" class="roundtopsmall">
+<input value="archive.cloudera.com" name="sitesearch" type="hidden"><input onFocus="getBlank (this, 'Search the site with google');" size="25" name="q" id="query" type="text" value="Search the site with google">&nbsp; 
+                    <input name="Search" value="Search" type="submit">
+</form>
+</div>
+<!--+
+    |end search
+    +-->
+<!--+
+    |start Tabs
+    +-->
+<ul id="tabs">
+<li>
+<a class="unselected" href="http://hadoop.apache.org/core/">Project</a>
+</li>
+<li>
+<a class="unselected" href="http://wiki.apache.org/hadoop">Wiki</a>
+</li>
+<li class="current">
+<a class="selected" href="index.html">Hadoop 0.20 Documentation</a>
+</li>
+</ul>
+<!--+
+    |end Tabs
+    +-->
+</div>
+</div>
+<div id="main">
+<div id="publishedStrip">
+<!--+
+    |start Subtabs
+    +-->
+<div id="level2tabs"></div>
+<!--+
+    |end Endtabs
+    +-->
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<!--+
+    |breadtrail
+    +-->
+<div class="breadtrail">
+
+             &nbsp;
+           </div>
+<!--+
+    |start Menu, mainarea
+    +-->
+<!--+
+    |start Menu
+    +-->
+<div id="menu">
+<div onclick="SwitchMenu('menu_1.1', 'skin/')" id="menu_1.1Title" class="menutitle">Getting Started</div>
+<div id="menu_1.1" class="menuitemgroup">
+<div class="menuitem">
+<a href="index.html">Overview</a>
+</div>
+<div class="menuitem">
+<a href="single_node_setup.html">Single Node Setup</a>
+</div>
+<div class="menuitem">
+<a href="cluster_setup.html">Cluster Setup</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.2', 'skin/')" id="menu_1.2Title" class="menutitle">Guides</div>
+<div id="menu_1.2" class="menuitemgroup">
+<div class="menuitem">
+<a href="HttpAuthentication.html">Authentication for Hadoop HTTP web-consoles</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_selected_1.3', 'skin/')" id="menu_selected_1.3Title" class="menutitle" style="background-image: url('skin/images/chapter_open.gif');">MapReduce</div>
+<div id="menu_selected_1.3" class="selectedmenuitemgroup" style="display: block;">
+<div class="menuitem">
+<a href="mapred_tutorial.html">MapReduce Tutorial</a>
+</div>
+<div class="menuitem">
+<a href="streaming.html">Hadoop Streaming</a>
+</div>
+<div class="menuitem">
+<a href="commands_manual.html">Hadoop Commands</a>
+</div>
+<div class="menuitem">
+<a href="distcp.html">DistCp</a>
+</div>
+<div class="menuitem">
+<a href="vaidya.html">Vaidya</a>
+</div>
+<div class="menuitem">
+<a href="hadoop_archives.html">Hadoop Archives</a>
+</div>
+<div class="menupage">
+<div class="menupagetitle">Gridmix</div>
+</div>
+<div class="menuitem">
+<a href="capacity_scheduler.html">Capacity Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="fair_scheduler.html">Fair Scheduler</a>
+</div>
+<div class="menuitem">
+<a href="hod_scheduler.html">Hod Scheduler</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.4', 'skin/')" id="menu_1.4Title" class="menutitle">HDFS</div>
+<div id="menu_1.4" class="menuitemgroup">
+<div class="menuitem">
+<a href="hdfs_user_guide.html">HDFS Users </a>
+</div>
+<div class="menuitem">
+<a href="hdfs_design.html">HDFS Architecture</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_permissions_guide.html">Permissions</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_quota_admin_guide.html">Quotas</a>
+</div>
+<div class="menuitem">
+<a href="hdfs_imageviewer.html">Offline Image Viewer Guide</a>
+</div>
+<div class="menuitem">
+<a href="SLG_user_guide.html">Synthetic Load Generator</a>
+</div>
+<div class="menuitem">
+<a href="libhdfs.html">C API libhdfs</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.5', 'skin/')" id="menu_1.5Title" class="menutitle">Common</div>
+<div id="menu_1.5" class="menuitemgroup">
+<div class="menuitem">
+<a href="file_system_shell.html">File System Shell</a>
+</div>
+<div class="menuitem">
+<a href="service_level_auth.html">Service Level Authorization</a>
+</div>
+<div class="menuitem">
+<a href="native_libraries.html">Native Libraries</a>
+</div>
+</div>
+<div onclick="SwitchMenu('menu_1.6', 'skin/')" id="menu_1.6Title" class="menutitle">Miscellaneous</div>
+<div id="menu_1.6" class="menuitemgroup">
+<div class="menuitem">
+<a href="Secure_Impersonation.html">Secure Impersonation</a>
+</div>
+<div class="menuitem">
+<a href="api/index.html">API Docs</a>
+</div>
+<div class="menuitem">
+<a href="jdiff/changes.html">API Changes</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/">Wiki</a>
+</div>
+<div class="menuitem">
+<a href="http://wiki.apache.org/hadoop/FAQ">FAQ</a>
+</div>
+<div class="menuitem">
+<a href="releasenotes.html">Release Notes</a>
+</div>
+<div class="menuitem">
+<a href="changes.html">Change Log</a>
+</div>
+</div>
+<div id="credit"></div>
+<div id="roundbottom">
+<img style="display: none" class="corner" height="15" width="15" alt="" src="skin/images/rc-b-l-15-1body-2menu-3menu.png"></div>
+<!--+
+  |alternative credits
+  +-->
+<div id="credit2"></div>
+</div>
+<!--+
+    |end Menu
+    +-->
+<!--+
+    |start content
+    +-->
+<div id="content">
+<div title="Portable Document Format" class="pdflink">
+<a class="dida" href="gridmix.pdf"><img alt="PDF -icon" src="skin/images/pdfdoc.gif" class="skin"><br>
+        PDF</a>
+</div>
+<h1>Gridmix</h1>
+<div id="minitoc-area">
+<ul class="minitoc">
+<li>
+<a href="#Overview">Overview</a>
+</li>
+<li>
+<a href="#usage">Usage</a>
+<ul class="minitoc">
+<li>
+<a href="#Configuration+parameters">Configuration parameters</a>
+</li>
+</ul>
+</li>
+<li>
+<a href="#assumptions">Simplifying Assumptions</a>
+</li>
+<li>
+<a href="#Appendix">Appendix</a>
+</li>
+</ul>
+</div>
+
+  
+<a name="N1000D"></a><a name="Overview"></a>
+<h2 class="h3">Overview</h2>
+<div class="section">
+<p>Gridmix is a benchmark for live clusters. It submits a mix of synthetic
+  jobs, modeling a profile mined from production loads.</p>
+<p>There exist three versions of the Gridmix tool. This document discusses
+  the third (checked into contrib), distinct from the two checked into the
+  benchmarks subdirectory. While the first two versions of the tool included
+  stripped-down versions of common jobs, both were principally saturation
+  tools for stressing the framework at scale. In support of a broader range of
+  deployments and finer-tuned job mixes, this version of the tool will attempt
+  to model the resource profiles of production jobs to identify bottlenecks,
+  guide development, and serve as a replacement for the existing gridmix
+  benchmarks.</p>
+</div>
+
+  
+<a name="N1001A"></a><a name="usage"></a>
+<h2 class="h3">Usage</h2>
+<div class="section">
+<p>To run Gridmix, one requires a job trace describing the job mix for a
+  given cluster. Such traces are typically genenerated by Rumen (see related
+  documentation). Gridmix also requires input data from which the synthetic
+  jobs will draw bytes. The input data need not be in any particular format,
+  as the synthetic jobs are currently binary readers. If one is running on a
+  new cluster, an optional step generating input data may precede the run.</p>
+<p>Basic command line usage:</p>
+<pre class="code">
+
+bin/mapred org.apache.hadoop.mapred.gridmix.Gridmix [-generate &lt;MiB&gt;] &lt;iopath&gt; &lt;trace&gt;
+</pre>
+<p>The <span class="codefrag">-generate</span> parameter accepts standard units, e.g.
+  <span class="codefrag">100g</span> will generate 100 * 2<sup>30</sup> bytes. The
+  &lt;iopath&gt; parameter is the destination directory for generated and/or
+  the directory from which input data will be read. The &lt;trace&gt;
+  parameter is a path to a job trace. The following configuration parameters
+  are also accepted in the standard idiom, before other Gridmix
+  parameters.</p>
+<a name="N10036"></a><a name="Configuration+parameters"></a>
+<h3 class="h4">Configuration parameters</h3>
+<p></p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+    
+<tr>
+<th colspan="1" rowspan="1"> Parameter </th><th colspan="1" rowspan="1"> Description </th><th colspan="1" rowspan="1"> Notes </th>
+</tr>
+    
+<tr>
+<td colspan="1" rowspan="1"><span class="codefrag">gridmix.output.directory</span></td>
+        <td colspan="1" rowspan="1">The directory into which output will be written. If specified, the
+        <span class="codefrag">iopath</span> will be relative to this parameter.</td>
+        <td colspan="1" rowspan="1">The submitting user must have read/write access to this
+        directory. The user should also be mindful of any quota issues that
+        may arise during a run.</td>
+</tr>
+    
+<tr>
+<td colspan="1" rowspan="1"><span class="codefrag">gridmix.client.submit.threads</span></td>
+        <td colspan="1" rowspan="1">The number of threads submitting jobs to the cluster. This also
+        controls how many splits will be loaded into memory at a given time,
+        pending the submit time in the trace.</td>
+        <td colspan="1" rowspan="1">Splits are pregenerated to hit submission deadlines, so
+        particularly dense traces may want more submitting threads. However,
+        storing splits in memory is reasonably expensive, so one should raise
+        this cautiously.</td>
+</tr>
+    
+<tr>
+<td colspan="1" rowspan="1"><span class="codefrag">gridmix.client.pending.queue.depth</span></td>
+        <td colspan="1" rowspan="1">The depth of the queue of job descriptions awaiting split
+        generation.</td>
+        <td colspan="1" rowspan="1">The jobs read from the trace occupy a queue of this depth before
+        being processed by the submission threads. It is unusual to configure
+        this.</td>
+</tr>
+    
+<tr>
+<td colspan="1" rowspan="1"><span class="codefrag">gridmix.min.key.length</span></td>
+        <td colspan="1" rowspan="1">The key size for jobs submitted to the cluster.</td>
+        <td colspan="1" rowspan="1">While this is clearly a job-specific, even task-specific property,
+        no data on key length is currently available. Since the intermediate
+        data are random, memcomparable data, not even the sort is likely
+        affected. It exists as a tunable as no default value is appropriate,
+        but future versions will likely replace it with trace data.</td>
+</tr>
+  
+</table>
+</div>
+
+
+<a name="N10098"></a><a name="assumptions"></a>
+<h2 class="h3">Simplifying Assumptions</h2>
+<div class="section">
+<p>Gridmix will be developed in stages, incorporating feedback and patches
+  from the community. Currently, its intent is to evaluate Map/Reduce and HDFS
+  performance and not the layers on top of them (i.e. the extensive lib and
+  subproject space). Given these two limitations, the following
+  characteristics of job load are not currently captured in job traces and
+  cannot be accurately reproduced in Gridmix.</p>
+<table class="ForrestTable" cellspacing="1" cellpadding="4">
+  
+<tr>
+<th colspan="1" rowspan="1">Property</th><th colspan="1" rowspan="1">Notes</th>
+</tr>
+  
+<tr>
+<td colspan="1" rowspan="1">CPU usage</td><td colspan="1" rowspan="1">We have no data for per-task CPU usage, so we
+  cannot attempt even an approximation. Gridmix tasks are never CPU bound
+  independent of I/O, though this surely happens in practice.</td>
+</tr>
+  
+<tr>
+<td colspan="1" rowspan="1">Filesystem properties</td><td colspan="1" rowspan="1">No attempt is made to match block
+  sizes, namespace hierarchies, or any property of input, intermediate, or
+  output data other than the bytes/records consumed and emitted from a given
+  task. This implies that some of the most heavily used parts of the system-
+  the compression libraries, text processing, streaming, etc.- cannot be
+  meaningfully tested with the current implementation.</td>
+</tr>
+  
+<tr>
+<td colspan="1" rowspan="1">I/O rates</td><td colspan="1" rowspan="1">The rate at which records are consumed/emitted is
+  assumed to be limited only by the speed of the reader/writer and constant
+  throughout the task.</td>
+</tr>
+  
+<tr>
+<td colspan="1" rowspan="1">Memory profile</td><td colspan="1" rowspan="1">No data on tasks' memory usage over time is
+  available, though the max heap size is retained.</td>
+</tr>
+  
+<tr>
+<td colspan="1" rowspan="1">Skew</td><td colspan="1" rowspan="1">The records consumed and emitted to/from a given task
+  are assumed to follow observed averages, i.e. records will be more regular
+  than may be seen in the wild. Each map also generates a proportional
+  percentage of data for each reduce, so a job with unbalanced input will be
+  flattened.</td>
+</tr>
+  
+<tr>
+<td colspan="1" rowspan="1">Job failure</td><td colspan="1" rowspan="1">User code is assumed to be correct.</td>
+</tr>
+  
+<tr>
+<td colspan="1" rowspan="1">Job independence</td><td colspan="1" rowspan="1">The output or outcome of one job does not
+  affect when or whether a subsequent job will run.</td>
+</tr>
+  
+</table>
+</div>
+
+
+<a name="N100F5"></a><a name="Appendix"></a>
+<h2 class="h3">Appendix</h2>
+<div class="section">
+<p>Issues tracking the implementations of <a href="https://issues.apache.org/jira/browse/HADOOP-2369">gridmix1</a>, <a href="https://issues.apache.org/jira/browse/HADOOP-3770">gridmix2</a>, and
+  <a href="https://issues.apache.org/jira/browse/MAPREDUCE-776">gridmix3</a>.
+  Other issues tracking the development of Gridmix can be found by searching
+  the Map/Reduce <a href="https://issues.apache.org/jira/browse/MAPREDUCE">JIRA</a>
+</p>
+</div>
+
+
+</div>
+<!--+
+    |end content
+    +-->
+<div class="clearboth">&nbsp;</div>
+</div>
+<div id="footer">
+<!--+
+    |start bottomstrip
+    +-->
+<div class="lastmodified">
+<script type="text/javascript"><!--
+document.write("Last Published: " + document.lastModified);
+//  --></script>
+</div>
+<div class="copyright">
+        Copyright &copy;
+         2008 <a href="http://www.apache.org/licenses/">The Apache Software Foundation.</a>
+</div>
+<!--+
+    |end bottomstrip
+    +-->
+</div>
+</body>
+</html>

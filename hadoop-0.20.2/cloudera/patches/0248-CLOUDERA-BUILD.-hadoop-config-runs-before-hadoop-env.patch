@@ -1,0 +1,104 @@
+From 3af9533ee6f260373f302ff4a16dd04eb75e0616 Mon Sep 17 00:00:00 2001
+From: Chad Metcalf <chad@cloudera.com>
+Date: Mon, 1 Mar 2010 15:28:19 -0800
+Subject: [PATCH 0248/1179] CLOUDERA-BUILD. hadoop-config runs before hadoop-env.sh
+
+    conf/hadoop-env.sh says you can update JAVA_HOME there, but it gets
+    sourced after hadoop-config.sh, which errors out if JAVA_HOME is not
+    set. This patch changes the flow so hadoop-env is always sourced by
+    hadoop-config after the --config flag is processed. This will allow
+    JAVA_HOME to be set in hadoop-env and still allow for trying to find a valid
+    JAVA_HOME.
+---
+ bin/hadoop           |    4 ----
+ bin/hadoop-config.sh |   36 +++++++++++++++++++-----------------
+ bin/hadoop-daemon.sh |    4 ----
+ 3 files changed, 19 insertions(+), 25 deletions(-)
+
+diff --git a/bin/hadoop b/bin/hadoop
+index bdf5eac..c170607 100755
+--- a/bin/hadoop
++++ b/bin/hadoop
+@@ -84,10 +84,6 @@ fi
+ COMMAND=$1
+ shift
+ 
+-if [ -f "${HADOOP_CONF_DIR}/hadoop-env.sh" ]; then
+-  . "${HADOOP_CONF_DIR}/hadoop-env.sh"
+-fi
+-
+ # some Java parameters
+ if [ "$JAVA_HOME" != "" ]; then
+   #echo "run java in $JAVA_HOME"
+diff --git a/bin/hadoop-config.sh b/bin/hadoop-config.sh
+index bd8ed66..31f0db3 100644
+--- a/bin/hadoop-config.sh
++++ b/bin/hadoop-config.sh
+@@ -56,6 +56,25 @@ EOF
+   exit 1
+ fi
+ 
++#check to see if the conf dir is given as an optional argument
++if [ $# -gt 1 ]
++then
++    if [ "--config" = "$1" ]
++	  then
++	      shift
++	      confdir=$1
++	      shift
++	      HADOOP_CONF_DIR=$confdir
++    fi
++fi
++ 
++# Allow alternate conf dir location.
++HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-$HADOOP_HOME/conf}"
++
++if [ -f "${HADOOP_CONF_DIR}/hadoop-env.sh" ]; then
++  . "${HADOOP_CONF_DIR}/hadoop-env.sh"
++fi
++
+ # attempt to find java
+ if [ -z "$JAVA_HOME" ]; then
+   for candidate in \
+@@ -87,23 +106,6 @@ EOF
+   fi
+ fi
+ 
+-
+-
+-#check to see if the conf dir is given as an optional argument
+-if [ $# -gt 1 ]
+-then
+-    if [ "--config" = "$1" ]
+-	  then
+-	      shift
+-	      confdir=$1
+-	      shift
+-	      HADOOP_CONF_DIR=$confdir
+-    fi
+-fi
+- 
+-# Allow alternate conf dir location.
+-HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-$HADOOP_HOME/conf}"
+-
+ if [ -d $HADOOP_HOME/pids ]; then
+ HADOOP_PID_DIR="${HADOOP_PID_DIR:-$HADOOP_HOME/pids}"
+ fi
+diff --git a/bin/hadoop-daemon.sh b/bin/hadoop-daemon.sh
+index e10390a..63325d0 100755
+--- a/bin/hadoop-daemon.sh
++++ b/bin/hadoop-daemon.sh
+@@ -64,10 +64,6 @@ hadoop_rotate_log ()
+     fi
+ }
+ 
+-if [ -f "${HADOOP_CONF_DIR}/hadoop-env.sh" ]; then
+-  . "${HADOOP_CONF_DIR}/hadoop-env.sh"
+-fi
+-
+ # get log directory
+ if [ "$HADOOP_LOG_DIR" = "" ]; then
+   export HADOOP_LOG_DIR="$HADOOP_HOME/logs"
+-- 
+1.7.0.4
+

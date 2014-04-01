@@ -1,0 +1,117 @@
+From 3d43a9035ebaf0c449647c5f35fbd37444708d9f Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 11 Mar 2010 10:48:27 -0800
+Subject: [PATCH 0550/1179] MAPREDUCE-1522. FileInputFormat may change the file system of an input path
+
+Patch: https://issues.apache.org/jira/secure/attachment/12437994/M1522-1v20.patch
+Author: Tsz Wo (Nicholas), SZE
+Ref: CDH-648
+---
+ .../mapreduce/lib/input/FileInputFormat.java       |    8 +--
+ .../mapreduce/lib/input/TestFileInputFormat.java   |   65 ++++++++++++++++++++
+ 2 files changed, 68 insertions(+), 5 deletions(-)
+ create mode 100644 src/test/org/apache/hadoop/mapreduce/lib/input/TestFileInputFormat.java
+
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/input/FileInputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/input/FileInputFormat.java
+index 58d0992..d424088 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/input/FileInputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/input/FileInputFormat.java
+@@ -345,12 +345,11 @@ public abstract class FileInputFormat<K, V> extends InputFormat<K, V> {
+   public static void setInputPaths(Job job, 
+                                    Path... inputPaths) throws IOException {
+     Configuration conf = job.getConfiguration();
+-    FileSystem fs = FileSystem.get(conf);
+-    Path path = inputPaths[0].makeQualified(fs);
++    Path path = inputPaths[0].getFileSystem(conf).makeQualified(inputPaths[0]);
+     StringBuffer str = new StringBuffer(StringUtils.escapeString(path.toString()));
+     for(int i = 1; i < inputPaths.length;i++) {
+       str.append(StringUtils.COMMA_STR);
+-      path = inputPaths[i].makeQualified(fs);
++      path = inputPaths[i].getFileSystem(conf).makeQualified(inputPaths[i]);
+       str.append(StringUtils.escapeString(path.toString()));
+     }
+     conf.set("mapred.input.dir", str.toString());
+@@ -366,8 +365,7 @@ public abstract class FileInputFormat<K, V> extends InputFormat<K, V> {
+   public static void addInputPath(Job job, 
+                                   Path path) throws IOException {
+     Configuration conf = job.getConfiguration();
+-    FileSystem fs = FileSystem.get(conf);
+-    path = path.makeQualified(fs);
++    path = path.getFileSystem(conf).makeQualified(path);
+     String dirStr = StringUtils.escapeString(path.toString());
+     String dirs = conf.get("mapred.input.dir");
+     conf.set("mapred.input.dir", dirs == null ? dirStr : dirs + "," + dirStr);
+diff --git a/src/test/org/apache/hadoop/mapreduce/lib/input/TestFileInputFormat.java b/src/test/org/apache/hadoop/mapreduce/lib/input/TestFileInputFormat.java
+new file mode 100644
+index 0000000..0d4d944
+--- /dev/null
++++ b/src/test/org/apache/hadoop/mapreduce/lib/input/TestFileInputFormat.java
+@@ -0,0 +1,65 @@
++/**
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.hadoop.mapreduce.lib.input;
++
++import java.io.IOException;
++import java.util.Arrays;
++
++import junit.framework.TestCase;
++
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.fs.Path;
++import org.apache.hadoop.mapreduce.Job;
++
++public class TestFileInputFormat extends TestCase {
++
++  public void testAddInputPath() throws IOException {
++    final Configuration conf = new Configuration();
++    conf.set("fs.default.name", "s3://abc:xyz@hostname/");
++    final Job j = new Job(conf);
++
++    //setup default fs
++    final FileSystem defaultfs = FileSystem.get(conf);
++    System.out.println("defaultfs.getUri() = " + defaultfs.getUri());
++
++    {
++      //test addInputPath
++      final Path original = new Path("file:/foo");
++      System.out.println("original = " + original);
++      FileInputFormat.addInputPath(j, original);
++      final Path[] results = FileInputFormat.getInputPaths(j);
++      System.out.println("results = " + Arrays.asList(results));
++      assertEquals(1, results.length);
++      assertEquals(original, results[0]);
++    }
++
++    {
++      //test setInputPaths
++      final Path original = new Path("file:/bar");
++      System.out.println("original = " + original);
++      FileInputFormat.setInputPaths(j, original);
++      final Path[] results = FileInputFormat.getInputPaths(j);
++      System.out.println("results = " + Arrays.asList(results));
++      assertEquals(1, results.length);
++      assertEquals(original, results[0]);
++    }
++  }
++
++}
+-- 
+1.7.0.4
+

@@ -1,0 +1,39 @@
+From f0cefd74f8727ebd331c6712ab5b4c004e46a629 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Tue, 15 Mar 2011 10:37:46 -0700
+Subject: [PATCH 0929/1179] CLOUDERA-BUILD. Nuke DFSConfigKeys.DFS_BLOCK_SIZE_KEY.
+
+Ref: CDH-2828
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java |    1 -
+ .../hadoop/hdfs/TestWriteConfigurationToDFS.java   |    2 +-
+ 2 files changed, 1 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+index 504461a..917d675 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSConfigKeys.java
+@@ -28,7 +28,6 @@ import org.apache.hadoop.fs.CommonConfigurationKeys;
+ 
+ public class DFSConfigKeys extends CommonConfigurationKeys {
+ 
+-  public static final String  DFS_BLOCK_SIZE_KEY = "dfs.blocksize";
+   public static final long    DFS_BLOCK_SIZE_DEFAULT = 64*1024*1024;
+   public static final String  DFS_REPLICATION_KEY = "dfs.replication";
+   public static final short   DFS_REPLICATION_DEFAULT = 3;
+diff --git a/src/test/org/apache/hadoop/hdfs/TestWriteConfigurationToDFS.java b/src/test/org/apache/hadoop/hdfs/TestWriteConfigurationToDFS.java
+index 82119b4..6387414 100644
+--- a/src/test/org/apache/hadoop/hdfs/TestWriteConfigurationToDFS.java
++++ b/src/test/org/apache/hadoop/hdfs/TestWriteConfigurationToDFS.java
+@@ -32,7 +32,7 @@ public class TestWriteConfigurationToDFS {
+   @Test(timeout=60000)
+   public void testWriteConf() throws Exception {
+     Configuration conf = new Configuration();
+-    conf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, 4096);
++    conf.setInt("dfs.block.size", 4096);
+     System.out.println("Setting conf in: " + System.identityHashCode(conf));
+     MiniDFSCluster cluster = new MiniDFSCluster(conf, 1, true, null);
+     FileSystem fs = cluster.getFileSystem();
+-- 
+1.7.0.4
+

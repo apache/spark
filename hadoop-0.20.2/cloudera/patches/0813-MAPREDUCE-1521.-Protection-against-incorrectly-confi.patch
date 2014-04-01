@@ -1,0 +1,446 @@
+From d2032071037eb33c562d97b16e0cd291f4e3f23b Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 2 Feb 2011 16:59:51 -0800
+Subject: [PATCH 0813/1179] MAPREDUCE-1521. Protection against incorrectly configured reduces
+
+Author: Mahadev Konar
+Ref: CDH-2622
+---
+ src/mapred/mapred-default.xml                      |    8 ++++
+ src/mapred/org/apache/hadoop/mapred/JSPUtil.java   |   10 ++++-
+ src/mapred/org/apache/hadoop/mapred/JobClient.java |   10 +++++
+ .../org/apache/hadoop/mapred/JobInProgress.java    |   36 +++++++++++++++-
+ src/mapred/org/apache/hadoop/mapred/JobStatus.java |   21 +++++++++-
+ .../hadoop/mapred/JobSubmissionProtocol.java       |    5 ++-
+ .../org/apache/hadoop/mapred/JobTracker.java       |    6 ++-
+ .../apache/hadoop/mapred/ResourceEstimator.java    |   17 ++++++-
+ .../org/apache/hadoop/mapred/RunningJob.java       |    7 +++
+ .../org/apache/hadoop/mapred/jobcontrol/Job.java   |    2 +-
+ .../org/apache/hadoop/mapred/TestTaskLimits.java   |   43 +++++++++++++++++++-
+ src/webapps/job/jobdetails.jsp                     |    4 ++
+ 12 files changed, 155 insertions(+), 14 deletions(-)
+
+diff --git a/src/mapred/mapred-default.xml b/src/mapred/mapred-default.xml
+index 665d730..cd701fb 100644
+--- a/src/mapred/mapred-default.xml
++++ b/src/mapred/mapred-default.xml
+@@ -365,6 +365,14 @@
+ </property>
+ 
+ <property>
++  <name>mapreduce.reduce.input.limit</name>
++  <value>-1</value>
++  <description>The limit on the input size of the reduce. If the estimated
++  input size of the reduce is greater than this value, job is failed. A
++  value of -1 means that there is no limit set. </description>
++</property>
++
++<property>
+   <name>mapred.job.tracker.retiredjobs.cache.size</name>
+   <value>1000</value>
+   <description>The number of retired job status to keep in the cache.
+diff --git a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+index 4c097e7..5c805bb 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
++++ b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+@@ -310,6 +310,7 @@ class JSPUtil {
+       sb.append("<th><b>Reduce Total</b></th>");
+       sb.append("<th><b>Reduces Completed</b></th>");
+       sb.append("<th><b>Job Scheduling Information</b></th>");
++      sb.append("<td><b>Diagnostic Info </b></td>");
+       sb.append("</tr>\n");
+       sb.append("</thead><tbody>");
+       for (Iterator<JobInProgress> it = jobs.iterator(); it.hasNext(); ++rowId) {
+@@ -326,7 +327,8 @@ class JSPUtil {
+         String jobpri = job.getPriority().toString();
+         String schedulingInfo =
+           HtmlQuoting.quoteHtmlChars(job.getStatus().getSchedulingInfo());
+-
++        String diagnosticInfo = 
++          HtmlQuoting.quoteHtmlChars(job.getStatus().getFailureInfo());
+         if (isModifiable) {
+           sb.append("<tr><td><input TYPE=\"checkbox\" " +
+           		"onclick=\"checkButtonVerbage()\" " +
+@@ -351,6 +353,7 @@ class JSPUtil {
+             + ServletUtil.percentageGraph(status.reduceProgress() * 100, 80)
+             + "</td><td>" + desiredReduces + "</td><td> " + completedReduces 
+             + "</td><td>" + schedulingInfo
++            + "</td><td>" + diagnosticInfo
+             + "</td></tr>\n");
+       }
+       sb.append("</tbody>");
+@@ -391,6 +394,7 @@ class JSPUtil {
+       sb.append("<td><b>Map % Complete</b></td>");
+       sb.append("<td><b>Reduce % Complete</b></td>");
+       sb.append("<td><b>Job Scheduling Information</b></td>");
++      sb.append("<td><b>Diagnostic Info </b></td>");
+       sb.append("</tr>\n");
+       for (int i = 0; i < 100 && iterator.hasNext(); i++) {
+         RetireJobInfo info = iterator.next();
+@@ -434,7 +438,9 @@ class JSPUtil {
+             
+             "<td>" +
+             HtmlQuoting.quoteHtmlChars(info.status.getSchedulingInfo()) +
+-            "</td>" + "</tr>\n");
++            "</td>" + 
++            "<td>" + HtmlQuoting.quoteHtmlChars(info.status.getFailureInfo()) + 
++            "</td></tr>\n");
+         rowId++;
+       }
+     }
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobClient.java b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+index 5552d4e..6943c8f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobClient.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobClient.java
+@@ -428,6 +428,15 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     public String[] getTaskDiagnostics(TaskAttemptID id) throws IOException {
+       return jobSubmitClient.getTaskDiagnostics(id);
+     }
++
++    @Override
++    public String getFailureInfo() throws IOException {
++      //assuming that this is just being called after 
++      //we realized the job failed. SO we try avoiding 
++      //a rpc by not calling updateStatus
++      ensureFreshStatus();
++      return status.getFailureInfo();
++    }
+   }
+ 
+   private JobSubmissionProtocol jobSubmitClient;
+@@ -1222,6 +1231,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
+     RunningJob rj = jc.submitJob(job);
+     try {
+       if (!jc.monitorAndPrintJob(job, rj)) {
++        LOG.info("Job Failed: " + rj.getFailureInfo());
+         throw new IOException("Job failed!");
+       }
+     } catch (InterruptedException ie) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 8774956..ae9b10d 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -112,7 +112,8 @@ public class JobInProgress {
+   int finishedReduceTasks = 0;
+   int failedMapTasks = 0; 
+   int failedReduceTasks = 0;
+-  
++  private static long DEFAULT_REDUCE_INPUT_LIMIT = -1L;
++  long reduce_input_limit = -1L;
+   private static float DEFAULT_COMPLETED_MAPS_PERCENT_FOR_REDUCE_SLOWSTART = 0.05f;
+   int completedMapsForReduceSlowstart = 0;
+   
+@@ -421,6 +422,12 @@ public class JobInProgress {
+       this.jobMetrics.setTag("jobId", jobId.toString());
+       hasSpeculativeMaps = conf.getMapSpeculativeExecution();
+       hasSpeculativeReduces = conf.getReduceSpeculativeExecution();
++      // a limit on the input size of the reduce.
++      // we check to see if the estimated input size of 
++      // of each reduce is less than this value. If not
++      // we fail the job. A value of -1 just means there is no
++      // limit set.
++      reduce_input_limit = -1L;
+       this.maxLevel = jobtracker.getNumTaskCacheLevels();
+       this.anyCacheLevel = this.maxLevel+1;
+       this.nonLocalMaps = new LinkedList<TaskInProgress>();
+@@ -429,7 +436,8 @@ public class JobInProgress {
+       this.nonRunningReduces = new LinkedList<TaskInProgress>();    
+       this.runningReduces = new LinkedHashSet<TaskInProgress>();
+       this.resourceEstimator = new ResourceEstimator(this);
+-
++      this.reduce_input_limit = conf.getLong("mapreduce.reduce.input.limit", 
++          DEFAULT_REDUCE_INPUT_LIMIT);
+       // register job's tokens for renewal
+       DelegationTokenRenewal.registerDelegationTokensForRenewal(
+           jobInfo.getJobID(), ts, jobtracker.getConf());
+@@ -711,7 +719,10 @@ public class JobInProgress {
+           (conf.getFloat("mapred.reduce.slowstart.completed.maps", 
+                          DEFAULT_COMPLETED_MAPS_PERCENT_FOR_REDUCE_SLOWSTART) * 
+            numMapTasks));
+-
++    
++    // ... use the same for estimating the total output of all maps
++    resourceEstimator.setThreshhold(completedMapsForReduceSlowstart);
++    
+     // create cleanup two cleanup tips, one map and one reduce.
+     cleanup = new TaskInProgress[2];
+ 
+@@ -1544,6 +1555,25 @@ public class JobInProgress {
+       return null;
+     }
+     
++    /** check to see if we have any misbehaving reducers. If the expected output
++     * for reducers is huge then we just fail the job and error out. The estimated
++     * size is divided by 2 since the resource estimator returns the amount of disk 
++     * space the that the reduce will use (which is 2 times the input, space for merge + reduce
++     * input). **/
++    long estimatedReduceInputSize = resourceEstimator.getEstimatedReduceInputSize()/2;
++    if (((estimatedReduceInputSize) > 
++      reduce_input_limit) && (reduce_input_limit > 0L)) {
++      // make sure jobtracker lock is held
++      LOG.info("Exceeded limit for reduce input size: Estimated:" + 
++          estimatedReduceInputSize + " Limit: " + 
++          reduce_input_limit + " Failing Job " + jobId);
++      status.setFailureInfo("Job exceeded Reduce Input limit " 
++          + " Limit:  " + reduce_input_limit + 
++          " Estimated: " + estimatedReduceInputSize);
++      jobtracker.failJob(this);
++      return null;
++    }
++    
+     // Ensure we have sufficient map outputs ready to shuffle before 
+     // scheduling reduces
+     if (!scheduleReduces()) {
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobStatus.java b/src/mapred/org/apache/hadoop/mapred/JobStatus.java
+index 0ecbab7..dd26d32 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobStatus.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobStatus.java
+@@ -84,7 +84,8 @@ public class JobStatus implements Writable, Cloneable {
+   private String user;
+   private JobPriority priority;
+   private String schedulingInfo="NA";
+-    
++  private String failureInfo = "NA";
++  
+   /**
+    */
+   public JobStatus() {
+@@ -278,8 +279,24 @@ public class JobStatus implements Writable, Cloneable {
+   public synchronized String getSchedulingInfo() {
+    return schedulingInfo;
+   }
++  
++  /**
++   * gets any available info on the reason of failure of the job.
++   * @return diagnostic information on why a job might have failed.
++   */
++  public synchronized String getFailureInfo() {
++    return this.failureInfo;
++  }
+ 
+   /**
++   * set the reason for failuire of this job
++   * @param failureInfo the reason for failure of this job.
++   */
++  public synchronized void setFailureInfo(String failureInfo) {
++    this.failureInfo = failureInfo;
++  }
++  
++  /**
+    * Used to set the scheduling information associated to a particular Job.
+    * 
+    * @param schedulingInfo Scheduling information of the job
+@@ -343,6 +360,7 @@ public class JobStatus implements Writable, Cloneable {
+       WritableUtils.writeEnum(out, entry.getKey());
+       entry.getValue().write(out);
+     }
++    Text.writeString(out, failureInfo);
+   }
+ 
+   public synchronized void readFields(DataInput in) throws IOException {
+@@ -365,6 +383,7 @@ public class JobStatus implements Writable, Cloneable {
+       acl.readFields(in);
+       this.jobACLs.put(aclType, acl);
+     }
++    this.failureInfo = Text.readString(in);
+   }
+ 
+   // A utility to convert new job runstates to the old ones.
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+index 88baf9c..e9d7b4b 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobSubmissionProtocol.java
+@@ -79,8 +79,11 @@ interface JobSubmissionProtocol extends VersionedProtocol {
+    * Version 25: Added JobACLs to JobStatus as part of MAPREDUCE-1307
+    * Version 26: Added the method getQueueAdmins(queueName) as part of
+    *             MAPREDUCE-1664.
++   * Version 27: Added queue state to JobQueueInfo as part of HADOOP-5913.
++   * Version 28: Added a new field to JobStatus to provide user readable 
++   *             information on job failure. MAPREDUCE-1521.
+    */
+-  public static final long versionID = 26L;
++  public static final long versionID = 28L;
+ 
+   /**
+    * Allocate a name for the job.
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobTracker.java b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+index bc5f2bd..6d4776f 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobTracker.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobTracker.java
+@@ -4017,9 +4017,11 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
+           StringUtils.stringifyException(kie));
+       killJob(job);
+     } catch (Throwable t) {
++      String failureInfo = 
++        "Job initialization failed:\n" + StringUtils.stringifyException(t);
+       // If the job initialization is failed, job state will be FAILED
+-      LOG.error("Job initialization failed:\n" +
+-          StringUtils.stringifyException(t));
++      LOG.error(failureInfo);
++      job.getStatus().setFailureInfo(failureInfo);
+       failJob(job);
+     }
+ 	 }
+diff --git a/src/mapred/org/apache/hadoop/mapred/ResourceEstimator.java b/src/mapred/org/apache/hadoop/mapred/ResourceEstimator.java
+index 6e9154e..924011e 100644
+--- a/src/mapred/org/apache/hadoop/mapred/ResourceEstimator.java
++++ b/src/mapred/org/apache/hadoop/mapred/ResourceEstimator.java
+@@ -39,7 +39,7 @@ class ResourceEstimator {
+ 
+   private int completedMapsUpdates;
+   final private JobInProgress job;
+-  final private int threshholdToUse;
++  private int threshholdToUse;
+ 
+   public ResourceEstimator(JobInProgress job) {
+     this.job = job;
+@@ -73,7 +73,9 @@ class ResourceEstimator {
+     } else {
+       long inputSize = job.getInputLength() + job.desiredMaps(); 
+       //add desiredMaps() so that randomwriter case doesn't blow up
+-      long estimate = Math.round((inputSize * 
++      //the multiplication might lead to overflow, casting it with
++      //double prevents it
++      long estimate = Math.round(((double)inputSize * 
+           completedMapsOutputSize * 2.0)/completedMapsInputSize);
+       if (LOG.isDebugEnabled()) {
+         LOG.debug("estimate total map output will be " + estimate);
+@@ -106,5 +108,14 @@ class ResourceEstimator {
+     }
+   }
+   
+-
++  /**
++   * the number of maps after which reduce starts launching
++   * @param numMaps the number of maps after which reduce starts
++   * launching. It acts as the upper bound for the threshhold, so
++   * that we can get right estimates before we reach these number
++   * of maps.
++   */
++  void setThreshhold(int numMaps) {
++    threshholdToUse = Math.min(threshholdToUse, numMaps);
++  }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapred/RunningJob.java b/src/mapred/org/apache/hadoop/mapred/RunningJob.java
+index 91cd202..89d9072 100644
+--- a/src/mapred/org/apache/hadoop/mapred/RunningJob.java
++++ b/src/mapred/org/apache/hadoop/mapred/RunningJob.java
+@@ -183,6 +183,13 @@ public interface RunningJob {
+   public Counters getCounters() throws IOException;
+   
+   /**
++   * Get failure info for the job.
++   * @return the failure info for the job.
++   * @throws IOException
++   */
++  public String getFailureInfo() throws IOException;
++  
++  /**
+    * Gets the diagnostic messages for a given task attempt.
+    * @param taskid
+    * @return the list of diagnostic messages for the task
+diff --git a/src/mapred/org/apache/hadoop/mapred/jobcontrol/Job.java b/src/mapred/org/apache/hadoop/mapred/jobcontrol/Job.java
+index 4a1ee30..a7ed6fb 100644
+--- a/src/mapred/org/apache/hadoop/mapred/jobcontrol/Job.java
++++ b/src/mapred/org/apache/hadoop/mapred/jobcontrol/Job.java
+@@ -286,7 +286,7 @@ public class Job {
+           this.state = Job.SUCCESS;
+         } else {
+           this.state = Job.FAILED;
+-          this.message = "Job failed!";
++          this.message = "Job failed! Error - " + running.getFailureInfo();
+           try {
+             running.killJob();
+           } catch (IOException e1) {
+diff --git a/src/test/org/apache/hadoop/mapred/TestTaskLimits.java b/src/test/org/apache/hadoop/mapred/TestTaskLimits.java
+index 6da1a62..1c87e7b 100644
+--- a/src/test/org/apache/hadoop/mapred/TestTaskLimits.java
++++ b/src/test/org/apache/hadoop/mapred/TestTaskLimits.java
+@@ -63,6 +63,44 @@ public class TestTaskLimits extends TestCase {
+   }
+ 
+   /**
++   * check with a reduce limit of 10 bytes for input to reduce.
++   * This should fail since input to reduce estimate is greater
++   * than that!
++   * @return true on failing the job, false
++   * @throws IOException
++   */
++  private boolean runReduceLimitCheck() throws IOException {
++    MiniDFSCluster dfs = null;
++    MiniMRCluster mr = null;
++    FileSystem fileSys = null;
++    boolean success = false;
++    try {
++      final int taskTrackers = 2;
++   
++      Configuration conf = new Configuration();
++      conf.setInt("mapred.jobtracker.maxtasks.per.job", -1);
++      dfs = new MiniDFSCluster(conf, 4, true, null);
++      fileSys = dfs.getFileSystem();
++      JobConf jconf = new JobConf(conf);
++      mr = new MiniMRCluster(0, 0, taskTrackers, fileSys.getUri().toString(), 1,
++                             null, null, null, jconf);
++      
++      JobConf jc = mr.createJobConf();
++      jc.setLong("mapreduce.reduce.input.limit", 10L);
++      try {
++        runPI(mr, jc);
++        success = false;
++      } catch (IOException e) {
++        success = true;
++      }
++    } finally {
++      if (dfs != null) { dfs.shutdown(); }
++      if (mr != null) { mr.shutdown(); }
++    }
++    return success;
++  }
++  
++  /**
+    * Run the pi test with a specifix value of 
+    * mapred.jobtracker.maxtasks.per.job. Returns true if the job succeeded.
+    */
+@@ -73,7 +111,7 @@ public class TestTaskLimits extends TestCase {
+     boolean success = false;
+     try {
+       final int taskTrackers = 2;
+-
++   
+       Configuration conf = new Configuration();
+       conf.setInt("mapred.jobtracker.maxtasks.per.job", maxTasks);
+       dfs = new MiniDFSCluster(conf, 4, true, null);
+@@ -114,5 +152,8 @@ public class TestTaskLimits extends TestCase {
+     status = runOneTest(-1);
+     assertTrue(status == true);
+     System.out.println("Job 3 succeeded as expected.");
++    status = runReduceLimitCheck();
++    assertTrue(status == true);
++    System.out.println("Success: Reduce limit as expected");
+   }
+ }
+diff --git a/src/webapps/job/jobdetails.jsp b/src/webapps/job/jobdetails.jsp
+index 379b708..3e63ba4 100644
+--- a/src/webapps/job/jobdetails.jsp
++++ b/src/webapps/job/jobdetails.jsp
+@@ -306,6 +306,8 @@
+             job.getFinishTime(), job.getStartTime()) + "<br>\n");
+       } else if (runState == JobStatus.FAILED) {
+         out.print("<b>Status:</b> Failed<br>\n");
++        out.print("<b>Failure Info:</b>" + 
++                   HtmlQuoting.quoteHtmlChars(status.getFailureInfo()) + "<br>\n");
+         out.print("<b>Started at:</b> " + new Date(job.getStartTime()) + "<br>\n");
+         out.print("<b>Failed at:</b> " + new Date(job.getFinishTime()) +
+                   "<br>\n");
+@@ -313,6 +315,8 @@
+             job.getFinishTime(), job.getStartTime()) + "<br>\n");
+       } else if (runState == JobStatus.KILLED) {
+         out.print("<b>Status:</b> Killed<br>\n");
++        out.print("<b>Failure Info:</b>" + 
++                   HtmlQuoting.quoteHtmlChars(status.getFailureInfo()) + "<br>\n");
+         out.print("<b>Started at:</b> " + new Date(job.getStartTime()) + "<br>\n");
+         out.print("<b>Killed at:</b> " + new Date(job.getFinishTime()) +
+                   "<br>\n");
+-- 
+1.7.0.4
+

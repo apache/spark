@@ -1,0 +1,49 @@
+From ecc1a3b745384b0f925cb6efc7b6775240ad9195 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Mon, 2 Aug 2010 17:47:05 -0700
+Subject: [PATCH 0671/1179] HDFS-1164. Fix problem in TestHdfsProxy when user running tests doesn't belong to 'users' group
+
+Author: Todd Lipcon
+Reason: fix broken unit test
+Ref: CDH-648
+---
+ .../org/apache/hadoop/hdfsproxy/TestHdfsProxy.java |   14 +++++++++-----
+ 1 files changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/TestHdfsProxy.java b/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/TestHdfsProxy.java
+index d2b5c05..7feb94d 100644
+--- a/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/TestHdfsProxy.java
++++ b/src/contrib/hdfsproxy/src/test/org/apache/hadoop/hdfsproxy/TestHdfsProxy.java
+@@ -40,6 +40,7 @@ import org.apache.hadoop.hdfs.MiniDFSCluster;
+ import org.apache.hadoop.hdfs.server.datanode.DataNode;
+ import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+ import org.apache.hadoop.net.NetUtils;
++import org.apache.hadoop.security.UserGroupInformation;
+ 
+ /**
+  * A JUnit test for HdfsProxy
+@@ -202,13 +203,16 @@ public class TestHdfsProxy extends TestCase {
+     MiniDFSCluster cluster = null;
+     HdfsProxy proxy = null;
+     try {
++      final UserGroupInformation CLIENT_UGI = UserGroupInformation.getCurrentUser();
++      final String testUser = CLIENT_UGI.getShortUserName();
++      final String testGroup = CLIENT_UGI.getGroupNames()[0];
+ 
+       final Configuration dfsConf = new Configuration();
+-      dfsConf.set("hadoop.proxyuser." + System.getProperty("user.name") +
+-          ".groups", "users");
+-      dfsConf.set("hadoop.proxyuser.users.hosts", "127.0.0.1,localhost");
+-      dfsConf.set("hadoop.proxyuser." + System.getProperty("user.name") +
+-          ".hosts", "127.0.0.1,localhost");
++      dfsConf.set("hadoop.proxyuser." + testUser + ".groups", testGroup);
++      dfsConf.set("hadoop.proxyuser." + testGroup + ".hosts",
++          "127.0.0.1,localhost");
++      dfsConf.set("hadoop.proxyuser." + testUser + ".hosts",
++          "127.0.0.1,localhost");
+       dfsConf.set("hadoop.security.authentication", "simple");
+       cluster = new MiniDFSCluster(dfsConf, 2, true, null);
+       cluster.waitActive();
+-- 
+1.7.0.4
+

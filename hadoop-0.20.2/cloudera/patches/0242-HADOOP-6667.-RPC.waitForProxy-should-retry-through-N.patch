@@ -1,0 +1,39 @@
+From d64943401780c3dd1dc498419f33ded8222c3210 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Wed, 12 May 2010 12:05:26 -0700
+Subject: [PATCH 0242/1179] HADOOP-6667. RPC.waitForProxy should retry through NoRouteToHostException.
+
+Description: RPC.waitForProxy already loops through ConnectExceptions, but NoRouteToHostException is not a subclass of ConnectException. In the case that the NN is on a VIP, the No Route To Host error is reasonably common during a failover, so we should retry through it just the same as the other connection errors.
+
+Reason: Improvement
+Author: Eli Collins
+Ref: CDH-907
+---
+ src/core/org/apache/hadoop/ipc/RPC.java |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/ipc/RPC.java b/src/core/org/apache/hadoop/ipc/RPC.java
+index 94b0ec8..2f7101f 100644
+--- a/src/core/org/apache/hadoop/ipc/RPC.java
++++ b/src/core/org/apache/hadoop/ipc/RPC.java
+@@ -26,6 +26,7 @@ import java.lang.reflect.InvocationTargetException;
+ 
+ import java.net.ConnectException;
+ import java.net.InetSocketAddress;
++import java.net.NoRouteToHostException;
+ import java.net.SocketTimeoutException;
+ import java.io.*;
+ import java.util.Map;
+@@ -318,6 +319,9 @@ public class RPC {
+       } catch(SocketTimeoutException te) {  // namenode is busy
+         LOG.info("Problem connecting to server: " + addr);
+         ioe = te;
++      } catch(NoRouteToHostException nrthe) { // perhaps a VIP is failing over
++        LOG.info("No route to host for server: " + addr);
++        ioe = nrthe;
+       }
+       // check if timed out
+       if (System.currentTimeMillis()-timeout >= startTime) {
+-- 
+1.7.0.4
+

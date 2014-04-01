@@ -1,0 +1,35 @@
+From 7604c6f69076effbb0c9793e114946d679f5912d Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:45:02 -0800
+Subject: [PATCH 0202/1179] HADOOP-6505. sed in build.xml fails
+
+Description: I'm not sure whether this is a Solaris thing or an ant 1.7.1 thing, but it definitely doesn't do what it is supposed to.  Instead of getting SunOS-x86-32 (or whatever) I get -x86-32.
+
+<p>This patch replaces the sed call with tr. </p>
+Reason: OS compatibility improvement
+Author: Allen Wittenauer
+Ref: UNKNOWN
+---
+ build.xml |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index a857e2b..62a51d9 100644
+--- a/build.xml
++++ b/build.xml
+@@ -62,9 +62,10 @@
+   <property name="build.anttasks" value="${build.dir}/ant"/>
+   <property name="build.librecordio" value="${build.dir}/librecordio"/>
+   <!-- convert spaces to _ so that mac os doesn't break things -->
+-  <exec executable="sed" inputstring="${os.name}" 
++  <exec executable="tr" inputstring="${os.name}" 
+         outputproperty="nonspace.os">
+-     <arg value="s/ /_/g"/>
++     <arg value="[:space:]"/>
++     <arg value="_"/>
+   </exec>
+   <property name="build.platform" 
+             value="${nonspace.os}-${os.arch}-${sun.arch.data.model}"/>
+-- 
+1.7.0.4
+

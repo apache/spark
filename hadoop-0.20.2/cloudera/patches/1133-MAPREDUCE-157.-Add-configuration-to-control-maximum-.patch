@@ -1,0 +1,154 @@
+From dcdbb78b84fe865235c0bb74cb27538fe0913328 Mon Sep 17 00:00:00 2001
+From: Tom White <tom@cloudera.com>
+Date: Mon, 5 Mar 2012 17:06:13 -0800
+Subject: [PATCH 1133/1179] MAPREDUCE-157. Add configuration to control maximum age of job history files (mapreduce.jobhistory.max-age-ms).
+
+Reason: Improvement
+Author: Jothi Padmanabhan and Tom White
+Ref: CDH-3641
+---
+ .../org/apache/hadoop/mapred/JobHistory.java       |   30 ++++++++++---
+ .../org/apache/hadoop/mapred/TestJobHistory.java   |   46 ++++++++++++++++++++
+ 2 files changed, 69 insertions(+), 7 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobHistory.java b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+index 6dcb5e9..2bb33cb 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobHistory.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobHistory.java
+@@ -373,6 +373,19 @@ public class JobHistory {
+       }
+     }
+     fileManager.start();
++    
++    HistoryCleaner.cleanupFrequency =
++      conf.getLong("mapreduce.jobhistory.cleaner.interval-ms",
++          HistoryCleaner.DEFAULT_CLEANUP_FREQUENCY);
++    HistoryCleaner.maxAgeOfHistoryFiles =
++      conf.getLong("mapreduce.jobhistory.max-age-ms",
++          HistoryCleaner.DEFAULT_HISTORY_MAX_AGE);
++    LOG.info(String.format("Job History MaxAge is %d ms (%.2f days), " +
++          "Cleanup Frequency is %d ms (%.2f days)",
++          HistoryCleaner.maxAgeOfHistoryFiles,
++          ((float) HistoryCleaner.maxAgeOfHistoryFiles)/(HistoryCleaner.ONE_DAY_IN_MS),
++          HistoryCleaner.cleanupFrequency,
++          ((float) HistoryCleaner.cleanupFrequency)/HistoryCleaner.ONE_DAY_IN_MS));
+   }
+ 
+ 
+@@ -1458,6 +1471,7 @@ public class JobHistory {
+         }
+       }
+       Thread historyCleaner  = new Thread(new HistoryCleaner());
++      historyCleaner.setName("Thread for cleaning up History files");
+       historyCleaner.start(); 
+     }
+     /**
+@@ -2064,14 +2078,18 @@ public class JobHistory {
+   }
+   
+   /**
+-   * Delete history files older than one month. Update master index and remove all 
++   * Delete history files older than one month (or a configurable age).
++   * Update master index and remove all 
+    * jobs older than one month. Also if a job tracker has no jobs in last one month
+    * remove reference to the job tracker. 
+    *
+    */
+   public static class HistoryCleaner implements Runnable{
+     static final long ONE_DAY_IN_MS = 24 * 60 * 60 * 1000L;
+-    static final long THIRTY_DAYS_IN_MS = 30 * ONE_DAY_IN_MS;
++    static final long DEFAULT_CLEANUP_FREQUENCY = ONE_DAY_IN_MS;
++    static final long DEFAULT_HISTORY_MAX_AGE = 30 * ONE_DAY_IN_MS;
++    static long cleanupFrequency = DEFAULT_CLEANUP_FREQUENCY;
++    static long maxAgeOfHistoryFiles = DEFAULT_HISTORY_MAX_AGE;
+     private long now; 
+     private static boolean isRunning = false; 
+     private static long lastRan = 0; 
+@@ -2084,18 +2102,16 @@ public class JobHistory {
+         return; 
+       }
+       now = System.currentTimeMillis();
+-      // clean history only once a day at max
+-      if (lastRan != 0 && (now - lastRan) < ONE_DAY_IN_MS) {
++      if (lastRan != 0 && (now - lastRan) < cleanupFrequency) {
+         return; 
+       }
+       lastRan = now;  
+       isRunning = true; 
+       try {
+         FileStatus[] historyFiles = DONEDIR_FS.listStatus(DONE);
+-        // delete if older than 30 days
+         if (historyFiles != null) {
+           for (FileStatus f : historyFiles) {
+-            if (now - f.getModificationTime() > THIRTY_DAYS_IN_MS) {
++            if (now - f.getModificationTime() > maxAgeOfHistoryFiles) {
+               DONEDIR_FS.delete(f.getPath(), true); 
+               LOG.info("Deleting old history file : " + f.getPath());
+             }
+@@ -2108,7 +2124,7 @@ public class JobHistory {
+             jobHistoryFileMap.entrySet().iterator();
+           while (it.hasNext()) {
+             MovedFileInfo info = it.next().getValue();
+-            if (now - info.timestamp > THIRTY_DAYS_IN_MS) {
++            if (now - info.timestamp > maxAgeOfHistoryFiles) {
+               it.remove();
+             } else {
+               //since entries are in sorted timestamp order, no more entries
+diff --git a/src/test/org/apache/hadoop/mapred/TestJobHistory.java b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+index e3e68c3..b984a04 100644
+--- a/src/test/org/apache/hadoop/mapred/TestJobHistory.java
++++ b/src/test/org/apache/hadoop/mapred/TestJobHistory.java
+@@ -1245,4 +1245,50 @@ public class TestJobHistory extends TestCase {
+     assertEquals("user", parts[3]);
+     assertEquals("my_job", parts[4]);
+   }
++
++  // run two jobs and check history has been deleted
++  public void testJobHistoryCleaner() throws Exception {
++    MiniMRCluster mr = null;
++    try {
++      JobConf conf = new JobConf();
++      // expire history rapidly
++      conf.setInt("mapreduce.jobhistory.cleaner.interval-ms", 0);
++      conf.setInt("mapreduce.jobhistory.max-age-ms", 100);
++      mr = new MiniMRCluster(2, "file:///", 3, null, null, conf);
++
++      // run the TCs
++      conf = mr.createJobConf();
++
++      FileSystem fs = FileSystem.get(conf);
++      // clean up
++      fs.delete(new Path(TEST_ROOT_DIR + "/succeed"), true);
++
++      Path inDir = new Path(TEST_ROOT_DIR + "/succeed/input1");
++      Path outDir = new Path(TEST_ROOT_DIR + "/succeed/output1");
++      conf.set("user.name", UserGroupInformation.getCurrentUser().getUserName());
++      
++      RunningJob job1 = UtilsForTests.runJobSucceed(conf, inDir, outDir);
++      validateJobHistoryUserLogLocation(job1.getID(), conf);
++      long historyCleanerRanAt1 = JobHistory.HistoryCleaner.getLastRan();
++      assertTrue(historyCleanerRanAt1 != 0);
++      
++      // wait for the history max age to pass
++      Thread.sleep(200);
++      
++      RunningJob job2 = UtilsForTests.runJobSucceed(conf, inDir, outDir);
++      validateJobHistoryUserLogLocation(job2.getID(), conf);
++      long historyCleanerRanAt2 = JobHistory.HistoryCleaner.getLastRan();
++      assertTrue(historyCleanerRanAt2 > historyCleanerRanAt1);
++
++      Path doneDir = JobHistory.getCompletedJobHistoryLocation();
++      String logFileName = getDoneFile(conf, job1.getID(), doneDir);
++      assertNull("Log file should no longer exist for " + job1.getID(), logFileName);
++      
++    } finally {
++      if (mr != null) {
++        cleanupLocalFiles(mr);
++        mr.shutdown();
++      }
++    }
++  }
+ }
+-- 
+1.7.0.4
+

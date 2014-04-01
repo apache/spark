@@ -1,0 +1,56 @@
+From e53741132f4e458382899f5181e4c3a45a199113 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 30 Jul 2009 17:40:47 -0700
+Subject: [PATCH 0348/1179] MAPREDUCE-733. When running ant test TestTrackerBlacklistAcrossJobs, losing task tracker heartbeat.
+
+Author: Arun C Murthy
+Reason: Bug fix
+Ref: YDH
+---
+ .../org/apache/hadoop/mapred/JobInProgress.java    |   18 +++++++++++++++---
+ 1 files changed, 15 insertions(+), 3 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+index 4079414..276e62a 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
++++ b/src/mapred/org/apache/hadoop/mapred/JobInProgress.java
+@@ -1456,7 +1456,8 @@ public class JobInProgress {
+    * 
+    * @param taskTracker task-tracker on which a task failed
+    */
+-  void addTrackerTaskFailure(String trackerName, TaskTracker taskTracker) {
++  synchronized void addTrackerTaskFailure(String trackerName, 
++                                          TaskTracker taskTracker) {
+     if (flakyTaskTrackers < (clusterSize * CLUSTER_BLACKLIST_PERCENT)) { 
+       String trackerHostName = convertTrackerNameToHostName(trackerName);
+ 
+@@ -1472,8 +1473,12 @@ public class JobInProgress {
+         
+         // Cancel reservations if appropriate
+         if (taskTracker != null) {
+-          taskTracker.unreserveSlots(TaskType.MAP, this);
+-          taskTracker.unreserveSlots(TaskType.REDUCE, this);
++          if (trackersReservedForMaps.containsKey(taskTracker)) {
++            taskTracker.unreserveSlots(TaskType.MAP, this);
++          }
++          if (trackersReservedForReduces.containsKey(taskTracker)) {
++            taskTracker.unreserveSlots(TaskType.REDUCE, this);
++          }
+         }
+         LOG.info("TaskTracker at '" + trackerHostName + "' turned 'flaky'");
+       }
+@@ -2906,4 +2911,11 @@ public class JobInProgress {
+    }
+    return level;
+  }
++  
++  /**
++   * Test method to set the cluster sizes
++   */
++  void setClusterSize(int clusterSize) {
++    this.clusterSize = clusterSize;
++  }
+ }
+-- 
+1.7.0.4
+

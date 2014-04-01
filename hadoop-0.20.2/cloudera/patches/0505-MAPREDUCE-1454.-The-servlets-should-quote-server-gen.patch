@@ -1,0 +1,770 @@
+From 0d1bfe678e356b154d237e34d4e4379a84614158 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Fri, 26 Feb 2010 13:12:41 -0800
+Subject: [PATCH 0505/1179] MAPREDUCE-1454. The servlets should quote server generated strings sent in the response
+
+Patch: http://issues.apache.org/jira/secure/attachment/12436834/M1454-0y20.patch
+Patch: https://issues.apache.org/jira/secure/attachment/12437591/M1454-1y20.patch
+Author: Chris Douglas
+Ref: CDH-648
+---
+ src/mapred/org/apache/hadoop/mapred/JSPUtil.java   |   23 +++++----
+ .../org/apache/hadoop/mapred/TaskLogServlet.java   |   51 +-------------------
+ src/webapps/job/analysejobhistory.jsp              |    7 ++-
+ src/webapps/job/jobblacklistedtrackers.jsp         |    5 +-
+ src/webapps/job/jobconf_history.jsp                |    3 +-
+ src/webapps/job/jobdetails.jsp                     |   16 ++++--
+ src/webapps/job/jobdetailshistory.jsp              |   12 +++--
+ src/webapps/job/jobfailures.jsp                    |    6 ++-
+ src/webapps/job/jobhistory.jsp                     |   29 ++++++++----
+ src/webapps/job/jobqueue_details.jsp               |   16 ++++--
+ src/webapps/job/jobtasks.jsp                       |    5 +-
+ src/webapps/job/jobtaskshistory.jsp                |    8 ++-
+ src/webapps/job/jobtracker.jsp                     |    3 +-
+ src/webapps/job/loadhistory.jsp                    |    2 +-
+ src/webapps/job/taskdetails.jsp                    |    3 +-
+ src/webapps/job/taskdetailshistory.jsp             |    6 ++-
+ src/webapps/job/taskstats.jsp                      |    6 ++-
+ src/webapps/job/taskstatshistory.jsp               |    6 ++-
+ src/webapps/task/tasktracker.jsp                   |    9 +++-
+ 19 files changed, 106 insertions(+), 110 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+index 95b0d01..d6d1c22 100644
+--- a/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
++++ b/src/mapred/org/apache/hadoop/mapred/JSPUtil.java
+@@ -34,6 +34,7 @@ import org.apache.commons.logging.Log;
+ import org.apache.commons.logging.LogFactory;
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.FileSystem;
++import org.apache.hadoop.http.HtmlQuoting;
+ import org.apache.hadoop.mapred.JobHistory.JobInfo;
+ import org.apache.hadoop.mapred.JobTracker.RetireJobInfo;
+ import org.apache.hadoop.util.ServletUtil;
+@@ -164,9 +165,10 @@ class JSPUtil {
+         int desiredReduces = job.desiredReduces();
+         int completedMaps = job.finishedMaps();
+         int completedReduces = job.finishedReduces();
+-        String name = profile.getJobName();
++        String name = HtmlQuoting.quoteHtmlChars(profile.getJobName());
+         String jobpri = job.getPriority().toString();
+-        String schedulingInfo = job.getStatus().getSchedulingInfo();
++        String schedulingInfo =
++          HtmlQuoting.quoteHtmlChars(job.getStatus().getSchedulingInfo());
+ 
+         if (isModifiable) {
+           sb.append("<tr><td><input TYPE=\"checkbox\" " +
+@@ -181,7 +183,8 @@ class JSPUtil {
+             + "\"><a href=\"jobdetails.jsp?jobid=" + jobid + "&refresh="
+             + refresh + "\">" + jobid + "</a></td>" + "<td id=\"priority_"
+             + rowId + "\">" + jobpri + "</td>" + "<td id=\"user_" + rowId
+-            + "\">" + profile.getUser() + "</td>" + "<td id=\"name_" + rowId
++            + "\">" + HtmlQuoting.quoteHtmlChars(profile.getUser()) +
++              "</td>" + "<td id=\"name_" + rowId
+             + "\">" + ("".equals(name) ? "&nbsp;" : name) + "</td>" + "<td>"
+             + StringUtils.formatPercent(status.mapProgress(), 2)
+             + ServletUtil.percentageGraph(status.mapProgress() * 100, 80)
+@@ -255,10 +258,10 @@ class JSPUtil {
+             
+             "<td id=\"priority_" + rowId + "\">" + 
+               info.status.getJobPriority().toString() + "</td>" +
+-            "<td id=\"user_" + rowId + "\">" + info.profile.getUser() 
+-              + "</td>" +
+-            "<td id=\"name_" + rowId + "\">" + info.profile.getJobName() 
+-              + "</td>" +
++            "<td id=\"user_" + rowId + "\">" +
++              HtmlQuoting.quoteHtmlChars(info.profile.getUser()) + "</td>" +
++            "<td id=\"name_" + rowId + "\">" +
++              HtmlQuoting.quoteHtmlChars(info.profile.getJobName()) + "</td>" +
+             "<td>" + JobStatus.getJobRunState(info.status.getRunState()) 
+               + "</td>" +
+             "<td>" + new Date(info.status.getStartTime()) + "</td>" +
+@@ -273,9 +276,9 @@ class JSPUtil {
+                info.status.reduceProgress() * 100, 80) + 
+               "</td>" +
+             
+-            "<td>" + info.status.getSchedulingInfo() + "</td>" +
+-            
+-            "</tr>\n");
++            "<td>" +
++            HtmlQuoting.quoteHtmlChars(info.status.getSchedulingInfo()) +
++            "</td>" + "</tr>\n");
+         rowId++;
+       }
+     }
+diff --git a/src/mapred/org/apache/hadoop/mapred/TaskLogServlet.java b/src/mapred/org/apache/hadoop/mapred/TaskLogServlet.java
+index 17fe8eb..a81c4bb 100644
+--- a/src/mapred/org/apache/hadoop/mapred/TaskLogServlet.java
++++ b/src/mapred/org/apache/hadoop/mapred/TaskLogServlet.java
+@@ -27,6 +27,7 @@ import javax.servlet.http.HttpServlet;
+ import javax.servlet.http.HttpServletRequest;
+ import javax.servlet.http.HttpServletResponse;
+ 
++import org.apache.hadoop.http.HtmlQuoting;
+ import org.apache.hadoop.util.StringUtils;
+ 
+ /**
+@@ -53,54 +54,6 @@ public class TaskLogServlet extends HttpServlet {
+         + "/tasklog?taskid=" + taskAttemptID);
+   }
+ 
+-  /**
+-   * Find the next quotable character in the given array.
+-   * @param data the bytes to look in
+-   * @param offset the first index to look in
+-   * @param end the index after the last one to look in
+-   * @return the index of the quotable character or end if none was found
+-   */
+-  private static int findFirstQuotable(byte[] data, int offset, int end) {
+-    while (offset < end) {
+-      switch (data[offset]) {
+-      case '<':
+-      case '>':
+-      case '&':
+-        return offset;
+-      default:
+-        offset += 1;
+-      }
+-    }
+-    return offset;
+-  }
+-
+-  private static void quotedWrite(OutputStream out, byte[] data, int offset,
+-                                  int length) throws IOException {
+-    int end = offset + length;
+-    while (offset < end) {
+-      int next = findFirstQuotable(data, offset, end);
+-      out.write(data, offset, next - offset);
+-      offset = next;
+-      if (offset < end) {
+-        switch (data[offset]) {
+-        case '<':
+-          out.write("&lt;".getBytes());
+-          break;
+-        case '>':
+-          out.write("&gt;".getBytes());
+-          break;
+-        case '&':
+-          out.write("&amp;".getBytes());
+-          break;
+-        default:
+-          out.write(data[offset]);
+-          break;
+-        }
+-        offset += 1;
+-      }
+-    }
+-  }
+-
+   private void printTaskLog(HttpServletResponse response,
+                             OutputStream out, TaskAttemptID taskId, 
+                             long start, long end, boolean plainText, 
+@@ -122,7 +75,7 @@ public class TaskLogServlet extends HttpServlet {
+           if (plainText) {
+             out.write(b, 0, result); 
+           } else {
+-            quotedWrite(out, b, 0, result);
++            HtmlQuoting.quoteHtmlChars(out, b, 0, result);
+           }
+         } else {
+           break;
+diff --git a/src/webapps/job/analysejobhistory.jsp b/src/webapps/job/analysejobhistory.jsp
+index 27540b3..a885706 100644
+--- a/src/webapps/job/analysejobhistory.jsp
++++ b/src/webapps/job/analysejobhistory.jsp
+@@ -3,6 +3,7 @@
+   import="javax.servlet.http.*"
+   import="java.io.*"
+   import="java.util.*"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.fs.*"
+   import="org.apache.hadoop.util.*"
+@@ -17,7 +18,7 @@
+ %>
+ <html>
+ <%
+-  String jobid = request.getParameter("jobid");
++  String jobid = JobID.forName(request.getParameter("jobid")).toString();
+   String logFile = request.getParameter("logFile");
+   String encodedLogFileName = JobHistory.JobInfo.encodeJobHistoryFilePath(logFile);
+   String numTasks = request.getParameter("numTasks");
+@@ -36,8 +37,8 @@
+ 
+ <body>
+ <h2>Hadoop Job <a href="jobdetailshistory.jsp?jobid=<%=jobid%>&&logFile=<%=encodedLogFileName%>"><%=jobid %> </a></h2>
+-<b>User : </b> <%=job.get(Keys.USER) %><br/> 
+-<b>JobName : </b> <%=job.get(Keys.JOBNAME) %><br/> 
++<b>User : </b> <%=HtmlQuoting.quoteHtmlChars(job.get(Keys.USER)) %><br/> 
++<b>JobName : </b> <%=HtmlQuoting.quoteHtmlChars(job.get(Keys.JOBNAME)) %><br/> 
+ <b>JobConf : </b> <%=job.get(Keys.JOBCONF) %><br/> 
+ <b>Submitted At : </b> <%=StringUtils.getFormattedTimeWithDiff(dateFormat, job.getLong(Keys.SUBMIT_TIME), 0 ) %><br/> 
+ <b>Launched At : </b> <%=StringUtils.getFormattedTimeWithDiff(dateFormat, job.getLong(Keys.LAUNCH_TIME), job.getLong(Keys.SUBMIT_TIME)) %><br/>
+diff --git a/src/webapps/job/jobblacklistedtrackers.jsp b/src/webapps/job/jobblacklistedtrackers.jsp
+index a50b0ab..f7c7226 100644
+--- a/src/webapps/job/jobblacklistedtrackers.jsp
++++ b/src/webapps/job/jobblacklistedtrackers.jsp
+@@ -4,6 +4,7 @@
+   import="javax.servlet.http.*"
+   import="java.io.*"
+   import="java.util.*"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.util.*"
+ %>
+@@ -24,8 +25,8 @@
+     int maxErrorsPerTracker = job.getJobConf().getMaxTaskFailuresPerTracker();
+     for (Map.Entry<String,Integer> e : trackerErrors.entrySet()) {
+       if (e.getValue().intValue() >= maxErrorsPerTracker) {
+-        out.print("<tr><td>" + e.getKey() + "</td><td>" + e.getValue() + 
+-            "</td></tr>\n");
++        out.print("<tr><td>" + HtmlQuoting.quoteHtmlChars(e.getKey()) +
++            "</td><td>" + e.getValue() + "</td></tr>\n");
+       }
+     }
+     out.print("</table>\n");
+diff --git a/src/webapps/job/jobconf_history.jsp b/src/webapps/job/jobconf_history.jsp
+index cfaa764..a93290f 100644
+--- a/src/webapps/job/jobconf_history.jsp
++++ b/src/webapps/job/jobconf_history.jsp
+@@ -3,7 +3,6 @@
+   import="javax.servlet.*"
+   import="javax.servlet.http.*"
+   import="java.io.*"
+-  import="java.net.URL"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.fs.*"
+   import="org.apache.hadoop.util.*"
+@@ -14,7 +13,7 @@
+ 
+ <%
+   JobTracker tracker = (JobTracker) application.getAttribute("job.tracker");
+-  String jobId = request.getParameter("jobid");
++  String jobId = JobID.forName(request.getParameter("jobid")).toString();
+   if (jobId == null) {
+     out.println("<h2>Missing 'jobid' for fetching job configuration!</h2>");
+  	return;
+diff --git a/src/webapps/job/jobdetails.jsp b/src/webapps/job/jobdetails.jsp
+index 22a386d..20f99e2 100644
+--- a/src/webapps/job/jobdetails.jsp
++++ b/src/webapps/job/jobdetails.jsp
+@@ -6,6 +6,7 @@
+   import="java.text.*"
+   import="java.util.*"
+   import="java.text.DecimalFormat"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.mapreduce.TaskType"
+   import="org.apache.hadoop.util.*"
+@@ -216,10 +217,12 @@
+     JobStatus status = job.getStatus();
+     int runState = status.getRunState();
+     int flakyTaskTrackers = job.getNoOfBlackListedTrackers();
+-    out.print("<b>User:</b> " + profile.getUser() + "<br>\n");
+-    out.print("<b>Job Name:</b> " + profile.getJobName() + "<br>\n");
+-    out.print("<b>Job File:</b> <a href=\"jobconf.jsp?jobid=" + jobId + "\">" 
+-              + profile.getJobFile() + "</a><br>\n");
++    out.print("<b>User:</b> " +
++        HtmlQuoting.quoteHtmlChars(profile.getUser()) + "<br>\n");
++    out.print("<b>Job Name:</b> " +
++        HtmlQuoting.quoteHtmlChars(profile.getJobName()) + "<br>\n");
++    out.print("<b>Job File:</b> <a href=\"jobconf.jsp?jobid=" + jobId + "\">" +
++        profile.getJobFile() + "</a><br>\n");
+     out.print("<b>Job Setup:</b>");
+     printJobLevelTaskSummary(out, jobId, "setup", 
+                              job.getTasks(TaskType.JOB_SETUP));
+@@ -313,11 +316,12 @@
+           if (isFirst) {
+             isFirst = false;
+             %>
+-            <td rowspan="<%=totalGroup.size()%>"><%=totalGroup.getDisplayName()%></td>
++            <td rowspan="<%=totalGroup.size()%>">
++            <%=HtmlQuoting.quoteHtmlChars(totalGroup.getDisplayName())%></td>
+             <%
+           }
+           %>
+-          <td><%=name%></td>
++          <td><%=HtmlQuoting.quoteHtmlChars(name)%></td>
+           <td align="right"><%=mapValue%></td>
+           <td align="right"><%=reduceValue%></td>
+           <td align="right"><%=totalValue%></td>
+diff --git a/src/webapps/job/jobdetailshistory.jsp b/src/webapps/job/jobdetailshistory.jsp
+index a3f9faa..3b160cc 100644
+--- a/src/webapps/job/jobdetailshistory.jsp
++++ b/src/webapps/job/jobdetailshistory.jsp
+@@ -4,6 +4,7 @@
+   import="java.io.*"
+   import="java.util.*"
+   import="org.apache.hadoop.fs.*"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.util.*"
+   import="java.text.*"
+@@ -13,7 +14,7 @@
+ %>
+ <%! static SimpleDateFormat dateFormat = new SimpleDateFormat("d-MMM-yyyy HH:mm:ss") ; %>
+ <%
+-    String jobid = request.getParameter("jobid");
++    String jobid = JobID.forName(request.getParameter("jobid")).toString();
+     String logFile = request.getParameter("logFile");
+ 	String encodedLogFileName = JobHistory.JobInfo.encodeJobHistoryFilePath(logFile);
+ 	
+@@ -36,8 +37,8 @@ Hadoop Job <%=jobid %> on History Viewer
+ 
+ <h2>Hadoop Job <%=jobid %> on <a href="jobhistory.jsp">History Viewer</a></h2>
+ 
+-<b>User: </b> <%=job.get(Keys.USER) %><br/> 
+-<b>JobName: </b> <%=job.get(Keys.JOBNAME) %><br/> 
++<b>User: </b> <%=HtmlQuoting.quoteHtmlChars(job.get(Keys.USER)) %><br/> 
++<b>JobName: </b> <%=HtmlQuoting.quoteHtmlChars(job.get(Keys.JOBNAME)) %><br/> 
+ <b>JobConf: </b> <a href="jobconf_history.jsp?jobid=<%=jobid%>&jobLogDir=<%=new Path(logFile).getParent().toString()%>&jobUniqueString=<%=jobUniqueString%>"> 
+                  <%=job.get(Keys.JOBCONF) %></a><br/> 
+ <b>Submitted At: </b> <%=StringUtils.getFormattedTimeWithDiff(dateFormat, job.getLong(Keys.SUBMIT_TIME), 0 )  %><br/> 
+@@ -243,11 +244,12 @@ Hadoop Job <%=jobid %> on History Viewer
+        if (isFirst) {
+          isFirst = false;
+ %>
+-         <td rowspan="<%=totalGroup.size()%>"><%=totalGroup.getDisplayName()%></td>
++         <td rowspan="<%=totalGroup.size()%>">
++         <%=HtmlQuoting.quoteHtmlChars(totalGroup.getDisplayName())%></td>
+ <%
+        }
+ %>
+-       <td><%=counter.getDisplayName()%></td>
++       <td><%=HtmlQuoting.quoteHtmlChars(counter.getDisplayName())%></td>
+        <td align="right"><%=mapValue%></td>
+        <td align="right"><%=reduceValue%></td>
+        <td align="right"><%=totalValue%></td>
+diff --git a/src/webapps/job/jobfailures.jsp b/src/webapps/job/jobfailures.jsp
+index ef6892e..19d2e12 100644
+--- a/src/webapps/job/jobfailures.jsp
++++ b/src/webapps/job/jobfailures.jsp
+@@ -4,6 +4,7 @@
+   import="javax.servlet.http.*"
+   import="java.io.*"
+   import="java.util.*"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.mapreduce.TaskType"
+   import="org.apache.hadoop.util.*"
+@@ -50,7 +51,7 @@
+           out.print("&nbsp;");
+         } else {
+           for(int j = 0 ; j < failures.length ; j++){
+-            out.print(failures[j]);
++            out.print(HtmlQuoting.quoteHtmlChars(failures[j]));
+             if (j < (failures.length - 1)) {
+               out.print("\n-------\n");
+             }
+@@ -106,7 +107,8 @@
+       includeMap = true;
+       includeReduce = true;
+     } else {
+-      out.print("<b>Kind " + kind + " not supported.</b><br>\n");
++      out.print("<b>Kind " + kind +
++          " not supported.</b><br>\n");
+       return;
+     }
+     
+diff --git a/src/webapps/job/jobhistory.jsp b/src/webapps/job/jobhistory.jsp
+index 1a17510..6fbbbe6 100644
+--- a/src/webapps/job/jobhistory.jsp
++++ b/src/webapps/job/jobhistory.jsp
+@@ -8,6 +8,7 @@
+   import="org.apache.hadoop.fs.*"
+   import="javax.servlet.jsp.*"
+   import="java.text.SimpleDateFormat"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.mapred.JobHistory.*"
+ %>
+@@ -60,18 +61,23 @@ window.location.href = url;
+                            ? parts[1].toLowerCase()
+                            : "";
+     PathFilter jobLogFileFilter = new PathFilter() {
++      // unquote params before encoding for search
++      final String uqUser = JobHistory.JobInfo.encodeJobHistoryFileName(
++            HtmlQuoting.unquoteHtmlChars(user));
++      final String uqJobname = JobHistory.JobInfo.encodeJobHistoryFileName(
++            HtmlQuoting.unquoteHtmlChars(jobname));
+       private boolean matchUser(String fileName) {
+         // return true if 
+         //  - user is not specified
+         //  - user matches
+-        return "".equals(user) || user.equals(fileName.split("_")[5]);
++        return "".equals(uqUser) || uqUser.equals(fileName.split("_")[5]);
+       }
+ 
+       private boolean matchJobName(String fileName) {
+         // return true if 
+         //  - jobname is not specified
+         //  - jobname contains the keyword
+-        return "".equals(jobname) || fileName.split("_")[6].toLowerCase().contains(jobname);
++        return "".equals(uqJobname) || fileName.split("_")[6].toLowerCase().contains(uqJobname);
+       }
+ 
+       public boolean accept(Path path) {
+@@ -87,7 +93,8 @@ window.location.href = url;
+     }
+     Path[] jobFiles = FileUtil.stat2Paths(fs.listStatus(new Path(historyLogDir),
+                                           jobLogFileFilter));
+-    out.println("<!--  user : " + user + ", jobname : " + jobname + "-->");
++    out.println("<!--  user : " + user +
++        ", jobname : " + jobname + "-->");
+     if (null == jobFiles || jobFiles.length == 0)  {
+       out.println("No files found!"); 
+       return ; 
+@@ -142,10 +149,12 @@ window.location.href = url;
+     // display the number of jobs, start index, end index
+     out.println("(<i> <span class=\"small\">Displaying <b>" + length + "</b> jobs from <b>" + start + "</b> to <b>" + (start + length - 1) + "</b> out of <b>" + jobFiles.length + "</b> jobs");
+     if (!"".equals(user)) {
+-      out.println(" for user <b>" + user + "</b>"); // show the user if present
++      // show the user if present
++      out.println(" for user <b>" + user + "</b>");
+     }
+     if (!"".equals(jobname)) {
+-      out.println(" with jobname having the keyword <b>" + jobname + "</b> in it."); // show the jobname keyword if present
++      out.println(" with jobname having the keyword <b>" +
++          jobname + "</b> in it."); // show the jobname keyword if present
+     }
+     out.print("</span></i>)");
+ 
+@@ -262,8 +271,8 @@ window.location.href = url;
+       out.print("<td>" + new Date(Long.parseLong(trackerid)) + "</td>"); 
+       out.print("<td>" + "<a href=\"jobdetailshistory.jsp?jobid=" + jobId + 
+                 "&logFile=" + URLEncoder.encode(logFile.toString(), "UTF-8") + "\">" + jobId + "</a></td>"); 
+-      out.print("<td>" + jobName + "</td>"); 
+-      out.print("<td>" + user + "</td>"); 
++      out.print("<td>" + HtmlQuoting.quoteHtmlChars(jobName) + "</td>"); 
++      out.print("<td>" + HtmlQuoting.quoteHtmlChars(user) + "</td>"); 
+       out.print("</tr>");
+     }
+ 
+@@ -276,7 +285,8 @@ window.location.href = url;
+ 
+       // show previous link
+       if (pageno > 1) {
+-        out.println("<a href=\"jobhistory.jsp?pageno=" + (pageno - 1) + "&search=" + search + "\">Previous</a>");
++        out.println("<a href=\"jobhistory.jsp?pageno=" + (pageno - 1) +
++            "&search=" + search + "\">Previous</a>");
+       }
+ 
+       // display the numbered index 1 2 3 4
+@@ -295,7 +305,8 @@ window.location.href = url;
+ 
+       for (int i = firstPage; i <= lastPage; ++i) {
+         if (i != pageno) {// needs hyperlink
+-          out.println(" <a href=\"jobhistory.jsp?pageno=" + i + "&search=" + search + "\">" + i + "</a> ");
++          out.println(" <a href=\"jobhistory.jsp?pageno=" + i + "&search=" +
++              search + "\">" + i + "</a> ");
+         } else { // current page
+           out.println(i);
+         }
+diff --git a/src/webapps/job/jobqueue_details.jsp b/src/webapps/job/jobqueue_details.jsp
+index 4ca3a14..df19da5 100644
+--- a/src/webapps/job/jobqueue_details.jsp
++++ b/src/webapps/job/jobqueue_details.jsp
+@@ -4,6 +4,7 @@
+   import="javax.servlet.http.*"
+   import="java.util.Vector"
+   import="java.util.Collection"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.util.StringUtils"
+   import="org.apache.hadoop.util.ServletUtil"
+@@ -16,15 +17,15 @@ private static final long serialVersionUID = 526456771152222127L;
+     (JobTracker) application.getAttribute("job.tracker");
+   String trackerName = 
+     StringUtils.simpleHostname(tracker.getJobTrackerMachine());
+-  String queueName = 
+-    StringUtils.escapeHTML(request.getParameter("queueName"));
++  String queueName = request.getParameter("queueName");
+   TaskScheduler scheduler = tracker.getTaskScheduler();
+   Collection<JobInProgress> jobs = scheduler.getJobs(queueName);
+   JobQueueInfo schedInfo = tracker.getQueueInfo(queueName);
+ %>
+ <html>
+ <head>
+-<title>Queue details for <%=queueName!=null?queueName:""%> </title>
++<title>Queue details for
++<%=queueName!=null?queueName:""%> </title>
+ <link rel="stylesheet" type="text/css" href="/static/hadoop.css">
+ <link rel="icon" type="image/vnd.microsoft.icon" href="/static/images/favicon.ico" />
+ <script type="text/javascript" src="/static/jobtracker.js"></script>
+@@ -38,21 +39,24 @@ private static final long serialVersionUID = 526456771152222127L;
+   <a href="jobtracker.jsp"><%=trackerName%></a>
+ </h1>
+ <div>
+-Scheduling Information : <%= schedulingInfoString.replaceAll("\n","<br/>") %>
++Scheduling Information :
++<%= HtmlQuoting.quoteHtmlChars(schedulingInfoString).replaceAll("\n","<br/>") %>
+ </div>
+ <hr/>
+ <%
+ if(jobs == null || jobs.isEmpty()) {
+ %>
+ <center>
+-<h2> No Jobs found for the Queue :: <%=queueName!=null?queueName:""%> </h2>
++<h2> No Jobs found for the Queue ::
++<%=queueName!=null?queueName:""%> </h2>
+ <hr/>
+ </center>
+ <%
+ }else {
+ %>
+ <center>
+-<h2> Job Summary for the Queue :: <%=queueName!=null?queueName:"" %> </h2>
++<h2> Job Summary for the Queue ::
++<%=queueName!=null?queueName:"" %> </h2>
+ </center>
+ <div style="text-align: center;text-indent: center;font-style: italic;">
+ (In the order maintained by the scheduler)
+diff --git a/src/webapps/job/jobtasks.jsp b/src/webapps/job/jobtasks.jsp
+index 96e2500..a6e6baa 100644
+--- a/src/webapps/job/jobtasks.jsp
++++ b/src/webapps/job/jobtasks.jsp
+@@ -4,6 +4,7 @@
+   import="javax.servlet.http.*"
+   import="java.io.*"
+   import="java.util.*"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.util.*"
+   import="java.lang.Integer"
+@@ -101,14 +102,14 @@
+                     report.getTaskID() + "</a></td>");
+          out.print("<td>" + StringUtils.formatPercent(report.getProgress(),2) +
+         		   ServletUtil.percentageGraph(report.getProgress() * 100f, 80) + "</td>");
+-         out.print("<td>"  + report.getState() + "<br/></td>");
++         out.print("<td>"  + HtmlQuoting.quoteHtmlChars(report.getState()) + "<br/></td>");
+          out.println("<td>" + StringUtils.getFormattedTimeWithDiff(dateFormat, report.getStartTime(),0) + "<br/></td>");
+          out.println("<td>" + StringUtils.getFormattedTimeWithDiff(dateFormat, 
+              report.getFinishTime(), report.getStartTime()) + "<br/></td>");
+          String[] diagnostics = report.getDiagnostics();
+          out.print("<td><pre>");
+          for (int j = 0; j < diagnostics.length ; j++) {
+-             out.println(diagnostics[j]);
++             out.println(HtmlQuoting.quoteHtmlChars(diagnostics[j]));
+          }
+          out.println("</pre><br/></td>");
+          out.println("<td>" + 
+diff --git a/src/webapps/job/jobtaskshistory.jsp b/src/webapps/job/jobtaskshistory.jsp
+index 1eb3baf..aaa5f85 100644
+--- a/src/webapps/job/jobtaskshistory.jsp
++++ b/src/webapps/job/jobtaskshistory.jsp
+@@ -3,6 +3,7 @@
+   import="javax.servlet.http.*"
+   import="java.io.*"
+   import="java.util.*"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.fs.*"
+   import="org.apache.hadoop.util.*"
+@@ -18,10 +19,10 @@
+ %>
+ 
+ <%	
+-  String jobid = request.getParameter("jobid");
++  String jobid = JobID.forName(request.getParameter("jobid")).toString();
+   String logFile = request.getParameter("logFile");
+   String encodedLogFileName = JobHistory.JobInfo.encodeJobHistoryFilePath(logFile);
+-  String taskStatus = request.getParameter("status"); 
++  String taskStatus = request.getParameter("status");
+   String taskType = request.getParameter("taskType"); 
+   
+   FileSystem fs = (FileSystem) application.getAttribute("fileSys");
+@@ -69,7 +70,8 @@
+     out.print("<td>" + StringUtils.getFormattedTimeWithDiff(dateFormat, 
+           attempt.getLong(Keys.FINISH_TIME),
+           attempt.getLong(Keys.START_TIME) ) + "</td>");
+-    out.print("<td>" + attempt.get(Keys.ERROR) + "</td>");
++    out.print("<td>" + HtmlQuoting.quoteHtmlChars(attempt.get(Keys.ERROR)) +
++        "</td>");
+     out.print("</tr>"); 
+   }
+ %>
+diff --git a/src/webapps/job/jobtracker.jsp b/src/webapps/job/jobtracker.jsp
+index 9f2c613..4b87879 100644
+--- a/src/webapps/job/jobtracker.jsp
++++ b/src/webapps/job/jobtracker.jsp
+@@ -5,6 +5,7 @@
+   import="java.io.*"
+   import="java.util.*"
+   import="java.text.DecimalFormat"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.mapreduce.*"
+   import="org.apache.hadoop.util.*"
+@@ -129,7 +130,7 @@ for(JobQueueInfo queue: queues) {
+ %>
+ <tr>
+ <td><a href="jobqueue_details.jsp?queueName=<%=queueName%>"><%=queueName%></a></td>
+-<td><%=schedulingInformation.replaceAll("\n","<br/>") %>
++<td><%=HtmlQuoting.quoteHtmlChars(schedulingInformation).replaceAll("\n","<br/>") %>
+ </td>
+ </tr>
+ <%
+diff --git a/src/webapps/job/loadhistory.jsp b/src/webapps/job/loadhistory.jsp
+index b9d0ab4..33a6844 100644
+--- a/src/webapps/job/loadhistory.jsp
++++ b/src/webapps/job/loadhistory.jsp
+@@ -19,7 +19,7 @@
+     };
+     
+     FileSystem fs = (FileSystem) application.getAttribute("fileSys");
+-    String jobId =  request.getParameter("jobid");
++    String jobId = request.getParameter("jobid");
+     JobHistory.JobInfo job = (JobHistory.JobInfo)
+                                request.getSession().getAttribute("job");
+     // if session attribute of JobInfo exists and is of different job's,
+diff --git a/src/webapps/job/taskdetails.jsp b/src/webapps/job/taskdetails.jsp
+index acedff3..257ec66 100644
+--- a/src/webapps/job/taskdetails.jsp
++++ b/src/webapps/job/taskdetails.jsp
+@@ -5,6 +5,7 @@
+   import="java.io.*"
+   import="java.lang.String"
+   import="java.util.*"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.util.*"
+   import="java.text.SimpleDateFormat"  
+@@ -187,7 +188,7 @@
+           out.print("&nbsp;");
+         } else {
+           for(int j = 0 ; j < failures.length ; j++){
+-            out.print(failures[j]);
++            out.print(HtmlQuoting.quoteHtmlChars(failures[j]));
+             if (j < (failures.length - 1)) {
+               out.print("\n-------\n");
+             }
+diff --git a/src/webapps/job/taskdetailshistory.jsp b/src/webapps/job/taskdetailshistory.jsp
+index 761225b..296dafd 100644
+--- a/src/webapps/job/taskdetailshistory.jsp
++++ b/src/webapps/job/taskdetailshistory.jsp
+@@ -3,6 +3,7 @@
+   import="javax.servlet.http.*"
+   import="java.io.*"
+   import="java.util.*"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.fs.*"
+   import="org.apache.hadoop.util.*"
+@@ -15,7 +16,7 @@
+ %>
+ 
+ <%	
+-  String jobid = request.getParameter("jobid");
++  String jobid = JobID.forName(request.getParameter("jobid")).toString();
+   String logFile = request.getParameter("logFile");
+   String encodedLogFileName = JobHistory.JobInfo.encodeJobHistoryFilePath(logFile);
+   String taskid = request.getParameter("taskid"); 
+@@ -94,7 +95,8 @@
+               taskAttempt.getLong(Keys.FINISH_TIME), 
+               taskAttempt.getLong(Keys.START_TIME) ) + "</td>"); 
+     out.print("<td>" + taskAttempt.get(Keys.HOSTNAME) + "</td>");
+-    out.print("<td>" + taskAttempt.get(Keys.ERROR) + "</td>");
++    out.print("<td>" + HtmlQuoting.quoteHtmlChars(taskAttempt.get(Keys.ERROR)) +
++        "</td>");
+ 
+     // Print task log urls
+     out.print("<td>");	
+diff --git a/src/webapps/job/taskstats.jsp b/src/webapps/job/taskstats.jsp
+index 2f555b8..392ff05 100644
+--- a/src/webapps/job/taskstats.jsp
++++ b/src/webapps/job/taskstats.jsp
+@@ -6,6 +6,7 @@
+   import="java.lang.String"
+   import="java.text.*"
+   import="java.util.*"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.util.*"
+   import="java.text.SimpleDateFormat"  
+@@ -62,7 +63,8 @@
+         String displayGroupName = group.getDisplayName();
+ %>
+         <tr>
+-          <td colspan="3"><br/><b><%=displayGroupName%></b></td>
++          <td colspan="3"><br/><b>
++          <%=HtmlQuoting.quoteHtmlChars(displayGroupName)%></b></td>
+         </tr>
+ <%
+         for (Counters.Counter counter : group) {
+@@ -71,7 +73,7 @@
+ %>
+           <tr>
+             <td width="50"></td>
+-            <td><%=displayCounterName%></td>
++            <td><%=HtmlQuoting.quoteHtmlChars(displayCounterName)%></td>
+             <td align="right"><%=decimal.format(value)%></td>
+           </tr>
+ <%
+diff --git a/src/webapps/job/taskstatshistory.jsp b/src/webapps/job/taskstatshistory.jsp
+index e2b6a38..633c2dd 100644
+--- a/src/webapps/job/taskstatshistory.jsp
++++ b/src/webapps/job/taskstatshistory.jsp
+@@ -22,6 +22,7 @@
+   import="javax.servlet.http.*"
+   import="java.io.*"
+   import="java.util.*"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.fs.*"
+   import="org.apache.hadoop.util.*"
+@@ -75,7 +76,8 @@
+         String displayGroupName = group.getDisplayName();
+ %>
+         <tr>
+-          <td colspan="3"><br/><b><%=displayGroupName%></b></td>
++          <td colspan="3"><br/><b>
++          <%=HtmlQuoting.quoteHtmlChars(displayGroupName)%></b></td>
+         </tr>
+ <%
+         Iterator<Counters.Counter> ctrItr = group.iterator();
+@@ -86,7 +88,7 @@
+ %>
+           <tr>
+             <td width="50"></td>
+-            <td><%=displayCounterName%></td>
++            <td><%=HtmlQuoting.quoteHtmlChars(displayCounterName)%></td>
+             <td align="right"><%=decimal.format(value)%></td>
+           </tr>
+ <%
+diff --git a/src/webapps/task/tasktracker.jsp b/src/webapps/task/tasktracker.jsp
+index be5316c..f7fe8d2 100644
+--- a/src/webapps/task/tasktracker.jsp
++++ b/src/webapps/task/tasktracker.jsp
+@@ -5,6 +5,7 @@
+   import="java.io.*"
+   import="java.util.*"
+   import="java.text.DecimalFormat"
++  import="org.apache.hadoop.http.HtmlQuoting"
+   import="org.apache.hadoop.mapred.*"
+   import="org.apache.hadoop.util.*"
+ %>
+@@ -43,7 +44,9 @@
+        out.print("</td><td>" + status.getRunState()); 
+        out.print("</td><td>" + 
+                  StringUtils.formatPercent(status.getProgress(), 2));
+-       out.print("</td><td><pre>" + status.getDiagnosticInfo() + "</pre></td>");
++       out.print("</td><td><pre>" +
++           HtmlQuoting.quoteHtmlChars(status.getDiagnosticInfo()) +
++           "</pre></td>");
+        out.print("</tr>\n");
+      }
+   %>
+@@ -76,7 +79,9 @@
+        out.print("</td><td>" + status.getRunState()); 
+        out.print("</td><td>" + 
+                  StringUtils.formatPercent(status.getProgress(), 2));
+-       out.print("</td><td><pre>" + status.getDiagnosticInfo() + "</pre></td>");
++       out.print("</td><td><pre>" +
++           HtmlQuoting.quoteHtmlChars(status.getDiagnosticInfo()) +
++           "</pre></td>");
+        out.print("</tr>\n");
+      }
+   %>
+-- 
+1.7.0.4
+

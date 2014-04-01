@@ -1,0 +1,35 @@
+From fd14a491d0a1bcae807aa4d985b71c4170eb1136 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Wed, 16 Mar 2011 15:14:23 -0700
+Subject: [PATCH 0939/1179] HDFS-1759. Improve error message when starting secure DN without jsvc
+
+Author: Todd Lipcon
+Ref: CDH-2554
+---
+ .../hadoop/hdfs/server/datanode/DataNode.java      |   10 ++++++++--
+ 1 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+index 8b4964b..fac0cd7 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/server/datanode/DataNode.java
+@@ -303,8 +303,14 @@ public class DataNode extends Configured
+                      ) throws IOException {
+     if(UserGroupInformation.isSecurityEnabled() && resources == null &&
+        conf.getBoolean("dfs.datanode.require.secure.ports", true))
+-      throw new RuntimeException("Cannot start secure cluster without " +
+-      		"privileged resources.");
++      throw new RuntimeException(
++        "Cannot start secure cluster without privileged resources. " +
++        "In a secure cluster, the DataNode must be started from within " +
++        "jsvc. If using Cloudera packages, please install the " +
++        "hadoop-0.20-sbin package.\n\n" +
++        "For development purposes ONLY you may override this check by setting" +
++        " dfs.datanode.require.secure.ports to false. *** THIS WILL OPEN A " +
++        "SECURITY HOLE AND MUST NOT BE USED FOR A REAL CLUSTER ***.");
+     
+     this.secureResources = resources;
+     // use configured nameserver & interface to get local hostname
+-- 
+1.7.0.4
+

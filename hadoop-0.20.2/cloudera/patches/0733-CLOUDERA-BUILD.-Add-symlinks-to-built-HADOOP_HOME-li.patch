@@ -1,0 +1,34 @@
+From 49e808c8751615fe154061d456f171f8bb582504 Mon Sep 17 00:00:00 2001
+From: Todd Lipcon <todd@cloudera.com>
+Date: Thu, 7 Oct 2010 18:10:47 -0700
+Subject: [PATCH 0733/1179] CLOUDERA-BUILD. Add symlinks to built HADOOP_HOME like hadoop-core.jar -> hadoop-core-0.20.2+NNN.jar
+
+This helps other projects create symlinks into the installed hadoop-home without
+having to declare a dependency on a particular patchlevel of the jar.
+---
+ cloudera/install_hadoop.sh |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/cloudera/install_hadoop.sh b/cloudera/install_hadoop.sh
+index e4c39bd..e9858b6 100755
+--- a/cloudera/install_hadoop.sh
++++ b/cloudera/install_hadoop.sh
+@@ -119,12 +119,15 @@ mkdir -p $LIB_DIR
+ (cd $BUILD_DIR && tar cf - .) | (cd $LIB_DIR && tar xf - )
+ 
+ # Create symlinks to preserve old jar names
++# Also create symlinks of versioned jars to jars without version names, which other
++# packages can depend on
+ (cd $LIB_DIR &&
+ for j in hadoop-*.jar; do
+   if [[ $j =~ hadoop-([a-zA-Z]+)-([0-9+\.-]+).jar ]]; then
+     name=${BASH_REMATCH[1]}
+     ver=${BASH_REMATCH[2]}
+     ln -s hadoop-$name-$ver.jar hadoop-$ver-$name.jar
++    ln -s hadoop-$name-$ver.jar hadoop-$name.jar
+   fi
+ done)
+ 
+-- 
+1.7.0.4
+

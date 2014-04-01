@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Put site-specific property overrides in this file. -->
+
+<configuration>
+
+<property>
+  <name>sea.distribution.policy</name>
+  <value>org.apache.hadoop.contrib.index.example.HashingDistributionPolicy</value>
+</property>
+
+<property>
+  <name>sea.document.analyzer</name>
+  <value>org.apache.lucene.analysis.standard.StandardAnalyzer</value>
+</property>
+
+<property>
+  <name>sea.input.format</name>
+  <value>org.apache.hadoop.contrib.index.example.LineDocInputFormat</value>
+</property>
+
+<property>
+  <name>sea.index.updater</name>
+  <value>org.apache.hadoop.contrib.index.mapred.IndexUpdater</value>
+</property>
+
+<property>
+  <name>sea.local.analysis</name>
+  <value>org.apache.hadoop.contrib.index.example.LineDocLocalAnalysis</value>
+</property>
+
+<property>
+  <name>sea.max.field.length</name>
+  <value>2000000</value>
+</property>
+
+<property>
+  <name>sea.max.num.segments</name>
+  <value>10</value>
+</property>
+
+<property>
+  <name>sea.use.compound.file</name>
+  <value>true</value>
+</property>
+
+</configuration>

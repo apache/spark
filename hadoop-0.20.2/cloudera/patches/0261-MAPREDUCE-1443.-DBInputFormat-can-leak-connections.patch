@@ -1,0 +1,143 @@
+From 5626a0e301557dbc93ad5084aa9ef4527316db7b Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Thu, 17 Jun 2010 18:45:58 -0700
+Subject: [PATCH 0261/1179] MAPREDUCE-1443. DBInputFormat can leak connections
+
+Description: The DBInputFormat creates a Connection to use when enumerating splits, but never closes
+it. This can leak connections to the database which are not cleaned up for a long time.
+Reason: bug
+Author: Aaron Kimball
+Ref: CDH-1435
+---
+ .../hadoop/mapreduce/lib/db/DBInputFormat.java     |   38 ++++++++++++++++----
+ .../hadoop/mapreduce/lib/db/DBRecordReader.java    |    1 +
+ .../mapreduce/lib/db/DataDrivenDBInputFormat.java  |    6 ++-
+ 3 files changed, 36 insertions(+), 9 deletions(-)
+
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBInputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBInputFormat.java
+index 0032ce1..485cde3 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBInputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBInputFormat.java
+@@ -149,9 +149,7 @@ public class DBInputFormat<T extends DBWritable>
+     dbConf = new DBConfiguration(conf);
+ 
+     try {
+-      this.connection = dbConf.getConnection();
+-      this.connection.setAutoCommit(false);
+-      connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
++      getConnection();
+ 
+       DatabaseMetaData dbMeta = connection.getMetaData();
+       this.dbProductName = dbMeta.getDatabaseProductName().toUpperCase();
+@@ -174,6 +172,17 @@ public class DBInputFormat<T extends DBWritable>
+   }
+ 
+   public Connection getConnection() {
++    try {
++      if (null == this.connection) {
++        // The connection was closed; reinstantiate it.
++        this.connection = dbConf.getConnection();
++        this.connection.setAutoCommit(false);
++        this.connection.setTransactionIsolation(
++            Connection.TRANSACTION_SERIALIZABLE);
++      }
++    } catch (Exception e) {
++      throw new RuntimeException(e);
++    }
+     return connection;
+   }
+ 
+@@ -191,15 +200,18 @@ public class DBInputFormat<T extends DBWritable>
+       if (dbProductName.startsWith("ORACLE")) {
+         // use Oracle-specific db reader.
+         return new OracleDBRecordReader<T>(split, inputClass,
+-            conf, connection, getDBConf(), conditions, fieldNames, tableName);
++            conf, getConnection(), getDBConf(), conditions, fieldNames,
++            tableName);
+       } else if (dbProductName.startsWith("MYSQL")) {
+         // use MySQL-specific db reader.
+         return new MySQLDBRecordReader<T>(split, inputClass,
+-            conf, connection, getDBConf(), conditions, fieldNames, tableName);
++            conf, getConnection(), getDBConf(), conditions, fieldNames,
++            tableName);
+       } else {
+         // Generic reader.
+         return new DBRecordReader<T>(split, inputClass,
+-            conf, connection, getDBConf(), conditions, fieldNames, tableName);
++            conf, getConnection(), getDBConf(), conditions, fieldNames,
++            tableName);
+       }
+     } catch (SQLException ex) {
+       throw new IOException(ex.getMessage());
+@@ -251,13 +263,16 @@ public class DBInputFormat<T extends DBWritable>
+       connection.commit();
+       return splits;
+     } catch (SQLException e) {
++      throw new IOException("Got SQLException", e);
++    } finally {
+       try {
+         if (results != null) { results.close(); }
+       } catch (SQLException e1) {}
+       try {
+         if (statement != null) { statement.close(); }
+       } catch (SQLException e1) {}
+-      throw new IOException(e.getMessage());
++
++      closeConnection();
+     }
+   }
+ 
+@@ -325,4 +340,13 @@ public class DBInputFormat<T extends DBWritable>
+     dbConf.setInputQuery(inputQuery);
+     dbConf.setInputCountQuery(inputCountQuery);
+   }
++
++  protected void closeConnection() {
++    try {
++      if (null != this.connection) {
++        this.connection.close();
++        this.connection = null;
++      }
++    } catch (SQLException sqlE) { } // ignore exception on close.
++  }
+ }
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBRecordReader.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBRecordReader.java
+index bdfd273..c098cee 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBRecordReader.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DBRecordReader.java
+@@ -156,6 +156,7 @@ public class DBRecordReader<T extends DBWritable> extends
+       }
+       if (null != connection) {
+         connection.commit();
++        connection.close();
+       }
+     } catch (SQLException e) {
+       throw new IOException(e.getMessage());
+diff --git a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DataDrivenDBInputFormat.java b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DataDrivenDBInputFormat.java
+index bbaf469..0413975 100644
+--- a/src/mapred/org/apache/hadoop/mapreduce/lib/db/DataDrivenDBInputFormat.java
++++ b/src/mapred/org/apache/hadoop/mapreduce/lib/db/DataDrivenDBInputFormat.java
+@@ -172,8 +172,9 @@ public class DataDrivenDBInputFormat<T extends DBWritable>
+ 
+     ResultSet results = null;
+     Statement statement = null;
++    Connection connection = getConnection();
+     try {
+-      statement = getConnection().createStatement();
++      statement = connection.createStatement();
+ 
+       results = statement.executeQuery(getBoundingValsQuery());
+       results.next();
+@@ -209,7 +210,8 @@ public class DataDrivenDBInputFormat<T extends DBWritable>
+       }
+ 
+       try {
+-        getConnection().commit();
++        connection.commit();
++        closeConnection();
+       } catch (SQLException se) {
+         LOG.debug("SQLException committing split transaction: " + se.toString());
+       }
+-- 
+1.7.0.4
+

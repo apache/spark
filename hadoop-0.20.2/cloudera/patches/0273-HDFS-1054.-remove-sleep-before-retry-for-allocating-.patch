@@ -1,0 +1,45 @@
+From bc5217543eccc2cfd8a182cdbb051b39d2abf3e7 Mon Sep 17 00:00:00 2001
+From: Dhruba Borthakur <dhruba@apache.org>
+Date: Fri, 11 Jun 2010 23:37:38 +0000
+Subject: [PATCH 0273/1179] HDFS-1054. remove sleep before retry for allocating a block.
+
+Description: When the write pipeline fails to allocate a new block,
+             it previously slept for hard-coded 6 seconds before
+             retrying. This sleep has little reasoning behind it,
+             so is removed.
+Reason: Improve failure recovery performance for interactive applications
+        like HBase.
+Author: Todd Lipcon
+Ref: CDH-931
+---
+ src/hdfs/org/apache/hadoop/hdfs/DFSClient.java |    9 +--------
+ 1 files changed, 1 insertions(+), 8 deletions(-)
+
+diff --git a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+index 962ffe9..9820199 100644
+--- a/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
++++ b/src/hdfs/org/apache/hadoop/hdfs/DFSClient.java
+@@ -2869,19 +2869,12 @@ public class DFSClient implements FSConstants, java.io.Closeable {
+           namenode.abandonBlock(block, src, clientName);
+ 
+           if (errorIndex < nodes.length) {
+-            LOG.debug("Excluding datanode " + nodes[errorIndex]);
++            LOG.info("Excluding datanode " + nodes[errorIndex]);
+             excludedNodes.add(nodes[errorIndex]);
+           }
+ 
+           // Connection failed.  Let's wait a little bit and retry
+           retry = true;
+-          try {
+-            if (System.currentTimeMillis() - startTime > 5000) {
+-              LOG.info("Waiting to find target node: " + nodes[0].getName());
+-            }
+-            Thread.sleep(6000);
+-          } catch (InterruptedException iex) {
+-          }
+         }
+       } while (retry && --count >= 0);
+ 
+-- 
+1.7.0.4
+

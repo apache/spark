@@ -1,0 +1,38 @@
+From 586992381042e1b4ec8c9ece069561ad2e4dfcc0 Mon Sep 17 00:00:00 2001
+From: Aaron Kimball <aaron@cloudera.com>
+Date: Fri, 12 Mar 2010 17:15:42 -0800
+Subject: [PATCH 0120/1179] HADOOP-6279. Add JVM memory usage to JvmMetrics
+
+Description: The JvmMetrics currently publish memory usage from the MemoryMXBean. This is useful, but doesn't include the total heap size (eg as displayed in the JT Web UI).
+
+<p>It would be nice to expose Runtime.getRuntime().maxMemory() as part of JvmMetrics.</p>
+
+<p>It seems that Runtime.getRuntime().totalMemory() (used by the JT for "memory used") is the same as the 'memHeapCommittedM' which already exists.</p>
+Reason: Metrics improvement
+Author: Todd Lipcon
+Ref: UNKNOWN
+---
+ .../org/apache/hadoop/metrics/jvm/JvmMetrics.java  |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/src/core/org/apache/hadoop/metrics/jvm/JvmMetrics.java b/src/core/org/apache/hadoop/metrics/jvm/JvmMetrics.java
+index c519168..24be21d 100644
+--- a/src/core/org/apache/hadoop/metrics/jvm/JvmMetrics.java
++++ b/src/core/org/apache/hadoop/metrics/jvm/JvmMetrics.java
+@@ -104,10 +104,13 @@ public class JvmMetrics implements Updater {
+                 memoryMXBean.getNonHeapMemoryUsage();
+         MemoryUsage memHeap =
+                 memoryMXBean.getHeapMemoryUsage();
++        Runtime runtime = Runtime.getRuntime();
++
+         metrics.setMetric("memNonHeapUsedM", memNonHeap.getUsed()/M);
+         metrics.setMetric("memNonHeapCommittedM", memNonHeap.getCommitted()/M);
+         metrics.setMetric("memHeapUsedM", memHeap.getUsed()/M);
+         metrics.setMetric("memHeapCommittedM", memHeap.getCommitted()/M);
++        metrics.setMetric("maxMemoryM", runtime.maxMemory()/M);
+     }
+     
+     private void doGarbageCollectionUpdates() {
+-- 
+1.7.0.4
+

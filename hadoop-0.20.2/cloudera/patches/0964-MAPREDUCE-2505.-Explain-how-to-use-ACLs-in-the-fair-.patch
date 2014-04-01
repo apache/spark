@@ -1,0 +1,64 @@
+From 0dc60cdb69d7a52068629bcecf79d69dd1cb1132 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Wed, 18 May 2011 14:44:27 -0700
+Subject: [PATCH 0964/1179] MAPREDUCE-2505. Explain how to use ACLs in the fair scheduler.
+
+The fair scheduler already works with the ACL system introduced through the
+mapred.queue.* parameters, but the documentation doesn't explain how to use
+this. We should add a paragraph or two about it.
+
+Reason: Improvement
+Author: Matei Zaharia
+Ref: CDH-2050
+---
+ .../documentation/content/xdocs/fair_scheduler.xml |   27 ++++++++++++++++++-
+ 1 files changed, 25 insertions(+), 2 deletions(-)
+
+diff --git a/src/docs/src/documentation/content/xdocs/fair_scheduler.xml b/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
+index 8018eb0..e42bdc7 100644
+--- a/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
++++ b/src/docs/src/documentation/content/xdocs/fair_scheduler.xml
+@@ -197,8 +197,8 @@
+             Specify which jobconf property is used to determine the pool that a
+             job belongs in. String, default: <em>user.name</em>
+             (i.e. one pool for each user). 
+-            Another useful value is <em>group.name</em> to create a
+-            pool per Unix group.
++            Another useful value is <em>mapred.job.queue.name</em> to use MapReduce's "queue"
++            system for access control lists (see below).
+             mapred.fairscheduler.poolnameproperty is used only for jobs in which
+             mapred.fairscheduler.pool is not explicitly set.
+           </td>
+@@ -435,6 +435,29 @@
+         is available in <em>HADOOP_HOME/conf/fair-scheduler.xml.template</em>.
+         </p>
+       </section>
++      <section>
++        <title>Access Control Lists (ACLs)</title>
++        <p>
++          The fair scheduler can be used in tandem with the "queue" based access
++          control system in MapReduce to restrict which pools each user can access.
++          To do this, first enable ACLs and set up some queues as described in the
++          <a href="mapred_tutorial.html#Job+Authorization">MapReduce usage guide</a>,
++          then set the fair scheduler to use one pool per queue by adding
++          the following property in <em>HADOOP_CONF_DIR/mapred-site.xml</em>:
++        </p>
++<source>
++&lt;property&gt;
++  &lt;name&gt;mapred.fairscheduler.poolnameproperty&lt;/name&gt;
++  &lt;value&gt;mapred.job.queue.name&lt;/value&gt;
++&lt;/property&gt;
++</source>
++        <p>
++          You can then set the minimum share, weight, and internal scheduling mode
++          for each pool as described earlier.
++          In addition, make sure that users submit jobs to the right queue by setting
++          the <em>mapred.job.queue.name</em> property in their jobs.
++        </p>
++      </section>
+     </section>
+     <section>
+     <title> Administration</title>
+-- 
+1.7.0.4
+

@@ -1,0 +1,56 @@
+From 50796a1b13f77ef5c2e098f6a651bf52c05cd2f7 Mon Sep 17 00:00:00 2001
+From: Alejandro Abdelnur <tucu00@gmail.com>
+Date: Tue, 30 Nov 2010 14:03:00 +0800
+Subject: [PATCH 0745/1179] CDH-2234 adding Oozie needed config to Hadoop config example-confs/
+
+Description: adding Oozie needed config to Hadoop config example-confs/
+Reason: to enable zero config for Oozie out of the box
+Author: Alejandro
+Ref: CDH-2234
+---
+ example-confs/conf.pseudo/core-site.xml |   11 +++++++++++
+ example-confs/conf.secure/core-site.xml |   10 ++++++++++
+ 2 files changed, 21 insertions(+), 0 deletions(-)
+
+diff --git a/example-confs/conf.pseudo/core-site.xml b/example-confs/conf.pseudo/core-site.xml
+index 431fa0b..3878ff1 100644
+--- a/example-confs/conf.pseudo/core-site.xml
++++ b/example-confs/conf.pseudo/core-site.xml
+@@ -11,4 +11,15 @@
+      <name>hadoop.tmp.dir</name>
+      <value>/var/lib/hadoop-0.20/cache/${user.name}</value>
+   </property>
++
++  <!-- OOZIE proxy user setting -->
++  <property>
++    <name>hadoop.proxyuser.oozie.hosts</name>
++    <value>*</value>
++  </property>
++  <property>
++    <name>hadoop.proxyuser.oozie.groups</name>
++    <value>*</value>
++  </property>
++
+ </configuration>
+diff --git a/example-confs/conf.secure/core-site.xml b/example-confs/conf.secure/core-site.xml
+index 08b1235..2e2b280 100644
+--- a/example-confs/conf.secure/core-site.xml
++++ b/example-confs/conf.secure/core-site.xml
+@@ -87,4 +87,14 @@
+    <value>org.apache.hadoop.http.lib.StaticUserWebFilter</value>
+  </property>
+ 
++  <!-- OOZIE proxy user setting -->
++  <property>
++    <name>hadoop.proxyuser.oozie.hosts</name>
++    <value>*</value>
++  </property>
++  <property>
++    <name>hadoop.proxyuser.oozie.groups</name>
++    <value>*</value>
++  </property>
++
+ </configuration>
+-- 
+1.7.0.4
+

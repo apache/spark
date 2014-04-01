@@ -1,0 +1,65 @@
+From cce41bfecdffd8f37b5a9ae571a827e8042b39c4 Mon Sep 17 00:00:00 2001
+From: Eli Collins <eli@cloudera.com>
+Date: Sun, 6 Feb 2011 13:12:41 -0800
+Subject: [PATCH 0802/1179] CLOUDERA-BUILD. tar file has incorrect permissions for jsvc and task-controller.
+
+Reason: Bug
+Author: Eli Collins
+Ref: CDH-2553
+---
+ build.xml |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
+
+diff --git a/build.xml b/build.xml
+index be4db34..62d2843 100644
+--- a/build.xml
++++ b/build.xml
+@@ -1361,6 +1361,7 @@
+       <param.listofitems>
+         <tarfileset dir="${build.dir}" mode="664">
+           <exclude name="${final.name}/bin/*" />
++          <exclude name="${final.name}/sbin/**" />
+           <exclude name="${final.name}/contrib/*/bin/*" />
+           <exclude name="${final.name}/src/contrib/ec2/bin/*" />
+           <exclude name="${final.name}/src/contrib/ec2/bin/image/*" />
+@@ -1369,6 +1370,7 @@
+         </tarfileset>
+         <tarfileset dir="${build.dir}" mode="755">
+           <include name="${final.name}/bin/*" />
++          <include name="${final.name}/sbin/**" />
+           <include name="${final.name}/contrib/*/bin/*" />
+           <include name="${final.name}/src/contrib/ec2/bin/*" />
+           <include name="${final.name}/src/contrib/ec2/bin/image/*" />
+@@ -1482,12 +1484,14 @@
+         <param.listofitems>
+           <tarfileset dir="${system-test-build-dir}" mode="664">
+             <exclude name="${final.name}/bin/*" />
++            <exclude name="${final.name}/sbin/**" />
+             <exclude name="${final.name}/src/**" />
+             <exclude name="${final.name}/docs/**" />
+             <include name="${final.name}/**" />
+           </tarfileset>
+           <tarfileset dir="${build.dir}" mode="755">
+             <include name="${final.name}/bin/*" />
++            <include name="${final.name}/sbin/**" />
+           </tarfileset>
+         </param.listofitems>
+       </macro_tar>
+@@ -1498,12 +1502,14 @@
+       <param.listofitems>
+         <tarfileset dir="${build.dir}" mode="664">
+           <exclude name="${final.name}/bin/*" />
++          <exclude name="${final.name}/sbin/*" />
+           <exclude name="${final.name}/src/**" />
+           <exclude name="${final.name}/docs/**" />
+           <include name="${final.name}/**" />
+         </tarfileset>
+         <tarfileset dir="${build.dir}" mode="755">
+           <include name="${final.name}/bin/*" />
++          <include name="${final.name}/sbin/**" />
+         </tarfileset>
+       </param.listofitems>
+     </macro_tar>
+-- 
+1.7.0.4
+

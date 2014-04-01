@@ -1,0 +1,39 @@
+From 3bec5b05964cf8a1f705ad0cf3b10c3ac707f1d5 Mon Sep 17 00:00:00 2001
+From: Aaron T. Myers <atm@cloudera.com>
+Date: Tue, 5 Jul 2011 19:43:03 -0700
+Subject: [PATCH 1017/1179] HDFS-1758. Web UI JSP pages thread safety issue
+
+Reason: Bug
+Author: Tanping Wang
+Ref: CDH-2842
+---
+ src/webapps/hdfs/dfshealth.jsp   |    1 +
+ src/webapps/hdfs/dfsnodelist.jsp |    3 ++-
+ 2 files changed, 3 insertions(+), 1 deletions(-)
+
+diff --git a/src/webapps/hdfs/dfshealth.jsp b/src/webapps/hdfs/dfshealth.jsp
+index 976c4d1..4d136e0 100644
+--- a/src/webapps/hdfs/dfshealth.jsp
++++ b/src/webapps/hdfs/dfshealth.jsp
+@@ -1,5 +1,6 @@
+ <%@ page
+   contentType="text/html; charset=UTF-8"
++  isThreadSafe="false"
+   import="javax.servlet.*"
+   import="javax.servlet.http.*"
+   import="java.io.*"
+diff --git a/src/webapps/hdfs/dfsnodelist.jsp b/src/webapps/hdfs/dfsnodelist.jsp
+index 42c1561..ca89924 100644
+--- a/src/webapps/hdfs/dfsnodelist.jsp
++++ b/src/webapps/hdfs/dfsnodelist.jsp
+@@ -1,5 +1,6 @@
+ <%@ page
+-contentType="text/html; charset=UTF-8"
++    contentType="text/html; charset=UTF-8"
++    isThreadSafe="false"
+ 	import="javax.servlet.*"
+ 	import="javax.servlet.http.*"
+ 	import="java.io.*"
+-- 
+1.7.0.4
+

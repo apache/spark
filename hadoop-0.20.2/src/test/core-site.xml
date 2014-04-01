@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Values used when running unit tests.  This is mostly empty, to -->
+<!-- use of the default values, overriding the potentially -->
+<!-- user-editted core-site.xml in the conf/ directory.  -->
+
+<configuration>
+
+
+<property>
+  <name>hadoop.tmp.dir</name>
+  <value>build/test</value>
+  <description>A base for other temporary directories.</description>
+  <final>true</final>
+</property>
+
+<property>
+  <name>test.fs.s3.name</name>
+  <value>s3:///</value>
+  <description>The name of the s3 file system for testing.</description>
+</property>
+
+<property>
+  <name>fs.s3.block.size</name>
+  <value>128</value>
+  <description>Size of a block in bytes.</description>
+</property>
+
+<property>
+  <name>fs.ftp.user.localhost</name>
+  <value>user</value>
+  <description>The username for connecting to FTP server running on localhost. 
+  This is required by FTPFileSystem</description>
+</property>
+
+<property>
+  <name>fs.ftp.password.localhost</name>
+  <value>password</value>
+  <description>The password for connecting to FTP server running on localhost.
+   This is required by FTPFileSystem</description>
+</property>
+
+<property>
+  <name>test.fs.s3n.name</name>
+  <value>s3n:///</value>
+  <description>The name of the s3n file system for testing.</description>
+</property>
+
+<!-- Turn security off for tests by default -->
+<property>
+  <name>hadoop.security.authentication</name>
+  <value>simple</value>
+</property>
+
+</configuration>
