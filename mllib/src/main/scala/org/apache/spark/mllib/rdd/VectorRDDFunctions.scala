@@ -78,27 +78,27 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
             maxVec,
             minVec)
       },
-      combOp = (lhs, rhs) => (lhs, rhs) match {
+      combOp = (c, v) => (c, v) match {
         case (
-          (lhsMean, lhsM2n, lhsCnt, lhsNNZ, lhsMax, lhsMin),
-          (rhsMean, rhsM2n, rhsCnt, rhsNNZ, rhsMax, rhsMin)) =>
-            val totalCnt = lhsCnt + rhsCnt
-            val deltaMean = rhsMean - lhsMean
-            lhsMean :*= (lhsCnt / totalCnt)
-            axpy(rhsCnt/totalCnt, rhsMean, lhsMean)
-            val totalMean = lhsMean
+          (mean1, m2n1, cnt1, nnz1, max1, min1),
+          (mean2, m2n2, cnt2, nnz2, max2, min2)) =>
+            val totalCnt = cnt1 + cnt2
+            val deltaMean = mean2 - mean1
+            mean1 :*= (cnt1 / totalCnt)
+            axpy(cnt2/totalCnt, mean2, mean1)
+            val totalMean = mean1
             deltaMean :*= deltaMean
-            axpy(lhsCnt*rhsCnt/totalCnt, deltaMean, lhsM2n)
-            axpy(1.0, rhsM2n, lhsM2n)
-            val totalM2n = lhsM2n
-            rhsMax.activeIterator.foreach { case (id, value) =>
-              if (lhsMax(id) < value) lhsMax(id) = value
+            axpy(cnt1*cnt2/totalCnt, deltaMean, m2n1)
+            axpy(1.0, m2n2, m2n1)
+            val totalM2n = m2n1
+            max2.activeIterator.foreach { case (id, value) =>
+              if (max1(id) < value) max1(id) = value
             }
-            rhsMin.activeIterator.foreach { case (id, value) =>
-              if (lhsMin(id) > value) lhsMin(id) = value
+            min2.activeIterator.foreach { case (id, value) =>
+              if (min1(id) > value) min1(id) = value
             }
-            axpy(1.0, rhsNNZ, lhsNNZ)
-            (totalMean, totalM2n, totalCnt, lhsNNZ, lhsMax, lhsMin)
+            axpy(1.0, nnz2, nnz1)
+            (totalMean, totalM2n, totalCnt, nnz1, max1, min1)
       }
     )
 
