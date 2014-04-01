@@ -67,7 +67,7 @@ private[spark] class Worker(
   // How often worker will clean up old app folders
   val CLEANUP_INTERVAL_MILLIS = conf.getLong("spark.worker.cleanup_interval", 60 * 30) * 1000
   // TTL for app folders/data;  after TTL expires it will be cleaned up
-  val APP_DATA_RETENTION_SECS = conf.getLong("spark.worker.app_data_ttl", 15 * 24 * 3600)
+  val APP_DATA_RETENTION_SECS = conf.getLong("spark.worker.app_data_ttl", 7 * 24 * 3600)
 
   // Index into masterUrls that we're currently trying to register with.
   var masterIndex = 0
