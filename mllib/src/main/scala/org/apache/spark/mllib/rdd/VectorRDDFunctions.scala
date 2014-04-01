@@ -50,7 +50,7 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
    * with the size of Vector as input parameter.
    */
   def summarizeStatistics(size: Int): VectorRDDStatisticalSummary = {
-    val results = self.map(_.toBreeze).aggregate((
+    val (fakeMean, fakeM2n, totalCnt, nnz, max, min) = self.map(_.toBreeze).aggregate((
       BV.zeros[Double](size),
       BV.zeros[Double](size),
       0.0,
@@ -59,19 +59,16 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
       BV.fill(size){Double.MaxValue}))(
       seqOp = (c, v) => (c, v) match {
         case ((prevMean, prevM2n, cnt, nnzVec, maxVec, minVec), currData) =>
-          val currMean = prevMean :* (cnt / (cnt + 1.0))
-          axpy(1.0/(cnt+1.0), currData, currMean)
-          axpy(-1.0, currData, prevMean)
-          prevMean :*= (currMean - currData)
-          axpy(1.0, prevMean, prevM2n)
-          axpy(1.0,
-            Vectors.sparse(size, currData.activeKeysIterator.toSeq.map(x => (x, 1.0))).toBreeze,
-            nnzVec)
-          currData.activeIterator.foreach { case (id, value) =>
+          currData.activeIterator.map{ case (id, value) =>
+            val tmpPrevMean = prevMean(id)
+            prevMean(id)  = (prevMean(id) * cnt + value) / (cnt + 1.0)
             if (maxVec(id) < value) maxVec(id) = value
             if (minVec(id) > value) minVec(id) = value
+            nnzVec(id) += 1.0
+            prevM2n(id) += (value - prevMean(id)) * (value - tmpPrevMean)
           }
-          (currMean,
+
+          (prevMean,
             prevM2n,
             cnt + 1.0,
             nnzVec,
@@ -84,32 +81,34 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
           (mean2, m2n2, cnt2, nnz2, max2, min2)) =>
             val totalCnt = cnt1 + cnt2
             val deltaMean = mean2 - mean1
-            mean1 :*= (cnt1 / totalCnt)
-            axpy(cnt2/totalCnt, mean2, mean1)
-            val totalMean = mean1
-            deltaMean :*= deltaMean
-            axpy(cnt1*cnt2/totalCnt, deltaMean, m2n1)
-            axpy(1.0, m2n2, m2n1)
-            val totalM2n = m2n1
+            val totalMean = ((mean1 :* nnz1) + (mean2 :* nnz2)) :/ (nnz1 + nnz2)
+            val totalM2n = m2n1 + m2n2 + ((deltaMean :* deltaMean) :* (nnz1 :* nnz2) :/ (nnz1 + nnz2))
             max2.activeIterator.foreach { case (id, value) =>
               if (max1(id) < value) max1(id) = value
             }
             min2.activeIterator.foreach { case (id, value) =>
               if (min1(id) > value) min1(id) = value
             }
-            axpy(1.0, nnz2, nnz1)
-            (totalMean, totalM2n, totalCnt, nnz1, max1, min1)
+            (totalMean, totalM2n, totalCnt, nnz1 + nnz2, max1, min1)
       }
     )
 
-    results._2 :/= results._3
+    // solve real mean
+    val realMean = fakeMean :* nnz :/ totalCnt
+    // solve real variance
+    val deltaMean = fakeMean :- 0.0
+    val realVar = fakeM2n - ((deltaMean :* deltaMean) :* (nnz :* (nnz :- totalCnt)) :/ totalCnt)
+    max :+= 0.0
+    min :+= 0.0
+
+    realVar :/= totalCnt
 
     VectorRDDStatisticalSummary(
-      Vectors.fromBreeze(results._1),
-      Vectors.fromBreeze(results._2),
-      results._3.toLong,
-      Vectors.fromBreeze(results._4),
-      Vectors.fromBreeze(results._5),
-      Vectors.fromBreeze(results._6))
+      Vectors.fromBreeze(realMean),
+      Vectors.fromBreeze(realVar),
+      totalCnt.toLong,
+      Vectors.fromBreeze(nnz),
+      Vectors.fromBreeze(max),
+      Vectors.fromBreeze(min))
   }
 }
