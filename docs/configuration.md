@@ -646,6 +646,15 @@ Apart from these, the following properties are also available, and may be useful
     Number of cores to allocate for each task.
   </td>
 </tr>
+<tr>
+  <td>spark.executor.extraJavaOptions</td>
+  <td>(none)</td>
+  <td>
+    A string of extra JVM options to pass to executors. For instance, GC settings. Note that
+    it is illegal to set Spark properties or heap size settings with this flag.
+  </td>
+</tr>
+
 </table>
 
 ## Viewing Spark Properties

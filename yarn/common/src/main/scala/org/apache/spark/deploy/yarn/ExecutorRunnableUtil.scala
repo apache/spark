@@ -58,10 +58,9 @@ trait ExecutorRunnableUtil extends Logging {
     val executorMemoryString = executorMemory + "m"
     JAVA_OPTS += "-Xms" + executorMemoryString + " -Xmx" + executorMemoryString + " "
 
-    /* Pass on Spark properties to the driver. */
-    for ((k, v) <- sys.props.filterKeys(_.startsWith("spark"))) {
-      JAVA_OPTS += s"-D$k=$v"
-    }
+    // Set extra Java options for the executor
+    val executorOpts = sys.props.find(_._1.contains("spark.executor.extraJavaOptions"))
+    JAVA_OPTS += executorOpts
 
     JAVA_OPTS += " -Djava.io.tmpdir=" +
       new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR) + " "
