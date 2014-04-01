@@ -16,11 +16,15 @@
  */
 package org.apache.spark.mllib.rdd
 
-import breeze.linalg.{Vector => BV, axpy}
+import breeze.linalg.{axpy, Vector => BV}
 
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 
+/**
+ * Case class of the summary statistics, including mean, variance, count, max, min, and non-zero
+ * elements count.
+ */
 case class VectorRDDStatisticalSummary(
     mean: Vector,
     variance: Vector,
@@ -29,6 +33,12 @@ case class VectorRDDStatisticalSummary(
     min: Vector,
     nonZeroCnt: Vector) extends Serializable
 
+/**
+ * Case class of the aggregate value for collecting summary statistics from RDD[Vector]. These
+ * values are relatively with
+ * [[org.apache.spark.mllib.rdd.VectorRDDStatisticalSummary VectorRDDStatisticalSummary]], the
+ * latter is computed from the former.
+ */
 private case class VectorRDDStatisticalRing(
     fakeMean: BV[Double],
     fakeM2n: BV[Double],
@@ -45,18 +55,8 @@ private case class VectorRDDStatisticalRing(
 class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
 
   /**
-   * Compute full column-wise statistics for the RDD, including
-   * {{{
-   *   Mean:              Vector,
-   *   Variance:          Vector,
-   *   Count:             Double,
-   *   Non-zero count:    Vector,
-   *   Maximum elements:  Vector,
-   *   Minimum elements:  Vector.
-   * }}},
-   * with the size of Vector as input parameter.
+   * Aggregate function used for aggregating elements in a worker together.
    */
-
   private def seqOp(
       aggregator: VectorRDDStatisticalRing,
       currData: BV[Double]): VectorRDDStatisticalRing = {
@@ -84,6 +84,9 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
     }
   }
 
+  /**
+   * Combine function used for combining intermediate results together from every worker.
+   */
   private def combOp(
       statistics1: VectorRDDStatisticalRing,
       statistics2: VectorRDDStatisticalRing): VectorRDDStatisticalRing = {
@@ -92,27 +95,38 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
             VectorRDDStatisticalRing(mean2, m2n2, cnt2, nnz2, max2, min2)) =>
         val totalCnt = cnt1 + cnt2
         val deltaMean = mean2 - mean1
+
         mean2.activeIterator.foreach {
           case (id, 0.0) =>
-          case (id, value) => mean1(id) = (mean1(id) * nnz1(id) + mean2(id) * nnz2(id)) / (nnz1(id) + nnz2(id))
+          case (id, value) =>
+            mean1(id) = (mean1(id) * nnz1(id) + mean2(id) * nnz2(id)) / (nnz1(id) + nnz2(id))
         }
+
         m2n2.activeIterator.foreach {
           case (id, 0.0) =>
-          case (id, value) => m2n1(id) += value + deltaMean(id) * deltaMean(id) * nnz1(id) * nnz2(id) / (nnz1(id)+nnz2(id))
+          case (id, value) =>
+            m2n1(id) +=
+              value + deltaMean(id) * deltaMean(id) * nnz1(id) * nnz2(id) / (nnz1(id)+nnz2(id))
         }
+
         max2.activeIterator.foreach {
           case (id, value) =>
             if (max1(id) < value) max1(id) = value
         }
+
         min2.activeIterator.foreach {
           case (id, value) =>
             if (min1(id) > value) min1(id) = value
         }
+
         axpy(1.0, nnz2, nnz1)
         VectorRDDStatisticalRing(mean1, m2n1, totalCnt, nnz1, max1, min1)
     }
   }
 
+  /**
+   * Compute full column-wise statistics for the RDD with the size of Vector as input parameter.
+   */
   def summarizeStatistics(size: Int): VectorRDDStatisticalSummary = {
     val zeroValue = VectorRDDStatisticalRing(
       BV.zeros[Double](size),
@@ -122,16 +136,17 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
       BV.fill(size)(Double.MinValue),
       BV.fill(size)(Double.MaxValue))
 
-    val breezeVectors = self.map(_.toBreeze)
     val VectorRDDStatisticalRing(fakeMean, fakeM2n, totalCnt, nnz, fakeMax, fakeMin) =
-      breezeVectors.aggregate(zeroValue)(seqOp, combOp)
+      self.map(_.toBreeze).aggregate(zeroValue)(seqOp, combOp)
 
     // solve real mean
     val realMean = fakeMean :* nnz :/ totalCnt
-    // solve real variance
-    val deltaMean = fakeMean :- 0.0
-    val realVar = fakeM2n - ((deltaMean :* deltaMean) :* (nnz :* (nnz :- totalCnt)) :/ totalCnt)
-    // max, min
+
+    // solve real m2n
+    val deltaMean = fakeMean
+    val realM2n = fakeM2n - ((deltaMean :* deltaMean) :* (nnz :* (nnz :- totalCnt)) :/ totalCnt)
+
+    // remove the initial value in max and min, i.e. the Double.MaxValue or Double.MinValue.
     val max = Vectors.sparse(size, fakeMax.activeIterator.map { case (id, value) =>
       if ((value == Double.MinValue) && (realMean(id) != Double.MinValue)) (id, 0.0)
       else (id, value)
@@ -142,11 +157,11 @@ class VectorRDDFunctions(self: RDD[Vector]) extends Serializable {
     }.toSeq)
 
     // get variance
-    realVar :/= totalCnt
+    realM2n :/= totalCnt
 
     VectorRDDStatisticalSummary(
       Vectors.fromBreeze(realMean),
-      Vectors.fromBreeze(realVar),
+      Vectors.fromBreeze(realM2n),
       totalCnt.toLong,
       Vectors.fromBreeze(nnz),
       max,

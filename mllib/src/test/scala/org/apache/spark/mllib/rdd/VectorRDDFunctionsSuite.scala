@@ -17,12 +17,18 @@
 
 package org.apache.spark.mllib.rdd
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.scalatest.FunSuite
+
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.util.MLUtils._
-import scala.collection.mutable.ArrayBuffer
 
+/**
+ * Test suite for the summary statistics of RDD[Vector]. Both the accuracy and the time consuming
+ * between dense and sparse vector are tested.
+ */
 class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
   import VectorRDDFunctionsSuite._
 
@@ -33,13 +39,15 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
   )
 
   val sparseData = ArrayBuffer(Vectors.sparse(20, Seq((0, 1.0), (9, 2.0), (10, 7.0))))
-  for (i <- 0 to 10000) sparseData += Vectors.sparse(20, Seq((9, 0.0)))
+  for (i <- 0 until 10000) sparseData += Vectors.sparse(20, Seq((9, 0.0)))
   sparseData += Vectors.sparse(20, Seq((0, 5.0), (9, 13.0), (16, 2.0)))
   sparseData += Vectors.sparse(20, Seq((3, 5.0), (9, 13.0), (18, 2.0)))
 
   test("full-statistics") {
     val data = sc.parallelize(localData, 2)
-    val (VectorRDDStatisticalSummary(mean, variance, cnt, nnz, max, min), denseTime) = time(data.summarizeStatistics(3))
+    val (VectorRDDStatisticalSummary(mean, variance, cnt, nnz, max, min), denseTime) =
+      time(data.summarizeStatistics(3))
+
     assert(equivVector(mean, Vectors.dense(4.0, 5.0, 6.0)), "Column mean do not match.")
     assert(equivVector(variance, Vectors.dense(6.0, 6.0, 6.0)), "Column variance do not match.")
     assert(cnt === 3, "Column cnt do not match.")
@@ -48,21 +56,12 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
     assert(equivVector(min, Vectors.dense(1.0, 2.0, 3.0)), "Column min do not match.")
 
     val dataForSparse = sc.parallelize(sparseData.toSeq, 2)
-    val (VectorRDDStatisticalSummary(sparseMean, sparseVariance, sparseCnt, sparseNnz, sparseMax, sparseMin), sparseTime) = time(dataForSparse.summarizeStatistics(20))
-    /*
-    assert(equivVector(sparseMean, Vectors.dense(4.0, 5.0, 6.0)), "Column mean do not match.")
-    assert(equivVector(sparseVariance, Vectors.dense(6.0, 6.0, 6.0)), "Column variance do not match.")
-    assert(sparseCnt === 3, "Column cnt do not match.")
-    assert(equivVector(sparseNnz, Vectors.dense(3.0, 3.0, 3.0)), "Column nnz do not match.")
-    assert(equivVector(sparseMax, Vectors.dense(7.0, 8.0, 9.0)), "Column max do not match.")
-    assert(equivVector(sparseMin, Vectors.dense(1.0, 2.0, 3.0)), "Column min do not match.")
-    */
-
-
+    val (_, sparseTime) = time(dataForSparse.summarizeStatistics(20))
 
     println(s"dense time is $denseTime, sparse time is $sparseTime.")
+    assert(relativeTime(denseTime, sparseTime),
+      "Relative time between dense and sparse vector doesn't match.")
   }
-
 }
 
 object VectorRDDFunctionsSuite {
@@ -75,6 +74,11 @@ object VectorRDDFunctionsSuite {
 
   def equivVector(lhs: Vector, rhs: Vector): Boolean = {
     (lhs.toBreeze - rhs.toBreeze).norm(2) < 1e-9
+  }
+
+  def relativeTime(lhs: Double, rhs: Double): Boolean = {
+    val denominator = math.max(lhs, rhs)
+    math.abs(lhs - rhs) / denominator < 0.3
   }
 }
 
