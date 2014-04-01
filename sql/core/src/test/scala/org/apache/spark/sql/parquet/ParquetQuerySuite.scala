@@ -28,12 +28,10 @@ import parquet.schema.MessageTypeParser
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.getTempFilePath
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.TestData
 import org.apache.spark.sql.SchemaRDD
-import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.catalyst.expressions.Equals
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.IntegerType
 import org.apache.spark.util.Utils
 
@@ -366,20 +364,26 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(query.collect().size === 10)
   }
 
-  test("Importing nested File") {
+  test("Importing nested Parquet file (Addressbook)") {
     ParquetTestData.readNestedFile()
     val result = getRDD(ParquetTestData.testNestedData1).collect()
     assert(result != null)
     assert(result.size === 2)
-    assert(result(0).size === 3)
-    assert(result(1).apply(1) === null)
-    assert(result(1).apply(2) === null)
-    assert(result(1).apply(0) === "A. Nonymous")
-    assert(result(0).apply(0).isInstanceOf[java.lang.String])
-    assert(result(0).apply(0) === "Julien Le Dem")
-    assert(result(0).apply(1).asInstanceOf[Row].apply(0) === "555 123 4567")
-    assert(result(0).apply(1).asInstanceOf[Row].apply(2) === "XXX XXX XXXX")
-    assert(result(0).apply(1).asInstanceOf[Row].apply(3) === null) // this should not even be there!
+    val first_record = result(0)
+    val second_record = result(1)
+    val first_owner_numbers = result(0).apply(1).asInstanceOf[ArrayBuffer[Any]]
+    val first_contacts = result(0).apply(2).asInstanceOf[ArrayBuffer[ArrayBuffer[Any]]]
+    assert(first_record.size === 3)
+    assert(second_record.apply(1) === null)
+    assert(second_record.apply(2) === null)
+    assert(second_record.apply(0) === "A. Nonymous")
+    assert(first_record.apply(0) === "Julien Le Dem")
+    assert(first_owner_numbers.apply(0) === "555 123 4567")
+    assert(first_owner_numbers.apply(2) === "XXX XXX XXXX")
+    assert(first_contacts.apply(0).size === 2)
+    assert(first_contacts.apply(0).apply(0) === "Dmitriy Ryaboy")
+    assert(first_contacts.apply(0).apply(1) === "555 987 6543")
+    assert(first_contacts.apply(1).apply(0) === "Chris Aniszczyk")
   }
 
   /**
