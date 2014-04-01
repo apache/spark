@@ -25,8 +25,15 @@ private[spark] object UIUtils {
               type="text/css" />
         <script src={prependBaseUri("/static/sorttable.js")} ></script>
         <title>{appName} - {title}</title>
+        <script type="text/JavaScript">
+          <!--
+          function timedRefresh(timeoutPeriod) {
+	          setTimeout("location.reload(true);",timeoutPeriod);
+          }
+          //   -->
+        </script>
       </head>
-      <body>
+      <body onload="JavaScript:timedRefresh(1000);">
         <div class="navbar navbar-static-top">
           <div class="navbar-inner">
             <a href={prependBaseUri(basePath, "/")} class="brand">

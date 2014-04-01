@@ -24,7 +24,7 @@ class UISuite extends FunSuite with BeforeAndAfterAll {
     val startTime = System.currentTimeMillis()
     while (System.currentTimeMillis() - startTime < duration) {
       servers.map(_.send(Random.nextString(10) + "\n"))
-      Thread.sleep(1)
+      //Thread.sleep(1)
     }
     ssc.stop()
     servers.foreach(_.stop())
