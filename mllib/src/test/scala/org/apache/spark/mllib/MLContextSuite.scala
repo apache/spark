@@ -41,8 +41,8 @@ class MLContextSuite extends FunSuite with LocalSparkContext {
 
     val mlc = MLContext(sc)
 
-    val pointsWithNumFeatures = mlc.libSVMFile(tempDir.toURI.toString, 6).collect()
-    val pointsWithoutNumFeatures = mlc.libSVMFile(tempDir.toURI.toString, 0).collect()
+    val pointsWithNumFeatures = mlc.libSVMFile(tempDir.toURI.toString, numFeatures = 6).collect()
+    val pointsWithoutNumFeatures = mlc.libSVMFile(tempDir.toURI.toString).collect()
 
     for (points <- Seq(pointsWithNumFeatures, pointsWithoutNumFeatures)) {
       assert(points.length === 3)
