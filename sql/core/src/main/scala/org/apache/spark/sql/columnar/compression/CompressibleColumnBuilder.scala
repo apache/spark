@@ -41,15 +41,15 @@ import org.apache.spark.sql.columnar.{ColumnBuilder, NativeColumnBuilder}
  * }}}
  */
 private[sql] trait CompressibleColumnBuilder[T <: NativeType]
-  extends ColumnBuilder with WithCompressionSchemes with Logging {
+  extends ColumnBuilder with Logging {
 
-  this: NativeColumnBuilder[T] =>
+  this: NativeColumnBuilder[T] with WithCompressionSchemes =>
 
   import CompressionScheme._
 
   val compressionEncoders = schemes.filter(_.supports(columnType)).map(_.encoder)
 
-  private def isWorthCompressing(encoder: Encoder) = {
+  protected def isWorthCompressing(encoder: Encoder) = {
     encoder.compressionRatio < 0.8
   }
 

@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.columnar
 
+import scala.collection.immutable.HashSet
 import scala.util.Random
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.catalyst.types.DataType
+import org.apache.spark.sql.catalyst.types.{DataType, NativeType}
 
-object ColumnarTestData {
+object ColumnarTestUtils {
   def makeNullRow(length: Int) = {
     val row = new GenericMutableRow(length)
     (0 until length).foreach(row.setNullAt)
@@ -48,7 +49,7 @@ object ColumnarTestData {
       case BOOLEAN => Random.nextBoolean()
       case BINARY  => randomBytes(Random.nextInt(32))
       case _ =>
-        // Using an random one-element map instead of an arbitrary object
+        // Using a random one-element map instead of an arbitrary object
         Map(Random.nextInt() -> Random.nextString(Random.nextInt(32)))
     }).asInstanceOf[JvmType]
   }
@@ -59,6 +60,15 @@ object ColumnarTestData {
 
   def makeRandomValues(columnTypes: Seq[ColumnType[_ <: DataType, _]]): Seq[Any] = {
     columnTypes.map(makeRandomValue(_))
+  }
+
+  def makeUniqueRandomValues[T <: DataType, JvmType](
+      columnType: ColumnType[T, JvmType],
+      count: Int): Seq[JvmType] = {
+
+    Iterator.iterate(HashSet.empty[JvmType]) { set =>
+      set + Iterator.continually(makeRandomValue(columnType)).filterNot(set.contains).next()
+    }.drop(count).next().toSeq
   }
 
   def makeRandomRow(
@@ -72,4 +82,19 @@ object ColumnarTestData {
     }
     row
   }
+
+  def makeUniqueValuesAndSingleValueRows[T <: NativeType](
+      columnType: NativeColumnType[T],
+      count: Int) = {
+
+    val values = makeUniqueRandomValues(columnType, count)
+    val rows = values.map { value =>
+      val row = new GenericMutableRow(1)
+      row(0) = value
+      row
+    }
+
+    (values, rows)
+  }
+
 }

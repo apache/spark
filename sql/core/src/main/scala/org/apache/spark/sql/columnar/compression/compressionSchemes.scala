@@ -129,7 +129,7 @@ private[sql] object RunLengthEncoding extends CompressionScheme {
             currentRun += 1
           } else {
             // Writes current run
-            columnType.append(value, to)
+            columnType.append(currentValue, to)
             to.putInt(currentRun)
 
             // Resets current run
@@ -137,6 +137,10 @@ private[sql] object RunLengthEncoding extends CompressionScheme {
             currentRun = 1
           }
         }
+
+        // Writes the last run
+        columnType.append(currentValue, to)
+        to.putInt(currentRun)
       }
 
       to.rewind()

@@ -39,7 +39,7 @@ object TestNullableColumnAccessor {
 }
 
 class NullableColumnAccessorSuite extends FunSuite {
-  import ColumnarTestData._
+  import ColumnarTestUtils._
 
   Seq(INT, LONG, SHORT, BOOLEAN, BYTE, STRING, DOUBLE, FLOAT, BINARY, GENERIC).foreach {
     testNullableColumnAccessor(_)

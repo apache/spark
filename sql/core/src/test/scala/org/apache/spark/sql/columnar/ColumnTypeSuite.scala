@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.columnar.ColumnarTestData._
+import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 
 class ColumnTypeSuite extends FunSuite {

@@ -22,7 +22,14 @@ import org.scalatest.FunSuite
 import org.apache.spark.sql.catalyst.types._
 
 class ColumnStatsSuite extends FunSuite {
-  testColumnStats(classOf[IntColumnStats], INT)
+  testColumnStats(classOf[BooleanColumnStats], BOOLEAN)
+  testColumnStats(classOf[ByteColumnStats],    BYTE)
+  testColumnStats(classOf[ShortColumnStats],   SHORT)
+  testColumnStats(classOf[IntColumnStats],     INT)
+  testColumnStats(classOf[LongColumnStats],    LONG)
+  testColumnStats(classOf[FloatColumnStats],   FLOAT)
+  testColumnStats(classOf[DoubleColumnStats],  DOUBLE)
+  testColumnStats(classOf[StringColumnStats],  STRING)
 
   def testColumnStats[T <: NativeType, U <: NativeColumnStats[T]](
       columnStatsClass: Class[U],
@@ -36,7 +43,7 @@ class ColumnStatsSuite extends FunSuite {
     }
 
     test(s"$columnStatsName: non-empty") {
-      import ColumnarTestData._
+      import ColumnarTestUtils._
 
       val columnStats = columnStatsClass.newInstance()
       val rows = Seq.fill(10)(makeRandomRow(columnType))
