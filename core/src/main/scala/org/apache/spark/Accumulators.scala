@@ -24,7 +24,7 @@ import scala.collection.generic.Growable
 import scala.collection.mutable.Map
 
 import org.apache.spark.serializer.JavaSerializer
-import scala.collection.immutable
+
 
 /**
  * A data type that can be accumulated, ie has an commutative and associative "add" operation,
@@ -268,11 +268,9 @@ private object Accumulators {
   }
 
   // Add values to the original accumulators with some given IDs
-  def add(values: immutable.Map[Long, Any]): Unit = synchronized {
-    for ((id, value) <- values) {
-      if (originals.contains(id)) {
-        originals(id).asInstanceOf[Accumulable[Any, Any]] ++= value
-      }
+  def add(value: (Long, Any)): Unit = synchronized {
+    if (originals.contains(value._1)) {
+      originals(value._1).asInstanceOf[Accumulable[Any, Any]] ++= value._2
     }
   }
 }
