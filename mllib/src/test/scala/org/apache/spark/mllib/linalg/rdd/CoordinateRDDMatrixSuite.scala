@@ -24,7 +24,7 @@ import org.apache.spark.mllib.linalg.Vectors
 
 class CoordinateRDDMatrixSuite extends FunSuite with LocalSparkContext {
 
-  val m = 4
+  val m = 5
   val n = 4
   var mat: CoordinateRDDMatrix = _
 
@@ -46,8 +46,8 @@ class CoordinateRDDMatrixSuite extends FunSuite with LocalSparkContext {
   }
 
   test("size") {
-    assert(mat.numRows() === 4)
-    assert(mat.numCols() === 5)
+    assert(mat.numRows() === m)
+    assert(mat.numCols() === n)
   }
 
   test("toIndexedRowRDDMatrix") {

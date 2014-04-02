@@ -139,17 +139,18 @@ class RowRDDMatrix(
     val V = Matrices.dense(n, sk, util.Arrays.copyOfRange(u.data, 0, n * sk))
 
     if (computeU) {
-      val N = new BDM[Double](sk, n, util.Arrays.copyOfRange(v.data, 0, sk * n))
+      // N = Vk * Sk^{-1}
+      val N = new BDM[Double](n, sk, util.Arrays.copyOfRange(u.data, 0, n * sk))
       var i = 0
       var j = 0
-      while (i < sk) {
-        j = 0
-        val sigma = sigmas(i)
-        while (j < n) {
+      while (j < sk) {
+        i = 0
+        val sigma = sigmas(j)
+        while (i < n) {
           N(i, j) /= sigma
-          j += 1
+          i += 1
         }
-        i += 1
+        j += 1
       }
       val U = this.multiply(Matrices.fromBreeze(N))
       SingularValueDecomposition(U, s, V)

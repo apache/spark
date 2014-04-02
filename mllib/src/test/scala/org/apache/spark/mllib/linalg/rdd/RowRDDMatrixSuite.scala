@@ -80,7 +80,8 @@ class RowRDDMatrixSuite extends FunSuite with LocalSparkContext {
       val brzV = svd.V.toBreeze.asInstanceOf[BDM[Double]]
       val rows = U.rows.collect()
       val brzUt = new BDM[Double](n, m, rows.flatMap(r => r.toArray))
-      assert(closeToZero(brzUt.t * brzDiag(brzSigma) * brzV.t - A))
+      val UsVt = brzUt.t * brzDiag(brzSigma) * brzV.t
+      assert(closeToZero(UsVt - A))
       val VtV: BDM[Double] = brzV.t * brzV
       assert(closeToZero(VtV - BDM.eye[Double](n)))
       val UtU = U.computeGramianMatrix().toBreeze.asInstanceOf[BDM[Double]]
