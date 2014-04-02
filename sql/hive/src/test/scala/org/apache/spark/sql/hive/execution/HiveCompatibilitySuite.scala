@@ -42,6 +42,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "bucket_num_reducers",
     "column_access_stats",
     "concatenate_inherit_table_location",
+    "describe_pretty",
+    "describe_syntax",
 
     // Setting a default property does not seem to get reset and thus changes the answer for many
     // subsequent tests.
@@ -268,8 +270,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "describe_database_json",
     "describe_formatted_view_partitioned",
     "describe_formatted_view_partitioned_json",
-    "describe_pretty",
-    "describe_syntax",
     "describe_table_json",
     "diff_part_input_formats",
     "disable_file_format_check",
@@ -438,7 +438,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "join_star",
     "join_view",
     "lateral_view_cp",
-    "lateral_view_outer",
     "lateral_view_ppd",
     "lineage1",
     "literal_double",
