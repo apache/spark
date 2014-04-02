@@ -53,16 +53,16 @@ public class StorageLevels {
    * Create a new StorageLevel object.
    * @param useDisk saved to disk, if true
    * @param useMemory saved to memory, if true
-   * @param useTachyon saved to Tachyon, if true
+   * @param useOffHeap saved to Tachyon, if true
    * @param deserialized saved as deserialized objects, if true
    * @param replication replication factor
    */
   public static StorageLevel create(
     boolean useDisk,
     boolean useMemory,
-    boolean useTachyon,
+    boolean useOffHeap,
     boolean deserialized,
     int replication) {
-    return StorageLevel.apply(useDisk, useMemory, useTachyon, deserialized, replication);
+    return StorageLevel.apply(useDisk, useMemory, useOffHeap, deserialized, replication);
   }
 }
