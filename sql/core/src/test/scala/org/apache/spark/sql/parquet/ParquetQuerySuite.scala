@@ -394,7 +394,22 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       ParquetTestData.testNestedFile2,
       ParquetTestData.testNestedSchema2)
     val result = getRDD(ParquetTestData.testNestedData2).collect()
-    assert(result != null)
+    assert(result.size === 1, "number of top-level rows incorrect")
+    assert(result(0).size === 5, "number of fields in row incorrect")
+    assert(result(0)(0) === 1)
+    assert(result(0)(1) === 7)
+    assert(result(0)(2).asInstanceOf[ArrayBuffer[Any]].size === 3)
+    assert(result(0)(2).asInstanceOf[ArrayBuffer[Any]].apply(0) === (1.toLong << 32))
+    assert(result(0)(2).asInstanceOf[ArrayBuffer[Any]].apply(1) === (1.toLong << 33))
+    assert(result(0)(2).asInstanceOf[ArrayBuffer[Any]].apply(2) === (1.toLong << 34))
+    assert(result(0)(3).asInstanceOf[ArrayBuffer[Any]].size === 2)
+    assert(result(0)(3).asInstanceOf[ArrayBuffer[Any]].apply(0) === 2.5)
+    assert(result(0)(3).asInstanceOf[ArrayBuffer[Any]].apply(1) === false)
+    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].size === 3)
+    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].apply(1).asInstanceOf[ArrayBuffer[Any]].size === 1)
+    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].apply(1).asInstanceOf[ArrayBuffer[ArrayBuffer[Any]]].size === 1)
+    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].apply(1).asInstanceOf[ArrayBuffer[ArrayBuffer[Any]]].apply(0) === 9)
+    assert(true)
   }
 
   /**

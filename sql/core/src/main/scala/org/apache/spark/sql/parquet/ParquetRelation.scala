@@ -228,7 +228,11 @@ private[parquet] object ParquetTypesConverter {
             if (groupType.getFieldCount == 1) { // single field, either optional or required
               new StructType(fields)
             } else { // multi field repeated group, which we map into an array of structs
+              if (parquetType.getRepetition == Repetition.REPEATED) {
                 new ArrayType(StructType(fields))
+              } else {
+                new StructType(fields)
+              }
             }
           }
         }
@@ -247,7 +251,11 @@ private[parquet] object ParquetTypesConverter {
     case _ => None
   }
 
-  def fromDataType(ctype: DataType, name: String, nullable: Boolean = true, inArray: Boolean = false): ParquetType = {
+  def fromDataType(
+      ctype: DataType,
+      name: String,
+      nullable: Boolean = true,
+      inArray: Boolean = false): ParquetType = {
     val repetition =
       if (inArray) Repetition.REPEATED
       else {
@@ -262,16 +270,17 @@ private[parquet] object ParquetTypesConverter {
         case ArrayType(elementType: DataType) => {
           elementType match {
             case StructType(fields) => { // first case: array of structs
-              val parquetFieldTypes = fields.map(f => fromDataType(f.dataType, f.name, f.nullable, false))
+              val parquetFieldTypes = fields.map(
+                f => fromDataType(f.dataType, f.name, f.nullable, false))
               new ParquetGroupType(repetition, name, ParquetOriginalType.LIST, parquetFieldTypes)
               //ConversionPatterns.listType(Repetition.REPEATED, name, parquetFieldTypes)
             }
             case _ => { // second case: array of primitive types
-              // TODO: "values" is a generic name but without it the Parquet column path would
-              // be incomplete and values may be silently dropped; better would be to give
-              // Array elements a name of some sort (and specify whether they are nullable),
-              // as in StructField
-              val parquetElementType = fromDataType(elementType, "values", nullable=false, inArray=true)
+              val parquetElementType = fromDataType(
+                elementType,
+                CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
+                nullable = false,
+                inArray = true)
               ConversionPatterns.listType(repetition, name, parquetElementType)
             }
           }
@@ -281,14 +290,18 @@ private[parquet] object ParquetTypesConverter {
           val fields = structFields.map {
             field => fromDataType(field.dataType, field.name, field.nullable)
           }
-          new ParquetGroupType(Repetition.REPEATED, name, fields)
+          new ParquetGroupType(repetition, name, fields)
         }
         case _ => sys.error(s"Unsupported datatype $ctype")
       }
     }
   }
 
-  def consumeType(consumer: RecordConsumer, ctype: DataType, record: Row, index: Int): Unit = {
+  def consumeType(
+      consumer: RecordConsumer,
+      ctype: DataType,
+      record: Row,
+      index: Int): Unit = {
     ctype match {
       case StringType => consumer.addBinary(
         Binary.fromByteArray(
@@ -311,11 +324,18 @@ private[parquet] object ParquetTypesConverter {
     parquetSchema
       .asGroupType()
       .getFields
-      .map(field => new AttributeReference(field.getName, toDataType(field), field.getRepetition != Repetition.REQUIRED)())
+      .map(
+        field =>
+          new AttributeReference(
+            field.getName,
+            toDataType(field),
+            field.getRepetition != Repetition.REQUIRED)())
   }
 
   def convertFromAttributes(attributes: Seq[Attribute]): MessageType = {
-    val fields = attributes.map(attribute => fromDataType(attribute.dataType, attribute.name, attribute.nullable))
+    val fields = attributes.map(
+      attribute =>
+        fromDataType(attribute.dataType, attribute.name, attribute.nullable))
     new MessageType("root", fields)
   }
 

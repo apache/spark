@@ -257,15 +257,21 @@ private[sql] object ParquetTestData {
     r1.add(0, 1)
     r1.add(1, 7)
     val longs = r1.addGroup(2)
-    longs.add("values", 1.toLong << 32)
-    longs.add("values", 1.toLong << 33)
-    longs.add("values", 1.toLong << 34)
+    longs.add(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME , 1.toLong << 32)
+    longs.add(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 1.toLong << 33)
+    longs.add(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 1.toLong << 34)
     val booleanNumberPairs = r1.addGroup(3)
     booleanNumberPairs.add("value", 2.5)
     booleanNumberPairs.add("truth", false)
-    r1.addGroup(4).addGroup(0).addGroup(0).add("values", 7)
-    r1.addGroup(4).addGroup(0).addGroup(0).add("values", 8)
-    r1.addGroup(4).addGroup(0).addGroup(0).add("values", 9)
+    r1.addGroup(4).addGroup(0).addGroup(0).add(
+      CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
+      7)
+    r1.addGroup(4).addGroup(0).addGroup(0).add(
+      CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
+      8)
+    r1.addGroup(4).addGroup(0).addGroup(0).add(
+      CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
+      9)
 
     val writeSupport = new TestGroupWriteSupport(schema)
     val writer = new ParquetWriter[Group](path, writeSupport)
