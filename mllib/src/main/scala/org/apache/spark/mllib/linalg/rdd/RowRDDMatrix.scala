@@ -79,7 +79,6 @@ class RowRDDMatrix(
     RowRDDMatrix.triuToFull(n, GU.data)
   }
 
-
   /**
    * Computes the singular value decomposition of this matrix.
    * Denote this matrix by A (m x n), this will compute matrices U, S, V such that A = U * S * V'.

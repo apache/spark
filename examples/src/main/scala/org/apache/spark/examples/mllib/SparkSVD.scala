@@ -19,8 +19,6 @@ package org.apache.spark.examples.mllib
       
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.SVD
-import org.apache.spark.mllib.linalg.MatrixEntry
-import org.apache.spark.mllib.linalg.SparseMatrix
 
 /**
  * Compute SVD of an example matrix

@@ -18,9 +18,6 @@
 package org.apache.spark.examples.mllib
       
 import org.apache.spark.SparkContext
-import org.apache.spark.mllib.linalg.PCA
-import org.apache.spark.mllib.linalg.MatrixEntry
-import org.apache.spark.mllib.linalg.SparseMatrix
 import org.apache.spark.mllib.util._
 
 
