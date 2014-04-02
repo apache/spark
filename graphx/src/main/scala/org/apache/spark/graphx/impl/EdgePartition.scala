@@ -92,8 +92,14 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
    * @return a new edge partition with the attribute values replaced
    */
   def map[ED2: ClassTag](iter: Iterator[ED2]): EdgePartition[ED2] = {
-    val newData = iter.toArray
-    assert(newData.size == data.size)
+    // Faster than iter.toArray, because the expected size is known.
+    val newData = new Array[ED2](data.size)
+    var i = 0
+    while (iter.hasNext) {
+      newData(i) = iter.next()
+      i += 1
+    }
+    assert(newData.size == i)
     new EdgePartition(srcIds, dstIds, newData, index)
   }
 
