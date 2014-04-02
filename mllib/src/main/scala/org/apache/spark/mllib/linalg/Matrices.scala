@@ -59,7 +59,14 @@ object Matrices {
     new DenseMatrix(m, n, values)
   }
 
-  private[mllib] def fromBreeze(breeze: BDM[Double]): Matrix = {
-    null
+  private[mllib] def fromBreeze(breeze: BM[Double]): Matrix = {
+    breeze match {
+      case dm: BDM[Double] =>
+        require(dm.majorStride == dm.rows)
+        new DenseMatrix(dm.rows, dm.cols, dm.data)
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Do not support conversion from type ${breeze.getClass.getName}.")
+    }
   }
 }

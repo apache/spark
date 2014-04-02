@@ -19,10 +19,10 @@ package org.apache.spark.mllib.linalg.rdd
 
 import org.scalatest.FunSuite
 
-import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, diag => brzDiag}
+import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, diag => brzDiag, norm => brzNorm}
 
 import org.apache.spark.mllib.util.LocalSparkContext
-import org.apache.spark.mllib.linalg.{Matrices, Vectors}
+import org.apache.spark.mllib.linalg.{Matrices, Vectors, Matrix}
 
 class RowRDDMatrixSuite extends FunSuite with LocalSparkContext {
 
@@ -41,6 +41,10 @@ class RowRDDMatrixSuite extends FunSuite with LocalSparkContext {
     Vectors.sparse(3, Seq((0, 6.0), (1, 7.0), (2, 8.0))),
     Vectors.sparse(3, Seq((0, 9.0), (2, 1.0)))
   )
+
+  val principalComponents = Matrices.dense(n, n,
+    Array(0.0, math.sqrt(2.0) / 2.0, math.sqrt(2.0) / 2.0, 1.0, 0.0, 0.0,
+      0.0, math.sqrt(2.0) / 2.0, - math.sqrt(2.0) / 2.0))
 
   var denseMat: RowRDDMatrix = _
   var sparseMat: RowRDDMatrix = _
@@ -62,7 +66,7 @@ class RowRDDMatrixSuite extends FunSuite with LocalSparkContext {
     val expected =
       Matrices.dense(n, n, Array(126.0, 54.0, 72.0, 54.0, 66.0, 78.0, 72.0, 78.0, 94.0))
     for (mat <- Seq(denseMat, sparseMat)) {
-      val G = mat.gram()
+      val G = mat.computeGramianMatrix()
       assert(G.toBreeze === expected.toBreeze)
     }
   }
@@ -79,12 +83,52 @@ class RowRDDMatrixSuite extends FunSuite with LocalSparkContext {
       assert(closeToZero(brzUt.t * brzDiag(brzSigma) * brzV.t - A))
       val VtV: BDM[Double] = brzV.t * brzV
       assert(closeToZero(VtV - BDM.eye[Double](n)))
-      val UtU = U.gram().toBreeze.asInstanceOf[BDM[Double]]
+      val UtU = U.computeGramianMatrix().toBreeze.asInstanceOf[BDM[Double]]
       assert(closeToZero(UtU - BDM.eye[Double](n)))
     }
   }
 
   def closeToZero(G: BDM[Double]): Boolean = {
     G.valuesIterator.map(math.abs).sum < 1e-6
+  }
+
+  def closeToZero(v: BDV[Double]): Boolean = {
+    brzNorm(v, 1.0) < 1e-6
+  }
+
+  def assertPrincipalComponentsEqual(a: Matrix, b: Matrix, k: Int) {
+    val brzA = a.toBreeze.asInstanceOf[BDM[Double]]
+    val brzB = b.toBreeze.asInstanceOf[BDM[Double]]
+    assert(brzA.rows === brzB.rows)
+    for (j <- 0 until k) {
+      val aj = brzA(::, j)
+      val bj = brzB(::, j)
+      assert(closeToZero(aj - bj) || closeToZero(aj + bj),
+        s"The $j-th components mismatch: $aj and $bj")
+    }
+  }
+
+  test("pca") {
+    for (mat <- Seq(denseMat, sparseMat); k <- 1 to n) {
+      val pc = denseMat.computePrincipalComponents(k)
+      assert(pc.m === n)
+      assert(pc.n === k)
+      assertPrincipalComponentsEqual(pc, principalComponents, k)
+    }
+  }
+
+  test("multiply a local matrix") {
+    val B = Matrices.dense(n, 2, Array(0.0, 1.0, 2.0, 3.0, 4.0, 5.0))
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val AB = mat.multiply(B)
+      assert(AB.numRows() === m)
+      assert(AB.numCols() === 2)
+      assert(AB.rows.collect().toSeq === Seq(
+        Vectors.dense(5.0, 14.0),
+        Vectors.dense(14.0, 50.0),
+        Vectors.dense(23.0, 86.0),
+        Vectors.dense(2.0, 32.0)
+      ))
+    }
   }
 }

@@ -22,9 +22,9 @@ import org.apache.spark.rdd.RDD
 /**
  * Represents a row-oriented RDDMatrix with indexed rows.
  *
- * @param rows
- * @param m
- * @param n
+ * @param rows indexed rows of this matrix
+ * @param m number of rows, where a negative number means unknown
+ * @param n number of cols, where a negative number means unknown
  */
 class IndexedRowRDDMatrix(
     val rows: RDD[RDDMatrixRow],
