@@ -46,12 +46,6 @@ object CommandUtils extends Logging {
    * the way the JAVA_OPTS are assembled there.
    */
   def buildJavaOpts(command: Command, memory: Int, sparkHome: String): Seq[String] = {
-    val libraryOpts = getEnv("SPARK_LIBRARY_PATH", command)
-      .map(p => List("-Djava.library.path=" + p))
-      .getOrElse(Nil)
-    val workerLocalOpts = Option(getenv("SPARK_JAVA_OPTS"))
-      .map(Utils.splitCommandString).getOrElse(Nil)
-    val userOpts = getEnv("SPARK_JAVA_OPTS", command).map(Utils.splitCommandString).getOrElse(Nil)
     val memoryOpts = Seq(s"-Xms${memory}M", s"-Xmx${memory}M")
 
     // Figure out our classpath with the external compute-classpath script
@@ -60,7 +54,7 @@ object CommandUtils extends Logging {
       Seq(sparkHome + "/bin/compute-classpath" + ext),
       extraEnvironment=command.environment)
 
-    Seq("-cp", classPath) ++ libraryOpts ++ workerLocalOpts ++ userOpts ++ memoryOpts
+    Seq("-cp", classPath) ++ memoryOpts
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
