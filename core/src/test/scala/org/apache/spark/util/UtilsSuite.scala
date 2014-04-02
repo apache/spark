@@ -155,7 +155,7 @@ class UtilsSuite extends FunSuite {
     assert(Utils.getIteratorSize(iterator) === 5L)
   }
 
-  test("findOldestFiles") {
+  test("findOldFiles") {
     // create some temporary directories and files
     val parent: File = Utils.createTempDir()
     val child1: File = Utils.createTempDir(parent.getCanonicalPath) // The parent directory has two child directories

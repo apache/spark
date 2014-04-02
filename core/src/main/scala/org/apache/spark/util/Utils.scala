@@ -541,7 +541,7 @@ private[spark] object Utils extends Logging {
    * @param dir  must be the path to a directory, or IllegalArgumentException is thrown
    * @param cutoff measured in seconds. Files older than this are returned.
    */
-  def findOldestFiles(dir: File, cutoff: Long): Seq[File] = {
+  def findOldFiles(dir: File, cutoff: Long): Seq[File] = {
     val currentTimeSecs = System.currentTimeMillis / 1000
     if (dir.isDirectory) {
       val files = listFilesSafely(dir)
