@@ -29,7 +29,7 @@ import akka.actor.{ActorSystem, Cancellable, Props}
 import it.unimi.dsi.fastutil.io.{FastBufferedOutputStream, FastByteArrayOutputStream}
 import sun.nio.ch.DirectBuffer
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv, SparkException, MapOutputTracker}
+import org.apache.spark._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer
@@ -49,8 +49,8 @@ private[spark] class BlockManager(
     maxMemory: Long,
     val conf: SparkConf,
     securityManager: SecurityManager,
-    mapOutputTracker: MapOutputTracker
-  ) extends Logging {
+    mapOutputTracker: MapOutputTracker)
+  extends Logging {
 
   val shuffleBlockManager = new ShuffleBlockManager(this)
   val diskBlockManager = new DiskBlockManager(shuffleBlockManager,
@@ -58,7 +58,7 @@ private[spark] class BlockManager(
 
   private val blockInfo = new TimeStampedHashMap[BlockId, BlockInfo]
 
-  private[storage] val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
+  private[storage] val memoryStore = new MemoryStore(this, maxMemory)
   private[storage] val diskStore = new DiskStore(this, diskBlockManager)
 
   // If we use Netty for shuffle, start a new Netty-based shuffle sender service.
@@ -209,10 +209,14 @@ private[spark] class BlockManager(
     }
   }
 
-  /**
-   * Get storage level of local block. If no info exists for the block, then returns null.
-   */
-  def getLevel(blockId: BlockId): StorageLevel = blockInfo.get(blockId).map(_.level).orNull
+  /** Get the BlockStatus for the block identified by the given ID, if it exists. */
+  def getStatus(blockId: BlockId): Option[BlockStatus] = {
+    blockInfo.get(blockId).map { info =>
+      val memSize = if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
+      val diskSize = if (diskStore.contains(blockId)) diskStore.getSize(blockId) else 0L
+      BlockStatus(info.level, memSize, diskSize)
+    }
+  }
 
   /**
    * Tell the master about the current storage status of a block. This will send a block update
@@ -496,9 +500,8 @@ private[spark] class BlockManager(
 
   /**
    * A short circuited method to get a block writer that can write data directly to disk.
-   * The Block will be appended to the File specified by filename.
-   * This is currently used for writing shuffle files out. Callers should handle error
-   * cases.
+   * The Block will be appended to the File specified by filename. This is currently used for
+   * writing shuffle files out. Callers should handle error cases.
    */
   def getDiskWriter(
       blockId: BlockId,
@@ -816,12 +819,22 @@ private[spark] class BlockManager(
    * @return The number of blocks removed.
    */
   def removeRdd(rddId: Int): Int = {
-    // TODO: Instead of doing a linear scan on the blockInfo map, create another map that maps
-    // from RDD.id to blocks.
+    // TODO: Avoid a linear scan by creating another mapping of RDD.id to blocks.
     logInfo("Removing RDD " + rddId)
     val blocksToRemove = blockInfo.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
-    blocksToRemove.foreach(blockId => removeBlock(blockId, tellMaster = false))
+    blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster = false) }
     blocksToRemove.size
+  }
+
+  /**
+   * Remove all blocks belonging to the given broadcast.
+   */
+  def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean) {
+    logInfo("Removing broadcast " + broadcastId)
+    val blocksToRemove = blockInfo.keys.collect {
+      case bid @ BroadcastBlockId(`broadcastId`, _) => bid
+    }
+    blocksToRemove.foreach { blockId => removeBlock(blockId, removeFromDriver) }
   }
 
   /**
@@ -860,7 +873,7 @@ private[spark] class BlockManager(
   }
 
   private def dropOldBlocks(cleanupTime: Long, shouldDrop: (BlockId => Boolean)) {
-    val iterator = blockInfo.internalMap.entrySet().iterator()
+    val iterator = blockInfo.getEntrySet.iterator
     while (iterator.hasNext) {
       val entry = iterator.next()
       val (id, info, time) = (entry.getKey, entry.getValue.value, entry.getValue.timestamp)
@@ -884,7 +897,7 @@ private[spark] class BlockManager(
 
   def shouldCompress(blockId: BlockId): Boolean = blockId match {
     case ShuffleBlockId(_, _, _) => compressShuffle
-    case BroadcastBlockId(_) => compressBroadcast
+    case BroadcastBlockId(_, _) => compressBroadcast
     case RDDBlockId(_, _) => compressRdds
     case TempBlockId(_) => compressShuffleSpill
     case _ => false

@@ -17,14 +17,13 @@
 
 package org.apache.spark.broadcast
 
-import java.io.{File, FileOutputStream, ObjectInputStream, OutputStream}
-import java.net.{URL, URLConnection, URI}
+import java.io.{File, FileOutputStream, ObjectInputStream, ObjectOutputStream, OutputStream}
+import java.net.{URI, URL, URLConnection}
 import java.util.concurrent.TimeUnit
 
-import it.unimi.dsi.fastutil.io.FastBufferedInputStream
-import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
+import it.unimi.dsi.fastutil.io.{FastBufferedInputStream, FastBufferedOutputStream}
 
-import org.apache.spark.{SparkConf, HttpServer, Logging, SecurityManager, SparkEnv}
+import org.apache.spark.{HttpServer, Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashSet, Utils}
@@ -32,19 +31,45 @@ import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedH
 private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
   extends Broadcast[T](id) with Logging with Serializable {
 
-  def value = value_
+  def value: T = {
+    assertValid()
+    value_
+  }
 
-  def blockId = BroadcastBlockId(id)
+  val blockId = BroadcastBlockId(id)
 
   HttpBroadcast.synchronized {
-    SparkEnv.get.blockManager.putSingle(blockId, value_, StorageLevel.MEMORY_AND_DISK, false)
+    SparkEnv.get.blockManager.putSingle(
+      blockId, value_, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
   }
 
   if (!isLocal) {
     HttpBroadcast.write(id, value_)
   }
 
-  // Called by JVM when deserializing an object
+  /**
+   * Remove all persisted state associated with this HTTP broadcast on the executors.
+   */
+  def unpersist() {
+    HttpBroadcast.unpersist(id, removeFromDriver = false)
+  }
+
+  /**
+   * Remove all persisted state associated with this HTTP Broadcast on both the executors
+   * and the driver.
+   */
+  private[spark] def destroy() {
+    _isValid = false
+    HttpBroadcast.unpersist(id, removeFromDriver = true)
+  }
+
+  // Used by the JVM when serializing this object
+  private def writeObject(out: ObjectOutputStream) {
+    assertValid()
+    out.defaultWriteObject()
+  }
+
+  // Used by the JVM when deserializing this object
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     HttpBroadcast.synchronized {
@@ -54,7 +79,8 @@ private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolea
           logInfo("Started reading broadcast variable " + id)
           val start = System.nanoTime
           value_ = HttpBroadcast.read[T](id)
-          SparkEnv.get.blockManager.putSingle(blockId, value_, StorageLevel.MEMORY_AND_DISK, false)
+          SparkEnv.get.blockManager.putSingle(
+            blockId, value_, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
           val time = (System.nanoTime - start) / 1e9
           logInfo("Reading broadcast variable " + id + " took " + time + " s")
         }
@@ -63,21 +89,7 @@ private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolea
   }
 }
 
-/**
- * A [[BroadcastFactory]] implementation that uses a HTTP server as the broadcast medium.
- */
-class HttpBroadcastFactory extends BroadcastFactory {
-  def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager) {
-    HttpBroadcast.initialize(isDriver, conf, securityMgr) 
-  }
-
-  def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long) =
-    new HttpBroadcast[T](value_, isLocal, id)
-
-  def stop() { HttpBroadcast.stop() }
-}
-
-private object HttpBroadcast extends Logging {
+private[spark] object HttpBroadcast extends Logging {
   private var initialized = false
 
   private var broadcastDir: File = null
@@ -136,8 +148,10 @@ private object HttpBroadcast extends Logging {
     logInfo("Broadcast server started at " + serverUri)
   }
 
+  def getFile(id: Long) = new File(broadcastDir, BroadcastBlockId(id).name)
+
   def write(id: Long, value: Any) {
-    val file = new File(broadcastDir, BroadcastBlockId(id).name)
+    val file = getFile(id)
     val out: OutputStream = {
       if (compress) {
         compressionCodec.compressedOutputStream(new FileOutputStream(file))
@@ -160,7 +174,7 @@ private object HttpBroadcast extends Logging {
     if (securityManager.isAuthenticationEnabled()) {
       logDebug("broadcast security enabled")
       val newuri = Utils.constructURIForAuthentication(new URI(url), securityManager)
-      uc = newuri.toURL().openConnection()
+      uc = newuri.toURL.openConnection()
       uc.setAllowUserInteraction(false)
     } else {
       logDebug("broadcast not using security")
@@ -169,7 +183,7 @@ private object HttpBroadcast extends Logging {
 
     val in = {
       uc.setReadTimeout(httpReadTimeout)
-      val inputStream = uc.getInputStream();
+      val inputStream = uc.getInputStream
       if (compress) {
         compressionCodec.compressedInputStream(inputStream)
       } else {
@@ -183,20 +197,48 @@ private object HttpBroadcast extends Logging {
     obj
   }
 
-  def cleanup(cleanupTime: Long) {
+  /**
+   * Remove all persisted blocks associated with this HTTP broadcast on the executors.
+   * If removeFromDriver is true, also remove these persisted blocks on the driver
+   * and delete the associated broadcast file.
+   */
+  def unpersist(id: Long, removeFromDriver: Boolean) = synchronized {
+    SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver)
+    if (removeFromDriver) {
+      val file = getFile(id)
+      files.remove(file.toString)
+      deleteBroadcastFile(file)
+    }
+  }
+
+  /**
+   * Periodically clean up old broadcasts by removing the associated map entries and
+   * deleting the associated files.
+   */
+  private def cleanup(cleanupTime: Long) {
     val iterator = files.internalMap.entrySet().iterator()
     while(iterator.hasNext) {
       val entry = iterator.next()
       val (file, time) = (entry.getKey, entry.getValue)
       if (time < cleanupTime) {
-        try {
-          iterator.remove()
-          new File(file.toString).delete()
-          logInfo("Deleted broadcast file '" + file + "'")
-        } catch {
-          case e: Exception => logWarning("Could not delete broadcast file '" + file + "'", e)
+        iterator.remove()
+        deleteBroadcastFile(new File(file.toString))
+      }
+    }
+  }
+
+  private def deleteBroadcastFile(file: File) {
+    try {
+      if (file.exists) {
+        if (file.delete()) {
+          logInfo("Deleted broadcast file: %s".format(file))
+        } else {
+          logWarning("Could not delete broadcast file: %s".format(file))
         }
       }
+    } catch {
+      case e: Exception =>
+        logError("Exception while deleting broadcast file: %s".format(file), e)
     }
   }
 }

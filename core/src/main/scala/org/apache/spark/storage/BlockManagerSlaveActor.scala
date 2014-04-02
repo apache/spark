@@ -29,8 +29,9 @@ import org.apache.spark.storage.BlockManagerMessages._
 private[storage]
 class BlockManagerSlaveActor(
     blockManager: BlockManager,
-    mapOutputTracker: MapOutputTracker
-  ) extends Actor {
+    mapOutputTracker: MapOutputTracker)
+  extends Actor {
+
   override def receive = {
 
     case RemoveBlock(blockId) =>
@@ -45,5 +46,11 @@ class BlockManagerSlaveActor(
       if (mapOutputTracker != null) {
         mapOutputTracker.unregisterShuffle(shuffleId)
       }
+
+    case RemoveBroadcast(broadcastId, removeFromDriver) =>
+      blockManager.removeBroadcast(broadcastId, removeFromDriver)
+
+    case GetBlockStatus(blockId, _) =>
+      sender ! blockManager.getStatus(blockId)
   }
 }

@@ -96,7 +96,7 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     assert(tracker.getServerStatuses(10, 0).isEmpty)
   }
 
-  test("master register shuffle and unregister mapoutput and fetch") {
+  test("master register shuffle and unregister map output and fetch") {
     val actorSystem = ActorSystem("test")
     val tracker = new MapOutputTrackerMaster(conf)
     tracker.trackerActor =

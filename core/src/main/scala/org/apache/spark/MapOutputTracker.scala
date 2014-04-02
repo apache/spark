@@ -112,8 +112,8 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   }
 
   /**
-   * Called from executors to get the server URIs and
-   * output sizes of the map outputs of a given shuffle
+   * Called from executors to get the server URIs and output sizes of the map outputs of
+   * a given shuffle.
    */
   def getServerStatuses(shuffleId: Int, reduceId: Int): Array[(BlockManagerId, Long)] = {
     val statuses = mapStatuses.get(shuffleId).orNull
@@ -218,10 +218,9 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   private var cacheEpoch = epoch
 
   /**
-   * Timestamp based HashMap for storing mapStatuses and cached serialized statuses
-   * in the master, so that statuses are dropped only by explicit deregistering or
-   * by TTL-based cleaning (if set). Other than these two
-   * scenarios, nothing should be dropped from this HashMap.
+   * Timestamp based HashMap for storing mapStatuses and cached serialized statuses in the master,
+   * so that statuses are dropped only by explicit deregistering or by TTL-based cleaning (if set).
+   * Other than these two scenarios, nothing should be dropped from this HashMap.
    */
   protected val mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]()
   private val cachedSerializedStatuses = new TimeStampedHashMap[Int, Array[Byte]]()

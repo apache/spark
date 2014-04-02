@@ -295,10 +295,8 @@ private[spark] object JsonProtocol {
         ("Map ID" -> shuffleBlockId.mapId) ~
         ("Reduce ID" -> shuffleBlockId.reduceId)
       case broadcastBlockId: BroadcastBlockId =>
-        "Broadcast ID" -> broadcastBlockId.broadcastId
-      case broadcastHelperBlockId: BroadcastHelperBlockId =>
-        ("Broadcast Block ID" -> blockIdToJson(broadcastHelperBlockId.broadcastId)) ~
-        ("Helper Type" -> broadcastHelperBlockId.hType)
+        ("Broadcast ID" -> broadcastBlockId.broadcastId) ~
+        ("Field" -> broadcastBlockId.field)
       case taskResultBlockId: TaskResultBlockId =>
         "Task ID" -> taskResultBlockId.taskId
       case streamBlockId: StreamBlockId =>
@@ -620,7 +618,6 @@ private[spark] object JsonProtocol {
     val rddBlockId = Utils.getFormattedClassName(RDDBlockId)
     val shuffleBlockId = Utils.getFormattedClassName(ShuffleBlockId)
     val broadcastBlockId = Utils.getFormattedClassName(BroadcastBlockId)
-    val broadcastHelperBlockId = Utils.getFormattedClassName(BroadcastHelperBlockId)
     val taskResultBlockId = Utils.getFormattedClassName(TaskResultBlockId)
     val streamBlockId = Utils.getFormattedClassName(StreamBlockId)
     val tempBlockId = Utils.getFormattedClassName(TempBlockId)
@@ -638,12 +635,8 @@ private[spark] object JsonProtocol {
         new ShuffleBlockId(shuffleId, mapId, reduceId)
       case `broadcastBlockId` =>
         val broadcastId = (json \ "Broadcast ID").extract[Long]
-        new BroadcastBlockId(broadcastId)
-      case `broadcastHelperBlockId` =>
-        val broadcastBlockId =
-          blockIdFromJson(json \ "Broadcast Block ID").asInstanceOf[BroadcastBlockId]
-        val hType = (json \ "Helper Type").extract[String]
-        new BroadcastHelperBlockId(broadcastBlockId, hType)
+        val field = (json \ "Field").extract[String]
+        new BroadcastBlockId(broadcastId, field)
       case `taskResultBlockId` =>
         val taskId = (json \ "Task ID").extract[Long]
         new TaskResultBlockId(taskId)

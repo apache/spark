@@ -17,114 +17,154 @@
 
 package org.apache.spark.util
 
-import scala.collection.{JavaConversions, immutable}
-
-import java.util
 import java.lang.ref.WeakReference
-import java.util.concurrent.ConcurrentHashMap
-
-import org.apache.spark.Logging
 import java.util.concurrent.atomic.AtomicInteger
 
-private[util] case class TimeStampedWeakValue[T](timestamp: Long, weakValue: WeakReference[T]) {
-  def this(timestamp: Long, value: T) = this(timestamp, new WeakReference[T](value))
+import scala.collection.mutable
+
+import org.apache.spark.Logging
+
+/**
+ * A wrapper of TimeStampedHashMap that ensures the values are weakly referenced and timestamped.
+ *
+ * If the value is garbage collected and the weak reference is null, get() will return a
+ * non-existent value. These entries are removed from the map periodically (every N inserts), as
+ * their values are no longer strongly reachable. Further, key-value pairs whose timestamps are
+ * older than a particular threshold can be removed using the clearOldValues method.
+ *
+ * TimeStampedWeakValueHashMap exposes a scala.collection.mutable.Map interface, which allows it
+ * to be a drop-in replacement for Scala HashMaps. Internally, it uses a Java ConcurrentHashMap,
+ * so all operations on this HashMap are thread-safe.
+ *
+ * @param updateTimeStampOnGet Whether timestamp of a pair will be updated when it is accessed.
+ */
+private[spark] class TimeStampedWeakValueHashMap[A, B](updateTimeStampOnGet: Boolean = false)
+  extends mutable.Map[A, B]() with Logging {
+
+  import TimeStampedWeakValueHashMap._
+
+  private val internalMap = new TimeStampedHashMap[A, WeakReference[B]](updateTimeStampOnGet)
+  private val insertCount = new AtomicInteger(0)
+
+  /** Return a map consisting only of entries whose values are still strongly reachable. */
+  private def nonNullReferenceMap = internalMap.filter { case (_, ref) => ref.get != null }
+
+  def get(key: A): Option[B] = internalMap.get(key)
+
+  def iterator: Iterator[(A, B)] = nonNullReferenceMap.iterator
+
+  override def + [B1 >: B](kv: (A, B1)): mutable.Map[A, B1] = {
+    val newMap = new TimeStampedWeakValueHashMap[A, B1]
+    val oldMap = nonNullReferenceMap.asInstanceOf[mutable.Map[A, WeakReference[B1]]]
+    newMap.internalMap.putAll(oldMap.toMap)
+    newMap.internalMap += kv
+    newMap
+  }
+
+  override def - (key: A): mutable.Map[A, B] = {
+    val newMap = new TimeStampedWeakValueHashMap[A, B]
+    newMap.internalMap.putAll(nonNullReferenceMap.toMap)
+    newMap.internalMap -= key
+    newMap
+  }
+
+  override def += (kv: (A, B)): this.type = {
+    internalMap += kv
+    if (insertCount.incrementAndGet() % CLEAR_NULL_VALUES_INTERVAL == 0) {
+      clearNullValues()
+    }
+    this
+  }
+
+  override def -= (key: A): this.type = {
+    internalMap -= key
+    this
+  }
+
+  override def update(key: A, value: B) = this += ((key, value))
+
+  override def apply(key: A): B = internalMap.apply(key)
+
+  override def filter(p: ((A, B)) => Boolean): mutable.Map[A, B] = nonNullReferenceMap.filter(p)
+
+  override def empty: mutable.Map[A, B] = new TimeStampedWeakValueHashMap[A, B]()
+
+  override def size: Int = internalMap.size
+
+  override def foreach[U](f: ((A, B)) => U) = nonNullReferenceMap.foreach(f)
+
+  def putIfAbsent(key: A, value: B): Option[B] = internalMap.putIfAbsent(key, value)
+
+  def toMap: Map[A, B] = iterator.toMap
+
+  /** Remove old key-value pairs with timestamps earlier than `threshTime`. */
+  def clearOldValues(threshTime: Long) = internalMap.clearOldValues(threshTime)
+
+  /** Remove entries with values that are no longer strongly reachable. */
+  def clearNullValues() {
+    val it = internalMap.getEntrySet.iterator
+    while (it.hasNext) {
+      val entry = it.next()
+      if (entry.getValue.value.get == null) {
+        logDebug("Removing key " + entry.getKey + " because it is no longer strongly reachable.")
+        it.remove()
+      }
+    }
+  }
+
+  // For testing
+
+  def getTimestamp(key: A): Option[Long] = {
+    internalMap.getTimeStampedValue(key).map(_.timestamp)
+  }
+
+  def getReference(key: A): Option[WeakReference[B]] = {
+    internalMap.getTimeStampedValue(key).map(_.value)
+  }
 }
 
 /**
- * A map that stores the timestamp of when a key was inserted along with the value,
- * while ensuring that the values are weakly referenced. If the value is garbage collected and
- * the weak reference is null, get() operation returns the key be non-existent. However,
- * the key is actually not removed in the current implementation. Key-value pairs whose
- * timestamps are older than a particular threshold time can then be removed using the
- * clearOldValues method. It exposes a scala.collection.mutable.Map interface to allow it to be a
- * drop-in replacement for Scala HashMaps.
- *
- * Internally, it uses a Java ConcurrentHashMap, so all operations on this HashMap are thread-safe.
+ * Helper methods for converting to and from WeakReferences.
  */
+private object TimeStampedWeakValueHashMap {
 
-private[spark] class TimeStampedWeakValueHashMap[A, B]()
-  extends WrappedJavaHashMap[A, B, A, TimeStampedWeakValue[B]] with Logging {
+  // Number of inserts after which entries with null references are removed
+  val CLEAR_NULL_VALUES_INTERVAL = 100
 
-  /** Number of inserts after which keys whose weak ref values are null will be cleaned */
-  private val CLEANUP_INTERVAL = 1000
+  /* Implicit conversion methods to WeakReferences. */
 
-  /** Counter for counting the number of inserts */
-  private val insertCounts = new AtomicInteger(0)
+  implicit def toWeakReference[V](v: V): WeakReference[V] = new WeakReference[V](v)
 
-  private[util] val internalJavaMap: util.Map[A, TimeStampedWeakValue[B]] = {
-    new ConcurrentHashMap[A, TimeStampedWeakValue[B]]()
+  implicit def toWeakReferenceTuple[K, V](kv: (K, V)): (K, WeakReference[V]) = {
+    kv match { case (k, v) => (k, toWeakReference(v)) }
   }
 
-  private[util] def newInstance[K1, V1](): WrappedJavaHashMap[K1, V1, _, _] = {
-    new TimeStampedWeakValueHashMap[K1, V1]()
+  implicit def toWeakReferenceFunction[K, V, R](p: ((K, V)) => R): ((K, WeakReference[V])) => R = {
+    (kv: (K, WeakReference[V])) => p(kv)
   }
 
-  override def +=(kv: (A, B)): this.type = {
-    // Cleanup null value at certain intervals
-    if (insertCounts.incrementAndGet() % CLEANUP_INTERVAL == 0) {
-      cleanNullValues()
-    }
-    super.+=(kv)
-  }
+  /* Implicit conversion methods from WeakReferences. */
 
-  override def get(key: A): Option[B] = {
-    Option(internalJavaMap.get(key)).flatMap { weakValue =>
-      val value = weakValue.weakValue.get
-      if (value == null) {
-        internalJavaMap.remove(key)
-      }
-      Option(value)
+  implicit def fromWeakReference[V](ref: WeakReference[V]): V = ref.get
+
+  implicit def fromWeakReferenceOption[V](v: Option[WeakReference[V]]): Option[V] = {
+    v match {
+      case Some(ref) => Option(fromWeakReference(ref))
+      case None => None
     }
   }
 
-  @inline override protected def externalValueToInternalValue(v: B): TimeStampedWeakValue[B] = {
-    new TimeStampedWeakValue(currentTime, v)
+  implicit def fromWeakReferenceTuple[K, V](kv: (K, WeakReference[V])): (K, V) = {
+    kv match { case (k, v) => (k, fromWeakReference(v)) }
   }
 
-  @inline override protected def internalValueToExternalValue(iv: TimeStampedWeakValue[B]): B = {
-    iv.weakValue.get
+  implicit def fromWeakReferenceIterator[K, V](
+      it: Iterator[(K, WeakReference[V])]): Iterator[(K, V)] = {
+    it.map(fromWeakReferenceTuple)
   }
 
-  override def iterator: Iterator[(A, B)] = {
-    val iterator = internalJavaMap.entrySet().iterator()
-    JavaConversions.asScalaIterator(iterator).flatMap(kv => {
-      val (key, value) = (kv.getKey, kv.getValue.weakValue.get)
-      if (value != null) Seq((key, value)) else Seq.empty
-    })
+  implicit def fromWeakReferenceMap[K, V](
+      map: mutable.Map[K, WeakReference[V]]) : mutable.Map[K, V] = {
+    mutable.Map(map.mapValues(fromWeakReference).toSeq: _*)
   }
-
-  /**
-   * Removes old key-value pairs that have timestamp earlier than `threshTime`,
-   * calling the supplied function on each such entry before removing.
-   */
-  def clearOldValues(threshTime: Long, f: (A, B) => Unit = null) {
-    val iterator = internalJavaMap.entrySet().iterator()
-    while (iterator.hasNext) {
-      val entry = iterator.next()
-      if (entry.getValue.timestamp < threshTime) {
-        val value = entry.getValue.weakValue.get
-        if (f != null && value != null) {
-          f(entry.getKey, value)
-        }
-        logDebug("Removing key " + entry.getKey)
-        iterator.remove()
-      }
-    }
-  }
-
-  /**
-   * Removes keys whose weak referenced values have become null.
-   */
-  private def cleanNullValues() {
-    val iterator = internalJavaMap.entrySet().iterator()
-    while (iterator.hasNext) {
-      val entry = iterator.next()
-      if (entry.getValue.weakValue.get == null) {
-        logDebug("Removing key " + entry.getKey)
-        iterator.remove()
-      }
-    }
-  }
-
-  private def currentTime = System.currentTimeMillis()
 }

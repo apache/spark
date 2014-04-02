@@ -35,7 +35,6 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
 
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
@@ -230,6 +229,7 @@ class SparkContext(
 
   private[spark] val cleaner = new ContextCleaner(this)
   cleaner.start()
+
   postEnvironmentUpdate()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
@@ -643,7 +643,11 @@ class SparkContext(
    * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
    * The variable will be sent to each cluster only once.
    */
-  def broadcast[T](value: T): Broadcast[T] = env.broadcastManager.newBroadcast[T](value, isLocal)
+  def broadcast[T](value: T) = {
+    val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
+    cleaner.registerBroadcastForCleanup(bc)
+    bc
+  }
 
   /**
    * Add a file to be downloaded with this Spark job on every node.

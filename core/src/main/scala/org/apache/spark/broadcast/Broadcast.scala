@@ -18,9 +18,8 @@
 package org.apache.spark.broadcast
 
 import java.io.Serializable
-import java.util.concurrent.atomic.AtomicLong
 
-import org.apache.spark._
+import org.apache.spark.SparkException
 
 /**
  * A broadcast variable. Broadcast variables allow the programmer to keep a read-only variable
@@ -51,49 +50,37 @@ import org.apache.spark._
  * @tparam T Type of the data contained in the broadcast variable.
  */
 abstract class Broadcast[T](val id: Long) extends Serializable {
+
+  protected var _isValid: Boolean = true
+
+  /**
+   * Whether this Broadcast is actually usable. This should be false once persisted state is
+   * removed from the driver.
+   */
+  def isValid: Boolean = _isValid
+
   def value: T
 
-  // We cannot have an abstract readObject here due to some weird issues with
-  // readObject having to be 'private' in sub-classes.
+  /**
+   * Remove all persisted state associated with this broadcast on the executors. The next use
+   * of this broadcast on the executors will trigger a remote fetch.
+   */
+  def unpersist()
 
-  override def toString = "Broadcast(" + id + ")"
-}
+  /**
+   * Remove all persisted state associated with this broadcast on both the executors and the
+   * driver. Overriding implementations should set isValid to false.
+   */
+  private[spark] def destroy()
 
-private[spark]
-class BroadcastManager(val _isDriver: Boolean, conf: SparkConf, securityManager: SecurityManager)
-    extends Logging with Serializable {
-
-  private var initialized = false
-  private var broadcastFactory: BroadcastFactory = null
-
-  initialize()
-
-  // Called by SparkContext or Executor before using Broadcast
-  private def initialize() {
-    synchronized {
-      if (!initialized) {
-        val broadcastFactoryClass = conf.get(
-          "spark.broadcast.factory", "org.apache.spark.broadcast.HttpBroadcastFactory")
-
-        broadcastFactory =
-          Class.forName(broadcastFactoryClass).newInstance.asInstanceOf[BroadcastFactory]
-
-        // Initialize appropriate BroadcastFactory and BroadcastObject
-        broadcastFactory.initialize(isDriver, conf, securityManager)
-
-        initialized = true
-      }
+  /**
+   * If this broadcast is no longer valid, throw an exception.
+   */
+  protected def assertValid() {
+    if (!_isValid) {
+      throw new SparkException("Attempted to use %s after it has been destroyed!".format(toString))
     }
   }
 
-  def stop() {
-    broadcastFactory.stop()
-  }
-
-  private val nextBroadcastId = new AtomicLong(0)
-
-  def newBroadcast[T](value_ : T, isLocal: Boolean) =
-    broadcastFactory.newBroadcast[T](value_, isLocal, nextBroadcastId.getAndIncrement())
-
-  def isDriver = _isDriver
+  override def toString = "Broadcast(" + id + ")"
 }

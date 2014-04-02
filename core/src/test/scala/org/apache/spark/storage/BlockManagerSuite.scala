@@ -28,8 +28,7 @@ import org.scalatest.concurrent.Timeouts._
 import org.scalatest.matchers.ShouldMatchers._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{MapOutputTrackerMaster, SecurityManager, SparkConf, SparkContext}
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{MapOutputTrackerMaster, SecurityManager, SparkConf}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
@@ -744,6 +743,46 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(store.get("list2").isDefined, "list2 was not in store")
     assert(store.get("list4").isDefined, "list4 was not in store")
     assert(!store.get("list5").isDefined, "list5 was in store")
+  }
+
+  test("query block statuses") {
+    store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
+      securityMgr, mapOutputTracker)
+    val list = List.fill(2)(new Array[Byte](200))
+
+    // Tell master. By LRU, only list2 and list3 remains.
+    store.put("list1", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.put("list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+    store.put("list3", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+
+    // getLocations and getBlockStatus should yield the same locations
+    assert(store.master.getLocations("list1").size === 0)
+    assert(store.master.getLocations("list2").size === 1)
+    assert(store.master.getLocations("list3").size === 1)
+    assert(store.master.getBlockStatus("list1", askSlaves = false).size === 0)
+    assert(store.master.getBlockStatus("list2", askSlaves = false).size === 1)
+    assert(store.master.getBlockStatus("list3", askSlaves = false).size === 1)
+    assert(store.master.getBlockStatus("list1", askSlaves = true).size === 0)
+    assert(store.master.getBlockStatus("list2", askSlaves = true).size === 1)
+    assert(store.master.getBlockStatus("list3", askSlaves = true).size === 1)
+
+    // This time don't tell master and see what happens. By LRU, only list5 and list6 remains.
+    store.put("list4", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = false)
+    store.put("list5", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+    store.put("list6", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = false)
+
+    // getLocations should return nothing because the master is not informed
+    // getBlockStatus without asking slaves should have the same result
+    // getBlockStatus with asking slaves, however, should return the actual block statuses
+    assert(store.master.getLocations("list4").size === 0)
+    assert(store.master.getLocations("list5").size === 0)
+    assert(store.master.getLocations("list6").size === 0)
+    assert(store.master.getBlockStatus("list4", askSlaves = false).size === 0)
+    assert(store.master.getBlockStatus("list5", askSlaves = false).size === 0)
+    assert(store.master.getBlockStatus("list6", askSlaves = false).size === 0)
+    assert(store.master.getBlockStatus("list4", askSlaves = true).size === 0)
+    assert(store.master.getBlockStatus("list5", askSlaves = true).size === 1)
+    assert(store.master.getBlockStatus("list6", askSlaves = true).size === 1)
   }
 
   test("SPARK-1194 regression: fix the same-RDD rule for cache replacement") {
