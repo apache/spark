@@ -19,6 +19,7 @@ package org.apache.spark.mllib.classification;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.junit.After;
 import org.junit.Assert;
@@ -45,12 +46,12 @@ public class JavaNaiveBayesSuite implements Serializable {
   }
 
   private static final List<LabeledPoint> POINTS = Arrays.asList(
-    new LabeledPoint(0, new double[] {1.0, 0.0, 0.0}),
-    new LabeledPoint(0, new double[] {2.0, 0.0, 0.0}),
-    new LabeledPoint(1, new double[] {0.0, 1.0, 0.0}),
-    new LabeledPoint(1, new double[] {0.0, 2.0, 0.0}),
-    new LabeledPoint(2, new double[] {0.0, 0.0, 1.0}),
-    new LabeledPoint(2, new double[] {0.0, 0.0, 2.0})
+    new LabeledPoint(0, Vectors.dense(1.0, 0.0, 0.0)),
+    new LabeledPoint(0, Vectors.dense(2.0, 0.0, 0.0)),
+    new LabeledPoint(1, Vectors.dense(0.0, 1.0, 0.0)),
+    new LabeledPoint(1, Vectors.dense(0.0, 2.0, 0.0)),
+    new LabeledPoint(2, Vectors.dense(0.0, 0.0, 1.0)),
+    new LabeledPoint(2, Vectors.dense(0.0, 0.0, 2.0))
   );
 
   private int validatePrediction(List<LabeledPoint> points, NaiveBayesModel model) {

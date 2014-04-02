@@ -30,6 +30,7 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
  * A class that implements a decision tree algorithm for classification and regression. It
@@ -295,7 +296,7 @@ object DecisionTree extends Serializable with Logging {
     val numNodes = scala.math.pow(2, level).toInt
     logDebug("numNodes = " + numNodes)
     // Find the number of features by looking at the first sample.
-    val numFeatures = input.first().features.length
+    val numFeatures = input.first().features.size
     logDebug("numFeatures = " + numFeatures)
     val numBins = bins(0).length
     logDebug("numBins = " + numBins)
@@ -902,7 +903,7 @@ object DecisionTree extends Serializable with Logging {
     val count = input.count()
 
     // Find the number of features by looking at the first sample
-    val numFeatures = input.take(1)(0).features.length
+    val numFeatures = input.take(1)(0).features.size
 
     val maxBins = strategy.maxBins
     val numBins = if (maxBins <= count) maxBins else count.toInt
@@ -1116,7 +1117,7 @@ object DecisionTree extends Serializable with Logging {
     sc.textFile(dir).map { line =>
       val parts = line.trim().split(",")
       val label = parts(0).toDouble
-      val features = parts.slice(1,parts.length).map(_.toDouble)
+      val features = Vectors.dense(parts.slice(1,parts.length).map(_.toDouble))
       LabeledPoint(label, features)
     }
   }
@@ -1127,7 +1128,7 @@ object DecisionTree extends Serializable with Logging {
    */
   private def accuracyScore(model: DecisionTreeModel, data: RDD[LabeledPoint],
       threshold: Double = 0.5): Double = {
-    def predictedValue(features: Array[Double]) = {
+    def predictedValue(features: Vector) = {
       if (model.predict(features) < threshold) 0.0 else 1.0
     }
     val correctCount = data.filter(y => predictedValue(y.features) == y.label).count()

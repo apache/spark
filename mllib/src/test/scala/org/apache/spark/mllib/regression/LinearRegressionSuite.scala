@@ -19,6 +19,7 @@ package org.apache.spark.mllib.regression
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LinearDataGenerator, LocalSparkContext}
 
 class LinearRegressionSuite extends FunSuite with LocalSparkContext {
@@ -40,11 +41,12 @@ class LinearRegressionSuite extends FunSuite with LocalSparkContext {
     linReg.optimizer.setNumIterations(1000).setStepSize(1.0)
 
     val model = linReg.run(testRDD)
-
     assert(model.intercept >= 2.5 && model.intercept <= 3.5)
-    assert(model.weights.length === 2)
-    assert(model.weights(0) >= 9.0 && model.weights(0) <= 11.0)
-    assert(model.weights(1) >= 9.0 && model.weights(1) <= 11.0)
+
+    val weights = model.weights
+    assert(weights.size === 2)
+    assert(weights(0) >= 9.0 && weights(0) <= 11.0)
+    assert(weights(1) >= 9.0 && weights(1) <= 11.0)
 
     val validationData = LinearDataGenerator.generateLinearInput(
       3.0, Array(10.0, 10.0), 100, 17)
@@ -67,9 +69,11 @@ class LinearRegressionSuite extends FunSuite with LocalSparkContext {
     val model = linReg.run(testRDD)
 
     assert(model.intercept === 0.0)
-    assert(model.weights.length === 2)
-    assert(model.weights(0) >= 9.0 && model.weights(0) <= 11.0)
-    assert(model.weights(1) >= 9.0 && model.weights(1) <= 11.0)
+
+    val weights = model.weights
+    assert(weights.size === 2)
+    assert(weights(0) >= 9.0 && weights(0) <= 11.0)
+    assert(weights(1) >= 9.0 && weights(1) <= 11.0)
 
     val validationData = LinearDataGenerator.generateLinearInput(
       0.0, Array(10.0, 10.0), 100, 17)
@@ -80,5 +84,41 @@ class LinearRegressionSuite extends FunSuite with LocalSparkContext {
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+  }
+
+  // Test if we can correctly learn Y = 10*X1 + 10*X10000
+  test("sparse linear regression without intercept") {
+    val denseRDD = sc.parallelize(
+      LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 100, 42), 2)
+    val sparseRDD = denseRDD.map { case LabeledPoint(label, v) =>
+      val sv = Vectors.sparse(10000, Seq((0, v(0)), (9999, v(1))))
+      LabeledPoint(label, sv)
+    }.cache()
+    val linReg = new LinearRegressionWithSGD().setIntercept(false)
+    linReg.optimizer.setNumIterations(1000).setStepSize(1.0)
+
+    val model = linReg.run(sparseRDD)
+
+    assert(model.intercept === 0.0)
+
+    val weights = model.weights
+    assert(weights.size === 10000)
+    assert(weights(0) >= 9.0 && weights(0) <= 11.0)
+    assert(weights(9999) >= 9.0 && weights(9999) <= 11.0)
+
+    val validationData = LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 100, 17)
+    val sparseValidationData = validationData.map { case LabeledPoint(label, v) =>
+      val sv = Vectors.sparse(10000, Seq((0, v(0)), (9999, v(1))))
+      LabeledPoint(label, sv)
+    }
+    val sparseValidationRDD = sc.parallelize(sparseValidationData, 2)
+
+      // Test prediction on RDD.
+    validatePrediction(
+      model.predict(sparseValidationRDD.map(_.features)).collect(), sparseValidationData)
+
+    // Test prediction on Array.
+    validatePrediction(
+      sparseValidationData.map(row => model.predict(row.features)), sparseValidationData)
   }
 }

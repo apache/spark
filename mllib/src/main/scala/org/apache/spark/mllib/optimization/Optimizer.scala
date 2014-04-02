@@ -19,11 +19,12 @@ package org.apache.spark.mllib.optimization
 
 import org.apache.spark.rdd.RDD
 
-trait Optimizer {
+import org.apache.spark.mllib.linalg.Vector
+
+trait Optimizer extends Serializable {
 
   /**
    * Solve the provided convex optimization problem. 
    */
-  def optimize(data: RDD[(Double, Array[Double])], initialWeights: Array[Double]): Array[Double]
-
+  def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector
 }

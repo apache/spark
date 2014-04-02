@@ -87,18 +87,19 @@ class NaiveBayesModel(object):
     >>> data = array([0.0, 0.0, 1.0, 0.0, 0.0, 2.0, 1.0, 1.0, 0.0]).reshape(3,3)
     >>> model = NaiveBayes.train(sc.parallelize(data))
     >>> model.predict(array([0.0, 1.0]))
-    0
+    0.0
     >>> model.predict(array([1.0, 0.0]))
-    1
+    1.0
     """
 
-    def __init__(self, pi, theta):
+    def __init__(self, labels, pi, theta):
+        self.labels = labels
         self.pi = pi
         self.theta = theta
 
     def predict(self, x):
         """Return the most likely class for a data vector x"""
-        return numpy.argmax(self.pi + dot(x, self.theta))
+        return self.labels[numpy.argmax(self.pi + dot(x, self.theta))]
 
 class NaiveBayes(object):
     @classmethod
@@ -122,7 +123,8 @@ class NaiveBayes(object):
         ans = sc._jvm.PythonMLLibAPI().trainNaiveBayes(dataBytes._jrdd, lambda_)
         return NaiveBayesModel(
             _deserialize_double_vector(ans[0]),
-            _deserialize_double_matrix(ans[1]))
+            _deserialize_double_vector(ans[1]),
+            _deserialize_double_matrix(ans[2]))
 
 
 def _test():

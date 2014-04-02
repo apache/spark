@@ -19,6 +19,7 @@ package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.Logging
 import org.apache.spark.mllib.tree.configuration.FeatureType._
+import org.apache.spark.mllib.linalg.Vector
 
 /**
  * Node in a decision tree
@@ -54,8 +55,8 @@ class Node (
     logDebug("stats = " + stats)
     logDebug("predict = " + predict)
     if (!isLeaf) {
-      val leftNodeIndex = id*2 + 1
-      val rightNodeIndex = id*2 + 2
+      val leftNodeIndex = id * 2 + 1
+      val rightNodeIndex = id * 2 + 2
       leftNode = Some(nodes(leftNodeIndex))
       rightNode = Some(nodes(rightNodeIndex))
       leftNode.get.build(nodes)
@@ -68,7 +69,7 @@ class Node (
    * @param feature feature value
    * @return predicted value
    */
-  def predictIfLeaf(feature: Array[Double]) : Double = {
+  def predictIfLeaf(feature: Vector) : Double = {
     if (isLeaf) {
       predict
     } else{
