@@ -18,20 +18,109 @@ package org.apache.spark.mllib.rdd
 
 import breeze.linalg.{axpy, Vector => BV}
 
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.rdd.RDD
 
 /**
  * Case class of the summary statistics, including mean, variance, count, max, min, and non-zero
  * elements count.
  */
+trait VectorRDDStatisticalSummary {
+  def mean(): Vector
+  def variance(): Vector
+  def totalCount(): Long
+  def numNonZeros(): Vector
+  def max(): Vector
+  def min(): Vector
+}
+
+private class Aggregator(
+    val currMean: BV[Double],
+    val currM2n: BV[Double],
+    var totalCnt: Double,
+    val nnz: BV[Double],
+    val currMax: BV[Double],
+    val currMin: BV[Double]) extends VectorRDDStatisticalSummary {
+  nnz.activeIterator.foreach {
+    case (id, 0.0) =>
+      currMax(id) = 0.0
+      currMin(id) = 0.0
+    case _ =>
+  }
+  override def mean(): Vector = Vectors.fromBreeze(currMean :* nnz :/ totalCnt)
+  override def variance(): Vector = {
+    val deltaMean = currMean
+    val realM2n = currM2n - ((deltaMean :* deltaMean) :* (nnz :* (nnz :- totalCnt)) :/ totalCnt)
+    realM2n :/= totalCnt
+    Vectors.fromBreeze(realM2n)
+  }
+
+  override def totalCount(): Long = totalCnt.toLong
+
+  override def numNonZeros(): Vector = Vectors.fromBreeze(nnz)
+  override def max(): Vector = Vectors.fromBreeze(currMax)
+  override def min(): Vector = Vectors.fromBreeze(currMin)
+  /**
+   * Aggregate function used for aggregating elements in a worker together.
+   */
+  def add(currData: BV[Double]): this.type = {
+    currData.activeIterator.foreach {
+      case (id, 0.0) =>
+      case (id, value) =>
+        if (currMax(id) < value) currMax(id) = value
+        if (currMin(id) > value) currMin(id) = value
+
+        val tmpPrevMean = currMean(id)
+        currMean(id) = (currMean(id) * totalCnt + value) / (totalCnt + 1.0)
+        currM2n(id) += (value - currMean(id)) * (value - tmpPrevMean)
+
+        nnz(id) += 1.0
+        totalCnt += 1.0
+    }
+    this
+  }
+  /**
+   * Combine function used for combining intermediate results together from every worker.
+   */
+  def merge(other: this.type): this.type = {
+    totalCnt += other.totalCnt
+    val deltaMean = currMean - other.currMean
+
+    other.currMean.activeIterator.foreach {
+      case (id, 0.0) =>
+      case (id, value) =>
+        currMean(id) = (currMean(id) * nnz(id) + other.currMean(id) * other.nnz(id)) / (nnz(id) + other.nnz(id))
+    }
+
+    other.currM2n.activeIterator.foreach {
+      case (id, 0.0) =>
+      case (id, value) =>
+        currM2n(id) +=
+          value + deltaMean(id) * deltaMean(id) * nnz(id) * other.nnz(id) / (nnz(id)+other.nnz(id))
+    }
+
+    other.currMax.activeIterator.foreach {
+      case (id, value) =>
+        if (currMax(id) < value) currMax(id) = value
+    }
+
+    other.currMin.activeIterator.foreach {
+      case (id, value) =>
+        if (currMin(id) > value) currMin(id) = value
+    }
+
+    axpy(1.0, other.nnz, nnz)
+    this
+  }
+}
+
 case class VectorRDDStatisticalAggregator(
     mean: BV[Double],
-    statCounter: BV[Double],
-    totalCount: Double,
-    numNonZeros: BV[Double],
-    max: BV[Double],
-    min: BV[Double])
+    statCnt: BV[Double],
+    totalCnt: Double,
+    nnz: BV[Double],
+    currMax: BV[Double],
+    currMin: BV[Double])
 
 /**
  * Extra functions available on RDDs of [[org.apache.spark.mllib.linalg.Vector Vector]] through an
