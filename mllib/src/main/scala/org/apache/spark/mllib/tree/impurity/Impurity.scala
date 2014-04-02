@@ -23,6 +23,8 @@ package org.apache.spark.mllib.tree.impurity
 trait Impurity extends Serializable {
 
   /**
+   * <span class="badge badge-red" style="float: right;">DEVELOPER API - UNSTABLE</span>
+   *
    * information calculation for binary classification
    * @param c0 count of instances with label 0
    * @param c1 count of instances with label 1
@@ -31,6 +33,8 @@ trait Impurity extends Serializable {
   def calculate(c0 : Double, c1 : Double): Double
 
   /**
+   * <span class="badge badge-red" style="float: right;">DEVELOPER API - UNSTABLE</span>
+   *
    * information calculation for regression
    * @param count number of instances
    * @param sum sum of labels
