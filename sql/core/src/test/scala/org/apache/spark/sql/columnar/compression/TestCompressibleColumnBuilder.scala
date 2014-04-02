@@ -15,20 +15,29 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar
+package org.apache.spark.sql.columnar.compression
 
-import org.apache.spark.sql.{QueryTest, TestData}
-import org.apache.spark.sql.execution.SparkLogicalPlan
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.catalyst.types.NativeType
+import org.apache.spark.sql.columnar._
 
-class ColumnarQuerySuite extends QueryTest {
-  import TestData._
-  import TestSQLContext._
+class TestCompressibleColumnBuilder[T <: NativeType](
+    override val columnStats: NativeColumnStats[T],
+    override val columnType: NativeColumnType[T],
+    override val schemes: Seq[CompressionScheme])
+  extends NativeColumnBuilder(columnStats, columnType)
+  with NullableColumnBuilder
+  with CompressibleColumnBuilder[T] {
 
-  test("simple columnar query") {
-    val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
-    val scan = SparkLogicalPlan(InMemoryColumnarTableScan(plan.output, plan))
+  override protected def isWorthCompressing(encoder: Encoder) = true
+}
 
-    checkAnswer(scan, testData.collect().toSeq)
+object TestCompressibleColumnBuilder {
+  def apply[T <: NativeType](
+      columnStats: NativeColumnStats[T],
+      columnType: NativeColumnType[T],
+      scheme: CompressionScheme) = {
+
+    new TestCompressibleColumnBuilder(columnStats, columnType, Seq(scheme))
   }
 }
+

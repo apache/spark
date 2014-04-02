@@ -15,20 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar
+package org.apache.spark.sql.columnar.compression
 
-import org.apache.spark.sql.{QueryTest, TestData}
-import org.apache.spark.sql.execution.SparkLogicalPlan
-import org.apache.spark.sql.test.TestSQLContext
+import java.nio.ByteBuffer
 
-class ColumnarQuerySuite extends QueryTest {
-  import TestData._
-  import TestSQLContext._
+import org.apache.spark.sql.catalyst.types.NativeType
+import org.apache.spark.sql.columnar.{ColumnAccessor, NativeColumnAccessor}
 
-  test("simple columnar query") {
-    val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
-    val scan = SparkLogicalPlan(InMemoryColumnarTableScan(plan.output, plan))
+private[sql] trait CompressibleColumnAccessor[T <: NativeType] extends ColumnAccessor {
+  this: NativeColumnAccessor[T] =>
 
-    checkAnswer(scan, testData.collect().toSeq)
+  private var decoder: Decoder[T] = _
+
+  abstract override protected def initialize() = {
+    super.initialize()
+    decoder = CompressionScheme(underlyingBuffer.getInt()).decoder(buffer, columnType)
   }
+
+  abstract override def extractSingle(buffer: ByteBuffer): T#JvmType = decoder.next()
 }

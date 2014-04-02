@@ -22,10 +22,18 @@ import java.nio.{ByteBuffer, ByteOrder}
 import org.apache.spark.sql.Row
 
 /**
- * Builds a nullable column. The byte buffer of a nullable column contains:
- * - 4 bytes for the null count (number of nulls)
- * - positions for each null, in ascending order
- * - the non-null data (column data type, compression type, data...)
+ * A stackable trait used for building byte buffer for a column containing null values.  Memory
+ * layout of the final byte buffer is:
+ * {{{
+ *    .----------------------- Column type ID (4 bytes)
+ *    |   .------------------- Null count N (4 bytes)
+ *    |   |   .--------------- Null positions (4 x N bytes, empty if null count is zero)
+ *    |   |   |     .--------- Non-null elements
+ *    V   V   V     V
+ *   +---+---+-----+---------+
+ *   |   |   | ... | ... ... |
+ *   +---+---+-----+---------+
+ * }}}
  */
 private[sql] trait NullableColumnBuilder extends ColumnBuilder {
   private var nulls: ByteBuffer = _
@@ -59,19 +67,8 @@ private[sql] trait NullableColumnBuilder extends ColumnBuilder {
     nulls.limit(nullDataLen)
     nulls.rewind()
 
-    // Column type ID is moved to the front, follows the null count, then non-null data
-    //
-    //      +---------+
-    //      | 4 bytes | Column type ID
-    //      +---------+
-    //      | 4 bytes | Null count
-    //      +---------+
-    //      |   ...   | Null positions (if null count is not zero)
-    //      +---------+
-    //      |   ...   | Non-null part (without column type ID)
-    //      +---------+
     val buffer = ByteBuffer
-      .allocate(4 + nullDataLen + nonNulls.limit)
+      .allocate(4 + 4 + nullDataLen + nonNulls.remaining())
       .order(ByteOrder.nativeOrder())
       .putInt(typeId)
       .putInt(nullCount)

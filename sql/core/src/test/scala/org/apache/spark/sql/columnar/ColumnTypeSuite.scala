@@ -19,46 +19,56 @@ package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
 
-import scala.util.Random
-
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 
 class ColumnTypeSuite extends FunSuite {
-  val columnTypes = Seq(INT, SHORT, LONG, BYTE, DOUBLE, FLOAT, STRING, BINARY, GENERIC)
+  val DEFAULT_BUFFER_SIZE = 512
 
   test("defaultSize") {
-    val defaultSize = Seq(4, 2, 8, 1, 8, 4, 8, 16, 16)
+    val checks = Map(
+      INT -> 4, SHORT -> 2, LONG -> 8, BYTE -> 1, DOUBLE -> 8, FLOAT -> 4,
+      BOOLEAN -> 1, STRING -> 8, BINARY -> 16, GENERIC -> 16)
 
-    columnTypes.zip(defaultSize).foreach { case (columnType, size) =>
-      assert(columnType.defaultSize === size)
+    checks.foreach { case (columnType, expectedSize) =>
+      expectResult(expectedSize, s"Wrong defaultSize for $columnType") {
+        columnType.defaultSize
+      }
     }
   }
 
   test("actualSize") {
-    val expectedSizes = Seq(4, 2, 8, 1, 8, 4, 4 + 5, 4 + 4, 4 + 11)
-    val actualSizes = Seq(
-      INT.actualSize(Int.MaxValue),
-      SHORT.actualSize(Short.MaxValue),
-      LONG.actualSize(Long.MaxValue),
-      BYTE.actualSize(Byte.MaxValue),
-      DOUBLE.actualSize(Double.MaxValue),
-      FLOAT.actualSize(Float.MaxValue),
-      STRING.actualSize("hello"),
-      BINARY.actualSize(new Array[Byte](4)),
-      GENERIC.actualSize(SparkSqlSerializer.serialize(Map(1 -> "a"))))
+    def checkActualSize[T <: DataType, JvmType](
+        columnType: ColumnType[T, JvmType],
+        value: JvmType,
+        expected: Int) {
 
-    expectedSizes.zip(actualSizes).foreach { case (expected, actual) =>
-      assert(expected === actual)
+      expectResult(expected, s"Wrong actualSize for $columnType") {
+        columnType.actualSize(value)
+      }
     }
+
+    checkActualSize(INT,     Int.MaxValue,    4)
+    checkActualSize(SHORT,   Short.MaxValue,  2)
+    checkActualSize(LONG,    Long.MaxValue,   8)
+    checkActualSize(BYTE,    Byte.MaxValue,   1)
+    checkActualSize(DOUBLE,  Double.MaxValue, 8)
+    checkActualSize(FLOAT,   Float.MaxValue,  4)
+    checkActualSize(BOOLEAN, true,            1)
+    checkActualSize(STRING,  "hello",         4 + 5)
+
+    val binary = Array.fill[Byte](4)(0: Byte)
+    checkActualSize(BINARY,  binary, 4 + 4)
+
+    val generic = Map(1 -> "a")
+    checkActualSize(GENERIC, SparkSqlSerializer.serialize(generic), 4 + 11)
   }
 
-  testNumericColumnType[BooleanType.type, Boolean](
+  testNativeColumnType[BooleanType.type](
     BOOLEAN,
-    Array.fill(4)(Random.nextBoolean()),
-    ByteBuffer.allocate(32),
     (buffer: ByteBuffer, v: Boolean) => {
       buffer.put((if (v) 1 else 0).toByte)
     },
@@ -66,105 +76,42 @@ class ColumnTypeSuite extends FunSuite {
       buffer.get() == 1
     })
 
-  testNumericColumnType[IntegerType.type, Int](
-    INT,
-    Array.fill(4)(Random.nextInt()),
-    ByteBuffer.allocate(32),
-    (_: ByteBuffer).putInt(_),
-    (_: ByteBuffer).getInt)
+  testNativeColumnType[IntegerType.type](INT, _.putInt(_), _.getInt)
 
-  testNumericColumnType[ShortType.type, Short](
-    SHORT,
-    Array.fill(4)(Random.nextInt(Short.MaxValue).asInstanceOf[Short]),
-    ByteBuffer.allocate(32),
-    (_: ByteBuffer).putShort(_),
-    (_: ByteBuffer).getShort)
+  testNativeColumnType[ShortType.type](SHORT, _.putShort(_), _.getShort)
 
-  testNumericColumnType[LongType.type, Long](
-    LONG,
-    Array.fill(4)(Random.nextLong()),
-    ByteBuffer.allocate(64),
-    (_: ByteBuffer).putLong(_),
-    (_: ByteBuffer).getLong)
+  testNativeColumnType[LongType.type](LONG, _.putLong(_), _.getLong)
 
-  testNumericColumnType[ByteType.type, Byte](
-    BYTE,
-    Array.fill(4)(Random.nextInt(Byte.MaxValue).asInstanceOf[Byte]),
-    ByteBuffer.allocate(64),
-    (_: ByteBuffer).put(_),
-    (_: ByteBuffer).get)
+  testNativeColumnType[ByteType.type](BYTE, _.put(_), _.get)
 
-  testNumericColumnType[DoubleType.type, Double](
-    DOUBLE,
-    Array.fill(4)(Random.nextDouble()),
-    ByteBuffer.allocate(64),
-    (_: ByteBuffer).putDouble(_),
-    (_: ByteBuffer).getDouble)
+  testNativeColumnType[DoubleType.type](DOUBLE, _.putDouble(_), _.getDouble)
 
-  testNumericColumnType[FloatType.type, Float](
-    FLOAT,
-    Array.fill(4)(Random.nextFloat()),
-    ByteBuffer.allocate(64),
-    (_: ByteBuffer).putFloat(_),
-    (_: ByteBuffer).getFloat)
+  testNativeColumnType[FloatType.type](FLOAT, _.putFloat(_), _.getFloat)
 
-  test("STRING") {
-    val buffer = ByteBuffer.allocate(128)
-    val seq = Array("hello", "world", "spark", "sql")
-
-    seq.map(_.getBytes).foreach { bytes: Array[Byte] =>
-      buffer.putInt(bytes.length).put(bytes)
-    }
-
-    buffer.rewind()
-    seq.foreach { s =>
-      assert(s === STRING.extract(buffer))
-    }
-
-    buffer.rewind()
-    seq.foreach(STRING.append(_, buffer))
-
-    buffer.rewind()
-    seq.foreach { s =>
-      val length = buffer.getInt
-      assert(length === s.getBytes.length)
-
+  testNativeColumnType[StringType.type](
+    STRING,
+    (buffer: ByteBuffer, string: String) => {
+      val bytes = string.getBytes()
+      buffer.putInt(bytes.length).put(string.getBytes)
+    },
+    (buffer: ByteBuffer) => {
+      val length = buffer.getInt()
       val bytes = new Array[Byte](length)
       buffer.get(bytes, 0, length)
-      assert(s === new String(bytes))
-    }
-  }
+      new String(bytes)
+    })
 
-  test("BINARY") {
-    val buffer = ByteBuffer.allocate(128)
-    val seq = Array.fill(4) {
-      val bytes = new Array[Byte](4)
-      Random.nextBytes(bytes)
+  testColumnType[BinaryType.type, Array[Byte]](
+    BINARY,
+    (buffer: ByteBuffer, bytes: Array[Byte]) => {
+      buffer.putInt(bytes.length).put(bytes)
+    },
+    (buffer: ByteBuffer) => {
+      val length = buffer.getInt()
+      val bytes = new Array[Byte](length)
+      buffer.get(bytes, 0, length)
       bytes
-    }
-
-    seq.foreach { bytes =>
-      buffer.putInt(bytes.length).put(bytes)
-    }
-
-    buffer.rewind()
-    seq.foreach { b =>
-      assert(b === BINARY.extract(buffer))
-    }
-
-    buffer.rewind()
-    seq.foreach(BINARY.append(_, buffer))
-
-    buffer.rewind()
-    seq.foreach { b =>
-      val length = buffer.getInt
-      assert(length === b.length)
-
-      val bytes = new Array[Byte](length)
-      buffer.get(bytes, 0, length)
-      assert(b === bytes)
-    }
-  }
+    })
 
   test("GENERIC") {
     val buffer = ByteBuffer.allocate(512)
@@ -177,43 +124,58 @@ class ColumnTypeSuite extends FunSuite {
     val length = buffer.getInt()
     assert(length === serializedObj.length)
 
-    val bytes = new Array[Byte](length)
-    buffer.get(bytes, 0, length)
-    assert(obj === SparkSqlSerializer.deserialize(bytes))
+    expectResult(obj, "Deserialized object didn't equal to the original object") {
+      val bytes = new Array[Byte](length)
+      buffer.get(bytes, 0, length)
+      SparkSqlSerializer.deserialize(bytes)
+    }
 
     buffer.rewind()
     buffer.putInt(serializedObj.length).put(serializedObj)
 
-    buffer.rewind()
-    assert(obj === SparkSqlSerializer.deserialize(GENERIC.extract(buffer)))
+    expectResult(obj, "Deserialized object didn't equal to the original object") {
+      buffer.rewind()
+      SparkSqlSerializer.deserialize(GENERIC.extract(buffer))
+    }
   }
 
-  def testNumericColumnType[T <: DataType, JvmType](
+  def testNativeColumnType[T <: NativeType](
+      columnType: NativeColumnType[T],
+      putter: (ByteBuffer, T#JvmType) => Unit,
+      getter: (ByteBuffer) => T#JvmType) {
+
+    testColumnType[T, T#JvmType](columnType, putter, getter)
+  }
+
+  def testColumnType[T <: DataType, JvmType](
       columnType: ColumnType[T, JvmType],
-      seq: Seq[JvmType],
-      buffer: ByteBuffer,
       putter: (ByteBuffer, JvmType) => Unit,
       getter: (ByteBuffer) => JvmType) {
 
-    val columnTypeName = columnType.getClass.getSimpleName.stripSuffix("$")
+    val buffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE)
+    val seq = (0 until 4).map(_ => makeRandomValue(columnType))
 
-    test(s"$columnTypeName.extract") {
+    test(s"$columnType.extract") {
       buffer.rewind()
       seq.foreach(putter(buffer, _))
 
       buffer.rewind()
-      seq.foreach { i =>
-        assert(i === columnType.extract(buffer))
+      seq.foreach { expected =>
+        assert(
+          expected === columnType.extract(buffer),
+          "Extracted value didn't equal to the original one")
       }
     }
 
-    test(s"$columnTypeName.append") {
+    test(s"$columnType.append") {
       buffer.rewind()
       seq.foreach(columnType.append(_, buffer))
 
       buffer.rewind()
-      seq.foreach { i =>
-        assert(i === getter(buffer))
+      seq.foreach { expected =>
+        assert(
+          expected === getter(buffer),
+          "Extracted value didn't equal to the original one")
       }
     }
   }

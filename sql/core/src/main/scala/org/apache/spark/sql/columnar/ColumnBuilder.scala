@@ -22,7 +22,7 @@ import java.nio.{ByteBuffer, ByteOrder}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.ColumnBuilder._
-import org.apache.spark.sql.execution.SparkSqlSerializer
+import org.apache.spark.sql.columnar.compression.{AllCompressionSchemes, CompressibleColumnBuilder}
 
 private[sql] trait ColumnBuilder {
   /**
@@ -30,37 +30,44 @@ private[sql] trait ColumnBuilder {
    */
   def initialize(initialSize: Int, columnName: String = "")
 
+  /**
+   * Appends `row(ordinal)` to the column builder.
+   */
   def appendFrom(row: Row, ordinal: Int)
 
+  /**
+   * Column statistics information
+   */
+  def columnStats: ColumnStats[_, _]
+
+  /**
+   * Returns the final columnar byte buffer.
+   */
   def build(): ByteBuffer
 }
 
-private[sql] abstract class BasicColumnBuilder[T <: DataType, JvmType] extends ColumnBuilder {
+private[sql] class BasicColumnBuilder[T <: DataType, JvmType](
+    val columnStats: ColumnStats[T, JvmType],
+    val columnType: ColumnType[T, JvmType])
+  extends ColumnBuilder {
 
-  private var columnName: String = _
+  protected var columnName: String = _
+
   protected var buffer: ByteBuffer = _
-
-  def columnType: ColumnType[T, JvmType]
 
   override def initialize(initialSize: Int, columnName: String = "") = {
     val size = if (initialSize == 0) DEFAULT_INITIAL_BUFFER_SIZE else initialSize
     this.columnName = columnName
-    buffer = ByteBuffer.allocate(4 + 4 + size * columnType.defaultSize)
+
+    // Reserves 4 bytes for column type ID
+    buffer = ByteBuffer.allocate(4 + size * columnType.defaultSize)
     buffer.order(ByteOrder.nativeOrder()).putInt(columnType.typeId)
   }
 
-  // Have to give a concrete implementation to make mixin possible
   override def appendFrom(row: Row, ordinal: Int) {
-    doAppendFrom(row, ordinal)
-  }
-
-  // Concrete `ColumnBuilder`s can override this method to append values
-  protected def doAppendFrom(row: Row, ordinal: Int)
-
-  // Helper method to append primitive values (to avoid boxing cost)
-  protected def appendValue(v: JvmType) {
-    buffer = ensureFreeSpace(buffer, columnType.actualSize(v))
-    columnType.append(v, buffer)
+    val field = columnType.getField(row, ordinal)
+    buffer = ensureFreeSpace(buffer, columnType.actualSize(field))
+    columnType.append(field, buffer)
   }
 
   override def build() = {
@@ -69,83 +76,39 @@ private[sql] abstract class BasicColumnBuilder[T <: DataType, JvmType] extends C
   }
 }
 
-private[sql] abstract class NativeColumnBuilder[T <: NativeType](
-    val columnType: NativeColumnType[T])
-  extends BasicColumnBuilder[T, T#JvmType]
+private[sql] abstract class ComplexColumnBuilder[T <: DataType, JvmType](
+    columnType: ColumnType[T, JvmType])
+  extends BasicColumnBuilder[T, JvmType](new NoopColumnStats[T, JvmType], columnType)
   with NullableColumnBuilder
 
-private[sql] class BooleanColumnBuilder extends NativeColumnBuilder(BOOLEAN) {
-  override def doAppendFrom(row: Row, ordinal: Int) {
-    appendValue(row.getBoolean(ordinal))
-  }
-}
+private[sql] abstract class NativeColumnBuilder[T <: NativeType](
+    override val columnStats: NativeColumnStats[T],
+    override val columnType: NativeColumnType[T])
+  extends BasicColumnBuilder[T, T#JvmType](columnStats, columnType)
+  with NullableColumnBuilder
+  with AllCompressionSchemes
+  with CompressibleColumnBuilder[T]
 
-private[sql] class IntColumnBuilder extends NativeColumnBuilder(INT) {
-  override def doAppendFrom(row: Row, ordinal: Int) {
-    appendValue(row.getInt(ordinal))
-  }
-}
+private[sql] class BooleanColumnBuilder extends NativeColumnBuilder(new BooleanColumnStats, BOOLEAN)
 
-private[sql] class ShortColumnBuilder extends NativeColumnBuilder(SHORT) {
-  override def doAppendFrom(row: Row, ordinal: Int) {
-    appendValue(row.getShort(ordinal))
-  }
-}
+private[sql] class IntColumnBuilder extends NativeColumnBuilder(new IntColumnStats, INT)
 
-private[sql] class LongColumnBuilder extends NativeColumnBuilder(LONG) {
-  override def doAppendFrom(row: Row, ordinal: Int) {
-    appendValue(row.getLong(ordinal))
-  }
-}
+private[sql] class ShortColumnBuilder extends NativeColumnBuilder(new ShortColumnStats, SHORT)
 
-private[sql] class ByteColumnBuilder extends NativeColumnBuilder(BYTE) {
-  override def doAppendFrom(row: Row, ordinal: Int) {
-    appendValue(row.getByte(ordinal))
-  }
-}
+private[sql] class LongColumnBuilder extends NativeColumnBuilder(new LongColumnStats, LONG)
 
-private[sql] class DoubleColumnBuilder extends NativeColumnBuilder(DOUBLE) {
-  override def doAppendFrom(row: Row, ordinal: Int) {
-    appendValue(row.getDouble(ordinal))
-  }
-}
+private[sql] class ByteColumnBuilder extends NativeColumnBuilder(new ByteColumnStats, BYTE)
 
-private[sql] class FloatColumnBuilder extends NativeColumnBuilder(FLOAT) {
-  override def doAppendFrom(row: Row, ordinal: Int) {
-    appendValue(row.getFloat(ordinal))
-  }
-}
+private[sql] class DoubleColumnBuilder extends NativeColumnBuilder(new DoubleColumnStats, DOUBLE)
 
-private[sql] class StringColumnBuilder extends NativeColumnBuilder(STRING) {
-  override def doAppendFrom(row: Row, ordinal: Int) {
-    appendValue(row.getString(ordinal))
-  }
-}
+private[sql] class FloatColumnBuilder extends NativeColumnBuilder(new FloatColumnStats, FLOAT)
 
-private[sql] class BinaryColumnBuilder
-  extends BasicColumnBuilder[BinaryType.type, Array[Byte]]
-  with NullableColumnBuilder {
+private[sql] class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStats, STRING)
 
-  def columnType = BINARY
-
-  override def doAppendFrom(row: Row, ordinal: Int) {
-    appendValue(row(ordinal).asInstanceOf[Array[Byte]])
-  }
-}
+private[sql] class BinaryColumnBuilder extends ComplexColumnBuilder(BINARY)
 
 // TODO (lian) Add support for array, struct and map
-private[sql] class GenericColumnBuilder
-  extends BasicColumnBuilder[DataType, Array[Byte]]
-  with NullableColumnBuilder {
-
-  def columnType = GENERIC
-
-  override def doAppendFrom(row: Row, ordinal: Int) {
-    val serialized = SparkSqlSerializer.serialize(row(ordinal))
-    buffer = ColumnBuilder.ensureFreeSpace(buffer, columnType.actualSize(serialized))
-    columnType.append(serialized, buffer)
-  }
-}
+private[sql] class GenericColumnBuilder extends ComplexColumnBuilder(GENERIC)
 
 private[sql] object ColumnBuilder {
   val DEFAULT_INITIAL_BUFFER_SIZE = 10 * 1024 * 104
