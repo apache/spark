@@ -354,6 +354,9 @@ trait ClientBase extends Logging {
       for ((k, v) <- sys.props.filterKeys(_.startsWith("spark"))) {
         JAVA_OPTS += s"-D$k=$v"
       }
+      // TODO: honor driver classpath here: sys.props.get("spark.driver.classPath")
+      sys.props.get("spark.driver.javaOpts").map(opts => JAVA_OPTS += opts)
+      sys.props.get("spark.driver.libraryPath").map(p => JAVA_OPTS + s"-Djava.library.path=$p")
     }
 
     if (!localResources.contains(ClientBase.LOG4J_PROP)) {

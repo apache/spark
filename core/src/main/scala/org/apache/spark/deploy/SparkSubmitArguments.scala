@@ -31,6 +31,9 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
   var totalExecutorCores: String = null
   var propertiesFile: String = null
   var driverMemory: String = null
+  var driverExtraClassPath: String = null
+  var driverExtraLibraryPath: String = null
+  var driverExtraJavaOptions: String = null
   var driverCores: String = null
   var supervise: Boolean = false
   var queue: String = null
@@ -63,25 +66,28 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
 
   override def toString =  {
     s"""Parsed arguments:
-    |  master             $master
-    |  deployMode         $deployMode
-    |  executorMemory     $executorMemory
-    |  executorCores      $executorCores
-    |  totalExecutorCores $totalExecutorCores
-    |  propertiesFile     $propertiesFile
-    |  driverMemory       $driverMemory
-    |  driverCores        $driverCores
-    |  supervise          $supervise
-    |  queue              $queue
-    |  numExecutors       $numExecutors
-    |  files              $files
-    |  archives           $archives
-    |  mainClass          $mainClass
-    |  primaryResource    $primaryResource
-    |  name               $name
-    |  childArgs          [${childArgs.mkString(" ")}]
-    |  jars               $jars
-    |  verbose            $verbose
+    |  master                  $master
+    |  deployMode              $deployMode
+    |  executorMemory          $executorMemory
+    |  executorCores           $executorCores
+    |  totalExecutorCores      $totalExecutorCores
+    |  propertiesFile          $propertiesFile
+    |  driverMemory            $driverMemory
+    |  driverCores             $driverCores
+    |  driverExtraClassPath    $driverExtraClassPath
+    |  driverExtraLibraryPath  $driverExtraLibraryPath
+    |  driverExtraJavaOptions  $driverExtraJavaOptions
+    |  supervise               $supervise
+    |  queue                   $queue
+    |  numExecutors            $numExecutors
+    |  files                   $files
+    |  archives                $archives
+    |  mainClass               $mainClass
+    |  primaryResource         $primaryResource
+    |  name                    $name
+    |  childArgs               [${childArgs.mkString(" ")}]
+    |  jars                    $jars
+    |  verbose                 $verbose
     """.stripMargin
   }
 
@@ -132,6 +138,18 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
 
     case ("--driver-cores") :: value :: tail =>
       driverCores = value
+      parseOpts(tail)
+
+    case ("--driver-class-path") :: value :: tail =>
+      driverExtraClassPath = value
+      parseOpts(tail)
+
+    case ("--driver-java-opts") :: value :: tail =>
+      driverExtraJavaOptions = value
+      parseOpts(tail)
+
+    case ("--driver-library-path") :: value :: tail =>
+      driverExtraLibraryPath = value
       parseOpts(tail)
 
     case ("--properties-file") :: value :: tail =>
@@ -194,11 +212,15 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
         |  --class CLASS_NAME          Name of your app's main class (required for Java apps).
         |  --arg ARG                   Argument to be passed to your application's main class. This
         |                              option can be specified multiple times for multiple args.
-        |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: 512M).
         |  --name NAME                 The name of your application (Default: 'Spark').
         |  --jars JARS                 A comma-separated list of local jars to include on the
         |                              driver classpath and that SparkContext.addJar will work
         |                              with. Doesn't work on standalone with 'cluster' deploy mode.
+        |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: 512M).
+        |  --driver-java-opts          Extra Java options to pass to the driver
+        |  --driver-library-path       Extra library path entries to pass to the driver
+        |  --driver-class-path         Extra class path entries to pass to the driver
+        |
         |
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).

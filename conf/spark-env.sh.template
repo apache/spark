@@ -16,6 +16,17 @@
 # - MESOS_NATIVE_LIBRARY, to point to your libmesos.so if you use Mesos
 # - SPARK_CLASSPATH, default classpath entries to append
 
+# Options read in YARN client mode
+# - SPARK_YARN_APP_JAR, Path to your application’s JAR file (required)
+# - SPARK_WORKER_INSTANCES, Number of workers to start (Default: 2)
+# - SPARK_WORKER_CORES, Number of cores for the workers (Default: 1).
+# - SPARK_WORKER_MEMORY, Memory per Worker (e.g. 1000M, 2G) (Default: 1G)
+# - SPARK_MASTER_MEMORY, Memory for Master (e.g. 1000M, 2G) (Default: 512 Mb)
+# - SPARK_YARN_APP_NAME, The name of your application (Default: Spark)
+# - SPARK_YARN_QUEUE, The hadoop queue to use for allocation requests (Default: ‘default’)
+# - SPARK_YARN_DIST_FILES, Comma separated list of files to be distributed with the job.
+# - SPARK_YARN_DIST_ARCHIVES, Comma separated list of archives to be distributed with the job.
+
 # Options for the daemons used in the standalone deploy mode:
 # - SPARK_MASTER_IP, to bind the master to a different IP address or hostname
 # - SPARK_MASTER_PORT / SPARK_MASTER_WEBUI_PORT, to use non-default ports

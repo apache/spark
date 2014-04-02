@@ -47,14 +47,23 @@ object CommandUtils extends Logging {
    */
   def buildJavaOpts(command: Command, memory: Int, sparkHome: String): Seq[String] = {
     val memoryOpts = Seq(s"-Xms${memory}M", s"-Xmx${memory}M")
+    val libraryOpts =
+      if (command.libraryPathEntries.size > 0) {
+        val joined = command.libraryPathEntries.mkString(File.pathSeparator)
+        Seq(s"-Djava.library.path=$joined")
+      } else {
+         Seq()
+      }
 
     // Figure out our classpath with the external compute-classpath script
     val ext = if (System.getProperty("os.name").startsWith("Windows")) ".cmd" else ".sh"
     val classPath = Utils.executeAndGetOutput(
       Seq(sparkHome + "/bin/compute-classpath" + ext),
       extraEnvironment=command.environment)
+    val userClassPath = command.classPathEntries.mkString(File.pathSeparator)
+    val classPathWithUser = classPath + File.pathSeparator + userClassPath
 
-    Seq("-cp", classPath) ++ memoryOpts
+    Seq("-cp", classPathWithUser) ++ libraryOpts ++ memoryOpts ++ command.javaOptions
   }
 
   /** Spawn a thread that will redirect a given stream to a file */

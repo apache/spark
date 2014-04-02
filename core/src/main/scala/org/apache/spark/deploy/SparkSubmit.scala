@@ -65,7 +65,8 @@ object SparkSubmit {
   /**
    * @return
    *         a tuple containing the arguments for the child, a list of classpath
-   *         entries for the child, and the main class for the child
+   *         entries for the child, a list of system propertes, a list of env vars
+   *         and the main class for the child
    */
   private[spark] def createLaunchEnv(appArgs: SparkSubmitArguments): (ArrayBuffer[String],
       ArrayBuffer[String], Map[String, String], String) = {
@@ -140,6 +141,14 @@ object SparkSubmit {
 
     val options = List[OptionAssigner](
       new OptionAssigner(appArgs.master, ALL_CLUSTER_MGRS, false, sysProp = "spark.master"),
+
+      new OptionAssigner(appArgs.driverExtraClassPath, STANDALONE | YARN, true,
+        sysProp = "spark.driver.classPath"),
+      new OptionAssigner(appArgs.driverExtraJavaOptions, STANDALONE | YARN, true,
+        sysProp = "spark.driver.javaOpts"),
+      new OptionAssigner(appArgs.driverExtraLibraryPath, STANDALONE | YARN, true,
+        sysProp = "spark.driver.libraryPath"),
+
       new OptionAssigner(appArgs.driverMemory, YARN, true, clOption = "--driver-memory"),
       new OptionAssigner(appArgs.name, YARN, true, clOption = "--name"),
       new OptionAssigner(appArgs.queue, YARN, true, clOption = "--queue"),

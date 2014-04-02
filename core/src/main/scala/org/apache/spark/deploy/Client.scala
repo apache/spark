@@ -54,8 +54,15 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
         System.getenv().foreach{case (k, v) => env(k) = v}
 
         val mainClass = "org.apache.spark.deploy.worker.DriverWrapper"
+        val classPathEntries = sys.props.get("spark.driver.classPath").toSeq.flatMap { cp =>
+          cp.split(java.io.File.pathSeparator)
+        }
+        val libraryPathEntries = sys.props.get("spark.driver.libraryPath").toSeq.flatMap { cp =>
+          cp.split(java.io.File.pathSeparator)
+        }
+        val javaOpts = sys.props.get("spark.driver.javaOpts").toSeq
         val command = new Command(mainClass, Seq("{{WORKER_URL}}", driverArgs.mainClass) ++
-          driverArgs.driverOptions, env)
+          driverArgs.driverOptions, env, classPathEntries, libraryPathEntries, javaOpts)
 
         val driverDescription = new DriverDescription(
           driverArgs.jarUrl,

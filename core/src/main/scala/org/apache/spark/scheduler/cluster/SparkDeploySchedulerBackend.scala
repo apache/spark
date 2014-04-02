@@ -48,8 +48,10 @@ private[spark] class SparkDeploySchedulerBackend(
       Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}",
       "{{CORES}}", "{{WORKER_URL}}")
 
+    // TODO (pwendell) LOOK AT THIS
     val command = Command(
-      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.executorEnvs)
+      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.executorEnvs,
+      Seq(), Seq(), Seq())
     val sparkHome = sc.getSparkHome()
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
       sparkHome, sc.ui.appUIAddress, sc.eventLogger.map(_.logDir))
