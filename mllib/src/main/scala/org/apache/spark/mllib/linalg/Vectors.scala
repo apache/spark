@@ -151,6 +151,8 @@ class DenseVector(val values: Array[Double]) extends Vector {
   override def toArray: Array[Double] = values
 
   private[mllib] override def toBreeze: BV[Double] = new BDV[Double](values)
+
+  override def apply(i: Int) = values(i)
 }
 
 /**
