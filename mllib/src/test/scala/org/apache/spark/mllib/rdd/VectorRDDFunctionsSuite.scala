@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.mllib.rdd
 
 import scala.collection.mutable.ArrayBuffer
@@ -45,18 +44,23 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
 
   test("full-statistics") {
     val data = sc.parallelize(localData, 2)
-    val (VectorRDDStatisticalSummary(mean, variance, cnt, nnz, max, min), denseTime) =
-      time(data.summarizeStatistics(3))
+    val (VectorRDDStatisticalAggregator(mean, variance, cnt, nnz, max, min), denseTime) =
+      time(data.summarizeStatistics())
 
-    assert(equivVector(mean, Vectors.dense(4.0, 5.0, 6.0)), "Column mean do not match.")
-    assert(equivVector(variance, Vectors.dense(6.0, 6.0, 6.0)), "Column variance do not match.")
-    assert(cnt === 3, "Column cnt do not match.")
-    assert(equivVector(nnz, Vectors.dense(3.0, 3.0, 3.0)), "Column nnz do not match.")
-    assert(equivVector(max, Vectors.dense(7.0, 8.0, 9.0)), "Column max do not match.")
-    assert(equivVector(min, Vectors.dense(1.0, 2.0, 3.0)), "Column min do not match.")
+    assert(equivVector(Vectors.fromBreeze(mean), Vectors.dense(4.0, 5.0, 6.0)),
+      "Column mean do not match.")
+    assert(equivVector(Vectors.fromBreeze(variance), Vectors.dense(6.0, 6.0, 6.0)),
+      "Column variance do not match.")
+    assert(cnt === 3.0, "Column cnt do not match.")
+    assert(equivVector(Vectors.fromBreeze(nnz), Vectors.dense(3.0, 3.0, 3.0)),
+      "Column nnz do not match.")
+    assert(equivVector(Vectors.fromBreeze(max), Vectors.dense(7.0, 8.0, 9.0)),
+      "Column max do not match.")
+    assert(equivVector(Vectors.fromBreeze(min), Vectors.dense(1.0, 2.0, 3.0)),
+      "Column min do not match.")
 
     val dataForSparse = sc.parallelize(sparseData.toSeq, 2)
-    val (_, sparseTime) = time(dataForSparse.summarizeStatistics(20))
+    val (_, sparseTime) = time(dataForSparse.summarizeStatistics())
 
     println(s"dense time is $denseTime, sparse time is $sparseTime.")
     assert(relativeTime(denseTime, sparseTime),
@@ -81,4 +85,3 @@ object VectorRDDFunctionsSuite {
     math.abs(lhs - rhs) / denominator < 0.3
   }
 }
-
