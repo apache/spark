@@ -48,7 +48,7 @@ class HiveResolutionSuite extends HiveComparisonTest {
   createQueryTest("attr",
     "SELECT key FROM src a ORDER BY key LIMIT 1")
 
-  createQueryTest("alias.*",
+  createQueryTest("alias.star",
     "SELECT a.* FROM src a ORDER BY key LIMIT 1")
 
   test("case insensitivity with scala reflection") {
