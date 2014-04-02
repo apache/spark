@@ -22,7 +22,7 @@ import java.util.{Properties, UUID}
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, JsonAST}
 import org.json4s.JsonDSL._
 import org.json4s.JsonAST._
 
@@ -42,7 +42,7 @@ private[spark] object JsonProtocol {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
         stageSubmittedToJson(stageSubmitted)
-      case stageCompleted: SparkListenerStageCompleted =>
+      case stageCompleted: SparkListenerStageEnded =>
         stageCompletedToJson(stageCompleted)
       case taskStart: SparkListenerTaskStart =>
         taskStartToJson(taskStart)
@@ -76,7 +76,7 @@ private[spark] object JsonProtocol {
     ("Properties" -> properties)
   }
 
-  def stageCompletedToJson(stageCompleted: SparkListenerStageCompleted): JValue = {
+  def stageCompletedToJson(stageCompleted: SparkListenerStageEnded): JValue = {
     val stageInfo = stageInfoToJson(stageCompleted.stageInfo)
     ("Event" -> Utils.getFormattedClassName(stageCompleted)) ~
     ("Stage Info" -> stageInfo)
@@ -260,8 +260,7 @@ private[spark] object JsonProtocol {
       case JobSucceeded => Utils.emptyJson
       case jobFailed: JobFailed =>
         val exception = exceptionToJson(jobFailed.exception)
-        ("Exception" -> exception) ~
-        ("Failed Stage ID" -> jobFailed.failedStageId)
+        JsonAST.JObject("Exception" -> exception)
     }
     ("Result" -> result) ~ json
   }
@@ -336,7 +335,7 @@ private[spark] object JsonProtocol {
 
   def sparkEventFromJson(json: JValue): SparkListenerEvent = {
     val stageSubmitted = Utils.getFormattedClassName(SparkListenerStageSubmitted)
-    val stageCompleted = Utils.getFormattedClassName(SparkListenerStageCompleted)
+    val stageCompleted = Utils.getFormattedClassName(SparkListenerStageEnded)
     val taskStart = Utils.getFormattedClassName(SparkListenerTaskStart)
     val taskGettingResult = Utils.getFormattedClassName(SparkListenerTaskGettingResult)
     val taskEnd = Utils.getFormattedClassName(SparkListenerTaskEnd)
@@ -368,9 +367,9 @@ private[spark] object JsonProtocol {
     SparkListenerStageSubmitted(stageInfo, properties)
   }
 
-  def stageCompletedFromJson(json: JValue): SparkListenerStageCompleted = {
+  def stageCompletedFromJson(json: JValue): SparkListenerStageEnded = {
     val stageInfo = stageInfoFromJson(json \ "Stage Info")
-    SparkListenerStageCompleted(stageInfo)
+    SparkListenerStageEnded(stageInfo)
   }
 
   def taskStartFromJson(json: JValue): SparkListenerTaskStart = {
@@ -561,8 +560,7 @@ private[spark] object JsonProtocol {
       case `jobSucceeded` => JobSucceeded
       case `jobFailed` =>
         val exception = exceptionFromJson(json \ "Exception")
-        val failedStageId = (json \ "Failed Stage ID").extract[Int]
-        new JobFailed(exception, failedStageId)
+        new JobFailed(exception)
     }
   }
 

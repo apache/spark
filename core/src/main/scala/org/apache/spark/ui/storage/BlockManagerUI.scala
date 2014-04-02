@@ -87,7 +87,7 @@ private[ui] class BlockManagerListener(storageStatusListener: StorageStatusListe
     _rddInfoMap.getOrElseUpdate(rddInfo.id, rddInfo)
   }
 
-  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
+  override def onStageEnded(stageEnded: SparkListenerStageEnded) = synchronized {
     // Remove all partitions that are no longer cached
     _rddInfoMap.retain { case (_, info) => info.numCachedPartitions > 0 }
   }

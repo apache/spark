@@ -78,7 +78,7 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
     logEvent(event)
 
   // Events that trigger a flush
-  override def onStageCompleted(event: SparkListenerStageCompleted) =
+  override def onStageEnded(event: SparkListenerStageEnded) =
     logEvent(event, flushLogger = true)
   override def onJobStart(event: SparkListenerJobStart) =
     logEvent(event, flushLogger = true)

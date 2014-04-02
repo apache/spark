@@ -34,7 +34,7 @@ class JsonProtocolSuite extends FunSuite {
   test("SparkListenerEvent") {
     val stageSubmitted =
       SparkListenerStageSubmitted(makeStageInfo(100, 200, 300, 400L, 500L), properties)
-    val stageCompleted = SparkListenerStageCompleted(makeStageInfo(101, 201, 301, 401L, 501L))
+    val stageEnded = SparkListenerStageEnded(makeStageInfo(101, 201, 301, 401L, 501L))
     val taskStart = SparkListenerTaskStart(111, makeTaskInfo(222L, 333, 444L))
     val taskGettingResult = SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 3000L))
     val taskEnd = SparkListenerTaskEnd(1, "ShuffleMapTask", Success,
@@ -54,7 +54,7 @@ class JsonProtocolSuite extends FunSuite {
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
-    testEvent(stageCompleted, stageCompletedJsonString)
+    testEvent(stageEnded, stageCompletedJsonString)
     testEvent(taskStart, taskStartJsonString)
     testEvent(taskGettingResult, taskGettingResultJsonString)
     testEvent(taskEnd, taskEndJsonString)
@@ -89,7 +89,7 @@ class JsonProtocolSuite extends FunSuite {
     // JobResult
     val exception = new Exception("Out of Memory! Please restock film.")
     exception.setStackTrace(stackTrace)
-    val jobFailed = JobFailed(exception, 2)
+    val jobFailed = JobFailed(exception)
     testJobResult(JobSucceeded)
     testJobResult(jobFailed)
 
@@ -180,7 +180,7 @@ class JsonProtocolSuite extends FunSuite {
       case (e1: SparkListenerStageSubmitted, e2: SparkListenerStageSubmitted) =>
         assert(e1.properties === e2.properties)
         assertEquals(e1.stageInfo, e2.stageInfo)
-      case (e1: SparkListenerStageCompleted, e2: SparkListenerStageCompleted) =>
+      case (e1: SparkListenerStageEnded, e2: SparkListenerStageEnded) =>
         assertEquals(e1.stageInfo, e2.stageInfo)
       case (e1: SparkListenerTaskStart, e2: SparkListenerTaskStart) =>
         assert(e1.stageId === e2.stageId)
@@ -294,7 +294,6 @@ class JsonProtocolSuite extends FunSuite {
     (result1, result2) match {
       case (JobSucceeded, JobSucceeded) =>
       case (r1: JobFailed, r2: JobFailed) =>
-        assert(r1.failedStageId === r2.failedStageId)
         assertEquals(r1.exception, r2.exception)
       case _ => fail("Job results don't match in types!")
     }

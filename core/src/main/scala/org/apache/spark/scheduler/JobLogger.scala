@@ -187,11 +187,15 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
 
   /**
    * When stage is completed, record stage completion status
-   * @param stageCompleted Stage completed event
+   * @param stageEnded Stage ended event
    */
-  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
-    val stageId = stageCompleted.stageInfo.stageId
-    stageLogInfo(stageId, "STAGE_ID=%d STATUS=COMPLETED".format(stageId))
+  override def onStageEnded(stageEnded: SparkListenerStageEnded) {
+    val stageId = stageEnded.stageInfo.stageId
+    if (stageEnded.stageInfo.failureReason.isEmpty) {
+      stageLogInfo(stageId, s"STAGE_ID=$stageId STATUS=COMPLETED")
+    } else {
+      stageLogInfo(stageId, s"STAGE_ID=$stageId STATUS=FAILED")
+    }
   }
 
   /**
@@ -227,7 +231,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
     var info = "JOB_ID=" + jobId
     jobEnd.jobResult match {
       case JobSucceeded => info += " STATUS=SUCCESS"
-      case JobFailed(exception, _) =>
+      case JobFailed(exception) =>
         info += " STATUS=FAILED REASON="
         exception.getMessage.split("\\s+").foreach(info += _ + "_")
       case _ =>

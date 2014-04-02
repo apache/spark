@@ -64,6 +64,21 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     override def defaultParallelism() = 2
   }
 
+  /** Length of time to wait while draining listener events. */
+  val WAIT_TIMEOUT_MILLIS = 10000
+  val sparkListener = new SparkListener() {
+    val successfulStages = new HashSet[Int]()
+    val failedStages = new HashSet[Int]()
+    override def onStageEnded(stageEnded: SparkListenerStageEnded) {
+      val stageInfo = stageEnded.stageInfo
+      if (stageInfo.failureReason.isEmpty) {
+        successfulStages += stageInfo.stageId
+      } else {
+        failedStages += stageInfo.stageId
+      }
+    }
+  }
+
   var mapOutputTracker: MapOutputTrackerMaster = null
   var scheduler: DAGScheduler = null
 
@@ -89,13 +104,16 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
   /** The list of results that DAGScheduler has collected. */
   val results = new HashMap[Int, Any]()
   var failure: Exception = _
-  val listener = new JobListener() {
+  val jobListener = new JobListener() {
     override def taskSucceeded(index: Int, result: Any) = results.put(index, result)
     override def jobFailed(exception: Exception) = { failure = exception }
   }
 
   before {
     sc = new SparkContext("local", "DAGSchedulerSuite")
+    sparkListener.successfulStages.clear()
+    sparkListener.failedStages.clear()
+    sc.addSparkListener(sparkListener)
     taskSets.clear()
     cancelledStages.clear()
     cacheLocations.clear()
@@ -187,7 +205,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
       partitions: Array[Int],
       func: (TaskContext, Iterator[_]) => _ = jobComputeFunc,
       allowLocal: Boolean = false,
-      listener: JobListener = listener): Int = {
+      listener: JobListener = jobListener): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
     runEvent(JobSubmitted(jobId, rdd, func, partitions, allowLocal, null, listener))
     return jobId
@@ -231,7 +249,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
       override def toString = "DAGSchedulerSuite Local RDD"
     }
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(JobSubmitted(jobId, rdd, jobComputeFunc, Array(0), true, null, listener))
+    runEvent(JobSubmitted(jobId, rdd, jobComputeFunc, Array(0), true, null, jobListener))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
   }
@@ -262,6 +280,9 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     submit(makeRdd(1, Nil), Array(0))
     failed(taskSets(0), "some failure")
     assert(failure.getMessage === "Job aborted due to stage failure: some failure")
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sparkListener.failedStages.contains(0))
+    assert(sparkListener.failedStages.size === 1)
     assertDataStructuresEmpty
   }
 
@@ -270,6 +291,9 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     val jobId = submit(rdd, Array(0))
     cancel(jobId)
     assert(failure.getMessage === s"Job $jobId cancelled")
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sparkListener.failedStages.contains(0))
+    assert(sparkListener.failedStages.size === 1)
     assertDataStructuresEmpty
   }
 
@@ -354,6 +378,13 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     val stageFailureMessage = "Exception failure in map stage"
     failed(taskSets(0), stageFailureMessage)
     assert(failure.getMessage === s"Job aborted due to stage failure: $stageFailureMessage")
+
+    // Listener bus should get told about the map stage failing, but not the reduce stage
+    // (since the reduce stage hasn't been started yet).
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sparkListener.failedStages.contains(1))
+    assert(sparkListener.failedStages.size === 1)
+
     assertDataStructuresEmpty
   }
 
@@ -398,8 +429,16 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
 
     val stageFailureMessage = "Exception failure in map stage"
     failed(taskSets(0), stageFailureMessage)
-
+ 
     assert(cancelledStages.contains(1))
+
+    // Make sure the listeners got told about both failed stages.
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sparkListener.successfulStages.isEmpty)
+    assert(sparkListener.failedStages.contains(1))
+    assert(sparkListener.failedStages.contains(3))
+    assert(sparkListener.failedStages.size === 2)
+
     assert(listener1.failureMessage === s"Job aborted due to stage failure: $stageFailureMessage")
     assert(listener2.failureMessage === s"Job aborted due to stage failure: $stageFailureMessage")
     assertDataStructuresEmpty
