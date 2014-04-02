@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.input
+package org.apache.spark.input
 
 import com.google.common.io.{ByteStreams, Closeables}
 
@@ -30,7 +30,7 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext
  * out in a key-value pair, where the key is the file path and the value is the entire content of
  * the file.
  */
-private[mllib] class WholeTextFileRecordReader(
+private[spark] class WholeTextFileRecordReader(
     split: CombineFileSplit,
     context: TaskAttemptContext,
     index: Integer)

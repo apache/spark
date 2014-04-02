@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.input
+package org.apache.spark.input
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.InputSplit
@@ -32,7 +32,7 @@ import org.apache.hadoop.mapreduce.lib.input.CombineFileSplit
  * the value is the entire content of file.
  */
 
-private[mllib] class WholeTextFileInputFormat extends CombineFileInputFormat[String, String] {
+private[spark] class WholeTextFileInputFormat extends CombineFileInputFormat[String, String] {
   override protected def isSplitable(context: JobContext, file: Path): Boolean = false
 
   override def createRecordReader(

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.input
+package org.apache.spark.input
 
 import java.io.DataOutputStream
 import java.io.File
@@ -31,11 +31,10 @@ import org.scalatest.FunSuite
 import org.apache.hadoop.io.Text
 
 import org.apache.spark.SparkContext
-import org.apache.spark.mllib.MLContext._
 
 /**
  * Tests the correctness of
- * [[org.apache.spark.mllib.input.WholeTextFileRecordReader WholeTextFileRecordReader]]. A temporary
+ * [[org.apache.spark.input.WholeTextFileRecordReader WholeTextFileRecordReader]]. A temporary
  * directory is created as fake input. Temporal storage would be deleted in the end.
  */
 class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
@@ -74,7 +73,7 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
       createNativeFile(dir, filename, contents)
     }
 
-    val res = sc.wholeTextFile(dir.toString).collect()
+    val res = sc.wholeTextFiles(dir.toString).collect()
 
     assert(res.size === WholeTextFileRecordReaderSuite.fileNames.size,
       "Number of files read out does not fit with the actual value.")
