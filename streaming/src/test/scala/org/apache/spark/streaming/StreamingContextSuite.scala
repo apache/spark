@@ -160,12 +160,12 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts {
       ssc.start()
     }
 
-    // test whether waitForStop() exits after give amount of time
+    // test whether awaitTermination() exits after give amount of time
     failAfter(1000 millis) {
       ssc.awaitTermination(500)
     }
 
-    // test whether waitForStop() does not exit if not time is given
+    // test whether awaitTermination() does not exit if not time is given
     val exception = intercept[Exception] {
       failAfter(1000 millis) {
         ssc.awaitTermination()

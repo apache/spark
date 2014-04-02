@@ -28,6 +28,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.{ReadableByteChannel, SocketChannel}
 import java.io.EOFException
 import java.util.concurrent.ArrayBlockingQueue
+import org.apache.spark.streaming.receiver.NetworkReceiver
 
 
 /**

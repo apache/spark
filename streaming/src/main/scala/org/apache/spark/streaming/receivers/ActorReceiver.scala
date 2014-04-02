@@ -17,21 +17,17 @@
 
 package org.apache.spark.streaming.receivers
 
-import akka.actor.{ Actor, PoisonPill, Props, SupervisorStrategy }
-import akka.actor.{ actorRef2Scala, ActorRef }
-import akka.actor.{ PossiblyHarmful, OneForOneStrategy }
-import akka.actor.SupervisorStrategy._
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
-import org.apache.spark.storage.{StorageLevel, StreamBlockId}
-import org.apache.spark.streaming.dstream.NetworkReceiver
+import akka.actor.{Actor, OneForOneStrategy, PoisonPill, PossiblyHarmful, Props, SupervisorStrategy, actorRef2Scala}
+import akka.actor.SupervisorStrategy._
 
-import java.util.concurrent.atomic.AtomicInteger
-
-import scala.collection.mutable.ArrayBuffer
-import org.apache.spark.{SparkEnv, Logging}
+import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.receiver.NetworkReceiver
 
 /** A helper with set of defaults for supervisor strategy */
 object ReceiverSupervisorStrategy {
@@ -117,11 +113,11 @@ private[streaming] case class Data[T: ClassTag](data: T)
  * }}}
  */
 private[streaming] class ActorReceiver[T: ClassTag](
-  props: Props,
-  name: String,
-  storageLevel: StorageLevel,
-  receiverSupervisorStrategy: SupervisorStrategy)
-  extends NetworkReceiver[T](storageLevel) with Logging {
+    props: Props,
+    name: String,
+    storageLevel: StorageLevel,
+    receiverSupervisorStrategy: SupervisorStrategy
+  ) extends NetworkReceiver[T](storageLevel) with Logging {
 
   protected lazy val supervisor = SparkEnv.get.actorSystem.actorOf(Props(new Supervisor),
     "Supervisor" + receiverId)

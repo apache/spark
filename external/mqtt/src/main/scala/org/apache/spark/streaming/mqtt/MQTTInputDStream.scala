@@ -39,6 +39,7 @@ import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.receiver.NetworkReceiver
 
 /**
  * Input stream that subscribe messages from a Mqtt Broker.
@@ -96,8 +97,8 @@ class MQTTReceiver(
       }
 
       override def connectionLost(arg0: Throwable) {
-        store("Connection lost " + arg0)
-        stopOnError(new Exception(arg0))
+        reportError("Connection lost ", arg0)
+        stop()
       }
     }
 

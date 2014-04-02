@@ -26,6 +26,7 @@ import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.Logging
+import org.apache.spark.streaming.receiver.NetworkReceiver
 
 /* A stream of Twitter statuses, potentially filtered by one or more keywords.
 *
@@ -75,7 +76,10 @@ class TwitterReceiver(
       def onTrackLimitationNotice(i: Int) {}
       def onScrubGeo(l: Long, l1: Long) {}
       def onStallWarning(stallWarning: StallWarning) {}
-      def onException(e: Exception) { stopOnError(e) }
+      def onException(e: Exception) {
+        reportError("Error receiving tweets", e)
+        stop()
+      }
     })
 
     val query: FilterQuery = new FilterQuery

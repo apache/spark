@@ -26,6 +26,7 @@ import scala.reflect.ClassTag
 import java.io._
 import java.net.Socket
 import org.apache.spark.Logging
+import org.apache.spark.streaming.receiver.NetworkReceiver
 
 private[streaming]
 class SocketInputDStream[T: ClassTag](

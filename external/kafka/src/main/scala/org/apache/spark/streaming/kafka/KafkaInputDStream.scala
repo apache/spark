@@ -33,6 +33,7 @@ import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.receiver.NetworkReceiver
 
 /**
  * Input stream that pulls messages from a Kafka Broker.

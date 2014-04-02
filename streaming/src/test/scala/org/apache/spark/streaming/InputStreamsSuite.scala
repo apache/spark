@@ -36,10 +36,10 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.dstream.NetworkReceiver
 import org.apache.spark.streaming.receivers.Receiver
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.util.Utils
+import org.apache.spark.streaming.receiver.NetworkReceiver
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 

@@ -40,6 +40,7 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receivers._
 import org.apache.spark.streaming.scheduler._
 import org.apache.hadoop.conf.Configuration
+import org.apache.spark.streaming.receiver.NetworkReceiver
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create

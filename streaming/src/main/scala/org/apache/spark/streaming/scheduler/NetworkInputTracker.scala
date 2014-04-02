@@ -17,20 +17,15 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.apache.spark.streaming.dstream.{NetworkInputDStream, NetworkReceiver}
-import org.apache.spark.streaming.dstream.{StopReceiver, ReportBlock, ReportError}
-import org.apache.spark.{SparkException, Logging, SparkEnv}
-import org.apache.spark.SparkContext._
-
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.Queue
-import scala.concurrent.duration._
+import scala.collection.mutable.{HashMap, Queue}
 
 import akka.actor._
-import akka.pattern.ask
-import akka.dispatch._
+
+import org.apache.spark.{Logging, SparkEnv, SparkException}
+import org.apache.spark.SparkContext._
 import org.apache.spark.storage.BlockId
-import org.apache.spark.streaming.{Time, StreamingContext}
+import org.apache.spark.streaming.{StreamingContext, Time}
+import org.apache.spark.streaming.receiver.{NetworkReceiver, NetworkReceiverExecutorImpl, StopReceiver}
 import org.apache.spark.util.AkkaUtils
 
 private[streaming] sealed trait NetworkInputTrackerMessage
@@ -173,9 +168,12 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
       // Function to start the receiver on the worker node
       val startReceiver = (iterator: Iterator[NetworkReceiver[_]]) => {
         if (!iterator.hasNext) {
-          throw new Exception("Could not start receiver as details not found.")
+          throw new SparkException(
+            "Could not start receiver as NetworkReceiver object not found.")
         }
-        iterator.next().handler.run()
+        val receiver = iterator.next()
+        val executor = new NetworkReceiverExecutorImpl(receiver, SparkEnv.get)
+        executor.run()
       }
       // Run the dummy Spark job to ensure that all slaves have registered.
       // This avoids all the receivers to be scheduled on the same node.
