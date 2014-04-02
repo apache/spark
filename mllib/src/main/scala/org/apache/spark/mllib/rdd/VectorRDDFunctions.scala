@@ -59,16 +59,16 @@ private class Aggregator(
 
   override def max(): Vector = {
     nnz.activeIterator.foreach {
-      case (id, 0.0) => currMax(id) = 0.0
-      case _ =>
+      case (id, count) =>
+        if ((count == 0.0) || ((count < totalCnt) && (currMax(id) < 0.0)))  currMax(id) = 0.0
     }
     Vectors.fromBreeze(currMax)
   }
 
   override def min(): Vector = {
     nnz.activeIterator.foreach {
-      case (id, 0.0) => currMin(id) = 0.0
-      case _ =>
+      case (id, count) =>
+        if ((count == 0.0) || ((count < totalCnt) && (currMin(id) > 0.0))) currMin(id) = 0.0
     }
     Vectors.fromBreeze(currMin)
   }
