@@ -21,7 +21,7 @@ import java.util.Set
 import java.util.Map.Entry
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.{immutable, JavaConversions, mutable}
+import scala.collection.{JavaConversions, mutable}
 
 import org.apache.spark.Logging
 
@@ -50,11 +50,11 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
   }
 
   def iterator: Iterator[(A, B)] = {
-    val jIterator = getEntrySet.iterator()
+    val jIterator = getEntrySet.iterator
     JavaConversions.asScalaIterator(jIterator).map(kv => (kv.getKey, kv.getValue.value))
   }
 
-  def getEntrySet: Set[Entry[A, TimeStampedValue[B]]] = internalMap.entrySet()
+  def getEntrySet: Set[Entry[A, TimeStampedValue[B]]] = internalMap.entrySet
 
   override def + [B1 >: B](kv: (A, B1)): mutable.Map[A, B1] = {
     val newMap = new TimeStampedHashMap[A, B1]
@@ -86,8 +86,7 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
   }
 
   override def apply(key: A): B = {
-    val value = internalMap.get(key)
-    Option(value).map(_.value).getOrElse { throw new NoSuchElementException() }
+    get(key).getOrElse { throw new NoSuchElementException() }
   }
 
   override def filter(p: ((A, B)) => Boolean): mutable.Map[A, B] = {
@@ -101,9 +100,9 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
   override def size: Int = internalMap.size
 
   override def foreach[U](f: ((A, B)) => U) {
-    val iterator = getEntrySet.iterator()
-    while(iterator.hasNext) {
-      val entry = iterator.next()
+    val it = getEntrySet.iterator
+    while(it.hasNext) {
+      val entry = it.next()
       val kv = (entry.getKey, entry.getValue.value)
       f(kv)
     }
@@ -115,27 +114,39 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
     Option(prev).map(_.value)
   }
 
-  def toMap: immutable.Map[A, B] = iterator.toMap
+  def putAll(map: Map[A, B]) {
+    map.foreach { case (k, v) => update(k, v) }
+  }
+
+  def toMap: Map[A, B] = iterator.toMap
 
   def clearOldValues(threshTime: Long, f: (A, B) => Unit) {
-    val iterator = getEntrySet.iterator()
-    while (iterator.hasNext) {
-      val entry = iterator.next()
+    val it = getEntrySet.iterator
+    while (it.hasNext) {
+      val entry = it.next()
       if (entry.getValue.timestamp < threshTime) {
         f(entry.getKey, entry.getValue.value)
         logDebug("Removing key " + entry.getKey)
-        iterator.remove()
+        it.remove()
       }
     }
   }
 
-  /**
-   * Removes old key-value pairs that have timestamp earlier than `threshTime`.
-   */
+  /** Removes old key-value pairs that have timestamp earlier than `threshTime`. */
   def clearOldValues(threshTime: Long) {
     clearOldValues(threshTime, (_, _) => ())
   }
 
   private def currentTime: Long = System.currentTimeMillis
+
+  // For testing
+
+  def getTimeStampedValue(key: A): Option[TimeStampedValue[B]] = {
+    Option(internalMap.get(key))
+  }
+
+  def getTimestamp(key: A): Option[Long] = {
+    getTimeStampedValue(key).map(_.timestamp)
+  }
 
 }

@@ -78,7 +78,7 @@ abstract class Broadcast[T](val id: Long) extends Serializable {
    */
   protected def assertValid() {
     if (!_isValid) {
-      throw new SparkException("Attempted to use %s when is no longer valid!".format(toString))
+      throw new SparkException("Attempted to use %s after it has been destroyed!".format(toString))
     }
   }
 
