@@ -20,4 +20,4 @@ package org.apache.spark.mllib.linalg.rdd
 import org.apache.spark.mllib.linalg.Vector
 
 /** Represents a row of RowRDDMatrix. */
-case class RDDMatrixRow(index: Long, vector: Vector)
+case class IndexedRDDMatrixRow(index: Long, vector: Vector)

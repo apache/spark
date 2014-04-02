@@ -66,7 +66,7 @@ class CoordinateRDDMatrix(
     val indexedRows = entries.map(entry => (entry.i, (entry.j.toInt, entry.value)))
       .groupByKey()
       .map { case (i, vectorEntries) =>
-      RDDMatrixRow(i, Vectors.sparse(n, vectorEntries))
+      IndexedRDDMatrixRow(i, Vectors.sparse(n, vectorEntries))
     }
     new IndexedRowRDDMatrix(indexedRows, numRows(), numCols())
   }

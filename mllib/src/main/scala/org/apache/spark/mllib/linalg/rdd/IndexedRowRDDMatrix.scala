@@ -27,7 +27,7 @@ import org.apache.spark.rdd.RDD
  * @param n number of cols, where a negative number means unknown
  */
 class IndexedRowRDDMatrix(
-    val rows: RDD[RDDMatrixRow],
+    val rows: RDD[IndexedRDDMatrixRow],
     m: Long = -1L,
     n: Long = -1L) extends RDDMatrix {
 
@@ -49,8 +49,8 @@ class IndexedRowRDDMatrix(
     _m
   }
 
-  /** Drops row indices and converts this to a RowRDDMatrix. */
-  def compressRows(): RowRDDMatrix = {
+  /** Drops row indices and converts this matrix to a RowRDDMatrix. */
+  def toRowRDDMatrix(): RowRDDMatrix = {
     new RowRDDMatrix(rows.map(_.vector), -1, _n)
   }
 }
