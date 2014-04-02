@@ -54,6 +54,10 @@ case class Aggregate(
 
   override def otherCopyArgs = sc :: Nil
 
+  // HACK: Generators don't correctly preserve their output through serializations so we grab
+  // out child's output attributes statically here.
+  val childOutput = child.output
+
   def output = aggregateExpressions.map(_.toAttribute)
 
   case class ComputedAggregate(
@@ -68,7 +72,7 @@ case class Aggregate(
       case a: AggregateExpression =>
         ComputedAggregate(
           a,
-          BindReferences.bindReference(a, child.output).asInstanceOf[AggregateExpression],
+          BindReferences.bindReference(a, childOutput).asInstanceOf[AggregateExpression],
           AttributeReference(s"aggResult:$a", a.dataType, nullable = true)())
     }
   }.toArray
@@ -137,7 +141,7 @@ case class Aggregate(
     } else {
       child.execute().mapPartitions { iter =>
         val hashTable = new HashMap[Row, Array[AggregateFunction]]
-        val groupingProjection = new MutableProjection(groupingExpressions, child.output)
+        val groupingProjection = new MutableProjection(groupingExpressions, childOutput)
 
         var currentRow: Row = null
         while (iter.hasNext) {
@@ -163,9 +167,9 @@ case class Aggregate(
             new MutableProjection(resultExpressions, computedSchema ++ namedGroups.map(_._2))
           private[this] val joinedRow = new JoinedRow
 
-          final def hasNext: Boolean = hashTableIter.hasNext
+          override final def hasNext: Boolean = hashTableIter.hasNext
 
-          final def next(): Row = {
+          override final def next(): Row = {
             val currentEntry = hashTableIter.next()
             val currentGroup = currentEntry.getKey
             val currentBuffer = currentEntry.getValue
