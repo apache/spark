@@ -15,7 +15,7 @@ title: Spark SQL Programming Guide
 Spark SQL allows relational queries expressed in SQL, HiveQL, or Scala to be executed using
 Spark.  At the core of this component is a new type of RDD,
 [SchemaRDD](api/sql/core/index.html#org.apache.spark.sql.SchemaRDD).  SchemaRDDs are composed
-[Row](api/sql/core/index.html#org.apache.spark.sql.api.java.Row) objects along with
+[Row](api/sql/catalyst/index.html#org.apache.spark.sql.catalyst.expressions.Row) objects along with
 a schema that describes the data types of each column in the row.  A SchemaRDD is similar to a table
 in a traditional relational database.  A SchemaRDD can be created from an existing RDD, parquet
 file, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
@@ -63,8 +63,8 @@ The entry point into all relational functionality in Spark is the
 of its decendents.  To create a basic JavaSQLContext, all you need is a JavaSparkContext.
 
 {% highlight java %}
-JavaSparkContext ctx // An existing JavaSparkContext.
-JavaSQLContext sqlCtx = new org.apache.spark.sql.api.java.JavaSQLContext(ctx)
+JavaSparkContext ctx = ...; // An existing JavaSparkContext.
+JavaSQLContext sqlCtx = new org.apache.spark.sql.api.java.JavaSQLContext(ctx);
 {% endhighlight %}
 
 </div>
@@ -302,14 +302,14 @@ the `sql` method a `JavaHiveContext` also provides an `hql` methods, which allow
 expressed in HiveQL.
 
 {% highlight java %}
-JavaSparkContext ctx // An existing JavaSparkContext.
-JavaHiveContext hiveCtx = new org.apache.spark.sql.hive.api.java.HiveContext(ctx)
+JavaSparkContext ctx = ...; // An existing JavaSparkContext.
+JavaHiveContext hiveCtx = new org.apache.spark.sql.hive.api.java.HiveContext(ctx);
 
-hiveCtx.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-hiveCtx.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+hiveCtx.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)");
+hiveCtx.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src");
 
-// Queries are expressed in HiveQL
-hiveCtx.hql("FROM src SELECT key, value").collect().foreach(println)
+// Queries are expressed in HiveQL.
+Row[] results = hiveCtx.hql("FROM src SELECT key, value").collect();
 
 {% endhighlight %}
 
