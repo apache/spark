@@ -39,6 +39,107 @@ object MLUtils {
   }
 
   /**
+   * Multiclass label parser, which parses a string into double.
+   */
+  val multiclassLabelParser: String => Double = _.toDouble
+
+  /**
+   * Binary label parser, which outputs 1.0 (positive) if the value is greater than 0.5,
+   * or 0.0 (negative) otherwise.
+   */
+  val binaryLabelParser: String => Double = label => if (label.toDouble > 0.5) 1.0 else 0.0
+
+  /**
+   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint].
+   * The LIBSVM format is a text-based format used by LIBSVM and LIBLINEAR.
+   * Each line represents a labeled sparse feature vector using the following format:
+   * {{{label index1:value1 index2:value2 ...}}}
+   * where the indices are one-based and in ascending order.
+   * This method parses each line into a [[org.apache.spark.mllib.regression.LabeledPoint]],
+   * where the feature indices are converted to zero-based.
+   *
+   * @param sc Spark context
+   * @param path file or directory path in any Hadoop-supported file system URI
+   * @param labelParser parser for labels, default: 1.0 if label > 0.5 or 0.0 otherwise
+   * @param numFeatures number of features, which will be determined from the input data if a
+   *                    negative value is given. The default value is -1.
+   * @param minSplits min number of partitions, default: sc.defaultMinSplits
+   * @return labeled data stored as an RDD[LabeledPoint]
+   */
+  def loadLibSVMData(
+      sc: SparkContext,
+      path: String,
+      labelParser: String => Double,
+      numFeatures: Int,
+      minSplits: Int): RDD[LabeledPoint] = {
+    val parsed = sc.textFile(path, minSplits)
+      .map(_.trim)
+      .filter(!_.isEmpty)
+      .map(_.split(' '))
+    // Determine number of features.
+    val d = if (numFeatures >= 0) {
+      numFeatures
+    } else {
+      parsed.map { items =>
+        if (items.length > 1) {
+          items.last.split(':')(0).toInt
+        } else {
+          0
+        }
+      }.reduce(math.max)
+    }
+    parsed.map { items =>
+      val label = labelParser(items.head)
+      val (indices, values) = items.tail.map { item =>
+        val indexAndValue = item.split(':')
+        val index = indexAndValue(0).toInt - 1
+        val value = indexAndValue(1).toDouble
+        (index, value)
+      }.unzip
+      LabeledPoint(label, Vectors.sparse(d, indices.toArray, values.toArray))
+    }
+  }
+
+  // Convenient methods for calling from Java.
+
+  /**
+   * Loads binary labeled data in the LIBSVM format into an RDD[LabeledPoint],
+   * with number of features determined automatically and the default number of partitions.
+   */
+  def loadLibSVMData(sc: SparkContext, path: String): RDD[LabeledPoint] =
+    loadLibSVMData(sc, path, binaryLabelParser, -1, sc.defaultMinSplits)
+
+  /**
+   * Loads binary labeled data in the LIBSVM format into an RDD[LabeledPoint],
+   * with number of features specified explicitly and the default number of partitions.
+   */
+  def loadLibSVMData(sc: SparkContext, path: String, numFeatures: Int): RDD[LabeledPoint] =
+    loadLibSVMData(sc, path, binaryLabelParser, numFeatures, sc.defaultMinSplits)
+
+  /**
+   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint],
+   * with the given label parser, number of features determined automatically,
+   * and the default number of partitions.
+   */
+  def loadLibSVMData(
+      sc: SparkContext,
+      path: String,
+      labelParser: String => Double): RDD[LabeledPoint] =
+    loadLibSVMData(sc, path, labelParser, -1, sc.defaultMinSplits)
+
+  /**
+   * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint],
+   * with the given label parser, number of features specified explicitly,
+   * and the default number of partitions.
+   */
+  def loadLibSVMData(
+      sc: SparkContext,
+      path: String,
+      labelParser: String => Double,
+      numFeatures: Int): RDD[LabeledPoint] =
+    loadLibSVMData(sc, path, labelParser, numFeatures, sc.defaultMinSplits)
+
+  /**
    * Load labeled data from a file. The data format used here is
    * <L>, <f1> <f2> ...
    * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
