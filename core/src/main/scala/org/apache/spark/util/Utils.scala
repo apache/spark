@@ -542,7 +542,7 @@ private[spark] object Utils extends Logging {
    * @param cutoff measured in seconds. Files older than this are returned.
    */
   def findOldFiles(dir: File, cutoff: Long): Seq[File] = {
-    val currentTimeSecs = System.currentTimeMillis / 1000
+    val currentTimeSecs = System.currentTimeMillis
     if (dir.isDirectory) {
       val files = listFilesSafely(dir)
       files.filter { file => file.lastModified < (currentTimeSecs - cutoff * 1000) }
