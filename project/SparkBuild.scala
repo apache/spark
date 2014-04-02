@@ -152,7 +152,7 @@ object SparkBuild extends Build {
   def sharedSettings = Defaults.defaultSettings ++ MimaBuild.mimaSettings(file(sparkHome)) ++ Seq(
     organization       := "org.apache.spark",
     version            := SPARK_VERSION,
-    scalaVersion       := "2.10.3",
+    scalaVersion       := "2.10.4",
     scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation",
       "-target:" + SCALAC_JVM_VERSION),
     javacOptions := Seq("-target", JAVAC_JVM_VERSION, "-source", JAVAC_JVM_VERSION),
@@ -248,13 +248,13 @@ object SparkBuild extends Build {
     */
 
     libraryDependencies ++= Seq(
-        "io.netty"          % "netty-all"       % "4.0.17.Final",
-        "org.eclipse.jetty" % "jetty-server"    % "7.6.8.v20121106",
-        "org.eclipse.jetty" % "jetty-util" % "7.6.8.v20121106",
-        "org.eclipse.jetty" % "jetty-plus" % "7.6.8.v20121106",
-        "org.eclipse.jetty" % "jetty-security" % "7.6.8.v20121106",
+        "io.netty"          % "netty-all"      % "4.0.17.Final",
+        "org.eclipse.jetty" % "jetty-server"   % "8.1.14.v20131031",
+        "org.eclipse.jetty" % "jetty-util"     % "8.1.14.v20131031",
+        "org.eclipse.jetty" % "jetty-plus"     % "8.1.14.v20131031",
+        "org.eclipse.jetty" % "jetty-security" % "8.1.14.v20131031",
         /** Workaround for SPARK-959. Dependency used by org.eclipse.jetty. Fixed in ivy 2.3.0. */
-        "org.eclipse.jetty.orbit" % "javax.servlet" % "2.5.0.v201103041518" artifacts Artifact("javax.servlet", "jar", "jar"),
+        "org.eclipse.jetty.orbit" % "javax.servlet" % "3.0.0.v201112011016" artifacts Artifact("javax.servlet", "jar", "jar"),
         "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
         "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
         "com.novocode"      % "junit-interface" % "0.10"   % "test",
