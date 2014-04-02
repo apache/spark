@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.mllib.rdd
 
 import scala.collection.mutable.ArrayBuffer
@@ -21,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.rdd.VectorRDDFunctionsSuite._
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.util.MLUtils._
 
@@ -29,7 +31,6 @@ import org.apache.spark.mllib.util.MLUtils._
  * between dense and sparse vector are tested.
  */
 class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
-  import VectorRDDFunctionsSuite._
 
   val localData = Array(
     Vectors.dense(1.0, 2.0, 3.0),
@@ -47,16 +48,21 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
     val (summary, denseTime) =
       time(data.summarizeStatistics())
 
-    assert(equivVector(summary.mean(), Vectors.dense(4.0, 5.0, 6.0)),
+    assert(equivVector(summary.mean, Vectors.dense(4.0, 5.0, 6.0)),
       "Column mean do not match.")
-    assert(equivVector(summary.variance(), Vectors.dense(6.0, 6.0, 6.0)),
+
+    assert(equivVector(summary.variance, Vectors.dense(6.0, 6.0, 6.0)),
       "Column variance do not match.")
-    assert(summary.totalCount() === 3, "Column cnt do not match.")
-    assert(equivVector(summary.numNonZeros(), Vectors.dense(3.0, 3.0, 3.0)),
+
+    assert(summary.totalCount === 3, "Column cnt do not match.")
+
+    assert(equivVector(summary.numNonZeros, Vectors.dense(3.0, 3.0, 3.0)),
       "Column nnz do not match.")
-    assert(equivVector(summary.max(), Vectors.dense(7.0, 8.0, 9.0)),
+
+    assert(equivVector(summary.max, Vectors.dense(7.0, 8.0, 9.0)),
       "Column max do not match.")
-    assert(equivVector(summary.min(), Vectors.dense(1.0, 2.0, 3.0)),
+
+    assert(equivVector(summary.min, Vectors.dense(1.0, 2.0, 3.0)),
       "Column min do not match.")
 
     val dataForSparse = sc.parallelize(sparseData.toSeq, 2)

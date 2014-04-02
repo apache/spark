@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.mllib.rdd
 
 import breeze.linalg.{axpy, Vector => BV}
@@ -26,12 +27,12 @@ import org.apache.spark.rdd.RDD
  * elements count.
  */
 trait VectorRDDStatisticalSummary {
-  def mean(): Vector
-  def variance(): Vector
-  def totalCount(): Long
-  def numNonZeros(): Vector
-  def max(): Vector
-  def min(): Vector
+  def mean: Vector
+  def variance: Vector
+  def totalCount: Long
+  def numNonZeros: Vector
+  def max: Vector
+  def min: Vector
 }
 
 private class Aggregator(
@@ -42,22 +43,24 @@ private class Aggregator(
     val currMax: BV[Double],
     val currMin: BV[Double]) extends VectorRDDStatisticalSummary with Serializable {
 
-  override def mean(): Vector = {
-    Vectors.fromBreeze(currMean :* nnz :/ totalCnt)
-  }
+  override lazy val mean = Vectors.fromBreeze(currMean :* nnz :/ totalCnt)
 
-  override def variance(): Vector = {
+  override lazy val variance = {
     val deltaMean = currMean
-    val realM2n = currM2n - ((deltaMean :* deltaMean) :* (nnz :* (nnz :- totalCnt)) :/ totalCnt)
-    realM2n :/= totalCnt
-    Vectors.fromBreeze(realM2n)
+    var i = 0
+    while(i < currM2n.size) {
+      currM2n(i) -= deltaMean(i) * deltaMean(i) * nnz(i) * (nnz(i)-totalCnt) / totalCnt
+      currM2n(i) /= totalCnt
+      i += 1
+    }
+    Vectors.fromBreeze(currM2n)
   }
 
-  override def totalCount(): Long = totalCnt.toLong
+  override lazy val totalCount: Long = totalCnt.toLong
 
-  override def numNonZeros(): Vector = Vectors.fromBreeze(nnz)
+  override lazy val numNonZeros: Vector = Vectors.fromBreeze(nnz)
 
-  override def max(): Vector = {
+  override lazy val max: Vector = {
     nnz.activeIterator.foreach {
       case (id, count) =>
         if ((count == 0.0) || ((count < totalCnt) && (currMax(id) < 0.0)))  currMax(id) = 0.0
@@ -65,7 +68,7 @@ private class Aggregator(
     Vectors.fromBreeze(currMax)
   }
 
-  override def min(): Vector = {
+  override lazy val min: Vector = {
     nnz.activeIterator.foreach {
       case (id, count) =>
         if ((count == 0.0) || ((count < totalCnt) && (currMin(id) > 0.0))) currMin(id) = 0.0
@@ -78,6 +81,7 @@ private class Aggregator(
    */
   def add(currData: BV[Double]): this.type = {
     currData.activeIterator.foreach {
+      // this case is used for filtering the zero elements if the vector is a dense one.
       case (id, 0.0) =>
       case (id, value) =>
         if (currMax(id) < value) currMax(id) = value
@@ -106,7 +110,8 @@ private class Aggregator(
     other.currMean.activeIterator.foreach {
       case (id, 0.0) =>
       case (id, value) =>
-        currMean(id) = (currMean(id) * nnz(id) + other.currMean(id) * other.nnz(id)) / (nnz(id) + other.nnz(id))
+        currMean(id) =
+          (currMean(id) * nnz(id) + other.currMean(id) * other.nnz(id)) / (nnz(id) + other.nnz(id))
     }
 
     other.currM2n.activeIterator.foreach {
