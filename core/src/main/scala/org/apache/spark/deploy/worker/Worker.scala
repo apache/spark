@@ -65,9 +65,9 @@ private[spark] class Worker(
   val REGISTRATION_RETRIES = 3
 
   // How often worker will clean up old app folders
-  val CLEANUP_INTERVAL_MILLIS = conf.getLong("spark.worker.cleanup_interval", 60 * 30) * 1000
+  val CLEANUP_INTERVAL_MILLIS = conf.getLong("spark.worker.cleanupInterval", 60 * 30) * 1000
   // TTL for app folders/data;  after TTL expires it will be cleaned up
-  val APP_DATA_RETENTION_SECS = conf.getLong("spark.worker.app_data_ttl", 7 * 24 * 3600)
+  val APP_DATA_RETENTION_SECS = conf.getLong("spark.worker.appDataTTL", 7 * 24 * 3600)
 
   // Index into masterUrls that we're currently trying to register with.
   var masterIndex = 0
@@ -185,19 +185,19 @@ private[spark] class Worker(
       changeMaster(masterUrl, masterWebUiUrl)
       context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis, self, SendHeartbeat)
       context.system.scheduler.schedule(CLEANUP_INTERVAL_MILLIS millis,
-                                        CLEANUP_INTERVAL_MILLIS millis, self, Worker.AppDirCleanup)
+                                        CLEANUP_INTERVAL_MILLIS millis, self, WorkDirCleanup)
 
     case SendHeartbeat =>
       masterLock.synchronized {
         if (connected) { master ! Heartbeat(workerId) }
       }
 
-    case Worker.AppDirCleanup =>
+    case WorkDirCleanup =>
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker actor
       val cleanupFuture = concurrent.future {
         logInfo("Cleaning up oldest application directories in " + workDir + " ...")
         Utils.findOldFiles(workDir, APP_DATA_RETENTION_SECS)
-             .foreach(Utils.deleteRecursively(_))
+             .foreach(Utils.deleteRecursively)
       }
       cleanupFuture onFailure {
         case e: Throwable =>
@@ -350,8 +350,6 @@ private[spark] class Worker(
 }
 
 private[spark] object Worker {
-  case object AppDirCleanup      // Sent to Worker actor periodically for cleaning up app folders
-
   def main(argStrings: Array[String]) {
     val args = new WorkerArguments(argStrings)
     val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,
