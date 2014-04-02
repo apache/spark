@@ -64,10 +64,11 @@ private[spark] class Worker(
   val REGISTRATION_TIMEOUT = 20.seconds
   val REGISTRATION_RETRIES = 3
 
+  val CLEANUP_ENABLED = conf.getBoolean("spark.worker.cleanup.enabled", true)
   // How often worker will clean up old app folders
-  val CLEANUP_INTERVAL_MILLIS = conf.getLong("spark.worker.cleanupInterval", 60 * 30) * 1000
+  val CLEANUP_INTERVAL_MILLIS = conf.getLong("spark.worker.cleanup.interval", 60 * 30) * 1000
   // TTL for app folders/data;  after TTL expires it will be cleaned up
-  val APP_DATA_RETENTION_SECS = conf.getLong("spark.worker.appDataTTL", 7 * 24 * 3600)
+  val APP_DATA_RETENTION_SECS = conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
 
   // Index into masterUrls that we're currently trying to register with.
   var masterIndex = 0
@@ -184,8 +185,10 @@ private[spark] class Worker(
       registered = true
       changeMaster(masterUrl, masterWebUiUrl)
       context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis, self, SendHeartbeat)
-      context.system.scheduler.schedule(CLEANUP_INTERVAL_MILLIS millis,
-                                        CLEANUP_INTERVAL_MILLIS millis, self, WorkDirCleanup)
+      if (CLEANUP_ENABLED) {
+        context.system.scheduler.schedule(CLEANUP_INTERVAL_MILLIS millis,
+                                          CLEANUP_INTERVAL_MILLIS millis, self, WorkDirCleanup)
+      }
 
     case SendHeartbeat =>
       masterLock.synchronized {
