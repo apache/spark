@@ -146,107 +146,66 @@ class EntropyMinimizationDiscretizer private (
       lastSelected : Option[Double],
       nLabels: Int) = {
 
-    var result = candidates.map({
-      case (cand, freqs) =>
-        (cand, freqs, Array.empty[Long], Array.empty[Long])
-    }).cache
-
     val numPartitions = candidates.partitions.size
-    val bcNumPartitions = candidates.context.broadcast(numPartitions)
 
-    // stores accumulated freqs from left to right
-    val bcLeftTotal = candidates.context.accumulator(Array.fill(nLabels)(0L))(ArrayAccumulator)
-    // stores accumulated freqs from right to left
-    val bcRightTotal = candidates.context.accumulator(Array.fill(nLabels)(0L))(ArrayAccumulator)
+    val sc = candidates.sparkContext
 
-    // calculates accumulated frequencies for each candidate
-    (0 until numPartitions) foreach { l2rIndex =>
+    // store total frequencies for each partition
+    val totals = sc.runJob(candidates, { case it =>
+      val accum = Array.fill(nLabels)(0L)
+      for ((_, freqs) <- it) {
+        for (i <- 0 until nLabels) accum(i) += freqs(i)
+      }
+      accum
+    }: (Iterator[(Double, Array[Long])]) => Array[Long])
 
-      val leftTotal = bcLeftTotal.value
-      val rightTotal = bcRightTotal.value
+    val bcTotals = sc.broadcast(totals)
 
-      result =
-        result.mapPartitionsWithIndex({ (slice, it) =>
+    val result =
+      candidates.mapPartitionsWithIndex({ (slice, it) =>
 
-          val l2r = slice == l2rIndex
-          val r2l = slice == bcNumPartitions.value - 1 - l2rIndex
+        // accumulate freqs from left to right
+        val leftTotal = Array.fill(nLabels)(0L)
+        for (i <- 0 until slice) {
+          for (j <- 0 until nLabels) leftTotal(j) += bcTotals.value(i)(j)
+        }
 
-          if (l2r && r2l) {
+        var leftAccum = Seq.empty[(Double, Array[Long], Array[Long])]
 
-            // accumulate both from left to right and right to left
-            var partialResult = Seq.empty[(Double, Array[Long], Array[Long], Array[Long])]
-            var accum = leftTotal
+        for ((cand, freqs) <- it) {
+          for (i <- 0 until nLabels) leftTotal(i) += freqs(i)
+          leftAccum = (cand, freqs, leftTotal.clone) +: leftAccum
+        }
 
-            for ((cand, freqs, _, rightFreqs) <- it) {
-              for (i <- 0 until nLabels) accum(i) += freqs(i)
-              partialResult = (cand, freqs, accum.clone, rightFreqs) +: partialResult
-            }
+        // accumulate freqs from right to left
+        val rightTotal = Array.fill(nLabels)(0L)
+        for (i <- slice + 1 until numPartitions) {
+          for (j <- 0 until nLabels) leftTotal(j) += bcTotals.value(i)(j)
+        }
 
-            bcLeftTotal += accum
+        var leftAndRightAccum = Seq.empty[(Double, Array[Long], Array[Long], Array[Long])]
 
-            val r2lIt = partialResult.iterator
-            partialResult = Seq.empty[(Double, Array[Long], Array[Long], Array[Long])]
-            accum = Array.fill[Long](nLabels)(0L)
+        for ((cand, freqs, leftFreqs) <- leftAccum) {
+          leftAndRightAccum = (cand, freqs, leftFreqs, rightTotal.clone) +: leftAndRightAccum
+          for (i <- 0 until nLabels) rightTotal(i) += freqs(i)
+        }
 
-            for ((cand, freqs, leftFreqs, _) <- r2lIt) {
-              partialResult = (cand, freqs, leftFreqs, accum.clone) +: partialResult
-              for (i <- 0 until nLabels) accum(i) += freqs(i)
-            }
-
-            bcRightTotal += accum
-
-            partialResult.iterator
-
-          } else if (l2r) {
-
-            // accumulate freqs from left to right
-            var partialResult = Seq.empty[(Double, Array[Long], Array[Long], Array[Long])]
-            val accum = leftTotal
-
-            for ((cand, freqs, _, rightFreqs) <- it) {
-              for (i <- 0 until nLabels) accum(i) += freqs(i)
-              partialResult = (cand, freqs, accum.clone, rightFreqs) +: partialResult
-            }
-
-            bcLeftTotal += accum
-            partialResult.reverseIterator
-
-          } else if (r2l) {
-
-            // accumulate freqs from right to left
-            val r2lIt = it.toSeq.reverseIterator
-
-            var partialResult = Seq.empty[(Double, Array[Long], Array[Long], Array[Long])]
-            val accum = rightTotal
-
-            for ((cand, freqs, leftFreqs, _) <- r2lIt) {
-              partialResult = (cand, freqs, leftFreqs, accum.clone) +: partialResult
-              for (i <- 0 until nLabels) accum(i) += freqs(i)
-            }
-
-            bcRightTotal += accum
-
-            partialResult.iterator
-
-          } else {
-            // do nothing in this iteration
-            it
-          }
-        }, true) // important to maintain partitions within the loop
-        .persist(StorageLevel.MEMORY_AND_DISK) // needed, otherwise spark repeats calculations
-
-      result.foreachPartition({ _ => }) // Forces the iteration to be calculated
-
-    }
+        leftAndRightAccum.iterator
+      })
 
     // calculate h(S)
     // s: number of elements
     // k: number of distinct classes
     // hs: entropy
 
-    val s  = bcLeftTotal.value.reduce(_ + _)
-    val hs = InfoTheory.entropy(bcLeftTotal.value.toSeq, s)
-    val k  = bcLeftTotal.value.filter(_ != 0).size
+    val total = Array.fill(nLabels)(0L)
+    for (partition_total <- totals) {
+      for (i <- 0 until nLabels) total(i) += partition_total(i)
+    }
+
+    val s  = total.reduce(_ + _)
+    val hs = InfoTheory.entropy(total.toSeq, s)
+    val k  = total.filter(_ != 0).size
 
     // select best threshold according to the criteria
     val finalCandidates =
@@ -262,9 +221,9 @@ class EntropyMinimizationDiscretizer private (
           val hs2 = InfoTheory.entropy(rightFreqs, s2)
 
           val weightedHs = (s1 * hs1 + s2 * hs2) / s
-          val gain        = hs - weightedHs
-          val delta       = log2(3 ^ k - 2) - (k * hs - k1 * hs1 - k2 * hs2)
-          var criterion   = (gain - (log2(s - 1) + delta) / s) > -1e-5
+          val gain       = hs - weightedHs
+          val delta      = log2(math.pow(3, k) - 2) - (k * hs - k1 * hs1 - k2 * hs2)
+          var criterion  = (gain - (log2(s - 1) + delta) / s) > -1e-5
 
           lastSelected match {
               case None =>

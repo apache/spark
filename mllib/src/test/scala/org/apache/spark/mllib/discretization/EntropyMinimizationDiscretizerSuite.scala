@@ -43,29 +43,29 @@ class EntropyMinimizationDiscretizerSuite extends FunSuite with LocalSparkContex
     
   test("EMD discretization") {
     val rnd = new Random(13)
-		
-		val data = for (i <- 1 to 99) yield
-			if (i <= 33) {
-			    LabeledPoint(1.0, Array(i.toDouble + rnd.nextDouble*2 - 1))
-			} else if (i <= 66) {
-			    LabeledPoint(2.0, Array(i.toDouble + rnd.nextDouble*2 - 1))
-			} else {
-			    LabeledPoint(3.0, Array(i.toDouble + rnd.nextDouble*2 - 1))
-			}
-		
-		val shuffledData = data.sortWith((lp1, lp2) => rnd.nextDouble < 0.5)
-		
-		val rdd = sc.parallelize(shuffledData, 3)
+        
+    val data = for (i <- 1 to 99) yield
+      if (i <= 33) {
+        LabeledPoint(1.0, Array(i.toDouble + rnd.nextDouble*2 - 1))
+      } else if (i <= 66) {
+        LabeledPoint(2.0, Array(i.toDouble + rnd.nextDouble*2 - 1))
+      } else {
+        LabeledPoint(3.0, Array(i.toDouble + rnd.nextDouble*2 - 1))
+      }
+    
+    val shuffledData = data.sortWith((lp1, lp2) => rnd.nextDouble < 0.5)
+    
+    val rdd = sc.parallelize(shuffledData, 3)
 
-		val discretizer = EntropyMinimizationDiscretizer.train(rdd, Seq(0))
-				
-		val thresholdsArray = discretizer.thresholds(0).toArray
-		if (math.abs(thresholdsArray(1) - 33.5) > 1.55) {
-		    fail("Selected thresholds aren't what they should be.")
-		}
-		if (math.abs(thresholdsArray(2) - 66.5) > 1.55) {
-		    fail("Selected thresholds aren't what they should be.")
-		}
+    val discretizer = EntropyMinimizationDiscretizer.train(rdd, Seq(0))
+            
+    val thresholdsArray = discretizer.thresholds(0).toArray
+    if (math.abs(thresholdsArray(1) - 33.5) > 1.55) {
+      fail("Selected thresholds aren't what they should be.")
+    }
+    if (math.abs(thresholdsArray(2) - 66.5) > 1.55) {
+      fail("Selected thresholds aren't what they should be.")
+    }
   }
     
 }
