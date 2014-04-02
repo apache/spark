@@ -1210,7 +1210,7 @@ class RDD(object):
         java_storage_level = self._jrdd.getStorageLevel()
         storage_level = StorageLevel(java_storage_level.useDisk(),
                                      java_storage_level.useMemory(),
-                                     java_storage_level.useTachyon(),
+                                     java_storage_level.useOffHeap(),
                                      java_storage_level.deserialized(),
                                      java_storage_level.replication())
         return storage_level
