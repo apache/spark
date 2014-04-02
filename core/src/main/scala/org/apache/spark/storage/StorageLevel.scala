@@ -31,7 +31,7 @@ import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 class StorageLevel private(
     private var useDisk_ : Boolean,
     private var useMemory_ : Boolean,
-    private var useTachyon_ : Boolean,
+    private var useOffHeap_ : Boolean,
     private var deserialized_ : Boolean,
     private var replication_ : Int = 1)
   extends Externalizable {
@@ -45,27 +45,27 @@ class StorageLevel private(
 
   def useDisk = useDisk_
   def useMemory = useMemory_
-  def useTachyon = useTachyon_
+  def useOffHeap = useOffHeap_
   def deserialized = deserialized_
   def replication = replication_
 
   assert(replication < 40, "Replication restricted to be less than 40 for calculating hashcodes")
 
   override def clone(): StorageLevel = new StorageLevel(
-    this.useDisk, this.useMemory, this.useTachyon, this.deserialized, this.replication)
+    this.useDisk, this.useMemory, this.useOffHeap, this.deserialized, this.replication)
 
   override def equals(other: Any): Boolean = other match {
     case s: StorageLevel =>
       s.useDisk == useDisk &&
       s.useMemory == useMemory &&
-      s.useTachyon == useTachyon &&
+      s.useOffHeap == useOffHeap &&
       s.deserialized == deserialized &&
       s.replication == replication
     case _ =>
       false
   }
 
-  def isValid = ((useMemory || useDisk || useTachyon) && (replication > 0))
+  def isValid = ((useMemory || useDisk || useOffHeap) && (replication > 0))
 
   def toInt: Int = {
     var ret = 0
@@ -75,7 +75,7 @@ class StorageLevel private(
     if (useMemory_) {
       ret |= 4
     }
-    if (useTachyon_) {
+    if (useOffHeap_) {
       ret |= 2
     }
     if (deserialized_) {
@@ -93,7 +93,7 @@ class StorageLevel private(
     val flags = in.readByte()
     useDisk_ = (flags & 8) != 0
     useMemory_ = (flags & 4) != 0
-    useTachyon_ = (flags & 2) != 0
+    useOffHeap_ = (flags & 2) != 0
     deserialized_ = (flags & 1) != 0
     replication_ = in.readByte()
   }
@@ -102,14 +102,14 @@ class StorageLevel private(
   private def readResolve(): Object = StorageLevel.getCachedStorageLevel(this)
 
   override def toString: String = "StorageLevel(%b, %b, %b, %b, %d)".format(
-    useDisk, useMemory, useTachyon, deserialized, replication)
+    useDisk, useMemory, useOffHeap, deserialized, replication)
 
   override def hashCode(): Int = toInt * 41 + replication
   def description : String = {
     var result = ""
     result += (if (useDisk) "Disk " else "")
     result += (if (useMemory) "Memory " else "")
-    result += (if (useTachyon) "Tachyon " else "")
+    result += (if (useOffHeap) "Tachyon " else "")
     result += (if (deserialized) "Deserialized " else "Serialized ")
     result += "%sx Replicated".format(replication)
     result
@@ -135,10 +135,10 @@ object StorageLevel {
   val MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, false, 2)
   val OFF_HEAP = new StorageLevel(false, false, true, false)
   
-  /** Create a new StorageLevel object without setting useTachyon*/
-  def apply(useDisk: Boolean, useMemory: Boolean, useTachyon: Boolean, 
+  /** Create a new StorageLevel object without setting useOffHeap*/
+  def apply(useDisk: Boolean, useMemory: Boolean, useOffHeap: Boolean,
     deserialized: Boolean, replication: Int) = getCachedStorageLevel(
-      new StorageLevel(useDisk, useMemory, useTachyon, deserialized, replication))
+      new StorageLevel(useDisk, useMemory, useOffHeap, deserialized, replication))
       
   /** Create a new StorageLevel object */
   def apply(useDisk: Boolean, useMemory: Boolean,

@@ -126,12 +126,12 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.tachyonStore.baseDir</td>
   <td>System.getProperty("java.io.tmpdir")</td>
   <td>
-    Directories of the Tachyon File System that store RDDs. The Tachyon file system's URL is set by <code>spark.tachyonStore.URL</code>.
+    Directories of the Tachyon File System that store RDDs. The Tachyon file system's URL is set by <code>spark.tachyonStore.url</code>.
     It can also be a comma-separated list of multiple directories on Tachyon file system.
   </td>
 </tr>
 <tr>
-  <td>spark.tachyonStore.URL</td>
+  <td>spark.tachyonStore.url</td>
   <td>tachyon://localhost:19998</td>
   <td>
     The URL of the underlying Tachyon file system in the TachyonStore.

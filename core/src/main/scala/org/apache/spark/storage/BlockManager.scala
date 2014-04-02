@@ -62,7 +62,7 @@ private[spark] class BlockManager(
     val storeDir = conf.get("spark.tachyonStore.baseDir", System.getProperty("java.io.tmpdir"))
     val appFolderName = conf.get("spark.tachyonStore.folderName")
     val tachyonStorePath = s"${storeDir}/${appFolderName}/${this.executorId}"
-    val tachyonMaster = conf.get("spark.tachyonStore.URL",  "tachyon://localhost:19998")
+    val tachyonMaster = conf.get("spark.tachyonStore.url",  "tachyon://localhost:19998")
     val tachyonBlockManager = new TachyonBlockManager(
       shuffleBlockManager, tachyonStorePath, tachyonMaster)
     tachyonInitialized = true
@@ -276,7 +276,7 @@ private[spark] class BlockManager(
           (StorageLevel.NONE, 0L, 0L, 0L)
         case level =>
           val inMem = level.useMemory && memoryStore.contains(blockId)
-          val inTachyon = level.useTachyon && tachyonStore.contains(blockId)
+          val inTachyon = level.useOffHeap && tachyonStore.contains(blockId)
           val onDisk = level.useDisk && diskStore.contains(blockId)
           val deserialized = if (inMem) level.deserialized else false
           val replication = if (inMem || inTachyon || onDisk) level.replication else 1
@@ -369,7 +369,7 @@ private[spark] class BlockManager(
         }
         
         // Look for the block in Tachyon
-        if (level.useTachyon) {
+        if (level.useOffHeap) {
           logDebug("Getting block " + blockId + " from tachyon")
           if (tachyonStore.contains(blockId)) {
             tachyonStore.getBytes(blockId) match {
@@ -651,7 +651,7 @@ private[spark] class BlockManager(
           }
           // Keep track of which blocks are dropped from memory
           res.droppedBlocks.foreach { block => updatedBlocks += block }
-        } else if (level.useTachyon) {
+        } else if (level.useOffHeap) {
           // Save to Tachyon.
           val askForBytes = level.replication > 1
           val res = data match {
@@ -757,7 +757,7 @@ private[spark] class BlockManager(
   var cachedPeers: Seq[BlockManagerId] = null
   private def replicate(blockId: BlockId, data: ByteBuffer, level: StorageLevel) {
     val tLevel = StorageLevel(
-      level.useDisk, level.useMemory, level.useTachyon, level.deserialized, 1)
+      level.useDisk, level.useMemory, level.useOffHeap, level.deserialized, 1)
     if (cachedPeers == null) {
       cachedPeers = master.getPeers(blockManagerId, level.replication - 1)
     }
@@ -922,7 +922,7 @@ private[spark] class BlockManager(
           if (level.useDisk) {
             diskStore.remove(id)
           }
-          if (level.useTachyon) {
+          if (level.useOffHeap) {
             tachyonStore.remove(id)
           }
           iterator.remove()

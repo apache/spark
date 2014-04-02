@@ -34,7 +34,7 @@ class StorageLevel:
 
     def __repr__(self):
         return "StorageLevel(%s, %s, %s, %s, %s)" % (
-            self.useDisk, self.useMemory, self.useTachyon, self.deserialized, self.replication)
+            self.useDisk, self.useMemory, self.useOffHeap, self.deserialized, self.replication)
 
 StorageLevel.DISK_ONLY = StorageLevel(True, False, False, False)
 StorageLevel.DISK_ONLY_2 = StorageLevel(True, False, False, False, 2)
@@ -46,4 +46,4 @@ StorageLevel.MEMORY_AND_DISK = StorageLevel(True, True, False, True)
 StorageLevel.MEMORY_AND_DISK_2 = StorageLevel(True, True, False, True, 2)
 StorageLevel.MEMORY_AND_DISK_SER = StorageLevel(True, True, False, False)
 StorageLevel.MEMORY_AND_DISK_SER_2 = StorageLevel(True, True, False, False, 2)
-StorageLevel.TACHYON = StorageLevel(False, False, True, False, 1)
+StorageLevel.OFF_HEAP = StorageLevel(False, False, True, False, 1)

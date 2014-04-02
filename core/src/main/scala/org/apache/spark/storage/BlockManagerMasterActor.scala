@@ -375,7 +375,7 @@ private[spark] class BlockManagerInfo(
         logInfo("Added %s on disk on %s (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
       }
-      if (storageLevel.useTachyon) {
+      if (storageLevel.useOffHeap) {
         _blocks.put(blockId, BlockStatus(storageLevel, 0, 0, tachyonSize))
         logInfo("Added %s on tachyon on %s (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(tachyonSize)))
@@ -394,7 +394,7 @@ private[spark] class BlockManagerInfo(
         logInfo("Removed %s on %s on disk (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.diskSize)))
       }
-      if (blockStatus.storageLevel.useTachyon) {
+      if (blockStatus.storageLevel.useOffHeap) {
         logInfo("Removed %s on %s on tachyon (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.tachyonSize)))
       }
