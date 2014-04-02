@@ -190,7 +190,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     if (evaluated == null) {
       null
     } else {
-      if(child.dataType == dataType) evaluated else cast(evaluated)
+      cast(evaluated)
     }
   }
 }
