@@ -44,6 +44,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "concatenate_inherit_table_location",
     "describe_pretty",
     "describe_syntax",
+    "orc_ends_with_nulls",
 
     // Setting a default property does not seem to get reset and thus changes the answer for many
     // subsequent tests.
@@ -488,7 +489,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "optional_outer",
     "orc_dictionary_threshold",
     "orc_empty_files",
-    "orc_ends_with_nulls",
     "order",
     "order2",
     "outer_join_ppr",
