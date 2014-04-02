@@ -83,10 +83,10 @@ case class Aggregate(
 
   // Creates a new aggregate buffer for a group.
   def newAggregateBuffer(): Array[AggregateFunction] = {
-    val buffer = new Array[AggregateFunction](computedAggregates.size)
+    val buffer = new Array[AggregateFunction](computedAggregates.length)
     var i = 0
-    while(i < computedAggregates.size) {
-      buffer(i) = computedAggregates(i).aggregate.newInstance
+    while (i < computedAggregates.length) {
+      buffer(i) = computedAggregates(i).aggregate.newInstance()
       i += 1
     }
     buffer
@@ -122,16 +122,16 @@ case class Aggregate(
         while (iter.hasNext) {
           currentRow = iter.next()
           var i = 0
-          while (i < buffer.size) {
+          while (i < buffer.length) {
             buffer(i).update(currentRow)
             i += 1
           }
         }
         val resultProjection = new Projection(resultExpressions, computedSchema)
-        val aggregateResults = new GenericMutableRow(computedAggregates.size)
+        val aggregateResults = new GenericMutableRow(computedAggregates.length)
 
         var i = 0
-        while (i < buffer.size) {
+        while (i < buffer.length) {
           aggregateResults(i) = buffer(i).apply(EmptyRow)
           i += 1
         }
@@ -154,7 +154,7 @@ case class Aggregate(
           }
 
           var i = 0
-          while (i < currentBuffer.size) {
+          while (i < currentBuffer.length) {
             currentBuffer(i).update(currentRow)
             i += 1
           }
@@ -162,7 +162,7 @@ case class Aggregate(
 
         new Iterator[Row] {
           private[this] val hashTableIter = hashTable.entrySet().iterator()
-          private[this] val aggregateResults = new GenericMutableRow(computedAggregates.size)
+          private[this] val aggregateResults = new GenericMutableRow(computedAggregates.length)
           private[this] val resultProjection =
             new MutableProjection(resultExpressions, computedSchema ++ namedGroups.map(_._2))
           private[this] val joinedRow = new JoinedRow
@@ -175,7 +175,7 @@ case class Aggregate(
             val currentBuffer = currentEntry.getValue
 
             var i = 0
-            while (i < currentBuffer.size) {
+            while (i < currentBuffer.length) {
               aggregateResults(i) = currentBuffer(i).apply(EmptyRow)
               i += 1
             }
