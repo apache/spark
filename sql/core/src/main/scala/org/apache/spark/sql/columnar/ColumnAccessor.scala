@@ -21,7 +21,7 @@ import java.nio.{ByteOrder, ByteBuffer}
 
 import org.apache.spark.sql.catalyst.types.{BinaryType, NativeType, DataType}
 import org.apache.spark.sql.catalyst.expressions.MutableRow
-import org.apache.spark.sql.execution.SparkSqlSerializer
+import org.apache.spark.sql.columnar.compression.CompressibleColumnAccessor
 
 /**
  * An `Iterator` like trait used to extract values from columnar byte buffer. When a value is
@@ -41,121 +41,66 @@ private[sql] trait ColumnAccessor {
   protected def underlyingBuffer: ByteBuffer
 }
 
-private[sql] abstract class BasicColumnAccessor[T <: DataType, JvmType](buffer: ByteBuffer)
+private[sql] abstract class BasicColumnAccessor[T <: DataType, JvmType](
+    protected val buffer: ByteBuffer,
+    protected val columnType: ColumnType[T, JvmType])
   extends ColumnAccessor {
 
   protected def initialize() {}
 
-  def columnType: ColumnType[T, JvmType]
-
   def hasNext = buffer.hasRemaining
 
   def extractTo(row: MutableRow, ordinal: Int) {
-    doExtractTo(row, ordinal)
+    columnType.setField(row, ordinal, extractSingle(buffer))
   }
 
-  protected def doExtractTo(row: MutableRow, ordinal: Int)
+  def extractSingle(buffer: ByteBuffer): JvmType = columnType.extract(buffer)
 
   protected def underlyingBuffer = buffer
 }
 
 private[sql] abstract class NativeColumnAccessor[T <: NativeType](
-    buffer: ByteBuffer,
-    val columnType: NativeColumnType[T])
-  extends BasicColumnAccessor[T, T#JvmType](buffer)
+    override protected val buffer: ByteBuffer,
+    override protected val columnType: NativeColumnType[T])
+  extends BasicColumnAccessor(buffer, columnType)
   with NullableColumnAccessor
+  with CompressibleColumnAccessor[T]
 
 private[sql] class BooleanColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, BOOLEAN) {
-
-  override protected def doExtractTo(row: MutableRow, ordinal: Int) {
-    row.setBoolean(ordinal, columnType.extract(buffer))
-  }
-}
+  extends NativeColumnAccessor(buffer, BOOLEAN)
 
 private[sql] class IntColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, INT) {
-
-  override protected def doExtractTo(row: MutableRow, ordinal: Int) {
-    row.setInt(ordinal, columnType.extract(buffer))
-  }
-}
+  extends NativeColumnAccessor(buffer, INT)
 
 private[sql] class ShortColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, SHORT) {
-
-  override protected def doExtractTo(row: MutableRow, ordinal: Int) {
-    row.setShort(ordinal, columnType.extract(buffer))
-  }
-}
+  extends NativeColumnAccessor(buffer, SHORT)
 
 private[sql] class LongColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, LONG) {
-
-  override protected def doExtractTo(row: MutableRow, ordinal: Int) {
-    row.setLong(ordinal, columnType.extract(buffer))
-  }
-}
+  extends NativeColumnAccessor(buffer, LONG)
 
 private[sql] class ByteColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, BYTE) {
-
-  override protected def doExtractTo(row: MutableRow, ordinal: Int) {
-    row.setByte(ordinal, columnType.extract(buffer))
-  }
-}
+  extends NativeColumnAccessor(buffer, BYTE)
 
 private[sql] class DoubleColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, DOUBLE) {
-
-  override protected def doExtractTo(row: MutableRow, ordinal: Int) {
-    row.setDouble(ordinal, columnType.extract(buffer))
-  }
-}
+  extends NativeColumnAccessor(buffer, DOUBLE)
 
 private[sql] class FloatColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, FLOAT) {
-
-  override protected def doExtractTo(row: MutableRow, ordinal: Int) {
-    row.setFloat(ordinal, columnType.extract(buffer))
-  }
-}
+  extends NativeColumnAccessor(buffer, FLOAT)
 
 private[sql] class StringColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, STRING) {
-
-  override protected def doExtractTo(row: MutableRow, ordinal: Int) {
-    row.setString(ordinal, columnType.extract(buffer))
-  }
-}
+  extends NativeColumnAccessor(buffer, STRING)
 
 private[sql] class BinaryColumnAccessor(buffer: ByteBuffer)
-  extends BasicColumnAccessor[BinaryType.type, Array[Byte]](buffer)
-  with NullableColumnAccessor {
-
-  def columnType = BINARY
-
-  override protected def doExtractTo(row: MutableRow, ordinal: Int) {
-    row(ordinal) = columnType.extract(buffer)
-  }
-}
+  extends BasicColumnAccessor[BinaryType.type, Array[Byte]](buffer, BINARY)
+  with NullableColumnAccessor
 
 private[sql] class GenericColumnAccessor(buffer: ByteBuffer)
-  extends BasicColumnAccessor[DataType, Array[Byte]](buffer)
-  with NullableColumnAccessor {
-
-  def columnType = GENERIC
-
-  override protected def doExtractTo(row: MutableRow, ordinal: Int) {
-    val serialized = columnType.extract(buffer)
-    row(ordinal) = SparkSqlSerializer.deserialize[Any](serialized)
-  }
-}
+  extends BasicColumnAccessor[DataType, Array[Byte]](buffer, GENERIC)
+  with NullableColumnAccessor
 
 private[sql] object ColumnAccessor {
-  def apply(b: ByteBuffer): ColumnAccessor = {
-    // The first 4 bytes in the buffer indicates the column type.
-    val buffer = b.duplicate().order(ByteOrder.nativeOrder())
+  def apply(buffer: ByteBuffer): ColumnAccessor = {
+    // The first 4 bytes in the buffer indicate the column type.
     val columnTypeId = buffer.getInt()
 
     columnTypeId match {
