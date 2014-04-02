@@ -206,8 +206,11 @@ private[parquet] object ParquetTypesConverter {
           val fields = groupType.getFields.map {
             field => new StructField(field.getName, toDataType(field), field.getRepetition != Repetition.REQUIRED)
           }
-          if (fields.size == 1) new ArrayType(fields.apply(0).dataType)
-          new ArrayType(StructType(fields))
+          if (fields.size == 1) {
+            new ArrayType(fields.apply(0).dataType)
+          } else {
+            new ArrayType(StructType(fields))
+          }
         }
         case _ => { // everything else nested becomes a Struct, unless it has a single repeated field
           // in which case it becomes an array (this should correspond to the inverse operation of
@@ -260,7 +263,7 @@ private[parquet] object ParquetTypesConverter {
           elementType match {
             case StructType(fields) => { // first case: array of structs
               val parquetFieldTypes = fields.map(f => fromDataType(f.dataType, f.name, f.nullable, false))
-              new ParquetGroupType(Repetition.REPEATED, name, ParquetOriginalType.LIST, parquetFieldTypes)
+              new ParquetGroupType(repetition, name, ParquetOriginalType.LIST, parquetFieldTypes)
               //ConversionPatterns.listType(Repetition.REPEATED, name, parquetFieldTypes)
             }
             case _ => { // second case: array of primitive types

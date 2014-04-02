@@ -143,10 +143,10 @@ private[sql] object ParquetTestData {
           |required double value;
           |optional boolean truth;
         |}
-        |required group outerouter {
-          |required group outer {
-            |required group inner {
-              |required int32 number;
+        |optional group outerouter {
+          |repeated group values {
+            |repeated group values {
+              |repeated int32 values;
             |}
           |}
         |}
@@ -263,9 +263,9 @@ private[sql] object ParquetTestData {
     val booleanNumberPairs = r1.addGroup(3)
     booleanNumberPairs.add("value", 2.5)
     booleanNumberPairs.add("truth", false)
-    r1.addGroup(4).addGroup(0).addGroup(0).add("number", 7)
-    r1.addGroup(4).addGroup(0).addGroup(0).add("number", 8)
-    r1.addGroup(4).addGroup(0).addGroup(0).add("number", 9)
+    r1.addGroup(4).addGroup(0).addGroup(0).add("values", 7)
+    r1.addGroup(4).addGroup(0).addGroup(0).add("values", 8)
+    r1.addGroup(4).addGroup(0).addGroup(0).add("values", 9)
 
     val writeSupport = new TestGroupWriteSupport(schema)
     val writer = new ParquetWriter[Group](path, writeSupport)

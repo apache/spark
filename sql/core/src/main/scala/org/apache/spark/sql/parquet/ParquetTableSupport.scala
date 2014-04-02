@@ -157,7 +157,7 @@ private[parquet] object CatalystConverter {
       case ArrayType(elementType: DataType) => {
         elementType match {
           case StructType(fields) =>
-            if (fields.size > 1) new CatalystGroupConverter(fields, fieldIndex, parent) //CatalystStructArrayConverter(fields, fieldIndex, parent)
+            if (fields.size > 1) new CatalystGroupConverter(fields, fieldIndex, parent)
             else new CatalystArrayConverter(fields(0).dataType, fieldIndex, parent)
           case _ => new CatalystArrayConverter(elementType, fieldIndex, parent)
         }
@@ -244,8 +244,11 @@ class CatalystGroupConverter(
   override val size = schema.size
 
   // Should be only called in root group converter!
-  def getCurrentRecord: Row = new GenericRow {
-    override val values: Array[Any] = current.toArray
+  def getCurrentRecord: Row = {
+    assert(isRootConverter, "getCurrentRecord should only be called in root group converter!")
+    new GenericRow {
+      override val values: Array[Any] = current.toArray
+    }
   }
 
   override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
