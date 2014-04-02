@@ -15,13 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg
+package org.apache.spark.mllib.linalg.rdd
 
-/**
- * Class that represents an entry in a matrix of doubles.
- *
- * @param i row index (0-based indexing)
- * @param j column index (0-based indexing)
- * @param value value of the entry
- */
-case class MatrixEntry(val i: Int, val j: Int, val value: Double)
+import org.apache.spark.mllib.linalg.Vector
+
+/** Represents a row of RowRDDMatrix. */
+case class RDDMatrixRow(index: Long, vector: Vector)

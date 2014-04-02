@@ -34,7 +34,7 @@ object LAUtils {
   def sparseToTallSkinnyDense(sp: SparseMatrix): TallSkinnyDenseMatrix = {
     val m = sp.m
     val n = sp.n
-    val rows = sp.data.map(x => (x.i, (x.j, x.mval))).groupByKey().map {
+    val rows = sp.data.map(x => (x.i, (x.j, x.value))).groupByKey().map {
       case (i, cols) =>
         val rowArray = Array.ofDim[Double](n)
         var j = 0
@@ -58,7 +58,7 @@ object LAUtils {
     val n = a.n
     val data = a.rows.flatMap {
       mrow => Array.tabulate(n)(j => MatrixEntry(mrow.i, j, mrow.data(j)))
-        .filter(x => x.mval != 0)
+        .filter(x => x.value != 0)
     }
     SparseMatrix(data, m, n)
   }

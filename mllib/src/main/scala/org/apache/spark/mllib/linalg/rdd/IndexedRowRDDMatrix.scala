@@ -15,13 +15,42 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg
+package org.apache.spark.mllib.linalg.rdd
+
+import org.apache.spark.rdd.RDD
 
 /**
- * Class that represents an entry in a matrix of doubles.
+ * Represents a row-oriented RDDMatrix with indexed rows.
  *
- * @param i row index (0-based indexing)
- * @param j column index (0-based indexing)
- * @param value value of the entry
+ * @param rows
+ * @param m
+ * @param n
  */
-case class MatrixEntry(val i: Int, val j: Int, val value: Double)
+class IndexedRowRDDMatrix(
+    val rows: RDD[RDDMatrixRow],
+    m: Long = -1L,
+    n: Long = -1L) extends RDDMatrix {
+
+  private var _m = m
+  private var _n = n
+
+  /** Gets or computes the number of columns. */
+  override def numCols(): Long = {
+    if (_n < 0) {
+      _n = rows.first().vector.size
+    }
+    _n
+  }
+
+  override def numRows(): Long = {
+    if (_m < 0) {
+      _m = rows.map(_.index).reduce(math.max) + 1
+    }
+    _m
+  }
+
+  /** Drops row indices and converts this to a RowRDDMatrix. */
+  def compressRows(): RowRDDMatrix = {
+    new RowRDDMatrix(rows.map(_.vector), -1, _n)
+  }
+}

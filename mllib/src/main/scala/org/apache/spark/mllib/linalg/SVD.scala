@@ -285,7 +285,7 @@ class SVD {
 
     // Compute A^T A, assuming rows are sparse enough to fit in memory
     val rows = data.map(entry =>
-      (entry.i, (entry.j, entry.mval))).groupByKey()
+      (entry.i, (entry.j, entry.value))).groupByKey()
     val emits = rows.flatMap {
       case (rowind, cols) =>
         cols.flatMap {
@@ -339,7 +339,7 @@ class SVD {
 
     if (computeU) {
       // Multiply A by VS^-1
-      val aCols = data.map(entry => (entry.j, (entry.i, entry.mval)))
+      val aCols = data.map(entry => (entry.j, (entry.i, entry.value)))
       val bRows = vsirdd.map(entry => (entry._1._1, (entry._1._2, entry._2)))
       val retUdata = aCols.join(bRows).map {
         case (key, ((rowInd, rowVal), (colInd, colVal))) =>

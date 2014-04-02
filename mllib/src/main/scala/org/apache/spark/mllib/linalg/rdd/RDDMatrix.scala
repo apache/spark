@@ -15,13 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg
+package org.apache.spark.mllib.linalg.rdd
 
 /**
- * Class that represents an entry in a matrix of doubles.
- *
- * @param i row index (0-based indexing)
- * @param j column index (0-based indexing)
- * @param value value of the entry
+ * Represents a matrix backed by one or more RDDs.
  */
-case class MatrixEntry(val i: Int, val j: Int, val value: Double)
+trait RDDMatrix extends Serializable {
+
+  /** Gets or computes the number of rows. */
+  def numRows(): Long
+
+  /** Gets or computes the number of columns. */
+  def numCols(): Long
+}

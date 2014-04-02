@@ -48,7 +48,7 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
   def getDenseMatrix(matrix: SparseMatrix) : DoubleMatrix = {
     val data = matrix.data
     val ret = DoubleMatrix.zeros(matrix.m, matrix.n)
-    matrix.data.collect().map(x => ret.put(x.i, x.j, x.mval))
+    matrix.data.collect().map(x => ret.put(x.i, x.j, x.value))
     ret
   }
 

@@ -52,7 +52,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val m = matrix.m
     val n = matrix.n
     val ret = DoubleMatrix.zeros(m, n)
-    matrix.data.collect().map(x => ret.put(x.i, x.j, x.mval))
+    matrix.data.collect().map(x => ret.put(x.i, x.j, x.value))
     ret
   }
 
