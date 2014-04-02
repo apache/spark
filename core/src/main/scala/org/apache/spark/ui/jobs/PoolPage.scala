@@ -23,17 +23,17 @@ import scala.xml.Node
 
 import org.apache.spark.scheduler.{Schedulable, StageInfo}
 import org.apache.spark.ui.Page._
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{UIPage, UIUtils}
 
 /** Page showing specific pool details */
-private[ui] class PoolPage(parent: JobProgressUI) {
+private[ui] class PoolPage(parent: JobProgressTab) extends UIPage("pool") {
   private val appName = parent.appName
   private val basePath = parent.basePath
   private val live = parent.live
   private val sc = parent.sc
-  private lazy val listener = parent.listener
+  private lazy val listener = parent.jobProgressListener
 
-  def render(request: HttpServletRequest): Seq[Node] = {
+  override def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val poolName = request.getParameter("poolname")
       val poolToActiveStages = listener.poolToActiveStages

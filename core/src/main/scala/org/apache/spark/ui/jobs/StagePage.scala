@@ -23,16 +23,16 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.ui.Page._
-import org.apache.spark.ui.{WebUI, UIUtils}
+import org.apache.spark.ui.{UIPage, UIUtils}
 import org.apache.spark.util.{Utils, Distribution}
 
 /** Page showing statistics and task list for a given stage */
-private[ui] class StagePage(parent: JobProgressUI) {
+private[ui] class StagePage(parent: JobProgressTab) extends UIPage("stage") {
   private val appName = parent.appName
   private val basePath = parent.basePath
-  private lazy val listener = parent.listener
+  private lazy val listener = parent.jobProgressListener
 
-  def render(request: HttpServletRequest): Seq[Node] = {
+  override def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val stageId = request.getParameter("id").toInt
 
@@ -58,7 +58,7 @@ private[ui] class StagePage(parent: JobProgressUI) {
       val hasBytesSpilled = memoryBytesSpilled > 0 && diskBytesSpilled > 0
 
       var activeTime = 0L
-      val now = System.currentTimeMillis()
+      val now = System.currentTimeMillis
       val tasksActive = listener.stageIdToTasksActive(stageId).values
       tasksActive.foreach(activeTime += _.timeRunning(now))
 
@@ -68,7 +68,7 @@ private[ui] class StagePage(parent: JobProgressUI) {
           <ul class="unstyled">
             <li>
               <strong>Total task time across all tasks: </strong>
-              {parent.formatDuration(listener.stageIdToTime.getOrElse(stageId, 0L) + activeTime)}
+              {UIUtils.formatDuration(listener.stageIdToTime.getOrElse(stageId, 0L) + activeTime)}
             </li>
             {if (hasShuffleRead)
               <li>
@@ -119,13 +119,13 @@ private[ui] class StagePage(parent: JobProgressUI) {
           }
           val serializationQuantiles =
             "Result serialization time" +: Distribution(serializationTimes).
-              get.getQuantiles().map(ms => parent.formatDuration(ms.toLong))
+              get.getQuantiles().map(ms => UIUtils.formatDuration(ms.toLong))
 
           val serviceTimes = validTasks.map { case TaskUIData(_, metrics, _) =>
             metrics.get.executorRunTime.toDouble
           }
           val serviceQuantiles = "Duration" +: Distribution(serviceTimes).get.getQuantiles()
-            .map(ms => parent.formatDuration(ms.toLong))
+            .map(ms => UIUtils.formatDuration(ms.toLong))
 
           val gettingResultTimes = validTasks.map { case TaskUIData(info, _, _) =>
             if (info.gettingResultTime > 0) {
@@ -136,7 +136,7 @@ private[ui] class StagePage(parent: JobProgressUI) {
           }
           val gettingResultQuantiles = "Time spent fetching task results" +:
             Distribution(gettingResultTimes).get.getQuantiles().map { millis =>
-              parent.formatDuration(millis.toLong)
+              UIUtils.formatDuration(millis.toLong)
             }
           // The scheduler delay includes the network delay to send the task to the worker
           // machine and to send back the result (but not the time to fetch the task result,
@@ -153,7 +153,7 @@ private[ui] class StagePage(parent: JobProgressUI) {
           }
           val schedulerDelayQuantiles = "Scheduler delay" +:
             Distribution(schedulerDelays).get.getQuantiles().map { millis =>
-              parent.formatDuration(millis.toLong)
+              UIUtils.formatDuration(millis.toLong)
             }
 
           def getQuantileCols(data: Seq[Double]) =
@@ -217,8 +217,8 @@ private[ui] class StagePage(parent: JobProgressUI) {
     taskData match { case TaskUIData(info, metrics, exception) =>
       val duration = if (info.status == "RUNNING") info.timeRunning(System.currentTimeMillis())
         else metrics.map(_.executorRunTime).getOrElse(1L)
-      val formatDuration = if (info.status == "RUNNING") parent.formatDuration(duration)
-        else metrics.map(m => parent.formatDuration(m.executorRunTime)).getOrElse("")
+      val formatDuration = if (info.status == "RUNNING") UIUtils.formatDuration(duration)
+        else metrics.map(m => UIUtils.formatDuration(m.executorRunTime)).getOrElse("")
       val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
       val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
 
@@ -233,8 +233,8 @@ private[ui] class StagePage(parent: JobProgressUI) {
 
       val maybeWriteTime = metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleWriteTime)
       val writeTimeSortable = maybeWriteTime.map(_.toString).getOrElse("")
-      val writeTimeReadable = maybeWriteTime.map( t => t / (1000 * 1000)).map { ms =>
-        if (ms == 0) "" else parent.formatDuration(ms)
+      val writeTimeReadable = maybeWriteTime.map(t => t / (1000 * 1000)).map { ms =>
+        if (ms == 0) "" else UIUtils.formatDuration(ms)
       }.getOrElse("")
 
       val maybeMemoryBytesSpilled = metrics.map(_.memoryBytesSpilled)
@@ -252,15 +252,15 @@ private[ui] class StagePage(parent: JobProgressUI) {
         <td>{info.status}</td>
         <td>{info.taskLocality}</td>
         <td>{info.host}</td>
-        <td>{WebUI.formatDate(new Date(info.launchTime))}</td>
+        <td>{UIUtils.formatDate(new Date(info.launchTime))}</td>
         <td sorttable_customkey={duration.toString}>
           {formatDuration}
         </td>
         <td sorttable_customkey={gcTime.toString}>
-          {if (gcTime > 0) parent.formatDuration(gcTime) else ""}
+          {if (gcTime > 0) UIUtils.formatDuration(gcTime) else ""}
         </td>
         <td sorttable_customkey={serializationTime.toString}>
-          {if (serializationTime > 0) parent.formatDuration(serializationTime) else ""}
+          {if (serializationTime > 0) UIUtils.formatDuration(serializationTime) else ""}
         </td>
         {if (shuffleRead) {
            <td sorttable_customkey={shuffleReadSortable}>
