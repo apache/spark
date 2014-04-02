@@ -31,24 +31,23 @@ import org.apache.spark.sql.api.java.Row;
 
 public class JavaSparkSQL {
   public static class Person implements Serializable {
-    private String _name;
+    private String name;
+    private int age;
 
     String getName() {
-      return _name;
+      return name;
     }
 
     void setName(String name) {
-      _name = name;
+      this.name = name;
     }
 
-    private int _age;
-
     int getAge() {
-      return _age;
+      return age;
     }
 
     void setAge(int age) {
-      _age = age;
+      this.age = age;
     }
   }
 

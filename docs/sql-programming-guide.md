@@ -113,21 +113,24 @@ class that implements Serializable and has getters and setters for all of its fi
 
 {% highlight java %}
 
-public class Person implements Serializable {
-  private String _name;
+public static class Person implements Serializable {
+  private String name;
+  private int age;
+
   String getName() {
-    return _name;
-  }
-  void setName(String name) {
-    _name = name;
+    return name;
   }
 
-  private int _age;
-  int getAge() {
-    return _age;
+  void setName(String name) {
+    this.name = name;
   }
+
+  int getAge() {
+    return age;
+  }
+
   void setAge(int age) {
-    _age = age;
+    this.age = age;
   }
 }
 
