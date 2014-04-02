@@ -23,8 +23,8 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.rdd.RDD
 
 /**
- * Case class of the summary statistics, including mean, variance, count, max, min, and non-zero
- * elements count.
+ * Trait of the summary statistics, including mean, variance, count, max, min, and non-zero elements
+ * count.
  */
 trait VectorRDDStatisticalSummary {
   def mean: Vector
@@ -35,6 +35,10 @@ trait VectorRDDStatisticalSummary {
   def min: Vector
 }
 
+/**
+ * Aggregates [[org.apache.spark.mllib.rdd.VectorRDDStatisticalSummary VectorRDDStatisticalSummary]]
+ * together with add() and merge() function.
+ */
 private class Aggregator(
     val currMean: BV[Double],
     val currM2n: BV[Double],
@@ -43,8 +47,15 @@ private class Aggregator(
     val currMax: BV[Double],
     val currMin: BV[Double]) extends VectorRDDStatisticalSummary with Serializable {
 
+  // lazy val is used for computing only once time. Same below.
   override lazy val mean = Vectors.fromBreeze(currMean :* nnz :/ totalCnt)
 
+  // Online variance solution used in add() function, while parallel variance solution used in
+  // merge() function. Reference here:
+  // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+  // Solution here ignoring the zero elements when calling add() and merge(), for decreasing the
+  // O(n) algorithm to O(nnz). Real variance is computed here after we get other statistics, simply
+  // by another parallel combination process.
   override lazy val variance = {
     val deltaMean = currMean
     var i = 0
