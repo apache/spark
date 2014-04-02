@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import scala.Tuple2
-import scala.collection.mutable.{HashMap, Map}
+import scala.collection.mutable.{HashSet, HashMap, Map}
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
@@ -43,6 +43,10 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
   val conf = new SparkConf
   /** Set of TaskSets the DAGScheduler has requested executed. */
   val taskSets = scala.collection.mutable.Buffer[TaskSet]()
+
+  /** Stages for which the DAGScheduler has called TaskScheduler.cancelTasks(). */
+  val cancelledStages = new HashSet[Int]()
+
   val taskScheduler = new TaskScheduler() {
     override def rootPool: Pool = null
     override def schedulingMode: SchedulingMode = SchedulingMode.NONE
@@ -53,7 +57,9 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
       taskSets += taskSet
     }
-    override def cancelTasks(stageId: Int) {}
+    override def cancelTasks(stageId: Int) {
+      cancelledStages += stageId
+    }
     override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
     override def defaultParallelism() = 2
   }
@@ -174,20 +180,26 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     }
   }
 
-  /** Sends the rdd to the scheduler for scheduling. */
+  /** Sends the rdd to the scheduler for scheduling and returns the job id. */
   private def submit(
       rdd: RDD[_],
       partitions: Array[Int],
       func: (TaskContext, Iterator[_]) => _ = jobComputeFunc,
       allowLocal: Boolean = false,
-      listener: JobListener = listener) {
+      listener: JobListener = listener): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
     runEvent(JobSubmitted(jobId, rdd, func, partitions, allowLocal, null, listener))
+    return jobId
   }
 
   /** Sends TaskSetFailed to the scheduler. */
   private def failed(taskSet: TaskSet, message: String) {
     runEvent(TaskSetFailed(taskSet, message))
+  }
+
+  /** Sends JobCancelled to the DAG scheduler. */
+  private def cancel(jobId: Int) {
+    runEvent(JobCancelled(jobId))
   }
 
   test("zero split job") {
@@ -248,7 +260,15 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
   test("trivial job failure") {
     submit(makeRdd(1, Nil), Array(0))
     failed(taskSets(0), "some failure")
-    assert(failure.getMessage === "Job aborted: some failure")
+    assert(failure.getMessage === "Job aborted due to stage failure: some failure")
+    assertDataStructuresEmpty
+  }
+
+  test("trivial job cancellation") {
+    val rdd = makeRdd(1, Nil)
+    val jobId = submit(rdd, Array(0))
+    cancel(jobId)
+    assert(failure.getMessage === s"Job $jobId cancelled")
     assertDataStructuresEmpty
   }
 
@@ -320,6 +340,68 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
            Array(makeBlockManagerId("hostB"), makeBlockManagerId("hostA")))
     complete(taskSets(1), Seq((Success, 42), (Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty
+  }
+
+  test("run shuffle with map stage failure") {
+    val shuffleMapRdd = makeRdd(2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = makeRdd(2, List(shuffleDep))
+    submit(reduceRdd, Array(0, 1))
+
+    // Fail the map stage.  This should cause the entire job to fail.
+    val stageFailureMessage = "Exception failure in map stage"
+    failed(taskSets(0), stageFailureMessage)
+    assert(failure.getMessage === s"Job aborted due to stage failure: $stageFailureMessage")
+    assertDataStructuresEmpty
+  }
+
+  /**
+   * Makes sure that failures of stage used by multiple jobs are correctly handled.
+   *
+   * This test creates the following dependency graph:
+   *
+   * shuffleMapRdd1     shuffleMapRDD2
+   *        |     \        |
+   *        |      \       |
+   *        |       \      |
+   *        |        \     |
+   *   reduceRdd1    reduceRdd2
+   *
+   * We start both shuffleMapRdds and then fail shuffleMapRdd1.  As a result, the job listeners for
+   * reduceRdd1 and reduceRdd2 should both be informed that the job failed.  shuffleMapRDD2 should
+   * also be cancelled, because it is only used by reduceRdd2 and reduceRdd2 cannot complete
+   * without shuffleMapRdd1.
+   */
+  test("failure of stage used by two jobs") {
+    val shuffleMapRdd1 = makeRdd(2, Nil)
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, null)
+    val shuffleMapRdd2 = makeRdd(2, Nil)
+    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, null)
+
+    val reduceRdd1 = makeRdd(2, List(shuffleDep1))
+    val reduceRdd2 = makeRdd(2, List(shuffleDep1, shuffleDep2))
+
+    // We need to make our own listeners for this test, since by default submit uses the same
+    // listener for all jobs, and here we want to capture the failure for each job separately.
+    class FailureRecordingJobListener() extends JobListener {
+      var failureMessage: String = _
+      override def taskSucceeded(index: Int, result: Any) {}
+      override def jobFailed(exception: Exception) = { failureMessage = exception.getMessage }
+    }
+    val listener1 = new FailureRecordingJobListener()
+    val listener2 = new FailureRecordingJobListener()
+
+    submit(reduceRdd1, Array(0, 1), listener=listener1)
+    submit(reduceRdd2, Array(0, 1), listener=listener2)
+
+    val stageFailureMessage = "Exception failure in map stage"
+    failed(taskSets(0), stageFailureMessage)
+
+    assert(cancelledStages.contains(1))
+    assert(listener1.failureMessage === s"Job aborted due to stage failure: $stageFailureMessage")
+    assert(listener2.failureMessage === s"Job aborted due to stage failure: $stageFailureMessage")
     assertDataStructuresEmpty
   }
 
