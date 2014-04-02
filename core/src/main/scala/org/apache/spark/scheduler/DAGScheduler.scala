@@ -86,7 +86,7 @@ class DAGScheduler(
   private[scheduler] val shuffleToMapStage = new TimeStampedHashMap[Int, Stage]
   private[scheduler] val jobIdToActiveJob = new HashMap[Int, ActiveJob]
   private[scheduler] val resultStageToJob = new HashMap[Stage, ActiveJob]
-  private[spark] val stageToInfos = new TimeStampedHashMap[Stage, StageInfo]
+  private[scheduler] val stageToInfos = new TimeStampedHashMap[Stage, StageInfo]
 
   // Stages we need to run whose parents aren't done
   private[scheduler] val waitingStages = new HashSet[Stage]
