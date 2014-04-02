@@ -44,53 +44,52 @@ private class TachyonStore(
 
   override def getSize(blockId: BlockId): Long = {
     tachyonManager.getFile(blockId.name).length
-//    tachyonManager.getBlockLocation(blockId).length
   }
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult =  {
-    putToTachyonStore(blockId, _bytes, true)
+  override def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult =  {
+    putToTachyonStore(blockId, bytes, true)
   }
 
   override def putValues(
-    blockId: BlockId,
-    values: ArrayBuffer[Any],
-    level: StorageLevel,
-    returnValues: Boolean): PutResult = {
+      blockId: BlockId,
+      values: ArrayBuffer[Any],
+      level: StorageLevel,
+      returnValues: Boolean): PutResult = {
     return putValues(blockId, values.toIterator, level, returnValues)
   }
 
   override def putValues(
-    blockId: BlockId,
-    values: Iterator[Any],
-    level: StorageLevel,
-    returnValues: Boolean): PutResult = {
+      blockId: BlockId,
+      values: Iterator[Any],
+      level: StorageLevel,
+      returnValues: Boolean): PutResult = {
     logDebug("Attempting to write values for block " + blockId)
     val _bytes = blockManager.dataSerialize(blockId, values)
     putToTachyonStore(blockId, _bytes, returnValues)
   }
 
   private def putToTachyonStore(
-    blockId: BlockId,
-    _bytes: ByteBuffer,
-    returnValues: Boolean): PutResult = {
+      blockId: BlockId,
+      bytes: ByteBuffer,
+      returnValues: Boolean): PutResult = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
-    val bytes = _bytes.duplicate()
-    bytes.rewind()
+    val byteBuffer = bytes.duplicate()
+    byteBuffer.rewind()
     logDebug("Attempting to put block " + blockId + " into Tachyon")
     val startTime = System.currentTimeMillis
     val file = tachyonManager.getFile(blockId)
     val os = file.getOutStream(WriteType.TRY_CACHE)
-    os.write(bytes.array())
+    os.write(byteBuffer.array())
     os.close()
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file in Tachyon in %d ms".format(
-      blockId, Utils.bytesToString(bytes.limit), (finishTime - startTime)))
+      blockId, Utils.bytesToString(byteBuffer.limit), (finishTime - startTime)))
 
     if (returnValues) {
-      PutResult(_bytes.limit(), Right(_bytes.duplicate()))
+      PutResult(bytes.limit(), Right(bytes.duplicate()))
     } else {
-      PutResult(_bytes.limit(), null)
+      PutResult(bytes.limit(), null)
     }
   }
 

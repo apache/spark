@@ -283,8 +283,6 @@ object SparkBuild extends Build {
   val excludeCommonsLogging = ExclusionRule(organization = "commons-logging")
   val excludeSLF4J = ExclusionRule(organization = "org.slf4j")
   val excludeScalap = ExclusionRule(organization = "org.scala-lang", artifact = "scalap")
-  val excludeKyro = ExclusionRule(organization = "de.javakaffee")
-  val excludeJackson = ExclusionRule(organization = "org.codehaus.jackson")
   val excludeHadoop = ExclusionRule(organization = "org.apache.hadoop")
   val excludeCurator = ExclusionRule(organization = "org.apache.curator")
   val excludePowermock = ExclusionRule(organization = "org.powermock")
