@@ -263,13 +263,19 @@ private[sql] object ParquetTestData {
     val booleanNumberPairs = r1.addGroup(3)
     booleanNumberPairs.add("value", 2.5)
     booleanNumberPairs.add("truth", false)
-    r1.addGroup(4).addGroup(0).addGroup(0).add(
+    val top_level = r1.addGroup(4)
+    val second_level_a = top_level.addGroup(0)
+    val second_level_b = top_level.addGroup(0)
+    val third_level_aa = second_level_a.addGroup(0)
+    val third_level_ab = second_level_a.addGroup(0)
+    val third_level_c = second_level_b.addGroup(0)
+    third_level_aa.add(
       CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
       7)
-    r1.addGroup(4).addGroup(0).addGroup(0).add(
+    third_level_ab.add(
       CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
       8)
-    r1.addGroup(4).addGroup(0).addGroup(0).add(
+    third_level_c.add(
       CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
       9)
 

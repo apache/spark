@@ -50,12 +50,14 @@ object CatalystConverter {
           case _ => new CatalystArrayConverter(elementType, fieldIndex, parent)
         }
       }
-      case StructType(fields: Seq[StructField]) =>
-        new CatalystGroupConverter(fields, fieldIndex, parent)
-      case ctype: NativeType =>
+      case StructType(fields: Seq[StructField]) => {
+        new CatalystStructConverter(fields, fieldIndex, parent)
+      }
+      case ctype: NativeType => {
         // note: for some reason matching for StringType fails so use this ugly if instead
         if (ctype == StringType) new CatalystPrimitiveStringConverter(parent, fieldIndex)
         else new CatalystPrimitiveConverter(parent, fieldIndex)
+      }
       case _ => throw new RuntimeException(
         s"unable to convert datatype ${field.dataType.toString} in CatalystGroupConverter")
     }
@@ -109,7 +111,7 @@ trait CatalystConverter {
  * @param schema The corresponding Catalyst schema in the form of a list of attributes.
  */
 class CatalystGroupConverter(
-    private[parquet] val schema: Seq[FieldType],
+    protected[parquet] val schema: Seq[FieldType],
     protected[parquet] val index: Int,
     protected[parquet] val parent: CatalystConverter,
     protected[parquet] var current: ArrayBuffer[Any],
@@ -274,6 +276,23 @@ class CatalystArrayConverter(
   // TODO: think about reusing the buffer
   override def end(): Unit = {
     if (parent != null) parent.updateField(index, buffer)
+  }
+}
+
+// this is for multi-element groups of primitive or complex types
+// that have repetition level optional or required (so struct fields)
+class CatalystStructConverter(
+    override protected[parquet] val schema: Seq[FieldType],
+    override protected[parquet] val index: Int,
+    override protected[parquet] val parent: CatalystConverter)
+  extends CatalystGroupConverter(schema, index, parent) {
+
+  override protected[parquet] def clearBuffer(): Unit = {}
+
+  // TODO: think about reusing the buffer
+  override def end(): Unit = {
+    assert(!isRootConverter)
+    parent.updateField(index, current)
   }
 }
 
