@@ -49,7 +49,7 @@ private class Aggregator(
     val deltaMean = currMean
     var i = 0
     while(i < currM2n.size) {
-      currM2n(i) -= deltaMean(i) * deltaMean(i) * nnz(i) * (nnz(i)-totalCnt) / totalCnt
+      currM2n(i) += deltaMean(i) * deltaMean(i) * nnz(i) * (totalCnt-nnz(i)) / totalCnt
       currM2n(i) /= totalCnt
       i += 1
     }
@@ -61,7 +61,7 @@ private class Aggregator(
   override lazy val numNonZeros: Vector = Vectors.fromBreeze(nnz)
 
   override lazy val max: Vector = {
-    nnz.activeIterator.foreach {
+    nnz.iterator.foreach {
       case (id, count) =>
         if ((count == 0.0) || ((count < totalCnt) && (currMax(id) < 0.0)))  currMax(id) = 0.0
     }
@@ -69,7 +69,7 @@ private class Aggregator(
   }
 
   override lazy val min: Vector = {
-    nnz.activeIterator.foreach {
+    nnz.iterator.foreach {
       case (id, count) =>
         if ((count == 0.0) || ((count < totalCnt) && (currMin(id) > 0.0))) currMin(id) = 0.0
     }
@@ -88,7 +88,7 @@ private class Aggregator(
         if (currMin(id) > value) currMin(id) = value
 
         val tmpPrevMean = currMean(id)
-        currMean(id) = (currMean(id) * totalCnt + value) / (totalCnt + 1.0)
+        currMean(id) = (currMean(id) * nnz(id) + value) / (nnz(id) + 1.0)
         currM2n(id) += (value - currMean(id)) * (value - tmpPrevMean)
 
         nnz(id) += 1.0
@@ -114,11 +114,14 @@ private class Aggregator(
           (currMean(id) * nnz(id) + other.currMean(id) * other.nnz(id)) / (nnz(id) + other.nnz(id))
     }
 
-    other.currM2n.activeIterator.foreach {
-      case (id, 0.0) =>
-      case (id, value) =>
-        currM2n(id) +=
-          value + deltaMean(id) * deltaMean(id) * nnz(id) * other.nnz(id) / (nnz(id)+other.nnz(id))
+    var i = 0
+    while(i < currM2n.size) {
+      (nnz(i), other.nnz(i)) match {
+        case (0.0, 0.0) =>
+        case _ => currM2n(i) +=
+          other.currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * other.nnz(i) / (nnz(i)+other.nnz(i))
+      }
+      i += 1
     }
 
     other.currMax.activeIterator.foreach {
