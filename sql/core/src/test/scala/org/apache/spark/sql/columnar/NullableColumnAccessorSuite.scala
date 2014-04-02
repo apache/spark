@@ -49,13 +49,13 @@ class NullableColumnAccessorSuite extends FunSuite {
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
     val nullRow = makeNullRow(1)
 
-    test(s"Nullable $typeName accessor: empty column") {
+    test(s"Nullable $typeName column accessor: empty column") {
       val builder = TestNullableColumnBuilder(columnType)
       val accessor = TestNullableColumnAccessor(builder.build(), columnType)
       assert(!accessor.hasNext)
     }
 
-    test(s"Nullable $typeName accessor: access null values") {
+    test(s"Nullable $typeName column accessor: access null values") {
       val builder = TestNullableColumnBuilder(columnType)
       val randomRow = makeRandomRow(columnType)
 
@@ -72,7 +72,7 @@ class NullableColumnAccessorSuite extends FunSuite {
         assert(row(0) === randomRow(0))
 
         accessor.extractTo(row, 0)
-        assert(row(0) === null)
+        assert(row.isNullAt(0))
       }
     }
   }

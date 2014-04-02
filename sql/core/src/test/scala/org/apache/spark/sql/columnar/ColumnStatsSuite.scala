@@ -39,7 +39,9 @@ class ColumnStatsSuite extends FunSuite {
 
     test(s"$columnStatsName: empty") {
       val columnStats = columnStatsClass.newInstance()
-      assert((columnStats.lowerBound, columnStats.upperBound) === columnStats.initialBounds)
+      expectResult(columnStats.initialBounds, "Wrong initial bounds") {
+        (columnStats.lowerBound, columnStats.upperBound)
+      }
     }
 
     test(s"$columnStatsName: non-empty") {
@@ -52,8 +54,8 @@ class ColumnStatsSuite extends FunSuite {
       val values = rows.map(_.head.asInstanceOf[T#JvmType])
       val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#JvmType]]
 
-      assert(columnStats.lowerBound === values.min(ordering))
-      assert(columnStats.upperBound === values.max(ordering))
+      expectResult(values.min(ordering), "Wrong lower bound")(columnStats.lowerBound)
+      expectResult(values.max(ordering), "Wrong upper bound")(columnStats.upperBound)
     }
   }
 }

@@ -71,6 +71,8 @@ private[sql] sealed abstract class ColumnType[T <: DataType, JvmType](
    * Creates a duplicated copy of the value.
    */
   def clone(v: JvmType): JvmType = v
+
+  override def toString = getClass.getSimpleName.stripSuffix("$")
 }
 
 private[sql] abstract class NativeColumnType[T <: NativeType](
@@ -258,7 +260,7 @@ private[sql] object GENERIC extends ByteArrayColumnType[DataType](9, 16) {
 }
 
 private[sql] object ColumnType {
-  implicit def dataTypeToColumnType(dataType: DataType): ColumnType[_, _] = {
+  def apply(dataType: DataType): ColumnType[_, _] = {
     dataType match {
       case IntegerType => INT
       case LongType    => LONG

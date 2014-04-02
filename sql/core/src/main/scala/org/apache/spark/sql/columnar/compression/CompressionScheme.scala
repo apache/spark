@@ -58,7 +58,9 @@ private[sql] trait WithCompressionSchemes {
 }
 
 private[sql] trait AllCompressionSchemes extends WithCompressionSchemes {
-  override val schemes = Seq(PassThrough, RunLengthEncoding, DictionaryEncoding)
+  override val schemes: Seq[CompressionScheme] = {
+    Seq(PassThrough, RunLengthEncoding, DictionaryEncoding)
+  }
 }
 
 private[sql] object CompressionScheme {

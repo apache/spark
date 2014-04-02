@@ -20,7 +20,7 @@ package org.apache.spark.sql.columnar
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.types._
 
-private[sql] sealed abstract class ColumnStats[T <: DataType, JvmType] extends Serializable{
+private[sql] sealed abstract class ColumnStats[T <: DataType, JvmType] extends Serializable {
   /**
    * Closed lower bound of this column.
    */
@@ -246,7 +246,7 @@ private[sql] class FloatColumnStats extends BasicColumnStats(FLOAT) {
   }
 }
 
-object IntColumnStats {
+private[sql] object IntColumnStats {
   val UNINITIALIZED = 0
   val INITIALIZED = 1
   val ASCENDING = 2
@@ -254,6 +254,17 @@ object IntColumnStats {
   val UNORDERED = 4
 }
 
+/**
+ * Statistical information for `Int` columns. More information is collected since `Int` is
+ * frequently used. Extra information include:
+ *
+ * - Ordering state (ascending/descending/unordered), may be used to decide whether binary search
+ *   is applicable when searching elements.
+ * - Maximum delta between adjacent elements, may be used to guide the `IntDelta` compression
+ *   scheme.
+ *
+ * (This two kinds of information are not used anywhere yet and might be removed later.)
+ */
 private[sql] class IntColumnStats extends BasicColumnStats(INT) {
   import IntColumnStats._
 

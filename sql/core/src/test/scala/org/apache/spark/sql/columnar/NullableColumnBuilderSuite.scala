@@ -48,10 +48,8 @@ class NullableColumnBuilderSuite extends FunSuite {
       val columnBuilder = TestNullableColumnBuilder(columnType)
       val buffer = columnBuilder.build()
 
-      // For column type ID
-      assert(buffer.getInt() === columnType.typeId)
-      // For null count
-      assert(buffer.getInt() === 0)
+      expectResult(columnType.typeId, "Wrong column type ID")(buffer.getInt())
+      expectResult(0, "Wrong null count")(buffer.getInt())
       assert(!buffer.hasRemaining)
     }
 
@@ -59,16 +57,14 @@ class NullableColumnBuilderSuite extends FunSuite {
       val columnBuilder = TestNullableColumnBuilder(columnType)
       val randomRow = makeRandomRow(columnType)
 
-      (0 until 4) foreach { _ =>
+      (0 until 4).foreach { _ =>
         columnBuilder.appendFrom(randomRow, 0)
       }
 
       val buffer = columnBuilder.build()
 
-      // For column type ID
-      assert(buffer.getInt() === columnType.typeId)
-      // For null count
-      assert(buffer.getInt() === 0)
+      expectResult(columnType.typeId, "Wrong column type ID")(buffer.getInt())
+      expectResult(0, "Wrong null count")(buffer.getInt())
     }
 
     test(s"$typeName column builder: null values") {
@@ -76,19 +72,18 @@ class NullableColumnBuilderSuite extends FunSuite {
       val randomRow = makeRandomRow(columnType)
       val nullRow = makeNullRow(1)
 
-      (0 until 4) foreach { _ =>
+      (0 until 4).foreach { _ =>
         columnBuilder.appendFrom(randomRow, 0)
         columnBuilder.appendFrom(nullRow, 0)
       }
 
       val buffer = columnBuilder.build()
 
-      // For column type ID
-      assert(buffer.getInt() === columnType.typeId)
-      // For null count
-      assert(buffer.getInt() === 4)
+      expectResult(columnType.typeId, "Wrong column type ID")(buffer.getInt())
+      expectResult(4, "Wrong null count")(buffer.getInt())
+
       // For null positions
-      (1 to 7 by 2).foreach(i => assert(buffer.getInt() === i))
+      (1 to 7 by 2).foreach(expectResult(_, "Wrong null position")(buffer.getInt()))
 
       // For non-null values
       (0 until 4).foreach { _ =>
@@ -97,7 +92,8 @@ class NullableColumnBuilderSuite extends FunSuite {
         } else {
           columnType.extract(buffer)
         }
-        assert(actual === randomRow.head)
+
+        assert(actual === randomRow(0), "Extracted value didn't equal to the original one")
       }
 
       assert(!buffer.hasRemaining)

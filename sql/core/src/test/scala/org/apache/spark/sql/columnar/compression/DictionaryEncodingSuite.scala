@@ -31,8 +31,6 @@ class DictionaryEncodingSuite extends FunSuite {
   testDictionaryEncoding(new LongColumnStats,   LONG)
   testDictionaryEncoding(new StringColumnStats, STRING)
 
-  val schemeName = DictionaryEncoding.getClass.getSimpleName.stripSuffix("$")
-
   def testDictionaryEncoding[T <: NativeType](
       columnStats: NativeColumnStats[T],
       columnType: NativeColumnType[T]) {
@@ -43,7 +41,7 @@ class DictionaryEncodingSuite extends FunSuite {
       (0 until buffer.getInt()).map(columnType.extract(buffer) -> _.toShort).toMap
     }
 
-    test(s"$schemeName with $typeName: simple case") {
+    test(s"$DictionaryEncoding with $typeName: simple case") {
       // -------------
       // Tests encoder
       // -------------
@@ -59,25 +57,25 @@ class DictionaryEncodingSuite extends FunSuite {
 
       val buffer = builder.build()
       val headerSize = CompressionScheme.columnHeaderSize(buffer)
-      // 4 bytes for dictionary size
+      // 4 extra bytes for dictionary size
       val dictionarySize = 4 + values.map(columnType.actualSize).sum
+      // 4 `Short`s, 2 bytes each
       val compressedSize = dictionarySize + 2 * 4
-      // 4 bytes for compression scheme type ID
-      assert(buffer.capacity === headerSize + 4 + compressedSize)
+      // 4 extra bytes for compression scheme type ID
+      expectResult(headerSize + 4 + compressedSize, "Wrong buffer capacity")(buffer.capacity)
 
       // Skips column header
       buffer.position(headerSize)
-      // Checks compression scheme ID
-      assert(buffer.getInt() === DictionaryEncoding.typeId)
+      expectResult(DictionaryEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val dictionary = buildDictionary(buffer)
-      assert(dictionary(values(0)) === (0: Short))
-      assert(dictionary(values(1)) === (1: Short))
+      Array[Short](0, 1).foreach { i =>
+        expectResult(i, "Wrong dictionary entry")(dictionary(values(i)))
+      }
 
-      assert(buffer.getShort() === (0: Short))
-      assert(buffer.getShort() === (1: Short))
-      assert(buffer.getShort() === (0: Short))
-      assert(buffer.getShort() === (1: Short))
+      Array[Short](0, 1, 0, 1).foreach {
+        expectResult(_, "Wrong column element value")(buffer.getShort())
+      }
 
       // -------------
       // Tests decoder
@@ -88,15 +86,15 @@ class DictionaryEncodingSuite extends FunSuite {
 
       val decoder = new DictionaryEncoding.Decoder[T](buffer, columnType)
 
-      assert(decoder.next() === values(0))
-      assert(decoder.next() === values(1))
-      assert(decoder.next() === values(0))
-      assert(decoder.next() === values(1))
+      Array[Short](0, 1, 0, 1).foreach { i =>
+        expectResult(values(i), "Wrong decoded value")(decoder.next())
+      }
+
       assert(!decoder.hasNext)
     }
   }
 
-  test(s"$schemeName: overflow") {
+  test(s"$DictionaryEncoding: overflow") {
     val builder = TestCompressibleColumnBuilder(new IntColumnStats, INT, DictionaryEncoding)
     builder.initialize(0)
 
@@ -106,8 +104,10 @@ class DictionaryEncodingSuite extends FunSuite {
       builder.appendFrom(row, 0)
     }
 
-    intercept[Throwable] {
-      builder.build()
+    withClue("Dictionary overflowed, encoding should fail") {
+      intercept[Throwable] {
+        builder.build()
+      }
     }
   }
 }

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar._
 
-private[sql] object PassThrough extends CompressionScheme {
+private[sql] case object PassThrough extends CompressionScheme {
   override val typeId = 0
 
   override def supports(columnType: ColumnType[_, _]) = true
@@ -63,7 +63,7 @@ private[sql] object PassThrough extends CompressionScheme {
   }
 }
 
-private[sql] object RunLengthEncoding extends CompressionScheme {
+private[sql] case object RunLengthEncoding extends CompressionScheme {
   override def typeId = 1
 
   override def encoder = new this.Encoder
@@ -171,7 +171,7 @@ private[sql] object RunLengthEncoding extends CompressionScheme {
   }
 }
 
-private[sql] object DictionaryEncoding extends CompressionScheme {
+private[sql] case object DictionaryEncoding extends CompressionScheme {
   override def typeId: Int = 2
 
   // 32K unique values allowed
@@ -270,6 +270,7 @@ private[sql] object DictionaryEncoding extends CompressionScheme {
     extends compression.Decoder[T] {
 
     private val dictionary = {
+      // TODO Can we clean up this mess? Maybe move this to `DataType`?
       implicit val classTag = {
         val mirror = runtimeMirror(getClass.getClassLoader)
         ClassTag[T#JvmType](mirror.runtimeClass(columnType.scalaTag.tpe))
