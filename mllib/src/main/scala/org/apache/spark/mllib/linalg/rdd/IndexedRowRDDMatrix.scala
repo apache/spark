@@ -18,6 +18,10 @@
 package org.apache.spark.mllib.linalg.rdd
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.Vector
+
+/** Represents a row of RowRDDMatrix. */
+case class IndexedRDDMatrixRow(index: Long, vector: Vector)
 
 /**
  * Represents a row-oriented RDDMatrix with indexed rows.
