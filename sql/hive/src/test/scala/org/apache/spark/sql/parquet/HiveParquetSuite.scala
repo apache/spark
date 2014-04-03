@@ -57,34 +57,34 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
   }
 
   test("SELECT on Parquet table") {
-    val rdd = sql("SELECT * FROM testsource").collect()
+    val rdd = hql("SELECT * FROM testsource").collect()
     assert(rdd != null)
     assert(rdd.forall(_.size == 6))
   }
 
   test("Simple column projection + filter on Parquet table") {
-    val rdd = sql("SELECT myboolean, mylong FROM testsource WHERE myboolean=true").collect()
+    val rdd = hql("SELECT myboolean, mylong FROM testsource WHERE myboolean=true").collect()
     assert(rdd.size === 5, "Filter returned incorrect number of rows")
     assert(rdd.forall(_.getBoolean(0)), "Filter returned incorrect Boolean field value")
   }
 
   test("Converting Hive to Parquet Table via saveAsParquetFile") {
-    sql("SELECT * FROM src").saveAsParquetFile(dirname.getAbsolutePath)
+    hql("SELECT * FROM src").saveAsParquetFile(dirname.getAbsolutePath)
     parquetFile(dirname.getAbsolutePath).registerAsTable("ptable")
-    val rddOne = sql("SELECT * FROM src").collect().sortBy(_.getInt(0))
-    val rddTwo = sql("SELECT * from ptable").collect().sortBy(_.getInt(0))
+    val rddOne = hql("SELECT * FROM src").collect().sortBy(_.getInt(0))
+    val rddTwo = hql("SELECT * from ptable").collect().sortBy(_.getInt(0))
     compareRDDs(rddOne, rddTwo, "src (Hive)", Seq("key:Int", "value:String"))
   }
 
   test("INSERT OVERWRITE TABLE Parquet table") {
-    sql("SELECT * FROM testsource").saveAsParquetFile(dirname.getAbsolutePath)
+    hql("SELECT * FROM testsource").saveAsParquetFile(dirname.getAbsolutePath)
     parquetFile(dirname.getAbsolutePath).registerAsTable("ptable")
     // let's do three overwrites for good measure
-    sql("INSERT OVERWRITE TABLE ptable SELECT * FROM testsource").collect()
-    sql("INSERT OVERWRITE TABLE ptable SELECT * FROM testsource").collect()
-    sql("INSERT OVERWRITE TABLE ptable SELECT * FROM testsource").collect()
-    val rddCopy = sql("SELECT * FROM ptable").collect()
-    val rddOrig = sql("SELECT * FROM testsource").collect()
+    hql("INSERT OVERWRITE TABLE ptable SELECT * FROM testsource").collect()
+    hql("INSERT OVERWRITE TABLE ptable SELECT * FROM testsource").collect()
+    hql("INSERT OVERWRITE TABLE ptable SELECT * FROM testsource").collect()
+    val rddCopy = hql("SELECT * FROM ptable").collect()
+    val rddOrig = hql("SELECT * FROM testsource").collect()
     assert(rddCopy.size === rddOrig.size, "INSERT OVERWRITE changed size of table??")
     compareRDDs(rddOrig, rddCopy, "testsource", ParquetTestData.testSchemaFieldNames)
   }
@@ -93,13 +93,13 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
     createParquetFile(dirname.getAbsolutePath, ("key", IntegerType), ("value", StringType))
       .registerAsTable("tmp")
     val rddCopy =
-      sql("INSERT INTO TABLE tmp SELECT * FROM src")
+      hql("INSERT INTO TABLE tmp SELECT * FROM src")
       .collect()
       .sortBy[Int](_.apply(0) match {
         case x: Int => x
         case _ => 0
       })
-    val rddOrig = sql("SELECT * FROM src")
+    val rddOrig = hql("SELECT * FROM src")
       .collect()
       .sortBy(_.getInt(0))
     compareRDDs(rddOrig, rddCopy, "src (Hive)", Seq("key:Int", "value:String"))
@@ -108,22 +108,22 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
   test("Appending to Parquet table") {
     createParquetFile(dirname.getAbsolutePath, ("key", IntegerType), ("value", StringType))
       .registerAsTable("tmpnew")
-    sql("INSERT INTO TABLE tmpnew SELECT * FROM src").collect()
-    sql("INSERT INTO TABLE tmpnew SELECT * FROM src").collect()
-    sql("INSERT INTO TABLE tmpnew SELECT * FROM src").collect()
-    val rddCopies = sql("SELECT * FROM tmpnew").collect()
-    val rddOrig = sql("SELECT * FROM src").collect()
+    hql("INSERT INTO TABLE tmpnew SELECT * FROM src").collect()
+    hql("INSERT INTO TABLE tmpnew SELECT * FROM src").collect()
+    hql("INSERT INTO TABLE tmpnew SELECT * FROM src").collect()
+    val rddCopies = hql("SELECT * FROM tmpnew").collect()
+    val rddOrig = hql("SELECT * FROM src").collect()
     assert(rddCopies.size === 3 * rddOrig.size, "number of copied rows via INSERT INTO did not match correct number")
   }
 
   test("Appending to and then overwriting Parquet table") {
     createParquetFile(dirname.getAbsolutePath, ("key", IntegerType), ("value", StringType))
       .registerAsTable("tmp")
-    sql("INSERT INTO TABLE tmp SELECT * FROM src").collect()
-    sql("INSERT INTO TABLE tmp SELECT * FROM src").collect()
-    sql("INSERT OVERWRITE TABLE tmp SELECT * FROM src").collect()
-    val rddCopies = sql("SELECT * FROM tmp").collect()
-    val rddOrig = sql("SELECT * FROM src").collect()
+    hql("INSERT INTO TABLE tmp SELECT * FROM src").collect()
+    hql("INSERT INTO TABLE tmp SELECT * FROM src").collect()
+    hql("INSERT OVERWRITE TABLE tmp SELECT * FROM src").collect()
+    val rddCopies = hql("SELECT * FROM tmp").collect()
+    val rddOrig = hql("SELECT * FROM src").collect()
     assert(rddCopies.size === rddOrig.size, "INSERT OVERWRITE did not actually overwrite")
   }
 

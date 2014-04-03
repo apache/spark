@@ -23,6 +23,16 @@ import org.apache.spark.sql.hive.TestHive._
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
 class HiveQuerySuite extends HiveComparisonTest {
+
+  test("Query expressed in SQL") {
+    assert(sql("SELECT 1").collect() === Array(Seq(1)))
+  }
+
+  test("Query expressed in HiveQL") {
+    hql("FROM src SELECT key").collect()
+    hiveql("FROM src SELECT key").collect()
+  }
+
   createQueryTest("Simple Average",
     "SELECT AVG(key) FROM src")
 
