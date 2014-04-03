@@ -87,7 +87,7 @@ class JavaSQLContext(sparkContext: JavaSparkContext) {
    * Loads a parquet file, returning the result as a [[JavaSchemaRDD]].
    */
   def parquetFile(path: String): JavaSchemaRDD =
-    new JavaSchemaRDD(sqlContext, ParquetRelation("ParquetFile", path))
+    new JavaSchemaRDD(sqlContext, ParquetRelation(path))
 
 
   /**
