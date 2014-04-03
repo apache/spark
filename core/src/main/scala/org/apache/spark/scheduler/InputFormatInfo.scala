@@ -164,8 +164,7 @@ object InputFormatInfo {
 
     PS: I know the wording here is weird, hopefully it makes some sense !
   */
-  def computePreferredLocations(formats: Seq[InputFormatInfo]): Map[String, Set[SplitInfo]]
-  = {
+  def computePreferredLocations(formats: Seq[InputFormatInfo]): Map[String, Set[SplitInfo]] = {
 
     val nodeToSplit = new HashMap[String, HashSet[SplitInfo]]
     for (inputSplit <- formats) {
@@ -178,6 +177,6 @@ object InputFormatInfo {
       }
     }
 
-    nodeToSplit.map(entry => entry._1 -> entry._2.toSet).toMap
+    nodeToSplit.mapValues(_.toSet).toMap
   }
 }
