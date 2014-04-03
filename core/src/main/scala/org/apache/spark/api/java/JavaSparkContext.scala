@@ -167,7 +167,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    *   hdfs://a-hdfs-path/part-nnnnn
    * }}}
    *
-   * Do `JavaPairRDD<String, String> rdd = context.wholeTextFiles("hdfs://a-hdfs-path")`,
+   * Do `JavaPairRDD<String, String> rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path")`,
    *
    * <p> then `rdd` contains
    * {{{
@@ -176,6 +176,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    *   ...
    *   (a-hdfs-path/part-nnnnn, its content)
    * }}}
+   *
+   * @note Small files are perferred, large file is also allowable, but may cause bad performance.
    */
   def wholeTextFiles(path: String): JavaPairRDD[String, String] =
     new JavaPairRDD(sc.wholeTextFiles(path))
