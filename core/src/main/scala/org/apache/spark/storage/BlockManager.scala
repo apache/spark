@@ -257,7 +257,7 @@ private[spark] class BlockManager(
     if (info.tellMaster) {
       val storageLevel = status.storageLevel
       val inMemSize = Math.max(status.memSize, droppedMemorySize)
-      val inTachyonSize = Math.max(status.tachyonSize, droppedMemorySize)
+      val inTachyonSize = status.tachyonSize
       val onDiskSize = status.diskSize
       master.updateBlockInfo(
         blockManagerId, blockId, storageLevel, inMemSize, onDiskSize, inTachyonSize)

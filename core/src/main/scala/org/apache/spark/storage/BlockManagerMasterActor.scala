@@ -357,7 +357,7 @@ private[spark] class BlockManagerInfo(
     }
 
     if (storageLevel.isValid) {
-      /* isValid means it is either stored in-memory or on-disk.
+      /* isValid means it is either stored in-memory, on-disk or on-Tachyon.
        * But the memSize here indicates the data size in or dropped from memory,
        * tachyonSize here indicates the data size in or dropped from Tachyon,
        * and the diskSize here indicates the data size in or dropped to disk.
