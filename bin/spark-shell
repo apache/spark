@@ -145,7 +145,7 @@ function resolve_spark_master(){
     fi
 
     if [ -z "$MASTER" ]; then
-        MASTER="$DEFAULT_MASTER"
+        export MASTER="$DEFAULT_MASTER"
     fi
 
 }
