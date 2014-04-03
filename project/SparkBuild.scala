@@ -296,7 +296,6 @@ object SparkBuild extends Build {
     name := "spark-core",
     libraryDependencies ++= Seq(
         "com.google.guava"           % "guava"            % "14.0.1",
-        "com.google.code.findbugs"   % "jsr305"           % "1.3.9",
         "log4j"                      % "log4j"            % "1.2.17",
         "org.slf4j"                  % "slf4j-api"        % slf4jVersion,
         "org.slf4j"                  % "slf4j-log4j12"    % slf4jVersion,

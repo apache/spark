@@ -40,6 +40,7 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receivers._
 import org.apache.spark.streaming.scheduler._
 import org.apache.hadoop.conf.Configuration
+import org.apache.spark.streaming.ui.StreamingUI
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -157,6 +158,9 @@ class StreamingContext private[streaming] (
   private[streaming] val scheduler = new JobScheduler(this)
 
   private[streaming] val waiter = new ContextWaiter
+
+  private[streaming] val ui = new StreamingUI(this)
+  ui.bind()
 
   /**
    * Return the associated Spark context
