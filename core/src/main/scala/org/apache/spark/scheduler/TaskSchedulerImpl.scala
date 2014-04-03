@@ -96,7 +96,7 @@ private[spark] class TaskSchedulerImpl(
   val mapOutputTracker = SparkEnv.get.mapOutputTracker
 
   var schedulableBuilder: SchedulableBuilder = null
-  var rootPool: Pool = null
+  var rootPool_ : Pool = null
   // default scheduler is FIFO
   val schedulingMode: SchedulingMode = SchedulingMode.withName(
     conf.get("spark.scheduler.mode", "FIFO"))
@@ -110,14 +110,14 @@ private[spark] class TaskSchedulerImpl(
 
   def initialize(backend: SchedulerBackend) {
     this.backend = backend
-    // temporarily set rootPool name to empty
-    rootPool = new Pool("", schedulingMode, 0, 0)
+    // temporarily set rootPool_ name to empty
+    rootPool_ = new Pool("", schedulingMode, 0, 0)
     schedulableBuilder = {
       schedulingMode match {
         case SchedulingMode.FIFO =>
-          new FIFOSchedulableBuilder(rootPool)
+          new FIFOSchedulableBuilder(rootPool_)
         case SchedulingMode.FAIR =>
-          new FairSchedulableBuilder(rootPool, conf)
+          new FairSchedulableBuilder(rootPool_, conf)
       }
     }
     schedulableBuilder.buildPools()
@@ -137,6 +137,7 @@ private[spark] class TaskSchedulerImpl(
       }
     }
   }
+  override def rootPool = rootPool_
 
   override def submitTasks(taskSet: TaskSet) {
     val tasks = taskSet.tasks
