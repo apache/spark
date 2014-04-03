@@ -50,7 +50,8 @@ private class VectorRDDStatisticsAggregator(
     var totalCnt: Double,
     val nnz: BDV[Double],
     val currMax: BDV[Double],
-    val currMin: BDV[Double]) extends VectorRDDStatisticalSummary with Serializable {
+    val currMin: BDV[Double])
+  extends VectorRDDStatisticalSummary with Serializable {
 
   // lazy val is used for computing only once time. Same below.
   override def mean = {
@@ -130,31 +131,22 @@ private class VectorRDDStatisticsAggregator(
 
     var i = 0
     while (i < other.currMean.length) {
-      if (other.currMean(i) != 0.0)
+      // merge mean together
+      if (other.currMean(i) != 0.0) {
         currMean(i) = (currMean(i) * nnz(i) + other.currMean(i) * other.nnz(i)) /
           (nnz(i) + other.nnz(i))
-      i += 1
-    }
-
-    i = 0
-    while (i < currM2n.size) {
-      (nnz(i), other.nnz(i)) match {
-        case (0.0, 0.0) =>
-        case _ => currM2n(i) +=
-          other.currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * other.nnz(i) / (nnz(i)+other.nnz(i))
       }
-      i += 1
-    }
 
-    i = 0
-    while (i < other.currMax.length) {
+      // merge m2n together
+      if (nnz(i) + other.nnz(i) != 0.0) {
+        currM2n(i) += other.currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * other.nnz(i) /
+          (nnz(i)+other.nnz(i))
+      }
+
       if (currMax(i) < other.currMax(i)) currMax(i) = other.currMax(i)
-      i += 1
-    }
 
-    i = 0
-    while (i < other.currMin.length) {
       if (currMin(i) > other.currMin(i)) currMin(i) = other.currMin(i)
+
       i += 1
     }
 

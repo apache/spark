@@ -89,7 +89,6 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
 }
 
 object VectorRDDFunctionsSuite {
-
   def equivVector(lhs: Vector, rhs: Vector): Boolean = {
     (lhs.toBreeze - rhs.toBreeze).norm(2) < 1e-9
   }
