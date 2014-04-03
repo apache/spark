@@ -43,15 +43,25 @@ object ScalaReflection {
       val params = t.member("<init>": TermName).asMethod.paramss
       StructType(
         params.head.map(p => StructField(p.name.toString, schemaFor(p.typeSignature), true)))
+    // Need to decide if we actually need a special type here.
+    case t if t <:< typeOf[Array[Byte]] => BinaryType
+    case t if t <:< typeOf[Array[_]] =>
+      sys.error(s"Only Array[Byte] supported now, use Seq instead of $t")
     case t if t <:< typeOf[Seq[_]] =>
       val TypeRef(_, _, Seq(elementType)) = t
       ArrayType(schemaFor(elementType))
+    case t if t <:< typeOf[Map[_,_]] =>
+      val TypeRef(_, _, Seq(keyType, valueType)) = t
+      MapType(schemaFor(keyType), schemaFor(valueType))
     case t if t <:< typeOf[String] => StringType
     case t if t <:< definitions.IntTpe => IntegerType
     case t if t <:< definitions.LongTpe => LongType
+    case t if t <:< definitions.FloatTpe => FloatType
     case t if t <:< definitions.DoubleTpe => DoubleType
     case t if t <:< definitions.ShortTpe => ShortType
     case t if t <:< definitions.ByteTpe => ByteType
+    case t if t <:< definitions.BooleanTpe => BooleanType
+    case t if t <:< typeOf[BigDecimal] => DecimalType
   }
 
   implicit class CaseClassRelation[A <: Product : TypeTag](data: Seq[A]) {
