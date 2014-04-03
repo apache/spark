@@ -153,7 +153,6 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
     } catch {
       case ie: InterruptedException =>
         logInfo("Receiving thread interrupted")
-        //println("Receiving thread interrupted")
       case e: Exception =>
         stopOnError(e)
     }
@@ -167,7 +166,7 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
   def stop() {
     receivingThread.interrupt()
     onStop()
-    //TODO: terminate the actor
+    // TODO: terminate the actor
   }
 
   /**

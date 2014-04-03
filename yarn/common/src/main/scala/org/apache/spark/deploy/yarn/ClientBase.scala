@@ -139,7 +139,6 @@ trait ClientBase extends Logging {
     } else if (srcHost != null && dstHost == null) {
       return false
     }
-    //check for ports
     if (srcUri.getPort() != dstUri.getPort()) {
       false
     } else {

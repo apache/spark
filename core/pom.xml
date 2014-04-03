@@ -83,10 +83,6 @@
       <artifactId>guava</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.google.code.findbugs</groupId>
-      <artifactId>jsr305</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
     </dependency>
@@ -150,7 +146,7 @@
       <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
       <version>3.2.6</version>
       <!-- see also exclusion for lift-json; this is necessary since it depends on
-         scala-library and scalap 2.10.0, but we use 2.10.3, and only override
+         scala-library and scalap 2.10.0, but we use 2.10.4, and only override
          scala-library -->
       <exclusions>
         <exclusion>

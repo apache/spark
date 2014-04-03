@@ -114,6 +114,9 @@ class SqlParser extends StandardTokenParsers {
   protected val NULL = Keyword("NULL")
   protected val ON = Keyword("ON")
   protected val OR = Keyword("OR")
+  protected val LIKE = Keyword("LIKE")
+  protected val RLIKE = Keyword("RLIKE")
+  protected val REGEXP = Keyword("REGEXP")
   protected val ORDER = Keyword("ORDER")
   protected val OUTER = Keyword("OUTER")
   protected val RIGHT = Keyword("RIGHT")
@@ -178,7 +181,7 @@ class SqlParser extends StandardTokenParsers {
         val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
         val withHaving = h.map(h => Filter(h, withDistinct)).getOrElse(withDistinct)
         val withOrder = o.map(o => Sort(o, withHaving)).getOrElse(withHaving)
-        val withLimit = l.map { l => StopAfter(l, withOrder) }.getOrElse(withOrder)
+        val withLimit = l.map { l => Limit(l, withOrder) }.getOrElse(withOrder)
         withLimit
   }
 
@@ -267,6 +270,9 @@ class SqlParser extends StandardTokenParsers {
     termExpression ~ ">=" ~ termExpression ^^ { case e1 ~ _ ~ e2 => GreaterThanOrEqual(e1, e2) } |
     termExpression ~ "!=" ~ termExpression ^^ { case e1 ~ _ ~ e2 => Not(Equals(e1, e2)) } |
     termExpression ~ "<>" ~ termExpression ^^ { case e1 ~ _ ~ e2 => Not(Equals(e1, e2)) } |
+    termExpression ~ RLIKE ~ termExpression ^^ { case e1 ~ _ ~ e2 => RLike(e1, e2) } |
+    termExpression ~ REGEXP ~ termExpression ^^ { case e1 ~ _ ~ e2 => RLike(e1, e2) } |
+    termExpression ~ LIKE ~ termExpression ^^ { case e1 ~ _ ~ e2 => Like(e1, e2) } |
     termExpression ~ IN ~ "(" ~ rep1sep(termExpression, ",") <~ ")" ^^ {
       case e1 ~ _ ~ _ ~ e2 => In(e1, e2)
     } |

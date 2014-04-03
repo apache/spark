@@ -17,7 +17,7 @@
 
 import sbt._
 import sbt.Classpaths.publishTask
-import Keys._
+import sbt.Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
 import scala.util.Properties
@@ -27,7 +27,7 @@ import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
 import scala.collection.JavaConversions._
 
 // For Sonatype publishing
-//import com.jsuereth.pgp.sbtplugin.PgpKeys._
+// import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
 object SparkBuild extends Build {
   val SPARK_VERSION = "1.0.0-SNAPSHOT" 
@@ -152,7 +152,7 @@ object SparkBuild extends Build {
   def sharedSettings = Defaults.defaultSettings ++ MimaBuild.mimaSettings(file(sparkHome)) ++ Seq(
     organization       := "org.apache.spark",
     version            := SPARK_VERSION,
-    scalaVersion       := "2.10.3",
+    scalaVersion       := "2.10.4",
     scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation",
       "-target:" + SCALAC_JVM_VERSION),
     javacOptions := Seq("-target", JAVAC_JVM_VERSION, "-source", JAVAC_JVM_VERSION),
@@ -200,7 +200,7 @@ object SparkBuild extends Build {
 
     publishMavenStyle := true,
 
-    //useGpg in Global := true,
+    // useGpg in Global := true,
 
     pomExtra := (
       <parent>
@@ -248,13 +248,13 @@ object SparkBuild extends Build {
     */
 
     libraryDependencies ++= Seq(
-        "io.netty"          % "netty-all"       % "4.0.17.Final",
-        "org.eclipse.jetty" % "jetty-server"    % "7.6.8.v20121106",
-        "org.eclipse.jetty" % "jetty-util" % "7.6.8.v20121106",
-        "org.eclipse.jetty" % "jetty-plus" % "7.6.8.v20121106",
-        "org.eclipse.jetty" % "jetty-security" % "7.6.8.v20121106",
+        "io.netty"          % "netty-all"      % "4.0.17.Final",
+        "org.eclipse.jetty" % "jetty-server"   % "8.1.14.v20131031",
+        "org.eclipse.jetty" % "jetty-util"     % "8.1.14.v20131031",
+        "org.eclipse.jetty" % "jetty-plus"     % "8.1.14.v20131031",
+        "org.eclipse.jetty" % "jetty-security" % "8.1.14.v20131031",
         /** Workaround for SPARK-959. Dependency used by org.eclipse.jetty. Fixed in ivy 2.3.0. */
-        "org.eclipse.jetty.orbit" % "javax.servlet" % "2.5.0.v201103041518" artifacts Artifact("javax.servlet", "jar", "jar"),
+        "org.eclipse.jetty.orbit" % "javax.servlet" % "3.0.0.v201112011016" artifacts Artifact("javax.servlet", "jar", "jar"),
         "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
         "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
         "com.novocode"      % "junit-interface" % "0.10"   % "test",
@@ -296,7 +296,6 @@ object SparkBuild extends Build {
     name := "spark-core",
     libraryDependencies ++= Seq(
         "com.google.guava"           % "guava"            % "14.0.1",
-        "com.google.code.findbugs"   % "jsr305"           % "1.3.9",
         "log4j"                      % "log4j"            % "1.2.17",
         "org.slf4j"                  % "slf4j-api"        % slf4jVersion,
         "org.slf4j"                  % "slf4j-log4j12"    % slf4jVersion,

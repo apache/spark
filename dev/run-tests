@@ -39,18 +39,17 @@ JAVA_VERSION=$($java_cmd -version 2>&1 | sed 's/java version "\(.*\)\.\(.*\)\..*
 echo "========================================================================="
 echo "Running Apache RAT checks"
 echo "========================================================================="
-
 dev/check-license
 
 echo "========================================================================="
 echo "Running Scala style checks"
 echo "========================================================================="
-sbt/sbt clean scalastyle
+dev/scalastyle
 
 echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
-sbt/sbt assembly test
+sbt/sbt assembly test | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 
 echo "========================================================================="
 echo "Running PySpark tests"
@@ -64,5 +63,5 @@ echo "========================================================================="
 echo "Detecting binary incompatibilites with MiMa"
 echo "========================================================================="
 ./bin/spark-class org.apache.spark.tools.GenerateMIMAIgnore
-sbt/sbt mima-report-binary-issues
+sbt/sbt mima-report-binary-issues | grep -v -e "info.*Resolving" 
 
