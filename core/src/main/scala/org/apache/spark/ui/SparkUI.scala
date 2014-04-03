@@ -55,8 +55,8 @@ private[spark] class SparkUI(
 
   /** Initialize all components of the server. Must be called before bind(). */
   def start() {
-    attachTab(new BlockManagerTab(this))
     attachTab(new JobProgressTab(this))
+    attachTab(new BlockManagerTab(this))
     attachTab(new EnvironmentTab(this))
     attachTab(new ExecutorsTab(this))
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))

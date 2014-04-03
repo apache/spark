@@ -23,7 +23,6 @@ import scala.xml.{Node, NodeSeq}
 
 import org.apache.spark.scheduler.Schedulable
 import org.apache.spark.ui.{UIPage, UIUtils}
-import org.apache.spark.ui.Page.Stages
 
 /** Page showing list of all ongoing and recently finished stages and pools */
 private[ui] class IndexPage(parent: JobProgressTab) extends UIPage("") {
@@ -92,7 +91,7 @@ private[ui] class IndexPage(parent: JobProgressTab) extends UIPage("") {
         <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
         failedStagesTable.toNodeSeq
 
-      UIUtils.headerSparkPage(content, basePath, appName, "Spark Stages", Stages)
+      UIUtils.headerSparkPage(content, basePath, appName, "Spark Stages", parent.headerTabs, parent)
     }
   }
 }

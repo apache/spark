@@ -42,4 +42,6 @@ private[ui] class JobProgressTab(parent: SparkUI) extends UITab("stages") {
   }
 
   def isFairScheduler = jobProgressListener.schedulingMode.exists(_ == SchedulingMode.FAIR)
+
+  def headerTabs: Seq[UITab] = parent.getTabs
 }

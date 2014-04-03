@@ -42,6 +42,10 @@ private[spark] abstract class WebUI(securityManager: SecurityManager, basePath: 
   protected val handlers = ArrayBuffer[ServletContextHandler]()
   protected var serverInfo: Option[ServerInfo] = None
 
+  def getTabs: Seq[UITab] = tabs.toSeq
+  def getHandlers: Seq[ServletContextHandler] = handlers.toSeq
+  def getListeners: Seq[SparkListener] = tabs.flatMap(_.listener)
+
   /** Attach a tab to this UI, along with all of its attached pages. Only valid before bind(). */
   def attachTab(tab: UITab) {
     tab.start()
@@ -64,12 +68,6 @@ private[spark] abstract class WebUI(securityManager: SecurityManager, basePath: 
   def attachHandler(handler: ServletContextHandler) {
     handlers += handler
   }
-
-  /** Return a list of listeners attached to this UI. */
-  def getListeners = tabs.flatMap(_.listener)
-
-  /** Return a list of handlers attached to this UI. */
-  def getHandlers = handlers.toSeq
 
   /** Initialize all components of the server. Must be called before bind(). */
   def start()
@@ -98,6 +96,7 @@ private[spark] abstract class WebUI(securityManager: SecurityManager, basePath: 
 private[spark] abstract class UITab(val prefix: String) {
   val pages = ArrayBuffer[UIPage]()
   var listener: Option[SparkListener] = None
+  var name = prefix.capitalize
 
   /** Attach a page to this tab. This prepends the page's prefix with the tab's own prefix. */
   def attachPage(page: UIPage) {

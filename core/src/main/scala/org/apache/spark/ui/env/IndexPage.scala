@@ -22,7 +22,6 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.ui.{UIUtils, UIPage}
-import org.apache.spark.ui.Page.Environment
 
 private[ui] class IndexPage(parent: EnvironmentTab) extends UIPage("") {
   private val appName = parent.appName
@@ -46,7 +45,7 @@ private[ui] class IndexPage(parent: EnvironmentTab) extends UIPage("") {
         <h4>Classpath Entries</h4> {classpathEntriesTable}
       </span>
 
-    UIUtils.headerSparkPage(content, basePath, appName, "Environment", Environment)
+    UIUtils.headerSparkPage(content, basePath, appName, "Environment", parent.headerTabs, parent)
   }
 
   private def propertyHeader = Seq("Name", "Value")

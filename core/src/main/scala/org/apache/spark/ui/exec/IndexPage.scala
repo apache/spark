@@ -22,7 +22,6 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.ui.{UIPage, UIUtils}
-import org.apache.spark.ui.Page.Executors
 import org.apache.spark.util.Utils
 
 private[ui] class IndexPage(parent: ExecutorsTab) extends UIPage("") {
@@ -56,8 +55,8 @@ private[ui] class IndexPage(parent: ExecutorsTab) extends UIPage("") {
         </div>
       </div>;
 
-    UIUtils.headerSparkPage(
-      content, basePath, appName, "Executors (" + execInfo.size + ")", Executors)
+    UIUtils.headerSparkPage(content, basePath, appName, "Executors (" + execInfo.size + ")",
+      parent.headerTabs, parent)
   }
 
   /** Header fields for the executors table */

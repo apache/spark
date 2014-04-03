@@ -23,7 +23,6 @@ import scala.xml.Node
 
 import org.apache.spark.scheduler.{Schedulable, StageInfo}
 import org.apache.spark.ui.{UIPage, UIUtils}
-import org.apache.spark.ui.Page.Stages
 
 /** Page showing specific pool details */
 private[ui] class PoolPage(parent: JobProgressTab) extends UIPage("pool") {
@@ -51,8 +50,8 @@ private[ui] class PoolPage(parent: JobProgressTab) extends UIPage("pool") {
         <h4>Summary </h4> ++ poolTable.toNodeSeq ++
         <h4>{activeStages.size} Active Stages</h4> ++ activeStagesTable.toNodeSeq
 
-      UIUtils.headerSparkPage(
-        content, basePath, appName, "Fair Scheduler Pool: " + poolName, Stages)
+      UIUtils.headerSparkPage(content, basePath, appName, "Fair Scheduler Pool: " + poolName,
+        parent.headerTabs, parent)
     }
   }
 }

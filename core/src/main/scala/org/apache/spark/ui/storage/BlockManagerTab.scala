@@ -38,6 +38,8 @@ private[ui] class BlockManagerTab(parent: SparkUI) extends UITab("storage") {
     assert(listener.isDefined, "BlockManagerTab has not started yet!")
     listener.get.asInstanceOf[BlockManagerListener]
   }
+
+  def headerTabs: Seq[UITab] = parent.getTabs
 }
 
 /**

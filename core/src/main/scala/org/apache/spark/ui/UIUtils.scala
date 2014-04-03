@@ -25,8 +25,6 @@ import scala.xml.Node
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils {
 
-  import Page._
-
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
     override def initialValue(): SimpleDateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
@@ -62,26 +60,13 @@ private[spark] object UIUtils {
       basePath: String,
       appName: String,
       title: String,
-      page: Page.Value) : Seq[Node] = {
-    val jobs = page match {
-      case Stages =>
-        <li class="active"><a href={prependBaseUri(basePath, "/stages")}>Stages</a></li>
-      case _ => <li><a href={prependBaseUri(basePath, "/stages")}>Stages</a></li>
-    }
-    val storage = page match {
-      case Storage =>
-        <li class="active"><a href={prependBaseUri(basePath, "/storage")}>Storage</a></li>
-      case _ => <li><a href={prependBaseUri(basePath, "/storage")}>Storage</a></li>
-    }
-    val environment = page match {
-      case Environment => 
-        <li class="active"><a href={prependBaseUri(basePath, "/environment")}>Environment</a></li>
-      case _ => <li><a href={prependBaseUri(basePath, "/environment")}>Environment</a></li>
-    }
-    val executors = page match {
-      case Executors =>
-        <li class="active"><a href={prependBaseUri(basePath, "/executors")}>Executors</a></li>
-      case _ => <li><a href={prependBaseUri(basePath, "/executors")}>Executors</a></li>
+      tabs: Seq[UITab],
+      activeTab: UITab) : Seq[Node] = {
+
+    val header = tabs.map { tab =>
+      <li class={if (tab == activeTab) "active" else ""}>
+        <a href={prependBaseUri(basePath, "/" + tab.prefix)}>{tab.name}</a>
+      </li>
     }
 
     <html>
@@ -100,12 +85,7 @@ private[spark] object UIUtils {
             <a href={prependBaseUri(basePath, "/")} class="brand">
               <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
             </a>
-            <ul class="nav">
-              {jobs}
-              {storage}
-              {environment}
-              {executors}
-            </ul>
+            <ul class="nav">{header}</ul>
             <p class="navbar-text pull-right"><strong>{appName}</strong> application UI</p>
           </div>
         </div>

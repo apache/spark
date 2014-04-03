@@ -37,6 +37,8 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends UITab("executors") {
     assert(listener.isDefined, "ExecutorsTab has not started yet!")
     listener.get.asInstanceOf[ExecutorsListener]
   }
+
+  def headerTabs: Seq[UITab] = parent.getTabs
 }
 
 /**
