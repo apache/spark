@@ -164,7 +164,7 @@ private[sql] case object DictionaryEncoding extends CompressionScheme {
   override val typeId = 2
 
   // 32K unique values allowed
-  private val MAX_DICT_SIZE = Short.MaxValue - 1
+  val MAX_DICT_SIZE = Short.MaxValue
 
   override def decoder[T <: NativeType](buffer: ByteBuffer, columnType: NativeColumnType[T]) = {
     new this.Decoder(buffer, columnType)
@@ -272,9 +272,7 @@ private[sql] case object DictionaryEncoding extends CompressionScheme {
 private[sql] case object BooleanBitSet extends CompressionScheme {
   override val typeId = 3
 
-  private val BITS_PER_LONG = 64
-
-  private var _uncompressedSize = 0
+  val BITS_PER_LONG = 64
 
   override def decoder[T <: NativeType](buffer: ByteBuffer, columnType: NativeColumnType[T]) = {
     new this.Decoder(buffer).asInstanceOf[compression.Decoder[T]]
@@ -285,11 +283,13 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
   override def supports(columnType: ColumnType[_, _]) = columnType == BOOLEAN
 
   class Encoder extends compression.Encoder[BooleanType.type] {
+    private var _uncompressedSize = 0
+
     override def gatherCompressibilityStats(
         value: Boolean,
         columnType: NativeColumnType[BooleanType.type]) {
 
-      _uncompressedSize += columnType.actualSize(value)
+      _uncompressedSize += BOOLEAN.defaultSize
     }
 
     override def compress(
@@ -301,7 +301,7 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
         // Total element count (1 byte per Boolean value)
         .putInt(from.remaining)
 
-      while (from.remaining > BITS_PER_LONG) {
+      while (from.remaining >= BITS_PER_LONG) {
         var word = 0: Long
         var i = 0
 
@@ -344,7 +344,7 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
   class Decoder(buffer: ByteBuffer) extends compression.Decoder[BooleanType.type] {
     private val count = buffer.getInt()
 
-    private var currentWord = if (count > 0) buffer.getLong() else 0: Long
+    private var currentWord = 0: Long
 
     private var visited: Int = 0
 
@@ -356,7 +356,7 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
         currentWord = buffer.getLong()
       }
 
-      ((currentWord >> bit) & 1) > 0
+      ((currentWord >> bit) & 1) != 0
     }
 
     override def hasNext: Boolean = visited < count

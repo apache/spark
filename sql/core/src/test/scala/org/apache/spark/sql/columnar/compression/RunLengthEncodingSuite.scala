@@ -43,8 +43,6 @@ class RunLengthEncodingSuite extends FunSuite {
       // -------------
 
       val builder = TestCompressibleColumnBuilder(columnStats, columnType, RunLengthEncoding)
-      builder.initialize(0)
-
       val (values, rows) = makeUniqueValuesAndSingleValueRows(columnType, uniqueValueCount)
       val inputSeq = inputRuns.flatMap { case (index, run) =>
         Seq.fill(run)(index)
@@ -56,13 +54,14 @@ class RunLengthEncodingSuite extends FunSuite {
       // Column type ID + null count + null positions
       val headerSize = CompressionScheme.columnHeaderSize(buffer)
 
-      // 4 extra bytes each run for run length
-      val compressedSize = inputRuns.map { case (index, _) =>
+      // Compression scheme ID + compressed contents
+      val compressedSize = 4 + inputRuns.map { case (index, _) =>
+        // 4 extra bytes each run for run length
         columnType.actualSize(values(index)) + 4
       }.sum
 
       // 4 extra bytes for compression scheme type ID
-      expectResult(headerSize + 4 + compressedSize, "Wrong buffer capacity")(buffer.capacity)
+      expectResult(headerSize + compressedSize, "Wrong buffer capacity")(buffer.capacity)
 
       // Skips column header
       buffer.position(headerSize)
@@ -80,13 +79,17 @@ class RunLengthEncodingSuite extends FunSuite {
       // Rewinds, skips column header and 4 more bytes for compression scheme ID
       buffer.rewind().position(headerSize + 4)
 
-      val decoder = new RunLengthEncoding.Decoder[T](buffer, columnType)
+      val decoder = RunLengthEncoding.decoder(buffer, columnType)
 
       inputSeq.foreach { i =>
         expectResult(values(i), "Wrong decoded value")(decoder.next())
       }
 
       assert(!decoder.hasNext)
+    }
+
+    test(s"$RunLengthEncoding with $typeName: empty column") {
+      skeleton(0, Seq.empty)
     }
 
     test(s"$RunLengthEncoding with $typeName: simple case") {
