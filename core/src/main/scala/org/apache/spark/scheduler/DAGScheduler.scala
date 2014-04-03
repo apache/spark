@@ -84,7 +84,7 @@ class DAGScheduler(
   private[scheduler] val stageIdToJobIds = new TimeStampedHashMap[Int, HashSet[Int]]
   private[scheduler] val stageIdToStage = new TimeStampedHashMap[Int, Stage]
   private[scheduler] val shuffleToMapStage = new TimeStampedHashMap[Int, Stage]
-  private[scheduler] val jobIdToActiveJob = new HashMap[Int, ActiveJob]
+  private[scheduler] val stageIdToActiveJob = new HashMap[Int, ActiveJob]
   private[scheduler] val resultStageToJob = new HashMap[Stage, ActiveJob]
   private[spark] val stageToInfos = new TimeStampedHashMap[Stage, StageInfo]
 
@@ -536,7 +536,7 @@ class DAGScheduler(
           listenerBus.post(SparkListenerJobStart(job.jobId, Array[Int](), properties))
           runLocally(job)
         } else {
-          jobIdToActiveJob(jobId) = job
+          stageIdToActiveJob(jobId) = job
           activeJobs += job
           resultStageToJob(finalStage) = job
           listenerBus.post(
@@ -559,7 +559,7 @@ class DAGScheduler(
         // Cancel all running jobs.
         runningStages.map(_.jobId).foreach(handleJobCancellation)
         activeJobs.clear()      // These should already be empty by this point,
-        jobIdToActiveJob.clear()   // but just in case we lost track of some jobs...
+        stageIdToActiveJob.clear()   // but just in case we lost track of some jobs...
 
       case ExecutorAdded(execId, host) =>
         handleExecutorAdded(execId, host)
@@ -569,7 +569,8 @@ class DAGScheduler(
 
       case BeginEvent(task, taskInfo) =>
         for (
-          stage <- stageIdToStage.get(task.stageId);
+          job <- stageIdToActiveJob.get(task.stageId);
+		  stage <- stageIdToStage.get(task.stageId);
           stageInfo <- stageToInfos.get(stage)
         ) {
           if (taskInfo.serializedSize > TASK_SIZE_TO_WARN * 1024 &&
@@ -696,7 +697,7 @@ class DAGScheduler(
   private def activeJobForStage(stage: Stage): Option[Int] = {
     if (stageIdToJobIds.contains(stage.id)) {
       val jobsThatUseStage: Array[Int] = stageIdToJobIds(stage.id).toArray.sorted
-      jobsThatUseStage.find(jobIdToActiveJob.contains)
+      jobsThatUseStage.find(stageIdToActiveJob.contains)
     } else {
       None
     }
@@ -749,10 +750,10 @@ class DAGScheduler(
       }
     }
 
-    val properties = if (jobIdToActiveJob.contains(jobId)) {
-      jobIdToActiveJob(stage.jobId).properties
+    val properties = if (stageIdToActiveJob.contains(jobId)) {
+	  stageIdToActiveJob(stage.jobId).properties
     } else {
-      // this stage will be assigned to "default" pool
+      //this stage will be assigned to "default" pool
       null
     }
 
@@ -826,7 +827,7 @@ class DAGScheduler(
                   job.numFinished += 1
                   // If the whole job has finished, remove it
                   if (job.numFinished == job.numPartitions) {
-                    jobIdToActiveJob -= stage.jobId
+                    stageIdToActiveJob -= stage.jobId
                     activeJobs -= job
                     resultStageToJob -= stage
                     markStageAsFinished(stage)
@@ -985,11 +986,11 @@ class DAGScheduler(
       val independentStages = removeJobAndIndependentStages(jobId)
       independentStages.foreach(taskScheduler.cancelTasks)
       val error = new SparkException("Job %d cancelled".format(jobId))
-      val job = jobIdToActiveJob(jobId)
+      val job = stageIdToActiveJob(jobId)
       job.listener.jobFailed(error)
       jobIdToStageIds -= jobId
       activeJobs -= job
-      jobIdToActiveJob -= jobId
+      stageIdToActiveJob -= jobId
       listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error, job.finalStage.id)))
     }
   }
@@ -1010,7 +1011,7 @@ class DAGScheduler(
       val error = new SparkException("Job aborted: " + reason)
       job.listener.jobFailed(error)
       jobIdToStageIdsRemove(job.jobId)
-      jobIdToActiveJob -= resultStage.jobId
+      stageIdToActiveJob -= resultStage.jobId
       activeJobs -= job
       resultStageToJob -= resultStage
       listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error, failedStage.id)))
