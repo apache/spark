@@ -15,9 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
-package execution
+package org.apache.spark.sql.hive.execution
+
+import org.apache.spark.sql.hive.TestHive
+import org.apache.spark.sql.hive.TestHive._
+
+case class Data(a: Int, B: Int, n: Nested)
+case class Nested(a: Int, B: Int)
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
@@ -44,8 +48,16 @@ class HiveResolutionSuite extends HiveComparisonTest {
   createQueryTest("attr",
     "SELECT key FROM src a ORDER BY key LIMIT 1")
 
-  createQueryTest("alias.*",
+  createQueryTest("alias.star",
     "SELECT a.* FROM src a ORDER BY key LIMIT 1")
+
+  test("case insensitivity with scala reflection") {
+    // Test resolution with Scala Reflection
+    TestHive.sparkContext.parallelize(Data(1, 2, Nested(1,2)) :: Nil)
+      .registerAsTable("caseSensitivityTest")
+
+    sql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
+  }
 
   /**
    * Negative examples.  Currently only left here for documentation purposes.

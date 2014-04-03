@@ -15,25 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package columnar
+package org.apache.spark.sql.columnar
 
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Attribute}
 import org.apache.spark.sql.execution.{SparkPlan, LeafNode}
+import org.apache.spark.sql.Row
 
 private[sql] case class InMemoryColumnarTableScan(attributes: Seq[Attribute], child: SparkPlan)
   extends LeafNode {
-
-  // For implicit conversion from `DataType` to `ColumnType`
-  import ColumnType._
 
   override def output: Seq[Attribute] = attributes
 
   lazy val cachedColumnBuffers = {
     val output = child.output
     val cached = child.execute().mapPartitions { iterator =>
-      val columnBuilders = output.map { a =>
-        ColumnBuilder(a.dataType.typeId, 0, a.name)
+      val columnBuilders = output.map { attribute =>
+        ColumnBuilder(ColumnType(attribute.dataType).typeId, 0, attribute.name)
       }.toArray
 
       var row: Row = null

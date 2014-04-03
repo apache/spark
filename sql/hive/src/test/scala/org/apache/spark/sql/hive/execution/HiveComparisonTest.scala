@@ -15,17 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
-package execution
+package org.apache.spark.sql.hive.execution
 
 import java.io._
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
-
+import org.apache.spark.sql.Logging
 import org.apache.spark.sql.catalyst.plans.logical.{ExplainCommand, NativeCommand}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.Sort
+import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
+import org.apache.spark.sql.hive.TestHive
 
 /**
  * Allows the creations of tests that execute the same query against both hive

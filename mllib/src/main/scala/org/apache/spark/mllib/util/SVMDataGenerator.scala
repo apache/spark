@@ -23,6 +23,7 @@ import org.jblas.DoubleMatrix
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 
 /**
@@ -58,7 +59,7 @@ object SVMDataGenerator {
       }
       val yD = new DoubleMatrix(1, x.length, x: _*).dot(trueWeights) + rnd.nextGaussian() * 0.1
       val y = if (yD < 0) 0.0 else 1.0
-      LabeledPoint(y, x)
+      LabeledPoint(y, Vectors.dense(x))
     }
 
     MLUtils.saveLabeledData(data, outputPath)

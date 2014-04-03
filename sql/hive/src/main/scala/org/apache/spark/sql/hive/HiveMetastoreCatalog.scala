@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
+package org.apache.spark.sql.hive
 
 import scala.util.parsing.combinator.RegexParsers
 
@@ -27,13 +26,15 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.Deserializer
 
-import org.apache.spark.sql.catalyst.analysis.Catalog
+import org.apache.spark.sql.Logging
+import org.apache.spark.sql.catalyst.analysis.{EliminateAnalysisOperators, Catalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
 
+/* Implicit conversions */
 import scala.collection.JavaConversions._
 
 class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
@@ -96,7 +97,8 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
         createTable(databaseName, tableName, child.output)
 
         InsertIntoTable(
-          lookupRelation(Some(databaseName), tableName, None).asInstanceOf[BaseRelation],
+          EliminateAnalysisOperators(
+            lookupRelation(Some(databaseName), tableName, None)),
           Map.empty,
           child,
           overwrite = false)
@@ -139,6 +141,13 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
    */
   override def registerTable(
       databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit = ???
+
+  /**
+   * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
+   * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
+   */
+  override def unregisterTable(
+      databaseName: Option[String], tableName: String): Unit = ???
 }
 
 object HiveMetastoreTypes extends RegexParsers {

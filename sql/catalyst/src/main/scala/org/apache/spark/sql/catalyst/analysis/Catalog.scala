@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package analysis
+package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
@@ -33,6 +31,7 @@ trait Catalog {
     alias: Option[String] = None): LogicalPlan
 
   def registerTable(databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit
+  def unregisterTable(databaseName: Option[String], tableName: String): Unit
 }
 
 class SimpleCatalog extends Catalog {
@@ -42,17 +41,18 @@ class SimpleCatalog extends Catalog {
     tables += ((tableName, plan))
   }
 
-  def dropTable(tableName: String) = tables -= tableName
+  def unregisterTable(databaseName: Option[String], tableName: String) = { tables -= tableName }
 
   def lookupRelation(
       databaseName: Option[String],
       tableName: String,
       alias: Option[String] = None): LogicalPlan = {
     val table = tables.get(tableName).getOrElse(sys.error(s"Table Not Found: $tableName"))
+    val tableWithQualifiers = Subquery(tableName, table)
 
     // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
     // properly qualified with this alias.
-    alias.map(a => Subquery(a.toLowerCase, table)).getOrElse(table)
+    alias.map(a => Subquery(a.toLowerCase, tableWithQualifiers)).getOrElse(tableWithQualifiers)
   }
 }
 
@@ -88,6 +88,10 @@ trait OverrideCatalog extends Catalog {
       plan: LogicalPlan): Unit = {
     overrides.put((databaseName, tableName), plan)
   }
+
+  override def unregisterTable(databaseName: Option[String], tableName: String): Unit = {
+    overrides.remove((databaseName, tableName))
+  }
 }
 
 /**
@@ -103,6 +107,10 @@ object EmptyCatalog extends Catalog {
   }
 
   def registerTable(databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  def unregisterTable(databaseName: Option[String], tableName: String): Unit = {
     throw new UnsupportedOperationException
   }
 }

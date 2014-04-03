@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.mapred
+package org.apache.spark
 
 import java.io.IOException
 import java.text.NumberFormat
@@ -25,16 +25,14 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.exec.{FileSinkOperator, Utilities}
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
 import org.apache.hadoop.hive.ql.plan.FileSinkDesc
+import org.apache.hadoop.mapred._
 import org.apache.hadoop.io.Writable
-
-import org.apache.spark.Logging
-import org.apache.spark.SerializableWritable
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.
  * It is based on [[SparkHadoopWriter]].
  */
-protected[apache]
+protected[spark]
 class SparkHiveHadoopWriter(
     @transient jobConf: JobConf,
     fileSinkConf: FileSinkDesc)
@@ -115,11 +113,10 @@ class SparkHiveHadoopWriter(
         cmtr.commitTask(taCtxt)
         logInfo (taID + ": Committed")
       } catch {
-        case e: IOException => {
+        case e: IOException =>
           logError("Error committing the output of task: " + taID.value, e)
           cmtr.abortTask(taCtxt)
           throw e
-        }
       }
     } else {
       logWarning ("No need to commit output of task: " + taID.value)
@@ -163,12 +160,12 @@ class SparkHiveHadoopWriter(
     taskContext
   }
 
-  private def setIDs(jobid: Int, splitid: Int, attemptid: Int) {
-    jobID = jobid
-    splitID = splitid
-    attemptID = attemptid
+  private def setIDs(jobId: Int, splitId: Int, attemptId: Int) {
+    jobID = jobId
+    splitID = splitId
+    attemptID = attemptId
 
-    jID = new SerializableWritable[JobID](SparkHadoopWriter.createJobID(now, jobid))
+    jID = new SerializableWritable[JobID](SparkHadoopWriter.createJobID(now, jobId))
     taID = new SerializableWritable[TaskAttemptID](
       new TaskAttemptID(new TaskID(jID.value, true, splitID), attemptID))
   }

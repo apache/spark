@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.columnar
 
+import org.apache.spark.sql.{QueryTest, TestData}
 import org.apache.spark.sql.execution.SparkLogicalPlan
 import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.{TestData, DslQuerySuite}
 
-class ColumnarQuerySuite extends DslQuerySuite {
+class ColumnarQuerySuite extends QueryTest {
   import TestData._
   import TestSQLContext._
 

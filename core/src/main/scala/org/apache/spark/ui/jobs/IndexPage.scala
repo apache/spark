@@ -25,7 +25,7 @@ import org.apache.spark.scheduler.Schedulable
 import org.apache.spark.ui.Page._
 import org.apache.spark.ui.UIUtils
 
-/** Page showing list of all ongoing and recently finished stages and pools*/
+/** Page showing list of all ongoing and recently finished stages and pools */
 private[ui] class IndexPage(parent: JobProgressUI) {
   private val appName = parent.appName
   private val basePath = parent.basePath

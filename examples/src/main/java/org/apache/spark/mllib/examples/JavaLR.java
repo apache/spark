@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.examples;
 
+import java.util.regex.Pattern;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -24,10 +25,8 @@ import org.apache.spark.api.java.function.Function;
 
 import org.apache.spark.mllib.classification.LogisticRegressionWithSGD;
 import org.apache.spark.mllib.classification.LogisticRegressionModel;
+import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
-
-import java.util.Arrays;
-import java.util.regex.Pattern;
 
 /**
  * Logistic regression based classification using ML Lib.
@@ -47,12 +46,8 @@ public final class JavaLR {
       for (int i = 0; i < tok.length; ++i) {
         x[i] = Double.parseDouble(tok[i]);
       }
-      return new LabeledPoint(y, x);
+      return new LabeledPoint(y, Vectors.dense(x));
     }
-  }
-
-  public static void printWeights(double[] a) {
-    System.out.println(Arrays.toString(a));
   }
 
   public static void main(String[] args) {
@@ -80,8 +75,7 @@ public final class JavaLR {
     LogisticRegressionModel model = LogisticRegressionWithSGD.train(points.rdd(),
         iterations, stepSize);
 
-    System.out.print("Final w: ");
-    printWeights(model.weights());
+    System.out.print("Final w: " + model.weights());
 
     System.exit(0);
   }
