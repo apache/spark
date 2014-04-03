@@ -223,10 +223,10 @@ class SparkContext(
 
   // Create and start the scheduler
   private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
-  taskScheduler.start()
-
   @volatile private[spark] var dagScheduler = new DAGScheduler(this)
+  
   dagScheduler.start()
+  taskScheduler.start()
 
   postEnvironmentUpdate()
 
