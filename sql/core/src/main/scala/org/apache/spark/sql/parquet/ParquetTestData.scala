@@ -26,7 +26,7 @@ import parquet.hadoop.util.ContextUtil
 import parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.catalyst.util.getTempFilePath
+import org.apache.spark.util.Utils
 
 object ParquetTestData {
 
@@ -64,13 +64,13 @@ object ParquetTestData {
     "mylong:Long"
   )
 
-  val testFile = getTempFilePath("testParquetFile").getCanonicalFile
+  val testDir = Utils.createTempDir()
 
-  lazy val testData = new ParquetRelation("testData", testFile.toURI.toString)
+  lazy val testData = new ParquetRelation(testDir.toURI.toString)
 
   def writeFile() = {
-    testFile.delete
-    val path: Path = new Path(testFile.toURI)
+    testDir.delete
+    val path: Path = new Path(new Path(testDir.toURI), new Path("part-r-0.parquet"))
     val job = new Job()
     val configuration: Configuration = ContextUtil.getConfiguration(job)
     val schema: MessageType = MessageTypeParser.parseMessageType(testSchema)

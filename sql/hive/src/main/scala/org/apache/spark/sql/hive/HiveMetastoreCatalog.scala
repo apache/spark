@@ -148,6 +148,8 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
    */
   override def unregisterTable(
       databaseName: Option[String], tableName: String): Unit = ???
+
+  override def unregisterAllTables() = {}
 }
 
 object HiveMetastoreTypes extends RegexParsers {

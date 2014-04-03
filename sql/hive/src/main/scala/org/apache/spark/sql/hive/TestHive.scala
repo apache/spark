@@ -313,6 +313,8 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
         catalog.client.dropDatabase(db, true, false, true)
       }
 
+      catalog.unregisterAllTables()
+
       FunctionRegistry.getFunctionNames.filterNot(originalUdfs.contains(_)).foreach { udfName =>
         FunctionRegistry.unregisterTemporaryUDF(udfName)
       }

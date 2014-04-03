@@ -170,7 +170,7 @@ abstract class HiveComparisonTest
   }
 
   val installHooksCommand = "(?i)SET.*hooks".r
-  def createQueryTest(testCaseName: String, sql: String) {
+  def createQueryTest(testCaseName: String, sql: String, reset: Boolean = true) {
     // If test sharding is enable, skip tests that are not in the correct shard.
     shardInfo.foreach {
       case (shardId, numShards) if testCaseName.hashCode % numShards != shardId => return
@@ -228,7 +228,7 @@ abstract class HiveComparisonTest
       try {
         // MINOR HACK: You must run a query before calling reset the first time.
         TestHive.sql("SHOW TABLES")
-        TestHive.reset()
+        if (reset) { TestHive.reset() }
 
         val hiveCacheFiles = queryList.zipWithIndex.map {
           case (queryString, i)  =>
@@ -295,7 +295,7 @@ abstract class HiveComparisonTest
                     fail(errorMessage)
                 }
             }.toSeq
-            TestHive.reset()
+            if (reset) { TestHive.reset() }
 
             computedResults
           }

@@ -171,10 +171,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // TODO: need to support writing to other types of files.  Unify the below code paths.
       case logical.WriteToFile(path, child) =>
         val relation =
-          ParquetRelation.create(path, child, sparkContext.hadoopConfiguration, None)
-        InsertIntoParquetTable(relation, planLater(child))(sparkContext) :: Nil
+          ParquetRelation.create(path, child, sparkContext.hadoopConfiguration)
+        InsertIntoParquetTable(relation, planLater(child), overwrite=true)(sparkContext) :: Nil
       case logical.InsertIntoTable(table: ParquetRelation, partition, child, overwrite) =>
-        InsertIntoParquetTable(table, planLater(child))(sparkContext) :: Nil
+        InsertIntoParquetTable(table, planLater(child), overwrite)(sparkContext) :: Nil
       case PhysicalOperation(projectList, filters, relation: ParquetRelation) =>
         // TODO: Should be pushing down filters as well.
         pruneFilterProject(
