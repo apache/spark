@@ -45,7 +45,7 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
 
   test("dense statistical summary") {
     val data = sc.parallelize(localData, 2)
-    val summary = data.summarizeStatistics()
+    val summary = data.computeSummaryStatistics()
 
     assert(equivVector(summary.mean, Vectors.dense(4.0, 5.0, 6.0)),
       "Dense column mean do not match.")
@@ -53,7 +53,7 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
     assert(equivVector(summary.variance, Vectors.dense(6.0, 6.0, 6.0)),
       "Dense column variance do not match.")
 
-    assert(summary.totalCount === 3, "Dense column cnt do not match.")
+    assert(summary.count === 3, "Dense column cnt do not match.")
 
     assert(equivVector(summary.numNonZeros, Vectors.dense(3.0, 3.0, 3.0)),
       "Dense column nnz do not match.")
@@ -67,7 +67,7 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
 
   test("sparse statistical summary") {
     val dataForSparse = sc.parallelize(sparseData.toSeq, 2)
-    val summary = dataForSparse.summarizeStatistics()
+    val summary = dataForSparse.computeSummaryStatistics()
 
     assert(equivVector(summary.mean, Vectors.dense(0.06, 0.05, 0.0)),
       "Sparse column mean do not match.")
@@ -75,7 +75,7 @@ class VectorRDDFunctionsSuite extends FunSuite with LocalSparkContext {
     assert(equivVector(summary.variance, Vectors.dense(0.2564, 0.2475, 0.0)),
       "Sparse column variance do not match.")
 
-    assert(summary.totalCount === 100, "Sparse column cnt do not match.")
+    assert(summary.count === 100, "Sparse column cnt do not match.")
 
     assert(equivVector(summary.numNonZeros, Vectors.dense(2.0, 1.0, 0.0)),
       "Sparse column nnz do not match.")
