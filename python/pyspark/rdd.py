@@ -788,7 +788,7 @@ class RDD(object):
         >>> sc.parallelize([10, 1, 2, 9, 3, 4, 5, 6, 7]).takeOrdered(6)
         [1, 2, 3, 4, 5, 6]
         >>> sc.parallelize([10, 1, 2, 9, 3, 4, 5, 6, 7], 2).takeOrdered(6, key=lambda x: -x)
-        [(-10, 10), (-9, 9), (-7, 7), (-6, 6), (-5, 5), (-4, 4)]
+        [10, 9, 7, 6, 5, 4]
         """
 
         def topNKeyedElems(iterator, key_=None):
@@ -799,10 +799,15 @@ class RDD(object):
                 q.insert(k)
             yield q.getElements()
 
+        def unKey(x, key_=None):
+            if key_ != None:
+                x = [i[1] for i in x]
+            return x
+        
         def merge(a, b):
             return next(topNKeyedElems(a + b))
-
-        return sorted(self.mapPartitions(lambda i: topNKeyedElems(i, key)).reduce(merge))
+        result = self.mapPartitions(lambda i: topNKeyedElems(i, key)).reduce(merge)
+        return sorted(unKey(result, key), key=key)
 
 
     def take(self, num):
