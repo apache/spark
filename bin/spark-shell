@@ -127,7 +127,7 @@ function set_spark_log_conf(){
 
 function set_spark_master(){
     if ! [[ "$1" =~ $ARG_FLAG_PATTERN ]]; then
-        MASTER="$1"
+        export MASTER="$1"
     else
         out_error "wrong format for $2"
     fi
