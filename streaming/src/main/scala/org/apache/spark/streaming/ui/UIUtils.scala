@@ -18,7 +18,6 @@
 package org.apache.spark.streaming.ui
 
 import scala.xml.Node
-import org.apache.spark.ui.Page
 
 private[spark] object UIUtils {
 
