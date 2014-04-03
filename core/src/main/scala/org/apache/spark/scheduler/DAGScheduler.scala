@@ -570,7 +570,7 @@ class DAGScheduler(
       case BeginEvent(task, taskInfo) =>
         for (
           job <- stageIdToActiveJob.get(task.stageId);
-		  stage <- stageIdToStage.get(task.stageId);
+          stage <- stageIdToStage.get(task.stageId);
           stageInfo <- stageToInfos.get(stage)
         ) {
           if (taskInfo.serializedSize > TASK_SIZE_TO_WARN * 1024 &&
@@ -751,7 +751,7 @@ class DAGScheduler(
     }
 
     val properties = if (stageIdToActiveJob.contains(jobId)) {
-	  stageIdToActiveJob(stage.jobId).properties
+      stageIdToActiveJob(stage.jobId).properties
     } else {
       //this stage will be assigned to "default" pool
       null
