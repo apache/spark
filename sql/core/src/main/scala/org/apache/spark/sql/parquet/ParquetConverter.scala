@@ -275,7 +275,9 @@ class CatalystArrayConverter(
 
   // TODO: think about reusing the buffer
   override def end(): Unit = {
-    if (parent != null) parent.updateField(index, buffer)
+    assert(parent != null)
+    parent.updateField(index, buffer)
+    clearBuffer()
   }
 }
 

@@ -405,11 +405,12 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(result(0)(3).asInstanceOf[ArrayBuffer[Any]].size === 2)
     assert(result(0)(3).asInstanceOf[ArrayBuffer[Any]].apply(0) === 2.5)
     assert(result(0)(3).asInstanceOf[ArrayBuffer[Any]].apply(1) === false)
-    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].size === 3)
+    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].size === 2)
+    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].apply(0).asInstanceOf[ArrayBuffer[Any]].size === 2)
     assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].apply(1).asInstanceOf[ArrayBuffer[Any]].size === 1)
-    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].apply(1).asInstanceOf[ArrayBuffer[ArrayBuffer[Any]]].size === 1)
-    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].apply(1).asInstanceOf[ArrayBuffer[ArrayBuffer[Any]]].apply(0) === 9)
-    assert(true)
+    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].apply(0).asInstanceOf[ArrayBuffer[ArrayBuffer[Any]]].apply(0).apply(0) === 7)
+    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].apply(0).asInstanceOf[ArrayBuffer[ArrayBuffer[Any]]].apply(1).apply(0) === 8)
+    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].apply(1).asInstanceOf[ArrayBuffer[ArrayBuffer[Any]]].apply(0).apply(0) === 9)
   }
 
   /**
