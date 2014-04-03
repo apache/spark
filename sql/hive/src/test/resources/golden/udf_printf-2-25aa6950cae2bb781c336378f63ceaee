@@ -1,0 +1,4 @@
+printf(String format, Obj... args) - function that can format strings according to printf-style format strings
+Example:
+  > SELECT printf("Hello World %d %s", 100, "days")FROM src LIMIT 1;
+  "Hello World 100 days"
