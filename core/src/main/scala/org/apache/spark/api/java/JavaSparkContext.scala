@@ -167,7 +167,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    *   hdfs://a-hdfs-path/part-nnnnn
    * }}}
    *
-   * Do `val rdd = mlContext.wholeTextFile("hdfs://a-hdfs-path")`,
+   * Do `JavaPairRDD<String, String> rdd = context.wholeTextFiles("hdfs://a-hdfs-path")`,
    *
    * <p> then `rdd` contains
    * {{{
@@ -177,7 +177,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    *   (a-hdfs-path/part-nnnnn, its content)
    * }}}
    */
-  def wholeTextFiles(path: String): JavaRDD[(String, String)] = sc.wholeTextFiles(path)
+  def wholeTextFiles(path: String): JavaPairRDD[String, String] =
+    new JavaPairRDD(sc.wholeTextFiles(path))
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
     *

@@ -385,7 +385,7 @@ class SparkContext(
    *   hdfs://a-hdfs-path/part-nnnnn
    * }}}
    *
-   * Do `val rdd = mlContext.wholeTextFile("hdfs://a-hdfs-path")`,
+   * Do `val rdd = sparkContext.wholeTextFile("hdfs://a-hdfs-path")`,
    *
    * <p> then `rdd` contains
    * {{{
