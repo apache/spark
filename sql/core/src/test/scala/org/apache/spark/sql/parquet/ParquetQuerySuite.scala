@@ -55,7 +55,7 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
       case Seq(_, _) => // All good
     }
 
-    // TODO: We can't run this query as it NPEs
+    query.collect()
   }
 
   test("Import of simple Parquet file") {

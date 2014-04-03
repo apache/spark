@@ -41,7 +41,7 @@ import org.apache.spark.{SerializableWritable, SparkContext, TaskContext}
  * [[ParquetRelation]] as a RDD[Row].
  */
 case class ParquetTableScan(
-    @transient output: Seq[Attribute],
+    output: Seq[Attribute],
     @transient relation: ParquetRelation,
     @transient columnPruningPred: Option[Expression])(
     @transient val sc: SparkContext)
