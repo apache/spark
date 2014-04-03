@@ -61,7 +61,7 @@ private[spark] class TaskSchedulerImpl(
 
   // Threshold above which we warn user initial TaskSet may be starved
   val STARVATION_TIMEOUT = conf.getLong("spark.starvation.timeout", 15000)
-  
+ 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
   val activeTaskSets = new HashMap[String, TaskSetManager]
