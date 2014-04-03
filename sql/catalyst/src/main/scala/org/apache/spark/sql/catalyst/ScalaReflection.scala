@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
+import java.sql.Timestamp
+
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -54,14 +56,15 @@ object ScalaReflection {
       val TypeRef(_, _, Seq(keyType, valueType)) = t
       MapType(schemaFor(keyType), schemaFor(valueType))
     case t if t <:< typeOf[String] => StringType
+    case t if t <:< typeOf[Timestamp] => TimestampType
+    case t if t <:< typeOf[BigDecimal] => DecimalType
     case t if t <:< definitions.IntTpe => IntegerType
     case t if t <:< definitions.LongTpe => LongType
-    case t if t <:< definitions.FloatTpe => FloatType
     case t if t <:< definitions.DoubleTpe => DoubleType
+    case t if t <:< definitions.FloatTpe => FloatType
     case t if t <:< definitions.ShortTpe => ShortType
     case t if t <:< definitions.ByteTpe => ByteType
     case t if t <:< definitions.BooleanTpe => BooleanType
-    case t if t <:< typeOf[BigDecimal] => DecimalType
   }
 
   implicit class CaseClassRelation[A <: Product : TypeTag](data: Seq[A]) {
