@@ -35,7 +35,7 @@ class MasterWebUI(val master: Master, requestedPort: Int)
   val masterActorRef = master.self
   val timeout = AkkaUtils.askTimeout(master.conf)
 
-  /** Initialize all components of the server. Must be called before bind(). */
+  /** Initialize all components of the server. */
   def start() {
     attachPage(new ApplicationPage(this))
     attachPage(new IndexPage(this))
@@ -59,25 +59,13 @@ class MasterWebUI(val master: Master, requestedPort: Int)
   /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */
   def attachUI(ui: SparkUI) {
     assert(serverInfo.isDefined, "Master UI must be bound to a server before attaching SparkUIs")
-    val rootHandler = serverInfo.get.rootHandler
-    for (handler <- ui.getHandlers) {
-      rootHandler.addHandler(handler)
-      if (!handler.isStarted) {
-        handler.start()
-      }
-    }
+    ui.getHandlers.foreach(attachHandler)
   }
 
   /** Detach a reconstructed UI from this Master UI. Only valid after bind(). */
   def detachUI(ui: SparkUI) {
     assert(serverInfo.isDefined, "Master UI must be bound to a server before detaching SparkUIs")
-    val rootHandler = serverInfo.get.rootHandler
-    for (handler <- ui.getHandlers) {
-      if (handler.isStarted) {
-        handler.stop()
-      }
-      rootHandler.removeHandler(handler)
-    }
+    ui.getHandlers.foreach(detachHandler)
   }
 }
 

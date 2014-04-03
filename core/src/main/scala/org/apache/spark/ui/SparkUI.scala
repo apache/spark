@@ -52,8 +52,9 @@ private[spark] class SparkUI(
 
   // Maintain executor storage status through Spark events
   val storageStatusListener = new StorageStatusListener
+  listenerBus.addListener(storageStatusListener)
 
-  /** Initialize all components of the server. Must be called before bind(). */
+  /** Initialize all components of the server. */
   def start() {
     attachTab(new JobProgressTab(this))
     attachTab(new BlockManagerTab(this))
@@ -64,14 +65,10 @@ private[spark] class SparkUI(
     if (live) {
       sc.env.metricsSystem.getServletHandlers.foreach(attachHandler)
     }
-    // Storage status listener must receive events first, as other listeners depend on its state
-    listenerBus.addListener(storageStatusListener)
-    getListeners.foreach(listenerBus.addListener)
   }
 
   /** Bind to the HTTP server behind this web interface. */
   def bind() {
-    assert(!handlers.isEmpty, "SparkUI has not started yet!")
     try {
       serverInfo = Some(startJettyServer(bindHost, port, handlers, sc.conf))
       logInfo("Started Spark web UI at http://%s:%d".format(publicHost, boundPort))
@@ -80,6 +77,12 @@ private[spark] class SparkUI(
         logError("Failed to create Spark web UI", e)
         System.exit(1)
     }
+  }
+
+  /** Attach a tab to this UI, along with its corresponding listener if it exists. */
+  override def attachTab(tab: UITab) {
+    super.attachTab(tab)
+    tab.listener.foreach(listenerBus.addListener)
   }
 
   /** Stop the server behind this web interface. Only valid after bind(). */

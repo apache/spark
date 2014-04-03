@@ -35,7 +35,6 @@ import org.apache.spark.util.Utils
  *
  * Each WebUI represents a collection of tabs, each of which in turn represents a collection of
  * pages. The use of tabs is optional, however; a WebUI may choose to include pages directly.
- * All tabs and pages must be attached before bind()'ing the server.
  */
 private[spark] abstract class WebUI(securityManager: SecurityManager, basePath: String = "") {
   protected val tabs = ArrayBuffer[UITab]()
@@ -46,14 +45,14 @@ private[spark] abstract class WebUI(securityManager: SecurityManager, basePath: 
   def getHandlers: Seq[ServletContextHandler] = handlers.toSeq
   def getListeners: Seq[SparkListener] = tabs.flatMap(_.listener)
 
-  /** Attach a tab to this UI, along with all of its attached pages. Only valid before bind(). */
+  /** Attach a tab to this UI, along with all of its attached pages. */
   def attachTab(tab: UITab) {
     tab.start()
     tab.pages.foreach(attachPage)
     tabs += tab
   }
 
-  /** Attach a page to this UI. Only valid before bind(). */
+  /** Attach a page to this UI. */
   def attachPage(page: UIPage) {
     val pagePath = "/" + page.prefix
     attachHandler(createServletHandler(pagePath,
@@ -64,9 +63,26 @@ private[spark] abstract class WebUI(securityManager: SecurityManager, basePath: 
     }
   }
 
-  /** Attach a handler to this UI. Only valid before bind(). */
+  /** Attach a handler to this UI. */
   def attachHandler(handler: ServletContextHandler) {
     handlers += handler
+    serverInfo.foreach { info =>
+      info.rootHandler.addHandler(handler)
+      if (!handler.isStarted) {
+        handler.start()
+      }
+    }
+  }
+
+  /** Detach a handler from this UI. */
+  def detachHandler(handler: ServletContextHandler) {
+    handlers -= handler
+    serverInfo.foreach { info =>
+      info.rootHandler.removeHandler(handler)
+      if (handler.isStarted) {
+        handler.stop()
+      }
+    }
   }
 
   /** Initialize all components of the server. Must be called before bind(). */
@@ -89,6 +105,7 @@ private[spark] abstract class WebUI(securityManager: SecurityManager, basePath: 
   }
 }
 
+
 /**
  * A tab that represents a collection of pages and a unit of listening for Spark events.
  * Associating each tab with a listener is arbitrary and need not be the case.
@@ -107,6 +124,7 @@ private[spark] abstract class UITab(val prefix: String) {
   /** Initialize listener and attach pages. */
   def start()
 }
+
 
 /**
  * A page that represents the leaf node in the UI hierarchy.

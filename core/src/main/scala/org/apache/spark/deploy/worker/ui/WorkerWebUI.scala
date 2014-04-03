@@ -38,7 +38,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
     worker.conf.get("worker.ui.port",  WorkerWebUI.DEFAULT_PORT).toInt)
   val timeout = AkkaUtils.askTimeout(worker.conf)
 
-  /** Initialize all components of the server. Must be called before bind(). */
+  /** Initialize all components of the server. */
   def start() {
     val logPage = new LogPage(this)
     attachPage(logPage)
