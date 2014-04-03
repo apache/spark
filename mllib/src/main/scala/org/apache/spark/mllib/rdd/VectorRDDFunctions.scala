@@ -69,7 +69,8 @@ private class VectorRDDStatisticsAggregator(
     val deltaMean = currMean
     var i = 0
     while (i < currM2n.size) {
-      realVariance(i) = currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * (totalCnt - nnz(i)) / totalCnt
+      realVariance(i) =
+        currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * (totalCnt - nnz(i)) / totalCnt
       realVariance(i) /= totalCnt
       i += 1
     }
@@ -140,7 +141,7 @@ private class VectorRDDStatisticsAggregator(
       // merge m2n together
       if (nnz(i) + other.nnz(i) != 0.0) {
         currM2n(i) += other.currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * other.nnz(i) /
-          (nnz(i)+other.nnz(i))
+          (nnz(i) + other.nnz(i))
       }
 
       if (currMax(i) < other.currMax(i)) currMax(i) = other.currMax(i)
