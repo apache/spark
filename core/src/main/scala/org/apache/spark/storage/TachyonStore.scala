@@ -98,7 +98,7 @@ private class TachyonStore(
     if (tachyonManager.fileExists(file)) {
       tachyonManager.removeFile(file)
     } else {
-      true
+      false
     }
   }
 
