@@ -202,6 +202,12 @@ class RDD(object):
         def func(s, iterator): return chain.from_iterable(imap(f, iterator))
         return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
+    def partitions(self):
+        """
+        Get the array of partitions of this RDD, taking into account whether the RDD is checkpointed or not.
+        """
+        return self._jrdd.splits()
+
     def mapPartitions(self, f, preservesPartitioning=False):
         """
         Return a new RDD by applying a function to each partition of this RDD.
