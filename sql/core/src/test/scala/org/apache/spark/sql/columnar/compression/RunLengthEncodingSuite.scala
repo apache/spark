@@ -37,24 +37,30 @@ class RunLengthEncodingSuite extends FunSuite {
 
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
 
-    test(s"$RunLengthEncoding with $typeName: simple case") {
+    def skeleton(uniqueValueCount: Int, inputRuns: Seq[(Int, Int)]) {
       // -------------
       // Tests encoder
       // -------------
 
       val builder = TestCompressibleColumnBuilder(columnStats, columnType, RunLengthEncoding)
-      val (values, rows) = makeUniqueValuesAndSingleValueRows(columnType, 2)
-
       builder.initialize(0)
-      builder.appendFrom(rows(0), 0)
-      builder.appendFrom(rows(0), 0)
-      builder.appendFrom(rows(1), 0)
-      builder.appendFrom(rows(1), 0)
 
+      val (values, rows) = makeUniqueValuesAndSingleValueRows(columnType, uniqueValueCount)
+      val inputSeq = inputRuns.flatMap { case (index, run) =>
+        Seq.fill(run)(index)
+      }
+
+      inputSeq.foreach(i => builder.appendFrom(rows(i), 0))
       val buffer = builder.build()
+
+      // Column type ID + null count + null positions
       val headerSize = CompressionScheme.columnHeaderSize(buffer)
+
       // 4 extra bytes each run for run length
-      val compressedSize = values.map(columnType.actualSize(_) + 4).sum
+      val compressedSize = inputRuns.map { case (index, _) =>
+        columnType.actualSize(values(index)) + 4
+      }.sum
+
       // 4 extra bytes for compression scheme type ID
       expectResult(headerSize + 4 + compressedSize, "Wrong buffer capacity")(buffer.capacity)
 
@@ -62,9 +68,9 @@ class RunLengthEncodingSuite extends FunSuite {
       buffer.position(headerSize)
       expectResult(RunLengthEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
-      Array(0, 1).foreach { i =>
-        expectResult(values(i), "Wrong column element value")(columnType.extract(buffer))
-        expectResult(2, "Wrong run length")(buffer.getInt())
+      inputRuns.foreach { case (index, run) =>
+        expectResult(values(index), "Wrong column element value")(columnType.extract(buffer))
+        expectResult(run, "Wrong run length")(buffer.getInt())
       }
 
       // -------------
@@ -76,55 +82,23 @@ class RunLengthEncodingSuite extends FunSuite {
 
       val decoder = new RunLengthEncoding.Decoder[T](buffer, columnType)
 
-      Array(0, 0, 1, 1).foreach { i =>
+      inputSeq.foreach { i =>
         expectResult(values(i), "Wrong decoded value")(decoder.next())
       }
 
       assert(!decoder.hasNext)
     }
 
+    test(s"$RunLengthEncoding with $typeName: simple case") {
+      skeleton(2, Seq(0 -> 2, 1 ->2))
+    }
+
     test(s"$RunLengthEncoding with $typeName: run length == 1") {
-      // -------------
-      // Tests encoder
-      // -------------
+      skeleton(2, Seq(0 -> 1, 1 ->1))
+    }
 
-      val builder = TestCompressibleColumnBuilder(columnStats, columnType, RunLengthEncoding)
-      val (values, rows) = makeUniqueValuesAndSingleValueRows(columnType, 2)
-
-      builder.initialize(0)
-      builder.appendFrom(rows(0), 0)
-      builder.appendFrom(rows(1), 0)
-
-      val buffer = builder.build()
-      val headerSize = CompressionScheme.columnHeaderSize(buffer)
-      // 4 bytes each run for run length
-      val compressedSize = values.map(columnType.actualSize(_) + 4).sum
-      // 4 bytes for compression scheme type ID
-      expectResult(headerSize + 4 + compressedSize, "Wrong buffer capacity")(buffer.capacity)
-
-      // Skips column header
-      buffer.position(headerSize)
-      expectResult(RunLengthEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
-
-      Array(0, 1).foreach { i =>
-        expectResult(values(i), "Wrong column element value")(columnType.extract(buffer))
-        expectResult(1, "Wrong run length")(buffer.getInt())
-      }
-
-      // -------------
-      // Tests decoder
-      // -------------
-
-      // Rewinds, skips column header and 4 more bytes for compression scheme ID
-      buffer.rewind().position(headerSize + 4)
-
-      val decoder = new RunLengthEncoding.Decoder[T](buffer, columnType)
-
-      Array(0, 1).foreach { i =>
-        expectResult(values(i), "Wrong decoded value")(decoder.next())
-      }
-
-      assert(!decoder.hasNext)
+    test(s"$RunLengthEncoding with $typeName: single long run") {
+      skeleton(1, Seq(0 -> 1000))
     }
   }
 }
