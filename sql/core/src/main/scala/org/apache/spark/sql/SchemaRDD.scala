@@ -157,8 +157,8 @@ class SchemaRDD(
   def join(
       otherPlan: SchemaRDD,
       joinType: JoinType = Inner,
-      condition: Option[Expression] = None): SchemaRDD =
-    new SchemaRDD(sqlContext, Join(logicalPlan, otherPlan.logicalPlan, joinType, condition))
+      on: Option[Expression] = None): SchemaRDD =
+    new SchemaRDD(sqlContext, Join(logicalPlan, otherPlan.logicalPlan, joinType, on))
 
   /**
    * Sorts the results by the given expressions.
@@ -195,14 +195,14 @@ class SchemaRDD(
    * with the same name, for example, when peforming self-joins.
    *
    * {{{
-   *   val x = schemaRDD.where('a === 1).subquery('x)
-   *   val y = schemaRDD.where('a === 2).subquery('y)
+   *   val x = schemaRDD.where('a === 1).as('x)
+   *   val y = schemaRDD.where('a === 2).as('y)
    *   x.join(y).where("x.a".attr === "y.a".attr),
    * }}}
    *
    * @group Query
    */
-  def subquery(alias: Symbol) =
+  def as(alias: Symbol) =
     new SchemaRDD(sqlContext, Subquery(alias.name, logicalPlan))
 
   /**
