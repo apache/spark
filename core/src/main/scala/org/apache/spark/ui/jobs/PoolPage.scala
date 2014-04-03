@@ -22,8 +22,8 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.scheduler.{Schedulable, StageInfo}
-import org.apache.spark.ui.Page._
 import org.apache.spark.ui.{UIPage, UIUtils}
+import org.apache.spark.ui.Page.Stages
 
 /** Page showing specific pool details */
 private[ui] class PoolPage(parent: JobProgressTab) extends UIPage("pool") {

@@ -36,7 +36,7 @@ private[ui] class JobProgressTab(parent: SparkUI) extends UITab("stages") {
     attachPage(new PoolPage(this))
   }
 
-  def jobProgressListener = {
+  def jobProgressListener: JobProgressListener = {
     assert(listener.isDefined, "JobProgressTab has not started yet!")
     listener.get.asInstanceOf[JobProgressListener]
   }

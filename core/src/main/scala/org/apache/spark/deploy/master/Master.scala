@@ -85,7 +85,6 @@ private[spark] class Master(
   val masterSource = new MasterSource(this)
 
   val webUi = new MasterWebUI(this, webUiPort)
-  webUi.start()
 
   val masterPublicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
@@ -116,6 +115,7 @@ private[spark] class Master(
     logInfo("Starting Spark master at " + masterUrl)
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+    webUi.start()
     webUi.bind()
     masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis, self, CheckForWorkerTimeOut)

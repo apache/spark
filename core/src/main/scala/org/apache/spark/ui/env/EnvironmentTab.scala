@@ -29,7 +29,7 @@ private[ui] class EnvironmentTab(parent: SparkUI) extends UITab("environment") {
     attachPage(new IndexPage(this))
   }
 
-  def environmentListener = {
+  def environmentListener: EnvironmentListener = {
     assert(listener.isDefined, "EnvironmentTab has not started yet!")
     listener.get.asInstanceOf[EnvironmentListener]
   }

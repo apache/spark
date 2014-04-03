@@ -33,7 +33,7 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends UITab("executors") {
     attachPage(new IndexPage(this))
   }
 
-  def executorsListener = {
+  def executorsListener: ExecutorsListener = {
     assert(listener.isDefined, "ExecutorsTab has not started yet!")
     listener.get.asInstanceOf[ExecutorsListener]
   }

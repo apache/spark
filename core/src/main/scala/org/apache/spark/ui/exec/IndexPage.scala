@@ -50,11 +50,11 @@ private[ui] class IndexPage(parent: ExecutorsTab) extends UIPage("") {
           </ul>
         </div>
       </div>
-        <div class = "row">
-          <div class="span12">
-            {execTable}
-          </div>
-        </div>;
+      <div class = "row">
+        <div class="span12">
+          {execTable}
+        </div>
+      </div>;
 
     UIUtils.headerSparkPage(
       content, basePath, appName, "Executors (" + execInfo.size + ")", Executors)

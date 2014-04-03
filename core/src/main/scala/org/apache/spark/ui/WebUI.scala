@@ -19,15 +19,16 @@ package org.apache.spark.ui
 
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.mutable.ArrayBuffer
+import scala.xml.Node
+
 import org.eclipse.jetty.servlet.ServletContextHandler
+import org.json4s.JsonAST.{JNothing, JValue}
 
 import org.apache.spark.SecurityManager
+import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
-import scala.collection.mutable.ArrayBuffer
-import org.apache.spark.scheduler.SparkListener
-import scala.xml.Node
-import org.json4s.JsonAST.{JNothing, JValue}
 
 /**
  * The top level component of the UI hierarchy that contains the server.
@@ -70,6 +71,9 @@ private[spark] abstract class WebUI(securityManager: SecurityManager, basePath: 
   /** Return a list of handlers attached to this UI. */
   def getHandlers = handlers.toSeq
 
+  /** Initialize all components of the server. Must be called before bind(). */
+  def start()
+
   /**
    * Bind to the HTTP server behind this web interface.
    * Overridden implementation should set serverInfo.
@@ -101,6 +105,7 @@ private[spark] abstract class UITab(val prefix: String) {
     pages += page
   }
 
+  /** Initialize listener and attach pages. */
   def start()
 }
 

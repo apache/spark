@@ -35,6 +35,7 @@ class MasterWebUI(val master: Master, requestedPort: Int)
   val masterActorRef = master.self
   val timeout = AkkaUtils.askTimeout(master.conf)
 
+  /** Initialize all components of the server. Must be called before bind(). */
   def start() {
     attachPage(new ApplicationPage(this))
     attachPage(new IndexPage(this))

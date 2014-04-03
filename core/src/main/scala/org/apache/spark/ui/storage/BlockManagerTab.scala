@@ -34,7 +34,7 @@ private[ui] class BlockManagerTab(parent: SparkUI) extends UITab("storage") {
     attachPage(new RddPage(this))
   }
 
-  def blockManagerListener = {
+  def blockManagerListener: BlockManagerListener = {
     assert(listener.isDefined, "BlockManagerTab has not started yet!")
     listener.get.asInstanceOf[BlockManagerListener]
   }

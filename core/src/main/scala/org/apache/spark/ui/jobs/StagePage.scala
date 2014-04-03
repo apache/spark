@@ -22,8 +22,8 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.ui.Page._
 import org.apache.spark.ui.{UIPage, UIUtils}
+import org.apache.spark.ui.Page.Stages
 import org.apache.spark.util.{Utils, Distribution}
 
 /** Page showing statistics and task list for a given stage */

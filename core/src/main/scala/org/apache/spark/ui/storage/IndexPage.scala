@@ -22,8 +22,8 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.storage.RDDInfo
-import org.apache.spark.ui.Page._
 import org.apache.spark.ui.{UIPage, UIUtils}
+import org.apache.spark.ui.Page.Storage
 import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
