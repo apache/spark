@@ -116,7 +116,7 @@ class DAGScheduler(
   private val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.DAG_SCHEDULER, this.cleanup, env.conf)
 
-  taskScheduler.setDAGScheduler(this)
+  
 
   /**
    * Starts the event processing actor.  The actor has two responsibilities:
@@ -150,6 +150,7 @@ class DAGScheduler(
           }
       }
     }))
+	taskScheduler.setDAGScheduler(this)
   }
 
   // Called by TaskScheduler to report task's starting.
