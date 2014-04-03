@@ -105,8 +105,13 @@ private[ui] class StreamingUIListener(ssc: StreamingContext) extends StreamingLi
     val latestBatchInfos = allBatches.reverse.take(batchInfoLimit)
     val latestBlockInfos = latestBatchInfos.map(_.receivedBlockInfo)
     (0 until numNetworkReceivers).map { receiverId =>
-      val blockInfoOfParticularReceiver = latestBlockInfos.map(_.get(receiverId).getOrElse(Array.empty))
-      val recordsOfParticularReceiver = blockInfoOfParticularReceiver.map(_.map(_.numRecords).sum.toDouble * 1000 / batchDuration)
+      val blockInfoOfParticularReceiver = latestBlockInfos.map { batchInfo =>
+        batchInfo.get(receiverId).getOrElse(Array.empty)
+      }
+      val recordsOfParticularReceiver = blockInfoOfParticularReceiver.map { blockInfo =>
+        // calculate records per second for each batch
+        blockInfo.map(_.numRecords).sum.toDouble * 1000 / batchDuration
+      }
       val distributionOption = Distribution(recordsOfParticularReceiver)
       (receiverId, distributionOption)
     }.toMap
@@ -231,16 +236,24 @@ private[ui] class StreamingPage(parent: StreamingUI) extends Logging {
     val numBatches = listener.completedBatches.size
     val lastCompletedBatch = listener.lastCompletedBatch
     val table = if (numBatches > 0) {
-      val processingDelayQuantilesRow =
-        Seq("Processing Time", msDurationToString(lastCompletedBatch.flatMap(_.processingDelay))) ++
-          getQuantiles(listener.processingDelayDistribution)
-      val schedulingDelayQuantilesRow =
-        Seq("Scheduling Delay", msDurationToString(lastCompletedBatch.flatMap(_.schedulingDelay))) ++
-          getQuantiles(listener.schedulingDelayDistribution)
-      val totalDelayQuantilesRow =
-        Seq("Total Delay", msDurationToString(lastCompletedBatch.flatMap(_.totalDelay))) ++
-          getQuantiles(listener.totalDelayDistribution)
-
+      val processingDelayQuantilesRow = {
+        Seq(
+          "Processing Time",
+          msDurationToString(lastCompletedBatch.flatMap(_.processingDelay))
+        ) ++ getQuantiles(listener.processingDelayDistribution)
+      }
+      val schedulingDelayQuantilesRow = {
+        Seq(
+          "Scheduling Delay",
+          msDurationToString(lastCompletedBatch.flatMap(_.schedulingDelay))
+        ) ++ getQuantiles(listener.schedulingDelayDistribution)
+      }
+      val totalDelayQuantilesRow = {
+        Seq(
+          "Total Delay",
+          msDurationToString(lastCompletedBatch.flatMap(_.totalDelay))
+        ) ++ getQuantiles(listener.totalDelayDistribution)
+      }
       val headerRow = Seq("Metric", "Last batch", "Minimum", "25th percentile",
         "Median", "75th percentile", "Maximum")
       val dataRows: Seq[Seq[String]] = Seq(

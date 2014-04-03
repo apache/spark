@@ -25,7 +25,7 @@ import scala.util.Random
 
 class UISuite extends FunSuite with BeforeAndAfterAll {
 
-  test("Testing") {
+  ignore("Testing") {
     runStreaming(1000000)
   }
 
@@ -59,11 +59,3 @@ class FunctionBasedInputDStream[T: ClassTag](
 
   def compute(validTime: Time): Option[RDD[T]] = function(ssc, validTime)
 }
-
-
-
-
-
-
-
-

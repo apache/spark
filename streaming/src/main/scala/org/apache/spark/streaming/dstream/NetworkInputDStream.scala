@@ -184,7 +184,12 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
   /**
    * Pushes a block (as an ArrayBuffer filled with data) into the block manager.
    */
-  def pushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[T], metadata: Any, level: StorageLevel) {
+  def pushBlock(
+      blockId: StreamBlockId,
+      arrayBuffer: ArrayBuffer[T],
+      metadata: Any,
+      level: StorageLevel
+    ) {
     env.blockManager.put(blockId, arrayBuffer.asInstanceOf[ArrayBuffer[Any]], level)
     actor ! ReportBlock(blockId, arrayBuffer.size, metadata)
   }
@@ -192,7 +197,12 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
   /**
    * Pushes a block (as bytes) into the block manager.
    */
-  def pushBlock(blockId: StreamBlockId, bytes: ByteBuffer, metadata: Any, level: StorageLevel) {
+  def pushBlock(
+      blockId: StreamBlockId,
+      bytes: ByteBuffer,
+      metadata: Any,
+      level: StorageLevel
+    ) {
     env.blockManager.putBytes(blockId, bytes, level)
     actor ! ReportBlock(blockId, -1 , metadata)
   }
