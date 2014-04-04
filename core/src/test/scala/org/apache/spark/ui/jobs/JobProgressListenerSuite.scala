@@ -72,4 +72,41 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext {
     assert(listener.stageIdToExecutorSummaries.getOrElse(0, fail()).getOrElse("exe-2", fail())
       .shuffleRead == 1000)
   }
+
+  test("test basic stage cleanup") {
+    //Simple edge case
+    checkCleanup(numStages = 1, retainedStages = 1)
+    //Normal case
+    checkCleanup(numStages = 100, retainedStages = 10)
+    //Should not clean prematurely
+    checkCleanup(numStages = 2, retainedStages = 3)
+    //Should ensure no stages are kept
+    checkCleanup(numStages = 10, retainedStages = 0)
+    //edge case
+    checkCleanup(numStages = 0, retainedStages = 0)
+
+    
+    def checkCleanup(numStages: Int, retainedStages: Int) {
+      System.setProperty("spark.ui.retainedStages", retainedStages.toString)
+      val sc = new SparkContext("local", "test")
+      val listener = new JobProgressListener(sc.conf)
+      val allStages = Range(1, numStages).inclusive.map( i => {
+        new StageInfo(i, "stage%d".format(i), 1, null)
+      })
+      //Submit and complete the mock stages
+      //This should invoke the cleanup script
+      allStages.foreach(stageInfo => {
+        listener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
+        listener.onStageCompleted(SparkListenerStageCompleted(stageInfo))
+      })
+      //There should only be the number of stages configured
+      assert(listener.completedStages.length == math.min(retainedStages, numStages))
+      val expectedStages = allStages.takeRight(retainedStages)
+      //The last two stages should be the ones kept in the listener
+      expectedStages.foreach(stageInfo => {
+        assert(listener.completedStages.contains(stageInfo))
+        assert(listener.stageIdToDescription)
+      })
+    }
+  }
 }
