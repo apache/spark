@@ -109,7 +109,7 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
   /** Remove all blocks belonging to the given RDD. */
   def removeRdd(rddId: Int, blocking: Boolean) {
     val future = askDriverWithReply[Future[Seq[Int]]](RemoveRdd(rddId))
-    future onFailure {
+    future.onFailure {
       case e: Throwable => logError("Failed to remove RDD " + rddId, e)
     }
     if (blocking) {
@@ -117,12 +117,12 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
     }
   }
 
-  /** Remove all blocks belonging to the given shuffle. */
+  /** Remove all blocks belonging to the given shuffle asynchronously. */
   def removeShuffle(shuffleId: Int) {
     askDriverWithReply(RemoveShuffle(shuffleId))
   }
 
-  /** Remove all blocks belonging to the given broadcast. */
+  /** Remove all blocks belonging to the given broadcast asynchronously. */
   def removeBroadcast(broadcastId: Long, removeFromMaster: Boolean) {
     askDriverWithReply(RemoveBroadcast(broadcastId, removeFromMaster))
   }
@@ -142,7 +142,8 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
   }
 
   /**
-   * Return the block's status on all block managers, if any.
+   * Return the block's status on all block managers, if any. This can potentially be an
+   * expensive operation and is used mainly for testing.
    *
    * If askSlaves is true, this invokes the master to query each block manager for the most
    * updated block statuses. This is useful when the master is not informed of the given block

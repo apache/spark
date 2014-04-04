@@ -54,12 +54,7 @@ private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolea
     HttpBroadcast.unpersist(id, removeFromDriver = false)
   }
 
-  /**
-   * Remove all persisted state associated with this HTTP Broadcast on both the executors
-   * and the driver.
-   */
-  private[spark] def destroy() {
-    _isValid = false
+  protected def onDestroy() {
     HttpBroadcast.unpersist(id, removeFromDriver = true)
   }
 
@@ -91,7 +86,6 @@ private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolea
 
 private[spark] object HttpBroadcast extends Logging {
   private var initialized = false
-
   private var broadcastDir: File = null
   private var compress: Boolean = false
   private var bufferSize: Int = 65536
@@ -101,11 +95,9 @@ private[spark] object HttpBroadcast extends Logging {
 
   // TODO: This shouldn't be a global variable so that multiple SparkContexts can coexist
   private val files = new TimeStampedHashSet[String]
-  private var cleaner: MetadataCleaner = null
-
   private val httpReadTimeout = TimeUnit.MILLISECONDS.convert(5, TimeUnit.MINUTES).toInt
-
   private var compressionCodec: CompressionCodec = null
+  private var cleaner: MetadataCleaner = null
 
   def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager) {
     synchronized {

@@ -80,7 +80,6 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   /** Stop the cleaner. */
   def stop() {
     stopped = true
-    cleaningThread.interrupt()
   }
 
   /** Register a RDD for cleanup when it is garbage collected. */
@@ -119,8 +118,6 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
           }
         }
       } catch {
-        case ie: InterruptedException =>
-          if (!stopped) logWarning("Cleaning thread interrupted")
         case t: Throwable => logError("Error in cleaning thread", t)
       }
     }

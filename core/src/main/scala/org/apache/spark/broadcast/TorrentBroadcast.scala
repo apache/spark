@@ -57,12 +57,7 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
     TorrentBroadcast.unpersist(id, removeFromDriver = false)
   }
 
-  /**
-   * Remove all persisted state associated with this Torrent broadcast on both the executors
-   * and the driver.
-   */
-  private[spark] def destroy() {
-    _isValid = false
+  protected def onDestroy() {
     TorrentBroadcast.unpersist(id, removeFromDriver = true)
   }
 

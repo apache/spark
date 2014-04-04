@@ -71,13 +71,18 @@ private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster
  * (driver and worker) use different HashMap to store its metadata.
  */
 private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging {
-
   private val timeout = AkkaUtils.askTimeout(conf)
 
-  /** Set to the MapOutputTrackerActor living on the driver */
+  /** Set to the MapOutputTrackerActor living on the driver. */
   var trackerActor: ActorRef = _
 
-  /** This HashMap needs to have different storage behavior for driver and worker */
+  /**
+   * This HashMap has different behavior for the master and the workers.
+   *
+   * On the master, it serves as the source of map outputs recorded from ShuffleMapTasks.
+   * On the workers, it simply serves as a cache, in which a miss triggers a fetch from the
+   * master's corresponding HashMap.
+   */
   protected val mapStatuses: Map[Int, Array[MapStatus]]
 
   /**
@@ -87,7 +92,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   protected var epoch: Long = 0
   protected val epochLock = new AnyRef
 
-  /** Remembers which map output locations are currently being fetched on a worker */
+  /** Remembers which map output locations are currently being fetched on a worker. */
   private val fetching = new HashSet[Int]
 
   /**
@@ -173,7 +178,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     }
   }
 
-  /** Called to get current epoch number */
+  /** Called to get current epoch number. */
   def getEpoch: Long = {
     epochLock.synchronized {
       return epoch
@@ -195,16 +200,13 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     }
   }
 
-  /** Unregister shuffle data */
+  /** Unregister shuffle data. */
   def unregisterShuffle(shuffleId: Int) {
     mapStatuses.remove(shuffleId)
   }
 
-  def stop() {
-    sendTracker(StopMapOutputTracker)
-    mapStatuses.clear()
-    trackerActor = null
-  }
+  /** Stop the tracker. */
+  def stop() { }
 }
 
 /**
@@ -219,7 +221,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
 
   /**
    * Timestamp based HashMap for storing mapStatuses and cached serialized statuses in the master,
-   * so that statuses are dropped only by explicit deregistering or by TTL-based cleaning (if set).
+   * so that statuses are dropped only by explicit de-registering or by TTL-based cleaning (if set).
    * Other than these two scenarios, nothing should be dropped from this HashMap.
    */
   protected val mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]()
@@ -314,7 +316,9 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   }
 
   override def stop() {
-    super.stop()
+    sendTracker(StopMapOutputTracker)
+    mapStatuses.clear()
+    trackerActor = null
     metadataCleaner.cancel()
     cachedSerializedStatuses.clear()
   }
