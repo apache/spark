@@ -61,7 +61,7 @@ object SimpleSkewedGroupByTest {
     
     println("RESULT: " + pairs1.groupByKey(numReducers).count)
     // Print how many keys each reducer got (for debugging)
-    //println("RESULT: " + pairs1.groupByKey(numReducers)
+    // println("RESULT: " + pairs1.groupByKey(numReducers)
     //                           .map{case (k,v) => (k, v.size)}
     //                           .collectAsMap)
 

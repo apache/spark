@@ -127,7 +127,7 @@ class FlumeEventServer(receiver : FlumeReceiver) extends AvroSourceProtocol {
 }
 
 /** A NetworkReceiver which listens for events using the
-  * Flume Avro interface.*/
+  * Flume Avro interface. */
 private[streaming]
 class FlumeReceiver(
     host: String,

@@ -1,0 +1,10 @@
+1.01same0
+1.01same1
+1.01same2
+1.01same3
+1.01same4
+\N1same5
+\N\Nsame6
+1.0\Nsame7
+1.01same8
+1.01same9

@@ -27,7 +27,10 @@ import org.apache.hadoop.fs.Path
 import scala.collection.Map
 import scala.sys.process._
 import scala.util.Try
+
 import org.apache.hadoop.io.{Text, LongWritable}
+
+import org.apache.spark.executor.TaskMetrics
 
 class PipedRDDSuite extends FunSuite with SharedSparkContext {
 
@@ -172,7 +175,7 @@ class PipedRDDSuite extends FunSuite with SharedSparkContext {
       val hadoopPart1 = generateFakeHadoopPartition()
       val pipedRdd = new PipedRDD(nums, "printenv " + varName)
       val tContext = new TaskContext(0, 0, 0, interrupted = false, runningLocally = false,
-        taskMetrics = null)
+        taskMetrics = TaskMetrics.empty())
       val rddIter = pipedRdd.compute(hadoopPart1, tContext)
       val arr = rddIter.toArray
       assert(arr(0) == "/some/path")

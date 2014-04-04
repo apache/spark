@@ -77,8 +77,8 @@ between the two goals of small loss and small model complexity.
 
 **Distributed Datasets.**
 For all currently implemented optimization methods for classification, the data must be
-distributed between the worker machines *by examples*. Every machine holds a consecutive block of
-the `$n$` example/label pairs `$(\x_i,y_i)$`. 
+distributed between processes on the worker machines *by examples*. Machines hold consecutive
+blocks of the `$n$` example/label pairs `$(\x_i,y_i)$`. 
 In other words, the input distributed dataset
 ([RDD](scala-programming-guide.html#resilient-distributed-datasets-rdds)) must be the set of
 vectors `$\x_i\in\R^d$`.

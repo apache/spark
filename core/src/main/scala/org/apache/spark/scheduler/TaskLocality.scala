@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 private[spark] object TaskLocality extends Enumeration {
-  // process local is expected to be used ONLY within tasksetmanager for now.
+  // Process local is expected to be used ONLY within TaskSetManager for now.
   val PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY = Value
 
   type TaskLocality = Value

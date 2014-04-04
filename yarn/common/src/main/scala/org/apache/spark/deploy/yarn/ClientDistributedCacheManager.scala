@@ -46,10 +46,10 @@ class ClientDistributedCacheManager() extends Logging {
 
   /**
    * Add a resource to the list of distributed cache resources. This list can
-   * be sent to the ApplicationMaster and possibly the workers so that it can 
+   * be sent to the ApplicationMaster and possibly the executors so that it can
    * be downloaded into the Hadoop distributed cache for use by this application.
    * Adds the LocalResource to the localResources HashMap passed in and saves 
-   * the stats of the resources to they can be sent to the workers and verified.
+   * the stats of the resources to they can be sent to the executors and verified.
    *
    * @param fs FileSystem
    * @param conf Configuration
@@ -157,7 +157,7 @@ class ClientDistributedCacheManager() extends Logging {
   def isPublic(conf: Configuration, uri: URI, statCache: Map[URI, FileStatus]): Boolean = {
     val fs = FileSystem.get(uri, conf)
     val current = new Path(uri.getPath())
-    //the leaf level file should be readable by others
+    // the leaf level file should be readable by others
     if (!checkPermissionOfOther(fs, current, FsAction.READ, statCache)) {
       return false
     }
@@ -177,7 +177,7 @@ class ClientDistributedCacheManager() extends Logging {
       statCache: Map[URI, FileStatus]): Boolean =  {
     var current = path
     while (current != null) {
-      //the subdirs in the path should have execute permissions for others
+      // the subdirs in the path should have execute permissions for others
       if (!checkPermissionOfOther(fs, current, FsAction.EXECUTE, statCache)) {
         return false
       }

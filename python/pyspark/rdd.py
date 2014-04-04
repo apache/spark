@@ -29,6 +29,7 @@ from subprocess import Popen, PIPE
 from tempfile import NamedTemporaryFile
 from threading import Thread
 import warnings
+from heapq import heappush, heappop, heappushpop
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, pack_long
@@ -179,6 +180,10 @@ class RDD(object):
     def map(self, f, preservesPartitioning=False):
         """
         Return a new RDD by applying a function to each element of this RDD.
+        
+        >>> rdd = sc.parallelize(["b", "a", "c"])
+        >>> sorted(rdd.map(lambda x: (x, 1)).collect())
+        [('a', 1), ('b', 1), ('c', 1)]
         """
         def func(split, iterator): return imap(f, iterator)
         return PipelinedRDD(self, func, preservesPartitioning)
@@ -267,6 +272,7 @@ class RDD(object):
         >>> sc.parallelize(range(0, 100)).sample(False, 0.1, 2).collect() #doctest: +SKIP
         [2, 3, 20, 21, 24, 41, 42, 66, 67, 89, 90, 98]
         """
+        assert fraction >= 0.0, "Invalid fraction value: %s" % fraction
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
 
     # this is ported from scala/spark/RDD.scala
@@ -286,6 +292,9 @@ class RDD(object):
 
         if (num < 0):
             raise ValueError
+
+        if (initialCount == 0):
+            return list()
 
         if initialCount > sys.maxint - 1:
             maxSelected = sys.maxint - 1
@@ -566,7 +575,26 @@ class RDD(object):
         return reduce(op, vals, zeroValue)
 
     # TODO: aggregate
+        
 
+    def max(self):
+        """
+        Find the maximum item in this RDD.
+
+        >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).max()
+        43.0
+        """
+        return self.reduce(max)
+
+    def min(self):
+        """
+        Find the maximum item in this RDD.
+
+        >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).min()
+        1.0
+        """
+        return self.reduce(min)
+    
     def sum(self):
         """
         Add up the elements in this RDD.
@@ -660,6 +688,30 @@ class RDD(object):
                 m1[k] += v
             return m1
         return self.mapPartitions(countPartition).reduce(mergeMaps)
+    
+    def top(self, num):
+        """
+        Get the top N elements from a RDD.
+
+        Note: It returns the list sorted in descending order.
+        >>> sc.parallelize([10, 4, 2, 12, 3]).top(1)
+        [12]
+        >>> sc.parallelize([2, 3, 4, 5, 6]).cache().top(2)
+        [6, 5]
+        """
+        def topIterator(iterator):
+            q = []
+            for k in iterator:
+                if len(q) < num:
+                    heappush(q, k)
+                else:
+                    heappushpop(q, k)
+            yield q
+
+        def merge(a, b):
+            return next(topIterator(a + b))
+
+        return sorted(self.mapPartitions(topIterator).reduce(merge), reverse=True)
 
     def take(self, num):
         """

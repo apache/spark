@@ -33,11 +33,11 @@ import scala.reflect.ClassTag
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.json4s._
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
-import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.deploy.SparkHadoopUtil
-
+import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /**
  * Various utility methods used by Spark.
@@ -246,7 +246,7 @@ private[spark] object Utils extends Logging {
     val userCred = securityMgr.getSecretKey()
     if (userCred == null) throw new Exception("Secret key is null with authentication on")
     val userInfo = securityMgr.getHttpUser()  + ":" + userCred
-    new URI(uri.getScheme(), userInfo, uri.getHost(), uri.getPort(), uri.getPath(), 
+    new URI(uri.getScheme(), userInfo, uri.getHost(), uri.getPort(), uri.getPath(),
       uri.getQuery(), uri.getFragment())
   }
 
@@ -283,7 +283,7 @@ private[spark] object Utils extends Logging {
         uc.setConnectTimeout(timeout)
         uc.setReadTimeout(timeout)
         uc.connect()
-        val in = uc.getInputStream();
+        val in = uc.getInputStream()
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
         if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
@@ -329,8 +329,7 @@ private[spark] object Utils extends Logging {
         }
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
-        val conf = SparkHadoopUtil.get.newConfiguration()
-        val fs = FileSystem.get(uri, conf)
+        val fs = getHadoopFileSystem(uri)
         val in = fs.open(new Path(uri))
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
@@ -501,7 +500,7 @@ private[spark] object Utils extends Logging {
    * millisecond.
    */
   def getUsedTimeMs(startTimeMs: Long): String = {
-    return " " + (System.currentTimeMillis - startTimeMs) + " ms"
+    " " + (System.currentTimeMillis - startTimeMs) + " ms"
   }
 
   /**
@@ -531,7 +530,10 @@ private[spark] object Utils extends Logging {
       }
     }
     if (!file.delete()) {
-      throw new IOException("Failed to delete: " + file)
+      // Delete can also fail if the file simply did not exist
+      if (file.exists()) {
+        throw new IOException("Failed to delete: " + file.getAbsolutePath)
+      }
     }
   }
 
@@ -678,7 +680,13 @@ private[spark] object Utils extends Logging {
   private val SPARK_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
 
   private[spark] class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String,
-                                    val firstUserLine: Int, val firstUserClass: String)
+                                    val firstUserLine: Int, val firstUserClass: String) {
+
+    /** Returns a printable version of the call site info suitable for logs. */
+    override def toString = {
+      "%s at %s:%s".format(lastSparkMethod, firstUserFile, firstUserLine)
+    }
+  }
 
   /**
    * When called inside a class in the spark package, returns the name of the user code class
@@ -686,8 +694,8 @@ private[spark] object Utils extends Logging {
    * This is used, for example, to tell users where in their code each RDD got created.
    */
   def getCallSiteInfo: CallSiteInfo = {
-    val trace = Thread.currentThread.getStackTrace().filter( el =>
-      (!el.getMethodName.contains("getStackTrace")))
+    val trace = Thread.currentThread.getStackTrace()
+      .filterNot(_.getMethodName.contains("getStackTrace"))
 
     // Keep crawling up the stack trace until we find the first function not inside of the spark
     // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
@@ -718,12 +726,6 @@ private[spark] object Utils extends Logging {
       }
     }
     new CallSiteInfo(lastSparkMethod, firstUserFile, firstUserLine, firstUserClass)
-  }
-
-  /** Returns a printable version of the call site info suitable for logs. */
-  def formatCallSiteInfo(callSiteInfo: CallSiteInfo = Utils.getCallSiteInfo) = {
-    "%s at %s:%s".format(callSiteInfo.lastSparkMethod, callSiteInfo.firstUserFile,
-                         callSiteInfo.firstUserLine)
   }
 
   /** Return a string containing part of a file from byte 'start' to 'end'. */
@@ -790,7 +792,7 @@ private[spark] object Utils extends Logging {
     }
     var i = 0
     while (i < s.length) {
-      var nextChar = s.charAt(i)
+      val nextChar = s.charAt(i)
       if (inDoubleQuote) {
         if (nextChar == '"') {
           inDoubleQuote = false
@@ -916,4 +918,26 @@ private[spark] object Utils extends Logging {
   }
 
 
+  /** Return the class name of the given object, removing all dollar signs */
+  def getFormattedClassName(obj: AnyRef) = {
+    obj.getClass.getSimpleName.replace("$", "")
+  }
+
+  /** Return an option that translates JNothing to None */
+  def jsonOption(json: JValue): Option[JValue] = {
+    json match {
+      case JNothing => None
+      case value: JValue => Some(value)
+    }
+  }
+
+  /** Return an empty JSON object */
+  def emptyJson = JObject(List[JField]())
+
+  /**
+   * Return a Hadoop FileSystem with the scheme encoded in the given path.
+   */
+  def getHadoopFileSystem(path: URI): FileSystem = {
+    FileSystem.get(path, SparkHadoopUtil.get.newConfiguration())
+  }
 }

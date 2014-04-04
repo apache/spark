@@ -44,7 +44,7 @@ private[streaming] class ZeroMQReceiver[T: ClassTag](publisherUrl: String,
     case m: ZMQMessage =>
       logDebug("Received message for:" + m.frame(0))
 
-      //We ignore first frame for processing as it is the topic
+      // We ignore first frame for processing as it is the topic
       val bytes = m.frames.tail
       pushBlock(bytesToObjects(bytes))
 

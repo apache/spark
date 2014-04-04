@@ -1,4 +1,4 @@
-scalaVersion := "2.10.3"
+scalaVersion := "2.10.4"
 
 resolvers += Resolver.url("artifactory", url("http://scalasbt.artifactoryonline.com/scalasbt/sbt-plugin-releases"))(Resolver.ivyStylePatterns)
 
@@ -19,4 +19,7 @@ addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.7.4")
 
 addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "0.4.0")
 
+addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.1.6")
+
 addSbtPlugin("com.alpinenow" % "junit_xml_listener" % "0.5.0")
+

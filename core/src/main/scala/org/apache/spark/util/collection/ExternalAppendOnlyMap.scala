@@ -60,7 +60,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C,
-    serializer: Serializer = SparkEnv.get.serializerManager.default,
+    serializer: Serializer = SparkEnv.get.serializer,
     blockManager: BlockManager = SparkEnv.get.blockManager)
   extends Iterable[(K, C)] with Serializable with Logging {
 

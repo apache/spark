@@ -54,7 +54,6 @@ object SparkALS {
     for (i <- 0 until M; j <- 0 until U) {
       r.set(i, j, blas.ddot(ms(i), us(j)))
     }
-    //println("R: " + r)
     blas.daxpy(-1, targetR, r)
     val sumSqs = r.aggregate(Functions.plus, Functions.square)
     sqrt(sumSqs / (M * U))
@@ -128,11 +127,11 @@ object SparkALS {
       println("Iteration " + iter + ":")
       ms = sc.parallelize(0 until M, slices)
                 .map(i => update(i, msb.value(i), usb.value, Rc.value))
-                .toArray
+                .collect()
       msb = sc.broadcast(ms) // Re-broadcast ms because it was updated
       us = sc.parallelize(0 until U, slices)
                 .map(i => update(i, usb.value(i), msb.value, algebra.transpose(Rc.value)))
-                .toArray
+                .collect()
       usb = sc.broadcast(us) // Re-broadcast us because it was updated
       println("RMSE = " + rmse(R, ms, us))
       println()

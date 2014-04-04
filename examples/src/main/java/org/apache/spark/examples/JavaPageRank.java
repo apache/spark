@@ -90,8 +90,8 @@ public final class JavaPageRank {
           @Override
           public Iterable<Tuple2<String, Double>> call(Tuple2<List<String>, Double> s) {
             List<Tuple2<String, Double>> results = new ArrayList<Tuple2<String, Double>>();
-            for (String n : s._1) {
-              results.add(new Tuple2<String, Double>(n, s._2 / s._1.size()));
+            for (String n : s._1()) {
+              results.add(new Tuple2<String, Double>(n, s._2() / s._1().size()));
             }
             return results;
           }
@@ -109,7 +109,7 @@ public final class JavaPageRank {
     // Collects all URL ranks and dump them to console.
     List<Tuple2<String, Double>> output = ranks.collect();
     for (Tuple2<?,?> tuple : output) {
-        System.out.println(tuple._1 + " has rank: " + tuple._2 + ".");
+        System.out.println(tuple._1() + " has rank: " + tuple._2() + ".");
     }
 
     System.exit(0);

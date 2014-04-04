@@ -30,20 +30,21 @@ import scala.reflect.ClassTag
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 import org.apache.hadoop.conf.{Configurable, Configuration}
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf, OutputFormat}
-import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, Job => NewAPIHadoopJob, RecordWriter => NewRecordWriter, JobContext, SparkHadoopMapReduceUtil}
+import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, Job => NewAPIHadoopJob,
+RecordWriter => NewRecordWriter, SparkHadoopMapReduceUtil}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
 
-// SparkHadoopWriter and SparkHadoopMapReduceUtil are actually source files defined in Spark.
-import org.apache.hadoop.mapred.SparkHadoopWriter
-
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.SparkHadoopWriter
 import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.SparkContext._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.SerializableHyperLogLog
 
 /**
@@ -73,7 +74,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       mergeCombiners: (C, C) => C,
       partitioner: Partitioner,
       mapSideCombine: Boolean = true,
-      serializerClass: String = null): RDD[(K, C)] = {
+      serializer: Serializer = null): RDD[(K, C)] = {
     require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
     if (getKeyClass().isArray) {
       if (mapSideCombine) {
@@ -93,13 +94,13 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
         aggregator.combineValuesByKey(iter, context)
       }, preservesPartitioning = true)
       val partitioned = new ShuffledRDD[K, C, (K, C)](combined, partitioner)
-        .setSerializer(serializerClass)
+        .setSerializer(serializer)
       partitioned.mapPartitionsWithContext((context, iter) => {
         new InterruptibleIterator(context, aggregator.combineCombinersByKey(iter, context))
       }, preservesPartitioning = true)
     } else {
       // Don't apply map-side combiner.
-      val values = new ShuffledRDD[K, V, (K, V)](self, partitioner).setSerializer(serializerClass)
+      val values = new ShuffledRDD[K, V, (K, V)](self, partitioner).setSerializer(serializer)
       values.mapPartitionsWithContext((context, iter) => {
         new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
       }, preservesPartitioning = true)
@@ -423,7 +424,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * Return the key-value pairs in this RDD to the master as a Map.
    */
   def collectAsMap(): Map[K, V] = {
-    val data = self.toArray()
+    val data = self.collect()
     val map = new mutable.HashMap[K, V]
     map.sizeHint(data.length)
     data.foreach { case (k, v) => map.put(k, v) }
@@ -602,50 +603,9 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     val job = new NewAPIHadoopJob(conf)
     job.setOutputKeyClass(keyClass)
     job.setOutputValueClass(valueClass)
-
-    val wrappedConf = new SerializableWritable(job.getConfiguration)
-    val outpath = new Path(path)
-    NewFileOutputFormat.setOutputPath(job, outpath)
-    val jobFormat = outputFormatClass.newInstance
-    jobFormat.checkOutputSpecs(job)
-    val formatter = new SimpleDateFormat("yyyyMMddHHmm")
-    val jobtrackerID = formatter.format(new Date())
-    val stageId = self.id
-    def writeShard(context: TaskContext, iter: Iterator[(K,V)]): Int = {
-      // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
-      // around by taking a mod. We expect that no task will be attempted 2 billion times.
-      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
-      /* "reduce task" <split #> <attempt # = spark task #> */
-      val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
-        attemptNumber)
-      val hadoopContext = newTaskAttemptContext(wrappedConf.value, attemptId)
-      val format = outputFormatClass.newInstance
-      format match {
-        case c: Configurable => c.setConf(wrappedConf.value)
-        case _ => ()
-      }
-      val committer = format.getOutputCommitter(hadoopContext)
-      committer.setupTask(hadoopContext)
-      val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K,V]]
-      while (iter.hasNext) {
-        val (k, v) = iter.next()
-        writer.write(k, v)
-      }
-      writer.close(hadoopContext)
-      committer.commitTask(hadoopContext)
-      return 1
-    }
-
-    /* apparently we need a TaskAttemptID to construct an OutputCommitter;
-     * however we're only going to use this local OutputCommitter for
-     * setupJob/commitJob, so we just use a dummy "map" task.
-     */
-    val jobAttemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = true, 0, 0)
-    val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
-    val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
-    jobCommitter.setupJob(jobTaskContext)
-    self.context.runJob(self, writeShard _)
-    jobCommitter.commitJob(jobTaskContext)
+    job.setOutputFormatClass(outputFormatClass)
+    job.getConfiguration.set("mapred.output.dir", path)
+    saveAsNewAPIHadoopDataset(job.getConfiguration)
   }
 
   /**
@@ -692,6 +652,59 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   }
 
   /**
+   * Output the RDD to any Hadoop-supported storage system with new Hadoop API, using a Hadoop
+   * Configuration object for that storage system. The Conf should set an OutputFormat and any
+   * output paths required (e.g. a table name to write to) in the same way as it would be
+   * configured for a Hadoop MapReduce job.
+   */
+  def saveAsNewAPIHadoopDataset(conf: Configuration) {
+    val job = new NewAPIHadoopJob(conf)
+    val formatter = new SimpleDateFormat("yyyyMMddHHmm")
+    val jobtrackerID = formatter.format(new Date())
+    val stageId = self.id
+    val wrappedConf = new SerializableWritable(job.getConfiguration)
+    val outfmt = job.getOutputFormatClass
+    val jobFormat = outfmt.newInstance
+
+    if (jobFormat.isInstanceOf[NewFileOutputFormat[_, _]]) {
+      // FileOutputFormat ignores the filesystem parameter
+      jobFormat.checkOutputSpecs(job)
+    }
+
+    def writeShard(context: TaskContext, iter: Iterator[(K,V)]): Int = {
+      // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
+      // around by taking a mod. We expect that no task will be attempted 2 billion times.
+      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
+      /* "reduce task" <split #> <attempt # = spark task #> */
+      val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
+        attemptNumber)
+      val hadoopContext = newTaskAttemptContext(wrappedConf.value, attemptId)
+      val format = outfmt.newInstance
+      format match {
+        case c: Configurable => c.setConf(wrappedConf.value)
+        case _ => ()
+      }
+      val committer = format.getOutputCommitter(hadoopContext)
+      committer.setupTask(hadoopContext)
+      val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K,V]]
+      while (iter.hasNext) {
+        val (k, v) = iter.next()
+        writer.write(k, v)
+      }
+      writer.close(hadoopContext)
+      committer.commitTask(hadoopContext)
+      return 1
+    }
+
+    val jobAttemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = true, 0, 0)
+    val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
+    val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
+    jobCommitter.setupJob(jobTaskContext)
+    self.context.runJob(self, writeShard _)
+    jobCommitter.commitJob(jobTaskContext)
+  }
+
+  /**
    * Output the RDD to any Hadoop-supported storage system, using a Hadoop JobConf object for
    * that storage system. The JobConf should set an OutputFormat and any output paths required
    * (e.g. a table name to write to) in the same way as it would be configured for a Hadoop
@@ -710,6 +723,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     if (valueClass == null) {
       throw new SparkException("Output value class not set")
     }
+    SparkHadoopUtil.get.addCredentials(conf)
 
     logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
       valueClass.getSimpleName + ")")

@@ -29,7 +29,7 @@ private[spark] sealed trait TaskEndReason
 
 private[spark] case object Success extends TaskEndReason
 
-private[spark] 
+private[spark]
 case object Resubmitted extends TaskEndReason // Task was finished earlier but we've now lost it
 
 private[spark] case class FetchFailed(
@@ -65,4 +65,3 @@ private[spark] case object ExecutorLostFailure extends TaskEndReason
  * deserializing the task result.
  */
 private[spark] case object UnknownReason extends TaskEndReason
-

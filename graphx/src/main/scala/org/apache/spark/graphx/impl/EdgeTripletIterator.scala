@@ -37,20 +37,15 @@ class EdgeTripletIterator[VD: ClassTag, ED: ClassTag](
   // Current position in the array.
   private var pos = 0
 
-  // A triplet object that this iterator.next() call returns. We reuse this object to avoid
-  // allocating too many temporary Java objects.
-  private val triplet = new EdgeTriplet[VD, ED]
-
   private val vmap = new PrimitiveKeyOpenHashMap[VertexId, VD](vidToIndex, vertexArray)
 
   override def hasNext: Boolean = pos < edgePartition.size
 
   override def next() = {
+    val triplet = new EdgeTriplet[VD, ED]
     triplet.srcId = edgePartition.srcIds(pos)
-    // assert(vmap.containsKey(e.src.id))
     triplet.srcAttr = vmap(triplet.srcId)
     triplet.dstId = edgePartition.dstIds(pos)
-    // assert(vmap.containsKey(e.dst.id))
     triplet.dstAttr = vmap(triplet.dstId)
     triplet.attr = edgePartition.data(pos)
     pos += 1

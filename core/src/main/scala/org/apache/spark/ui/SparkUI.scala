@@ -17,12 +17,11 @@
 
 package org.apache.spark.ui
 
-import javax.servlet.http.HttpServletRequest
-
-import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.servlet.ServletContextHandler
 
-import org.apache.spark.{Logging, SparkContext, SparkEnv}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.scheduler._
+import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.EnvironmentUI
 import org.apache.spark.ui.exec.ExecutorsUI
@@ -31,34 +30,58 @@ import org.apache.spark.ui.storage.BlockManagerUI
 import org.apache.spark.util.Utils
 
 /** Top level user interface for Spark */
-private[spark] class SparkUI(sc: SparkContext) extends Logging {
-  val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
-  val port = sc.conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
-  var boundPort: Option[Int] = None
-  var server: Option[Server] = None
+private[spark] class SparkUI(
+    val sc: SparkContext,
+    conf: SparkConf,
+    val listenerBus: SparkListenerBus,
+    val appName: String,
+    val basePath: String = "")
+  extends Logging {
 
-  val handlers = Seq[ServletContextHandler] (
-    createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static/*"),
-    createRedirectHandler("/stages", "/")
-  )
-  val storage = new BlockManagerUI(sc)
-  val jobs = new JobProgressUI(sc)
-  val env = new EnvironmentUI(sc)
-  val exec = new ExecutorsUI(sc)
+  def this(sc: SparkContext) = this(sc, sc.conf, sc.listenerBus, sc.appName)
+  def this(conf: SparkConf, listenerBus: SparkListenerBus, appName: String, basePath: String) =
+    this(null, conf, listenerBus, appName, basePath)
 
-  // Add MetricsServlet handlers by default
-  val metricsServletHandlers = SparkEnv.get.metricsSystem.getServletHandlers
+  // If SparkContext is not provided, assume the associated application is not live
+  val live = sc != null
 
-  val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ env.getHandlers ++
-    exec.getHandlers ++ metricsServletHandlers ++ handlers
+  val securityManager = if (live) sc.env.securityManager else new SecurityManager(conf)
+
+  private val bindHost = Utils.localHostName()
+  private val publicHost = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(bindHost)
+  private val port = conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
+  private var serverInfo: Option[ServerInfo] = None
+
+  private val storage = new BlockManagerUI(this)
+  private val jobs = new JobProgressUI(this)
+  private val env = new EnvironmentUI(this)
+  private val exec = new ExecutorsUI(this)
+
+  val handlers: Seq[ServletContextHandler] = {
+    val metricsServletHandlers = if (live) {
+      SparkEnv.get.metricsSystem.getServletHandlers
+    } else {
+      Array[ServletContextHandler]()
+    }
+    storage.getHandlers ++
+    jobs.getHandlers ++
+    env.getHandlers ++
+    exec.getHandlers ++
+    metricsServletHandlers ++
+    Seq[ServletContextHandler] (
+      createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"),
+      createRedirectHandler("/", "/stages", basePath)
+    )
+  }
+
+  // Maintain executor storage status through Spark events
+  val storageStatusListener = new StorageStatusListener
 
   /** Bind the HTTP server which backs this web interface */
   def bind() {
     try {
-      val (srv, usedPort) = JettyUtils.startJettyServer(host, port, allHandlers, sc.conf)
-      logInfo("Started Spark Web UI at http://%s:%d".format(host, usedPort))
-      server = Some(srv)
-      boundPort = Some(usedPort)
+      serverInfo = Some(startJettyServer(bindHost, port, handlers, sc.conf))
+      logInfo("Started Spark Web UI at http://%s:%d".format(publicHost, boundPort))
     } catch {
       case e: Exception =>
         logError("Failed to create Spark JettyUtils", e)
@@ -66,25 +89,34 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
     }
   }
 
+  def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
+
   /** Initialize all components of the server */
   def start() {
-    // NOTE: This is decoupled from bind() because of the following dependency cycle:
-    //  DAGScheduler() requires that the port of this server is known
-    //  This server must register all handlers, including JobProgressUI, before binding
-    //  JobProgressUI registers a listener with SparkContext, which requires sc to initialize
+    storage.start()
     jobs.start()
+    env.start()
     exec.start()
+
+    // Storage status listener must receive events first, as other listeners depend on its state
+    listenerBus.addListener(storageStatusListener)
+    listenerBus.addListener(storage.listener)
+    listenerBus.addListener(jobs.listener)
+    listenerBus.addListener(env.listener)
+    listenerBus.addListener(exec.listener)
   }
 
   def stop() {
-    server.foreach(_.stop())
+    assert(serverInfo.isDefined, "Attempted to stop a SparkUI that was not bound to a server!")
+    serverInfo.get.server.stop()
+    logInfo("Stopped Spark Web UI at %s".format(appUIAddress))
   }
 
-  private[spark] def appUIAddress = host + ":" + boundPort.getOrElse("-1")
+  private[spark] def appUIAddress = "http://" + publicHost + ":" + boundPort
 
 }
 
 private[spark] object SparkUI {
   val DEFAULT_PORT = "4040"
-  val STATIC_RESOURCE_DIR = "org/apache/spark/ui"
+  val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
 }
