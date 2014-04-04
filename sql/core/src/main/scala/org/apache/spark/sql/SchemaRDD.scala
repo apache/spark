@@ -148,9 +148,9 @@ class SchemaRDD(
    *
    * @param otherPlan the [[SchemaRDD]] that should be joined with this one.
    * @param joinType One of `Inner`, `LeftOuter`, `RightOuter`, or `FullOuter`. Defaults to `Inner.`
-   * @param condition An optional condition for the join operation.  This is equivilent to the `ON`
-   *                  clause in standard SQL.  In the case of `Inner` joins, specifying a
-   *                  `condition` is equivilent to adding `where` clauses after the `join`.
+   * @param on       An optional condition for the join operation.  This is equivilent to the `ON`
+   *                 clause in standard SQL.  In the case of `Inner` joins, specifying a
+   *                 `condition` is equivilent to adding `where` clauses after the `join`.
    *
    * @group Query
    */
