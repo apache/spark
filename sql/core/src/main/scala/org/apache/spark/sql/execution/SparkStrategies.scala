@@ -15,24 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package execution
+package org.apache.spark.sql.execution
 
-import org.apache.spark.SparkContext
-
-import catalyst.expressions._
-import catalyst.planning._
-import catalyst.plans._
-import catalyst.plans.logical.LogicalPlan
-import catalyst.plans.physical._
-import parquet.ParquetRelation
-import parquet.InsertIntoParquetTable
+import org.apache.spark.sql.{SQLContext, execution}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.planning._
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.parquet._
 
 abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
+  self: SQLContext#SparkPlanner =>
 
-  val sparkContext: SparkContext
-
-  object SparkEquiInnerJoin extends Strategy {
+  object HashJoin extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case FilteredOperation(predicates, logical.Join(left, right, Inner, condition)) =>
         logger.debug(s"Considering join: ${predicates ++ condition}")
@@ -55,8 +51,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           val leftKeys = joinKeys.map(_._1)
           val rightKeys = joinKeys.map(_._2)
 
-          val joinOp = execution.SparkEquiInnerJoin(
-            leftKeys, rightKeys, planLater(left), planLater(right))
+          val joinOp = execution.HashJoin(
+            leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
 
           // Make sure other conditions are met if present.
           if (otherPredicates.nonEmpty) {
@@ -162,17 +158,36 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     case other => other
   }
 
-  object TopK extends Strategy {
+  object TakeOrdered extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.StopAfter(IntegerLiteral(limit), logical.Sort(order, child)) =>
-        execution.TopK(limit, order, planLater(child))(sparkContext) :: Nil
+      case logical.Limit(IntegerLiteral(limit), logical.Sort(order, child)) =>
+        execution.TakeOrdered(limit, order, planLater(child))(sparkContext) :: Nil
+      case _ => Nil
+    }
+  }
+
+  object ParquetOperations extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      // TODO: need to support writing to other types of files.  Unify the below code paths.
+      case logical.WriteToFile(path, child) =>
+        val relation =
+          ParquetRelation.create(path, child, sparkContext.hadoopConfiguration)
+        InsertIntoParquetTable(relation, planLater(child), overwrite=true)(sparkContext) :: Nil
+      case logical.InsertIntoTable(table: ParquetRelation, partition, child, overwrite) =>
+        InsertIntoParquetTable(table, planLater(child), overwrite)(sparkContext) :: Nil
+      case PhysicalOperation(projectList, filters, relation: ParquetRelation) =>
+        // TODO: Should be pushing down filters as well.
+        pruneFilterProject(
+          projectList,
+          filters,
+          ParquetTableScan(_, relation, None)(sparkContext)) :: Nil
       case _ => Nil
     }
   }
 
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
-    // TOOD: Set
+    // TODO: Set
     val numPartitions = 200
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Distinct(child) =>
@@ -185,14 +200,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // This sort only sorts tuples within a partition. Its requiredDistribution will be
         // an UnspecifiedDistribution.
         execution.Sort(sortExprs, global = false, planLater(child)) :: Nil
-      case logical.Project(projectList, r: ParquetRelation)
-          if projectList.forall(_.isInstanceOf[Attribute]) =>
-
-        // simple projection of data loaded from Parquet file
-        parquet.ParquetTableScan(
-          projectList.asInstanceOf[Seq[Attribute]],
-          r,
-          None)(sparkContext) :: Nil
       case logical.Project(projectList, child) =>
         execution.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
@@ -206,8 +213,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           sparkContext.parallelize(data.map(r =>
             new GenericRow(r.productIterator.map(convertToCatalyst).toArray): Row))
         execution.ExistingRdd(output, dataAsRdd) :: Nil
-      case logical.StopAfter(IntegerLiteral(limit), child) =>
-        execution.StopAfter(limit, planLater(child))(sparkContext) :: Nil
+      case logical.Limit(IntegerLiteral(limit), child) =>
+        execution.Limit(limit, planLater(child))(sparkContext) :: Nil
       case Unions(unionChildren) =>
         execution.Union(unionChildren.map(planLater))(sparkContext) :: Nil
       case logical.Generate(generator, join, outer, _, child) =>
@@ -216,12 +223,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.ExistingRdd(Nil, singleRowRdd) :: Nil
       case logical.Repartition(expressions, child) =>
         execution.Exchange(HashPartitioning(expressions, numPartitions), planLater(child)) :: Nil
-      case logical.WriteToFile(path, child) =>
-        val relation =
-          ParquetRelation.create(path, child, sparkContext.hadoopConfiguration, None)
-        InsertIntoParquetTable(relation, planLater(child))(sparkContext) :: Nil
-      case p: parquet.ParquetRelation =>
-        parquet.ParquetTableScan(p.output, p, None)(sparkContext) :: Nil
       case SparkLogicalPlan(existingPlan) => existingPlan :: Nil
       case _ => Nil
     }

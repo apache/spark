@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package expressions
+package org.apache.spark.sql.catalyst.expressions
 
-import rules._
-import errors._
-
-import catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.errors.attachTree
+import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.Logging
 
 /**
  * A bound reference points to a specific slot in the input tuple, allowing the actual value

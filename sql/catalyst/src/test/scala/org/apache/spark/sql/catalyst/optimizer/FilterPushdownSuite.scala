@@ -1,23 +1,38 @@
-package org.apache.spark.sql
-package catalyst
-package optimizer
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-import expressions._
-import plans.logical._
-import rules._
-import util._
+package org.apache.spark.sql.catalyst.optimizer
 
-import dsl.plans._
-import dsl.expressions._
+import org.apache.spark.sql.catalyst.analysis
+import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules._
+
+/* Implicit conversions */
+import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.dsl.expressions._
 
 class FilterPushdownSuite extends OptimizerTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", Once,
-        EliminateSubqueries) ::
+        EliminateAnalysisOperators) ::
       Batch("Filter Pushdown", Once,
-        EliminateSubqueries,
         CombineFilters,
         PushPredicateThroughProject,
         PushPredicateThroughInnerJoin) :: Nil
@@ -156,7 +171,7 @@ class FilterPushdownSuite extends OptimizerTest {
     }
     val optimized = Optimize(originalQuery.analyze)
 
-    comparePlans(optimizer.EliminateSubqueries(originalQuery.analyze), optimized)
+    comparePlans(analysis.EliminateAnalysisOperators(originalQuery.analyze), optimized)
   }
 
   test("joins: conjunctive predicates") {
@@ -175,7 +190,7 @@ class FilterPushdownSuite extends OptimizerTest {
       left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
 
-    comparePlans(optimized, optimizer.EliminateSubqueries(correctAnswer))
+    comparePlans(optimized, analysis.EliminateAnalysisOperators(correctAnswer))
   }
 
   test("joins: conjunctive predicates #2") {
@@ -194,7 +209,7 @@ class FilterPushdownSuite extends OptimizerTest {
       left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
 
-    comparePlans(optimized, optimizer.EliminateSubqueries(correctAnswer))
+    comparePlans(optimized, analysis.EliminateAnalysisOperators(correctAnswer))
   }
 
   test("joins: conjunctive predicates #3") {
@@ -217,6 +232,6 @@ class FilterPushdownSuite extends OptimizerTest {
           condition = Some("z.a".attr === "x.b".attr))
         .analyze
 
-    comparePlans(optimized, optimizer.EliminateSubqueries(correctAnswer))
+    comparePlans(optimized, analysis.EliminateAnalysisOperators(correctAnswer))
   }
 }

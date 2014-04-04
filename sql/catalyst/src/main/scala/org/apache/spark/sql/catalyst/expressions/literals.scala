@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package expressions
+package org.apache.spark.sql.catalyst.expressions
 
-import types._
+import java.sql.Timestamp
+
+import org.apache.spark.sql.catalyst.types._
 
 object Literal {
   def apply(v: Any): Literal = v match {
@@ -31,6 +31,9 @@ object Literal {
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(s, StringType)
     case b: Boolean => Literal(b, BooleanType)
+    case d: BigDecimal => Literal(d, DecimalType)
+    case t: Timestamp => Literal(t, TimestampType)
+    case a: Array[Byte] => Literal(a, BinaryType)
     case null => Literal(null, NullType)
   }
 }

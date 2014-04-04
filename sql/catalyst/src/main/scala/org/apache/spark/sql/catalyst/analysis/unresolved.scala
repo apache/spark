@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package analysis
+package org.apache.spark.sql.catalyst.analysis
 
-import expressions._
-import plans.logical.BaseRelation
-import trees.TreeNode
+import org.apache.spark.sql.catalyst.{errors, trees}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.plans.logical.BaseRelation
+import org.apache.spark.sql.catalyst.trees.TreeNode
 
 /**
  * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully
@@ -95,7 +94,7 @@ case class Star(
       // If there is no table specified, use all input attributes.
       case None => input
       // If there is a table, pick out attributes that are part of this table.
-      case Some(table) => input.filter(_.qualifiers contains table)
+      case Some(t) => input.filter(_.qualifiers contains t)
     }
     val mappedAttributes = expandedAttributes.map(mapFunction).zip(input).map {
       case (n: NamedExpression, _) => n

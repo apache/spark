@@ -15,62 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
+package org.apache.spark.sql.catalyst
+
+import java.sql.Timestamp
 
 import scala.language.implicitConversions
-import scala.reflect.runtime.universe.TypeTag
 
-import analysis.UnresolvedAttribute
-import expressions._
-import plans._
-import plans.logical._
-import types._
-
-/**
- * Provides experimental support for generating catalyst schemas for scala objects.
- */
-object ScalaReflection {
-  import scala.reflect.runtime.universe._
-
-  /** Returns a Sequence of attributes for the given case class type. */
-  def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
-    case s: StructType =>
-      s.fields.map(f => AttributeReference(f.name, f.dataType, nullable = true)())
-  }
-
-  /** Returns a catalyst DataType for the given Scala Type using reflection. */
-  def schemaFor[T: TypeTag]: DataType = schemaFor(typeOf[T])
-
-  /** Returns a catalyst DataType for the given Scala Type using reflection. */
-  def schemaFor(tpe: `Type`): DataType = tpe match {
-    case t if t <:< typeOf[Product] =>
-      val params = t.member("<init>": TermName).asMethod.paramss
-      StructType(
-        params.head.map(p => StructField(p.name.toString, schemaFor(p.typeSignature), true)))
-    case t if t <:< typeOf[Seq[_]] =>
-      val TypeRef(_, _, Seq(elementType)) = t
-      ArrayType(schemaFor(elementType))
-    case t if t <:< typeOf[String] => StringType
-    case t if t <:< definitions.IntTpe => IntegerType
-    case t if t <:< definitions.LongTpe => LongType
-    case t if t <:< definitions.DoubleTpe => DoubleType
-    case t if t <:< definitions.ShortTpe => ShortType
-    case t if t <:< definitions.ByteTpe => ByteType
-  }
-
-  implicit class CaseClassRelation[A <: Product : TypeTag](data: Seq[A]) {
-
-    /**
-     * Implicitly added to Sequences of case class objects.  Returns a catalyst logical relation
-     * for the the data in the sequence.
-     */
-    def asRelation: LocalRelation = {
-      val output = attributesFor[A]
-      LocalRelation(output, data)
-    }
-  }
-}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
+import org.apache.spark.sql.catalyst.types._
 
 /**
  * A collection of implicit conversions that create a DSL for constructing catalyst data structures.
@@ -117,6 +72,10 @@ package object dsl {
     def === (other: Expression) = Equals(expr, other)
     def != (other: Expression) = Not(Equals(expr, other))
 
+    def like(other: Expression) = Like(expr, other)
+    def rlike(other: Expression) = RLike(expr, other)
+    def cast(to: DataType) = Cast(expr, to)
+
     def asc = SortOrder(expr, Ascending)
     def desc = SortOrder(expr, Descending)
 
@@ -128,27 +87,64 @@ package object dsl {
       def expr = e
     }
 
+    implicit def booleanToLiteral(b: Boolean) = Literal(b)
+    implicit def byteToLiteral(b: Byte) = Literal(b)
+    implicit def shortToLiteral(s: Short) = Literal(s)
     implicit def intToLiteral(i: Int) = Literal(i)
     implicit def longToLiteral(l: Long) = Literal(l)
     implicit def floatToLiteral(f: Float) = Literal(f)
     implicit def doubleToLiteral(d: Double) = Literal(d)
     implicit def stringToLiteral(s: String) = Literal(s)
+    implicit def decimalToLiteral(d: BigDecimal) = Literal(d)
+    implicit def timestampToLiteral(t: Timestamp) = Literal(t)
+    implicit def binaryToLiteral(a: Array[Byte]) = Literal(a)
 
     implicit def symbolToUnresolvedAttribute(s: Symbol) = analysis.UnresolvedAttribute(s.name)
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s = sym.name }
-    implicit class DslString(val s: String) extends ImplicitAttribute
+    // TODO more implicit class for literal?
+    implicit class DslString(val s: String) extends ImplicitOperators {
+      def expr: Expression = Literal(s)
+      def attr = analysis.UnresolvedAttribute(s)
+    }
 
     abstract class ImplicitAttribute extends ImplicitOperators {
       def s: String
       def expr = attr
       def attr = analysis.UnresolvedAttribute(s)
 
-      /** Creates a new typed attributes of type int */
+      /** Creates a new AttributeReference of type boolean */
+      def boolean = AttributeReference(s, BooleanType, nullable = false)()
+
+      /** Creates a new AttributeReference of type byte */
+      def byte = AttributeReference(s, ByteType, nullable = false)()
+
+      /** Creates a new AttributeReference of type short */
+      def short = AttributeReference(s, ShortType, nullable = false)()
+
+      /** Creates a new AttributeReference of type int */
       def int = AttributeReference(s, IntegerType, nullable = false)()
 
-      /** Creates a new typed attributes of type string */
+      /** Creates a new AttributeReference of type long */
+      def long = AttributeReference(s, LongType, nullable = false)()
+
+      /** Creates a new AttributeReference of type float */
+      def float = AttributeReference(s, FloatType, nullable = false)()
+
+      /** Creates a new AttributeReference of type double */
+      def double = AttributeReference(s, DoubleType, nullable = false)()
+
+      /** Creates a new AttributeReference of type string */
       def string = AttributeReference(s, StringType, nullable = false)()
+
+      /** Creates a new AttributeReference of type decimal */
+      def decimal = AttributeReference(s, DecimalType, nullable = false)()
+
+      /** Creates a new AttributeReference of type timestamp */
+      def timestamp = AttributeReference(s, TimestampType, nullable = false)()
+
+      /** Creates a new AttributeReference of type binary */
+      def binary = AttributeReference(s, BinaryType, nullable = false)()
     }
 
     implicit class DslAttribute(a: AttributeReference) {
@@ -157,6 +153,8 @@ package object dsl {
 
       // Protobuf terminology
       def required = a.withNullability(false)
+
+      def at(ordinal: Int) = BoundReference(ordinal, a)
     }
   }
 

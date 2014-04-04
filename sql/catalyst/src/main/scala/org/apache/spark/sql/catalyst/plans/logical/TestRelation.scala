@@ -15,13 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package plans
-package logical
+package org.apache.spark.sql.catalyst.plans.logical
 
-import expressions._
-import rules._
+import org.apache.spark.sql.catalyst.analysis
+import org.apache.spark.sql.catalyst.expressions.Attribute
 
 object LocalRelation {
   def apply(output: Attribute*) =

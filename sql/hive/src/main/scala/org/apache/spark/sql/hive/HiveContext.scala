@@ -18,25 +18,26 @@
 package org.apache.spark.sql
 package hive
 
-import java.io.{PrintStream, InputStreamReader, BufferedReader, File}
-import java.util.{ArrayList => JArrayList}
 import scala.language.implicitConversions
 
-import org.apache.spark.SparkContext
+import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
+import java.util.{ArrayList => JArrayList}
+
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.ql.processors.{CommandProcessorResponse, CommandProcessorFactory}
-import org.apache.hadoop.hive.ql.processors.CommandProcessor
 import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.processors._
+import org.apache.hadoop.hive.ql.session.SessionState
+
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-
-import catalyst.analysis.{Analyzer, OverrideCatalog}
-import catalyst.expressions.GenericRow
-import catalyst.plans.logical.{BaseRelation, LogicalPlan, NativeCommand, ExplainCommand}
-import catalyst.types._
-
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, OverrideCatalog}
+import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LowerCaseSchema}
+import org.apache.spark.sql.catalyst.plans.logical.{NativeCommand, ExplainCommand}
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution._
 
+/* Implicit conversions */
 import scala.collection.JavaConversions._
 
 /**
@@ -70,6 +71,18 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
 
+  /**
+   * Executes a query expressed in HiveQL using Spark, returning the result as a SchemaRDD.
+   */
+  def hql(hqlQuery: String): SchemaRDD = {
+    val result = new SchemaRDD(this, HiveQl.parseSql(hqlQuery))
+    // We force query optimization to happen right away instead of letting it happen lazily like
+    // when using the query DSL.  This is so DDL commands behave as expected.  This is only
+    // generates the RDD lineage for DML queries, but do not perform any execution.
+    result.queryExecution.toRdd
+    result
+  }
+
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   @transient
   protected val outputBuffer =  new java.io.OutputStream {
@@ -85,7 +98,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       val input = new java.io.InputStream {
         val iterator = (start ++ end).iterator
 
-        def read(): Int = if (iterator.hasNext) iterator.next else -1
+        def read(): Int = if (iterator.hasNext) iterator.next() else -1
       }
       val reader = new BufferedReader(new InputStreamReader(input))
       val stringBuilder = new StringBuilder
@@ -107,17 +120,19 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient
-  override lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
+  override lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog {
+    override def lookupRelation(
+      databaseName: Option[String],
+      tableName: String,
+      alias: Option[String] = None): LogicalPlan = {
+
+      LowerCaseSchema(super.lookupRelation(databaseName, tableName, alias))
+    }
+  }
 
   /* An analyzer that uses the Hive metastore. */
   @transient
   override lazy val analyzer = new Analyzer(catalog, HiveFunctionRegistry, caseSensitive = false)
-
-  def tables: Seq[BaseRelation] = {
-    // TODO: Move this functionallity to Catalog. Make client protected.
-    val allTables = catalog.client.getAllTables("default")
-    allTables.map(catalog.lookupRelation(None, _, None)).collect { case b: BaseRelation => b }
-  }
 
   /**
    * Runs the specified SQL query using Hive.
@@ -129,8 +144,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     if (results.size == maxResults) sys.error("RESULTS POSSIBLY TRUNCATED")
     results
   }
-
-  // TODO: Move this.
 
   SessionState.start(sessionState)
 
@@ -147,24 +160,24 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
       SessionState.start(sessionState)
 
-      if (proc.isInstanceOf[Driver]) {
-        val driver: Driver = proc.asInstanceOf[Driver]
-        driver.init()
+      proc match {
+        case driver: Driver =>
+          driver.init()
 
-        val results = new JArrayList[String]
-        val response: CommandProcessorResponse = driver.run(cmd)
-        // Throw an exception if there is an error in query processing.
-        if (response.getResponseCode != 0) {
+          val results = new JArrayList[String]
+          val response: CommandProcessorResponse = driver.run(cmd)
+          // Throw an exception if there is an error in query processing.
+          if (response.getResponseCode != 0) {
+            driver.destroy()
+            throw new QueryExecutionException(response.getErrorMessage)
+          }
+          driver.setMaxRows(maxRows)
+          driver.getResults(results)
           driver.destroy()
-          throw new QueryExecutionException(response.getErrorMessage)
-        }
-        driver.setMaxRows(maxRows)
-        driver.getResults(results)
-        driver.destroy()
-        results
-      } else {
-        sessionState.out.println(tokens(0) + " " + cmd_1)
-        Seq(proc.run(cmd_1).getResponseCode.toString)
+          results
+        case _ =>
+          sessionState.out.println(tokens(0) + " " + cmd_1)
+          Seq(proc.run(cmd_1).getResponseCode.toString)
       }
     } catch {
       case e: Exception =>
@@ -187,14 +200,13 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     val hiveContext = self
 
     override val strategies: Seq[Strategy] = Seq(
-      TopK,
-      ColumnPrunings,
-      PartitionPrunings,
+      TakeOrdered,
+      ParquetOperations,
       HiveTableScans,
       DataSinks,
       Scripts,
       PartialAggregation,
-      SparkEquiInnerJoin,
+      HashJoin,
       BasicOperators,
       CartesianProduct,
       BroadcastNestedLoopJoin
@@ -214,7 +226,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     override lazy val optimizedPlan =
       optimizer(catalog.PreInsertionCasts(catalog.CreateTables(analyzed)))
 
-    // TODO: We are loosing schema here.
     override lazy val toRdd: RDD[Row] =
       analyzed match {
         case NativeCommand(cmd) =>
@@ -227,7 +238,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
             sparkContext.parallelize(asRows, 1)
           }
         case _ =>
-          executedPlan.execute.map(_.copy())
+          executedPlan.execute().map(_.copy())
       }
 
     protected val primitiveTypes =

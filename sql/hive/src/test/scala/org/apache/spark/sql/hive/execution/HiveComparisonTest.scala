@@ -15,18 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
-package execution
+package org.apache.spark.sql.hive.execution
 
 import java.io._
-import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 
-import catalyst.plans.logical.{ExplainCommand, NativeCommand}
-import catalyst.plans._
-import catalyst.util._
-
+import org.apache.spark.sql.Logging
+import org.apache.spark.sql.catalyst.plans.logical.{ExplainCommand, NativeCommand}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.Sort
+import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
+import org.apache.spark.sql.hive.TestHive
 
 /**
  * Allows the creations of tests that execute the same query against both hive
@@ -38,7 +36,8 @@ import org.apache.spark.sql.execution.Sort
  * See the documentation of public vals in this class for information on how test execution can be
  * configured using system properties.
  */
-abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
+abstract class HiveComparisonTest
+  extends FunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
 
   /**
    * When set, any cache files that result in test failures will be deleted.  Used when the test
@@ -171,7 +170,7 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
   }
 
   val installHooksCommand = "(?i)SET.*hooks".r
-  def createQueryTest(testCaseName: String, sql: String) {
+  def createQueryTest(testCaseName: String, sql: String, reset: Boolean = true) {
     // If test sharding is enable, skip tests that are not in the correct shard.
     shardInfo.foreach {
       case (shardId, numShards) if testCaseName.hashCode % numShards != shardId => return
@@ -229,7 +228,7 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
       try {
         // MINOR HACK: You must run a query before calling reset the first time.
         TestHive.sql("SHOW TABLES")
-        TestHive.reset()
+        if (reset) { TestHive.reset() }
 
         val hiveCacheFiles = queryList.zipWithIndex.map {
           case (queryString, i)  =>
@@ -296,7 +295,7 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
                     fail(errorMessage)
                 }
             }.toSeq
-            TestHive.reset()
+            if (reset) { TestHive.reset() }
 
             computedResults
           }

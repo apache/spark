@@ -15,24 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package optimizer
+package org.apache.spark.sql.catalyst.optimizer
 
-import types.IntegerType
-import util._
-import plans.logical.{LogicalPlan, LocalRelation}
-import rules._
-import expressions._
-import dsl.plans._
-import dsl.expressions._
+import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.types.IntegerType
+
+// For implicit conversions
+import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.dsl.expressions._
 
 class ConstantFoldingSuite extends OptimizerTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Subqueries", Once,
-        EliminateSubqueries) ::
+      Batch("AnalysisNodes", Once,
+        EliminateAnalysisOperators) ::
       Batch("ConstantFolding", Once,
         ConstantFolding,
         BooleanSimplification) :: Nil
@@ -106,7 +106,7 @@ class ConstantFoldingSuite extends OptimizerTest {
           Literal(5) + 'a as Symbol("c1"),
           'a + Literal(2) + Literal(3) as Symbol("c2"),
           Literal(2) * 'a + Literal(4) as Symbol("c3"),
-          'a * (Literal(7)) as Symbol("c4"))
+          'a * Literal(7) as Symbol("c4"))
         .analyze
 
     comparePlans(optimized, correctAnswer)

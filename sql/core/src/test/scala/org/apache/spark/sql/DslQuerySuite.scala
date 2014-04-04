@@ -17,14 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
-
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.test._
 
 /* Implicits */

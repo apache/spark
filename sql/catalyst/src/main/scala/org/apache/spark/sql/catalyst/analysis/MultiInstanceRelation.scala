@@ -15,17 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
-package analysis
+package org.apache.spark.sql.catalyst.analysis
 
-import plans.logical.LogicalPlan
-import rules._
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
  * A trait that should be mixed into query operators where an single instance might appear multiple
  * times in a logical query plan.  It is invalid to have multiple copies of the same attribute
- * produced by distinct operators in a query tree as this breaks the gurantee that expression
- * ids, which are used to differentate attributes, are unique.
+ * produced by distinct operators in a query tree as this breaks the guarantee that expression
+ * ids, which are used to differentiate attributes, are unique.
  *
  * Before analysis, all operators that include this trait will be asked to produce a new version
  * of itself with globally unique expression ids.

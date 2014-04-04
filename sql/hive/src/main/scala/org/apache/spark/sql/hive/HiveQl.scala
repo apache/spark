@@ -15,21 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
-
-import scala.collection.JavaConversions._
+package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
 
-import catalyst.analysis._
-import catalyst.expressions._
-import catalyst.plans._
-import catalyst.plans.logical
-import catalyst.plans.logical._
-import catalyst.types._
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.types._
+
+/* Implicit conversions */
+import scala.collection.JavaConversions._
 
 /**
  * Used when we need to start parsing the AST before deciding that we are going to pass the command
@@ -48,7 +48,7 @@ case class AddJar(jarPath: String) extends Command
 
 case class AddFile(filePath: String) extends Command
 
-/** Provides a mapping from HiveQL statments to catalyst logical plans and expression trees. */
+/** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 object HiveQl {
   protected val nativeCommands = Seq(
     "TOK_DESCFUNCTION",
@@ -150,13 +150,13 @@ object HiveQl {
     }
 
     /**
-     * Returns a scala.Seq equivilent to [s] or Nil if [s] is null.
+     * Returns a scala.Seq equivalent to [s] or Nil if [s] is null.
      */
     private def nilIfEmpty[A](s: java.util.List[A]): Seq[A] =
       Option(s).map(_.toSeq).getOrElse(Nil)
 
     /**
-     * Returns this ASTNode with the text changed to `newText``.
+     * Returns this ASTNode with the text changed to `newText`.
      */
     def withText(newText: String): ASTNode = {
       n.token.asInstanceOf[org.antlr.runtime.CommonToken].setText(newText)
@@ -300,14 +300,17 @@ object HiveQl {
   }
 
   protected def nodeToDataType(node: Node): DataType = node match {
-    case Token("TOK_BIGINT", Nil) => IntegerType
+    case Token("TOK_DECIMAL", Nil) => DecimalType
+    case Token("TOK_BIGINT", Nil) => LongType
     case Token("TOK_INT", Nil) => IntegerType
-    case Token("TOK_TINYINT", Nil) => IntegerType
-    case Token("TOK_SMALLINT", Nil) => IntegerType
+    case Token("TOK_TINYINT", Nil) => ByteType
+    case Token("TOK_SMALLINT", Nil) => ShortType
     case Token("TOK_BOOLEAN", Nil) => BooleanType
     case Token("TOK_STRING", Nil) => StringType
     case Token("TOK_FLOAT", Nil) => FloatType
-    case Token("TOK_DOUBLE", Nil) => FloatType
+    case Token("TOK_DOUBLE", Nil) => DoubleType
+    case Token("TOK_TIMESTAMP", Nil) => TimestampType
+    case Token("TOK_BINARY", Nil) => BinaryType
     case Token("TOK_LIST", elementType :: Nil) => ArrayType(nodeToDataType(elementType))
     case Token("TOK_STRUCT",
            Token("TOK_TABCOLLIST", fields) :: Nil) =>
@@ -529,7 +532,7 @@ object HiveQl {
 
         val withLimit =
           limitClause.map(l => nodeToExpr(l.getChildren.head))
-            .map(StopAfter(_, withSort))
+            .map(Limit(_, withSort))
             .getOrElse(withSort)
 
         // TOK_INSERT_INTO means to add files to the table.
@@ -602,7 +605,7 @@ object HiveQl {
         case Token("TOK_TABLESPLITSAMPLE",
                Token("TOK_ROWCOUNT", Nil) ::
                Token(count, Nil) :: Nil) =>
-          StopAfter(Literal(count.toInt), relation)
+          Limit(Literal(count.toInt), relation)
         case Token("TOK_TABLESPLITSAMPLE",
                Token("TOK_PERCENT", Nil) ::
                Token(fraction, Nil) :: Nil) =>
@@ -662,12 +665,12 @@ object HiveQl {
       // worth the number of hacks that will be required to implement it.  Namely, we need to add
       // some sort of mapped star expansion that would expand all child output row to be similarly
       // named output expressions where some aggregate expression has been applied (i.e. First).
-      ??? /// Aggregate(groups, Star(None, First(_)) :: Nil, joinedResult)
+      ??? // Aggregate(groups, Star(None, First(_)) :: Nil, joinedResult)
 
     case Token(allJoinTokens(joinToken),
            relation1 ::
            relation2 :: other) =>
-      assert(other.size <= 1, s"Unhandled join child ${other}")
+      assert(other.size <= 1, s"Unhandled join child $other")
       val joinType = joinToken match {
         case "TOK_JOIN" => Inner
         case "TOK_RIGHTOUTERJOIN" => RightOuter
@@ -829,6 +832,8 @@ object HiveQl {
       Cast(nodeToExpr(arg), BooleanType)
     case Token("TOK_FUNCTION", Token("TOK_DECIMAL", Nil) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), DecimalType)
+    case Token("TOK_FUNCTION", Token("TOK_TIMESTAMP", Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), TimestampType)
 
     /* Arithmetic */
     case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
@@ -847,12 +852,9 @@ object HiveQl {
     case Token(">=", left :: right:: Nil) => GreaterThanOrEqual(nodeToExpr(left), nodeToExpr(right))
     case Token("<", left :: right:: Nil) => LessThan(nodeToExpr(left), nodeToExpr(right))
     case Token("<=", left :: right:: Nil) => LessThanOrEqual(nodeToExpr(left), nodeToExpr(right))
-    case Token("LIKE", left :: right:: Nil) =>
-      UnresolvedFunction("LIKE", Seq(nodeToExpr(left), nodeToExpr(right)))
-    case Token("RLIKE", left :: right:: Nil) =>
-      UnresolvedFunction("RLIKE", Seq(nodeToExpr(left), nodeToExpr(right)))
-    case Token("REGEXP", left :: right:: Nil) =>
-      UnresolvedFunction("REGEXP", Seq(nodeToExpr(left), nodeToExpr(right)))
+    case Token("LIKE", left :: right:: Nil) => Like(nodeToExpr(left), nodeToExpr(right))
+    case Token("RLIKE", left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
+    case Token("REGEXP", left :: right:: Nil) => RLike(nodeToExpr(left), nodeToExpr(right))
     case Token("TOK_FUNCTION", Token("TOK_ISNOTNULL", Nil) :: child :: Nil) =>
       IsNotNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token("TOK_ISNULL", Nil) :: child :: Nil) =>

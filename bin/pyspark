@@ -36,10 +36,7 @@ if [ ! -f "$FWDIR/RELEASE" ]; then
   fi
 fi
 
-# Load environment variables from conf/spark-env.sh, if it exists
-if [ -e "$FWDIR/conf/spark-env.sh" ] ; then
-  . $FWDIR/conf/spark-env.sh
-fi
+. $FWDIR/bin/load-spark-env.sh
 
 # Figure out which Python executable to use
 if [ -z "$PYSPARK_PYTHON" ] ; then
@@ -58,7 +55,8 @@ if [ -n "$IPYTHON_OPTS" ]; then
   IPYTHON=1
 fi
 
-if [[ "$IPYTHON" = "1" ]] ; then
+# Only use ipython if no command line arguments were provided [SPARK-1134]
+if [[ "$IPYTHON" = "1" && $# = 0 ]] ; then
   exec ipython $IPYTHON_OPTS
 else
   exec "$PYSPARK_PYTHON" "$@"

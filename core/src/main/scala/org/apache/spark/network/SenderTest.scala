@@ -50,7 +50,7 @@ private[spark] object SenderTest {
     (0 until count).foreach(i => {
       val dataMessage = Message.createBufferMessage(buffer.duplicate)
       val startTime = System.currentTimeMillis
-      /*println("Started timer at " + startTime)*/
+      /* println("Started timer at " + startTime) */
       val responseStr = manager.sendMessageReliablySync(targetConnectionManagerId, dataMessage)
         .map { response =>
           val buffer = response.asInstanceOf[BufferMessage].buffers(0)

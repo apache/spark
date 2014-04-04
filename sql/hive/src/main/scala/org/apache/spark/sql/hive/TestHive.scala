@@ -15,30 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
+package org.apache.spark.sql.hive
 
 import java.io.File
 import java.util.{Set => JavaSet}
 
 import scala.collection.mutable
-import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 
-import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
-import org.apache.hadoop.hive.metastore.MetaStoreUtils
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
-import org.apache.hadoop.hive.ql.io.avro.{AvroContainerOutputFormat, AvroContainerInputFormat}
+import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.metadata.Table
-import org.apache.hadoop.hive.serde2.avro.AvroSerDe
-import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.hive.serde2.RegexSerDe
+import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, NativeCommand}
+import org.apache.spark.sql.catalyst.util._
 
-import catalyst.analysis._
-import catalyst.plans.logical.{LogicalPlan, NativeCommand}
-import catalyst.util._
+/* Implicit conversions */
+import scala.collection.JavaConversions._
 
 object TestHive
   extends TestHiveContext(new SparkContext("local", "TestSQLContext", new SparkConf()))
@@ -52,7 +50,7 @@ object TestHive
  *
  * TestHive is singleton object version of this class because instantiating multiple copies of the
  * hive metastore seems to lead to weird non-deterministic failures.  Therefore, the execution of
- * testcases that rely on TestHive must be serialized.
+ * test cases that rely on TestHive must be serialized.
  */
 class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
   self =>
@@ -314,6 +312,8 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
         logger.debug(s"Dropping Database: $db")
         catalog.client.dropDatabase(db, true, false, true)
       }
+
+      catalog.unregisterAllTables()
 
       FunctionRegistry.getFunctionNames.filterNot(originalUdfs.contains(_)).foreach { udfName =>
         FunctionRegistry.unregisterTemporaryUDF(udfName)

@@ -15,13 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
-package execution
+package org.apache.spark.sql.hive.execution
 
-import java.io._
+import java.io.File
 
-import catalyst.util._
+import org.apache.spark.sql.catalyst.util._
 
 /**
  * A framework for running the query tests that are listed as a set of text files.

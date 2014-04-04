@@ -15,12 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package plans
-package logical
+package org.apache.spark.sql.catalyst.plans.logical
 
-import expressions._
+import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder}
 
 /**
  * Performs a physical redistribution of the data.  Used when the consumer of the query

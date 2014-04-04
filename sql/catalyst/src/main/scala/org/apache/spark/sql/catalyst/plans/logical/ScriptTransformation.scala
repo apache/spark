@@ -15,12 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package plans
-package logical
+package org.apache.spark.sql.catalyst.plans.logical
 
-import expressions._
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 
 /**
  * Transforms the input by forking and running the specified script.

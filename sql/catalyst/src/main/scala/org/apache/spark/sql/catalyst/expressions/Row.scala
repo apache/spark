@@ -15,11 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package expressions
+package org.apache.spark.sql.catalyst.expressions
 
-import types._
+import org.apache.spark.sql.catalyst.types.NativeType
 
 /**
  * Represents one row of output from a relational operator.  Allows both generic access by ordinal,
@@ -46,6 +44,16 @@ trait Row extends Seq[Any] with Serializable {
     s"[${this.mkString(",")}]"
 
   def copy(): Row
+
+  /** Returns true if there are any NULL values in this row. */
+  def anyNull: Boolean = {
+    var i = 0
+    while (i < length) {
+      if (isNullAt(i)) { return true }
+      i += 1
+    }
+    false
+  }
 }
 
 /**

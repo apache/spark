@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package expressions
+package org.apache.spark.sql.catalyst.expressions
 
-import errors._
-import trees._
-import types._
+import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.types.{DataType, FractionalType, IntegralType, NumericType, NativeType}
 
 abstract class Expression extends TreeNode[Expression] {
   self: Product =>
@@ -69,7 +68,7 @@ abstract class Expression extends TreeNode[Expression] {
   def childrenResolved = !children.exists(!_.resolved)
 
   /**
-   * A set of helper functions that return the correct descendant of [[scala.math.Numeric]] type
+   * A set of helper functions that return the correct descendant of `scala.math.Numeric[T]` type
    * and do any casting necessary of child evaluation.
    */
   @inline
@@ -87,6 +86,11 @@ abstract class Expression extends TreeNode[Expression] {
     }
   }
 
+  /**
+   * Evaluation helper function for 2 Numeric children expressions. Those expressions are supposed 
+   * to be in the same data type, and also the return type.
+   * Either one of the expressions result is null, the evaluation result should be null.
+   */
   @inline
   protected final def n2(
       i: Row,
@@ -116,6 +120,11 @@ abstract class Expression extends TreeNode[Expression] {
     }
   }
 
+  /**
+   * Evaluation helper function for 2 Fractional children expressions. Those expressions are  
+   * supposed to be in the same data type, and also the return type.
+   * Either one of the expressions result is null, the evaluation result should be null.
+   */
   @inline
   protected final def f2(
       i: Row,
@@ -144,6 +153,11 @@ abstract class Expression extends TreeNode[Expression] {
     }
   }
 
+  /**
+   * Evaluation helper function for 2 Integral children expressions. Those expressions are  
+   * supposed to be in the same data type, and also the return type.
+   * Either one of the expressions result is null, the evaluation result should be null.
+   */
   @inline
   protected final def i2(
       i: Row,
@@ -167,6 +181,43 @@ abstract class Expression extends TreeNode[Expression] {
             f.asInstanceOf[(Integral[i.JvmType], i.JvmType, i.JvmType) => i.JvmType](
               i.integral, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
           case other => sys.error(s"Type $other does not support numeric operations")
+        }
+      }
+    }
+  }
+
+  /**
+   * Evaluation helper function for 2 Comparable children expressions. Those expressions are  
+   * supposed to be in the same data type, and the return type should be Integer:
+   * Negative value: 1st argument less than 2nd argument
+   * Zero:  1st argument equals 2nd argument
+   * Positive value: 1st argument greater than 2nd argument
+   * 
+   * Either one of the expressions result is null, the evaluation result should be null.
+   */
+  @inline
+  protected final def c2(
+      i: Row,
+      e1: Expression,
+      e2: Expression,
+      f: ((Ordering[Any], Any, Any) => Any)): Any  = {
+    if (e1.dataType != e2.dataType) {
+      throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
+    }
+
+    val evalE1 = e1.apply(i)
+    if(evalE1 == null) {
+      null
+    } else {
+      val evalE2 = e2.apply(i)
+      if (evalE2 == null) {
+        null
+      } else {
+        e1.dataType match {
+          case i: NativeType => 
+            f.asInstanceOf[(Ordering[i.JvmType], i.JvmType, i.JvmType) => Boolean](
+              i.ordering, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
+          case other => sys.error(s"Type $other does not support ordered operations")
         }
       }
     }

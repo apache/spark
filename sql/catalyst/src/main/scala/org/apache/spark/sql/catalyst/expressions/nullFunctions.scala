@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package expressions
+package org.apache.spark.sql.catalyst.expressions
 
-import catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 
 case class Coalesce(children: Seq[Expression]) extends Expression {
   type EvaluatedType = Any

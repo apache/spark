@@ -15,13 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package expressions
+package org.apache.spark.sql.catalyst.expressions
 
 import scala.language.dynamics
 
-import types._
+import org.apache.spark.sql.catalyst.types.DataType
 
 case object DynamicType extends DataType
 

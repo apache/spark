@@ -15,12 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package plans
+package org.apache.spark.sql.catalyst.plans
 
-import catalyst.expressions.{SortOrder, Attribute, Expression}
-import catalyst.trees._
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.trees.TreeNode
 
 abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
   self: PlanType with Product =>

@@ -15,23 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
+package org.apache.spark.sql.hive
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
+import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde2.Deserializer
-import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.io.Writable
-import org.apache.hadoop.fs.{Path, PathFilter}
-import org.apache.hadoop.mapred.{FileInputFormat, JobConf, InputFormat}
+import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf}
 
 import org.apache.spark.SerializableWritable
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.{HadoopRDD, UnionRDD, EmptyRDD, RDD}
-
+import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
 
 /**
  * A trait for subclasses that handle table scans.
@@ -40,7 +38,6 @@ private[hive] sealed trait TableReader {
   def makeRDDForTable(hiveTable: HiveTable): RDD[_]
 
   def makeRDDForPartitionedTable(partitions: Seq[HivePartition]): RDD[_]
-
 }
 
 
@@ -56,7 +53,6 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: HiveCon
   // it is smaller than what Spark suggests.
   private val _minSplitsPerRDD = math.max(
     sc.hiveconf.getInt("mapred.map.tasks", 1), sc.sparkContext.defaultMinSplits)
-
 
   // TODO: set aws s3 credentials.
 
@@ -85,8 +81,8 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: HiveCon
   def makeRDDForTable(
       hiveTable: HiveTable,
       deserializerClass: Class[_ <: Deserializer],
-      filterOpt: Option[PathFilter]): RDD[_] =
-  {
+      filterOpt: Option[PathFilter]): RDD[_] = {
+
     assert(!hiveTable.isPartitioned, """makeRDDForTable() cannot be called on a partitioned table,
       since input formats may differ across partitions. Use makeRDDForTablePartitions() instead.""")
 
@@ -98,7 +94,7 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: HiveCon
     val tablePath = hiveTable.getPath
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
 
-    //logDebug("Table input: %s".format(tablePath))
+    // logDebug("Table input: %s".format(tablePath))
     val ifc = hiveTable.getInputFormatClass
       .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
     val hadoopRDD = createHadoopRdd(tableDesc, inputPathStr, ifc)
@@ -115,6 +111,7 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: HiveCon
           sys.error(s"Unable to deserialize non-Writable: $value of ${value.getClass.getName}")
       }
     }
+
     deserializedHadoopRDD
   }
 
@@ -136,8 +133,8 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: HiveCon
    */
   def makeRDDForPartitionedTable(
       partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]],
-      filterOpt: Option[PathFilter]): RDD[_] =
-  {
+      filterOpt: Option[PathFilter]): RDD[_] = {
+
     val hivePartitionRDDs = partitionToDeserializer.map { case (partition, partDeserializer) =>
       val partDesc = Utilities.getPartitionDesc(partition)
       val partPath = partition.getPartitionPath
@@ -178,6 +175,7 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: HiveCon
         }
       }
     }.toSeq
+
     // Even if we don't use any partitions, we still need an empty RDD
     if (hivePartitionRDDs.size == 0) {
       new EmptyRDD[Object](sc.sparkContext)
@@ -207,8 +205,8 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: HiveCon
   private def createHadoopRdd(
     tableDesc: TableDesc,
     path: String,
-    inputFormatClass: Class[InputFormat[Writable, Writable]])
-  : RDD[Writable] = {
+    inputFormatClass: Class[InputFormat[Writable, Writable]]): RDD[Writable] = {
+
     val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
 
     val rdd = new HadoopRDD(
@@ -227,7 +225,6 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: HiveCon
 }
 
 private[hive] object HadoopTableReader {
-
   /**
    * Curried. After given an argument for 'path', the resulting JobConf => Unit closure is used to
    * instantiate a HadoopRDD.

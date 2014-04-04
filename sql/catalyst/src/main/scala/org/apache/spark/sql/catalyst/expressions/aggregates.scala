@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package expressions
+package org.apache.spark.sql.catalyst.expressions
 
-import catalyst.types._
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.trees
 
 abstract class AggregateExpression extends Expression {
   self: Product =>

@@ -24,7 +24,6 @@ import java.nio.{ByteBuffer, ByteOrder}
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
-import org.apache.commons.io.FileUtils
 import org.scalatest.FunSuite
 
 class UtilsSuite extends FunSuite {
@@ -40,7 +39,7 @@ class UtilsSuite extends FunSuite {
   }
 
   test("copyStream") {
-    //input array initialization
+    // input array initialization
     val bytes = Array.ofDim[Byte](9000)
     Random.nextBytes(bytes)
 
@@ -136,7 +135,7 @@ class UtilsSuite extends FunSuite {
     // Read some nonexistent bytes on both ends
     assert(Utils.offsetBytes(f1Path, -3, 25) === "1\n2\n3\n4\n5\n6\n7\n8\n9\n")
 
-    FileUtils.deleteDirectory(tmpDir2)
+    Utils.deleteRecursively(tmpDir2)
   }
 
   test("deserialize long value") {

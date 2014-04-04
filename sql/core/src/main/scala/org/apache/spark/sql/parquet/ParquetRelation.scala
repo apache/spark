@@ -17,29 +17,27 @@
 
 package org.apache.spark.sql.parquet
 
-import java.io.{IOException, FileNotFoundException}
+import java.io.IOException
 
-import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.mapreduce.Job
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.fs.permission.FsAction
+import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, BaseRelation}
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.ArrayType
-import org.apache.spark.sql.catalyst.expressions.{Row, AttributeReference, Attribute}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-
-import parquet.schema.{MessageTypeParser, MessageType}
-import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
-import parquet.schema.{PrimitiveType => ParquetPrimitiveType}
-import parquet.schema.{Type => ParquetType}
-import parquet.schema.Type.Repetition
-import parquet.io.api.{Binary, RecordConsumer}
-import parquet.hadoop.{Footer, ParquetFileWriter, ParquetFileReader}
-import parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
 import parquet.hadoop.util.ContextUtil
+import parquet.hadoop.{ParquetOutputFormat, Footer, ParquetFileWriter, ParquetFileReader}
+import parquet.hadoop.metadata.{CompressionCodecName, FileMetaData, ParquetMetadata}
+import parquet.io.api.{Binary, RecordConsumer}
+import parquet.schema.{Type => ParquetType, PrimitiveType => ParquetPrimitiveType, MessageType, MessageTypeParser}
+import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
+import parquet.schema.Type.Repetition
 
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
+import org.apache.spark.sql.catalyst.types._
+
+// Implicits
 import scala.collection.JavaConversions._
 
 /**
@@ -49,66 +47,117 @@ import scala.collection.JavaConversions._
  * of using this class directly.
  *
  * {{{
- *   val parquetRDD = sqlContext.parquetFile("path/to/parequet.file")
+ *   val parquetRDD = sqlContext.parquetFile("path/to/parquet.file")
  * }}}
  *
- * @param tableName The name of the relation that can be used in queries.
  * @param path The path to the Parquet file.
  */
-case class ParquetRelation(val tableName: String, val path: String) extends BaseRelation {
+private[sql] case class ParquetRelation(val path: String)
+    extends LeafNode with MultiInstanceRelation {
+  self: Product =>
 
-  /** Schema derived from ParquetFile **/
+  /** Schema derived from ParquetFile */
   def parquetSchema: MessageType =
     ParquetTypesConverter
       .readMetaData(new Path(path))
       .getFileMetaData
       .getSchema
 
-  /** Attributes **/
-  val attributes =
+  /** Attributes */
+  override val output =
     ParquetTypesConverter
-    .convertToAttributes(parquetSchema)
+      .convertToAttributes(parquetSchema)
 
-  /** Output **/
-  override val output = attributes
+  override def newInstance = ParquetRelation(path).asInstanceOf[this.type]
 
-  // Parquet files have no concepts of keys, therefore no Partitioner
-  // Note: we could allow Block level access; needs to be thought through
-  override def isPartitioned = false
+  // Equals must also take into account the output attributes so that we can distinguish between
+  // different instances of the same relation,
+  override def equals(other: Any) = other match {
+    case p: ParquetRelation =>
+      p.path == path && p.output == output
+    case _ => false
+  }
 }
 
-object ParquetRelation {
+private[sql] object ParquetRelation {
+
+  def enableLogForwarding() {
+    // Note: Parquet does not use forwarding to parent loggers which
+    // is required for the JUL-SLF4J bridge to work. Also there is
+    // a default logger that appends to Console which needs to be
+    // reset.
+    import org.slf4j.bridge.SLF4JBridgeHandler
+    import java.util.logging.Logger
+    import java.util.logging.LogManager
+
+    val loggerNames = Seq(
+      "parquet.hadoop.ColumnChunkPageWriteStore",
+      "parquet.hadoop.InternalParquetRecordWriter",
+      "parquet.hadoop.ParquetRecordReader",
+      "parquet.hadoop.ParquetInputFormat",
+      "parquet.hadoop.ParquetOutputFormat",
+      "parquet.hadoop.ParquetFileReader",
+      "parquet.hadoop.InternalParquetRecordReader",
+      "parquet.hadoop.codec.CodecConfig")
+    LogManager.getLogManager.reset()
+    SLF4JBridgeHandler.install()
+    for(name <- loggerNames) {
+      val logger = Logger.getLogger(name)
+      logger.setParent(Logger.getGlobal)
+      logger.setUseParentHandlers(true)
+    }
+  }
 
   // The element type for the RDDs that this relation maps to.
   type RowType = org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 
+  // The compression type
+  type CompressionType = parquet.hadoop.metadata.CompressionCodecName
+
+  // The default compression
+  val defaultCompression = CompressionCodecName.GZIP
+
   /**
-   * Creates a new ParquetRelation and underlying Parquetfile for the given
-   * LogicalPlan. Note that this is used inside [[SparkStrategies]] to
-   * create a resolved relation as a data sink for writing to a Parquetfile.
-   * The relation is empty but is initialized with ParquetMetadata and
-   * can be inserted into.
+   * Creates a new ParquetRelation and underlying Parquetfile for the given LogicalPlan. Note that
+   * this is used inside [[org.apache.spark.sql.execution.SparkStrategies SparkStrategies]] to
+   * create a resolved relation as a data sink for writing to a Parquetfile. The relation is empty
+   * but is initialized with ParquetMetadata and can be inserted into.
    *
    * @param pathString The directory the Parquetfile will be stored in.
    * @param child The child node that will be used for extracting the schema.
-   * @param conf A configuration configuration to be used.
-   * @param tableName The name of the resulting relation.
-   * @return An empty ParquetRelation inferred metadata.
+   * @param conf A configuration to be used.
+   * @return An empty ParquetRelation with inferred metadata.
    */
   def create(pathString: String,
              child: LogicalPlan,
-             conf: Configuration,
-             tableName: Option[String]): ParquetRelation = {
+             conf: Configuration): ParquetRelation = {
     if (!child.resolved) {
       throw new UnresolvedException[LogicalPlan](
         child,
         "Attempt to create Parquet table from unresolved child (when schema is not available)")
     }
+    createEmpty(pathString, child.output, conf)
+  }
 
-    val name = s"${tableName.getOrElse(child.nodeName)}_parquet"
+  /**
+   * Creates an empty ParquetRelation and underlying Parquetfile that only
+   * consists of the Metadata for the given schema.
+   *
+   * @param pathString The directory the Parquetfile will be stored in.
+   * @param attributes The schema of the relation.
+   * @param conf A configuration to be used.
+   * @return An empty ParquetRelation.
+   */
+  def createEmpty(pathString: String,
+                  attributes: Seq[Attribute],
+                  conf: Configuration): ParquetRelation = {
     val path = checkPath(pathString, conf)
-    ParquetTypesConverter.writeMetaData(child.output, path, conf)
-    new ParquetRelation(name, path.toString)
+    if (conf.get(ParquetOutputFormat.COMPRESSION) == null) {
+      conf.set(ParquetOutputFormat.COMPRESSION, ParquetRelation.defaultCompression.name())
+    }
+    ParquetRelation.enableLogForwarding()
+    ParquetTypesConverter.writeMetaData(attributes, path, conf)
+    new ParquetRelation(path.toString)
   }
 
   private def checkPath(pathStr: String, conf: Configuration): Path = {
@@ -134,7 +183,7 @@ object ParquetRelation {
   }
 }
 
-object ParquetTypesConverter {
+private[parquet] object ParquetTypesConverter {
   def toDataType(parquetType : ParquetPrimitiveTypeName): DataType = parquetType match {
     // for now map binary to string type
     // TODO: figure out how Parquet uses strings or why we can't use them in a MessageType schema
@@ -145,11 +194,10 @@ object ParquetTypesConverter {
     case ParquetPrimitiveTypeName.FLOAT => FloatType
     case ParquetPrimitiveTypeName.INT32 => IntegerType
     case ParquetPrimitiveTypeName.INT64 => LongType
-    case ParquetPrimitiveTypeName.INT96 => {
+    case ParquetPrimitiveTypeName.INT96 =>
       // TODO: add BigInteger type? TODO(andre) use DecimalType instead????
       sys.error("Warning: potential loss of precision: converting INT96 to long")
       LongType
-    }
     case _ => sys.error(
       s"Unsupported parquet datatype $parquetType")
   }
@@ -186,11 +234,10 @@ object ParquetTypesConverter {
 
   def convertToAttributes(parquetSchema: MessageType) : Seq[Attribute] = {
     parquetSchema.getColumns.map {
-      case (desc) => {
+      case (desc) =>
         val ctype = toDataType(desc.getType)
         val name: String = desc.getPath.mkString(".")
         new AttributeReference(name, ctype, false)()
-      }
     }
   }
 
@@ -235,6 +282,7 @@ object ParquetTypesConverter {
       extraMetadata,
       "Spark")
 
+    ParquetRelation.enableLogForwarding()
     ParquetFileWriter.writeMetadataFile(
       conf,
       path,
@@ -245,7 +293,7 @@ object ParquetTypesConverter {
    * Try to read Parquet metadata at the given Path. We first see if there is a summary file
    * in the parent directory. If so, this is used. Else we read the actual footer at the given
    * location.
-   * @param path The path at which we expect one (or more) Parquet files.
+   * @param origPath The path at which we expect one (or more) Parquet files.
    * @return The `ParquetMetadata` containing among other things the schema.
    */
   def readMetaData(origPath: Path): ParquetMetadata = {
@@ -261,16 +309,24 @@ object ParquetTypesConverter {
       throw new IllegalArgumentException(s"Incorrectly formatted Parquet metadata path $origPath")
     }
     val path = origPath.makeQualified(fs)
+    if (!fs.getFileStatus(path).isDir) {
+      throw new IllegalArgumentException(
+        s"Expected $path for be a directory with Parquet files/metadata")
+    }
+    ParquetRelation.enableLogForwarding()
     val metadataPath = new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)
+    // if this is a new table that was just created we will find only the metadata file
     if (fs.exists(metadataPath) && fs.isFile(metadataPath)) {
-      // TODO: improve exception handling, etc.
       ParquetFileReader.readFooter(conf, metadataPath)
     } else {
-      if (!fs.exists(path) || !fs.isFile(path)) {
-        throw new FileNotFoundException(
-          s"Could not find file ${path.toString} when trying to read metadata")
+      // there may be one or more Parquet files in the given directory
+      val footers = ParquetFileReader.readFooters(conf, fs.getFileStatus(path))
+      // TODO: for now we assume that all footers (if there is more than one) have identical
+      // metadata; we may want to add a check here at some point
+      if (footers.size() == 0) {
+        throw new IllegalArgumentException(s"Could not find Parquet metadata at path $path")
       }
-      ParquetFileReader.readFooter(conf, path)
+      footers(0).getParquetMetadata
     }
   }
 }

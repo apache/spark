@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
+package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
@@ -24,24 +23,18 @@ import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Hive}
 import org.apache.hadoop.hive.ql.plan.{TableDesc, FileSinkDesc}
 import org.apache.hadoop.hive.serde2.Serializer
-import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
+import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveDecimalObjectInspector
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveVarcharObjectInspector
-
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
 
-import catalyst.expressions._
-import catalyst.types.{BooleanType, DataType}
-import org.apache.spark.{TaskContext, SparkException}
-import catalyst.expressions.Cast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.{BooleanType, DataType}
 import org.apache.spark.sql.execution._
-
-import scala.Some
-import scala.collection.immutable.ListMap
+import org.apache.spark.{SparkHiveHadoopWriter, TaskContext, SparkException}
 
 /* Implicits */
 import scala.collection.JavaConversions._
@@ -194,20 +187,26 @@ case class InsertIntoHiveTable(
    * TODO: Consolidate all hive OI/data interface code.
    */
   protected def wrap(a: (Any, ObjectInspector)): Any = a match {
-    case (s: String, oi: JavaHiveVarcharObjectInspector) => new HiveVarchar(s, s.size)
+    case (s: String, oi: JavaHiveVarcharObjectInspector) =>
+      new HiveVarchar(s, s.size)
+
     case (bd: BigDecimal, oi: JavaHiveDecimalObjectInspector) =>
       new HiveDecimal(bd.underlying())
+
     case (row: Row, oi: StandardStructObjectInspector) =>
       val struct = oi.create()
-      row.zip(oi.getAllStructFieldRefs).foreach {
+      row.zip(oi.getAllStructFieldRefs: Seq[StructField]).foreach {
         case (data, field) =>
           oi.setStructFieldData(struct, field, wrap(data, field.getFieldObjectInspector))
       }
       struct
+
     case (s: Seq[_], oi: ListObjectInspector) =>
       val wrappedSeq = s.map(wrap(_, oi.getListElementObjectInspector))
       seqAsJavaList(wrappedSeq)
-    case (obj, _) => obj
+
+    case (obj, _) =>
+      obj
   }
 
   def saveAsHiveFile(
@@ -324,7 +323,7 @@ case class InsertIntoHiveTable(
         case (key, Some(value)) => key -> value
         case (key, None) => key -> "" // Should not reach here right now.
       }
-      val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols(), partitionSpec)
+      val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols, partitionSpec)
       db.validatePartitionNameCharacters(partVals)
       // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
       // which is currently considered as a Hive native command.

@@ -15,13 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package catalyst
-package planning
+package org.apache.spark.sql.catalyst.planning
 
-
-import plans.logical.LogicalPlan
-import trees._
+import org.apache.spark.sql.Logging
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.TreeNode
 
 /**
  * Abstract class for transforming [[plans.logical.LogicalPlan LogicalPlan]]s into physical plans.
