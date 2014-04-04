@@ -81,35 +81,32 @@ private[sql] case class ParquetRelation(val path: String)
 
 private[sql] object ParquetRelation {
 
-  var isEnableLogForwarding = false
+  @volatile private var enabledLogForwarding = false
+  val initLock = new Object()
 
   def enableLogForwarding() {
     // Note: Parquet does not use forwarding to parent loggers which
     // is required for the JUL-SLF4J bridge to work. Also there is
     // a default logger that appends to Console which needs to be
     // reset.
-    if (isEnableLogForwarding) return
-    import org.slf4j.bridge.SLF4JBridgeHandler
-    import java.util.logging.Logger
-    import java.util.logging.LogManager
+    if (!enabledLogForwarding) {
+      initLock.synchronized {
+        if (!enabledLogForwarding) {
+          import org.slf4j.bridge.SLF4JBridgeHandler
+          import java.util.logging.Logger
+          import java.util.logging.LogManager
 
-    val loggerNames = Seq(
-      "parquet.hadoop.ColumnChunkPageWriteStore",
-      "parquet.hadoop.InternalParquetRecordWriter",
-      "parquet.hadoop.ParquetRecordReader",
-      "parquet.hadoop.ParquetInputFormat",
-      "parquet.hadoop.ParquetOutputFormat",
-      "parquet.hadoop.ParquetFileReader",
-      "parquet.hadoop.InternalParquetRecordReader",
-      "parquet.hadoop.codec.CodecConfig")
-    LogManager.getLogManager.reset()
-    SLF4JBridgeHandler.install()
-    for(name <- loggerNames) {
-      val logger = Logger.getLogger(name)
-      logger.setParent(Logger.getGlobal)
-      logger.setUseParentHandlers(true)
+          if (!SLF4JBridgeHandler.isInstalled){
+            LogManager.getLogManager.reset()
+            SLF4JBridgeHandler.install()
+          }
+          val parquetLogger = Logger.getLogger("parquet")
+          parquetLogger.getHandlers.foreach(parquetLogger.removeHandler)
+          parquetLogger.addHandler(new SLF4JBridgeHandler())
+          enabledLogForwarding = true
+        }
+      }
     }
-    isEnableLogForwarding = true
   }
 
   // The element type for the RDDs that this relation maps to.
