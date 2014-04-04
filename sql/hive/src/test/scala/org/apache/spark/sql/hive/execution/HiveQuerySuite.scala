@@ -143,7 +143,7 @@ class HiveQuerySuite extends HiveComparisonTest {
     "SELECT * FROM src LATERAL VIEW explode(map(key+3,key+4)) D as k, v")
 
   test("sampling") {
-    sql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
+    hql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
   }
 
 }
