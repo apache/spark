@@ -62,21 +62,30 @@ abstract class Broadcast[T](val id: Long) extends Serializable {
   def value: T
 
   /**
+   * Asynchronously delete cached copies of this broadcast on the executors.
+   * If the broadcast is used after this is called, it will need to be re-sent to each executor.
+   */
+  def unpersist() {
+    unpersist(blocking = false)
+  }
+
+  /**
    * Delete cached copies of this broadcast on the executors. If the broadcast is used after
    * this is called, it will need to be re-sent to each executor.
+   * @param blocking Whether to block until unpersisting has completed
    */
-  def unpersist()
+  def unpersist(blocking: Boolean)
 
   /**
    * Remove all persisted state associated with this broadcast on both the executors and
    * the driver.
    */
-  private[spark] def destroy() {
+  private[spark] def destroy(blocking: Boolean) {
     _isValid = false
-    onDestroy()
+    onDestroy(blocking)
   }
 
-  protected def onDestroy()
+  protected def onDestroy(blocking: Boolean)
 
   /**
    * If this broadcast is no longer valid, throw an exception.

@@ -100,12 +100,10 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       sender ! removeRdd(rddId)
 
     case RemoveShuffle(shuffleId) =>
-      removeShuffle(shuffleId)
-      sender ! true
+      sender ! removeShuffle(shuffleId)
 
     case RemoveBroadcast(broadcastId, removeFromDriver) =>
-      removeBroadcast(broadcastId, removeFromDriver)
-      sender ! true
+      sender ! removeBroadcast(broadcastId, removeFromDriver)
 
     case RemoveBlock(blockId) =>
       removeBlockFromWorkers(blockId)
@@ -150,15 +148,22 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     // The dispatcher is used as an implicit argument into the Future sequence construction.
     import context.dispatcher
     val removeMsg = RemoveRdd(rddId)
-    Future.sequence(blockManagerInfo.values.map { bm =>
-      bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Int]
-    }.toSeq)
+    Future.sequence(
+      blockManagerInfo.values.map { bm =>
+        bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Int]
+      }.toSeq
+    )
   }
 
-  private def removeShuffle(shuffleId: Int) {
+  private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
     // Nothing to do in the BlockManagerMasterActor data structures
+    import context.dispatcher
     val removeMsg = RemoveShuffle(shuffleId)
-    blockManagerInfo.values.foreach { bm => bm.slaveActor ! removeMsg }
+    Future.sequence(
+      blockManagerInfo.values.map { bm =>
+        bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Boolean]
+      }.toSeq
+    )
   }
 
   /**
@@ -166,12 +171,18 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
    * of all broadcast blocks. If removeFromDriver is false, broadcast blocks are only removed
    * from the executors, but not from the driver.
    */
-  private def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean) {
+  private def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean): Future[Seq[Int]] = {
     // TODO: Consolidate usages of <driver>
+    import context.dispatcher
     val removeMsg = RemoveBroadcast(broadcastId, removeFromDriver)
-    blockManagerInfo.values
-      .filter { info => removeFromDriver || info.blockManagerId.executorId != "<driver>" }
-      .foreach { bm => bm.slaveActor ! removeMsg }
+    val requiredBlockManagers = blockManagerInfo.values.filter { info =>
+      removeFromDriver || info.blockManagerId.executorId != "<driver>"
+    }
+    Future.sequence(
+      requiredBlockManagers.map { bm =>
+        bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Int]
+      }.toSeq
+    )
   }
 
   private def removeBlockManager(blockManagerId: BlockManagerId) {

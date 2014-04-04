@@ -53,12 +53,12 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
   /**
    * Remove all persisted state associated with this Torrent broadcast on the executors.
    */
-  def unpersist() {
-    TorrentBroadcast.unpersist(id, removeFromDriver = false)
+  def unpersist(blocking: Boolean) {
+    TorrentBroadcast.unpersist(id, removeFromDriver = false, blocking)
   }
 
-  protected def onDestroy() {
-    TorrentBroadcast.unpersist(id, removeFromDriver = true)
+  protected def onDestroy(blocking: Boolean) {
+    TorrentBroadcast.unpersist(id, removeFromDriver = true, blocking)
   }
 
   private def sendBroadcast() {
@@ -242,8 +242,8 @@ private[spark] object TorrentBroadcast extends Logging {
    * Remove all persisted blocks associated with this torrent broadcast on the executors.
    * If removeFromDriver is true, also remove these persisted blocks on the driver.
    */
-  def unpersist(id: Long, removeFromDriver: Boolean) = synchronized {
-    SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver)
+  def unpersist(id: Long, removeFromDriver: Boolean, blocking: Boolean) = synchronized {
+    SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver, blocking)
   }
 }
 

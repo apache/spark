@@ -29,6 +29,6 @@ import org.apache.spark.SparkConf
 trait BroadcastFactory {
   def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager)
   def newBroadcast[T](value: T, isLocal: Boolean, id: Long): Broadcast[T]
-  def unbroadcast(id: Long, removeFromDriver: Boolean)
+  def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean)
   def stop()
 }

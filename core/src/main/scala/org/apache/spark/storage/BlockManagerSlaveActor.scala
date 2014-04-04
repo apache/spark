@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import scala.concurrent.Future
 
-import akka.actor.Actor
+import akka.actor.{ActorRef, Actor}
 
 import org.apache.spark.{Logging, MapOutputTracker}
 import org.apache.spark.storage.BlockManagerMessages._
@@ -39,35 +39,44 @@ class BlockManagerSlaveActor(
   // Operations that involve removing blocks may be slow and should be done asynchronously
   override def receive = {
     case RemoveBlock(blockId) =>
-      val removeBlock = Future { blockManager.removeBlock(blockId) }
-      removeBlock.onFailure { case t: Throwable =>
-        logError("Error in removing block " + blockId, t)
+      doAsync("removing block", sender) {
+        blockManager.removeBlock(blockId)
+        true
       }
 
     case RemoveRdd(rddId) =>
-      val removeRdd = Future { sender ! blockManager.removeRdd(rddId) }
-      removeRdd.onFailure { case t: Throwable =>
-        logError("Error in removing RDD " + rddId, t)
+      doAsync("removing RDD", sender) {
+        blockManager.removeRdd(rddId)
       }
 
     case RemoveShuffle(shuffleId) =>
-      val removeShuffle = Future {
+      doAsync("removing shuffle", sender) {
         blockManager.shuffleBlockManager.removeShuffle(shuffleId)
-        if (mapOutputTracker != null) {
-          mapOutputTracker.unregisterShuffle(shuffleId)
-        }
-      }
-      removeShuffle.onFailure { case t: Throwable =>
-        logError("Error in removing shuffle " + shuffleId, t)
       }
 
     case RemoveBroadcast(broadcastId, tellMaster) =>
-      val removeBroadcast = Future { blockManager.removeBroadcast(broadcastId, tellMaster) }
-      removeBroadcast.onFailure { case t: Throwable =>
-        logError("Error in removing broadcast " + broadcastId, t)
+      doAsync("removing RDD", sender) {
+        blockManager.removeBroadcast(broadcastId, tellMaster)
       }
 
     case GetBlockStatus(blockId, _) =>
       sender ! blockManager.getStatus(blockId)
+  }
+
+  private def doAsync[T](actionMessage: String, responseActor: ActorRef)(body: => T) {
+    val future = Future {
+      logDebug(actionMessage)
+      val response = body
+      response
+    }
+    future.onSuccess { case response =>
+      logDebug("Successful in " + actionMessage + ", response is " + response)
+      responseActor ! response
+      logDebug("Sent response: " + response + " to " + responseActor)
+    }
+    future.onFailure { case t: Throwable =>
+      logError("Error in " + actionMessage, t)
+      responseActor ! null.asInstanceOf[T]
+    }
   }
 }

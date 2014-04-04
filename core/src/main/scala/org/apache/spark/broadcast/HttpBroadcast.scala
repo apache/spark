@@ -50,12 +50,12 @@ private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolea
   /**
    * Remove all persisted state associated with this HTTP broadcast on the executors.
    */
-  def unpersist() {
-    HttpBroadcast.unpersist(id, removeFromDriver = false)
+  def unpersist(blocking: Boolean) {
+    HttpBroadcast.unpersist(id, removeFromDriver = false, blocking)
   }
 
-  protected def onDestroy() {
-    HttpBroadcast.unpersist(id, removeFromDriver = true)
+  protected def onDestroy(blocking: Boolean) {
+    HttpBroadcast.unpersist(id, removeFromDriver = true, blocking)
   }
 
   // Used by the JVM when serializing this object
@@ -194,8 +194,8 @@ private[spark] object HttpBroadcast extends Logging {
    * If removeFromDriver is true, also remove these persisted blocks on the driver
    * and delete the associated broadcast file.
    */
-  def unpersist(id: Long, removeFromDriver: Boolean) = synchronized {
-    SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver)
+  def unpersist(id: Long, removeFromDriver: Boolean, blocking: Boolean) = synchronized {
+    SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver, blocking)
     if (removeFromDriver) {
       val file = getFile(id)
       files.remove(file.toString)

@@ -176,7 +176,7 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
   }
 
   /** Remove all the blocks / files related to a particular shuffle. */
-  private def removeShuffleBlocks(shuffleId: ShuffleId) {
+  private def removeShuffleBlocks(shuffleId: ShuffleId): Boolean = {
     shuffleStates.get(shuffleId) match {
       case Some(state) =>
         if (consolidateShuffleFiles) {
@@ -190,8 +190,10 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
           }
         }
         logInfo("Deleted all files for shuffle " + shuffleId)
+        true
       case None =>
         logInfo("Could not find files for shuffle " + shuffleId + " for deleting")
+        false
     }
   }
 

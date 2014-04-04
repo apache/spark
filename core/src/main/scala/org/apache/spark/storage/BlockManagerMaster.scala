@@ -117,14 +117,28 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
     }
   }
 
-  /** Remove all blocks belonging to the given shuffle asynchronously. */
-  def removeShuffle(shuffleId: Int) {
-    askDriverWithReply(RemoveShuffle(shuffleId))
+  /** Remove all blocks belonging to the given shuffle. */
+  def removeShuffle(shuffleId: Int, blocking: Boolean) {
+    val future = askDriverWithReply[Future[Seq[Boolean]]](RemoveShuffle(shuffleId))
+    future.onFailure {
+      case e: Throwable => logError("Failed to remove shuffle " + shuffleId, e)
+    }
+    if (blocking) {
+      Await.result(future, timeout)
+    }
   }
 
-  /** Remove all blocks belonging to the given broadcast asynchronously. */
-  def removeBroadcast(broadcastId: Long, removeFromMaster: Boolean) {
-    askDriverWithReply(RemoveBroadcast(broadcastId, removeFromMaster))
+  /** Remove all blocks belonging to the given broadcast. */
+  def removeBroadcast(broadcastId: Long, removeFromMaster: Boolean, blocking: Boolean) {
+    val future = askDriverWithReply[Future[Seq[Int]]](RemoveBroadcast(broadcastId, removeFromMaster))
+    future.onFailure {
+      case e: Throwable =>
+        logError("Failed to remove broadcast " + broadcastId +
+          " with removeFromMaster = " + removeFromMaster, e)
+    }
+    if (blocking) {
+      Await.result(future, timeout)
+    }
   }
 
   /**

@@ -112,9 +112,9 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
           logDebug("Got cleaning task " + task)
           referenceBuffer -= reference.get
           task match {
-            case CleanRDD(rddId) => doCleanupRDD(rddId)
-            case CleanShuffle(shuffleId) => doCleanupShuffle(shuffleId)
-            case CleanBroadcast(broadcastId) => doCleanupBroadcast(broadcastId)
+            case CleanRDD(rddId) => doCleanupRDD(rddId, blocking = false)
+            case CleanShuffle(shuffleId) => doCleanupShuffle(shuffleId, blocking = false)
+            case CleanBroadcast(broadcastId) => doCleanupBroadcast(broadcastId, blocking = false)
           }
         }
       } catch {
@@ -124,10 +124,10 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   }
 
   /** Perform RDD cleanup. */
-  private def doCleanupRDD(rddId: Int) {
+  private def doCleanupRDD(rddId: Int, blocking: Boolean) {
     try {
       logDebug("Cleaning RDD " + rddId)
-      sc.unpersistRDD(rddId, blocking = false)
+      sc.unpersistRDD(rddId, blocking)
       listeners.foreach(_.rddCleaned(rddId))
       logInfo("Cleaned RDD " + rddId)
     } catch {
@@ -135,12 +135,12 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     }
   }
 
-  /** Perform shuffle cleanup. */
-  private def doCleanupShuffle(shuffleId: Int) {
+  /** Perform shuffle cleanup, asynchronously. */
+  private def doCleanupShuffle(shuffleId: Int, blocking: Boolean) {
     try {
       logDebug("Cleaning shuffle " + shuffleId)
       mapOutputTrackerMaster.unregisterShuffle(shuffleId)
-      blockManagerMaster.removeShuffle(shuffleId)
+      blockManagerMaster.removeShuffle(shuffleId, blocking)
       listeners.foreach(_.shuffleCleaned(shuffleId))
       logInfo("Cleaned shuffle " + shuffleId)
     } catch {
@@ -149,10 +149,10 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   }
 
   /** Perform broadcast cleanup. */
-  private def doCleanupBroadcast(broadcastId: Long) {
+  private def doCleanupBroadcast(broadcastId: Long, blocking: Boolean) {
     try {
       logDebug("Cleaning broadcast " + broadcastId)
-      broadcastManager.unbroadcast(broadcastId, removeFromDriver = true)
+      broadcastManager.unbroadcast(broadcastId, true, blocking)
       listeners.foreach(_.broadcastCleaned(broadcastId))
       logInfo("Cleaned broadcast " + broadcastId)
     } catch {
@@ -164,18 +164,18 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   private def broadcastManager = sc.env.broadcastManager
   private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
 
-  // Used for testing
+  // Used for testing, explicitly blocks until cleanup is completed
 
   def cleanupRDD(rdd: RDD[_]) {
-    doCleanupRDD(rdd.id)
+    doCleanupRDD(rdd.id, blocking = true)
   }
 
   def cleanupShuffle(shuffleDependency: ShuffleDependency[_, _]) {
-    doCleanupShuffle(shuffleDependency.shuffleId)
+    doCleanupShuffle(shuffleDependency.shuffleId, blocking = true)
   }
 
   def cleanupBroadcast[T](broadcast: Broadcast[T]) {
-    doCleanupBroadcast(broadcast.id)
+    doCleanupBroadcast(broadcast.id, blocking = true)
   }
 }
 
