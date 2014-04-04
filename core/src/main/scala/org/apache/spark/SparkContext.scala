@@ -1028,21 +1028,18 @@ class SparkContext(
   def cancelAllJobs() {
     dagScheduler.cancelAllJobs()
   }
-
+  
   /**
    * Clean a closure to make it ready to serialized and send to tasks
    * (removes unreferenced variables in $outer's, updates REPL variables)
+   *
+   * @param f closure to be cleaned and optionally serialized
+   * @param captureNow whether or not to serialize this closure and capture any free 
+   * variables immediately; defaults to true.  If this is set and f is not serializable, 
+   * it will raise an exception.
    */
-  private[spark] def clean[F <: AnyRef : ClassTag](f: F): F = {
-    clean(f, true)
-  }
-
-  /**
-   * Clean a closure to make it ready to serialized and send to tasks
-   * (removes unreferenced variables in $outer's, updates REPL variables)
-   */
-  private[spark] def clean[F <: AnyRef : ClassTag](f: F, checkSerializable: Boolean): F = {
-    ClosureCleaner.clean(f, checkSerializable)
+  private[spark] def clean[F <: AnyRef : ClassTag](f: F, captureNow: Boolean = true): F = {
+    ClosureCleaner.clean(f, captureNow)
   }
 
   /**

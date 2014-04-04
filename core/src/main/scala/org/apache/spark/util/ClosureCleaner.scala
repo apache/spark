@@ -105,7 +105,7 @@ private[spark] object ClosureCleaner extends Logging {
     }
   }
   
-  def clean[F <: AnyRef : ClassTag](func: F, checkSerializable: Boolean = true): F = {
+  def clean[F <: AnyRef : ClassTag](func: F, captureNow: Boolean = true): F = {
     // TODO: cache outerClasses / innerClasses / accessedFields
     val outerClasses = getOuterClasses(func)
     val innerClasses = getInnerClasses(func)
@@ -155,14 +155,14 @@ private[spark] object ClosureCleaner extends Logging {
       field.set(func, outer)
     }
     
-    if (checkSerializable) {
-      ensureSerializable(func)
+    if (captureNow) {
+      cloneViaSerializing(func)
     } else {
       func
     }
   }
 
-  private def ensureSerializable[T: ClassTag](func: T) = {
+  private def cloneViaSerializing[T: ClassTag](func: T): T = {
     try {
       val serializer = SparkEnv.get.closureSerializer.newInstance()
       serializer.deserialize[T](serializer.serialize[T](func))
