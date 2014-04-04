@@ -197,7 +197,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     }
   }
 
-  def cleaner = sc.cleaner
+  def cleaner = sc.cleaner.get
 }
 
 
@@ -235,7 +235,7 @@ class CleanerTester(
 
   logInfo("Attempting to validate before cleanup:\n" + uncleanedResourcesToString)
   preCleanupValidate()
-  sc.cleaner.attachListener(cleanerListener)
+  sc.cleaner.get.attachListener(cleanerListener)
 
   /** Assert that all the stuff has been cleaned up */
   def assertCleanup()(implicit waitTimeout: Eventually.Timeout) {

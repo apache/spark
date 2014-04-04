@@ -139,7 +139,7 @@ abstract class RDD[T: ClassTag](
     }
     sc.persistRDD(this)
     // Register the RDD with the ContextCleaner for automatic GC-based cleanup
-    sc.cleaner.registerRDDForCleanup(this)
+    sc.cleaner.foreach(_.registerRDDForCleanup(this))
     storageLevel = newLevel
     this
   }

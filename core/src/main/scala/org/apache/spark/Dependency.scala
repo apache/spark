@@ -56,7 +56,7 @@ class ShuffleDependency[K, V](
 
   val shuffleId: Int = rdd.context.newShuffleId()
 
-  rdd.sparkContext.cleaner.registerShuffleForCleanup(this)
+  rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
 }
 
 
