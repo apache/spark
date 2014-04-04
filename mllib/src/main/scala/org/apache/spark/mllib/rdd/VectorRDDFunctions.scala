@@ -27,11 +27,35 @@ import org.apache.spark.rdd.RDD
  * count.
  */
 trait VectorRDDStatisticalSummary {
+
+  /**
+   * Computes the mean of columns in RDD[Vector].
+   */
   def mean: Vector
+
+  /**
+   * Computes the sample variance of columns in RDD[Vector].
+   */
   def variance: Vector
+
+  /**
+   * Computes number of vectors in RDD[Vector].
+   */
   def count: Long
+
+  /**
+   * Computes the number of non-zero elements in each column of RDD[Vector].
+   */
   def numNonZeros: Vector
+
+  /**
+   * Computes the maximum of each column in RDD[Vector].
+   */
   def max: Vector
+
+  /**
+   * Computes the minimum of each column in RDD[Vector].
+   */
   def min: Vector
 }
 
@@ -53,7 +77,6 @@ private class VectorRDDStatisticsAggregator(
     val currMin: BDV[Double])
   extends VectorRDDStatisticalSummary with Serializable {
 
-  // lazy val is used for computing only once time. Same below.
   override def mean = {
     val realMean = BDV.zeros[Double](currMean.length)
     var i = 0
@@ -71,7 +94,7 @@ private class VectorRDDStatisticsAggregator(
     while (i < currM2n.size) {
       realVariance(i) =
         currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * (totalCnt - nnz(i)) / totalCnt
-      realVariance(i) /= totalCnt
+      realVariance(i) /= (totalCnt - 1.0)
       i += 1
     }
     Vectors.fromBreeze(realVariance)
