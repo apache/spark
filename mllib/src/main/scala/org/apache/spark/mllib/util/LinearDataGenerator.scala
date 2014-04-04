@@ -24,6 +24,7 @@ import org.jblas.DoubleMatrix
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 
 /**
@@ -74,7 +75,7 @@ object LinearDataGenerator {
     val y = x.map { xi =>
       new DoubleMatrix(1, xi.length, xi: _*).dot(weightsMat) + intercept + eps * rnd.nextGaussian()
     }
-    y.zip(x).map(p => LabeledPoint(p._1, p._2))
+    y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
   }
 
   /**

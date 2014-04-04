@@ -54,6 +54,12 @@ trait Vector extends Serializable {
    * Converts the instance to a breeze vector.
    */
   private[mllib] def toBreeze: BV[Double]
+
+  /**
+   * Gets the value of the ith element.
+   * @param i index
+   */
+  private[mllib] def apply(i: Int): Double = toBreeze(i)
 }
 
 /**
@@ -145,6 +151,8 @@ class DenseVector(val values: Array[Double]) extends Vector {
   override def toArray: Array[Double] = values
 
   private[mllib] override def toBreeze: BV[Double] = new BDV[Double](values)
+
+  override def apply(i: Int) = values(i)
 }
 
 /**
