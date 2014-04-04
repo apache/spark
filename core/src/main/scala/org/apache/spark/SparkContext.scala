@@ -228,8 +228,12 @@ class SparkContext(
   @volatile private[spark] var dagScheduler = new DAGScheduler(this)
   dagScheduler.start()
 
-  private[spark] val cleaner = new ContextCleaner(this)
-  cleaner.start()
+  private[spark] val cleaner: Option[ContextCleaner] =
+    if (conf.getBoolean("spark.cleaner.automatic", true)) {
+      Some(new ContextCleaner(this))
+    } else None
+
+  cleaner.foreach(_.start())
 
   postEnvironmentUpdate()
 
@@ -646,7 +650,7 @@ class SparkContext(
    */
   def broadcast[T](value: T): Broadcast[T] = {
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
-    cleaner.registerBroadcastForCleanup(bc)
+    cleaner.foreach(_.registerBroadcastForCleanup(bc))
     bc
   }
 
@@ -841,7 +845,7 @@ class SparkContext(
     dagScheduler = null
     if (dagSchedulerCopy != null) {
       metadataCleaner.cancel()
-      cleaner.stop()
+      cleaner.foreach(_.stop())
       dagSchedulerCopy.stop()
       listenerBus.stop()
       taskScheduler = null
