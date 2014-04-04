@@ -168,7 +168,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
    */
   private def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean) {
     // TODO: Consolidate usages of <driver>
-    val removeMsg = RemoveBroadcast(broadcastId)
+    val removeMsg = RemoveBroadcast(broadcastId, removeFromDriver)
     blockManagerInfo.values
       .filter { info => removeFromDriver || info.blockManagerId.executorId != "<driver>" }
       .foreach { bm => bm.slaveActor ! removeMsg }
@@ -255,7 +255,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   }
 
   /**
-   * Return the block's status for all block managers, if any.
+   * Return the block's status for all block managers, if any. This can potentially be an
+   * expensive operation and is used mainly for testing.
    *
    * If askSlaves is true, the master queries each block manager for the most updated block
    * statuses. This is useful when the master is not informed of the given block by all block

@@ -35,6 +35,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
@@ -227,8 +228,12 @@ class SparkContext(
   @volatile private[spark] var dagScheduler = new DAGScheduler(this)
   dagScheduler.start()
 
-  private[spark] val cleaner = new ContextCleaner(this)
-  cleaner.start()
+  private[spark] val cleaner: Option[ContextCleaner] =
+    if (conf.getBoolean("spark.cleaner.automatic", true)) {
+      Some(new ContextCleaner(this))
+    } else None
+
+  cleaner.foreach(_.start())
 
   postEnvironmentUpdate()
 
@@ -643,9 +648,9 @@ class SparkContext(
    * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
    * The variable will be sent to each cluster only once.
    */
-  def broadcast[T](value: T) = {
+  def broadcast[T](value: T): Broadcast[T] = {
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
-    cleaner.registerBroadcastForCleanup(bc)
+    cleaner.foreach(_.registerBroadcastForCleanup(bc))
     bc
   }
 
@@ -840,7 +845,7 @@ class SparkContext(
     dagScheduler = null
     if (dagSchedulerCopy != null) {
       metadataCleaner.cancel()
-      cleaner.stop()
+      cleaner.foreach(_.stop())
       dagSchedulerCopy.stop()
       listenerBus.stop()
       taskScheduler = null

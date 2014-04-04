@@ -62,16 +62,21 @@ abstract class Broadcast[T](val id: Long) extends Serializable {
   def value: T
 
   /**
-   * Remove all persisted state associated with this broadcast on the executors. The next use
-   * of this broadcast on the executors will trigger a remote fetch.
+   * Delete cached copies of this broadcast on the executors. If the broadcast is used after
+   * this is called, it will need to be re-sent to each executor.
    */
   def unpersist()
 
   /**
-   * Remove all persisted state associated with this broadcast on both the executors and the
-   * driver. Overriding implementations should set isValid to false.
+   * Remove all persisted state associated with this broadcast on both the executors and
+   * the driver.
    */
-  private[spark] def destroy()
+  private[spark] def destroy() {
+    _isValid = false
+    onDestroy()
+  }
+
+  protected def onDestroy()
 
   /**
    * If this broadcast is no longer valid, throw an exception.

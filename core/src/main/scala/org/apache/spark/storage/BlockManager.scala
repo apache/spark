@@ -829,12 +829,12 @@ private[spark] class BlockManager(
   /**
    * Remove all blocks belonging to the given broadcast.
    */
-  def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean) {
+  def removeBroadcast(broadcastId: Long, tellMaster: Boolean) {
     logInfo("Removing broadcast " + broadcastId)
     val blocksToRemove = blockInfo.keys.collect {
       case bid @ BroadcastBlockId(`broadcastId`, _) => bid
     }
-    blocksToRemove.foreach { blockId => removeBlock(blockId, removeFromDriver) }
+    blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster) }
   }
 
   /**

@@ -17,9 +17,11 @@
 
 package org.apache.spark.storage
 
+import scala.concurrent.Future
+
 import akka.actor.Actor
 
-import org.apache.spark.MapOutputTracker
+import org.apache.spark.{Logging, MapOutputTracker}
 import org.apache.spark.storage.BlockManagerMessages._
 
 /**
@@ -30,25 +32,40 @@ private[storage]
 class BlockManagerSlaveActor(
     blockManager: BlockManager,
     mapOutputTracker: MapOutputTracker)
-  extends Actor {
+  extends Actor with Logging {
 
+  import context.dispatcher
+
+  // Operations that involve removing blocks may be slow and should be done asynchronously
   override def receive = {
-
     case RemoveBlock(blockId) =>
-      blockManager.removeBlock(blockId)
-
-    case RemoveRdd(rddId) =>
-      val numBlocksRemoved = blockManager.removeRdd(rddId)
-      sender ! numBlocksRemoved
-
-    case RemoveShuffle(shuffleId) =>
-      blockManager.shuffleBlockManager.removeShuffle(shuffleId)
-      if (mapOutputTracker != null) {
-        mapOutputTracker.unregisterShuffle(shuffleId)
+      val removeBlock = Future { blockManager.removeBlock(blockId) }
+      removeBlock.onFailure { case t: Throwable =>
+        logError("Error in removing block " + blockId, t)
       }
 
-    case RemoveBroadcast(broadcastId, removeFromDriver) =>
-      blockManager.removeBroadcast(broadcastId, removeFromDriver)
+    case RemoveRdd(rddId) =>
+      val removeRdd = Future { sender ! blockManager.removeRdd(rddId) }
+      removeRdd.onFailure { case t: Throwable =>
+        logError("Error in removing RDD " + rddId, t)
+      }
+
+    case RemoveShuffle(shuffleId) =>
+      val removeShuffle = Future {
+        blockManager.shuffleBlockManager.removeShuffle(shuffleId)
+        if (mapOutputTracker != null) {
+          mapOutputTracker.unregisterShuffle(shuffleId)
+        }
+      }
+      removeShuffle.onFailure { case t: Throwable =>
+        logError("Error in removing shuffle " + shuffleId, t)
+      }
+
+    case RemoveBroadcast(broadcastId, tellMaster) =>
+      val removeBroadcast = Future { blockManager.removeBroadcast(broadcastId, tellMaster) }
+      removeBroadcast.onFailure { case t: Throwable =>
+        logError("Error in removing broadcast " + broadcastId, t)
+      }
 
     case GetBlockStatus(blockId, _) =>
       sender ! blockManager.getStatus(blockId)
