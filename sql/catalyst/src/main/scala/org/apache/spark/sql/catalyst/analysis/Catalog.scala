@@ -31,18 +31,33 @@ trait Catalog {
     alias: Option[String] = None): LogicalPlan
 
   def registerTable(databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit
+
+  def unregisterTable(databaseName: Option[String], tableName: String): Unit
+
+  def unregisterAllTables(): Unit
 }
 
 class SimpleCatalog extends Catalog {
   val tables = new mutable.HashMap[String, LogicalPlan]()
 
-  def registerTable(databaseName: Option[String],tableName: String, plan: LogicalPlan): Unit = {
+  override def registerTable(
+      databaseName: Option[String],
+      tableName: String,
+      plan: LogicalPlan): Unit = {
     tables += ((tableName, plan))
   }
 
-  def dropTable(tableName: String) = tables -= tableName
+  override def unregisterTable(
+      databaseName: Option[String],
+      tableName: String) = {
+    tables -= tableName
+  }
 
-  def lookupRelation(
+  override def unregisterAllTables() = {
+    tables.clear()
+  }
+
+  override def lookupRelation(
       databaseName: Option[String],
       tableName: String,
       alias: Option[String] = None): LogicalPlan = {
@@ -87,6 +102,14 @@ trait OverrideCatalog extends Catalog {
       plan: LogicalPlan): Unit = {
     overrides.put((databaseName, tableName), plan)
   }
+
+  override def unregisterTable(databaseName: Option[String], tableName: String): Unit = {
+    overrides.remove((databaseName, tableName))
+  }
+
+  override def unregisterAllTables(): Unit = {
+    overrides.clear()
+  }
 }
 
 /**
@@ -104,4 +127,10 @@ object EmptyCatalog extends Catalog {
   def registerTable(databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit = {
     throw new UnsupportedOperationException
   }
+
+  def unregisterTable(databaseName: Option[String], tableName: String): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  override def unregisterAllTables(): Unit = {}
 }
