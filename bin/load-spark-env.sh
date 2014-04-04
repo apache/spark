@@ -30,6 +30,9 @@ if [ -z "$SPARK_ENV_LOADED" ]; then
   use_conf_dir=${SPARK_CONF_DIR:-"$parent_dir/conf"}
 
   if [ -f "${use_conf_dir}/spark-env.sh" ]; then
+    # Promote all variable declarations to environment (exported) variables
+    set -a
     . "${use_conf_dir}/spark-env.sh"
+    set +a
   fi
 fi
