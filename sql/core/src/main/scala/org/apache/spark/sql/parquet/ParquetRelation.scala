@@ -193,6 +193,31 @@ private[parquet] object ParquetTypesConverter {
       s"Unsupported parquet datatype $parquetType")
   }
 
+  /**
+   * Converts a given Parquet `Type` into the corresponding
+   * [[org.apache.spark.sql.catalyst.types.DataType]].
+   *
+   * Note that we apply the following conversion rules:
+   * <ul>
+   *   <li> Primitive types are converter to the corresponding primitive type.</li>
+   *   <li> Group types that have a single field with repetition `REPEATED` or themselves
+   *        have repetition level `REPEATED` are converted to an [[ArrayType]] with the
+   *        corresponding field type (possibly primitive) as element type.</li>
+   *   <li> Other group types are converted as follows:<ul>
+   *      <li> If they have a single field, they are converted into a [[StructType]] with
+   *           the corresponding field type.</li>
+   *      <li> If they have more than one field and repetition level `REPEATED` they are
+   *           converted into an [[ArrayType]] with the corresponding [[StructType]] as complex
+   *           element type.</li>
+   *      <li> Otherwise they are converted into a [[StructType]] with the corresponding
+   *           field types.</li></ul></li>
+   * </ul>
+   * Note that fields are determined to be `nullable` if and only if their Parquet repetition
+   * level is not `REQUIRED`.
+   *
+   * @param parquetType The type to convert.
+   * @return The corresponding Catalyst type.
+   */
   def toDataType(parquetType: ParquetType): DataType = {
     if (parquetType.isPrimitive) {
       toPrimitiveDataType(parquetType.asPrimitiveType.getPrimitiveTypeName)
@@ -215,7 +240,9 @@ private[parquet] object ParquetTypesConverter {
         case _ => { // everything else nested becomes a Struct, unless it has a single repeated field
           // in which case it becomes an array (this should correspond to the inverse operation of
           // parquet.schema.ConversionPatterns.listType)
-          if (groupType.getFieldCount == 1 && groupType.getFields.apply(0).getRepetition == Repetition.REPEATED) {
+          if (groupType.getFieldCount == 1 &&
+              (groupType.getFields.apply(0).getRepetition == Repetition.REPEATED ||
+                groupType.getRepetition == Repetition.REPEATED)) {
             val elementType = toDataType(groupType.getFields.apply(0))
             new ArrayType(elementType)
           } else {
@@ -225,9 +252,10 @@ private[parquet] object ParquetTypesConverter {
               ptype.getName,
               toDataType(ptype),
               ptype.getRepetition != Repetition.REQUIRED))
-            if (groupType.getFieldCount == 1) { // single field, either optional or required
+
+            if (groupType.getFieldCount == 1) {
               new StructType(fields)
-            } else { // multi field repeated group, which we map into an array of structs
+            } else {
               if (parquetType.getRepetition == Repetition.REPEATED) {
                 new ArrayType(StructType(fields))
               } else {
@@ -240,6 +268,14 @@ private[parquet] object ParquetTypesConverter {
     }
   }
 
+  /**
+   * For a given Catalyst [[org.apache.spark.sql.catalyst.types.DataType]] return
+   * the name of the corresponding Parquet primitive type or None if the given type
+   * is not primitive.
+   *
+   * @param ctype The type to convert
+   * @return The name of the corresponding Parquet primitive type
+   */
   def fromPrimitiveDataType(ctype: DataType): Option[ParquetPrimitiveTypeName] = ctype match {
     case StringType => Some(ParquetPrimitiveTypeName.BINARY)
     case BooleanType => Some(ParquetPrimitiveTypeName.BOOLEAN)
@@ -251,6 +287,41 @@ private[parquet] object ParquetTypesConverter {
     case _ => None
   }
 
+  /**
+   * Converts a given Catalyst [[org.apache.spark.sql.catalyst.types.DataType]] into
+   * the corrponsing Parquet `Type`.
+   *
+   * The conversion follows the rules below:
+   * <ul>
+   *   <li> Primitive types are converted into Parquet's primitive types.</li>
+   *   <li> [[org.apache.spark.sql.catalyst.types.StructType]]s are converted
+   *   into Parquet's `GroupType` with the corresponding field types.</li>
+   *   <li> [[org.apache.spark.sql.catalyst.types.ArrayType]]s are handled as follows:<ul>
+   *     <li> If their element is complex, that is of type
+   *          [[org.apache.spark.sql.catalyst.types.StructType]], they are converted
+   *          into a `GroupType` with the corresponding field types of the struct and
+   *          original type of the `GroupType` is set to `LIST`.</li>
+   *     <li> Otherwise, that is they contain a primitive they are converted into a `GroupType`
+   *     that is also a list but has only a single field of the type corresponding to
+   *     the element type.</li></ul></li>
+   * </ul>
+   * Parquet's repetition level is set according to the following rule:
+   * <ul>
+   *   <li> If the call to `fromDataType` is recursive inside an enclosing `ArrayType`, then
+   *   the repetition level is set to `REPEATED`.</li>
+   *   <li> Otherwise, if the attribute whose type is converted is `nullable`, the Parquet
+   *   type gets repetition level `OPTIONAL` and otherwise `REQUIRED`.</li>
+   * </ul>
+   * The single expection to this rule is an [[org.apache.spark.sql.catalyst.types.ArrayType]]
+   * that contains a [[org.apache.spark.sql.catalyst.types.StructType]], whose repetition level
+   * is always set to `REPEATED`.
+   *
+   @param ctype The type to convert.
+   * @param name The name of the [[org.apache.spark.sql.catalyst.expressions.Attribute]] whose type is converted
+   * @param nullable When true indicates that the attribute is nullable
+   * @param inArray When true indicates that this is a nested attribute inside an array.
+   * @return The corresponding Parquet type.
+   */
   def fromDataType(
       ctype: DataType,
       name: String,
@@ -271,8 +342,9 @@ private[parquet] object ParquetTypesConverter {
           elementType match {
             case StructType(fields) => { // first case: array of structs
               val parquetFieldTypes = fields.map(
-                f => fromDataType(f.dataType, f.name, f.nullable, false))
-              new ParquetGroupType(repetition, name, ParquetOriginalType.LIST, parquetFieldTypes)
+                f => fromDataType(f.dataType, f.name, f.nullable, inArray = false))
+              assert(fields.size > 1, "Found struct inside array with a single field.. error parsin Catalyst schema")
+              new ParquetGroupType(Repetition.REPEATED, name, ParquetOriginalType.LIST, parquetFieldTypes)
               //ConversionPatterns.listType(Repetition.REPEATED, name, parquetFieldTypes)
             }
             case _ => { // second case: array of primitive types
@@ -288,7 +360,7 @@ private[parquet] object ParquetTypesConverter {
         // TODO: test structs inside arrays
         case StructType(structFields) => {
           val fields = structFields.map {
-            field => fromDataType(field.dataType, field.name, field.nullable)
+            field => fromDataType(field.dataType, field.name, field.nullable, inArray = false)
           }
           new ParquetGroupType(repetition, name, fields)
         }

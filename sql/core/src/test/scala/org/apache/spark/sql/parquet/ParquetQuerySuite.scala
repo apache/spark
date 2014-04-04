@@ -54,6 +54,10 @@ case class OptionalReflectData(
     doubleField: Option[Double],
     booleanField: Option[Boolean])
 
+case class Nested(i: Int, s: String)
+
+case class Data(array: Seq[Int], nested: Nested)
+
 class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
   import TestData._
   TestData // Load test data tables.
@@ -366,6 +370,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Importing nested Parquet file (Addressbook)") {
+    implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
     ParquetTestData.readNestedFile(
       ParquetTestData.testNestedFile1,
       ParquetTestData.testNestedSchema1)
@@ -374,22 +379,23 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(result.size === 2)
     val first_record = result(0)
     val second_record = result(1)
-    val first_owner_numbers = result(0).apply(1).asInstanceOf[ArrayBuffer[Any]]
-    val first_contacts = result(0).apply(2).asInstanceOf[ArrayBuffer[ArrayBuffer[Any]]]
+    val first_owner_numbers = result(0)(1)
+    val first_contacts = result(0)(2)
     assert(first_record.size === 3)
-    assert(second_record.apply(1) === null)
-    assert(second_record.apply(2) === null)
-    assert(second_record.apply(0) === "A. Nonymous")
-    assert(first_record.apply(0) === "Julien Le Dem")
-    assert(first_owner_numbers.apply(0) === "555 123 4567")
-    assert(first_owner_numbers.apply(2) === "XXX XXX XXXX")
-    assert(first_contacts.apply(0).size === 2)
-    assert(first_contacts.apply(0).apply(0) === "Dmitriy Ryaboy")
-    assert(first_contacts.apply(0).apply(1) === "555 987 6543")
-    assert(first_contacts.apply(1).apply(0) === "Chris Aniszczyk")
+    assert(second_record(1) === null)
+    assert(second_record(2) === null)
+    assert(second_record(0) === "A. Nonymous")
+    assert(first_record(0) === "Julien Le Dem")
+    assert(first_owner_numbers(0) === "555 123 4567")
+    assert(first_owner_numbers(2) === "XXX XXX XXXX")
+    assert(first_contacts(0).size === 2)
+    assert(first_contacts(0)(0) === "Dmitriy Ryaboy")
+    assert(first_contacts(0)(1) === "555 987 6543")
+    assert(first_contacts(1)(0) === "Chris Aniszczyk")
   }
 
   test("Importing nested Parquet file (nested numbers)") {
+    implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
     ParquetTestData.readNestedFile(
       ParquetTestData.testNestedFile2,
       ParquetTestData.testNestedSchema2)
@@ -398,19 +404,43 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(result(0).size === 5, "number of fields in row incorrect")
     assert(result(0)(0) === 1)
     assert(result(0)(1) === 7)
-    assert(result(0)(2).asInstanceOf[ArrayBuffer[Any]].size === 3)
-    assert(result(0)(2).asInstanceOf[ArrayBuffer[Any]].apply(0) === (1.toLong << 32))
-    assert(result(0)(2).asInstanceOf[ArrayBuffer[Any]].apply(1) === (1.toLong << 33))
-    assert(result(0)(2).asInstanceOf[ArrayBuffer[Any]].apply(2) === (1.toLong << 34))
-    assert(result(0)(3).asInstanceOf[ArrayBuffer[Any]].size === 2)
-    assert(result(0)(3).asInstanceOf[ArrayBuffer[Any]].apply(0) === 2.5)
-    assert(result(0)(3).asInstanceOf[ArrayBuffer[Any]].apply(1) === false)
-    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].size === 2)
-    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].apply(0).asInstanceOf[ArrayBuffer[Any]].size === 2)
-    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].apply(1).asInstanceOf[ArrayBuffer[Any]].size === 1)
-    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].apply(0).asInstanceOf[ArrayBuffer[ArrayBuffer[Any]]].apply(0).apply(0) === 7)
-    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].apply(0).asInstanceOf[ArrayBuffer[ArrayBuffer[Any]]].apply(1).apply(0) === 8)
-    assert(result(0)(4).asInstanceOf[ArrayBuffer[Any]].apply(1).asInstanceOf[ArrayBuffer[ArrayBuffer[Any]]].apply(0).apply(0) === 9)
+    assert(result(0)(2).size === 3)
+    assert(result(0)(2)(0) === (1.toLong << 32))
+    assert(result(0)(2)(1) === (1.toLong << 33))
+    assert(result(0)(2)(2) === (1.toLong << 34))
+    assert(result(0)(3).size === 2)
+    assert(result(0)(3)(0) === 2.5)
+    assert(result(0)(3)(1) === false)
+    assert(result(0)(4).size === 2)
+    assert(result(0)(4)(0).size === 2)
+    assert(result(0)(4)(1).size === 1)
+    assert(result(0)(4)(0)(0)(0) === 7)
+    assert(result(0)(4)(0)(1)(0) === 8)
+    assert(result(0)(4)(1)(0)(0) === 9)
+  }
+
+  test("Simple query on addressbook") {
+    val data = TestSQLContext.parquetFile(ParquetTestData.testNestedFile1.toString).toSchemaRDD
+    val tmp = data.where('owner === "Julien Le Dem").select('owner as 'a, 'contacts as 'c).collect()
+    assert(tmp.size === 1)
+    assert(tmp(0)(0) === "Julien Le Dem")
+  }
+
+  test("Simple query on nested int data") {
+    implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
+    val data = TestSQLContext.parquetFile(ParquetTestData.testNestedFile2.toString).toSchemaRDD
+    data.registerAsTable("data")
+    val tmp = sql("SELECT booleanNumberPairs.value, booleanNumberPairs.truth FROM data").collect()
+    assert(tmp(0)(0) === 2.5)
+    assert(tmp(0)(1) === false)
+    val result = sql("SELECT outerouter FROM data").collect()
+    // TODO: why does this not work?
+    //val result = sql("SELECT outerouter.values FROM data").collect()
+    // TODO: .. or this:
+    // val result = sql("SELECT outerouter[0] FROM data").collect()
+    assert(result(0)(0)(0)(0)(0) === 7)
+    assert(result(0)(0)(0)(1)(0) === 8)
+    assert(result(0)(0)(1)(0)(0) === 9)
   }
 
   /**

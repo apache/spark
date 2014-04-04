@@ -115,7 +115,7 @@ class CatalystGroupConverter(
     protected[parquet] val index: Int,
     protected[parquet] val parent: CatalystConverter,
     protected[parquet] var current: ArrayBuffer[Any],
-    protected[parquet] var buffer: ArrayBuffer[ArrayBuffer[Any]])
+    protected[parquet] var buffer: ArrayBuffer[Row])
   extends GroupConverter with CatalystConverter {
 
   def this(schema: Seq[FieldType], index: Int, parent: CatalystConverter) =
@@ -124,7 +124,7 @@ class CatalystGroupConverter(
       index,
       parent,
       current=null,
-      buffer=new ArrayBuffer[ArrayBuffer[Any]](
+      buffer=new ArrayBuffer[Row](
         CatalystArrayConverter.INITIAL_ARRAY_SIZE))
 
   // This constructor is used for the root converter only
@@ -141,6 +141,7 @@ class CatalystGroupConverter(
   // Should be only called in root group converter!
   def getCurrentRecord: Row = {
     assert(isRootConverter, "getCurrentRecord should only be called in root group converter!")
+    // TODO: use iterators if possible
     new GenericRow {
       override val values: Array[Any] = current.toArray
     }
@@ -155,7 +156,7 @@ class CatalystGroupConverter(
 
   override protected[parquet] def clearBuffer(): Unit = {
     // TODO: reuse buffer?
-    buffer = new ArrayBuffer[ArrayBuffer[Any]](CatalystArrayConverter.INITIAL_ARRAY_SIZE)
+    buffer = new ArrayBuffer[Row](CatalystArrayConverter.INITIAL_ARRAY_SIZE)
   }
 
   override def start(): Unit = {
@@ -173,8 +174,13 @@ class CatalystGroupConverter(
   override def end(): Unit = {
     if (!isRootConverter) {
       assert(current!=null) // there should be no empty groups
-      buffer.append(current)
-      parent.updateField(index, buffer)
+      buffer.append(new GenericRow {
+        override val values: Array[Any] = current.toArray
+      })
+      // TODO: use iterators if possible, avoid Row wrapping
+      parent.updateField(index, new GenericRow {
+        override val values: Array[Any] = buffer.toArray
+      })
     }
   }
 }
@@ -276,7 +282,10 @@ class CatalystArrayConverter(
   // TODO: think about reusing the buffer
   override def end(): Unit = {
     assert(parent != null)
-    parent.updateField(index, buffer)
+    // TODO: use iterators if possible, avoid Row wrapping
+    parent.updateField(index, new GenericRow {
+      override val values: Array[Any] = buffer.toArray
+    })
     clearBuffer()
   }
 }
@@ -294,7 +303,10 @@ class CatalystStructConverter(
   // TODO: think about reusing the buffer
   override def end(): Unit = {
     assert(!isRootConverter)
-    parent.updateField(index, current)
+    // TODO: use iterators if possible, avoid Row wrapping!
+    parent.updateField(index, new GenericRow {
+      override val values: Array[Any] = current.toArray
+    })
   }
 }
 
