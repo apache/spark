@@ -345,14 +345,8 @@ trait ClientBase extends Logging {
     }
 
     // Command for the ApplicationMaster
-    var javaCommand = "java"
-    val javaHome = System.getenv("JAVA_HOME")
-    if ((javaHome != null && !javaHome.isEmpty()) || env.isDefinedAt("JAVA_HOME")) {
-      javaCommand = Environment.JAVA_HOME.$() + "/bin/java"
-    }
-
     val commands = List[String](
-      javaCommand +
+      Environment.JAVA_HOME.$() + "/bin/java" +
         " -server " +
         JAVA_OPTS +
         " " + args.amClass +
