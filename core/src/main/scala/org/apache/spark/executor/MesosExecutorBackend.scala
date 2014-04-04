@@ -50,13 +50,18 @@ private[spark] class MesosExecutorBackend
       executorInfo: ExecutorInfo,
       frameworkInfo: FrameworkInfo,
       slaveInfo: SlaveInfo) {
-    logInfo("Registered with Mesos as executor ID " + executorInfo.getExecutorId.getValue)
-    this.driver = driver
-    val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray)
-    executor = new Executor(
-      executorInfo.getExecutorId.getValue,
-      slaveInfo.getHostname,
-      properties)
+    val cl = Thread.currentThread.getContextClassLoader
+    try {
+      logInfo("Registered with Mesos as executor ID " + executorInfo.getExecutorId.getValue)
+      this.driver = driver
+      val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray)
+      executor = new Executor(
+        executorInfo.getExecutorId.getValue,
+        slaveInfo.getHostname,
+        properties)
+    } finally {
+      Thread.currentThread.setContextClassLoader(cl)
+    }
   }
 
   override def launchTask(d: ExecutorDriver, taskInfo: TaskInfo) {
