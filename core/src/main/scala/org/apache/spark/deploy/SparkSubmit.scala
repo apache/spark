@@ -79,20 +79,23 @@ object SparkSubmit {
       printErrorAndExit("master must start with yarn, mesos, spark, or local")
     }
 
-    // Because "yarn-standalone" and "yarn-client" encapsulate both the master
+    // Because "yarn-cluster" and "yarn-client" encapsulate both the master
     // and deploy mode, we have some logic to infer the master and deploy mode
     // from each other if only one is specified, or exit early if they are at odds.
-    if (appArgs.deployMode == null && appArgs.master == "yarn-standalone") {
+    if (appArgs.deployMode == null &&
+        (appArgs.master == "yarn-standalone" || appArgs.master == "yarn-cluster")) {
       appArgs.deployMode = "cluster"
     }
     if (appArgs.deployMode == "cluster" && appArgs.master == "yarn-client") {
       printErrorAndExit("Deploy mode \"cluster\" and master \"yarn-client\" are not compatible")
     }
-    if (appArgs.deployMode == "client" && appArgs.master == "yarn-standalone") {
-      printErrorAndExit("Deploy mode \"client\" and master \"yarn-standalone\" are not compatible")
+    if (appArgs.deployMode == "client" &&
+        (appArgs.master == "yarn-standalone" || appArgs.master == "yarn-cluster")) {
+      printErrorAndExit("Deploy mode \"client\" and master \"" + appArgs.master
+        + "\" are not compatible")
     }
     if (appArgs.deployMode == "cluster" && appArgs.master.startsWith("yarn")) {
-      appArgs.master = "yarn-standalone"
+      appArgs.master = "yarn-cluster"
     }
     if (appArgs.deployMode != "cluster" && appArgs.master.startsWith("yarn")) {
       appArgs.master = "yarn-client"
