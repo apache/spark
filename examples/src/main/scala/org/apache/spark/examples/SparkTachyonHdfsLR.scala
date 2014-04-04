@@ -26,7 +26,7 @@ import org.apache.spark.scheduler.InputFormatInfo
 import org.apache.spark.storage.StorageLevel
 
 /**
- * Logistic regression based classification. 
+ * Logistic regression based classification.
  * This example uses Tachyon to persist rdds during computation.
  */
 object SparkTachyonHdfsLR {
@@ -36,8 +36,6 @@ object SparkTachyonHdfsLR {
   case class DataPoint(x: Vector, y: Double)
 
   def parsePoint(line: String): DataPoint = {
-    //val nums = line.split(' ').map(_.toDouble)
-    //return DataPoint(new Vector(nums.slice(1, D+1)), nums(0))
     val tok = new java.util.StringTokenizer(line, " ")
     var y = tok.nextToken.toDouble
     var x = new Array[Double](D)
@@ -56,7 +54,7 @@ object SparkTachyonHdfsLR {
     val inputPath = args(1)
     val conf = SparkHadoopUtil.get.newConfiguration()
     val sc = new SparkContext(args(0), "SparkTachyonHdfsLR",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass), Map(), 
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass), Map(),
       InputFormatInfo.computePreferredLocations(
         Seq(new InputFormatInfo(conf, classOf[org.apache.hadoop.mapred.TextInputFormat], inputPath))
       ))

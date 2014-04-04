@@ -40,9 +40,6 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 
-
-
-
 /**
  * Various utility methods used by Spark.
  */
@@ -164,7 +161,7 @@ private[spark] object Utils extends Logging {
       shutdownDeletePaths += absolutePath
     }
   }
-  
+
   // Register the tachyon path to be deleted via shutdown hook
   def registerShutdownDeleteDir(tachyonfile: TachyonFile) {
     val absolutePath = tachyonfile.getPath()
@@ -180,7 +177,7 @@ private[spark] object Utils extends Logging {
       shutdownDeletePaths.contains(absolutePath)
     }
   }
-  
+
   // Is the path already registered to be deleted via a shutdown hook ?
   def hasShutdownDeleteTachyonDir(file: TachyonFile): Boolean = {
     val absolutePath = file.getPath()
@@ -204,7 +201,7 @@ private[spark] object Utils extends Logging {
     }
     retval
   }
-  
+
   // Note: if file is child of some registered path, while not equal to it, then return true;
   // else false. This is to ensure that two shutdown hooks do not try to delete each others
   // paths - resulting in Exception and incomplete cleanup.
@@ -573,7 +570,7 @@ private[spark] object Utils extends Logging {
       }
     }
   }
-  
+
   /**
    * Delete a file or directory and its contents recursively.
    */
