@@ -69,6 +69,12 @@ private[spark] class Executor(
     conf.set("spark.local.dir", getYarnLocalDirs())
   }
 
+  // Create our ClassLoader
+  // do this after SparkEnv creation so can access the SecurityManager
+  private val urlClassLoader = createClassLoader()
+  private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
+  Thread.currentThread.setContextClassLoader(replClassLoader)
+
   if (!isLocal) {
     // Setup an uncaught exception handler for non-local mode.
     // Make any thread terminations due to uncaught exceptions kill the entire
@@ -111,11 +117,6 @@ private[spark] class Executor(
       SparkEnv.get
     }
   }
-
-  // Create our ClassLoader
-  // do this after SparkEnv creation so can access the SecurityManager
-  private val urlClassLoader = createClassLoader()
-  private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
 
   // Akka's message frame size. If task result is bigger than this, we use the block manager
   // to send the result back.
