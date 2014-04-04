@@ -19,6 +19,7 @@ package org.apache.spark.rdd
 
 import java.io.File
 import java.io.FilenameFilter
+import java.io.IOException
 import java.io.PrintWriter
 import java.util.StringTokenizer
 
@@ -28,7 +29,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
 
-import org.apache.commons.io.FileUtils
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.util.Utils
 
@@ -164,7 +164,9 @@ class PipedRDD[T: ClassTag](
 
           // cleanup task working directory if used
           if (workInTaskDirectory == true) {
-            FileUtils.deleteQuietly(new File(taskDirectory))
+            scala.util.control.Exception.ignoring(classOf[IOException]) {
+              Utils.deleteRecursively(new File(taskDirectory))
+            }
             logDebug("Removed task working directory " + taskDirectory)
           }
 
