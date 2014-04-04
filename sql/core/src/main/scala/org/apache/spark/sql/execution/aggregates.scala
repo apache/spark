@@ -188,6 +188,8 @@ case class Aggregate(
 
             var i = 0
             while (i < currentBuffer.length) {
+              // Evaluating an aggregate buffer returns the result.  No row is required since we
+              // already added all rows in the group using update.
               aggregateResults(i) = currentBuffer(i).apply(EmptyRow)
               i += 1
             }
