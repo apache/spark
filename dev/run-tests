@@ -49,7 +49,7 @@ dev/scalastyle
 echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
-sbt/sbt assembly test | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+sbt/sbt assembly test
 
 echo "========================================================================="
 echo "Running PySpark tests"
