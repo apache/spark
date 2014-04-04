@@ -17,9 +17,7 @@
 
 package org.apache.spark;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.Serializable;
+import java.io.*;
 import java.util.*;
 
 import scala.Tuple2;
@@ -597,6 +595,32 @@ public class JavaAPISuite implements Serializable {
     List<String> expected = Arrays.asList("1", "2", "3", "4");
     JavaRDD<String> readRDD = sc.textFile(outputDir);
     Assert.assertEquals(expected, readRDD.collect());
+  }
+
+  @Test
+  public void wholeTextFiles() throws IOException {
+    byte[] content1 = "spark is easy to use.\n".getBytes();
+    byte[] content2 = "spark is also easy to use.\n".getBytes();
+
+    File tempDir = Files.createTempDir();
+    String tempDirName = tempDir.getAbsolutePath();
+    DataOutputStream ds = new DataOutputStream(new FileOutputStream(tempDirName + "/part-00000"));
+    ds.write(content1);
+    ds.close();
+    ds = new DataOutputStream(new FileOutputStream(tempDirName + "/part-00001"));
+    ds.write(content2);
+    ds.close();
+
+    HashMap<String, String> container = new HashMap<String, String>();
+    container.put(tempDirName+"/part-00000", new Text(content1).toString());
+    container.put(tempDirName+"/part-00001", new Text(content2).toString());
+
+    JavaPairRDD<String, String> readRDD = sc.wholeTextFiles(tempDirName);
+    List<Tuple2<String, String>> result = readRDD.collect();
+
+    for (Tuple2<String, String> res : result) {
+      Assert.assertEquals(res._2(), container.get(res._1()));
+    }
   }
 
   @Test
