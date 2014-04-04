@@ -180,5 +180,4 @@ private[streaming] class ActorReceiver[T: ClassTag](
   protected def onStop() = {
     supervisor ! PoisonPill
   }
-
 }

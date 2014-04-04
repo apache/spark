@@ -125,11 +125,11 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register
 
-    assert(ssc.state === ssc.ContextState.Initialized)
+    assert(ssc.state === ssc.StreamingContextState.Initialized)
     ssc.start()
-    assert(ssc.state === ssc.ContextState.Started)
+    assert(ssc.state === ssc.StreamingContextState.Started)
     ssc.stop()
-    assert(ssc.state === ssc.ContextState.Stopped)
+    assert(ssc.state === ssc.StreamingContextState.Stopped)
   }
 
   test("start multiple times") {

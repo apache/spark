@@ -64,7 +64,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   private var eventActor: ActorRef = null
 
   // last batch whose completion,checkpointing and metadata cleanup has been completed
-  private var lastBatchFullyProcessed: Time = null
+  private var lastProcessedBatch: Time = null
 
   /** Start generation of jobs */
   def start(): Unit = synchronized {
@@ -83,14 +83,14 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   }
 
   /**
-   * Stop generation of jobs. processAllReceivedData = true makes this wait until jobs
+   * Stop generation of jobs. processReceivedData = true makes this wait until jobs
    * of current ongoing time interval has been generated, processed and corresponding
    * checkpoints written.
    */
-  def stop(processAllReceivedData: Boolean): Unit = synchronized {
+  def stop(processReceivedData: Boolean): Unit = synchronized {
     if (eventActor == null) return // generator has already been stopped
 
-    if (processAllReceivedData) {
+    if (processReceivedData) {
       logInfo("Stopping JobGenerator gracefully")
       val timeWhenStopStarted = System.currentTimeMillis()
       val stopTimeout = 10 * ssc.graph.batchDuration.milliseconds
@@ -112,23 +112,23 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       logInfo("Waited for all received blocsk to be consumed for job generation")
 
       // Stop generating jobs
-      val stopTime = timer.stop(stopAfterNextCallback = true)
+      val stopTime = timer.stop(false)
       graph.stop()
       logInfo("Stopped generation timer")
 
       // Wait for the jobs to complete and checkpoints to be written
-      def hasAllBatchesBeenFullyProcessed = {
-        lastBatchFullyProcessed != null && lastBatchFullyProcessed.milliseconds == stopTime
+      def haveAllBatchesBeenProcessed = {
+        lastProcessedBatch != null && lastProcessedBatch.milliseconds == stopTime
       }
       logInfo("Waiting for jobs to be processed and checkpoints to be written")
-      while (!hasTimedOut && !hasAllBatchesBeenFullyProcessed) {
+      while (!hasTimedOut && !haveAllBatchesBeenProcessed) {
         Thread.sleep(pollTime)
       }
       logInfo("Waited for jobs to be processed and checkpoints to be written")
     } else {
       logInfo("Stopping JobGenerator immediately")
       // Stop timer and graph immediately, ignore unprocessed data and pending jobs
-      timer.stop()
+      timer.stop(true)
       graph.stop()
     }
 
@@ -250,6 +250,6 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   }
 
   private def markBatchFullyProcessed(time: Time) {
-    lastBatchFullyProcessed = time
+    lastProcessedBatch = time
   }
 }

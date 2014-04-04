@@ -28,21 +28,24 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
     override def run() { loop }    
   }
 
-  private var prevTime = -1L
-  private var nextTime = -1L
-  private var stopped = false
+  @volatile private var prevTime = -1L
+  @volatile private var nextTime = -1L
+  @volatile private var stopped = false
 
   /**
-   * Get the earliest time when this timer can be started. The time must be a
-   * multiple of this timer's period and more than current time.
+   * Get the time when this timer will fire if it is started right now.
+   * The time will be a multiple of this timer's period and more than
+   * current system time.
    */
   def getStartTime(): Long = {
     (math.floor(clock.currentTime.toDouble / period) + 1).toLong * period
   }
 
   /**
-   * Get the earliest time when this timer can be restarted, based on the earlier start time.
-   * The time must be a multiple of this timer's period and more than current time.
+   * Get the time when the timer will fire if it is restarted right now.
+   * This time depends on when the timer was started the first time, and was stopped
+   * for whatever reason. The time must be a multiple of this timer's period and
+   * more than current time.
    */
   def getRestartTime(originalStartTime: Long): Long = {
     val gap = clock.currentTime - originalStartTime
@@ -67,16 +70,17 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
   }
 
   /**
-   * Stop the timer. stopAfterNextCallback = true make it wait for next callback to be completed.
-   * Returns the last time when it had called back.
+   * Stop the timer, and return the last time the callback was made.
+   * interruptTimer = true will interrupt the callback
+   * if it is in progress (not guaranteed to give correct time in this case).
    */
-  def stop(stopAfterNextCallback: Boolean = false): Long = synchronized {
+  def stop(interruptTimer: Boolean): Long = synchronized {
     if (!stopped) {
       stopped = true
-      if (!stopAfterNextCallback) thread.interrupt()
+      if (interruptTimer) thread.interrupt()
       thread.join()
+      logInfo("Stopped timer for " + name + " after time " + prevTime)
     }
-    logInfo("Stopped timer for " + name + " after time " + prevTime)
     prevTime
   }
 
@@ -113,6 +117,6 @@ object RecurringTimer {
     val timer = new  RecurringTimer(new SystemClock(), period, onRecur, "Test")
     timer.start()
     Thread.sleep(30 * 1000)
-    timer.stop()
+    timer.stop(true)
   }
 }

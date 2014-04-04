@@ -159,12 +159,12 @@ class StreamingContext private[streaming] (
   private[streaming] val waiter = new ContextWaiter
 
   /** Enumeration to identify current state of the StreamingContext */
-  private[streaming] object ContextState extends Enumeration {
+  private[streaming] object StreamingContextState extends Enumeration {
     type CheckpointState = Value
     val Initialized, Started, Stopped = Value
   }
 
-  import ContextState._
+  import StreamingContextState._
   private[streaming] var state = Initialized
 
   /**
@@ -446,16 +446,25 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Stop the execution of the streams.
+   * Stop the execution of the streams immediately (does not wait for all received data
+   * to be processed).
+   * @param stopSparkContext Stop the associated SparkContext or not
+   *
+   */
+  def stop(stopSparkContext: Boolean = true): Unit = synchronized {
+    stop(stopSparkContext, false)
+  }
+
+  /**
+   * Stop the execution of the streams, with option of ensuring all received data
+   * has been processed.
    * @param stopSparkContext Stop the associated SparkContext or not
    * @param stopGracefully Stop gracefully by waiting for the processing of all
    *                       received data to be completed
    */
-  def stop(
-      stopSparkContext: Boolean = true,
-      stopGracefully: Boolean = false
-    ): Unit = synchronized {
-    // Silently warn if context is stopped twice, or context is stopped before starting
+  def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = synchronized {
+    // Warn (but not fail) if context is stopped twice,
+    // or context is stopped before starting
     if (state == Initialized) {
       logWarning("StreamingContext has not been started yet")
       return

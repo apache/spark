@@ -143,7 +143,7 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
       receivingThread
 
       // Call user-defined onStart()
-      logInfo("Calling onStart")
+      logInfo("Starting receiver")
       onStart()
 
       // Wait until interrupt is called on this thread
@@ -157,7 +157,7 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
     }
 
     // Call user-defined onStop()
-    logInfo("Calling onStop")
+    logInfo("Stopping receiver")
     try {
       onStop()
     } catch {
@@ -187,8 +187,7 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
 
   /**
    * Stop the receiver. First it interrupts the main receiving thread,
-   * that is, the thread that called receiver.start(). Then it calls the user-defined
-   * onStop() method to stop other threads and/or do cleanup.
+   * that is, the thread that called receiver.start().
    */
   def stop() {
     // Stop receiving by interrupting the receiving thread
@@ -211,10 +210,9 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
    * Push a block (as an ArrayBuffer filled with data) into the block manager.
    */
   def pushBlock(blockId: BlockId, arrayBuffer: ArrayBuffer[T], metadata: Any, level: StorageLevel) {
-    logInfo("Block " + blockId + " has last element as " + arrayBuffer.last)
     env.blockManager.put(blockId, arrayBuffer.asInstanceOf[ArrayBuffer[Any]], level)
     trackerActor ! AddBlocks(streamId, Array(blockId), metadata)
-    logInfo("Pushed block " + blockId)
+    logDebug("Pushed block " + blockId)
   }
 
   /**
@@ -275,7 +273,7 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
     }
 
     def stop() {
-      blockIntervalTimer.stop(stopAfterNextCallback = true)
+      blockIntervalTimer.stop(false)
       stopped = true
       blockPushingThread.join()
       logInfo("Stopped BlockGenerator")
