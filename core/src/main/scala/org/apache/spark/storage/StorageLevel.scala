@@ -50,6 +50,9 @@ class StorageLevel private(
   def replication = replication_
 
   assert(replication < 40, "Replication restricted to be less than 40 for calculating hashcodes")
+  
+  assert(!(useOffHeap && (replication > 1)), 
+    "The replication of useOffHeap mode can not set more than 1")
 
   override def clone(): StorageLevel = new StorageLevel(
     this.useDisk, this.useMemory, this.useOffHeap, this.deserialized, this.replication)

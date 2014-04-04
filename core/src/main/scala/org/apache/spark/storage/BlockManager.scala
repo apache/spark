@@ -717,7 +717,7 @@ private[spark] class BlockManager(
 
     // Either we're storing bytes and we asynchronously started replication, or we're storing
     // values and need to serialize and replicate them now:
-    if (level.replication > 1 && !level.useOffHeap) {
+    if (level.replication > 1) {
       data match {
         case ByteBufferValues(bytes) => Await.ready(replicationFuture, Duration.Inf)
         case _ => {
@@ -739,7 +739,7 @@ private[spark] class BlockManager(
 
     BlockManager.dispose(bytesAfterPut)
 
-    if (level.replication > 1 && !level.useOffHeap) {
+    if (level.replication > 1) {
       logDebug("Put for block " + blockId + " with replication took " +
         Utils.getUsedTimeMs(startTimeMs))
     } else {
