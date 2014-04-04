@@ -283,7 +283,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
-   * Return a Stream that contains all of the elements in this RDD.
+   * Return an iterator that contains all of the elements in this RDD.
    *
    * In case of iterating it consumes memory as the biggest partition in cluster.
    */
