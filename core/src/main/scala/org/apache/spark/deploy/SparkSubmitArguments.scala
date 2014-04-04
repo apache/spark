@@ -171,7 +171,7 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
       outStream.println("Unknown/unsupported param " + unknownParam)
     }
     outStream.println(
-      """Usage: spark-submit <primary binary> [options]
+      """Usage: spark-submit <app jar> [options]
         |Options:
         |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local.
         |  --deploy-mode DEPLOY_MODE   Mode to deploy the app in, either 'client' or 'cluster'.

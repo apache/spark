@@ -56,7 +56,7 @@ The recommended way to launch a compiled Spark application is through the spark-
 bin directory), which takes care of setting up the classpath with Spark and its dependencies, as well as
 provides a layer over the different cluster managers and deploy modes that Spark supports.  It's usage is
 
-  spark-submit `<jar>` `<options>`
+  spark-submit `<app jar>` `<options>`
 
 Where options are any of:
 
