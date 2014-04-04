@@ -70,21 +70,28 @@ class ProactiveClosureSerializationSuite extends FunSuite with SharedSparkContex
     }
   }
   
-  private def xmap(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.map(y=>uc.op(y))
-  private def xmapWith(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.mapWith(x => x.toString)((x,y)=>x + uc.op(y))
-  private def xflatMap(x: RDD[String], uc: UnserializableClass): RDD[String] = 
+  def map(x: RDD[String], uc: UnserializableClass): RDD[String] =
+    x.map(y => uc.op(y))
+  
+  def mapWith(x: RDD[String], uc: UnserializableClass): RDD[String] =
+    x.mapWith(x => x.toString)((x,y) => x + uc.op(y))
+    
+  def flatMap(x: RDD[String], uc: UnserializableClass): RDD[String] =
     x.flatMap(y=>Seq(uc.op(y)))
-  private def xfilter(x: RDD[String], uc: UnserializableClass): RDD[String] = 
+  
+  def filter(x: RDD[String], uc: UnserializableClass): RDD[String] =
     x.filter(y=>uc.pred(y))
-  private def xfilterWith(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.filterWith(x => x.toString)((x,y)=>uc.pred(y))
-  private def xmapPartitions(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.mapPartitions(_.map(y=>uc.op(y)))
-  private def xmapPartitionsWithIndex(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.mapPartitionsWithIndex((_, it) => it.map(y=>uc.op(y)))
-  private def xmapPartitionsWithContext(x: RDD[String], uc: UnserializableClass): RDD[String] = 
-    x.mapPartitionsWithContext((_, it) => it.map(y=>uc.op(y)))
+  
+  def filterWith(x: RDD[String], uc: UnserializableClass): RDD[String] =
+    x.filterWith(x => x.toString)((x,y) => uc.pred(y))
+  
+  def mapPartitions(x: RDD[String], uc: UnserializableClass): RDD[String] =
+    x.mapPartitions(_.map(y => uc.op(y)))
+  
+  def mapPartitionsWithIndex(x: RDD[String], uc: UnserializableClass): RDD[String] =
+    x.mapPartitionsWithIndex((_, it) => it.map(y => uc.op(y)))
+  
+  def mapPartitionsWithContext(x: RDD[String], uc: UnserializableClass): RDD[String] =
+    x.mapPartitionsWithContext((_, it) => it.map(y => uc.op(y)))
   
 }
