@@ -74,8 +74,8 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   /** If stages is too large, remove and garbage collect old stages */
   def trimIfNecessary(stages: ListBuffer[StageInfo]) = synchronized {
     if (stages.size > RETAINED_STAGES) {
-      val toRemove = RETAINED_STAGES / 10
-      stages.takeRight(toRemove).foreach( s => {
+      val toRemove = math.max(RETAINED_STAGES / 10, 1)
+      stages.take(toRemove).foreach { s =>
         stageIdToTaskInfos.remove(s.stageId)
         stageIdToTime.remove(s.stageId)
         stageIdToShuffleRead.remove(s.stageId)
@@ -87,8 +87,8 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
         stageIdToTasksFailed.remove(s.stageId)
         stageIdToPool.remove(s.stageId)
         if (stageIdToDescription.contains(s.stageId)) {stageIdToDescription.remove(s.stageId)}
-      })
-      stages.trimEnd(toRemove)
+      }
+      stages.trimStart(toRemove)
     }
   }
 

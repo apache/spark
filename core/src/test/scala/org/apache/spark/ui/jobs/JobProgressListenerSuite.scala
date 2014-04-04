@@ -17,13 +17,47 @@
 
 package org.apache.spark.ui.jobs
 
-import org.scalatest.FunSuite
-import org.apache.spark.scheduler._
-import org.apache.spark.{LocalSparkContext, SparkContext, Success}
-import org.apache.spark.scheduler.SparkListenerTaskStart
-import org.apache.spark.executor.{ShuffleReadMetrics, TaskMetrics}
+import scala.collection.mutable.Buffer
 
-class JobProgressListenerSuite extends FunSuite with LocalSparkContext {
+import org.scalatest.FunSuite
+import org.scalatest.matchers.ShouldMatchers
+
+import org.apache.spark.{LocalSparkContext, SparkContext, Success}
+import org.apache.spark.executor.{ShuffleReadMetrics, TaskMetrics}
+import org.apache.spark.scheduler._
+import org.apache.spark.rdd.EmptyRDD
+
+class JobProgressListenerSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
+  test("test LRU eviction of stages") {
+    System.setProperty("spark.ui.retainedStages", 5.toString)
+    val sc = new SparkContext("local", "test")
+    val listener = new JobProgressListener(sc)
+
+    def createStageStartEvent(stageId: Int) = {
+      val stage = new Stage(stageId, new EmptyRDD(sc), 0, None, List(), 0, None)
+      val stageInfo = new StageInfo(stage, Buffer())
+      SparkListenerStageSubmitted(stageInfo, null)
+    }
+
+    def createStageEndEvent(stageId: Int) = {
+      val stage = new Stage(stageId, new EmptyRDD(sc), 0, None, List(), 0, None)
+      val stageInfo = new StageInfo(stage, Buffer())
+      SparkListenerStageCompleted(stageInfo)
+    }
+
+    for (i <- 1 to 50) {
+      listener.onStageSubmitted(createStageStartEvent(i))
+      listener.onStageCompleted(createStageEndEvent(i))
+    }
+
+    listener.completedStages.size should be (5)
+    listener.completedStages.filter(_.stageId == 50).size should be (1)
+    listener.completedStages.filter(_.stageId == 49).size should be (1)
+    listener.completedStages.filter(_.stageId == 48).size should be (1)
+    listener.completedStages.filter(_.stageId == 47).size should be (1)
+    listener.completedStages.filter(_.stageId == 46).size should be (1)
+  }
+
   test("test executor id to summary") {
     val sc = new SparkContext("local", "test")
     val listener = new JobProgressListener(sc)
