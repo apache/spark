@@ -64,6 +64,13 @@ class ClosureCleanerSuite extends FunSuite {
     
     assert(ones === onesPlusZeroes)
   }
+  
+  test("capturing arrays in closures at RDD definition") {
+    val obj = new TestCaptureArrayEltClass()
+    val (observed, expected) = obj.run()
+    
+    assert(observed === expected)
+  }
 }
 
 // A non-serializable class we create in closures to make sure that we aren't
@@ -173,6 +180,19 @@ class TestCaptureFieldClass extends Serializable {
       zb.zero = 5
     
       (ones.reduce(_ + _), onesPlusZeroes.reduce(_ + _))
+    }
+  }
+}
+
+class TestCaptureArrayEltClass extends Serializable {
+  def run(): (Int, Int) = {
+    withSpark(new SparkContext("local", "test")) {sc =>
+      val rdd = sc.parallelize(1 to 10)
+      val data = Array(1, 2, 3)
+      val expected = data(0)
+      val mapped = rdd.map(x => data(0))
+      data(0) = 4
+      (mapped.first, expected)
     }
   }
 }
