@@ -60,7 +60,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
   def bind() {
     try {
-      serverInfo = Some(JettyUtils.startJettyServer(host, port, handlers, worker.conf))
+      serverInfo = Some(JettyUtils.startJettyServer("0.0.0.0", port, handlers, worker.conf))
       logInfo("Started Worker web UI at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>
