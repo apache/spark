@@ -52,6 +52,7 @@ private[spark] class MesosExecutorBackend
       slaveInfo: SlaveInfo) {
     val cl = Thread.currentThread.getContextClassLoader
     try {
+      Thread.currentThread.setContextClassLoader(getClass.getClassLoader)
       logInfo("Registered with Mesos as executor ID " + executorInfo.getExecutorId.getValue)
       this.driver = driver
       val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray)
