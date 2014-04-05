@@ -169,7 +169,18 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     assert(taskSet.tasks.size >= results.size)
     for ((result, i) <- results.zipWithIndex) {
       if (i < taskSet.tasks.size) {
-        runEvent(CompletionEvent(taskSet.tasks(i), result._1, result._2, Map[Long, Any](), null, null))
+        runEvent(CompletionEvent(taskSet.tasks(i), result._1, result._2, null, null, null))
+      }
+    }
+  }
+
+  private def completeWithAccumulator(accumId: Long,
+                                      taskSet: TaskSet, results: Seq[(TaskEndReason, Any)]) {
+    assert(taskSet.tasks.size >= results.size)
+    for ((result, i) <- results.zipWithIndex) {
+      if (i < taskSet.tasks.size) {
+        runEvent(CompletionEvent(taskSet.tasks(i), result._1, result._2,
+          Map[Long, Any]((accumId, 1)), null, null))
       }
     }
   }
@@ -305,17 +316,16 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     runEvent(ExecutorLost("exec-hostA"))
     val newEpoch = mapOutputTracker.getEpoch
     assert(newEpoch > oldEpoch)
-    val noAccum = Map[Long, Any]()
     val taskSet = taskSets(0)
     // should be ignored for being too old
-    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA", 1), noAccum, null, null))
+    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA", 1), null, null, null))
     // should work because it's a non-failed host
-    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostB", 1), noAccum, null, null))
+    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostB", 1), null, null, null))
     // should be ignored for being too old
-    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA", 1), noAccum, null, null))
+    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA", 1), null, null, null))
     // should work because it's a new epoch
     taskSet.tasks(1).epoch = newEpoch
-    runEvent(CompletionEvent(taskSet.tasks(1), Success, makeMapStatus("hostA", 1), noAccum, null, null))
+    runEvent(CompletionEvent(taskSet.tasks(1), Success, makeMapStatus("hostA", 1), null, null, null))
     assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
            Array(makeBlockManagerId("hostB"), makeBlockManagerId("hostA")))
     complete(taskSets(1), Seq((Success, 42), (Success, 43)))
@@ -407,6 +417,45 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     assertDataStructuresEmpty
   }
 
+  test("accumulator is not calculated for resubmitted stage") {
+    //just for register
+    val accum = new Accumulator[Int](0, SparkContext.IntAccumulatorParam)
+    val shuffleOneRdd = makeRdd(2, Nil)
+    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
+    val shuffleTwoRdd = makeRdd(2, List(shuffleDepOne))
+    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, null)
+    val finalRdd = makeRdd(1, List(shuffleDepTwo))
+    submit(finalRdd, Array(0))
+    // have the first stage complete normally
+    completeWithAccumulator(accum.id, taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    // have the second stage complete normally
+    completeWithAccumulator(accum.id, taskSets(1), Seq(
+      (Success, makeMapStatus("hostA", 1)),
+      (Success, makeMapStatus("hostC", 1))))
+    // fail the third stage because hostA went down
+    completeWithAccumulator(accum.id, taskSets(2), Seq(
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleDepTwo.shuffleId, 0, 0), null)))
+    scheduler.resubmitFailedStages()
+    completeWithAccumulator(accum.id, taskSets(3), Seq((Success, makeMapStatus("hostA", 2))))
+    completeWithAccumulator(accum.id, taskSets(4), Seq((Success, makeMapStatus("hostA", 1))))
+    completeWithAccumulator(accum.id, taskSets(5), Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+    assert(Accumulators.originals(accum.id).value === 5)
+    assertDataStructuresEmpty
+  }
+
+  test("accumulator is cleared for aborted stages") {
+    //just for register
+    new Accumulator[Int](0, SparkContext.IntAccumulatorParam)
+    val rdd = makeRdd(2, Nil)
+    submit(rdd, Array(0))
+    failed(taskSets(0), "tastset failed")
+    assertDataStructuresEmpty
+  }
+
+
   /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
    * Note that this checks only the host and not the executor ID.
@@ -437,5 +486,6 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     assert(scheduler.runningStages.isEmpty)
     assert(scheduler.shuffleToMapStage.isEmpty)
     assert(scheduler.waitingStages.isEmpty)
+    assert(scheduler.stageIdToAccumulators.isEmpty)
   }
 }

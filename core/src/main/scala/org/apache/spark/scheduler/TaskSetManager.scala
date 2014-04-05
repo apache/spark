@@ -568,6 +568,10 @@ private[spark] class TaskSetManager(
         failureReason = "Lost result for TID %s on host %s".format(tid, info.host)
         logWarning(failureReason)
 
+      case ExecutorLostFailure =>
+        failureReason = "Executor %s lost for TID %s".format(info.executorId, tid)
+        logWarning(failureReason)
+
       case _ =>
         failureReason = "TID %s on host %s failed for unknown reason".format(tid, info.host)
     }

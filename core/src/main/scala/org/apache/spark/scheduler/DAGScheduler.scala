@@ -21,7 +21,7 @@ import java.io.NotSerializableException
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, ListBuffer}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
@@ -115,6 +115,10 @@ class DAGScheduler(
 
   private val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.DAG_SCHEDULER, this.cleanup, env.conf)
+
+  // stageId -> (splitId -> (acumulatorId, accumulatorValue))
+  private[scheduler] val stageIdToAccumulators = new HashMap[Int,
+     HashMap[Int, ListBuffer[(Long, Any)]]]
 
   taskScheduler.setDAGScheduler(this)
 
@@ -344,6 +348,45 @@ class DAGScheduler(
     updateJobIdStageIdMapsList(List(stage))
   }
 
+  private def removeStage(stageId: Int) {
+    // data structures based on Stage
+    for (stage <- stageIdToStage.get(stageId)) {
+      if (runningStages.contains(stage)) {
+        logDebug("Removing running stage %d".format(stageId))
+        runningStages -= stage
+      }
+      stageToInfos -= stage
+      for ((k, v) <- shuffleToMapStage.find(_._2 == stage)) {
+        shuffleToMapStage.remove(k)
+      }
+      if (pendingTasks.contains(stage) && !pendingTasks(stage).isEmpty) {
+        logDebug("Removing pending status for stage %d".format(stageId))
+      }
+      pendingTasks -= stage
+      if (waitingStages.contains(stage)) {
+        logDebug("Removing stage %d from waiting set.".format(stageId))
+        waitingStages -= stage
+      }
+      if (failedStages.contains(stage)) {
+        logDebug("Removing stage %d from failed set.".format(stageId))
+        failedStages -= stage
+      }
+    }
+    // data structures based on StageId
+    stageIdToStage -= stageId
+    stageIdToJobIds -= stageId
+    // accumulate acc values, if the stage is aborted, its accumulators
+    // will not be calculated, since we have removed it in abortStage()
+    for (partitionIdToAccum <- stageIdToAccumulators.get(stageId);
+         accumulators <- partitionIdToAccum.values;
+         accum <- accumulators) {
+      Accumulators.add(accum)
+    }
+    stageIdToAccumulators -= stageId
+    logDebug("After removal of stage %d, remaining stages = %d"
+      .format(stageId, stageIdToStage.size))
+  }
+
   /**
    * Removes job and any stages that are not needed by any other job.  Returns the set of ids for
    * stages that were removed.  The associated tasks for those stages need to be cancelled if we
@@ -362,38 +405,6 @@ class DAGScheduler(
               "Job %d not registered for stage %d even though that stage was registered for the job"
               .format(jobId, stageId))
           } else {
-            def removeStage(stageId: Int) {
-              // data structures based on Stage
-              for (stage <- stageIdToStage.get(stageId)) {
-                if (runningStages.contains(stage)) {
-                  logDebug("Removing running stage %d".format(stageId))
-                  runningStages -= stage
-                }
-                stageToInfos -= stage
-                for ((k, v) <- shuffleToMapStage.find(_._2 == stage)) {
-                  shuffleToMapStage.remove(k)
-                }
-                if (pendingTasks.contains(stage) && !pendingTasks(stage).isEmpty) {
-                  logDebug("Removing pending status for stage %d".format(stageId))
-                }
-                pendingTasks -= stage
-                if (waitingStages.contains(stage)) {
-                  logDebug("Removing stage %d from waiting set.".format(stageId))
-                  waitingStages -= stage
-                }
-                if (failedStages.contains(stage)) {
-                  logDebug("Removing stage %d from failed set.".format(stageId))
-                  failedStages -= stage
-                }
-              }
-              // data structures based on StageId
-              stageIdToStage -= stageId
-              stageIdToJobIds -= stageId
-
-              logDebug("After removal of stage %d, remaining stages = %d"
-                .format(stageId, stageIdToStage.size))
-            }
-
             jobSet -= jobId
             if (jobSet.isEmpty) { // no other job needs this stage
               independentStages += stageId
@@ -407,7 +418,7 @@ class DAGScheduler(
 
   private def jobIdToStageIdsRemove(jobId: Int) {
     if (!jobIdToStageIds.contains(jobId)) {
-      logDebug("Trying to remove unregistered job " + jobId)
+      logWarning("Trying to remove unregistered job " + jobId)
     } else {
       removeJobAndIndependentStages(jobId)
       jobIdToStageIds -= jobId
@@ -788,6 +799,25 @@ class DAGScheduler(
   }
 
   /**
+   * detect the duplicate accumulator value and save the accumulator values
+   * @param accumValue the accumulator values received from the task
+   * @param stage the stage which the task belongs to
+   * @param task the completed task
+   */
+  private def saveAccumulatorValue(accumValue: Map[Long, Any], stage: Stage, task: Task[_]) {
+    if (accumValue != null &&
+      (!stageIdToAccumulators.contains(stage.id) ||
+        !stageIdToAccumulators(stage.id).contains(task.partitionId))) {
+      val accum = stageIdToAccumulators.getOrElseUpdate(stage.id,
+        new HashMap[Int, ListBuffer[(Long, Any)]]).
+        getOrElseUpdate(task.partitionId, new ListBuffer[(Long, Any)])
+      for ((id, value) <- accumValue) {
+        accum += id -> value
+      }
+    }
+  }
+
+  /**
    * Responds to a task finishing. This is called inside the event loop so it assumes that it can
    * modify the scheduler's internal state. Use taskEnded() to post a task end event from outside.
    */
@@ -813,9 +843,7 @@ class DAGScheduler(
     event.reason match {
       case Success =>
         logInfo("Completed " + task)
-        if (event.accumUpdates != null) {
-          Accumulators.add(event.accumUpdates) // TODO: do this only if task wasn't resubmitted
-        }
+        saveAccumulatorValue(event.accumUpdates, stage, task)
         pendingTasks(stage) -= task
         task match {
           case rt: ResultTask[_, _] =>
@@ -924,6 +952,7 @@ class DAGScheduler(
         }
         failedStages += failedStage
         failedStages += mapStage
+        stageIdToAccumulators -= failedStage.id
         // TODO: mark the executor as failed only if there were lots of fetch failures on it
         if (bmAddress != null) {
           handleExecutorLost(bmAddress.executorId, Some(task.epoch))
@@ -1000,7 +1029,6 @@ class DAGScheduler(
    */
   private def abortStage(failedStage: Stage, reason: String) {
     if (!stageIdToStage.contains(failedStage.id)) {
-      // Skip all the actions if the stage has been removed.
       return
     }
     val dependentStages = resultStageToJob.keys.filter(x => stageDependsOn(x, failedStage)).toSeq
@@ -1009,6 +1037,9 @@ class DAGScheduler(
       val job = resultStageToJob(resultStage)
       val error = new SparkException("Job aborted: " + reason)
       job.listener.jobFailed(error)
+      // remove stageIdToAccumulators(id) ensuring that the aborted stage
+      // accumulator is not calculated in jobIdToStageIdsRemove
+      stageIdToAccumulators -= resultStage.id
       jobIdToStageIdsRemove(job.jobId)
       jobIdToActiveJob -= resultStage.jobId
       activeJobs -= job

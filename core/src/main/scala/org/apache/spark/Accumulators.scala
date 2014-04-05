@@ -18,11 +18,13 @@
 package org.apache.spark
 
 import java.io.{ObjectInputStream, Serializable}
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.generic.Growable
 import scala.collection.mutable.Map
 
 import org.apache.spark.serializer.JavaSerializer
+
 
 /**
  * A data type that can be accumulated, ie has an commutative and associative "add" operation,
@@ -237,12 +239,8 @@ private object Accumulators {
   // TODO: Use soft references? => need to make readObject work properly then
   val originals = Map[Long, Accumulable[_, _]]()
   val localAccums = Map[Thread, Map[Long, Accumulable[_, _]]]()
-  var lastId: Long = 0
-
-  def newId: Long = synchronized {
-    lastId += 1
-    lastId
-  }
+  private val nextAccumID = new AtomicLong(0)
+  def newId(): Long = nextAccumID.getAndIncrement()
 
   def register(a: Accumulable[_, _], original: Boolean): Unit = synchronized {
     if (original) {
@@ -270,11 +268,9 @@ private object Accumulators {
   }
 
   // Add values to the original accumulators with some given IDs
-  def add(values: Map[Long, Any]): Unit = synchronized {
-    for ((id, value) <- values) {
-      if (originals.contains(id)) {
-        originals(id).asInstanceOf[Accumulable[Any, Any]] ++= value
-      }
+  def add(value: (Long, Any)): Unit = synchronized {
+    if (originals.contains(value._1)) {
+      originals(value._1).asInstanceOf[Accumulable[Any, Any]] ++= value._2
     }
   }
 }
