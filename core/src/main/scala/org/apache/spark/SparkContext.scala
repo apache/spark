@@ -395,7 +395,7 @@ class SparkContext(
    *   (a-hdfs-path/part-nnnnn, its content)
    * }}}
    *
-   * @note Small files are perferred, large file is also allowable, but may cause bad performance.
+   * @note Small files are preferred, as each file will be loaded fully in memory.
    */
   def wholeTextFiles(path: String): RDD[(String, String)] = {
     newAPIHadoopFile(
