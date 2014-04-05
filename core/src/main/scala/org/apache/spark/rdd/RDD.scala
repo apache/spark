@@ -20,7 +20,6 @@ package org.apache.spark.rdd
 import java.util.Random
 
 import scala.collection.Map
-import scala.collection.JavaConversions.mapAsScalaMap
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{classTag, ClassTag}
 
@@ -848,7 +847,10 @@ abstract class RDD[T: ClassTag](
       m1
     }
     val myResult = mapPartitions(countPartition).reduce(mergeMaps)
-    myResult.asInstanceOf[java.util.Map[T, Long]]   // Will be wrapped as a Scala mutable Map
+    // Convert to a Scala mutable map
+    val mutableResult = scala.collection.mutable.Map[T,Long]()
+    myResult.foreach { case (k, v) => mutableResult.put(k, v) }
+    mutableResult
   }
 
   /**
