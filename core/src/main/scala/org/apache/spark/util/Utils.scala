@@ -26,6 +26,7 @@ import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
 import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.SortedSet
 import scala.io.Source
 import scala.reflect.ClassTag
 
@@ -42,6 +43,8 @@ import org.apache.spark.serializer.{DeserializationStream, SerializationStream, 
  * Various utility methods used by Spark.
  */
 private[spark] object Utils extends Logging {
+
+  val osName = System.getProperty("os.name")
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -521,9 +524,10 @@ private[spark] object Utils extends Logging {
 
   /**
    * Delete a file or directory and its contents recursively.
+   * Don't follow directories if they are symlinks.
    */
   def deleteRecursively(file: File) {
-    if (file.isDirectory) {
+    if ((file.isDirectory) && !isSymlink(file)) {
       for (child <- listFilesSafely(file)) {
         deleteRecursively(child)
       }
@@ -533,6 +537,25 @@ private[spark] object Utils extends Logging {
       if (file.exists()) {
         throw new IOException("Failed to delete: " + file.getAbsolutePath)
       }
+    }
+  }
+
+  /**
+   * Check to see if file is a symbolic link. 
+   */
+  def isSymlink(file: File): Boolean = {
+    if (file == null) throw new NullPointerException("File must not be null")
+    if (osName.startsWith("Windows")) return false
+    val fileInCanonicalDir = if (file.getParent() == null) {
+      file
+    } else {
+      new File(file.getParentFile().getCanonicalFile(), file.getName())
+    }
+
+    if (fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile())) {
+      return false;
+    } else {
+      return true;
     }
   }
 
@@ -897,6 +920,26 @@ private[spark] object Utils extends Logging {
     }
     count
   }
+
+  /**
+   * Creates a symlink. Note jdk1.7 has Files.createSymbolicLink but not used here
+   * for jdk1.6 support.  Supports windows by doing copy, everything else uses "ln -sf".
+   * @param src absolute path to the source
+   * @param dst relative path for the destination
+   */
+  def symlink(src: File, dst: File) {
+    if (!src.isAbsolute()) {
+      throw new IOException("Source must be absolute")
+    }
+    if (dst.isAbsolute()) {
+      throw new IOException("Destination must be relative")
+    }
+    val linkCmd = if (osName.startsWith("Windows")) "copy" else "ln -sf"
+    import scala.sys.process._
+    (linkCmd + " " + src.getAbsolutePath() + " " + dst.getPath()) lines_! ProcessLogger(line =>
+       (logInfo(line)))
+  }
+
 
   /** Return the class name of the given object, removing all dollar signs */
   def getFormattedClassName(obj: AnyRef) = {
