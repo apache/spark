@@ -162,6 +162,7 @@ case class LowerCaseSchema(child: LogicalPlan) extends UnaryNode {
         a.nullable)(
         a.exprId,
         a.qualifiers)
+    case other => other
   }
 
   def references = Set.empty
