@@ -731,10 +731,6 @@ class SparkContext(
    */
   def getPersistentRDDs: Map[Int, RDD[_]] = persistentRdds.toMap
 
-  def getStageInfo: Map[Stage, StageInfo] = {
-    dagScheduler.stageToInfos
-  }
-
   /**
    * Return information about blocks stored in all of the slaves
    */
