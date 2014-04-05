@@ -39,7 +39,7 @@ private[spark] class GroupedCountEvaluator[T : ClassTag](totalOutputs: Int, conf
 
   override def merge(outputId: Int, taskResult: OpenHashMap[T,Long]) {
     outputsMerged += 1
-    taskResult.foreach{ case (key,value) =>
+    taskResult.foreach { case (key, value) =>
       sums.changeValue(key, value, _ + value)
     }
   }
@@ -47,7 +47,7 @@ private[spark] class GroupedCountEvaluator[T : ClassTag](totalOutputs: Int, conf
   override def currentResult(): Map[T, BoundedDouble] = {
     if (outputsMerged == totalOutputs) {
       val result = new JHashMap[T, BoundedDouble](sums.size)
-      sums.foreach{ case (key,sum) =>
+      sums.foreach { case (key, sum) =>
         result(key) = new BoundedDouble(sum, 1.0, sum, sum)
       }
       result
@@ -57,7 +57,7 @@ private[spark] class GroupedCountEvaluator[T : ClassTag](totalOutputs: Int, conf
       val p = outputsMerged.toDouble / totalOutputs
       val confFactor = Probability.normalInverse(1 - (1 - confidence) / 2)
       val result = new JHashMap[T, BoundedDouble](sums.size)
-      sums.foreach{ case (key, sum) =>
+      sums.foreach { case (key, sum) =>
         val mean = (sum + 1 - p) / p
         val variance = (sum + 1) * (1 - p) / (p * p)
         val stdev = math.sqrt(variance)

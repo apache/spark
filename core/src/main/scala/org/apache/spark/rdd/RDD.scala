@@ -836,13 +836,13 @@ abstract class RDD[T: ClassTag](
     // TODO: This should perhaps be distributed by default.
     def countPartition(iter: Iterator[T]): Iterator[OpenHashMap[T,Long]] = {
       val map = new OpenHashMap[T,Long]
-      iter.foreach{
+      iter.foreach {
         t => map.changeValue(t, 1L, _ + 1L)
       }
       Iterator(map)
     }
     def mergeMaps(m1: OpenHashMap[T,Long], m2: OpenHashMap[T,Long]): OpenHashMap[T,Long] = {
-      m2.foreach{ case (key, value) =>
+      m2.foreach { case (key, value) =>
         m1.changeValue(key, value, _ + value)
       }
       m1
@@ -865,7 +865,7 @@ abstract class RDD[T: ClassTag](
     }
     val countPartition: (TaskContext, Iterator[T]) => OpenHashMap[T,Long] = { (ctx, iter) =>
       val map = new OpenHashMap[T,Long]
-      iter.foreach{
+      iter.foreach {
         t => map.changeValue(t, 1L, _ + 1L)
       }
       map

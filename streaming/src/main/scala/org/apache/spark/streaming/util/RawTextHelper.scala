@@ -30,11 +30,30 @@ object RawTextHelper {
    */
   def splitAndCountPartitions(iter: Iterator[String]): Iterator[(String, Long)] = {
     val map = new OpenHashMap[String,Long]
-    val tokenized = iter.flatMap(_.split(" ").filterNot(_.isEmpty))
-    tokenized.foreach{ s =>
-      map.changeValue(s, 1L, _ + 1L)
+    var i = 0
+    var j = 0
+    while (iter.hasNext) {
+      val s = iter.next()
+      i = 0
+      while (i < s.length) {
+        j = i
+        while (j < s.length && s.charAt(j) != ' ') {
+          j += 1
+        }
+        if (j > i) {
+          val w = s.substring(i, j)
+          map.changeValue(w, 1L, _ + 1L)
+        }
+        i = j
+        while (i < s.length && s.charAt(i) == ' ') {
+          i += 1
+        }
+      }
+      map.toIterator.map {
+        case (k, v) => (k, v)
+      }
     }
-    map.iterator
+    map.toIterator.map{case (k, v) => (k, v)}
   }
 
   /**

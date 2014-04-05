@@ -18,6 +18,7 @@
 package org.apache.spark.util.collection
 
 import java.util.{Arrays, Comparator}
+
 import com.google.common.hash.Hashing
 
 import org.apache.spark.annotation.DeveloperApi
