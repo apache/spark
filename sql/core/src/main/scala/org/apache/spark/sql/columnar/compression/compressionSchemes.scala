@@ -377,6 +377,9 @@ private[sql] sealed abstract class IntegralDelta[I <: IntegralType] extends Comp
    */
   protected def byteSizedDelta(x: I#JvmType, y: I#JvmType): (Boolean, Byte)
 
+  /**
+   * Simply computes `x + delta`
+   */
   protected def addDelta(x: I#JvmType, delta: Byte): I#JvmType
 
   class Encoder extends compression.Encoder[I] {
