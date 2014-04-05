@@ -103,7 +103,7 @@ private[sql] object ParquetRelation {
     SLF4JBridgeHandler.install()
     for(name <- loggerNames) {
       val logger = Logger.getLogger(name)
-      logger.setParent(Logger.getGlobal)
+      logger.setParent(Logger.getLogger(Logger.GLOBAL_LOGGER_NAME))
       logger.setUseParentHandlers(true)
     }
   }
