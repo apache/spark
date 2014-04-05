@@ -177,10 +177,7 @@ private[spark] object JettyUtils extends Logging {
 
     @tailrec
     def connect(currentPort: Int): (Server, Int) = {
-      val server = if ("0.0.0.0".equals(hostName))
-          new Server(currentPort)
-        else
-          new Server(new InetSocketAddress(hostName, currentPort))
+      val server = new Server(new InetSocketAddress(hostName, currentPort))
       val pool = new QueuedThreadPool
       pool.setDaemon(true)
       server.setThreadPool(pool)
