@@ -672,13 +672,7 @@ abstract class RDD[T: ClassTag](
     def collectPartition(p: Int): Array[T] = {
       sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p), allowLocal = false).head
     }
-    var buffer = Stream.empty[T]
-    for (p <- 0 until this.partitions.length) {
-      buffer = buffer append {
-        collectPartition(p).toStream
-      }
-    }
-    buffer.iterator
+    (0 until partitions.length).iterator.flatMap(i => collectPartition(i))
   }
 
   /**
