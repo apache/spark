@@ -34,10 +34,12 @@ import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.json4s._
+import tachyon.client.{TachyonFile,TachyonFS}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
+
 
 /**
  * Various utility methods used by Spark.
@@ -153,12 +155,21 @@ private[spark] object Utils extends Logging {
   }
 
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
+  private val shutdownDeleteTachyonPaths = new scala.collection.mutable.HashSet[String]()
 
   // Register the path to be deleted via shutdown hook
   def registerShutdownDeleteDir(file: File) {
     val absolutePath = file.getAbsolutePath()
     shutdownDeletePaths.synchronized {
       shutdownDeletePaths += absolutePath
+    }
+  }
+
+  // Register the tachyon path to be deleted via shutdown hook
+  def registerShutdownDeleteDir(tachyonfile: TachyonFile) {
+    val absolutePath = tachyonfile.getPath()
+    shutdownDeleteTachyonPaths.synchronized {
+      shutdownDeleteTachyonPaths += absolutePath
     }
   }
 
@@ -170,11 +181,35 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  // Is the path already registered to be deleted via a shutdown hook ?
+  def hasShutdownDeleteTachyonDir(file: TachyonFile): Boolean = {
+    val absolutePath = file.getPath()
+    shutdownDeletePaths.synchronized {
+      shutdownDeletePaths.contains(absolutePath)
+    }
+  }
+
   // Note: if file is child of some registered path, while not equal to it, then return true;
   // else false. This is to ensure that two shutdown hooks do not try to delete each others
   // paths - resulting in IOException and incomplete cleanup.
   def hasRootAsShutdownDeleteDir(file: File): Boolean = {
     val absolutePath = file.getAbsolutePath()
+    val retval = shutdownDeletePaths.synchronized {
+      shutdownDeletePaths.find { path =>
+        !absolutePath.equals(path) && absolutePath.startsWith(path)
+      }.isDefined
+    }
+    if (retval) {
+      logInfo("path = " + file + ", already present as root for deletion.")
+    }
+    retval
+  }
+
+  // Note: if file is child of some registered path, while not equal to it, then return true;
+  // else false. This is to ensure that two shutdown hooks do not try to delete each others
+  // paths - resulting in Exception and incomplete cleanup.
+  def hasRootAsShutdownDeleteDir(file: TachyonFile): Boolean = {
+    val absolutePath = file.getPath()
     val retval = shutdownDeletePaths.synchronized {
       shutdownDeletePaths.find { path =>
         !absolutePath.equals(path) && absolutePath.startsWith(path)
@@ -541,7 +576,16 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Check to see if file is a symbolic link. 
+   * Delete a file or directory and its contents recursively.
+   */
+  def deleteRecursively(dir: TachyonFile, client: TachyonFS) {
+    if (!client.delete(dir.getPath(), true)) {
+      throw new IOException("Failed to delete the tachyon dir: " + dir)
+    }
+  }
+
+  /**
+   * Check to see if file is a symbolic link.
    */
   def isSymlink(file: File): Boolean = {
     if (file == null) throw new NullPointerException("File must not be null")

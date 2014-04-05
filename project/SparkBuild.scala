@@ -30,7 +30,7 @@ import scala.collection.JavaConversions._
 // import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
 object SparkBuild extends Build {
-  val SPARK_VERSION = "1.0.0-SNAPSHOT" 
+  val SPARK_VERSION = "1.0.0-SNAPSHOT"
 
   // Hadoop version to build against. For example, "1.0.4" for Apache releases, or
   // "2.0.0-mr1-cdh4.2.0" for Cloudera Hadoop. Note that these variables can be set
@@ -185,15 +185,14 @@ object SparkBuild extends Build {
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
 
     resolvers ++= Seq(
-      // HTTPS is unavailable for Maven Central
       "Maven Repository"     at "http://repo.maven.apache.org/maven2",
       "Apache Repository"    at "https://repository.apache.org/content/repositories/releases",
       "JBoss Repository"     at "https://repository.jboss.org/nexus/content/repositories/releases/",
       "MQTT Repository"      at "https://repo.eclipse.org/content/repositories/paho-releases/",
-      "Cloudera Repository"  at "https://repository.cloudera.com/artifactory/cloudera-repos/",
+      "Cloudera Repository"  at "http://repository.cloudera.com/artifactory/cloudera-repos/",
       // For Sonatype publishing
-      //"sonatype-snapshots"   at "https://oss.sonatype.org/content/repositories/snapshots",
-      //"sonatype-staging"     at "https://oss.sonatype.org/service/local/staging/deploy/maven2/",
+      // "sonatype-snapshots"   at "https://oss.sonatype.org/content/repositories/snapshots",
+      // "sonatype-staging"     at "https://oss.sonatype.org/service/local/staging/deploy/maven2/",
       // also check the local Maven repository ~/.m2
       Resolver.mavenLocal
     ),
@@ -280,13 +279,18 @@ object SparkBuild extends Build {
   val slf4jVersion = "1.7.5"
 
   val excludeNetty = ExclusionRule(organization = "org.jboss.netty")
+  val excludeEclipseJetty = ExclusionRule(organization = "org.eclipse.jetty")
   val excludeAsm = ExclusionRule(organization = "org.ow2.asm")
   val excludeOldAsm = ExclusionRule(organization = "asm")
   val excludeCommonsLogging = ExclusionRule(organization = "commons-logging")
   val excludeSLF4J = ExclusionRule(organization = "org.slf4j")
   val excludeScalap = ExclusionRule(organization = "org.scala-lang", artifact = "scalap")
+  val excludeHadoop = ExclusionRule(organization = "org.apache.hadoop")
+  val excludeCurator = ExclusionRule(organization = "org.apache.curator")
+  val excludePowermock = ExclusionRule(organization = "org.powermock")
 
-  def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark", 
+
+  def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark",
       version: String = "0.9.0-incubating", crossVersion: String = "2.10"): Option[sbt.ModuleID] = {
     val fullId = if (crossVersion.isEmpty) id else id + "_" + crossVersion
     Some(organization % fullId % version) // the artifact to compare binary compatibility with
@@ -323,6 +327,7 @@ object SparkBuild extends Build {
         "com.codahale.metrics"       % "metrics-graphite" % "3.0.0",
         "com.twitter"               %% "chill"            % "0.3.1" excludeAll(excludeAsm),
         "com.twitter"                % "chill-java"       % "0.3.1" excludeAll(excludeAsm),
+        "org.tachyonproject"         % "tachyon"          % "0.4.1-thrift" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
         "com.clearspring.analytics"  % "stream"           % "2.5.1"
       ),
     libraryDependencies ++= maybeAvro
