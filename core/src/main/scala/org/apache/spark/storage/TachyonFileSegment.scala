@@ -15,29 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.examples
+package org.apache.spark.storage
 
-import scala.math.random
+import tachyon.client.TachyonFile
 
-import org.apache.spark._
-
-/** Computes an approximation to pi */
-object SparkPi {
-  def main(args: Array[String]) {
-    if (args.length == 0) {
-      System.err.println("Usage: SparkPi <master> [<slices>]")
-      System.exit(1)
-    }
-    val spark = new SparkContext(args(0), "SparkPi",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
-    val slices = if (args.length > 1) args(1).toInt else 2
-    val n = 100000 * slices
-    val count = spark.parallelize(1 to n, slices).map { i =>
-      val x = random * 2 - 1
-      val y = random * 2 - 1
-      if (x*x + y*y < 1) 1 else 0
-    }.reduce(_ + _)
-    println("Pi is roughly " + 4.0 * count / n)
-    spark.stop()
-  }
+/**
+ * References a particular segment of a file (potentially the entire file), based off an offset and
+ * a length.
+ */
+private[spark] class TachyonFileSegment(val file: TachyonFile, val offset: Long, val length: Long) {
+  override def toString = "(name=%s, offset=%d, length=%d)".format(file.getPath(), offset, length)
 }

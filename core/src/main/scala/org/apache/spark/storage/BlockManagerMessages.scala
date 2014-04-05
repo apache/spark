@@ -53,11 +53,12 @@ private[storage] object BlockManagerMessages {
       var blockId: BlockId,
       var storageLevel: StorageLevel,
       var memSize: Long,
-      var diskSize: Long)
+      var diskSize: Long,
+      var tachyonSize: Long)
     extends ToBlockManagerMaster
     with Externalizable {
 
-    def this() = this(null, null, null, 0, 0)  // For deserialization only
+    def this() = this(null, null, null, 0, 0, 0)  // For deserialization only
 
     override def writeExternal(out: ObjectOutput) {
       blockManagerId.writeExternal(out)
@@ -65,6 +66,7 @@ private[storage] object BlockManagerMessages {
       storageLevel.writeExternal(out)
       out.writeLong(memSize)
       out.writeLong(diskSize)
+      out.writeLong(tachyonSize)
     }
 
     override def readExternal(in: ObjectInput) {
@@ -73,6 +75,7 @@ private[storage] object BlockManagerMessages {
       storageLevel = StorageLevel(in)
       memSize = in.readLong()
       diskSize = in.readLong()
+      tachyonSize = in.readLong()
     }
   }
 
@@ -81,13 +84,15 @@ private[storage] object BlockManagerMessages {
         blockId: BlockId,
         storageLevel: StorageLevel,
         memSize: Long,
-        diskSize: Long): UpdateBlockInfo = {
-      new UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize)
+        diskSize: Long,
+        tachyonSize: Long): UpdateBlockInfo = {
+      new UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize, tachyonSize)
     }
 
     // For pattern-matching
-    def unapply(h: UpdateBlockInfo): Option[(BlockManagerId, BlockId, StorageLevel, Long, Long)] = {
-      Some((h.blockManagerId, h.blockId, h.storageLevel, h.memSize, h.diskSize))
+    def unapply(h: UpdateBlockInfo)
+      : Option[(BlockManagerId, BlockId, StorageLevel, Long, Long, Long)] = {
+      Some((h.blockManagerId, h.blockId, h.storageLevel, h.memSize, h.diskSize, h.tachyonSize))
     }
   }
 
