@@ -201,7 +201,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Create an input stream with any arbitrary user implemented network receiver.
-   * Find more details at: http://spark-project.org/docs/latest/streaming-custom-receivers.html
+   * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param receiver Custom implementation of NetworkReceiver
    */
   def networkStream[T: ClassTag](
@@ -211,7 +211,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Create an input stream with any arbitrary user implemented actor receiver.
-   * Find more details at: http://spark-project.org/docs/latest/streaming-custom-receivers.html
+   * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param props Props object defining creation of the actor
    * @param name Name of the actor
    * @param storageLevel RDD storage level. Defaults to memory-only.
@@ -431,7 +431,7 @@ class StreamingContext private[streaming] (
    * Stop the execution of the streams.
    * @param stopSparkContext Stop the associated SparkContext or not
    */
-  def stop(stopSparkContext: Boolean = true) = synchronized {
+  def stop(stopSparkContext: Boolean = true): Unit = synchronized {
     scheduler.stop()
     logInfo("StreamingContext stopped successfully")
     waiter.notifyStop()
@@ -489,7 +489,7 @@ object StreamingContext extends Logging {
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
    * their JARs to StreamingContext.
    */
-  def jarOfClass(cls: Class[_]) = SparkContext.jarOfClass(cls)
+  def jarOfClass(cls: Class[_]): Seq[String] = SparkContext.jarOfClass(cls)
 
   private[streaming] def createNewSparkContext(conf: SparkConf): SparkContext = {
     // Set the default cleaner delay to an hour if not already set.

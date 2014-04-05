@@ -107,7 +107,8 @@ class KryoDeserializationStream(kryo: Kryo, inStream: InputStream) extends Deser
       kryo.readClassAndObject(input).asInstanceOf[T]
     } catch {
       // DeserializationStream uses the EOF exception to indicate stopping condition.
-      case _: KryoException => throw new EOFException
+      case e: KryoException if e.getMessage.toLowerCase.contains("buffer underflow") =>
+        throw new EOFException
     }
   }
 

@@ -49,7 +49,7 @@ private[akka] class IndestructibleActorSystemImpl(
         if (isFatalError(cause) && !settings.JvmExitOnFatalError) {
           log.error(cause, "Uncaught fatal error from thread [{}] not shutting down " +
             "ActorSystem [{}] tolerating and continuing.... ", thread.getName, name)
-          //shutdown()                 //TODO make it configurable
+          // shutdown()                 //TODO make it configurable
         } else {
           fallbackHandler.uncaughtException(thread, cause)
         }

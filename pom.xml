@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache</groupId>
     <artifactId>apache</artifactId>
-    <version>13</version>
+    <version>14</version>
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent</artifactId>
@@ -91,6 +91,9 @@
     <module>mllib</module>
     <module>tools</module>
     <module>streaming</module>
+    <module>sql/catalyst</module>
+    <module>sql/core</module>
+    <module>sql/hive</module>
     <module>repl</module>
     <module>assembly</module>
     <module>external/twitter</module>
@@ -107,7 +110,7 @@
 
     <java.version>1.6</java.version>
 
-    <scala.version>2.10.3</scala.version>
+    <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
     <mesos.version>0.13.0</mesos.version>
     <akka.group>org.spark-project.akka</akka.group>
@@ -118,6 +121,8 @@
     <protobuf.version>2.4.1</protobuf.version>
     <yarn.version>0.23.7</yarn.version>
     <hbase.version>0.94.6</hbase.version>
+    <hive.version>0.12.0</hive.version>
+    <parquet.version>1.3.2</parquet.version>
 
     <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
@@ -127,7 +132,8 @@
     <repository>
       <id>maven-repo</id> <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
-      <url>https://repo.maven.apache.org/maven2</url>
+      <!-- HTTPS is unavailable for Maven Central -->
+      <url>http://repo.maven.apache.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -186,22 +192,22 @@
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-util</artifactId>
-        <version>7.6.8.v20121106</version>
+        <version>8.1.14.v20131031</version>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-security</artifactId>
-        <version>7.6.8.v20121106</version>
+        <version>8.1.14.v20131031</version>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-plus</artifactId>
-        <version>7.6.8.v20121106</version>
+        <version>8.1.14.v20131031</version>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-server</artifactId>
-        <version>7.6.8.v20121106</version>
+        <version>8.1.14.v20131031</version>
       </dependency>
       <dependency>
         <groupId>com.google.guava</groupId>
@@ -374,7 +380,7 @@
         <artifactId>lift-json_${scala.binary.version}</artifactId>
         <version>2.5.1</version>
         <!-- see also exclusion for json4s; this is necessary since it depends on
-             scala-library and scalap 2.10.0, but we use 2.10.3, and only override
+             scala-library and scalap 2.10.0, but we use 2.10.4, and only override
              scala-library -->
         <exclusions>
           <exclusion>
@@ -415,6 +421,11 @@
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
+        <artifactId>scala-reflect</artifactId>
+        <version>${scala.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang</groupId>
         <artifactId>jline</artifactId>
         <version>${scala.version}</version>
       </dependency>
@@ -428,11 +439,6 @@
         <artifactId>scalatest_${scala.binary.version}</artifactId>
         <version>1.9.1</version>
         <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>commons-io</groupId>
-        <artifactId>commons-io</artifactId>
-        <version>2.4</version>
       </dependency>
       <dependency>
         <groupId>org.easymock</groupId>
@@ -640,7 +646,6 @@
               <arg>-deprecation</arg>
             </args>
             <jvmArgs>
-              <jvmArg>-Xms64m</jvmArg>
               <jvmArg>-Xms1024m</jvmArg>
               <jvmArg>-Xmx1024m</jvmArg>
               <jvmArg>-XX:PermSize=${PermGen}</jvmArg>
@@ -683,7 +688,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>${project.build.directory}/SparkTestSuite.txt</filereports>
-            <argLine>-Xms64m -Xmx3g</argLine>
+            <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
             <stderr />
           </configuration>
           <executions>

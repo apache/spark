@@ -17,9 +17,7 @@
 
 package org.apache.spark;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.Serializable;
+import java.io.*;
 import java.util.*;
 
 import scala.Tuple2;
@@ -43,6 +41,7 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
+import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.partial.BoundedDouble;
 import org.apache.spark.partial.PartialResult;
 import org.apache.spark.storage.StorageLevel;
@@ -402,16 +401,16 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void javaDoubleRDDHistoGram() {
-   JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
-   // Test using generated buckets
-   Tuple2<double[], long[]> results = rdd.histogram(2);
-   double[] expected_buckets = {1.0, 2.5, 4.0};
-   long[] expected_counts = {2, 2};
-   Assert.assertArrayEquals(expected_buckets, results._1, 0.1);
-   Assert.assertArrayEquals(expected_counts, results._2);
-   // Test with provided buckets
-   long[] histogram = rdd.histogram(expected_buckets);
-   Assert.assertArrayEquals(expected_counts, histogram);
+    JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
+    // Test using generated buckets
+    Tuple2<double[], long[]> results = rdd.histogram(2);
+    double[] expected_buckets = {1.0, 2.5, 4.0};
+    long[] expected_counts = {2, 2};
+    Assert.assertArrayEquals(expected_buckets, results._1, 0.1);
+    Assert.assertArrayEquals(expected_counts, results._2);
+    // Test with provided buckets
+    long[] histogram = rdd.histogram(expected_buckets);
+    Assert.assertArrayEquals(expected_counts, histogram);
   }
 
   @Test
@@ -570,7 +569,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void iterator() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
-    TaskContext context = new TaskContext(0, 0, 0, false, false, null);
+    TaskContext context = new TaskContext(0, 0, 0, false, false, new TaskMetrics());
     Assert.assertEquals(1, rdd.iterator(rdd.splits().get(0), context).next().intValue());
   }
 
@@ -596,6 +595,32 @@ public class JavaAPISuite implements Serializable {
     List<String> expected = Arrays.asList("1", "2", "3", "4");
     JavaRDD<String> readRDD = sc.textFile(outputDir);
     Assert.assertEquals(expected, readRDD.collect());
+  }
+
+  @Test
+  public void wholeTextFiles() throws IOException {
+    byte[] content1 = "spark is easy to use.\n".getBytes();
+    byte[] content2 = "spark is also easy to use.\n".getBytes();
+
+    File tempDir = Files.createTempDir();
+    String tempDirName = tempDir.getAbsolutePath();
+    DataOutputStream ds = new DataOutputStream(new FileOutputStream(tempDirName + "/part-00000"));
+    ds.write(content1);
+    ds.close();
+    ds = new DataOutputStream(new FileOutputStream(tempDirName + "/part-00001"));
+    ds.write(content2);
+    ds.close();
+
+    HashMap<String, String> container = new HashMap<String, String>();
+    container.put(tempDirName+"/part-00000", new Text(content1).toString());
+    container.put(tempDirName+"/part-00001", new Text(content2).toString());
+
+    JavaPairRDD<String, String> readRDD = sc.wholeTextFiles(tempDirName);
+    List<Tuple2<String, String>> result = readRDD.collect();
+
+    for (Tuple2<String, String> res : result) {
+      Assert.assertEquals(res._2(), container.get(res._1()));
+    }
   }
 
   @Test

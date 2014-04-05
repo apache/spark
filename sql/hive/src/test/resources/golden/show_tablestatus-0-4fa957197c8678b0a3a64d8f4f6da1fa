@@ -1,0 +1,14 @@
+ABSTRACT SYNTAX TREE:
+  (TOK_SHOW_TABLESTATUS `src` default)
+
+STAGE DEPENDENCIES:
+  Stage-0 is a root stage
+  Stage-1 is a root stage
+
+STAGE PLANS:
+  Stage: Stage-0
+
+  Stage: Stage-1
+    Fetch Operator
+      limit: -1
+

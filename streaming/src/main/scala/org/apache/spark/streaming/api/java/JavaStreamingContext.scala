@@ -477,31 +477,41 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   /**
    * Start the execution of the streams.
    */
-  def start() = ssc.start()
+  def start(): Unit = {
+    ssc.start()
+  }
 
   /**
    * Wait for the execution to stop. Any exceptions that occurs during the execution
    * will be thrown in this thread.
    */
-  def awaitTermination() = ssc.awaitTermination()
+  def awaitTermination(): Unit = {
+    ssc.awaitTermination()
+  }
 
   /**
    * Wait for the execution to stop. Any exceptions that occurs during the execution
    * will be thrown in this thread.
    * @param timeout time to wait in milliseconds
    */
-  def awaitTermination(timeout: Long) = ssc.awaitTermination(timeout)
+  def awaitTermination(timeout: Long): Unit = {
+    ssc.awaitTermination(timeout)
+  }
 
   /**
    * Stop the execution of the streams. Will stop the associated JavaSparkContext as well.
    */
-  def stop() = ssc.stop()
+  def stop(): Unit = {
+    ssc.stop()
+  }
 
   /**
    * Stop the execution of the streams.
    * @param stopSparkContext Stop the associated SparkContext or not
    */
-  def stop(stopSparkContext: Boolean) = ssc.stop(stopSparkContext)
+  def stop(stopSparkContext: Boolean): Unit = {
+    ssc.stop(stopSparkContext)
+  }
 }
 
 /**
@@ -579,7 +589,7 @@ object JavaStreamingContext {
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
    * their JARs to StreamingContext.
    */
-  def jarOfClass(cls: Class[_]) = SparkContext.jarOfClass(cls).toArray
+  def jarOfClass(cls: Class[_]): Array[String] = SparkContext.jarOfClass(cls).toArray
 }
 
 /**

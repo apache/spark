@@ -38,7 +38,7 @@ object SparkSVD {
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "SVD",
-      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
 
     // Load and parse the data file
     val data = sc.textFile(args(1)).map { line =>
@@ -49,7 +49,7 @@ object SparkSVD {
     val n = args(3).toInt
 
     // recover largest singular vector
-    val decomposed = SVD.sparseSVD(SparseMatrix(data, m, n), 1)
+    val decomposed = new SVD().setK(1).compute(SparseMatrix(data, m, n))
     val u = decomposed.U.data
     val s = decomposed.S.data
     val v = decomposed.V.data

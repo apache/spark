@@ -1,0 +1,10 @@
+ABSTRACT SYNTAX TREE:
+  (TOK_ANALYZE (TOK_TAB (TOK_TABNAME analyze_srcpart) (TOK_PARTSPEC (TOK_PARTVAL ds '2008-04-08') (TOK_PARTVAL hr 11))) noscan)
+
+STAGE DEPENDENCIES:
+  Stage-1 is a root stage
+
+STAGE PLANS:
+  Stage: Stage-1
+    Stats-Aggr Operator
+

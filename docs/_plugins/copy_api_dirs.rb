@@ -22,6 +22,7 @@ if not (ENV['SKIP_API'] == '1' or ENV['SKIP_SCALADOC'] == '1')
   # Build Scaladoc for Java/Scala
   core_projects = ["core", "examples", "repl", "bagel", "graphx", "streaming", "mllib"]
   external_projects = ["flume", "kafka", "mqtt", "twitter", "zeromq"]
+  sql_projects = ["catalyst", "core", "hive"]
 
   projects = core_projects + external_projects.map { |project_name| "external/" + project_name }
 
@@ -40,6 +41,18 @@ if not (ENV['SKIP_API'] == '1' or ENV['SKIP_SCALADOC'] == '1')
   projects.each do |project_name|
     source = "../" + project_name + "/target/scala-2.10/api"
     dest = "api/" + project_name
+
+    puts "echo making directory " + dest
+    mkdir_p dest
+
+    # From the rubydoc: cp_r('src', 'dest') makes src/dest, but this doesn't.
+    puts "cp -r " + source + "/. " + dest
+    cp_r(source + "/.", dest)
+  end
+
+  sql_projects.each do |project_name|
+    source = "../sql/" + project_name + "/target/scala-2.10/api/"
+    dest = "api/sql/" + project_name
 
     puts "echo making directory " + dest
     mkdir_p dest

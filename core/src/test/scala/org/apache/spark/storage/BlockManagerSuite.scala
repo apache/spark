@@ -28,7 +28,8 @@ import org.scalatest.concurrent.Timeouts._
 import org.scalatest.matchers.ShouldMatchers._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
 
@@ -57,7 +58,8 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     conf.set("spark.driver.port", boundPort.toString)
 
     master = new BlockManagerMaster(
-      actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf))), conf)
+      actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
+      conf)
 
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     oldArch = System.setProperty("os.arch", "amd64")
@@ -94,9 +96,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   }
 
   test("StorageLevel object caching") {
-    val level1 = StorageLevel(false, false, false, 3)
-    val level2 = StorageLevel(false, false, false, 3) // this should return the same object as level1
-    val level3 = StorageLevel(false, false, false, 2) // this should return a different object
+    val level1 = StorageLevel(false, false, false, false, 3)
+    val level2 = StorageLevel(false, false, false, false, 3) // this should return the same object as level1
+    val level3 = StorageLevel(false, false, false, false, 2) // this should return a different object
     assert(level2 === level1, "level2 is not same as level1")
     assert(level2.eq(level1), "level2 is not the same object as level1")
     assert(level3 != level1, "level3 is same as level1")
@@ -408,6 +410,25 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(store.memoryStore.contains(rdd(0, 3)), "rdd_0_3 was not in store")
   }
 
+  test("tachyon storage") {
+    // TODO Make the spark.test.tachyon.enable true after using tachyon 0.5.0 testing jar.
+    val tachyonUnitTestEnabled = conf.getBoolean("spark.test.tachyon.enable", false)
+    if (tachyonUnitTestEnabled) {
+      store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf, securityMgr)
+      val a1 = new Array[Byte](400)
+      val a2 = new Array[Byte](400)
+      val a3 = new Array[Byte](400)
+      store.putSingle("a1", a1, StorageLevel.OFF_HEAP)
+      store.putSingle("a2", a2, StorageLevel.OFF_HEAP)
+      store.putSingle("a3", a3, StorageLevel.OFF_HEAP)
+      assert(store.getSingle("a3").isDefined, "a3 was in store")
+      assert(store.getSingle("a2").isDefined, "a2 was in store")
+      assert(store.getSingle("a1").isDefined, "a1 was in store")
+    } else {
+      info("tachyon storage test disabled.")
+    }
+  }
+
   test("on-disk storage") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf, securityMgr)
     val a1 = new Array[Byte](400)
@@ -492,12 +513,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY_SER)
     store.putSingle("a3", a3, StorageLevel.DISK_ONLY)
     // At this point LRU should not kick in because a3 is only on disk
-    assert(store.getSingle("a1").isDefined, "a2 was not in store")
-    assert(store.getSingle("a2").isDefined, "a3 was not in store")
-    assert(store.getSingle("a3").isDefined, "a1 was not in store")
-    assert(store.getSingle("a1").isDefined, "a2 was not in store")
-    assert(store.getSingle("a2").isDefined, "a3 was not in store")
-    assert(store.getSingle("a3").isDefined, "a1 was not in store")
+    assert(store.getSingle("a1").isDefined, "a1 was not in store")
+    assert(store.getSingle("a2").isDefined, "a2 was not in store")
+    assert(store.getSingle("a3").isDefined, "a3 was not in store")
     // Now let's add in a4, which uses both disk and memory; a1 should drop out
     store.putSingle("a4", a4, StorageLevel.MEMORY_AND_DISK_SER)
     assert(store.getSingle("a1") == None, "a1 was in store")
@@ -661,6 +679,60 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     failAfter(1 second) {
       assert(store.getSingle("a1") == None, "a1 should not be in store")
     }
+  }
+
+  test("updated block statuses") {
+    store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf, securityMgr)
+    val list = List.fill(2)(new Array[Byte](200))
+    val bigList = List.fill(8)(new Array[Byte](200))
+
+    // 1 updated block (i.e. list1)
+    val updatedBlocks1 =
+      store.put("list1", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    assert(updatedBlocks1.size === 1)
+    assert(updatedBlocks1.head._1 === TestBlockId("list1"))
+    assert(updatedBlocks1.head._2.storageLevel === StorageLevel.MEMORY_ONLY)
+
+    // 1 updated block (i.e. list2)
+    val updatedBlocks2 =
+      store.put("list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+    assert(updatedBlocks2.size === 1)
+    assert(updatedBlocks2.head._1 === TestBlockId("list2"))
+    assert(updatedBlocks2.head._2.storageLevel === StorageLevel.MEMORY_ONLY)
+
+    // 2 updated blocks - list1 is kicked out of memory while list3 is added
+    val updatedBlocks3 =
+      store.put("list3", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    assert(updatedBlocks3.size === 2)
+    updatedBlocks3.foreach { case (id, status) =>
+      id match {
+        case TestBlockId("list1") => assert(status.storageLevel === StorageLevel.NONE)
+        case TestBlockId("list3") => assert(status.storageLevel === StorageLevel.MEMORY_ONLY)
+        case _ => fail("Updated block is neither list1 nor list3")
+      }
+    }
+    assert(store.get("list3").isDefined, "list3 was not in store")
+
+    // 2 updated blocks - list2 is kicked out of memory (but put on disk) while list4 is added
+    val updatedBlocks4 =
+      store.put("list4", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    assert(updatedBlocks4.size === 2)
+    updatedBlocks4.foreach { case (id, status) =>
+      id match {
+        case TestBlockId("list2") => assert(status.storageLevel === StorageLevel.DISK_ONLY)
+        case TestBlockId("list4") => assert(status.storageLevel === StorageLevel.MEMORY_ONLY)
+        case _ => fail("Updated block is neither list2 nor list4")
+      }
+    }
+    assert(store.get("list4").isDefined, "list4 was not in store")
+
+    // No updated blocks - nothing is kicked out of memory because list5 is too big to be added
+    val updatedBlocks5 =
+      store.put("list5", bigList.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    assert(updatedBlocks5.size === 0)
+    assert(store.get("list2").isDefined, "list2 was not in store")
+    assert(store.get("list4").isDefined, "list4 was not in store")
+    assert(!store.get("list5").isDefined, "list5 was in store")
   }
 
   test("SPARK-1194 regression: fix the same-RDD rule for cache replacement") {

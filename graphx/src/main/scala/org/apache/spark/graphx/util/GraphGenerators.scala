@@ -123,7 +123,7 @@ object GraphGenerators {
    * the dimensions of the adjacency matrix
    */
   private def addEdge(numVertices: Int): Edge[Int] = {
-    //val (src, dst) = chooseCell(numVertices/2.0, numVertices/2.0, numVertices/2.0)
+    // val (src, dst) = chooseCell(numVertices/2.0, numVertices/2.0, numVertices/2.0)
     val v = math.round(numVertices.toFloat/2.0).toInt
 
     val (src, dst) = chooseCell(v, v, v)

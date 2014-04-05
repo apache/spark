@@ -23,21 +23,23 @@ import akka.actor.IOManager
 import akka.actor.Props
 import akka.util.ByteString
 
-import org.apache.spark.streaming.dstream.{NetworkReceiver}
-import java.net.{InetSocketAddress, SocketException, Socket, ServerSocket}
 import java.io.{File, BufferedWriter, OutputStreamWriter}
+import java.net.{InetSocketAddress, SocketException, ServerSocket}
+import java.nio.charset.Charset
 import java.util.concurrent.{Executors, TimeUnit, ArrayBlockingQueue}
-import collection.mutable.{SynchronizedBuffer, ArrayBuffer}
-import util.ManualClock
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.receivers.Receiver
-import org.apache.spark.Logging
-import scala.util.Random
-import org.apache.commons.io.FileUtils
-import org.scalatest.BeforeAndAfter
-import collection.JavaConversions._
-import com.google.common.io.Files
 import java.util.concurrent.atomic.AtomicInteger
+
+import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
+
+import com.google.common.io.Files
+import org.scalatest.BeforeAndAfter
+
+import org.apache.spark.Logging
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.dstream.NetworkReceiver
+import org.apache.spark.streaming.receivers.Receiver
+import org.apache.spark.streaming.util.ManualClock
+import org.apache.spark.util.Utils
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
@@ -112,7 +114,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     Thread.sleep(1000)
     for (i <- 0 until input.size) {
       val file = new File(testDir, i.toString)
-      FileUtils.writeStringToFile(file, input(i).toString + "\n")
+      Files.write(input(i) + "\n", file, Charset.forName("UTF-8"))
       logInfo("Created file " + file)
       Thread.sleep(batchDuration.milliseconds)
       Thread.sleep(1000)
@@ -136,7 +138,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     // (whether the elements were received one in each interval is not verified)
     assert(output.toList === expectedOutput.toList)
 
-    FileUtils.deleteDirectory(testDir)
+    Utils.deleteRecursively(testDir)
 
     // Enable manual clock back again for other tests
     conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
@@ -152,7 +154,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
     val networkStream = ssc.actorStream[String](Props(new TestActor(port)), "TestActor",
-      StorageLevel.MEMORY_AND_DISK) //Had to pass the local value of port to prevent from closing over entire scope
+      // Had to pass the local value of port to prevent from closing over entire scope
+      StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     val outputStream = new TestOutputStream(networkStream, outputBuffer)
     def output = outputBuffer.flatMap(x => x)
