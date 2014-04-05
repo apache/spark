@@ -667,7 +667,6 @@ class SparkContext(
 
   /**
    * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
-   *
    * Register a listener to receive up-calls from events that happen during execution.
    */
   def addSparkListener(listener: SparkListener) {
@@ -980,7 +979,6 @@ class SparkContext(
 
   /**
    * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
-   *
    * Run a job that can return approximate results.
    */
   def runApproximateJob[T, U, R](
@@ -999,7 +997,6 @@ class SparkContext(
 
   /**
    * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL API</span>
-   *
    * Submit a job for execution and return a FutureJob holding the result.
    */
   def submitJob[T, U, R](

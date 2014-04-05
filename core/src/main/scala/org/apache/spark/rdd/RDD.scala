@@ -856,7 +856,6 @@ abstract class RDD[T: ClassTag](
 
   /**
    * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL API</span>
-   *
    * Return approximate number of distinct elements in the RDD.
    *
    * The accuracy of approximation can be controlled through the relative standard deviation
