@@ -18,8 +18,7 @@
 package org.apache.spark.util.random
 
 /**
- * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
- *
+ * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
  * A class with pseudorandom behavior.
  */
 trait Pseudorandom {

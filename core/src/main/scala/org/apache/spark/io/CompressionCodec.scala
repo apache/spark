@@ -25,8 +25,7 @@ import org.xerial.snappy.{SnappyInputStream, SnappyOutputStream}
 import org.apache.spark.SparkConf
 
 /**
- * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
- *
+ * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
  * CompressionCodec allows the customization of choosing different compression implementations
  * to be used in block storage.
  *
@@ -58,8 +57,7 @@ private[spark] object CompressionCodec {
 
 
 /**
- * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
- *
+ * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
  * LZF implementation of [[org.apache.spark.io.CompressionCodec]].
  *
  * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
@@ -77,8 +75,7 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
 
 /**
- * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
- *
+ * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
  * Snappy implementation of [[org.apache.spark.io.CompressionCodec]].
  * Block size can be configured by spark.io.compression.snappy.block.size.
  *

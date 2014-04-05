@@ -20,7 +20,7 @@ package org.apache.spark
 import org.apache.spark.util.collection.{AppendOnlyMap, ExternalAppendOnlyMap}
 
 /**
- * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
+ * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
  * A set of functions used to aggregate data.
  *
  * @param createCombiner function to create the initial value of the aggregation.

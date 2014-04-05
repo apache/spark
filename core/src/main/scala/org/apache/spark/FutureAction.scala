@@ -25,8 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{JobFailed, JobSucceeded, JobWaiter}
 
 /**
- * <span class="badge badge-red">EXPERIMENTAL API</span>
- *
+ * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL API</span>
  * A future for the result of an action to support cancellation. This is an extension of the
  * Scala Future interface to support cancellation.
  */
@@ -86,8 +85,7 @@ trait FutureAction[T] extends Future[T] {
 
 
 /**
- * <span class="badge badge-red">EXPERIMENTAL API</span>
- *
+ * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL API</span>
  * A [[FutureAction]] holding the result of an action that triggers a single job. Examples include
  * count, collect, reduce.
  */
@@ -152,8 +150,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
 
 
 /**
- * <span class="badge badge-red">EXPERIMENTAL API</span>
- *
+ * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL API</span>
  * A [[FutureAction]] for actions that could trigger multiple Spark jobs. Examples include take,
  * takeSample. Cancellation works by setting the cancelled flag to true and interrupting the
  * action thread if it is being blocked by a job.

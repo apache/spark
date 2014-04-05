@@ -666,7 +666,7 @@ class SparkContext(
   }
 
   /**
-   * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
+   * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
    *
    * Register a listener to receive up-calls from events that happen during execution.
    */
@@ -979,7 +979,7 @@ class SparkContext(
   }
 
   /**
-   * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
+   * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
    *
    * Run a job that can return approximate results.
    */
@@ -998,7 +998,7 @@ class SparkContext(
   }
 
   /**
-   * <span class="badge badge-red">EXPERIMENTAL API</span>
+   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL API</span>
    *
    * Submit a job for execution and return a FutureJob holding the result.
    */

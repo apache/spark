@@ -18,8 +18,7 @@
 package org.apache.spark.util
 
 /**
- * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
- *
+ * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
  * A tuple of 2 elements. This can be used as an alternative to Scala's Tuple2 when we want to
  * minimize object allocation.
  *

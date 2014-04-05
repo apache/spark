@@ -86,22 +86,29 @@ abstract class RDD[T: ClassTag](
   // Methods that should be implemented by subclasses of RDD
   // =======================================================================
 
-  /** Implemented by subclasses to compute a given partition. */
+  /**
+   * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+   * Implemented by subclasses to compute a given partition.
+   */
   def compute(split: Partition, context: TaskContext): Iterator[T]
 
   /**
+   * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
    * Implemented by subclasses to return the set of partitions in this RDD. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
    */
   protected def getPartitions: Array[Partition]
 
   /**
+   * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
    * Implemented by subclasses to return how this RDD depends on parent RDDs. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
    */
   protected def getDependencies: Seq[Dependency[_]] = deps
 
-  /** Optionally overridden by subclasses to specify placement preferences. */
+  /**
+   * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+   * Optionally overridden by subclasses to specify placement preferences. */
   protected def getPreferredLocations(split: Partition): Seq[String] = Nil
 
   /** Optionally overridden by subclasses to specify how they are partitioned. */
@@ -513,8 +520,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
-   *
+   * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
    * Return a new RDD by applying a function to each partition of this RDD. This is a variant of
    * mapPartitions that also passes the TaskContext into the closure.
    */
@@ -777,7 +783,7 @@ abstract class RDD[T: ClassTag](
   def count(): Long = sc.runJob(this, Utils.getIteratorSize _).sum
 
   /**
-   * <span class="badge badge-red">EXPERIMENTAL API</span>
+   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL API</span>
    *
    * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
@@ -825,7 +831,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * <span class="badge badge-red">EXPERIMENTAL API</span>
+   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL API</span>
    *
    * Approximate version of countByValue().
    */
@@ -849,7 +855,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * <span class="badge badge-red">EXPERIMENTAL API</span>
+   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL API</span>
    *
    * Return approximate number of distinct elements in the RDD.
    *
