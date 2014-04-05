@@ -56,7 +56,7 @@ class HiveResolutionSuite extends HiveComparisonTest {
     TestHive.sparkContext.parallelize(Data(1, 2, Nested(1,2)) :: Nil)
       .registerAsTable("caseSensitivityTest")
 
-    sql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
+    hql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
   }
 
   /**

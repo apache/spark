@@ -33,20 +33,20 @@ object HiveFromSpark {
     val hiveContext = new LocalHiveContext(sc)
     import hiveContext._
 
-    sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-    sql("LOAD DATA LOCAL INPATH 'src/main/resources/kv1.txt' INTO TABLE src")
+    hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+    hql("LOAD DATA LOCAL INPATH 'src/main/resources/kv1.txt' INTO TABLE src")
 
     // Queries are expressed in HiveQL
     println("Result of 'SELECT *': ")
-    sql("SELECT * FROM src").collect.foreach(println)
+    hql("SELECT * FROM src").collect.foreach(println)
 
     // Aggregation queries are also supported.
-    val count = sql("SELECT COUNT(*) FROM src").collect().head.getInt(0)
+    val count = hql("SELECT COUNT(*) FROM src").collect().head.getInt(0)
     println(s"COUNT(*): $count")
 
     // The results of SQL queries are themselves RDDs and support all normal RDD functions.  The
     // items in the RDD are of type Row, which allows you to access each column by ordinal.
-    val rddFromSql = sql("SELECT key, value FROM src WHERE key < 10 ORDER BY key")
+    val rddFromSql = hql("SELECT key, value FROM src WHERE key < 10 ORDER BY key")
 
     println("Result of RDD.map:")
     val rddAsStrings = rddFromSql.map {
@@ -59,6 +59,6 @@ object HiveFromSpark {
 
     // Queries can then join RDD data with data stored in Hive.
     println("Result of SELECT *:")
-    sql("SELECT * FROM records r JOIN src s ON r.key = s.key").collect().foreach(println)
+    hql("SELECT * FROM records r JOIN src s ON r.key = s.key").collect().foreach(println)
   }
 }
