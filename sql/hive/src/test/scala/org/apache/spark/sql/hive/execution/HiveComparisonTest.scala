@@ -125,7 +125,7 @@ abstract class HiveComparisonTest
   }
 
   protected def prepareAnswer(
-    hiveQuery: TestHive.type#SqlQueryExecution,
+    hiveQuery: TestHive.type#HiveQLQueryExecution,
     answer: Seq[String]): Seq[String] = {
     val orderedAnswer = hiveQuery.logical match {
       // Clean out non-deterministic time schema info.
@@ -227,7 +227,7 @@ abstract class HiveComparisonTest
 
       try {
         // MINOR HACK: You must run a query before calling reset the first time.
-        TestHive.sql("SHOW TABLES")
+        TestHive.hql("SHOW TABLES")
         if (reset) { TestHive.reset() }
 
         val hiveCacheFiles = queryList.zipWithIndex.map {
@@ -256,7 +256,7 @@ abstract class HiveComparisonTest
             hiveCachedResults
           } else {
 
-            val hiveQueries = queryList.map(new TestHive.SqlQueryExecution(_))
+            val hiveQueries = queryList.map(new TestHive.HiveQLQueryExecution(_))
             // Make sure we can at least parse everything before attempting hive execution.
             hiveQueries.foreach(_.logical)
             val computedResults = (queryList.zipWithIndex, hiveQueries, hiveCacheFiles).zipped.map {
@@ -302,7 +302,7 @@ abstract class HiveComparisonTest
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
-          val query = new TestHive.SqlQueryExecution(queryString)
+          val query = new TestHive.HiveQLQueryExecution(queryString)
           try { (query, prepareAnswer(query, query.stringResult())) } catch {
             case e: Exception =>
               val errorMessage =
@@ -359,7 +359,7 @@ abstract class HiveComparisonTest
             // When we encounter an error we check to see if the environment is still okay by running a simple query.
             // If this fails then we halt testing since something must have gone seriously wrong.
             try {
-              new TestHive.SqlQueryExecution("SELECT key FROM src").stringResult()
+              new TestHive.HiveQLQueryExecution("SELECT key FROM src").stringResult()
               TestHive.runSqlHive("SELECT key FROM src")
             } catch {
               case e: Exception =>
