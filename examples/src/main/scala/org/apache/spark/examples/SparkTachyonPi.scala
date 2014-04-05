@@ -20,24 +20,33 @@ package org.apache.spark.examples
 import scala.math.random
 
 import org.apache.spark._
+import org.apache.spark.storage.StorageLevel
 
-/** Computes an approximation to pi */
-object SparkPi {
+/**
+ *  Computes an approximation to pi
+ *  This example uses Tachyon to persist rdds during computation.
+ */
+object SparkTachyonPi {
   def main(args: Array[String]) {
     if (args.length == 0) {
-      System.err.println("Usage: SparkPi <master> [<slices>]")
+      System.err.println("Usage: SparkTachyonPi <master> [<slices>]")
       System.exit(1)
     }
-    val spark = new SparkContext(args(0), "SparkPi",
+    val spark = new SparkContext(args(0), "SparkTachyonPi",
       System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
+    
     val slices = if (args.length > 1) args(1).toInt else 2
     val n = 100000 * slices
-    val count = spark.parallelize(1 to n, slices).map { i =>
+    
+    val rdd = spark.parallelize(1 to n, slices)
+    rdd.persist(StorageLevel.OFF_HEAP)
+    val count = rdd.map { i =>
       val x = random * 2 - 1
       val y = random * 2 - 1
-      if (x*x + y*y < 1) 1 else 0
+      if (x * x + y * y < 1) 1 else 0
     }.reduce(_ + _)
     println("Pi is roughly " + 4.0 * count / n)
+    
     spark.stop()
   }
 }

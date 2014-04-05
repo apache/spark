@@ -19,6 +19,21 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.types.NativeType
 
+object Row {
+  /**
+   * This method can be used to extract fields from a [[Row]] object in a pattern match. Example:
+   * {{{
+   * import org.apache.spark.sql._
+   *
+   * val pairs = sql("SELECT key, value FROM src").rdd.map {
+   *   case Row(key: Int, value: String) =>
+   *     key -> value
+   * }
+   * }}}
+   */
+  def unapplySeq(row: Row): Some[Seq[Any]] = Some(row)
+}
+
 /**
  * Represents one row of output from a relational operator.  Allows both generic access by ordinal,
  * which will incur boxing overhead for primitives, as well as native primitive access.

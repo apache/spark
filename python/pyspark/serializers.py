@@ -290,7 +290,7 @@ class MarshalSerializer(FramedSerializer):
 
 class UTF8Deserializer(Serializer):
     """
-    Deserializes streams written by getBytes.
+    Deserializes streams written by String.getBytes.
     """
 
     def loads(self, stream):
