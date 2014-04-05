@@ -414,6 +414,28 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void mapPartitionsWithIndex() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
+    JavaRDD<Integer> rddByIndex =
+      rdd.mapPartitionsWithIndex(new MapPartitionsWithIndexFunction<Integer, Integer>() {
+          @Override
+          public Iterator<Integer> call(Integer start, java.util.Iterator<Integer> iter) {
+            List<Integer> list = new ArrayList<Integer>();
+            int pos = start;
+            while (iter.hasNext()) {
+              list.add(iter.next() * pos);
+              pos += 1;
+            }
+            return list.iterator();
+          }
+        });
+    Assert.assertEquals(0, rddByIndex.first().intValue());
+    Integer[] values = {0, 2, 6, 12, 20};
+    Assert.assertEquals(Arrays.asList(values), rddByIndex.collect());
+  }
+
+
+  @Test
   public void map() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
     JavaDoubleRDD doubles = rdd.mapToDouble(new DoubleFunction<Integer>() {
