@@ -48,6 +48,8 @@ dev/scalastyle
 echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
+# echo "q" is needed because sbt on encountering a build file with failure (either resolution or compilation)
+# prompts the user for input either q, r, etc to quit or retry. This echo is there to make it not block.
 echo -e "q\n" | sbt/sbt assembly test |  grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 
 echo "========================================================================="
