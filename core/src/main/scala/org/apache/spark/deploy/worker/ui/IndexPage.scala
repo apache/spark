@@ -22,7 +22,7 @@ import scala.xml.Node
 
 import akka.pattern.ask
 import javax.servlet.http.HttpServletRequest
-import org.json4s.JValue
+import net.liftweb.json.JsonAST.JValue
 
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
@@ -144,7 +144,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
 
   def driverRow(driver: DriverRunner): Seq[Node] = {
     <tr>
-      <td>{driver.driverId}</td>
+      <td>{driver.driverDesc}</td>
       <td>{driver.driverDesc.command.arguments(1)}</td>
       <td>{driver.finalState.getOrElse(DriverState.RUNNING)}</td>
       <td sorttable_customkey={driver.driverDesc.cores.toString}>

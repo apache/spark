@@ -408,6 +408,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.driver.maxRetry</td>
+  <td>0</td>
+  <td>
+    Maximum retry times for in-cluster driver. Default - 0, the driver will be retried on every worker before it is killed.
+  </td>
+</tr>
+<tr>
   <td>spark.cleaner.ttl</td>
   <td>(infinite)</td>
   <td>

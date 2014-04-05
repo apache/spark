@@ -28,10 +28,10 @@ import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileUtil, Path}
 
-import org.apache.spark.Logging
-import org.apache.spark.deploy.{Command, DriverDescription}
+import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.deploy.{DriverDescription, Command}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
-import org.apache.spark.deploy.master.DriverState
+import org.apache.spark.deploy.master.{DriverInfo, DriverState}
 import org.apache.spark.deploy.master.DriverState.DriverState
 
 /**
@@ -39,12 +39,17 @@ import org.apache.spark.deploy.master.DriverState.DriverState
  */
 private[spark] class DriverRunner(
     val driverId: String,
+    val driverDesc: DriverDescription,
     val workDir: File,
     val sparkHome: File,
-    val driverDesc: DriverDescription,
     val worker: ActorRef,
-    val workerUrl: String)
+    val workerUrl: String,
+    val conf: SparkConf)
   extends Logging {
+
+  class FailedTooManyTimesException(retryN: Int) extends Exception {
+    var retryCount = retryN
+  }
 
   @volatile var process: Option[Process] = None
   @volatile var killed = false
@@ -53,6 +58,9 @@ private[spark] class DriverRunner(
   var finalState: Option[DriverState] = None
   var finalException: Option[Exception] = None
   var finalExitCode: Option[Int] = None
+
+  // Retry counters
+  var retryNum = 0
 
   // Decoupled for testing
   private[deploy] def setClock(_clock: Clock) = clock = _clock
@@ -97,7 +105,6 @@ private[spark] class DriverRunner(
           }
 
         finalState = Some(state)
-
         worker ! DriverStateChanged(driverId, state, finalException)
       }
     }.start()
@@ -184,7 +191,6 @@ private[spark] class DriverRunner(
     val successfulRunDuration = 5
 
     var keepTrying = !killed
-
     while (keepTrying) {
       logInfo("Launch Command: " + command.command.mkString("\"", "\" \"", "\""))
 
@@ -199,15 +205,19 @@ private[spark] class DriverRunner(
       if (clock.currentTimeMillis() - processStart > successfulRunDuration * 1000) {
         waitSeconds = 1
       }
-
-      if (supervise && exitCode != 0 && !killed) {
+      val maxRetry = conf.getInt("spark.driver.maxRetry", 0)
+      keepTrying = supervise && exitCode != 0 && !killed
+      if (keepTrying) {
+        retryNum  += 1
+        if (retryNum > maxRetry)
+          throw new FailedTooManyTimesException(retryNum)
+        //sleep only when we want to retry
         logInfo(s"Command exited with status $exitCode, re-launching after $waitSeconds s.")
         sleeper.sleep(waitSeconds)
         waitSeconds = waitSeconds * 2 // exponential back-off
+      } else {
+        finalExitCode = Some(exitCode)
       }
-
-      keepTrying = supervise && exitCode != 0 && !killed
-      finalExitCode = Some(exitCode)
     }
   }
 }
