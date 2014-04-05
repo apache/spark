@@ -86,6 +86,8 @@ trait FutureAction[T] extends Future[T] {
 
 
 /**
+ * <span class="badge badge-red">EXPERIMENTAL API</span>
+ *
  * A [[FutureAction]] holding the result of an action that triggers a single job. Examples include
  * count, collect, reduce.
  */

@@ -28,6 +28,8 @@ import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 
 /**
+ * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
+ *
  * A logger class to record runtime information for jobs in Spark. This class outputs one log file
  * for each Spark job, containing tasks start/stop and shuffle information. JobLogger is a subclass
  * of SparkListener, use addSparkListener to add JobLogger to a SparkContext after the SparkContext

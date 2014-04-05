@@ -21,6 +21,8 @@ import org.apache.spark.SecurityManager
 import org.apache.spark.SparkConf
 
 /**
+ * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
+ *
  * An interface for all the broadcast implementations in Spark (to allow 
  * multiple broadcast implementations). SparkContext uses a user-specified
  * BroadcastFactory implementation to instantiate a particular broadcast for the

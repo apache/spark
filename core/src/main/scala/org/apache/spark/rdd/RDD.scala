@@ -513,6 +513,8 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
+   *
    * Return a new RDD by applying a function to each partition of this RDD. This is a variant of
    * mapPartitions that also passes the TaskContext into the closure.
    */
@@ -775,7 +777,9 @@ abstract class RDD[T: ClassTag](
   def count(): Long = sc.runJob(this, Utils.getIteratorSize _).sum
 
   /**
-   * (Experimental) Approximate version of count() that returns a potentially incomplete result
+   * <span class="badge badge-red">EXPERIMENTAL API</span>
+   *
+   * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
    */
   def countApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
@@ -821,7 +825,9 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * (Experimental) Approximate version of countByValue().
+   * <span class="badge badge-red">EXPERIMENTAL API</span>
+   *
+   * Approximate version of countByValue().
    */
   def countByValueApprox(
       timeout: Long,
@@ -843,6 +849,8 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * <span class="badge badge-red">EXPERIMENTAL API</span>
+   *
    * Return approximate number of distinct elements in the RDD.
    *
    * The accuracy of approximation can be controlled through the relative standard deviation

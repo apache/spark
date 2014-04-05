@@ -21,6 +21,7 @@ import scala.util.Random
 
 import org.apache.spark.util.random.XORShiftRandom
 
+@deprecated("Use Vector from Spark's mllib.linalg package instead.", "1.0.0")
 class Vector(val elements: Array[Double]) extends Serializable {
   def length = elements.length
 

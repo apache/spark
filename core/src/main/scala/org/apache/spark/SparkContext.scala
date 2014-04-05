@@ -184,7 +184,7 @@ class SparkContext(
     jars.foreach(addJar)
   }
 
-  def warnSparkMem(value: String): String = {
+  private def warnSparkMem(value: String): String = {
     logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
       "deprecated, please use spark.executor.memory instead.")
     value
@@ -665,6 +665,11 @@ class SparkContext(
     postEnvironmentUpdate()
   }
 
+  /**
+   * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
+   *
+   * Register a listener to receive up-calls from events that happen during execution.
+   */
   def addSparkListener(listener: SparkListener) {
     listenerBus.addListener(listener)
   }
@@ -974,6 +979,8 @@ class SparkContext(
   }
 
   /**
+   * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
+   *
    * Run a job that can return approximate results.
    */
   def runApproximateJob[T, U, R](
@@ -991,6 +998,8 @@ class SparkContext(
   }
 
   /**
+   * <span class="badge badge-red">EXPERIMENTAL API</span>
+   *
    * Submit a job for execution and return a FutureJob holding the result.
    */
   def submitJob[T, U, R](
