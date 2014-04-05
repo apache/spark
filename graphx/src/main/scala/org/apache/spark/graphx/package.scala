@@ -20,7 +20,7 @@ package org.apache.spark
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
- * <span class="badge badge-red" style="float: right;">ALPHA COMPONENT</span>
+ * <span class="badge badge-red">ALPHA COMPONENT</span>
  *
  * GraphX is a graph processing framework built on top of Spark. */
 package object graphx {

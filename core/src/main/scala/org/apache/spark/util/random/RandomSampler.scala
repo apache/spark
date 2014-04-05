@@ -23,7 +23,7 @@ import cern.jet.random.Poisson
 import cern.jet.random.engine.DRand
 
 /**
- * <span class="badge badge-red" style="float: right;">DEVELOPER API - UNSTABLE</span>
+ * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
  *
  * A pseudorandom sampler. It is possible to change the sampled item type. For example, we might
  * want to add weights for stratified sampling or importance sampling. Should only use
@@ -42,7 +42,7 @@ trait RandomSampler[T, U] extends Pseudorandom with Cloneable with Serializable 
 }
 
 /**
- * <span class="badge badge-red" style="float: right;">DEVELOPER API - UNSTABLE</span>
+ * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
  *
  * A sampler based on Bernoulli trials.
  *
@@ -71,7 +71,7 @@ class BernoulliSampler[T](lb: Double, ub: Double, complement: Boolean = false)
 }
 
 /**
- * <span class="badge badge-red" style="float: right;">DEVELOPER API - UNSTABLE</span>
+ * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
  *
  * A sampler based on values drawn from Poisson distribution.
  *

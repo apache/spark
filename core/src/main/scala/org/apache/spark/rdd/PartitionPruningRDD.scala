@@ -46,7 +46,7 @@ private[spark] class PruneDependency[T](rdd: RDD[T], @transient partitionFilterF
 
 
 /**
- * <span class="badge badge-red" style="float: right;">DEVELOPER API - UNSTABLE</span>
+ * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
  *
  * A RDD used to prune RDD partitions/partitions so we can avoid launching tasks on
  * all partitions. An example use case: If we know the RDD is partitioned by range,
@@ -67,7 +67,7 @@ class PartitionPruningRDD[T: ClassTag](
 
 
 /**
- * <span class="badge badge-red" style="float: right;">DEVELOPER API - UNSTABLE</span>
+ * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
  */
 object PartitionPruningRDD {
 

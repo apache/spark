@@ -241,7 +241,7 @@ class SchemaRDD(
       Filter(ScalaUdf(udf, BooleanType, Seq(UnresolvedAttribute(arg1.name))), logicalPlan))
 
   /**
-   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+   * <span class="badge badge-red">EXPERIMENTAL</span>
    *
    * Filters tuples using a function over a `Dynamic` version of a given Row.  DynamicRows use
    * scala's Dynamic trait to emulate an ORM of in a dynamically typed language.  Since the type of
@@ -260,7 +260,7 @@ class SchemaRDD(
       Filter(ScalaUdf(dynamicUdf, BooleanType, Seq(WrapDynamic(logicalPlan.output))), logicalPlan))
 
   /**
-   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+   * <span class="badge badge-red">EXPERIMENTAL</span>
    *
    * Returns a sampled version of the underlying dataset.
    *
@@ -273,7 +273,7 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Sample(fraction, withReplacement, seed, logicalPlan))
 
   /**
-   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+   * <span class="badge badge-red">EXPERIMENTAL</span>
    *
    * Applies the given Generator, or table generating function, to this relation.
    *
@@ -298,7 +298,7 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Generate(generator, join, outer, None, logicalPlan))
 
   /**
-   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+   * <span class="badge badge-red">EXPERIMENTAL</span>
    *
    * Adds the rows from this RDD to the specified table.  Note in a standard [[SQLContext]] there is
    * no notion of persistent tables, and thus queries that contain this operator will fail to

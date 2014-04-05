@@ -62,7 +62,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new this.QueryExecution { val logical = plan }
 
   /**
-   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+   * <span class="badge badge-red">EXPERIMENTAL</span>
    *
    * Allows catalyst LogicalPlans to be executed as a SchemaRDD.  Note that the LogicalPlan
    * interface is considered internal, and thus not guranteed to be stable.  As a result, using

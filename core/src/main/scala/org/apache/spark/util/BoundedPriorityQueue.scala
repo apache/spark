@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.generic.Growable
 
 /**
- * <span class="badge badge-red" style="float: right;">DEVELOPER API - UNSTABLE</span>
+ * <span class="badge badge-red">DEVELOPER API - UNSTABLE</span>
  *
  * Bounded priority queue. This class wraps the original PriorityQueue
  * class and modifies it such that only the top K elements are retained.
