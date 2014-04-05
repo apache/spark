@@ -419,7 +419,7 @@ object SparkBuild extends Build {
 
   // Since we don't include hive in the main assembly this project also acts as an alternative
   // assembly jar.
-  def hiveSettings = sharedSettings ++ assemblyProjSettings ++ Seq(
+  def hiveSettings = sharedSettings ++ Seq(
     name := "spark-hive",
     javaOptions += "-XX:MaxPermSize=1g",
     libraryDependencies ++= Seq(

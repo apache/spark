@@ -64,10 +64,8 @@
             <version>${hive.version}</version>
         </dependency>
         <dependency>
-            <!-- Matches the version of jackson-core-asl pulled in by avro -->
             <groupId>org.codehaus.jackson</groupId>
             <artifactId>jackson-mapper-asl</artifactId>
-            <version>1.8.8</version>
         </dependency>
         <dependency>
             <groupId>org.apache.hive</groupId>
@@ -92,6 +90,30 @@
             <plugin>
                 <groupId>org.scalatest</groupId>
                 <artifactId>scalatest-maven-plugin</artifactId>
+            </plugin>
+
+            <!-- Deploy datanucleus jars to the spark/lib_managed/jars directory -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>2.4</version>
+                <executions>
+                    <execution>
+                        <id>copy-dependencies</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <!-- basedir is spark/sql/hive/ -->
+                            <outputDirectory>${basedir}/../../lib_managed/jars</outputDirectory>
+                            <overWriteReleases>false</overWriteReleases>
+                            <overWriteSnapshots>false</overWriteSnapshots>
+                            <overWriteIfNewer>true</overWriteIfNewer>
+                            <includeGroupIds>org.datanucleus</includeGroupIds>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
