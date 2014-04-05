@@ -99,7 +99,7 @@ With this mode, your application is actually run on the remote machine where the
 
 ## Launch spark application with yarn-client mode.
 
-With yarn-client mode, the application will be launched locally. Just like running application or spark-shell on Local / Mesos / Standalone mode. The launch method is also the similar with them, just make sure that when you need to specify a master url, use "yarn-client" instead. And you also need to export the env value for SPARK_JAR and SPARK_YARN_APP_JAR
+With yarn-client mode, the application will be launched locally. Just like running application or spark-shell on Local / Mesos / Standalone mode. The launch method is also the similar with them, just make sure that when you need to specify a master url, use "yarn-client" instead. And you also need to export the env value for SPARK_JAR and SPARK_YARN_APP_JAR.  If you are using spark-shell with secure HDFS you also need to export SPARK_YARN_MODE=true.
 
 Configuration in yarn-client mode:
 
@@ -121,7 +121,7 @@ For example:
     SPARK_YARN_APP_JAR=examples/target/scala-{{site.SCALA_BINARY_VERSION}}/spark-examples-assembly-{{site.SPARK_VERSION}}.jar \
     ./bin/run-example org.apache.spark.examples.SparkPi yarn-client
 
-
+    SPARK_YARN_MODE=true \
     SPARK_JAR=./assembly/target/scala-{{site.SCALA_BINARY_VERSION}}/spark-assembly-{{site.SPARK_VERSION}}-hadoop2.0.5-alpha.jar \
     SPARK_YARN_APP_JAR=examples/target/scala-{{site.SCALA_BINARY_VERSION}}/spark-examples-assembly-{{site.SPARK_VERSION}}.jar \
     MASTER=yarn-client ./bin/spark-shell
