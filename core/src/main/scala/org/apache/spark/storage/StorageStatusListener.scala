@@ -44,7 +44,7 @@ private[spark] class StorageStatusListener extends SparkListener {
     storageStatusList.foreach { storageStatus =>
       val unpersistedBlocksIds = storageStatus.rddBlocks.keys.filter(_.rddId == unpersistedRDDId)
       unpersistedBlocksIds.foreach { blockId =>
-        storageStatus.blocks(blockId) = BlockStatus(StorageLevel.NONE, 0L, 0L)
+        storageStatus.blocks(blockId) = BlockStatus(StorageLevel.NONE, 0L, 0L, 0L)
       }
     }
   }

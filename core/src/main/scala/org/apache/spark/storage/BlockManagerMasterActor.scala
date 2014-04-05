@@ -73,10 +73,11 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       register(blockManagerId, maxMemSize, slaveActor)
       sender ! true
 
-    case UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
+    case UpdateBlockInfo(
+      blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize) =>
       // TODO: Ideally we want to handle all the message replies in receive instead of in the
       // individual private methods.
-      updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size)
+      updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize)
 
     case GetLocations(blockId) =>
       sender ! getLocations(blockId)
@@ -246,7 +247,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       blockId: BlockId,
       storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long) {
+      diskSize: Long,
+      tachyonSize: Long) {
 
     if (!blockManagerInfo.contains(blockManagerId)) {
       if (blockManagerId.executorId == "<driver>" && !isLocal) {
@@ -265,7 +267,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       return
     }
 
-    blockManagerInfo(blockManagerId).updateBlockInfo(blockId, storageLevel, memSize, diskSize)
+    blockManagerInfo(blockManagerId).updateBlockInfo(
+      blockId, storageLevel, memSize, diskSize, tachyonSize)
 
     var locations: mutable.HashSet[BlockManagerId] = null
     if (blockLocations.containsKey(blockId)) {
@@ -309,8 +312,11 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   }
 }
 
-
-private[spark] case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long)
+private[spark] case class BlockStatus(
+    storageLevel: StorageLevel,
+    memSize: Long,
+    diskSize: Long,
+    tachyonSize: Long)
 
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,
@@ -336,7 +342,8 @@ private[spark] class BlockManagerInfo(
       blockId: BlockId,
       storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long) {
+      diskSize: Long,
+      tachyonSize: Long) {
 
     updateLastSeenMs()
 
@@ -350,22 +357,28 @@ private[spark] class BlockManagerInfo(
     }
 
     if (storageLevel.isValid) {
-      /* isValid means it is either stored in-memory or on-disk.
+      /* isValid means it is either stored in-memory, on-disk or on-Tachyon.
        * But the memSize here indicates the data size in or dropped from memory,
+       * tachyonSize here indicates the data size in or dropped from Tachyon,
        * and the diskSize here indicates the data size in or dropped to disk.
        * They can be both larger than 0, when a block is dropped from memory to disk.
        * Therefore, a safe way to set BlockStatus is to set its info in accurate modes. */
       if (storageLevel.useMemory) {
-        _blocks.put(blockId, BlockStatus(storageLevel, memSize, 0))
+        _blocks.put(blockId, BlockStatus(storageLevel, memSize, 0, 0))
         _remainingMem -= memSize
         logInfo("Added %s in memory on %s (size: %s, free: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
           Utils.bytesToString(_remainingMem)))
       }
       if (storageLevel.useDisk) {
-        _blocks.put(blockId, BlockStatus(storageLevel, 0, diskSize))
+        _blocks.put(blockId, BlockStatus(storageLevel, 0, diskSize, 0))
         logInfo("Added %s on disk on %s (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
+      }
+      if (storageLevel.useOffHeap) {
+        _blocks.put(blockId, BlockStatus(storageLevel, 0, 0, tachyonSize))
+        logInfo("Added %s on tachyon on %s (size: %s)".format(
+          blockId, blockManagerId.hostPort, Utils.bytesToString(tachyonSize)))
       }
     } else if (_blocks.containsKey(blockId)) {
       // If isValid is not true, drop the block.
@@ -380,6 +393,10 @@ private[spark] class BlockManagerInfo(
       if (blockStatus.storageLevel.useDisk) {
         logInfo("Removed %s on %s on disk (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.diskSize)))
+      }
+      if (blockStatus.storageLevel.useOffHeap) {
+        logInfo("Removed %s on %s on tachyon (size: %s)".format(
+          blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.tachyonSize)))
       }
     }
   }
