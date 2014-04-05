@@ -119,8 +119,8 @@ class DslQuerySuite extends QueryTest {
   }
 
   test("inner join, where, multiple matches") {
-    val x = testData2.where('a === 1).subquery('x)
-    val y = testData2.where('a === 1).subquery('y)
+    val x = testData2.where('a === 1).as('x)
+    val y = testData2.where('a === 1).as('y)
     checkAnswer(
       x.join(y).where("x.a".attr === "y.a".attr),
       (1,1,1,1) ::
@@ -131,8 +131,8 @@ class DslQuerySuite extends QueryTest {
   }
 
   test("inner join, no matches") {
-    val x = testData2.where('a === 1).subquery('x)
-    val y = testData2.where('a === 2).subquery('y)
+    val x = testData2.where('a === 1).as('x)
+    val y = testData2.where('a === 2).as('y)
     checkAnswer(
       x.join(y).where("x.a".attr === "y.a".attr),
       Nil)
@@ -140,8 +140,8 @@ class DslQuerySuite extends QueryTest {
 
   test("big inner join, 4 matches per row") {
     val bigData = testData.unionAll(testData).unionAll(testData).unionAll(testData)
-    val bigDataX = bigData.subquery('x)
-    val bigDataY = bigData.subquery('y)
+    val bigDataX = bigData.as('x)
+    val bigDataY = bigData.as('y)
 
     checkAnswer(
       bigDataX.join(bigDataY).where("x.key".attr === "y.key".attr),
@@ -181,8 +181,8 @@ class DslQuerySuite extends QueryTest {
   }
 
   test("full outer join") {
-    val left = upperCaseData.where('N <= 4).subquery('left)
-    val right = upperCaseData.where('N >= 3).subquery('right)
+    val left = upperCaseData.where('N <= 4).as('left)
+    val right = upperCaseData.where('N >= 3).as('right)
 
     checkAnswer(
       left.join(right, FullOuter, Some("left.N".attr === "right.N".attr)),

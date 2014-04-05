@@ -219,7 +219,7 @@ class SqlParser extends StandardTokenParsers {
 
   protected lazy val relationFactor: Parser[LogicalPlan] =
     ident ~ (opt(AS) ~> opt(ident)) ^^ {
-      case ident ~ alias => UnresolvedRelation(alias, ident)
+      case tableName ~ alias => UnresolvedRelation(None, tableName, alias)
     } |
     "(" ~> query ~ ")" ~ opt(AS) ~ ident ^^ { case s ~ _ ~ _ ~ a => Subquery(a, s) }
 
