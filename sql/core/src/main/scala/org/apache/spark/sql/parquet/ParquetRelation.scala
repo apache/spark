@@ -81,32 +81,14 @@ private[sql] case class ParquetRelation(val path: String)
 
 private[sql] object ParquetRelation {
 
-  @volatile private var enabledLogForwarding = false
-  val initLock = new Object()
-
   def enableLogForwarding() {
     // Note: Parquet does not use forwarding to parent loggers which
     // is required for the JUL-SLF4J bridge to work. Also there is
     // a default logger that appends to Console which needs to be
     // reset.
-    if (!enabledLogForwarding) {
-      initLock.synchronized {
-        if (!enabledLogForwarding) {
-          import org.slf4j.bridge.SLF4JBridgeHandler
-          import java.util.logging.Logger
-          import java.util.logging.LogManager
-
-          if (!SLF4JBridgeHandler.isInstalled){
-            LogManager.getLogManager.reset()
-            SLF4JBridgeHandler.install()
-          }
-          val parquetLogger = Logger.getLogger("parquet")
-          parquetLogger.getHandlers.foreach(parquetLogger.removeHandler)
-          parquetLogger.addHandler(new SLF4JBridgeHandler())
-          enabledLogForwarding = true
-        }
-      }
-    }
+    val parquetLogger = java.util.logging.Logger.getLogger("parquet")
+    parquetLogger.getHandlers.foreach(parquetLogger.removeHandler)
+    if(parquetLogger.getLevel != null) parquetLogger.setLevel(null)
   }
 
   // The element type for the RDDs that this relation maps to.

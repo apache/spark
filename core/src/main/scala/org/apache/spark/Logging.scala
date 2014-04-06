@@ -20,6 +20,7 @@ package org.apache.spark
 import org.apache.log4j.{LogManager, PropertyConfigurator}
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
+import org.slf4j.bridge.SLF4JBridgeHandler
 
 /**
  * Utility trait for classes that want to log data. Creates a SLF4J logger for the class and allows
@@ -128,4 +129,6 @@ trait Logging {
 private object Logging {
   @volatile private var initialized = false
   val initLock = new Object()
+  SLF4JBridgeHandler.removeHandlersForRootLogger()
+  SLF4JBridgeHandler.install()
 }
