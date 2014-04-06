@@ -783,7 +783,7 @@ abstract class RDD[T: ClassTag](
   def count(): Long = sc.runJob(this, Utils.getIteratorSize _).sum
 
   /**
-   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL API</span>
+   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
    *
    * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
@@ -831,7 +831,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL API</span>
+   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
    *
    * Approximate version of countByValue().
    */
@@ -855,7 +855,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL API</span>
+   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
    * Return approximate number of distinct elements in the RDD.
    *
    * The accuracy of approximation can be controlled through the relative standard deviation

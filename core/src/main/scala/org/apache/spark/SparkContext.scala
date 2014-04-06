@@ -1009,7 +1009,7 @@ class SparkContext(config: SparkConf)
   }
 
   /**
-   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL API</span>
+   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
    * Submit a job for execution and return a FutureJob holding the result.
    */
   def submitJob[T, U, R](

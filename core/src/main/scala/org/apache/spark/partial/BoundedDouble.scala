@@ -18,7 +18,7 @@
 package org.apache.spark.partial
 
 /**
- * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL API</span>
+ * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
  * A Double value with error bars and associated confidence.
  */
 class BoundedDouble(val mean: Double, val confidence: Double, val low: Double, val high: Double) {

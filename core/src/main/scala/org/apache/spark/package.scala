@@ -34,7 +34,7 @@ package org.apache
  * for Spark programming APIs in Java.
  *
  * Classes and methods marked with <span class="badge" style="background-color: #257080">
- * EXPERIMENTAL API</span> are user-facing features which have not been officially adopted by the
+ * EXPERIMENTAL</span> are user-facing features which have not been officially adopted by the
  * Spark project. These are subject to change or removal in minor releases.
  *
  * Classes and methods marked with <span class="badge" style="background-color: #44751E">
