@@ -174,6 +174,8 @@ class SparkContext(object):
                 SparkContext._gateway = gateway or launch_gateway()
                 SparkContext._jvm = SparkContext._gateway.jvm
                 SparkContext._writeToFile = SparkContext._jvm.PythonRDD.writeToFile
+                SparkContext._pythonToJava = SparkContext._jvm.PythonRDD.pythonToJava
+                SparkContext._javaToPython = SparkContext._jvm.PythonRDD.javaToPython
 
             if instance:
                 if SparkContext._active_spark_context and SparkContext._active_spark_context != instance:

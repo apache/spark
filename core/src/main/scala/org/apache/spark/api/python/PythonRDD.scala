@@ -289,8 +289,12 @@ private[spark] object PythonRDD {
   def pythonToJava(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[_] = {
     pyRDD.rdd.mapPartitions { iter =>
       val unpickle = new Unpickler
-      iter.map { row =>
-        unpickle.loads(row)
+      iter.flatMap { row =>
+        unpickle.loads(row) match {
+          case objs: java.util.ArrayList[Any] => objs
+          // Incase the partition doesn't have a collection
+          case obj => Seq(obj)
+        }
       }
     }
   }
