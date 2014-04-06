@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.parquet
 
-import collection.mutable.{ArrayBuffer, Buffer}
-
 import org.apache.hadoop.conf.Configuration
 
 import parquet.column.ParquetProperties
@@ -29,26 +27,22 @@ import parquet.io.api._
 import parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, Row}
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.parquet.CatalystConverter.FieldType
-import org.apache.spark.sql.parquet.ParquetRelation.RowType
-import scala.collection.mutable
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
 
 /**
  * A `parquet.io.api.RecordMaterializer` for Rows.
  *
  *@param root The root group converter for the record.
  */
-private[parquet] class RowRecordMaterializer(root: CatalystGroupConverter)
+private[parquet] class RowRecordMaterializer(root: CatalystConverter)
   extends RecordMaterializer[Row] {
 
   def this(parquetSchema: MessageType) =
-    this(new CatalystGroupConverter(ParquetTypesConverter.convertToAttributes(parquetSchema)))
+    this(CatalystConverter.createRootConverter(parquetSchema))
 
   override def getCurrentRecord: Row = root.getCurrentRecord
 
-  override def getRootConverter: GroupConverter = root
+  override def getRootConverter: GroupConverter = root.asInstanceOf[GroupConverter]
 }
 
 /**

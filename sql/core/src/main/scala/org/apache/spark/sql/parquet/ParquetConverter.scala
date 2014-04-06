@@ -20,7 +20,9 @@ package org.apache.spark.sql.parquet
 import scala.collection.mutable.{Buffer, ArrayBuffer}
 
 import parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Converter}
+import parquet.schema.MessageType
 
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Row, Attribute}
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
@@ -65,9 +67,19 @@ private[parquet] object CatalystConverter {
         s"unable to convert datatype ${field.dataType.toString} in CatalystConverter")
     }
   }
+
+  protected[parquet] def createRootConverter(parquetSchema: MessageType): CatalystConverter = {
+    val attributes = ParquetTypesConverter.convertToAttributes(parquetSchema)
+    // For non-nested types we use the optimized Row converter
+    if (attributes.forall(a => ParquetTypesConverter.isPrimitiveType(a.dataType))) {
+      new MutableRowGroupConverter(attributes)
+    } else {
+      new CatalystGroupConverter(attributes)
+    }
+  }
 }
 
-trait CatalystConverter {
+private[parquet] trait CatalystConverter {
   // the number of fields this group has
   protected[parquet] val size: Int
 
@@ -80,7 +92,6 @@ trait CatalystConverter {
   // for child converters to update upstream values
   protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit
 
-  // TODO: in the future consider using specific methods to avoid autoboxing
   protected[parquet] def updateBoolean(fieldIndex: Int, value: Boolean): Unit =
     updateField(fieldIndex, value)
 
@@ -105,6 +116,9 @@ trait CatalystConverter {
   protected[parquet] def isRootConverter: Boolean = parent == null
 
   protected[parquet] def clearBuffer(): Unit
+
+  // Should be only called in root group converter!
+  def getCurrentRecord: Row
 }
 
 /**
@@ -113,7 +127,7 @@ trait CatalystConverter {
  *
  * @param schema The corresponding Catalyst schema in the form of a list of attributes.
  */
-class CatalystGroupConverter(
+private[parquet] class CatalystGroupConverter(
     protected[parquet] val schema: Seq[FieldType],
     protected[parquet] val index: Int,
     protected[parquet] val parent: CatalystConverter,
@@ -183,12 +197,85 @@ class CatalystGroupConverter(
 }
 
 /**
+ * A `parquet.io.api.GroupConverter` that is able to convert a Parquet record
+ * to a [[org.apache.spark.sql.catalyst.expressions.Row]] object. Note that his
+ * converter is optimized for rows of primitive types (non-nested records).
+ */
+private[parquet] class MutableRowGroupConverter(
+    protected[parquet] val schema: Seq[FieldType],
+    protected[parquet] var current: ParquetRelation.RowType)
+  extends GroupConverter with CatalystConverter {
+
+  // This constructor is used for the root converter only
+  def this(attributes: Seq[Attribute]) =
+    this(
+      attributes.map(a => new FieldType(a.name, a.dataType, a.nullable)),
+      new ParquetRelation.RowType(attributes.length))
+
+  protected [parquet] val converters: Array[Converter] =
+    schema.map(field =>
+      CatalystConverter.createConverter(field, schema.indexOf(field), this))
+      .toArray
+
+  override val size = schema.size
+
+  override val index = 0
+
+  override val parent = null
+
+  // Should be only called in root group converter!
+  def getCurrentRecord: ParquetRelation.RowType = current
+
+  override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
+
+  // for child converters to update upstream values
+  override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit = {
+    throw new UnsupportedOperationException // child converters should use the
+    // specific update methods below
+  }
+
+  override protected[parquet] def clearBuffer(): Unit = {}
+
+  override def start(): Unit = {
+    var i = 0
+    while (i < schema.length) {
+      current.setNullAt(i)
+      i = i + 1
+    }
+  }
+
+  override def end(): Unit = {}
+
+  // Overriden here to avoid auto-boxing for primitive types
+  override protected[parquet] def updateBoolean(fieldIndex: Int, value: Boolean): Unit =
+    current.setBoolean(fieldIndex, value)
+
+  override protected[parquet] def updateInt(fieldIndex: Int, value: Int): Unit =
+    current.setInt(fieldIndex, value)
+
+  override protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit =
+    current.setLong(fieldIndex, value)
+
+  override protected[parquet] def updateDouble(fieldIndex: Int, value: Double): Unit =
+    current.setDouble(fieldIndex, value)
+
+  override protected[parquet] def updateFloat(fieldIndex: Int, value: Float): Unit =
+    current.setFloat(fieldIndex, value)
+
+  override protected[parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit =
+    current.update(fieldIndex, value.getBytes)
+
+  override protected[parquet] def updateString(fieldIndex: Int, value: Binary): Unit =
+    current.setString(fieldIndex, value.toStringUsingUTF8)
+}
+
+/**
  * A `parquet.io.api.PrimitiveConverter` that converts Parquet types to Catalyst types.
  *
  * @param parent The parent group converter.
  * @param fieldIndex The index inside the record.
  */
-class CatalystPrimitiveConverter(
+private[parquet] class CatalystPrimitiveConverter(
     parent: CatalystConverter,
     fieldIndex: Int) extends PrimitiveConverter {
   // TODO: consider refactoring these together with ParquetTypesConverter
@@ -218,7 +305,7 @@ class CatalystPrimitiveConverter(
  * @param parent The parent group converter.
  * @param fieldIndex The index inside the record.
  */
-class CatalystPrimitiveStringConverter(
+private[parquet] class CatalystPrimitiveStringConverter(
     parent: CatalystConverter,
     fieldIndex: Int)
   extends CatalystPrimitiveConverter(parent, fieldIndex) {
@@ -232,7 +319,7 @@ object CatalystArrayConverter {
 
 // this is for single-element groups of primitive or complex types
 // Note: AvroParquet only uses arrays for primitive types (?)
-class CatalystArrayConverter(
+private[parquet] class CatalystArrayConverter(
     val elementType: DataType,
     val index: Int,
     protected[parquet] val parent: CatalystConverter,
@@ -283,11 +370,14 @@ class CatalystArrayConverter(
     parent.updateField(index, new GenericRow(buffer.toArray))
     clearBuffer()
   }
+
+  // Should be only called in root group converter!
+  override def getCurrentRecord: Row = throw new UnsupportedOperationException
 }
 
 // this is for multi-element groups of primitive or complex types
 // that have repetition level optional or required (so struct fields)
-class CatalystStructConverter(
+private[parquet] class CatalystStructConverter(
     override protected[parquet] val schema: Seq[FieldType],
     override protected[parquet] val index: Int,
     override protected[parquet] val parent: CatalystConverter)
@@ -301,6 +391,9 @@ class CatalystStructConverter(
     // TODO: use iterators if possible, avoid Row wrapping!
     parent.updateField(index, new GenericRow(current.toArray))
   }
+
+  // Should be only called in root group converter!
+  override def getCurrentRecord: Row = throw new UnsupportedOperationException
 }
 
 // TODO: add MapConverter
