@@ -15,20 +15,24 @@
 # limitations under the License.
 #
 
+import struct
+import numpy
 from numpy import ndarray, float64, int64, int32, ones, array_equal, array, dot, shape, complex, issubdtype
 from pyspark import SparkContext, RDD
-import numpy as np
-
+from pyspark.mllib.linalg import SparseVector
 from pyspark.serializers import Serializer
-import struct
 
-# Double vector format:
+# Dense double vector format:
 #
 # [8-byte 1] [8-byte length] [length*8 bytes of data]
 #
+# Sparse double vector format:
+#
+# [8-byte 2] [8-byte size] [8-byte entries] [entries*4 bytes of indices] [entries*8 bytes of values]
+#
 # Double matrix format:
 #
-# [8-byte 2] [8-byte rows] [8-byte cols] [rows*cols*8 bytes of data]
+# [8-byte 3] [8-byte rows] [8-byte cols] [rows*cols*8 bytes of data]
 #
 # This is all in machine-endian.  That means that the Java interpreter and the
 # Python interpreter must agree on what endian the machine is.
@@ -43,8 +47,7 @@ def _deserialize_byte_array(shape, ba, offset):
     >>> array_equal(x, _deserialize_byte_array(x.shape, x.data, 0))
     True
     """
-    ar = ndarray(shape=shape, buffer=ba, offset=offset, dtype="float64",
-            order='C')
+    ar = ndarray(shape=shape, buffer=ba, offset=offset, dtype="float64", order='C')
     return ar.copy()
 
 def _serialize_double_vector(v):
@@ -58,21 +61,20 @@ def _serialize_double_vector(v):
     if type(v) != ndarray:
         raise TypeError("_serialize_double_vector called on a %s; "
                 "wanted ndarray" % type(v))
-    """complex is only datatype that can't be converted to float64"""
-    if issubdtype(v.dtype, complex):
-        raise TypeError("_serialize_double_vector called on a %s; "
-                "wanted ndarray" % type(v))
-    if v.dtype != float64:
-        v = v.astype(float64)
     if v.ndim != 1:
         raise TypeError("_serialize_double_vector called on a %ddarray; "
                 "wanted a 1darray" % v.ndim)
+    if v.dtype != float64:
+        if numpy.issubdtype(v.dtype, numpy.complex):
+            raise TypeError("_serialize_double_vector called on an ndarray of %s; "
+                    "wanted ndarray of float64" % v.dtype)
+        v = v.astype('float64')
     length = v.shape[0]
-    ba = bytearray(16 + 8*length)
-    header = ndarray(shape=[2], buffer=ba, dtype="int64")
-    header[0] = 1
-    header[1] = length
-    arr_mid = ndarray(shape=[length], buffer=ba, offset=16, dtype="float64")
+    ba = bytearray(5 + 8 * length)
+    ba[0] = 1
+    length_bytes = ndarray(shape=[1], buffer=ba, offset=1, dtype="int32")
+    length_bytes[0] = length
+    arr_mid = ndarray(shape=[length], buffer=ba, offset=5, dtype="float64")
     arr_mid[...] = v
     return ba
 
@@ -86,34 +88,34 @@ def _deserialize_double_vector(ba):
     if type(ba) != bytearray:
         raise TypeError("_deserialize_double_vector called on a %s; "
                 "wanted bytearray" % type(ba))
-    if len(ba) < 16:
+    if len(ba) < 5:
         raise TypeError("_deserialize_double_vector called on a %d-byte array, "
                 "which is too short" % len(ba))
-    if (len(ba) & 7) != 0:
-        raise TypeError("_deserialize_double_vector called on a %d-byte array, "
-                "which is not a multiple of 8" % len(ba))
-    header = ndarray(shape=[2], buffer=ba, dtype="int64")
-    if header[0] != 1:
+    if ba[0] != 1:
         raise TypeError("_deserialize_double_vector called on bytearray "
                         "with wrong magic")
-    length = header[1]
-    if len(ba) != 8*length + 16:
+    length = ndarray(shape=[1], buffer=ba, offset=1, dtype="int32")[0]
+    if len(ba) != 8*length + 5:
         raise TypeError("_deserialize_double_vector called on bytearray "
                         "with wrong length")
-    return _deserialize_byte_array([length], ba, 16)
+    return _deserialize_byte_array([length], ba, 5)
 
 def _serialize_double_matrix(m):
     """Serialize a double matrix into a mutually understood format."""
-    if (type(m) == ndarray and m.dtype == float64 and m.ndim == 2):
+    if (type(m) == ndarray and m.ndim == 2):
+        if m.dtype != float64:
+            if numpy.issubdtype(m.dtype, numpy.complex):
+                raise TypeError("_serialize_double_matrix called on an ndarray of %s; "
+                        "wanted ndarray of float64" % m.dtype)
+            m = m.astype('float64')
         rows = m.shape[0]
         cols = m.shape[1]
-        ba = bytearray(24 + 8 * rows * cols)
-        header = ndarray(shape=[3], buffer=ba, dtype="int64")
-        header[0] = 2
-        header[1] = rows
-        header[2] = cols
-        arr_mid = ndarray(shape=[rows, cols], buffer=ba, offset=24,
-                      dtype="float64", order='C')
+        ba = bytearray(9 + 8 * rows * cols)
+        ba[0] = 2
+        lengths = ndarray(shape=[3], buffer=ba, offset=1, dtype="int32")
+        lengths[0] = rows
+        lengths[1] = cols
+        arr_mid = ndarray(shape=[rows, cols], buffer=ba, offset=9, dtype="float64", order='C')
         arr_mid[...] = m
         return ba
     else:
@@ -125,22 +127,19 @@ def _deserialize_double_matrix(ba):
     if type(ba) != bytearray:
         raise TypeError("_deserialize_double_matrix called on a %s; "
                 "wanted bytearray" % type(ba))
-    if len(ba) < 24:
+    if len(ba) < 9:
         raise TypeError("_deserialize_double_matrix called on a %d-byte array, "
                 "which is too short" % len(ba))
-    if (len(ba) & 7) != 0:
-        raise TypeError("_deserialize_double_matrix called on a %d-byte array, "
-                "which is not a multiple of 8" % len(ba))
-    header = ndarray(shape=[3], buffer=ba, dtype="int64")
-    if (header[0] != 2):
+    if ba[0] != 2:
         raise TypeError("_deserialize_double_matrix called on bytearray "
                         "with wrong magic")
-    rows = header[1]
-    cols = header[2]
-    if (len(ba) != 8*rows*cols + 24):
+    lengths = ndarray(shape=[2], buffer=ba, offset=1, dtype="int32")
+    rows = lengths[0]
+    cols = lengths[1]
+    if (len(ba) != 8 * rows * cols + 9):
         raise TypeError("_deserialize_double_matrix called on bytearray "
                         "with wrong length")
-    return _deserialize_byte_array([rows, cols], ba, 24)
+    return _deserialize_byte_array([rows, cols], ba, 9)
 
 def _linear_predictor_typecheck(x, coeffs):
     """Check that x is a one-dimensional vector of the right shape.
@@ -151,7 +150,7 @@ def _linear_predictor_typecheck(x, coeffs):
                 pass
             else:
                 raise RuntimeError("Got array of %d elements; wanted %d"
-                        % (shape(x)[0], shape(coeffs)[0]))
+                        % (numpy.shape(x)[0], numpy.shape(coeffs)[0]))
         else:
             raise RuntimeError("Bulk predict not yet supported.")
     elif (type(x) == RDD):
@@ -187,7 +186,7 @@ class LinearRegressionModelBase(LinearModel):
         """Predict the value of the dependent variable given a vector x"""
         """containing values for the independent variables."""
         _linear_predictor_typecheck(x, self._coeff)
-        return dot(self._coeff, x) + self._intercept
+        return numpy.dot(self._coeff, x) + self._intercept
 
 # If we weren't given initial weights, take a zero vector of the appropriate
 # length.
@@ -200,7 +199,7 @@ def _get_initial_weights(initial_weights, data):
         if initial_weights.ndim != 1:
             raise TypeError("At least one data element has "
                     + initial_weights.ndim + " dimensions, which is not 1")
-        initial_weights = ones([initial_weights.shape[0] - 1])
+        initial_weights = numpy.ones([initial_weights.shape[0] - 1])
     return initial_weights
 
 # train_func should take two parameters, namely data and initial_weights, and

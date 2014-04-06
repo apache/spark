@@ -31,22 +31,24 @@ import org.apache.spark.rdd.RDD
 /**
  * :: DeveloperApi ::
  * The Java stubs necessary for the Python mllib bindings.
+ *
+ * See mllib/python/pyspark._common.py for the mutually agreed upon data format.
  */
 @DeveloperApi
 class PythonMLLibAPI extends Serializable {
   private def deserializeDoubleVector(bytes: Array[Byte]): Array[Double] = {
     val packetLength = bytes.length
-    if (packetLength < 16) {
+    if (packetLength < 5) {
       throw new IllegalArgumentException("Byte array too short.")
     }
     val bb = ByteBuffer.wrap(bytes)
     bb.order(ByteOrder.nativeOrder())
-    val magic = bb.getLong()
+    val magic = bb.get()
     if (magic != 1) {
       throw new IllegalArgumentException("Magic " + magic + " is wrong.")
     }
-    val length = bb.getLong()
-    if (packetLength != 16 + 8 * length) {
+    val length = bb.getInt()
+    if (packetLength != 5 + 8 * length) {
       throw new IllegalArgumentException("Length " + length + " is wrong.")
     }
     val db = bb.asDoubleBuffer()
@@ -57,11 +59,11 @@ class PythonMLLibAPI extends Serializable {
 
   private def serializeDoubleVector(doubles: Array[Double]): Array[Byte] = {
     val len = doubles.length
-    val bytes = new Array[Byte](16 + 8 * len)
+    val bytes = new Array[Byte](5 + 8 * len)
     val bb = ByteBuffer.wrap(bytes)
     bb.order(ByteOrder.nativeOrder())
-    bb.putLong(1)
-    bb.putLong(len)
+    bb.put(1: Byte)
+    bb.putInt(len)
     val db = bb.asDoubleBuffer()
     db.put(doubles)
     bytes
@@ -69,18 +71,18 @@ class PythonMLLibAPI extends Serializable {
 
   private def deserializeDoubleMatrix(bytes: Array[Byte]): Array[Array[Double]] = {
     val packetLength = bytes.length
-    if (packetLength < 24) {
+    if (packetLength < 9) {
       throw new IllegalArgumentException("Byte array too short.")
     }
     val bb = ByteBuffer.wrap(bytes)
     bb.order(ByteOrder.nativeOrder())
-    val magic = bb.getLong()
+    val magic = bb.get()
     if (magic != 2) {
       throw new IllegalArgumentException("Magic " + magic + " is wrong.")
     }
-    val rows = bb.getLong()
-    val cols = bb.getLong()
-    if (packetLength != 24 + 8 * rows * cols) {
+    val rows = bb.getInt()
+    val cols = bb.getInt()
+    if (packetLength != 9 + 8 * rows * cols) {
       throw new IllegalArgumentException("Size " + rows + "x" + cols + " is wrong.")
     }
     val db = bb.asDoubleBuffer()
@@ -98,12 +100,12 @@ class PythonMLLibAPI extends Serializable {
     if (rows > 0) {
       cols = doubles(0).length
     }
-    val bytes = new Array[Byte](24 + 8 * rows * cols)
+    val bytes = new Array[Byte](9 + 8 * rows * cols)
     val bb = ByteBuffer.wrap(bytes)
     bb.order(ByteOrder.nativeOrder())
-    bb.putLong(2)
-    bb.putLong(rows)
-    bb.putLong(cols)
+    bb.put(2: Byte)
+    bb.putInt(rows)
+    bb.putInt(cols)
     val db = bb.asDoubleBuffer()
     for (i <- 0 until rows) {
       db.put(doubles(i))
