@@ -42,29 +42,6 @@ class TaskSchedulerImplSuite extends FunSuite with BeforeAndAfter with EasyMockS
     taskScheduler = sc.taskScheduler.asInstanceOf[TaskSchedulerImpl]
   }
 
-  def checkTaskSetIds(workerOffers: Seq[WorkerOffer], expectedTaskSetIds: Seq[String]) {
-    assert(workerOffers.size == expectedTaskSetIds.size)
-    for (i <- 0 until workerOffers.size) {
-      val scheduledTask = taskScheduler.resourceOffers(Seq[WorkerOffer](workerOffers(i))).flatten
-      assert(getTasksetIdFromTaskDescription(scheduledTask(0)) === expectedTaskSetIds(i))
-    }
-  }
-
-  def generateWorkerOffers(offerNum: Int): Seq[WorkerOffer] = {
-    var s = new ArrayBuffer[WorkerOffer]
-    for (i <- 0 until offerNum) {
-      s += new WorkerOffer("execId_%d".format(i), "hostname_%s".format(i), 1)
-    }
-    s
-  }
-
-  private def getTasksetIdFromTaskDescription(td: TaskDescription) = {
-    """task (\d+\.\d+):\d+""".r.findFirstMatchIn(td.name) match {
-      case None => null
-      case Some(matchedString) => matchedString.group(1)
-    }
-  }
-
   test("Scheduler does not always schedule tasks on the same workers") {
     taskScheduler.initialize(new FakeSchedulerBackend)
 
