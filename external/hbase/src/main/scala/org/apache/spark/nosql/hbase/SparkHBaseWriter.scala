@@ -17,7 +17,7 @@
 
 package org.apache.spark.nosql.hbase
 
-import org.apache.hadoop.hbase.client.{HConnectionManager, Put, HTable}
+import org.apache.hadoop.hbase.client.{Put, HTable}
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.commons.codec.binary.Hex
@@ -25,6 +25,9 @@ import org.apache.hadoop.hbase.HConstants
 import org.apache.hadoop.conf.Configuration
 import java.io.IOException
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.types._
+import scala.Some
+import org.apache.spark.sql.Row
 
 /**
  * Internal helper class that saves an RDD using a HBase OutputFormat. This is only public
@@ -58,19 +61,37 @@ class SparkHBaseWriter(conf: HBaseConf)
   /**
    * Convert field to bytes
    * @param field split by delimiter from record
-   * @param kind the type of field
+   * @param dataType the type of field
    * @return
    */
-  def toByteArray(field: String, kind: String) = kind match {
-    case HBaseType.Boolean => Bytes.toBytes(field.toBoolean)
-    case HBaseType.Short => Bytes.toBytes(field.toShort)
-    case HBaseType.Int => Bytes.toBytes(field.toInt)
-    case HBaseType.Long => Bytes.toBytes(field.toLong)
-    case HBaseType.Float => Bytes.toBytes(field.toFloat)
-    case HBaseType.Double => Bytes.toBytes(field.toDouble)
-    case HBaseType.String => Bytes.toBytes(field)
-    case HBaseType.Bytes => Hex.decodeHex(field.toCharArray)
-    case _ => throw new IOException("Unsupported data type.")
+  def toByteArray(field: String, dataType: DataType) = dataType match {
+    case BooleanType => Bytes.toBytes(field.toBoolean)
+    case ShortType => Bytes.toBytes(field.toShort)
+    case IntegerType => Bytes.toBytes(field.toInt)
+    case LongType => Bytes.toBytes(field.toLong)
+    case FloatType => Bytes.toBytes(field.toFloat)
+    case DoubleType => Bytes.toBytes(field.toDouble)
+    case StringType => Bytes.toBytes(field)
+    case BinaryType => Hex.decodeHex(field.toCharArray)
+    case _ => throw new IOException("Unsupported data type")
+  }
+
+  /**
+   * Convert field to bytes
+   * @param row from [[org.apache.spark.sql.SchemaRDD]]
+   * @param index index of field in row
+   * @param dataType the type of field
+   * @return
+   */
+  def toByteArray(row: Row, index: Int, dataType: DataType) = dataType match {
+    case BooleanType => Bytes.toBytes(row.getBoolean(index))
+    case ShortType => Bytes.toBytes(row.getShort(index))
+    case IntegerType => Bytes.toBytes(row.getInt(index))
+    case LongType => Bytes.toBytes(row.getLong(index))
+    case FloatType => Bytes.toBytes(row.getFloat(index))
+    case DoubleType => Bytes.toBytes(row.getDouble(index))
+    case StringType => Bytes.toBytes(row.getString(index))
+    case _ => throw new IOException("Unsupported data type")
   }
 
   /**
@@ -88,7 +109,29 @@ class SparkHBaseWriter(conf: HBaseConf)
 
       List.range(1, fields.size) foreach {
         i => put.add(columns(i - 1).family, columns(i - 1).qualifier,
-          toByteArray(fields(i), columns(i - 1).typ))
+          toByteArray(fields(i), columns(i - 1).dataType))
+      }
+
+      htable.put(put)
+    } else {
+      logWarning(s"Record ($record) is unacceptable.")
+    }
+  }
+
+  /**
+   * Convert a [[org.apache.spark.sql.Row]] record to [[org.apache.hadoop.hbase.client.Put]]
+   * and put it to HBase
+   * @param record
+   * @return
+   */
+  def write(record: Row) = {
+    // Check the format of record
+    if (record.length == columns.length + 1) {
+      val put = new Put(toByteArray(record, 0, rowkeyType))
+
+      List.range(1, record.length) foreach {
+        i => put.add(columns(i - 1).family, columns(i - 1).qualifier,
+          toByteArray(record, i, columns(i - 1).dataType))
       }
 
       htable.put(put)
@@ -106,27 +149,12 @@ class SparkHBaseWriter(conf: HBaseConf)
 }
 
 /**
- * Contains the types which supported to
- * parse from [[java.lang.String]] into [[scala.Array[Byte]]]
- */
-object HBaseType {
-  val Boolean = "bool"
-  val Short = "short"
-  val Int = "int"
-  val Long = "long"
-  val Float = "float"
-  val Double = "double"
-  val String = "string"
-  val Bytes = "bytes"
-}
-
-/**
  * A representation of HBase Column
  * @param family HBase Column Family
  * @param qualifier HBase Column Qualifier
- * @param typ type [[org.apache.spark.nosql.hbase.HBaseType]]
+ * @param dataType type [[org.apache.spark.sql.catalyst.types.DataType]]
  */
-class HBaseColumn(val family: Array[Byte], val qualifier: Array[Byte], val typ: String)
+class HBaseColumn(val family: Array[Byte], val qualifier: Array[Byte], val dataType: DataType)
   extends Serializable
 
 /**
@@ -136,11 +164,11 @@ class HBaseColumn(val family: Array[Byte], val qualifier: Array[Byte], val typ: 
  * @param zkPort the zookeeper client listening port. e.g. "2181"
  * @param zkNode the zookeeper znode of HBase. e.g. "hbase-apache"
  * @param table the name of table which we save records
- * @param rowkeyType the type of rowkey. [[org.apache.spark.nosql.hbase.HBaseType]]
+ * @param rowkeyType the type of rowkey. [[org.apache.spark.sql.catalyst.types.DataType]]
  * @param columns the column list. [[org.apache.spark.nosql.hbase.HBaseColumn]]
  * @param delimiter the delimiter which used to split record into fields
  */
 class HBaseConf(val zkHost: String, val zkPort: String, val zkNode: String,
-                val table: String, val rowkeyType: String, val columns: List[HBaseColumn],
+                val table: String, val rowkeyType: DataType, val columns: List[HBaseColumn],
                 val delimiter: Char)
   extends Serializable
