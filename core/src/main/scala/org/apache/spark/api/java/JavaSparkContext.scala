@@ -89,7 +89,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    */
   def this(master: String, appName: String, sparkHome: String, jars: Array[String],
       environment: JMap[String, String]) =
-    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment))
+    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment, Map()))
 
   private[spark] val env = sc.env
 

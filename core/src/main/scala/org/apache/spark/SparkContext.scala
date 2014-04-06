@@ -85,10 +85,6 @@ class SparkContext(config: SparkConf)
   def this(master: String, appName: String, conf: SparkConf) =
     this(SparkContext.updatedConf(conf, master, appName))
 
-  // NOTE: The below constructors could be consolidated using default arguments. Due to
-  // Scala bug SI-8479, however, this causes the compile step to fail when generating docs.
-  // Until we have a good workaround for that bug the constructors remain broken out.
-
   /**
    * Alternative constructor that allows setting common Spark properties directly
    *
@@ -111,14 +107,18 @@ class SparkContext(config: SparkConf)
     this.preferredNodeLocationData = preferredNodeLocationData
   }
 
+  // NOTE: The below constructors could be consolidated using default arguments. Due to
+  // Scala bug SI-8479, however, this causes the compile step to fail when generating docs.
+  // Until we have a good workaround for that bug the constructors remain broken out.
+
   /**
    * Alternative constructor that allows setting common Spark properties directly
    *
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI.
    */
-  def this(master: String, appName: String) =
-    this(master, appName, null, Nil, Map())
+  private[spark] def this(master: String, appName: String) =
+    this(master, appName, null, Nil, Map(), Map())
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -127,8 +127,8 @@ class SparkContext(config: SparkConf)
    * @param appName A name for your application, to display on the cluster web UI.
    * @param sparkHome Location where Spark is installed on cluster nodes.
    */
-  def this(master: String, appName: String, sparkHome: String) =
-    this(master, appName, sparkHome, Nil, Map())
+  private[spark] def this(master: String, appName: String, sparkHome: String) =
+    this(master, appName, sparkHome, Nil, Map(), Map())
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -139,8 +139,8 @@ class SparkContext(config: SparkConf)
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */
-  def this(master: String, appName: String, sparkHome: String, jars: Seq[String]) =
-    this(master, appName, sparkHome, jars, Map())
+  private[spark] def this(master: String, appName: String, sparkHome: String, jars: Seq[String]) =
+    this(master, appName, sparkHome, jars, Map(), Map())
 
   private[spark] val conf = config.clone()
 
