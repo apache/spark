@@ -82,6 +82,33 @@ class JavaSQLContext(sparkContext: JavaSparkContext) {
     new JavaSchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
   }
 
+  /**
+   * Applies a schema to an RDD of Array[Any]
+   */
+  def applySchema(rdd: JavaRDD[Array[Any]]): JavaSchemaRDD = {
+    val fields = rdd.first.map(_.getClass)
+    val schema = fields.zipWithIndex.map { case (klass, index) =>
+      val dataType = klass match {
+        case c: Class[_] if c == classOf[java.lang.String] => StringType
+        case c: Class[_] if c == java.lang.Short.TYPE => ShortType
+        case c: Class[_] if c == java.lang.Integer.TYPE => IntegerType
+        case c: Class[_] if c == java.lang.Long.TYPE => LongType
+        case c: Class[_] if c == java.lang.Double.TYPE => DoubleType
+        case c: Class[_] if c == java.lang.Byte.TYPE => ByteType
+        case c: Class[_] if c == java.lang.Float.TYPE => FloatType
+        case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
+      }
+
+      AttributeReference(index.toString, dataType, true)()
+    }
+
+    val rowRdd = rdd.rdd.mapPartitions { iter =>
+      iter.map { row =>
+        new GenericRow(row): ScalaRow
+      }
+    }
+    new JavaSchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
+  }
 
   /**
    * Loads a parquet file, returning the result as a [[JavaSchemaRDD]].
