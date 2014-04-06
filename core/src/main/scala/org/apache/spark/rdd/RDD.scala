@@ -662,6 +662,18 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Return an iterator that contains all of the elements in this RDD.
+   *
+   * In case of iterating it consumes memory as the biggest partition in cluster.
+   */
+  def toLocalIterator: Iterator[T] = {
+    def collectPartition(p: Int): Array[T] = {
+      sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p), allowLocal = false).head
+    }
+    (0 until partitions.length).iterator.flatMap(i => collectPartition(i))
+  }
+
+  /**
    * Return an array that contains all of the elements in this RDD.
    */
   @deprecated("use collect", "1.0.0")
