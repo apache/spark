@@ -82,10 +82,8 @@ private[sql] case class ParquetRelation(val path: String)
 private[sql] object ParquetRelation {
 
   def enableLogForwarding() {
-    // Note: Parquet does not use forwarding to parent loggers which
-    // is required for the JUL-SLF4J bridge to work. Also there is
-    // a default logger that appends to Console which needs to be
-    // reset.
+    // Note: Logger.getLogger("parquet") has a default logger
+    // that appends to Console which needs to be cleared.
     val parquetLogger = java.util.logging.Logger.getLogger("parquet")
     parquetLogger.getHandlers.foreach(parquetLogger.removeHandler)
     if(parquetLogger.getLevel != null) parquetLogger.setLevel(null)
