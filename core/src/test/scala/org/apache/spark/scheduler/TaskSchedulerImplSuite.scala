@@ -157,6 +157,19 @@ class TaskSchedulerImplSuite extends FunSuite with BeforeAndAfter with EasyMockS
     }
   }
 
+  test("basic resourceOffer test") {
+    val taskSet1 = FakeTask.createTaskSet(1, 0, 0)
+    val rootPool = new Pool("", SchedulingMode.FIFO, 0, 0)
+    val schedulableBuilder = new FIFOSchedulableBuilder(rootPool)
+    schedulableBuilder.buildPools()
+    taskScheduler.rootPool = rootPool
+    taskScheduler.schedulableBuilder = schedulableBuilder
+
+    val taskSetManager0 = createDummyTaskSetManager(0, 0, 1, taskScheduler, taskSet1)
+    schedulableBuilder.addTaskSetManager(taskSetManager0, null)
+    checkTaskSetIds(generateWorkerOffers(1), Seq[String]("0.0"))
+  }
+
   test("FIFO Scheduler Test") {
     val taskSet1 = FakeTask.createTaskSet(1, 0, 0)
     val taskSet2 = FakeTask.createTaskSet(1, 1, 0)
