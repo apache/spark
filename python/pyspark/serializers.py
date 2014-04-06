@@ -64,6 +64,7 @@ import cPickle
 from itertools import chain, izip, product
 import marshal
 import struct
+import sys
 from pyspark import cloudpickle
 
 
@@ -113,6 +114,11 @@ class FramedSerializer(Serializer):
     where C{length} is a 32-bit integer and data is C{length} bytes.
     """
 
+    def __init__(self):
+        # On Python 2.6, we can't write bytearrays to streams, so we need to convert them
+        # to strings first. Check if the version number is that old.
+        self._only_write_strings = sys.version_info[0:2] <= (2, 6)
+
     def dump_stream(self, iterator, stream):
         for obj in iterator:
             self._write_with_length(obj, stream)
@@ -127,7 +133,10 @@ class FramedSerializer(Serializer):
     def _write_with_length(self, obj, stream):
         serialized = self.dumps(obj)
         write_int(len(serialized), stream)
-        stream.write(serialized)
+        if self._only_write_strings:
+            stream.write(str(serialized))
+        else:
+            stream.write(serialized)
 
     def _read_with_length(self, stream):
         length = read_int(stream)
