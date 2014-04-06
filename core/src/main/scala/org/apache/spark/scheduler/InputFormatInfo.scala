@@ -30,6 +30,7 @@ import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
 
 /**
+ * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
  * Parses and holds information about inputFormat (and files) specified as a parameter.
  */
 class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Class[_],
