@@ -58,7 +58,7 @@ else
 fi
 
 # When Hive support is needed, Datanucleus jars must be included on the classpath.
-# Datanucleus jars do not work if only included in the  uberjar as plugin.xml metadata is lost.
+# Datanucleus jars do not work if only included in the  uber jar as plugin.xml metadata is lost.
 # Both sbt and maven will populate "lib_managed/jars/" with the datanucleus jars when Spark is
 # built with Hive, so first check if the datanucleus jars exist, and then ensure the current Spark
 # assembly is built for Hive, before actually populating the CLASSPATH with the jars.
@@ -66,7 +66,7 @@ fi
 num_datanucleus_jars=$(ls "$FWDIR"/lib_managed/jars/ | grep "datanucleus-.*\\.jar" | wc -l)
 if [ $num_datanucleus_jars -gt 0 ]; then
   AN_ASSEMBLY_JAR=${ASSEMBLY_JAR:-$DEPS_ASSEMBLY_JAR}
-  num_hive_files=$(jar tvf  "$AN_ASSEMBLY_JAR" org/apache/hadoop/hive/ql/exec 2>/dev/null | wc -l)
+  num_hive_files=$(jar tvf "$AN_ASSEMBLY_JAR" org/apache/hadoop/hive/ql/exec 2>/dev/null | wc -l)
   if [ $num_hive_files -gt 0 ]; then
     echo "Spark assembly has been built with Hive, including Datanucleus jars on classpath" 1>&2
     DATANUCLEUSJARS=$(echo "$FWDIR/lib_managed/jars"/datanucleus-*.jar | tr " " :)
