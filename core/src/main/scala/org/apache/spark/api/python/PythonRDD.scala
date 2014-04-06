@@ -25,7 +25,7 @@ import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collectio
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
-import net.razorvine.pickle.Unpickler
+import net.razorvine.pickle.{Pickler, Unpickler}
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
@@ -291,6 +291,15 @@ private[spark] object PythonRDD {
       val unpickle = new Unpickler
       iter.map { row =>
         unpickle.loads(row)
+      }
+    }
+  }
+
+  def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
+    jRDD.rdd.mapPartitions { iter =>
+      val unpickle = new Pickler
+      iter.map { row =>
+        unpickle.dumps(row)
       }
     }
   }
