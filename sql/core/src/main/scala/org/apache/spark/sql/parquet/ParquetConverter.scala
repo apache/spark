@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Row, Attribute}
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
 
-object CatalystConverter {
+private[parquet] object CatalystConverter {
   // The type internally used for fields
   type FieldType = StructField
 
@@ -55,11 +55,14 @@ object CatalystConverter {
       }
       case ctype: NativeType => {
         // note: for some reason matching for StringType fails so use this ugly if instead
-        if (ctype == StringType) new CatalystPrimitiveStringConverter(parent, fieldIndex)
-        else new CatalystPrimitiveConverter(parent, fieldIndex)
+        if (ctype == StringType) {
+          new CatalystPrimitiveStringConverter(parent, fieldIndex)
+        } else {
+          new CatalystPrimitiveConverter(parent, fieldIndex)
+        }
       }
       case _ => throw new RuntimeException(
-        s"unable to convert datatype ${field.dataType.toString} in CatalystGroupConverter")
+        s"unable to convert datatype ${field.dataType.toString} in CatalystConverter")
     }
   }
 }
@@ -142,9 +145,7 @@ class CatalystGroupConverter(
   def getCurrentRecord: Row = {
     assert(isRootConverter, "getCurrentRecord should only be called in root group converter!")
     // TODO: use iterators if possible
-    new GenericRow {
-      override val values: Array[Any] = current.toArray
-    }
+    new GenericRow(current.toArray)
   }
 
   override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
@@ -174,13 +175,9 @@ class CatalystGroupConverter(
   override def end(): Unit = {
     if (!isRootConverter) {
       assert(current!=null) // there should be no empty groups
-      buffer.append(new GenericRow {
-        override val values: Array[Any] = current.toArray
-      })
+      buffer.append(new GenericRow(current.toArray))
       // TODO: use iterators if possible, avoid Row wrapping
-      parent.updateField(index, new GenericRow {
-        override val values: Array[Any] = buffer.toArray
-      })
+      parent.updateField(index, new GenericRow(buffer.toArray.asInstanceOf[Array[Any]]))
     }
   }
 }
@@ -283,9 +280,7 @@ class CatalystArrayConverter(
   override def end(): Unit = {
     assert(parent != null)
     // TODO: use iterators if possible, avoid Row wrapping
-    parent.updateField(index, new GenericRow {
-      override val values: Array[Any] = buffer.toArray
-    })
+    parent.updateField(index, new GenericRow(buffer.toArray))
     clearBuffer()
   }
 }
@@ -304,9 +299,7 @@ class CatalystStructConverter(
   override def end(): Unit = {
     assert(!isRootConverter)
     // TODO: use iterators if possible, avoid Row wrapping!
-    parent.updateField(index, new GenericRow {
-      override val values: Array[Any] = current.toArray
-    })
+    parent.updateField(index, new GenericRow(current.toArray))
   }
 }
 

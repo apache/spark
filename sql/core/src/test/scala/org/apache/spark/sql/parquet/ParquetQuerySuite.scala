@@ -205,8 +205,26 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     Utils.deleteRecursively(file)
   }
 
-  test("insert (appending) to same table via Scala API") {
-    sql("INSERT INTO testsource SELECT * FROM testsource")
+  test("Insert (overwrite) via Scala API") {
+    val dirname = Utils.createTempDir()
+    val source_rdd = TestSQLContext.sparkContext.parallelize((1 to 100))
+      .map(i => TestRDDEntry(i, s"val_$i"))
+    source_rdd.registerAsTable("source")
+    val dest_rdd = createParquetFile(dirname.toString, ("key", IntegerType), ("value", StringType))
+    dest_rdd.registerAsTable("dest")
+    sql("INSERT OVERWRITE INTO dest SELECT * FROM source").collect()
+    val rdd_copy1 = sql("SELECT * FROM dest").collect()
+    assert(rdd_copy1.size === 100)
+    assert(rdd_copy1(0).apply(0) === 1)
+    assert(rdd_copy1(0).apply(1) === "val_1")
+    sql("INSERT INTO dest SELECT * FROM source").collect()
+    val rdd_copy2 = sql("SELECT * FROM dest").collect()
+    assert(rdd_copy2.size === 200)
+    Utils.deleteRecursively(dirname)
+  }
+
+  test("Insert (appending) to same table via Scala API") {
+    sql("INSERT INTO testsource SELECT * FROM testsource").collect()
     val double_rdd = sql("SELECT * FROM testsource").collect()
     assert(double_rdd != null)
     assert(double_rdd.size === 30)
@@ -372,9 +390,12 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   test("Importing nested Parquet file (Addressbook)") {
     implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
     ParquetTestData.readNestedFile(
-      ParquetTestData.testNestedFile1,
+      ParquetTestData.testNestedDir1,
       ParquetTestData.testNestedSchema1)
-    val result = getRDD(ParquetTestData.testNestedData1).collect()
+    val result = TestSQLContext
+      .parquetFile(ParquetTestData.testNestedDir1.toString)
+      .toSchemaRDD
+      .collect()
     assert(result != null)
     assert(result.size === 2)
     val first_record = result(0)
@@ -397,9 +418,12 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   test("Importing nested Parquet file (nested numbers)") {
     implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
     ParquetTestData.readNestedFile(
-      ParquetTestData.testNestedFile2,
+      ParquetTestData.testNestedDir2,
       ParquetTestData.testNestedSchema2)
-    val result = getRDD(ParquetTestData.testNestedData2).collect()
+    val result = TestSQLContext
+      .parquetFile(ParquetTestData.testNestedDir2.toString)
+      .toSchemaRDD
+      .collect()
     assert(result.size === 1, "number of top-level rows incorrect")
     assert(result(0).size === 5, "number of fields in row incorrect")
     assert(result(0)(0) === 1)
@@ -420,7 +444,9 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Simple query on addressbook") {
-    val data = TestSQLContext.parquetFile(ParquetTestData.testNestedFile1.toString).toSchemaRDD
+    val data = TestSQLContext
+      .parquetFile(ParquetTestData.testNestedDir1.toString)
+      .toSchemaRDD
     val tmp = data.where('owner === "Julien Le Dem").select('owner as 'a, 'contacts as 'c).collect()
     assert(tmp.size === 1)
     assert(tmp(0)(0) === "Julien Le Dem")
@@ -428,7 +454,9 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
 
   test("Simple query on nested int data") {
     implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
-    val data = TestSQLContext.parquetFile(ParquetTestData.testNestedFile2.toString).toSchemaRDD
+    val data = TestSQLContext
+      .parquetFile(ParquetTestData.testNestedDir2.toString)
+      .toSchemaRDD
     data.registerAsTable("data")
     val tmp = sql("SELECT booleanNumberPairs.value, booleanNumberPairs.truth FROM data").collect()
     assert(tmp(0)(0) === 2.5)
