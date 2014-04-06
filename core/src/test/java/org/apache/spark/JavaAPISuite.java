@@ -22,6 +22,7 @@ import java.util.*;
 
 import scala.Tuple2;
 
+import com.google.common.collect.Lists;
 import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
@@ -178,6 +179,14 @@ public class JavaAPISuite implements Serializable {
     });
     Assert.assertEquals(2, foreachCalls);
   }
+
+    @Test
+    public void toLocalIterator() {
+        List<Integer> correct = Arrays.asList(1, 2, 3, 4);
+        JavaRDD<Integer> rdd = sc.parallelize(correct);
+        List<Integer> result = Lists.newArrayList(rdd.toLocalIterator());
+        Assert.assertTrue(correct.equals(result));
+    }
 
   @SuppressWarnings("unchecked")
   @Test
