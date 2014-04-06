@@ -24,27 +24,33 @@ from pyspark.serializers import Serializer
 
 # Dense double vector format:
 #
-# [8-byte 1] [8-byte length] [length*8 bytes of data]
+# [1-byte 1] [4-byte length] [length*8 bytes of data]
 #
 # Sparse double vector format:
 #
-# [8-byte 2] [8-byte size] [8-byte entries] [entries*4 bytes of indices] [entries*8 bytes of values]
+# [1-byte 2] [4-byte length] [4-byte nonzeros] [nonzeros*4 bytes of indices] [nonzeros*8 bytes of values]
 #
 # Double matrix format:
 #
-# [8-byte 3] [8-byte rows] [8-byte cols] [rows*cols*8 bytes of data]
+# [1-byte 3] [4-byte rows] [4-byte cols] [rows*cols*8 bytes of data]
 #
 # This is all in machine-endian.  That means that the Java interpreter and the
 # Python interpreter must agree on what endian the machine is.
 
-def _deserialize_byte_array(shape, ba, offset):
-    """Wrapper around ndarray aliasing hack.
+DENSE_VECTOR_MAGIC = 1
+SPARSE_VECTOR_MAGIC = 2
+DENSE_MATRIX_MAGIC = 3
+
+def _deserialize_numpy_array(shape, ba, offset):
+    """
+    Deserialize a numpy array of float64s from a given offset in
+    bytearray ba, assigning it the given shape.
 
     >>> x = array([1.0, 2.0, 3.0, 4.0, 5.0])
-    >>> array_equal(x, _deserialize_byte_array(x.shape, x.data, 0))
+    >>> array_equal(x, _deserialize_numpy_array(x.shape, x.data, 0))
     True
     >>> x = array([1.0, 2.0, 3.0, 4.0]).reshape(2,2)
-    >>> array_equal(x, _deserialize_byte_array(x.shape, x.data, 0))
+    >>> array_equal(x, _deserialize_numpy_array(x.shape, x.data, 0))
     True
     """
     ar = ndarray(shape=shape, buffer=ba, offset=offset, dtype="float64", order='C')
@@ -71,7 +77,7 @@ def _serialize_double_vector(v):
         v = v.astype('float64')
     length = v.shape[0]
     ba = bytearray(5 + 8 * length)
-    ba[0] = 1
+    ba[0] = DENSE_VECTOR_MAGIC
     length_bytes = ndarray(shape=[1], buffer=ba, offset=1, dtype="int32")
     length_bytes[0] = length
     arr_mid = ndarray(shape=[length], buffer=ba, offset=5, dtype="float64")
@@ -91,14 +97,14 @@ def _deserialize_double_vector(ba):
     if len(ba) < 5:
         raise TypeError("_deserialize_double_vector called on a %d-byte array, "
                 "which is too short" % len(ba))
-    if ba[0] != 1:
+    if ba[0] != DENSE_VECTOR_MAGIC:
         raise TypeError("_deserialize_double_vector called on bytearray "
                         "with wrong magic")
     length = ndarray(shape=[1], buffer=ba, offset=1, dtype="int32")[0]
     if len(ba) != 8*length + 5:
         raise TypeError("_deserialize_double_vector called on bytearray "
                         "with wrong length")
-    return _deserialize_byte_array([length], ba, 5)
+    return _deserialize_numpy_array([length], ba, 5)
 
 def _serialize_double_matrix(m):
     """Serialize a double matrix into a mutually understood format."""
@@ -111,7 +117,7 @@ def _serialize_double_matrix(m):
         rows = m.shape[0]
         cols = m.shape[1]
         ba = bytearray(9 + 8 * rows * cols)
-        ba[0] = 2
+        ba[0] = DENSE_MATRIX_MAGIC
         lengths = ndarray(shape=[3], buffer=ba, offset=1, dtype="int32")
         lengths[0] = rows
         lengths[1] = cols
@@ -130,7 +136,7 @@ def _deserialize_double_matrix(ba):
     if len(ba) < 9:
         raise TypeError("_deserialize_double_matrix called on a %d-byte array, "
                 "which is too short" % len(ba))
-    if ba[0] != 2:
+    if ba[0] != DENSE_MATRIX_MAGIC:
         raise TypeError("_deserialize_double_matrix called on bytearray "
                         "with wrong magic")
     lengths = ndarray(shape=[2], buffer=ba, offset=1, dtype="int32")
@@ -139,7 +145,7 @@ def _deserialize_double_matrix(ba):
     if (len(ba) != 8 * rows * cols + 9):
         raise TypeError("_deserialize_double_matrix called on bytearray "
                         "with wrong length")
-    return _deserialize_byte_array([rows, cols], ba, 9)
+    return _deserialize_numpy_array([rows, cols], ba, 9)
 
 def _linear_predictor_typecheck(x, coeffs):
     """Check that x is a one-dimensional vector of the right shape.

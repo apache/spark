@@ -36,6 +36,10 @@ import org.apache.spark.rdd.RDD
  */
 @DeveloperApi
 class PythonMLLibAPI extends Serializable {
+  private val DENSE_VECTOR_MAGIC = 1
+  private val SPARSE_VECTOR_MAGIC = 2
+  private val DENSE_MATRIX_MAGIC = 3
+  
   private def deserializeDoubleVector(bytes: Array[Byte]): Array[Double] = {
     val packetLength = bytes.length
     if (packetLength < 5) {
@@ -44,7 +48,7 @@ class PythonMLLibAPI extends Serializable {
     val bb = ByteBuffer.wrap(bytes)
     bb.order(ByteOrder.nativeOrder())
     val magic = bb.get()
-    if (magic != 1) {
+    if (magic != DENSE_VECTOR_MAGIC) {
       throw new IllegalArgumentException("Magic " + magic + " is wrong.")
     }
     val length = bb.getInt()
@@ -77,7 +81,7 @@ class PythonMLLibAPI extends Serializable {
     val bb = ByteBuffer.wrap(bytes)
     bb.order(ByteOrder.nativeOrder())
     val magic = bb.get()
-    if (magic != 2) {
+    if (magic != DENSE_MATRIX_MAGIC) {
       throw new IllegalArgumentException("Magic " + magic + " is wrong.")
     }
     val rows = bb.getInt()
