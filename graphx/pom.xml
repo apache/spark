@@ -54,7 +54,7 @@
     <dependency>
       <groupId>org.jblas</groupId>
       <artifactId>jblas</artifactId>
-      <version>1.2.3</version>
+      <version>${jblas.version}</version>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
