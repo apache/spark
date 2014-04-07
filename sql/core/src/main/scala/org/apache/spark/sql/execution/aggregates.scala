@@ -100,14 +100,14 @@ case class Aggregate(
       rows.foreach { row =>
         aggFunctions.foreach(_.update(row))
       }
-      buildRow(aggImplementations.map(_.apply(group)))
+      buildRow(aggImplementations.map(_.eval(group)))
     }
 
     // TODO: THIS BREAKS PIPELINING, DOUBLE COMPUTES THE ANSWER, AND USES TOO MUCH MEMORY...
     if (groupingExpressions.isEmpty && result.count == 0) {
       // When there there is no output to the Aggregate operator, we still output an empty row.
       val aggImplementations = createAggregateImplementations()
-      sc.makeRDD(buildRow(aggImplementations.map(_.apply(null))) :: Nil)
+      sc.makeRDD(buildRow(aggImplementations.map(_.eval(null))) :: Nil)
     } else {
       result
     }

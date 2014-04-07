@@ -72,7 +72,7 @@ abstract class AggregateFunction
   def dataType = base.dataType
 
   def update(input: Row): Unit
-  override def apply(input: Row): Any
+  override def eval(input: Row): Any
 
   // Do we really need this?
   def newInstance = makeCopy(productIterator.map { case a: AnyRef => a }.toArray)
@@ -169,15 +169,15 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
   def this() = this(null, null) // Required for serialization.
 
   private var count: Long = _
-  private val sum = MutableLiteral(Cast(Literal(0), expr.dataType).apply(EmptyRow))
+  private val sum = MutableLiteral(Cast(Literal(0), expr.dataType).eval(EmptyRow))
   private val sumAsDouble = Cast(sum, DoubleType)
 
 
 
   private val addFunction = Add(sum, expr)
 
-  override def apply(input: Row): Any =
-    sumAsDouble.apply(EmptyRow).asInstanceOf[Double] / count.toDouble
+  override def eval(input: Row): Any =
+    sumAsDouble.eval(EmptyRow).asInstanceOf[Double] / count.toDouble
 
   def update(input: Row): Unit = {
     count += 1
@@ -191,19 +191,19 @@ case class CountFunction(expr: Expression, base: AggregateExpression) extends Ag
   var count: Int = _
 
   def update(input: Row): Unit = {
-    val evaluatedExpr = expr.map(_.apply(input))
+    val evaluatedExpr = expr.map(_.eval(input))
     if (evaluatedExpr.map(_ != null).reduceLeft(_ || _)) {
       count += 1
     }
   }
 
-  override def apply(input: Row): Any = count
+  override def eval(input: Row): Any = count
 }
 
 case class SumFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
-  private val sum = MutableLiteral(Cast(Literal(0), expr.dataType).apply(null))
+  private val sum = MutableLiteral(Cast(Literal(0), expr.dataType).eval(null))
 
   private val addFunction = Add(sum, expr)
 
@@ -211,7 +211,7 @@ case class SumFunction(expr: Expression, base: AggregateExpression) extends Aggr
     sum.update(addFunction, input)
   }
 
-  override def apply(input: Row): Any = sum.apply(null)
+  override def eval(input: Row): Any = sum.eval(null)
 }
 
 case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
@@ -222,13 +222,13 @@ case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
   val seen = new scala.collection.mutable.HashSet[Any]()
 
   def update(input: Row): Unit = {
-    val evaluatedExpr = expr.apply(input)
+    val evaluatedExpr = expr.eval(input)
     if (evaluatedExpr != null) {
       seen += evaluatedExpr
     }
   }
 
-  override def apply(input: Row): Any =
+  override def eval(input: Row): Any =
     seen.reduceLeft(base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)
 }
 
@@ -240,13 +240,13 @@ case class CountDistinctFunction(expr: Seq[Expression], base: AggregateExpressio
   val seen = new scala.collection.mutable.HashSet[Any]()
 
   def update(input: Row): Unit = {
-    val evaluatedExpr = expr.map(_.apply(input))
+    val evaluatedExpr = expr.map(_.eval(input))
     if (evaluatedExpr.map(_ != null).reduceLeft(_ && _)) {
       seen += evaluatedExpr
     }
   }
 
-  override def apply(input: Row): Any = seen.size
+  override def eval(input: Row): Any = seen.size
 }
 
 case class FirstFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
@@ -256,9 +256,9 @@ case class FirstFunction(expr: Expression, base: AggregateExpression) extends Ag
 
   def update(input: Row): Unit = {
     if (result == null) {
-      result = expr.apply(input)
+      result = expr.eval(input)
     }
   }
 
-  override def apply(input: Row): Any = result
+  override def eval(input: Row): Any = result
 }

@@ -50,7 +50,7 @@ abstract class Expression extends TreeNode[Expression] {
   def references: Set[Attribute]
 
   /** Returns the result of evaluating this expression on a given input Row */
-  def apply(input: Row = null): EvaluatedType =
+  def eval(input: Row = null): EvaluatedType =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   /**
@@ -73,7 +73,7 @@ abstract class Expression extends TreeNode[Expression] {
    */
   @inline
   def n1(e: Expression, i: Row, f: ((Numeric[Any], Any) => Any)): Any  = {
-    val evalE = e.apply(i)
+    val evalE = e.eval(i)
     if (evalE == null) {
       null
     } else {
@@ -102,11 +102,11 @@ abstract class Expression extends TreeNode[Expression] {
       throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
     }
 
-    val evalE1 = e1.apply(i)
+    val evalE1 = e1.eval(i)
     if(evalE1 == null) {
       null
     } else {
-      val evalE2 = e2.apply(i)
+      val evalE2 = e2.eval(i)
       if (evalE2 == null) {
         null
       } else {
@@ -135,11 +135,11 @@ abstract class Expression extends TreeNode[Expression] {
       throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
     }
 
-    val evalE1 = e1.apply(i: Row)
+    val evalE1 = e1.eval(i: Row)
     if(evalE1 == null) {
       null
     } else {
-      val evalE2 = e2.apply(i: Row)
+      val evalE2 = e2.eval(i: Row)
       if (evalE2 == null) {
         null
       } else {
@@ -168,11 +168,11 @@ abstract class Expression extends TreeNode[Expression] {
       throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
     }
 
-    val evalE1 = e1.apply(i)
+    val evalE1 = e1.eval(i)
     if(evalE1 == null) {
       null
     } else {
-      val evalE2 = e2.apply(i)
+      val evalE2 = e2.eval(i)
       if (evalE2 == null) {
         null
       } else {
@@ -205,11 +205,11 @@ abstract class Expression extends TreeNode[Expression] {
       throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
     }
 
-    val evalE1 = e1.apply(i)
+    val evalE1 = e1.eval(i)
     if(evalE1 == null) {
       null
     } else {
-      val evalE2 = e2.apply(i)
+      val evalE2 = e2.eval(i)
       if (evalE2 == null) {
         null
       } else {

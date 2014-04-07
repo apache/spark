@@ -185,8 +185,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     case DoubleType => castToDouble
   }
 
-  override def apply(input: Row): Any = {
-    val evaluated = child.apply(input)
+  override def eval(input: Row): Any = {
+    val evaluated = child.eval(input)
     if (evaluated == null) {
       null
     } else {

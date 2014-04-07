@@ -45,7 +45,7 @@ case class BoundReference(ordinal: Int, baseReference: Attribute)
 
   override def toString = s"$baseReference:$ordinal"
 
-  override def apply(input: Row): Any = input(ordinal)
+  override def eval(input: Row): Any = input(ordinal)
 }
 
 class BindReferences[TreeNode <: QueryPlan[TreeNode]] extends Rule[TreeNode] {

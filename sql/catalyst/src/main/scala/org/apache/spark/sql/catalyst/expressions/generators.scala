@@ -103,10 +103,10 @@ case class Explode(attributeNames: Seq[String], child: Expression)
   override def apply(input: Row): TraversableOnce[Row] = {
     child.dataType match {
       case ArrayType(_) =>
-        val inputArray = child.apply(input).asInstanceOf[Seq[Any]]
+        val inputArray = child.eval(input).asInstanceOf[Seq[Any]]
         if (inputArray == null) Nil else inputArray.map(v => new GenericRow(Array(v)))
       case MapType(_, _) =>
-        val inputMap = child.apply(input).asInstanceOf[Map[Any,Any]]
+        val inputMap = child.eval(input).asInstanceOf[Map[Any,Any]]
         if (inputMap == null) Nil else inputMap.map { case (k,v) => new GenericRow(Array(k,v)) }
     }
   }
