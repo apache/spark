@@ -13,10 +13,8 @@ iterations <- as.integer(args[[3]])
 D <- 10
 
 readPartition <- function(part) {
-  m <- t(sapply(part, function(line) {
-    as.numeric(strsplit(line, " ")[[1]])
-  }))
-}
+	con = textConnection(part, "r")
+	list(as.matrix(read.table(con)))}
 
 # Read data points and convert each partition to a matrix
 points <- cache(lapplyPartition(textFile(sc, args[[2]]), readPartition))
@@ -27,6 +25,7 @@ cat("Initial w: ", w, "\n")
 
 # Compute logistic regression gradient for a matrix of data points
 gradient <- function(partition) {
+  partition = partition[[1]]
   Y <- partition[, 1]  # point labels (first column of input file)
   X <- partition[, -1] # point coordinates
 
