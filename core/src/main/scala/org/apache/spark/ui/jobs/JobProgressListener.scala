@@ -83,7 +83,6 @@ private[ui] class JobProgressListener(conf: SparkConf) extends SparkListener {
     if (stages.size > retainedStages) {
       val toRemove = math.max(retainedStages / 10, 1)
       stages.take(toRemove).foreach { s =>
-        stageIdToTaskData.remove(s.stageId)
         stageIdToTime.remove(s.stageId)
         stageIdToShuffleRead.remove(s.stageId)
         stageIdToShuffleWrite.remove(s.stageId)
@@ -92,8 +91,10 @@ private[ui] class JobProgressListener(conf: SparkConf) extends SparkListener {
         stageIdToTasksActive.remove(s.stageId)
         stageIdToTasksComplete.remove(s.stageId)
         stageIdToTasksFailed.remove(s.stageId)
+        stageIdToTaskData.remove(s.stageId)
+        stageIdToExecutorSummaries.remove(s.stageId)
         stageIdToPool.remove(s.stageId)
-        if (stageIdToDescription.contains(s.stageId)) {stageIdToDescription.remove(s.stageId)}
+        stageIdToDescription.remove(s.stageId)
       }
       stages.trimStart(toRemove)
     }
