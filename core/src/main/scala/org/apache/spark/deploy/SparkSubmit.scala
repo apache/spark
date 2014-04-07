@@ -20,7 +20,7 @@ package org.apache.spark.deploy
 import java.io.{PrintStream, File}
 import java.net.URL
 
-import org.apache.spark.executor.ExecutorURLClassLoader
+import org.apache.spark.util.SparkURLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
@@ -195,7 +195,7 @@ object SparkSubmit {
       System.err.println("\n")
     }
 
-    val loader = new ExecutorURLClassLoader(new Array[URL](0),
+    val loader = new SparkURLClassLoader(new Array[URL](0),
       Thread.currentThread.getContextClassLoader)
     Thread.currentThread.setContextClassLoader(loader)
 
@@ -212,7 +212,7 @@ object SparkSubmit {
     mainMethod.invoke(null, childArgs.toArray)
   }
 
-  private def addJarToClasspath(localJar: String, loader: ExecutorURLClassLoader) {
+  private def addJarToClasspath(localJar: String, loader: SparkURLClassLoader) {
     val localJarFile = new File(localJar)
     if (!localJarFile.exists()) {
       printWarning(s"Jar $localJar does not exist, skipping.")
