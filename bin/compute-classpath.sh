@@ -33,7 +33,7 @@ CLASSPATH="$SPARK_CLASSPATH:$FWDIR/conf"
 ASSEMBLY_DIR="$FWDIR/assembly/target/scala-$SCALA_VERSION"
 
 # First check if we have a dependencies jar. If so, include binary classes with the deps jar
-if [ -f "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar ]; then
+if [ -f "$ASSEMBLY_DIR"/spark*-assembly*hadoop*-deps.jar ]; then
   CLASSPATH="$CLASSPATH:$FWDIR/core/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/repl/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/mllib/target/scala-$SCALA_VERSION/classes"
