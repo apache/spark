@@ -85,7 +85,7 @@ private[spark] abstract class WebUI(securityManager: SecurityManager, basePath: 
     }
   }
 
-  /** Initialize all components of the server. Must be called before bind(). */
+  /** Initialize all components of the server. */
   def start()
 
   /**
