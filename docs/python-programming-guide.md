@@ -82,15 +82,16 @@ The Python shell can be used explore data interactively and is a simple way to l
 >>> help(pyspark) # Show all pyspark functions
 {% endhighlight %}
 
-By default, the `bin/pyspark` shell creates SparkContext that runs applications locally on a single core.
-To connect to a non-local cluster, or use multiple cores, set the `MASTER` environment variable.
+By default, the `bin/pyspark` shell creates SparkContext that runs applications locally on all of
+your machine's logical cores.
+To connect to a non-local cluster, or to specify a number of cores, set the `MASTER` environment variable.
 For example, to use the `bin/pyspark` shell with a [standalone Spark cluster](spark-standalone.html):
 
 {% highlight bash %}
 $ MASTER=spark://IP:PORT ./bin/pyspark
 {% endhighlight %}
 
-Or, to use four cores on the local machine:
+Or, to use exactly four cores on the local machine:
 
 {% highlight bash %}
 $ MASTER=local[4] ./bin/pyspark
