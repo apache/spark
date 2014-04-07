@@ -258,7 +258,7 @@ def _get_initial_weights(initial_weights, data):
                         + initial_weights.ndim + " dimensions, which is not 1")
             initial_weights = numpy.ones([initial_weights.shape[0] - 1])
         elif type(initial_weights) == SparseVector:
-            initial_weights = numpy.ones(initial_weights.size - 1)
+            initial_weights = numpy.ones([initial_weights.size - 1])
         else:
             raise TypeError("At least one data element has type "
                     + type(initial_weights).__name__ + " which is not a vector")
@@ -309,6 +309,31 @@ def _serialize_tuple(t):
     intpart = ndarray(shape=[2], buffer=ba, dtype=int32)
     intpart[0], intpart[1] = t
     return ba
+
+def _squared_distance(v1, v2):
+    """
+    Squared distance of two NumPy or sparse vectors.
+
+    >>> dense1 = array([1., 2.])
+    >>> sparse1 = SparseVector(2, [0, 1], [1., 2.])
+    >>> dense2 = array([2., 1.])
+    >>> sparse2 = SparseVector(2, [0, 1], [2., 1.])
+    >>> _squared_distance(dense1, dense2)
+    2.0
+    >>> _squared_distance(dense1, sparse2)
+    2.0
+    >>> _squared_distance(sparse1, dense2)
+    2.0
+    >>> _squared_distance(sparse1, sparse2)
+    2.0
+    """
+    if type(v1) == ndarray and type(v2) == ndarray:
+        diff = v1 - v2
+        return diff.dot(diff)
+    elif type(v1) == ndarray:
+        return v2.squared_distance(v1)
+    else:
+        return v1.squared_distance(v2)
 
 def _test():
     import doctest

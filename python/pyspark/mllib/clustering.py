@@ -19,10 +19,11 @@ from numpy import array, dot
 from math import sqrt
 from pyspark import SparkContext
 from pyspark.mllib._common import \
-    _get_unmangled_rdd, _get_unmangled_double_vector_rdd, \
+    _get_unmangled_rdd, _get_unmangled_double_vector_rdd, _squared_distance, \
     _serialize_double_matrix, _deserialize_double_matrix, \
     _serialize_double_vector, _deserialize_double_vector, \
     _get_initial_weights, _serialize_rating, _regression_train_wrapper
+from pyspark.mllib.linalg import SparseVector
 
 class KMeansModel(object):
     """A clustering model derived from the k-means method.
@@ -34,6 +35,21 @@ class KMeansModel(object):
     >>> clusters.predict(array([8.0, 9.0])) == clusters.predict(array([9.0, 8.0]))
     True
     >>> clusters = KMeans.train(sc.parallelize(data), 2)
+    >>> sparse_data = [
+    ...     SparseVector(3, [0, 1], [0.0, 1.0]),
+    ...     SparseVector(3, [0, 1], [0.0, 1.1]),
+    ...     SparseVector(3, [0, 2], [0.0, 1.0]),
+    ...     SparseVector(3, [0, 2], [0.0, 1.1])
+    ... ]
+    >>> clusters = KMeans.train(sc.parallelize(sparse_data), 2, initializationMode="k-means||")
+    >>> clusters.predict(array([0., 1., 0.])) == clusters.predict(array([0, 1.1, 0.]))
+    True
+    >>> clusters.predict(array([0., 0., 1.])) == clusters.predict(array([0, 0, 1.1]))
+    True
+    >>> clusters.predict(sparse_data[0]) == clusters.predict(sparse_data[1])
+    True
+    >>> clusters.predict(sparse_data[2]) == clusters.predict(sparse_data[3])
+    True
     """
     def __init__(self, centers_):
         self.centers = centers_
@@ -43,8 +59,7 @@ class KMeansModel(object):
         best = 0
         best_distance = 1e75
         for i in range(0, self.centers.shape[0]):
-            diff = x - self.centers[i]
-            distance = sqrt(dot(diff, diff))
+            distance = _squared_distance(x, self.centers[i])
             if distance < best_distance:
                 best = i
                 best_distance = distance

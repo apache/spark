@@ -50,6 +50,8 @@ class LogisticRegressionModel(LinearModel):
     True
     >>> lrm.predict(SparseVector(2, [1], [1.0])) > 0
     True
+    >>> lrm.predict(SparseVector(2, [1], [0.0])) <= 0
+    True
     """
     def predict(self, x):
         _linear_predictor_typecheck(x, self._coeff)
@@ -74,6 +76,17 @@ class SVMModel(LinearModel):
     >>> data = array([0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0, 3.0]).reshape(4,2)
     >>> svm = SVMWithSGD.train(sc.parallelize(data))
     >>> svm.predict(array([1.0])) > 0
+    True
+    >>> sparse_data = [
+    ...     SparseVector(3, [0, 1], [0.0, 0.0]),
+    ...     SparseVector(3, [0, 2], [1.0, 1.0]),
+    ...     SparseVector(3, [0, 1], [0.0, 0.0]),
+    ...     SparseVector(3, [0, 2], [1.0, 2.0])
+    ... ]
+    >>> svm = SVMWithSGD.train(sc.parallelize(sparse_data))
+    >>> svm.predict(SparseVector(2, [1], [1.0])) > 0
+    True
+    >>> svm.predict(SparseVector(2, [1], [0.0])) <= 0
     True
     """
     def predict(self, x):
@@ -105,6 +118,16 @@ class NaiveBayesModel(object):
     >>> model.predict(array([0.0, 1.0]))
     0.0
     >>> model.predict(array([1.0, 0.0]))
+    1.0
+    >>> sparse_data = [
+    ...     SparseVector(3, [0, 2], [0.0, 1.0]),
+    ...     SparseVector(3, [0, 2], [0.0, 2.0]),
+    ...     SparseVector(3, [0, 1], [1.0, 1.0])
+    ... ]
+    >>> model = NaiveBayes.train(sc.parallelize(sparse_data))
+    >>> model.predict(SparseVector(2, [1], [1.0]))
+    0.0
+    >>> model.predict(SparseVector(2, [0], [1.0]))
     1.0
     """
 

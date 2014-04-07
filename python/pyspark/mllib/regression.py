@@ -23,6 +23,7 @@ from pyspark.mllib._common import \
     _serialize_double_vector, _deserialize_double_vector, \
     _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
     _linear_predictor_typecheck
+from pyspark.mllib.linalg import SparseVector
 
 class LinearModel(object):
     """Something that has a vector of coefficients and an intercept."""
@@ -36,18 +37,37 @@ class LinearRegressionModelBase(LinearModel):
     >>> lrmb = LinearRegressionModelBase(array([1.0, 2.0]), 0.1)
     >>> abs(lrmb.predict(array([-1.03, 7.777])) - 14.624) < 1e-6
     True
+    >>> abs(lrmb.predict(SparseVector(2, [0, 1], [-1.03, 7.777])) - 14.624) < 1e-6
+    True
     """
     def predict(self, x):
         """Predict the value of the dependent variable given a vector x"""
         """containing values for the independent variables."""
         _linear_predictor_typecheck(x, self._coeff)
-        return dot(self._coeff, x) + self._intercept
+        return x.dot(self._coeff) + self._intercept
 
 class LinearRegressionModel(LinearRegressionModelBase):
     """A linear regression model derived from a least-squares fit.
 
     >>> data = array([0.0, 0.0, 1.0, 1.0, 3.0, 2.0, 2.0, 3.0]).reshape(4,2)
     >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
+    >>> abs(lrm.predict(array([0.0])) - 0) < 0.5
+    True
+    >>> abs(lrm.predict(array([1.0])) - 1) < 0.5
+    True
+    >>> abs(lrm.predict(SparseVector(1, [0], [1.0])) - 1) < 0.5
+    True
+    >>> data = [
+    ...     SparseVector(2, [0, 1], [0.0, 0.0]),
+    ...     SparseVector(2, [0, 1], [1.0, 1.0]),
+    ...     SparseVector(2, [0, 1], [3.0, 2.0]),
+    ...     SparseVector(2, [0, 1], [2.0, 3.0])
+    ... ]
+    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
+    >>> abs(lrm.predict(array([0.0])) - 0) < 0.5
+    True
+    >>> abs(lrm.predict(SparseVector(1, [0], [1.0])) - 1) < 0.5
+    True
     """
 
 class LinearRegressionWithSGD(object):
@@ -67,6 +87,23 @@ class LassoModel(LinearRegressionModelBase):
 
     >>> data = array([0.0, 0.0, 1.0, 1.0, 3.0, 2.0, 2.0, 3.0]).reshape(4,2)
     >>> lrm = LassoWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
+    >>> abs(lrm.predict(array([0.0])) - 0) < 0.5
+    True
+    >>> abs(lrm.predict(array([1.0])) - 1) < 0.5
+    True
+    >>> abs(lrm.predict(SparseVector(1, [0], [1.0])) - 1) < 0.5
+    True
+    >>> data = [
+    ...     SparseVector(2, [0, 1], [0.0, 0.0]),
+    ...     SparseVector(2, [0, 1], [1.0, 1.0]),
+    ...     SparseVector(2, [0, 1], [3.0, 2.0]),
+    ...     SparseVector(2, [0, 1], [2.0, 3.0])
+    ... ]
+    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
+    >>> abs(lrm.predict(array([0.0])) - 0) < 0.5
+    True
+    >>> abs(lrm.predict(SparseVector(1, [0], [1.0])) - 1) < 0.5
+    True
     """
 
 class LassoWithSGD(object):
@@ -86,6 +123,23 @@ class RidgeRegressionModel(LinearRegressionModelBase):
 
     >>> data = array([0.0, 0.0, 1.0, 1.0, 3.0, 2.0, 2.0, 3.0]).reshape(4,2)
     >>> lrm = RidgeRegressionWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
+    >>> abs(lrm.predict(array([0.0])) - 0) < 0.5
+    True
+    >>> abs(lrm.predict(array([1.0])) - 1) < 0.5
+    True
+    >>> abs(lrm.predict(SparseVector(1, [0], [1.0])) - 1) < 0.5
+    True
+    >>> data = [
+    ...     SparseVector(2, [0, 1], [0.0, 0.0]),
+    ...     SparseVector(2, [0, 1], [1.0, 1.0]),
+    ...     SparseVector(2, [0, 1], [3.0, 2.0]),
+    ...     SparseVector(2, [0, 1], [2.0, 3.0])
+    ... ]
+    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
+    >>> abs(lrm.predict(array([0.0])) - 0) < 0.5
+    True
+    >>> abs(lrm.predict(SparseVector(1, [0], [1.0])) - 1) < 0.5
+    True
     """
 
 class RidgeRegressionWithSGD(object):

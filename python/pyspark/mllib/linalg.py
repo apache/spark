@@ -59,7 +59,7 @@ class SparseVector(object):
 
     def dot(self, other):
         """
-        Dot product with another SparseVector or NumPy array.
+        Dot product with a SparseVector or 1- or 2-dimensional Numpy array.
 
         >>> a = SparseVector(4, [1, 3], [3.0, 4.0])
         >>> a.dot(a)
@@ -69,12 +69,22 @@ class SparseVector(object):
         >>> b = SparseVector(4, [2, 4], [1.0, 2.0])
         >>> a.dot(b)
         0.0
+        >>> a.dot(array([[1, 1], [2, 2], [3, 3], [4, 4]]))
+        array([ 22.,  22.])
         """
-        result = 0.0
         if type(other) == ndarray:
-            for i in xrange(len(self.indices)):
-                result += self.values[i] * other[self.indices[i]]
+            if other.ndim == 1:
+                result = 0.0
+                for i in xrange(len(self.indices)):
+                    result += self.values[i] * other[self.indices[i]]
+                return result
+            elif other.ndim == 2:
+                results = [self.dot(other[:,i]) for i in xrange(other.shape[1])]
+                return array(results)
+            else:
+                raise Exception("Cannot call dot with %d-dimensional array" % other.ndim)
         else:
+            result = 0.0
             i, j = 0, 0
             while i < len(self.indices) and j < len(other.indices):
                 if self.indices[i] == other.indices[j]:
@@ -85,7 +95,55 @@ class SparseVector(object):
                     i += 1
                 else:
                     j += 1
-        return result
+            return result
+
+    def squared_distance(self, other):
+        """
+        Squared distance from a SparseVector or 1-dimensional NumPy array.
+
+        >>> a = SparseVector(4, [1, 3], [3.0, 4.0])
+        >>> a.squared_distance(a)
+        0.0
+        >>> a.squared_distance(array([1., 2., 3., 4.]))
+        1.0
+        >>> b = SparseVector(4, [2, 4], [1.0, 2.0])
+        >>> a.squared_distance(b)
+        30.0
+        >>> b.squared_distance(a)
+        30.0
+        """
+        if type(other) == ndarray:
+            if other.ndim == 1:
+                result = 0.0
+                for i in xrange(len(self.indices)):
+                    diff = self.values[i] - other[self.indices[i]]
+                    result += diff * diff
+                return result
+            else:
+                raise Exception("Cannot call squared_distance with %d-dimensional array" %
+                        other.ndim)
+        else:
+            result = 0.0
+            i, j = 0, 0
+            while i < len(self.indices) and j < len(other.indices):
+                if self.indices[i] == other.indices[j]:
+                    diff = self.values[i] - other.values[j]
+                    result += diff * diff
+                    i += 1
+                    j += 1
+                elif self.indices[i] < other.indices[j]:
+                    result += self.values[i] * self.values[i]
+                    i += 1
+                else:
+                    result += other.values[j] * other.values[j]
+                    j += 1
+            while i < len(self.indices):
+                result += self.values[i] * self.values[i]
+                i += 1
+            while j < len(other.indices):
+                result += other.values[j] * other.values[j]
+                j += 1
+            return result
 
     def __str__(self):
         inds = self.indices
