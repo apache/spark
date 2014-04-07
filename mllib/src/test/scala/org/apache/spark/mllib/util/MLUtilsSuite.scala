@@ -80,7 +80,7 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     Files.write(lines, file, Charsets.US_ASCII)
     val path = tempDir.toURI.toString
 
-    val pointsWithNumFeatures = MLUtils.loadLibSVMData(sc, path, 6).collect()
+    val pointsWithNumFeatures = MLUtils.loadLibSVMData(sc, path, BinaryLabelParser(), 6).collect()
     val pointsWithoutNumFeatures = MLUtils.loadLibSVMData(sc, path).collect()
 
     for (points <- Seq(pointsWithNumFeatures, pointsWithoutNumFeatures)) {
@@ -93,7 +93,7 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
       assert(points(2).features === Vectors.sparse(6, Seq((1, 4.0), (3, 5.0), (5, 6.0))))
     }
 
-    val multiclassPoints = MLUtils.loadLibSVMData(sc, path, MLUtils.multiclassLabelParser).collect()
+    val multiclassPoints = MLUtils.loadLibSVMData(sc, path, MulticlassLabelParser()).collect()
     assert(multiclassPoints.length === 3)
     assert(multiclassPoints(0).label === 1.0)
     assert(multiclassPoints(1).label === -1.0)

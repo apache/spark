@@ -39,17 +39,6 @@ object MLUtils {
   }
 
   /**
-   * Multiclass label parser, which parses a string into double.
-   */
-  val multiclassLabelParser: String => Double = _.toDouble
-
-  /**
-   * Binary label parser, which outputs 1.0 (positive) if the value is greater than 0.5,
-   * or 0.0 (negative) otherwise.
-   */
-  val binaryLabelParser: String => Double = label => if (label.toDouble > 0.5) 1.0 else 0.0
-
-  /**
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint].
    * The LIBSVM format is a text-based format used by LIBSVM and LIBLINEAR.
    * Each line represents a labeled sparse feature vector using the following format:
@@ -69,7 +58,7 @@ object MLUtils {
   def loadLibSVMData(
       sc: SparkContext,
       path: String,
-      labelParser: String => Double,
+      labelParser: LabelParser,
       numFeatures: Int,
       minSplits: Int): RDD[LabeledPoint] = {
     val parsed = sc.textFile(path, minSplits)
@@ -107,14 +96,7 @@ object MLUtils {
    * with number of features determined automatically and the default number of partitions.
    */
   def loadLibSVMData(sc: SparkContext, path: String): RDD[LabeledPoint] =
-    loadLibSVMData(sc, path, binaryLabelParser, -1, sc.defaultMinSplits)
-
-  /**
-   * Loads binary labeled data in the LIBSVM format into an RDD[LabeledPoint],
-   * with number of features specified explicitly and the default number of partitions.
-   */
-  def loadLibSVMData(sc: SparkContext, path: String, numFeatures: Int): RDD[LabeledPoint] =
-    loadLibSVMData(sc, path, binaryLabelParser, numFeatures, sc.defaultMinSplits)
+    loadLibSVMData(sc, path, BinaryLabelParser(), -1, sc.defaultMinSplits)
 
   /**
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint],
@@ -124,7 +106,7 @@ object MLUtils {
   def loadLibSVMData(
       sc: SparkContext,
       path: String,
-      labelParser: String => Double): RDD[LabeledPoint] =
+      labelParser: LabelParser): RDD[LabeledPoint] =
     loadLibSVMData(sc, path, labelParser, -1, sc.defaultMinSplits)
 
   /**
@@ -135,7 +117,7 @@ object MLUtils {
   def loadLibSVMData(
       sc: SparkContext,
       path: String,
-      labelParser: String => Double,
+      labelParser: LabelParser,
       numFeatures: Int): RDD[LabeledPoint] =
     loadLibSVMData(sc, path, labelParser, numFeatures, sc.defaultMinSplits)
 
