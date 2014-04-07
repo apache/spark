@@ -243,7 +243,7 @@ class RowRDDMatrix(
    */
   def multiply(B: Matrix): RowRDDMatrix = {
     val n = numCols().toInt
-    require(n == B.m, s"Dimension mismatch: $n vs ${B.m}")
+    require(n == B.numRows, s"Dimension mismatch: $n vs ${B.numRows}")
 
     require(B.isInstanceOf[DenseMatrix],
       s"Only support dense matrix at this time but found ${B.getClass.getName}.")
@@ -254,7 +254,7 @@ class RowRDDMatrix(
       iter.map(v => Vectors.fromBreeze(Bi.t * v.toBreeze))
     }, preservesPartitioning = true)
 
-    new RowRDDMatrix(AB, _m, B.n)
+    new RowRDDMatrix(AB, _m, B.numCols)
   }
 }
 

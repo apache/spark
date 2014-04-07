@@ -25,44 +25,60 @@ import breeze.linalg.{Matrix => BM, DenseMatrix => BDM}
 trait Matrix extends Serializable {
 
   /** Number of rows. */
-  def m: Int
+  def numRows: Int
 
   /** Number of columns. */
-  def n: Int
+  def numCols: Int
 
   /** Converts to a dense array in column major. */
   def toArray: Array[Double]
 
   /** Converts to a breeze matrix. */
   private[mllib] def toBreeze: BM[Double]
+
+  /** Gets the (i, j)-th element. */
+  private[mllib] def apply(i: Int, j: Int): Double = toBreeze(i, j)
 }
 
 /**
- * Column majored dense matrix.
+ * Column-majored dense matrix.
  *
- * @param m
- * @param n
- * @param values
+ * @param numRows number of rows
+ * @param numCols number of columns
+ * @param values matrix entries in column major
  */
-class DenseMatrix(val m: Int, val n: Int, val values: Array[Double]) extends Matrix {
+class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double]) extends Matrix {
 
-  require(values.length == m * n)
+  require(values.length == numRows * numCols)
 
-  def toArray: Array[Double] = values
+  override def toArray: Array[Double] = values
 
-  private[mllib] def toBreeze: BM[Double] = new BDM[Double](m, n, values)
+  private[mllib] override def toBreeze: BM[Double] = new BDM[Double](numRows, numCols, values)
 }
 
 object Matrices {
 
-  def dense(m: Int, n: Int, values: Array[Double]): Matrix = {
-    new DenseMatrix(m, n, values)
+  /**
+   * Creates a dense matrix.
+   *
+   * @param numRows number of rows
+   * @param numCols number of columns
+   * @param values matrix entries in column major
+   */
+  def dense(numRows: Int, numCols: Int, values: Array[Double]): Matrix = {
+    new DenseMatrix(numRows, numCols, values)
   }
 
+  /**
+   * Creates a Matrix instance from a breeze matrix.
+   * @param breeze a breeze matrix
+   * @return a Matrix instance
+   */
   private[mllib] def fromBreeze(breeze: BM[Double]): Matrix = {
     breeze match {
       case dm: BDM[Double] =>
-        require(dm.majorStride == dm.rows)
+        require(dm.majorStride == dm.rows,
+          "Do not support stride size different from the number of rows.")
         new DenseMatrix(dm.rows, dm.cols, dm.data)
       case _ =>
         throw new UnsupportedOperationException(

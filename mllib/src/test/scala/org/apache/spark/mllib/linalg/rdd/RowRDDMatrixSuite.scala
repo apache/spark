@@ -112,8 +112,8 @@ class RowRDDMatrixSuite extends FunSuite with LocalSparkContext {
   test("pca") {
     for (mat <- Seq(denseMat, sparseMat); k <- 1 to n) {
       val pc = denseMat.computePrincipalComponents(k)
-      assert(pc.m === n)
-      assert(pc.n === k)
+      assert(pc.numRows === n)
+      assert(pc.numCols === k)
       assertPrincipalComponentsEqual(pc, principalComponents, k)
     }
   }
