@@ -208,7 +208,7 @@ private object SpecialLengths {
   val TIMING_DATA = -3
 }
 
-private[spark] object PythonRDD {
+object PythonRDD {
   val UTF8 = Charset.forName("UTF-8")
 
   def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
@@ -289,6 +289,7 @@ private[spark] object PythonRDD {
   def pythonToJava(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[_] = {
     pyRDD.rdd.mapPartitions { iter =>
       val unpickle = new Unpickler
+      // TODO: Figure out why flatMap is necessay for pyspark
       iter.flatMap { row =>
         unpickle.loads(row) match {
           case objs: java.util.ArrayList[Any] => objs
