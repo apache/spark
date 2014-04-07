@@ -377,7 +377,6 @@
         <groupId>org.apache.derby</groupId>
         <artifactId>derby</artifactId>
         <version>10.4.2.0</version>
-        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.liftweb</groupId>
@@ -579,6 +578,12 @@
             <artifactId>netty</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <!-- Matches the version of jackson-core-asl pulled in by avro -->
+        <groupId>org.codehaus.jackson</groupId>
+        <artifactId>jackson-mapper-asl</artifactId>
+        <version>1.8.8</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

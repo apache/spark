@@ -43,6 +43,8 @@ object SparkBuild extends Build {
 
   val DEFAULT_YARN = false
 
+  val DEFAULT_HIVE = false
+
   // HBase version; set as appropriate.
   val HBASE_VERSION = "0.94.6"
 
@@ -67,15 +69,17 @@ object SparkBuild extends Build {
 
   lazy val sql = Project("sql", file("sql/core"), settings = sqlCoreSettings) dependsOn(core, catalyst)
 
-  // Since hive is its own assembly, it depends on all of the modules.
-  lazy val hive = Project("hive", file("sql/hive"), settings = hiveSettings) dependsOn(sql, graphx, bagel, mllib, streaming, repl)
+  lazy val hive = Project("hive", file("sql/hive"), settings = hiveSettings) dependsOn(sql)
+
+  lazy val maybeHive: Seq[ClasspathDependency] = if (isHiveEnabled) Seq(hive) else Seq()
+  lazy val maybeHiveRef: Seq[ProjectReference] = if (isHiveEnabled) Seq(hive) else Seq()
 
   lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn(core)
 
   lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn(core)
 
   lazy val assemblyProj = Project("assembly", file("assembly"), settings = assemblyProjSettings)
-    .dependsOn(core, graphx, bagel, mllib, streaming, repl, sql) dependsOn(maybeYarn: _*) dependsOn(maybeGanglia: _*)
+    .dependsOn(core, graphx, bagel, mllib, streaming, repl, sql) dependsOn(maybeYarn: _*) dependsOn(maybeHive: _*) dependsOn(maybeGanglia: _*)
 
   lazy val assembleDeps = TaskKey[Unit]("assemble-deps", "Build assembly of dependencies and packages Spark projects")
 
@@ -100,6 +104,11 @@ object SparkBuild extends Build {
   }
   lazy val hadoopClient = if (hadoopVersion.startsWith("0.20.") || hadoopVersion == "1.0.0") "hadoop-core" else "hadoop-client"
   val maybeAvro = if (hadoopVersion.startsWith("0.23.") && isYarnEnabled) Seq("org.apache.avro" % "avro" % "1.7.4") else Seq()
+
+  lazy val isHiveEnabled = Properties.envOrNone("SPARK_HIVE") match {
+    case None => DEFAULT_HIVE
+    case Some(v) => v.toBoolean
+  }
 
   // Include Ganglia integration if the user has enabled Ganglia
   // This is isolated from the normal build due to LGPL-licensed code in the library
@@ -141,13 +150,13 @@ object SparkBuild extends Build {
   lazy val allExternalRefs = Seq[ProjectReference](externalTwitter, externalKafka, externalFlume, externalZeromq, externalMqtt)
 
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
-    .dependsOn(core, mllib, graphx, bagel, streaming, externalTwitter, hive) dependsOn(allExternal: _*)
+    .dependsOn(core, mllib, graphx, bagel, streaming, hive) dependsOn(allExternal: _*)
 
   // Everything except assembly, hive, tools, java8Tests and examples belong to packageProjects
-  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx, catalyst, sql) ++ maybeYarnRef ++ maybeGangliaRef
+  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx, catalyst, sql) ++ maybeYarnRef ++ maybeHiveRef ++ maybeGangliaRef
 
   lazy val allProjects = packageProjects ++ allExternalRefs ++
-    Seq[ProjectReference](examples, tools, assemblyProj, hive) ++ maybeJava8Tests
+    Seq[ProjectReference](examples, tools, assemblyProj) ++ maybeJava8Tests
 
   def sharedSettings = Defaults.defaultSettings ++ MimaBuild.mimaSettings(file(sparkHome)) ++ Seq(
     organization       := "org.apache.spark",
@@ -417,10 +426,8 @@ object SparkBuild extends Build {
 
   // Since we don't include hive in the main assembly this project also acts as an alternative
   // assembly jar.
-  def hiveSettings = sharedSettings ++ assemblyProjSettings ++ Seq(
+  def hiveSettings = sharedSettings ++ Seq(
     name := "spark-hive",
-    jarName in assembly <<= version map { v => "spark-hive-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" },
-    jarName in packageDependency <<= version map { v => "spark-hive-assembly-" + v + "-hadoop" + hadoopVersion + "-deps.jar" },
     javaOptions += "-XX:MaxPermSize=1g",
     libraryDependencies ++= Seq(
       "org.apache.hive" % "hive-metastore" % hiveVersion,
