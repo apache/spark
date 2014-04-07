@@ -191,4 +191,34 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     assertMatrixApproximatelyEquals(rets, DoubleMatrix.diag(svd(1).getRow(0)))
     assertMatrixApproximatelyEquals(retv, svd(2).getColumn(0))
   }
+
+ test("square matrix with DIMSUM") {
+    val m = 10
+    val n = 3
+    val datarr = Array.tabulate(m,n){ (a, b) =>
+      MatrixEntry(a, b, (a + 2).toDouble * (b + 1) / (1 + a + b)) }.flatten
+    val data = sc.makeRDD(datarr, 3)
+
+    val a = LAUtils.sparseToTallSkinnyDense(SparseMatrix(data, m, n))
+
+    val decomposed = new SVD().setK(n).setComputeU(true).useDIMSUM(40.0).compute(a)
+    val u = LAUtils.denseToSparse(decomposed.U)
+    val v = decomposed.V
+    val s = decomposed.S
+
+    val denseA = getDenseMatrix(LAUtils.denseToSparse(a))
+    val svd = Singular.sparseSVD(denseA)
+
+    val retu = getDenseMatrix(u)
+    val rets = DoubleMatrix.diag(new DoubleMatrix(s))
+    val retv = new DoubleMatrix(v)
+
+    // check individual decomposition  
+    assertMatrixApproximatelyEquals(retu, svd(0))
+    assertMatrixApproximatelyEquals(rets, DoubleMatrix.diag(svd(1)))
+    assertMatrixApproximatelyEquals(retv, svd(2))
+
+    // check multiplication guarantee
+    assertMatrixApproximatelyEquals(retu.mmul(rets).mmul(retv.transpose), denseA)
+  }
 }
