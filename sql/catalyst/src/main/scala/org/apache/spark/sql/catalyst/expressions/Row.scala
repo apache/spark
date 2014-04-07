@@ -212,8 +212,8 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
     var i = 0
     while (i < ordering.size) {
       val order = ordering(i)
-      val left = order.child.apply(a)
-      val right = order.child.apply(b)
+      val left = order.child.eval(a)
+      val right = order.child.eval(b)
 
       if (left == null && right == null) {
         // Both null, continue looking.

@@ -57,7 +57,7 @@ case class Literal(value: Any, dataType: DataType) extends LeafExpression {
   override def toString = if (value != null) value.toString else "null"
 
   type EvaluatedType = Any
-  override def apply(input: Row):Any = value
+  override def eval(input: Row):Any = value
 }
 
 // TODO: Specialize
@@ -69,8 +69,8 @@ case class MutableLiteral(var value: Any, nullable: Boolean = true) extends Leaf
   def references = Set.empty
 
   def update(expression: Expression, input: Row) = {
-    value = expression.apply(input)
+    value = expression.eval(input)
   }
 
-  override def apply(input: Row) = value
+  override def eval(input: Row) = value
 }
