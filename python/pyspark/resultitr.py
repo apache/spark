@@ -19,20 +19,14 @@ __all__ = ["ResultItr"]
 
 import collections
 
-class ResultItr(collections.Iterator):
+class ResultItr(collections.Iterable):
     """
-    A special result iterator. This is used because the standard iterator can not be pickled
+    A special result iterable. This is used because the standard iterator can not be pickled
     """
     def __init__(self, data):
         self.data = data
         self.index = 0
         self.maxindex = len(data)
-    def next(self):
-        if index == maxindex:
-            raise StopIteration
-        v = self.data[0]
-        self.data = data[1:]
-        return v
     def __iter__(self):
         return iter(self.data)
     def __len__(self):

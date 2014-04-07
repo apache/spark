@@ -56,10 +56,11 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
             // first map the cogrouped tuple to tuples of required type,
             // and then apply the update function
             val updateFuncLocal = updateFunc
-            val finalFunc = (iterator: Iterator[(K, (Iterator[V], Iterator[S]))]) => {
+            val finalFunc = (iterator: Iterator[(K, (Iterable[V], Iterable[S]))]) => {
               val i = iterator.map(t => {
-                val headOption = t._2._2.hasNext match {
-                  case true => Some(t._2._2.next())
+                val itr = t._2._2.iterator
+                val headOption = itr.hasNext match {
+                  case true => Some(itr.next())
                   case false => None
                 }
                 (t._1, t._2._1.toSeq, headOption)
@@ -94,7 +95,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
             // first map the grouped tuple to tuples of required type,
             // and then apply the update function
             val updateFuncLocal = updateFunc
-            val finalFunc = (iterator: Iterator[(K, Iterator[V])]) => {
+            val finalFunc = (iterator: Iterator[(K, Iterable[V])]) => {
               updateFuncLocal(iterator.map(tuple => (tuple._1, tuple._2.toSeq, None)))
             }
 

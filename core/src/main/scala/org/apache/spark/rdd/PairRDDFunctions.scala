@@ -261,7 +261,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * Group the values for each key in the RDD into a single sequence. Allows controlling the
    * partitioning of the resulting key-value pair RDD by passing a Partitioner.
    */
-  def groupByKey(partitioner: Partitioner): RDD[(K, Iterator[V])] = {
+  def groupByKey(partitioner: Partitioner): RDD[(K, Iterable[V])] = {
     // groupByKey shouldn't use map side combine because map side combine does not
     // reduce the amount of data shuffled and requires all map side data be inserted
     // into a hash table, leading to more objects in the old gen.
@@ -270,14 +270,14 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     def mergeCombiners(c1: ArrayBuffer[V], c2: ArrayBuffer[V]) = c1 ++ c2
     val bufs = combineByKey[ArrayBuffer[V]](
       createCombiner _, mergeValue _, mergeCombiners _, partitioner, mapSideCombine=false)
-    bufs.mapValues(_.toIterator)
+    bufs.mapValues(_.toIterable)
   }
 
   /**
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
    * resulting RDD with into `numPartitions` partitions.
    */
-  def groupByKey(numPartitions: Int): RDD[(K, Iterator[V])] = {
+  def groupByKey(numPartitions: Int): RDD[(K, Iterable[V])] = {
     groupByKey(new HashPartitioner(numPartitions))
   }
 
@@ -361,7 +361,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
    * resulting RDD with the existing partitioner/parallelism level.
    */
-  def groupByKey(): RDD[(K, Iterator[V])] = {
+  def groupByKey(): RDD[(K, Iterable[V])] = {
     groupByKey(defaultPartitioner(self))
   }
 
@@ -457,13 +457,13 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * list of values for that key in `this` as well as `other`.
    */
   def cogroup[W](other: RDD[(K, W)], partitioner: Partitioner)
-      : RDD[(K, (Iterator[V], Iterator[W]))]  = {
+      : RDD[(K, (Iterable[V], Iterable[W]))]  = {
     if (partitioner.isInstanceOf[HashPartitioner] && getKeyClass().isArray) {
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other), partitioner)
     cg.mapValues { case Seq(vs, ws) =>
-      (vs.asInstanceOf[Seq[V]].iterator, ws.asInstanceOf[Seq[W]].iterator)
+      (vs.asInstanceOf[Seq[V]], ws.asInstanceOf[Seq[W]])
     }
   }
 
@@ -472,15 +472,15 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * tuple with the list of values for that key in `this`, `other1` and `other2`.
    */
   def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], partitioner: Partitioner)
-      : RDD[(K, (Iterator[V], Iterator[W1], Iterator[W2]))] = {
+      : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))] = {
     if (partitioner.isInstanceOf[HashPartitioner] && getKeyClass().isArray) {
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2), partitioner)
     cg.mapValues { case Seq(vs, w1s, w2s) =>
-      (vs.asInstanceOf[Seq[V]].iterator,
-       w1s.asInstanceOf[Seq[W1]].iterator,
-       w2s.asInstanceOf[Seq[W2]].iterator)
+      (vs.asInstanceOf[Seq[V]],
+       w1s.asInstanceOf[Seq[W1]],
+       w2s.asInstanceOf[Seq[W2]])
     }
   }
 
@@ -488,7 +488,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
-  def cogroup[W](other: RDD[(K, W)]): RDD[(K, (Iterator[V], Iterator[W]))] = {
+  def cogroup[W](other: RDD[(K, W)]): RDD[(K, (Iterable[V], Iterable[W]))] = {
     cogroup(other, defaultPartitioner(self, other))
   }
 
@@ -497,7 +497,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * tuple with the list of values for that key in `this`, `other1` and `other2`.
    */
   def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
-      : RDD[(K, (Iterator[V], Iterator[W1], Iterator[W2]))] = {
+      : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))] = {
     cogroup(other1, other2, defaultPartitioner(self, other1, other2))
   }
 
@@ -505,7 +505,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
-  def cogroup[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (Iterator[V], Iterator[W]))] = {
+  def cogroup[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (Iterable[V], Iterable[W]))] = {
     cogroup(other, new HashPartitioner(numPartitions))
   }
 
@@ -514,18 +514,18 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * tuple with the list of values for that key in `this`, `other1` and `other2`.
    */
   def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], numPartitions: Int)
-      : RDD[(K, (Iterator[V], Iterator[W1], Iterator[W2]))] = {
+      : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))] = {
     cogroup(other1, other2, new HashPartitioner(numPartitions))
   }
 
   /** Alias for cogroup. */
-  def groupWith[W](other: RDD[(K, W)]): RDD[(K, (Iterator[V], Iterator[W]))] = {
+  def groupWith[W](other: RDD[(K, W)]): RDD[(K, (Iterable[V], Iterable[W]))] = {
     cogroup(other, defaultPartitioner(self, other))
   }
 
   /** Alias for cogroup. */
   def groupWith[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
-      : RDD[(K, (Iterator[V], Iterator[W1], Iterator[W2]))] = {
+      : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))] = {
     cogroup(other1, other2, defaultPartitioner(self, other1, other2))
   }
 

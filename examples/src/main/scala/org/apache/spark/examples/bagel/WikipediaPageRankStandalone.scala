@@ -115,7 +115,9 @@ object WikipediaPageRankStandalone {
     var ranks = links.mapValues { edges => defaultRank }
     for (i <- 1 to numIterations) {
       val contribs = links.groupWith(ranks).flatMap {
-        case (id, (linksWrapper, rankWrapper)) =>
+        case (id, (linksWrapperIterable, rankWrapperIterable)) =>
+          val linksWrapper = linksWrapperIterable.iterator
+          val rankWrapper = rankWrapperIterable.iterator
           if (linksWrapper.hasNext) {
             val linksWrapperHead = linksWrapper.next
             if (rankWrapper.hasNext) {

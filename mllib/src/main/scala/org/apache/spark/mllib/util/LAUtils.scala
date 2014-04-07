@@ -38,8 +38,9 @@ object LAUtils {
       case (i, cols) =>
         val rowArray = Array.ofDim[Double](n)
         var j = 0
-        while (cols.hasNext) {
-          val element = cols.next
+        val colsItr = cols.iterator
+        while (colsItr.hasNext) {
+          val element = colsItr.next
           rowArray(element._1) = element._2
           j += 1
         }

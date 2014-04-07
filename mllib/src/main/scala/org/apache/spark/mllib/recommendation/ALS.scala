@@ -421,7 +421,7 @@ class ALS private (
    * Compute the new feature vectors for a block of the users matrix given the list of factors
    * it received from each product and its InLinkBlock.
    */
-  private def updateBlock(messages: Iterator[(Int, Array[Array[Double]])], inLinkBlock: InLinkBlock,
+  private def updateBlock(messages: Iterable[(Int, Array[Array[Double]])], inLinkBlock: InLinkBlock,
       rank: Int, lambda: Double, alpha: Double, YtY: Option[Broadcast[DoubleMatrix]])
     : Array[Array[Double]] =
   {

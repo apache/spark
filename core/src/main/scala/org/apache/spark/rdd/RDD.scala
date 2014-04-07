@@ -438,20 +438,20 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD of grouped items.
    */
-  def groupBy[K: ClassTag](f: T => K): RDD[(K, Iterator[T])] =
+  def groupBy[K: ClassTag](f: T => K): RDD[(K, Iterable[T])] =
     groupBy[K](f, defaultPartitioner(this))
 
   /**
    * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
    * mapping to that key.
    */
-  def groupBy[K: ClassTag](f: T => K, numPartitions: Int): RDD[(K, Iterator[T])] =
+  def groupBy[K: ClassTag](f: T => K, numPartitions: Int): RDD[(K, Iterable[T])] =
     groupBy(f, new HashPartitioner(numPartitions))
 
   /**
    * Return an RDD of grouped items.
    */
-  def groupBy[K: ClassTag](f: T => K, p: Partitioner): RDD[(K, Iterator[T])] = {
+  def groupBy[K: ClassTag](f: T => K, p: Partitioner): RDD[(K, Iterable[T])] = {
     val cleanF = sc.clean(f)
     this.map(t => (cleanF(t), t)).groupByKey(p)
   }

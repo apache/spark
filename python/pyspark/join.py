@@ -36,7 +36,7 @@ from pyspark.resultitr import ResultItr
 def _do_python_join(rdd, other, numPartitions, dispatch):
     vs = rdd.map(lambda (k, v): (k, (1, v)))
     ws = other.map(lambda (k, v): (k, (2, v)))
-    return vs.union(ws).groupByKey(numPartitions).flatMapValues(dispatch)
+    return vs.union(ws).groupByKey(numPartitions).flatMapValues(lambda x : dispatch(x.__iter__()))
 
 
 def python_join(rdd, other, numPartitions):
@@ -90,4 +90,4 @@ def python_cogroup(rdd, other, numPartitions):
             elif n == 2:
                 wbuf.append(v)
         return (ResultItr(vbuf), ResultItr(wbuf))
-    return vs.union(ws).groupByKey(numPartitions).mapValues(dispatch)
+    return vs.union(ws).groupByKey(numPartitions).mapValues(lambda x : dispatch(x.__iter__()))

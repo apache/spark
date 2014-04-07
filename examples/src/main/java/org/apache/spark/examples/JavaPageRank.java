@@ -67,7 +67,7 @@ public final class JavaPageRank {
     JavaRDD<String> lines = ctx.textFile(args[1], 1);
 
     // Loads all URLs from input file and initialize their neighbors.
-    JavaPairRDD<String, Iterator<String>> links = lines.mapToPair(new PairFunction<String, String, String>() {
+    JavaPairRDD<String, Iterable<String>> links = lines.mapToPair(new PairFunction<String, String, String>() {
       @Override
       public Tuple2<String, String> call(String s) {
         String[] parts = SPACES.split(s);
@@ -76,9 +76,9 @@ public final class JavaPageRank {
     }).distinct().groupByKey().cache();
 
     // Loads all URLs with other URL(s) link to from input file and initialize ranks of them to one.
-    JavaPairRDD<String, Double> ranks = links.mapValues(new Function<Iterator<String>, Double>() {
+    JavaPairRDD<String, Double> ranks = links.mapValues(new Function<Iterable<String>, Double>() {
       @Override
-      public Double call(Iterator<String> rs) {
+      public Double call(Iterable<String> rs) {
         return 1.0;
       }
     });
@@ -87,16 +87,18 @@ public final class JavaPageRank {
     for (int current = 0; current < Integer.parseInt(args[2]); current++) {
       // Calculates URL contributions to the rank of other URLs.
       JavaPairRDD<String, Double> contribs = links.join(ranks).values()
-        .flatMapToPair(new PairFlatMapFunction<Tuple2<Iterator<String>, Double>, String, Double>() {
+        .flatMapToPair(new PairFlatMapFunction<Tuple2<Iterable<String>, Double>, String, Double>() {
           @Override
-          public Iterable<Tuple2<String, Double>> call(Tuple2<Iterator<String>, Double> s) {
-            List<String> urls = new ArrayList<String>();
-            while (s._1.hasNext()) {
-              urls.add(s._1.next());
+          public Iterable<Tuple2<String, Double>> call(Tuple2<Iterable<String>, Double> s) {
+	    int urlCount = 0;
+	    Iterator<String> urls = s._1.iterator();
+            while (urls.hasNext()) {
+		urls.next();
+		urlCount++;
             }
             List<Tuple2<String, Double>> results = new ArrayList<Tuple2<String, Double>>();
-            for (String n : urls) {
-              results.add(new Tuple2<String, Double>(n, s._2() / urls.size()));
+            for (String n : s._1) {
+              results.add(new Tuple2<String, Double>(n, s._2() / urlCount));
             }
             return results;
           }

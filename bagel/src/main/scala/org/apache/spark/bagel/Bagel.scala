@@ -220,13 +220,14 @@ object Bagel extends Logging {
    */
   private def comp[K: Manifest, V <: Vertex, M <: Message[K], C](
     sc: SparkContext,
-    grouped: RDD[(K, (Iterator[C], Iterator[V]))],
+    grouped: RDD[(K, (Iterable[C], Iterable[V]))],
     compute: (V, Option[C]) => (V, Array[M]),
     storageLevel: StorageLevel
   ): (RDD[(K, (V, Array[M]))], Int, Int) = {
     var numMsgs = sc.accumulator(0)
     var numActiveVerts = sc.accumulator(0)
-    val processed = grouped.flatMapValues {
+    val processed = grouped.mapValues(x => (x._1.iterator, x._2.iterator))
+      .flatMapValues {
       case (_, vs) if !vs.hasNext => None
       case (c, vs) => {
         val (newVert, newMsgs) =
