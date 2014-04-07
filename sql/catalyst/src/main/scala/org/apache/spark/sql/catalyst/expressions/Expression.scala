@@ -50,8 +50,7 @@ abstract class Expression extends TreeNode[Expression] {
   def references: Set[Attribute]
 
   /** Returns the result of evaluating this expression on a given input Row */
-  def eval(input: Row = null): EvaluatedType =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
+  def eval(input: Row = null): EvaluatedType
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
