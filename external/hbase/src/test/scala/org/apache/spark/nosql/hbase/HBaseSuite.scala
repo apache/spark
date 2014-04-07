@@ -7,7 +7,7 @@ import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{HConstants, HBaseTestingUtility}
 import org.apache.hadoop.hbase.client.{Scan, HTable}
 import org.apache.spark.sql.catalyst.types.{FloatType, StringType}
-import org.apache.spark.sql.{TestData, SchemaRDD}
+import org.apache.spark.sql.TestData
 import org.apache.spark.sql.test.TestSQLContext._
 
 class HBaseSuite
