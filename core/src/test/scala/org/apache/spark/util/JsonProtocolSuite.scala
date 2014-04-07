@@ -465,7 +465,7 @@ class JsonProtocolSuite extends FunSuite {
     t.shuffleWriteMetrics = Some(sw)
     // Make at most 6 blocks
     t.updatedBlocks = Some((1 to (e % 5 + 1)).map { i =>
-      (RDDBlockId(e % i, f % i), BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i))
+      (RDDBlockId(e % i, f % i), BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i, c%i))
     }.toSeq)
     t
   }
@@ -479,19 +479,19 @@ class JsonProtocolSuite extends FunSuite {
     """
       {"Event":"SparkListenerStageSubmitted","Stage Info":{"Stage ID":100,"Stage Name":
       "greetings","Number of Tasks":200,"RDD Info":{"RDD ID":100,"Name":"mayor","Storage
-      Level":{"Use Disk":true,"Use Memory":true,"Deserialized":true,"Replication":1},
-      "Number of Partitions":200,"Number of Cached Partitions":300,"Memory Size":400,
-      "Disk Size":500},"Emitted Task Size Warning":false},"Properties":{"France":"Paris",
-      "Germany":"Berlin","Russia":"Moscow","Ukraine":"Kiev"}}
+      Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":true,
+      "Replication":1},"Number of Partitions":200,"Number of Cached Partitions":300,
+      "Memory Size":400,"Disk Size":500,"Tachyon Size":0},"Emitted Task Size Warning":false},
+      "Properties":{"France":"Paris","Germany":"Berlin","Russia":"Moscow","Ukraine":"Kiev"}}
     """
 
   private val stageCompletedJsonString =
     """
       {"Event":"SparkListenerStageCompleted","Stage Info":{"Stage ID":101,"Stage Name":
       "greetings","Number of Tasks":201,"RDD Info":{"RDD ID":101,"Name":"mayor","Storage
-      Level":{"Use Disk":true,"Use Memory":true,"Deserialized":true,"Replication":1},
-      "Number of Partitions":201,"Number of Cached Partitions":301,"Memory Size":401,
-      "Disk Size":501},"Emitted Task Size Warning":false}}
+      Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":true,
+      "Replication":1},"Number of Partitions":201,"Number of Cached Partitions":301,
+      "Memory Size":401,"Disk Size":501,"Tachyon Size":0},"Emitted Task Size Warning":false}}
     """
 
   private val taskStartJsonString =
@@ -524,8 +524,8 @@ class JsonProtocolSuite extends FunSuite {
       700,"Fetch Wait Time":900,"Remote Bytes Read":1000},"Shuffle Write Metrics":
       {"Shuffle Bytes Written":1200,"Shuffle Write Time":1500},"Updated Blocks":
       [{"Block ID":{"Type":"RDDBlockId","RDD ID":0,"Split Index":0},"Status":
-      {"Storage Level":{"Use Disk":true,"Use Memory":true,"Deserialized":false,
-      "Replication":2},"Memory Size":0,"Disk Size":0}}]}}
+      {"Storage Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":false,
+      "Replication":2},"Memory Size":0,"Disk Size":0,"Tachyon Size":0}}]}}
     """
 
   private val jobStartJsonString =

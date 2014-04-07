@@ -70,7 +70,7 @@ package object dsl {
     def > (other: Expression) = GreaterThan(expr, other)
     def >= (other: Expression) = GreaterThanOrEqual(expr, other)
     def === (other: Expression) = Equals(expr, other)
-    def != (other: Expression) = Not(Equals(expr, other))
+    def !== (other: Expression) = Not(Equals(expr, other))
 
     def like(other: Expression) = Like(expr, other)
     def rlike(other: Expression) = RLike(expr, other)

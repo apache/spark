@@ -15,22 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.storage
+
+import tachyon.client.TachyonFile
 
 /**
- * Allows the execution of relational queries, including those expressed in SQL using Spark.
- *
- * Note that this package is located in catalyst instead of in core so that all subprojects can
- * inherit the settings from this package object.
+ * References a particular segment of a file (potentially the entire file), based off an offset and
+ * a length.
  */
-package object sql {
-
-  protected[sql] def Logger(name: String) =
-    com.typesafe.scalalogging.slf4j.Logger(org.slf4j.LoggerFactory.getLogger(name))
-
-  protected[sql] type Logging = com.typesafe.scalalogging.slf4j.Logging
-
-  type Row = catalyst.expressions.Row
-
-  val Row = catalyst.expressions.Row
+private[spark] class TachyonFileSegment(val file: TachyonFile, val offset: Long, val length: Long) {
+  override def toString = "(name=%s, offset=%d, length=%d)".format(file.getPath(), offset, length)
 }

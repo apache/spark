@@ -19,14 +19,13 @@ package org.apache.spark
 
 import java.io._
 import java.net.URI
-import java.util.{Properties, UUID}
 import java.util.concurrent.atomic.AtomicInteger
-
+import java.util.{Properties, UUID}
+import java.util.UUID.randomUUID
 import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.reflect.{ClassTag, classTag}
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
@@ -129,6 +128,11 @@ class SparkContext(
 
   val master = conf.get("spark.master")
   val appName = conf.get("spark.app.name")
+
+  // Generate the random name for a temp folder in Tachyon
+  // Add a timestamp as the suffix here to make it more safe
+  val tachyonFolderName = "spark-" + randomUUID.toString()
+  conf.set("spark.tachyonStore.folderName", tachyonFolderName)
 
   val isLocal = (master == "local" || master.startsWith("local["))
 
@@ -393,7 +397,7 @@ class SparkContext(
    *   (a-hdfs-path/part-nnnnn, its content)
    * }}}
    *
-   * @note Small files are perferred, large file is also allowable, but may cause bad performance.
+   * @note Small files are preferred, as each file will be loaded fully in memory.
    */
   def wholeTextFiles(path: String): RDD[(String, String)] = {
     newAPIHadoopFile(
@@ -724,10 +728,6 @@ class SparkContext(
    * Note that this does not necessarily mean the caching or computation was successful.
    */
   def getPersistentRDDs: Map[Int, RDD[_]] = persistentRdds.toMap
-
-  def getStageInfo: Map[Stage, StageInfo] = {
-    dagScheduler.stageToInfos
-  }
 
   /**
    * Return information about blocks stored in all of the slaves
