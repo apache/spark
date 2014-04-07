@@ -140,6 +140,8 @@ object MLUtils {
     loadLibSVMData(sc, path, labelParser, numFeatures, sc.defaultMinSplits)
 
   /**
+   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+   *
    * Load labeled data from a file. The data format used here is
    * <L>, <f1> <f2> ...
    * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
@@ -159,6 +161,8 @@ object MLUtils {
   }
 
   /**
+   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+   *
    * Save labeled data to a file. The data format used here is
    * <L>, <f1> <f2> ...
    * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
@@ -183,7 +187,7 @@ object MLUtils {
    *     xColMean - Row vector with mean for every column (or feature) of the input data
    *     xColSd - Row vector standard deviation for every column (or feature) of the input data.
    */
-  def computeStats(
+  private[mllib] def computeStats(
       data: RDD[LabeledPoint],
       numFeatures: Int,
       numExamples: Long): (Double, Vector, Vector) = {

@@ -51,16 +51,17 @@ class LassoModel(
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
  */
-class LassoWithSGD private (
-    var stepSize: Double,
-    var numIterations: Int,
-    var regParam: Double,
-    var miniBatchFraction: Double)
+class LassoWithSGD(
+    private var stepSize: Double,
+    private var numIterations: Int,
+    private var regParam: Double,
+    private var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[LassoModel] with Serializable {
 
-  val gradient = new LeastSquaresGradient()
-  val updater = new L1Updater()
-  @transient val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
+  private val gradient = new LeastSquaresGradient()
+  private val updater = new L1Updater()
+  override val optimizer = new GradientDescent(gradient, updater)
+    .setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)

@@ -79,7 +79,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   protected val validators: Seq[RDD[LabeledPoint] => Boolean] = List()
 
-  val optimizer: Optimizer
+  /** The optimizer to solve the problem. */
+  def optimizer: Optimizer
 
   /** Whether to add intercept (default: true). */
   protected var addIntercept: Boolean = true
@@ -100,6 +101,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   }
 
   /**
+   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+   *
    * Set if the algorithm should validate data before training. Default true.
    */
   def setValidateData(validateData: Boolean): this.type = {

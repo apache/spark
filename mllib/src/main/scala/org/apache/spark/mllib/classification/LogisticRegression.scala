@@ -55,7 +55,7 @@ class LogisticRegressionModel(
     this
   }
 
-  override def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
+  override protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
       intercept: Double) = {
     val margin = weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
     val score = 1.0/ (1.0 + math.exp(-margin))
@@ -70,28 +70,28 @@ class LogisticRegressionModel(
  * Train a classification model for Logistic Regression using Stochastic Gradient Descent.
  * NOTE: Labels used in Logistic Regression should be {0, 1}
  */
-class LogisticRegressionWithSGD private (
-    var stepSize: Double,
-    var numIterations: Int,
-    var regParam: Double,
-    var miniBatchFraction: Double)
+class LogisticRegressionWithSGD (
+    private var stepSize: Double,
+    private var numIterations: Int,
+    private var regParam: Double,
+    private var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[LogisticRegressionModel] with Serializable {
 
-  val gradient = new LogisticGradient()
-  val updater = new SimpleUpdater()
+  private val gradient = new LogisticGradient()
+  private val updater = new SimpleUpdater()
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
-  override val validators = List(DataValidators.classificationLabels)
+  override protected val validators = List(DataValidators.binaryLabelValidator)
 
   /**
    * Construct a LogisticRegression object with default parameters
    */
   def this() = this(1.0, 100, 0.0, 1.0)
 
-  def createModel(weights: Vector, intercept: Double) = {
+  override protected def createModel(weights: Vector, intercept: Double) = {
     new LogisticRegressionModel(weights, intercept)
   }
 }

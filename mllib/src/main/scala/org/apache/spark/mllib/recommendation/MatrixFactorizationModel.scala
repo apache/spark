@@ -68,6 +68,8 @@ class MatrixFactorizationModel(
   }
 
   /**
+   * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+   *
    * Predict the rating of many users for many products.
    * This is a Java stub for python predictAll()
    *

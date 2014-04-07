@@ -40,14 +40,17 @@ class NaiveBayesModel(
   private val brzPi = new BDV[Double](pi)
   private val brzTheta = new BDM[Double](theta.length, theta(0).length)
 
-  var i = 0
-  while (i < theta.length) {
-    var j = 0
-    while (j < theta(i).length) {
-      brzTheta(i, j) = theta(i)(j)
-      j += 1
+  {
+    // Need to put an extra pair of braces to prevent Scala treat `i` as a member.
+    var i = 0
+    while (i < theta.length) {
+      var j = 0
+      while (j < theta(i).length) {
+        brzTheta(i, j) = theta(i)(j)
+        j += 1
+      }
+      i += 1
     }
-    i += 1
   }
 
   override def predict(testData: RDD[Vector]): RDD[Double] = testData.map(predict)
@@ -65,7 +68,7 @@ class NaiveBayesModel(
  * document classification.  By making every vector a 0-1 vector, it can also be used as
  * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]).
  */
-class NaiveBayes private (var lambda: Double) extends Serializable with Logging {
+class NaiveBayes (private var lambda: Double) extends Serializable with Logging {
 
   def this() = this(1.0)
 

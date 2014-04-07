@@ -55,7 +55,9 @@ class SVMModel(
     this
   }
 
-  override def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
+  override protected def predictPoint(
+      dataMatrix: Vector,
+      weightMatrix: Vector,
       intercept: Double) = {
     val margin = weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
     threshold match {
@@ -69,29 +71,28 @@ class SVMModel(
  * Train a Support Vector Machine (SVM) using Stochastic Gradient Descent.
  * NOTE: Labels used in SVM should be {0, 1}.
  */
-class SVMWithSGD private (
-    var stepSize: Double,
-    var numIterations: Int,
-    var regParam: Double,
-    var miniBatchFraction: Double)
+class SVMWithSGD(
+    private var stepSize: Double,
+    private var numIterations: Int,
+    private var regParam: Double,
+    private var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[SVMModel] with Serializable {
 
-  val gradient = new HingeGradient()
-  val updater = new SquaredL2Updater()
+  private val gradient = new HingeGradient()
+  private val updater = new SquaredL2Updater()
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
-
-  override val validators = List(DataValidators.classificationLabels)
+  override protected val validators = List(DataValidators.binaryLabelValidator)
 
   /**
    * Construct a SVM object with default parameters
    */
   def this() = this(1.0, 100, 1.0, 1.0)
 
-  def createModel(weights: Vector, intercept: Double) = {
+  override protected def createModel(weights: Vector, intercept: Double) = {
     new SVMModel(weights, intercept)
   }
 }

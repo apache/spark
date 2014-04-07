@@ -51,17 +51,18 @@ class RidgeRegressionModel(
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
  */
-class RidgeRegressionWithSGD private (
-    var stepSize: Double,
-    var numIterations: Int,
-    var regParam: Double,
-    var miniBatchFraction: Double)
-    extends GeneralizedLinearAlgorithm[RidgeRegressionModel] with Serializable {
+class RidgeRegressionWithSGD(
+    private var stepSize: Double,
+    private var numIterations: Int,
+    private var regParam: Double,
+    private var miniBatchFraction: Double)
+  extends GeneralizedLinearAlgorithm[RidgeRegressionModel] with Serializable {
 
-  val gradient = new LeastSquaresGradient()
-  val updater = new SquaredL2Updater()
+  private val gradient = new LeastSquaresGradient()
+  private val updater = new SquaredL2Updater()
 
-  @transient val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
+  override val optimizer = new GradientDescent(gradient, updater)
+    .setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)

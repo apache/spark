@@ -25,10 +25,11 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
 
 /**
+ * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ *
  * Generate test data for LogisticRegression. This class chooses positive labels
  * with probability `probOne` and scales features for positive examples by `eps`.
  */
-
 object LogisticRegressionDataGenerator {
 
   /**

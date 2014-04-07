@@ -28,6 +28,8 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 
 /**
+ * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ *
  * Generate sample data used for Linear Data. This class generates
  * uniformly random values for every feature and adds Gaussian noise with mean `eps` to the
  * response variable `Y`.

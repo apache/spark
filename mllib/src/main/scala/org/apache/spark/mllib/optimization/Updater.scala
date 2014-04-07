@@ -24,6 +24,8 @@ import breeze.linalg.{norm => brzNorm, axpy => brzAxpy, Vector => BV}
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
+ * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ *
  * Class used to perform steps (weight update) using Gradient Descent methods.
  *
  * For general minimization problems, or for regularized problems of the form
@@ -59,6 +61,8 @@ abstract class Updater extends Serializable {
 }
 
 /**
+ * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ *
  * A simple updater for gradient descent *without* any regularization.
  * Uses a step-size decreasing with the square root of the number of iterations.
  */
@@ -78,6 +82,8 @@ class SimpleUpdater extends Updater {
 }
 
 /**
+ * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ *
  * Updater for L1 regularized problems.
  *          R(w) = ||w||_1
  * Uses a step-size decreasing with the square root of the number of iterations.
@@ -120,6 +126,8 @@ class L1Updater extends Updater {
 }
 
 /**
+ * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ *
  * Updater for L2 regularized problems.
  *          R(w) = 1/2 ||w||^2
  * Uses a step-size decreasing with the square root of the number of iterations.

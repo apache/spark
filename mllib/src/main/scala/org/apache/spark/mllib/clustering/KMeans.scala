@@ -36,13 +36,13 @@ import org.apache.spark.util.random.XORShiftRandom
  * This is an iterative algorithm that will make multiple passes over the data, so any RDDs given
  * to it should be cached by the user.
  */
-class KMeans private (
-    var k: Int,
-    var maxIterations: Int,
-    var runs: Int,
-    var initializationMode: String,
-    var initializationSteps: Int,
-    var epsilon: Double) extends Serializable with Logging {
+class KMeans(
+    private var k: Int,
+    private var maxIterations: Int,
+    private var runs: Int,
+    private var initializationMode: String,
+    private var initializationSteps: Int,
+    private var epsilon: Double) extends Serializable with Logging {
   def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4)
 
   /** Set the number of clusters to create (k). Default: 2. */
@@ -71,6 +71,8 @@ class KMeans private (
   }
 
   /**
+   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+   *
    * Set the number of runs of the algorithm to execute in parallel. We initialize the algorithm
    * this many times with random starting conditions (configured by the initialization mode), then
    * return the best clustering found over any run. Default: 1.

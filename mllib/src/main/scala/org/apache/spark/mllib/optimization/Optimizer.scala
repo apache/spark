@@ -21,6 +21,11 @@ import org.apache.spark.rdd.RDD
 
 import org.apache.spark.mllib.linalg.Vector
 
+/**
+ * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ *
+ * Trait for optimization problem solvers.
+ */
 trait Optimizer extends Serializable {
 
   /**
