@@ -25,12 +25,11 @@ class SparkUISuite extends FunSuite with SharedSparkContext {
 
   test("verify appUIHostPort doesn't contain scheme") {
     val appUIUri = new URI(sc.ui.appUIHostPort)
-    assert(appUIUri.getScheme().startsWith("http")  == false)
+    assert(!appUIUri.getScheme().startsWith("http"))
   }
 
   test("verify appUIAddress contains the scheme") {
     val appUIUri = new URI(sc.ui.appUIAddress)
-    assert(appUIUri.getScheme().startsWith("http")  == true)
+    assert(appUIUri.getScheme().startsWith("http"))
   }
-
 }
