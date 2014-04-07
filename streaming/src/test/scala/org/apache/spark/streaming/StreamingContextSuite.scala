@@ -178,7 +178,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     val conf = new SparkConf().setMaster(master).setAppName(appName)
     conf.set("spark.cleaner.ttl", "3600")
     sc = new SparkContext(conf)
-    for (i <- 1 to 3) {
+    for (i <- 1 to 4) {
       logInfo("==================================")
       ssc = new StreamingContext(sc, batchDuration)
       var runningCount = 0
@@ -190,7 +190,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
         runningCount += count.toInt
       })
       ssc.start()
-      ssc.awaitTermination(2000)
+      ssc.awaitTermination(500)
       ssc.stop(stopSparkContext = false, stopGracefully = true)
       logInfo("Running count = " + runningCount)
       logInfo("TestReceiver.counter = " + TestReceiver.counter.get())
