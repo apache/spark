@@ -100,7 +100,10 @@ class ExpressionEvaluationSuite extends FunSuite {
     (null,  false, null) ::
     (null,  null,  null) :: Nil)
 
-  def booleanLogicTest(name: String, op: (Expression, Expression) => Expression,  truthTable: Seq[(Any, Any, Any)]) {
+  def booleanLogicTest(
+      name: String,
+      op: (Expression, Expression) => Expression,
+      truthTable: Seq[(Any, Any, Any)]) {
     test(s"3VL $name") {
       truthTable.foreach {
         case (l,r,answer) =>
