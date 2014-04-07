@@ -297,5 +297,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         val asString = result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t")).toSeq
         asString
     }
+
+    override def simpleString: String =
+      logical match {
+        case _: NativeCommand => "<Executed by Hive>"
+        case _ => executedPlan.toString
+      }
   }
 }
