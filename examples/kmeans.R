@@ -9,6 +9,12 @@ parseVector <- function(line) {
   sapply(nums, as.double)
 }
 
+parseVectors <- function(lines) {
+	lines = strsplit(as.character(lines) , " ", fixed = TRUE)
+	split(matrix(as.numeric(unlist(lines)), ncol = length(lines[[1]])), 1:length(lines))
+}
+
+
 closestPoint <- function(p, centers) {
   bestIndex <- 0
   closest <- .Machine$double.xmax
@@ -36,7 +42,7 @@ K <- as.integer(args[[3]])
 convergeDist <- as.double(args[[4]])
 
 lines <- textFile(sc, args[[2]])
-points <- cache(lapply(lines, parseVector))
+points <- cache(lapplyPartition(lines, parseVectors))
 # kPoints <- take(points, K)
 kPoints <- takeSample(points, FALSE, K, 16189L)
 tempDist <- 1.0

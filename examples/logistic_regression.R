@@ -12,9 +12,9 @@ sc <- sparkR.init(args[[1]], "LogisticRegressionR")
 iterations <- as.integer(args[[3]])
 D <- 10
 
-readPartition <- function(part) {
-	con = textConnection(part, "r")
-	list(as.matrix(read.table(con)))}
+readPartition <- function(part){
+	part = strsplit(part, " ", fixed = T)
+	list(matrix(as.numeric(unlist(part)), ncol = length(part[[1]])))}
 
 # Read data points and convert each partition to a matrix
 points <- cache(lapplyPartition(textFile(sc, args[[2]]), readPartition))
