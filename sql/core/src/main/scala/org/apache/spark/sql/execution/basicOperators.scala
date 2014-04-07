@@ -41,7 +41,7 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   override def output = child.output
 
   override def execute() = child.execute().mapPartitions { iter =>
-    iter.filter(condition.apply(_).asInstanceOf[Boolean])
+    iter.filter(condition.eval(_).asInstanceOf[Boolean])
   }
 }
 

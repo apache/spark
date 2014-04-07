@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 class ExpressionEvaluationSuite extends FunSuite {
 
   test("literals") {
-    assert((Literal(1) + Literal(1)).apply(null) === 2)
+    assert((Literal(1) + Literal(1)).eval(null) === 2)
   }
 
   /**
@@ -62,7 +62,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     notTrueTable.foreach {
       case (v, answer) =>
         val expr = Not(Literal(v, BooleanType))
-        val result = expr.apply(null)
+        val result = expr.eval(null)
         if (result != answer)
           fail(s"$expr should not evaluate to $result, expected: $answer")    }
   }
@@ -105,7 +105,7 @@ class ExpressionEvaluationSuite extends FunSuite {
       truthTable.foreach {
         case (l,r,answer) =>
           val expr = op(Literal(l, BooleanType), Literal(r, BooleanType))
-          val result = expr.apply(null)
+          val result = expr.eval(null)
           if (result != answer)
             fail(s"$expr should not evaluate to $result, expected: $answer")
       }
@@ -113,7 +113,7 @@ class ExpressionEvaluationSuite extends FunSuite {
   }
 
   def evaluate(expression: Expression, inputRow: Row = EmptyRow): Any = {
-    expression.apply(inputRow)
+    expression.eval(inputRow)
   }
 
   def checkEvaluation(expression: Expression, expected: Any, inputRow: Row = EmptyRow): Unit = {

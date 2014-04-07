@@ -144,7 +144,7 @@ case class Aggregate(
 
         var i = 0
         while (i < buffer.length) {
-          aggregateResults(i) = buffer(i).apply(EmptyRow)
+          aggregateResults(i) = buffer(i).eval(EmptyRow)
           i += 1
         }
 
@@ -190,7 +190,7 @@ case class Aggregate(
             while (i < currentBuffer.length) {
               // Evaluating an aggregate buffer returns the result.  No row is required since we
               // already added all rows in the group using update.
-              aggregateResults(i) = currentBuffer(i).apply(EmptyRow)
+              aggregateResults(i) = currentBuffer(i).eval(EmptyRow)
               i += 1
             }
             resultProjection(joinedRow(aggregateResults, currentGroup))
