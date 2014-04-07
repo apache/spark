@@ -27,23 +27,23 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{Distribution, Utils}
 
-/** <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span> */
+/** <span class="developer badge">Developer API</span> */
 sealed trait SparkListenerEvent
 
-/** <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span> */
+/** <span class="developer badge">Developer API</span> */
 case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Properties = null)
   extends SparkListenerEvent
 
-/** <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span> */
+/** <span class="developer badge">Developer API</span> */
 case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent
 
-/** <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span> */
+/** <span class="developer badge">Developer API</span> */
 case class SparkListenerTaskStart(stageId: Int, taskInfo: TaskInfo) extends SparkListenerEvent
 
-/** <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span> */
+/** <span class="developer badge">Developer API</span> */
 case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent
 
-/** <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span> */
+/** <span class="developer badge">Developer API</span> */
 case class SparkListenerTaskEnd(
     stageId: Int,
     taskType: String,
@@ -52,26 +52,26 @@ case class SparkListenerTaskEnd(
     taskMetrics: TaskMetrics)
   extends SparkListenerEvent
 
-/** <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span> */
+/** <span class="developer badge">Developer API</span> */
 case class SparkListenerJobStart(jobId: Int, stageIds: Seq[Int], properties: Properties = null)
   extends SparkListenerEvent
 
-/** <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span> */
+/** <span class="developer badge">Developer API</span> */
 case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkListenerEvent
 
-/** <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span> */
+/** <span class="developer badge">Developer API</span> */
 case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(String, String)]])
   extends SparkListenerEvent
 
-/** <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span> */
+/** <span class="developer badge">Developer API</span> */
 case class SparkListenerBlockManagerAdded(blockManagerId: BlockManagerId, maxMem: Long)
   extends SparkListenerEvent
 
-/** <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span> */
+/** <span class="developer badge">Developer API</span> */
 case class SparkListenerBlockManagerRemoved(blockManagerId: BlockManagerId)
   extends SparkListenerEvent
 
-/** <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span> */
+/** <span class="developer badge">Developer API</span> */
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
 /** An event used in the listener to shutdown the listener daemon thread. */
@@ -79,7 +79,7 @@ private[spark] case object SparkListenerShutdown extends SparkListenerEvent
 
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * <span class="developer badge">Developer API</span>
  * Interface for listening to events from the Spark scheduler. Note that this is an internal
  * interface which might change in different Spark releases.
  */
@@ -142,7 +142,7 @@ trait SparkListener {
 }
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * <span class="developer badge">Developer API</span>
  * Simple SparkListener that logs a few summary statistics when each stage completes
  */
 class StatsReportListener extends SparkListener with Logging {

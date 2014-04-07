@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.executor.TaskMetrics
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * <span class="developer badge">Developer API</span>
  * Contextual information about a task which can be read or mutated during execution.
  */
 class TaskContext(

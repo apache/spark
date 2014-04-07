@@ -18,7 +18,7 @@
 package org.apache.spark.partial
 
 /**
- * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ * <span class="experimental badge">Experimental</span>
  */
 class PartialResult[R](initialVal: R, isFinal: Boolean) {
   private var finalValue: Option[R] = if (isFinal) Some(initialVal) else None

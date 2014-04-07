@@ -63,13 +63,13 @@ class SparkContext(config: SparkConf)
   private[spark] var preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()
 
   /**
-   * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+   * <span class="developer badge">Developer API</span>
    * Alternative constructor for setting preferred locations where Spark will create executors.
    *
    * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on. Ca
    * be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
    * from a list of input files or InputFormats for the application.
-   */
+
     def this(config: SparkConf, preferredNodeLocationData: Map[String, Set[SplitInfo]]) = {
       this(config)
       this.preferredNodeLocationData = preferredNodeLocationData
@@ -714,7 +714,7 @@ class SparkContext(config: SparkConf)
   }
 
   /**
-   * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+   * <span class="developer badge">Developer API</span>
    * Register a listener to receive up-calls from events that happen during execution.
    */
   def addSparkListener(listener: SparkListener) {
@@ -1026,7 +1026,7 @@ class SparkContext(config: SparkConf)
   }
 
   /**
-   * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+   * <span class="developer badge">Developer API</span>
    * Run a job that can return approximate results.
    */
   def runApproximateJob[T, U, R](
@@ -1044,7 +1044,7 @@ class SparkContext(config: SparkConf)
   }
 
   /**
-   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+   * <span class="experimental badge">Experimental</span>
    * Submit a job for execution and return a FutureJob holding the result.
    */
   def submitJob[T, U, R](

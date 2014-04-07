@@ -94,7 +94,7 @@ private[spark] class JavaSerializerInstance(counterReset: Int) extends Serialize
 }
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * <span class="developer badge">Developer API</span>
  * A Spark serializer that uses Java's built-in serialization.
  *
  * Note that this serializer is not guaranteed to be wire-compatible across different versions of

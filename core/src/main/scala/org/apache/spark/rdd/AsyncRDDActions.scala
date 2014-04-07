@@ -26,7 +26,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.{ComplexFutureAction, FutureAction, Logging}
 
 /**
- * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ * <span class="experimental badge">Experimental</span>
  * A set of asynchronous RDD actions available through an implicit conversion.
  * Import `org.apache.spark.SparkContext._` at the top of your program to use these functions.
  */

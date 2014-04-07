@@ -43,7 +43,7 @@ private[spark] class UnionPartition[T: ClassTag](idx: Int, rdd: RDD[T], splitInd
   }
 }
 
-/** <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span> */
+/** <span class="developer badge">Developer API</span> */
 class UnionRDD[T: ClassTag](
     sc: SparkContext,
     @transient var rdds: Seq[RDD[T]])

@@ -21,7 +21,7 @@ import collection.mutable.ArrayBuffer
 
 // information about a specific split instance : handles both split instances.
 // So that we do not need to worry about the differences.
-/** <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span> */
+/** <span class="developer badge">Developer API</span> */
 class SplitInfo(val inputFormatClazz: Class[_], val hostLocation: String, val path: String,
                 val length: Long, val underlyingSplit: Any) {
   override def toString(): String = {

@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.ObjectWritable
 import org.apache.hadoop.io.Writable
 
-/** <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span> */
+/** <span class="developer badge">Developer API</span> */
 class SerializableWritable[T <: Writable](@transient var t: T) extends Serializable {
   def value = t
   override def toString = t.toString

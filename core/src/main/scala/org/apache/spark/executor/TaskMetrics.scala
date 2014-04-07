@@ -20,7 +20,7 @@ package org.apache.spark.executor
 import org.apache.spark.storage.{BlockId, BlockStatus}
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * <span class="developer badge">Developer API</span>
  * Metrics tracked during the execution of a task.
  */
 class TaskMetrics extends Serializable {
@@ -87,7 +87,7 @@ object TaskMetrics {
 
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * <span class="developer badge">Developer API</span>
  * Metrics pertaining to shuffle data read in a given task.
  */
 class ShuffleReadMetrics extends Serializable {
@@ -125,7 +125,7 @@ class ShuffleReadMetrics extends Serializable {
 }
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * <span class="developer badge">Developer API</span>
  * Metrics pertaining to shuffle data written in a given task.
  */
 class ShuffleWriteMetrics extends Serializable {

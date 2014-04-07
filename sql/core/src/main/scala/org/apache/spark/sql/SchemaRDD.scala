@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.types.BooleanType
 import org.apache.spark.{Dependency, OneToOneDependency, Partition, TaskContext}
 
 /**
- * <span class="badge" style="float: right; background-color: #257080;">ALPHA COMPONENT</span>
+ * <span class="experimental badge">ALPHA COMPONENT</span>
  * An RDD of [[Row]] objects that has an associated schema. In addition to standard RDD functions,
  * SchemaRDDs can be used in relational queries, as shown in the examples below.
  *
@@ -240,7 +240,7 @@ class SchemaRDD(
       Filter(ScalaUdf(udf, BooleanType, Seq(UnresolvedAttribute(arg1.name))), logicalPlan))
 
   /**
-   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+   * <span class="experimental badge">Experimental</span>
    * Filters tuples using a function over a `Dynamic` version of a given Row.  DynamicRows use
    * scala's Dynamic trait to emulate an ORM of in a dynamically typed language.  Since the type of
    * the column is not known at compile time, all attributes are converted to strings before
@@ -258,7 +258,7 @@ class SchemaRDD(
       Filter(ScalaUdf(dynamicUdf, BooleanType, Seq(WrapDynamic(logicalPlan.output))), logicalPlan))
 
   /**
-   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+   * <span class="experimental badge">Experimental</span>
    * Returns a sampled version of the underlying dataset.
    *
    * @group Query
@@ -270,7 +270,7 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Sample(fraction, withReplacement, seed, logicalPlan))
 
   /**
-   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+   * <span class="experimental badge">Experimental</span>
    * Applies the given Generator, or table generating function, to this relation.
    *
    * @param generator A table generating function.  The API for such functions is likely to change
@@ -294,7 +294,7 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Generate(generator, join, outer, None, logicalPlan))
 
   /**
-   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+   * <span class="experimental badge">Experimental</span>
    * Adds the rows from this RDD to the specified table.  Note in a standard [[SQLContext]] there is
    * no notion of persistent tables, and thus queries that contain this operator will fail to
    * optimize.  When working with an extension of a SQLContext that has a persistent catalog, such

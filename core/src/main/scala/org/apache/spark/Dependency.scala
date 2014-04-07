@@ -21,14 +21,14 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * <span class="developer badge">Developer API</span>
  * Base class for dependencies.
  */
 abstract class Dependency[T](val rdd: RDD[T]) extends Serializable
 
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * <span class="developer badge">Developer API</span>
  * Base class for dependencies where each partition of the parent RDD is used by at most one
  * partition of the child RDD.  Narrow dependencies allow for pipelined execution.
  */
@@ -43,7 +43,7 @@ abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency(rdd) {
 
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * <span class="developer badge">Developer API</span>
  * Represents a dependency on the output of a shuffle stage.
  * @param rdd the parent RDD
  * @param partitioner partitioner used to partition the shuffle output
@@ -62,7 +62,7 @@ class ShuffleDependency[K, V](
 
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * <span class="developer badge">Developer API</span>
  * Represents a one-to-one dependency between partitions of the parent and child RDDs.
  */
 class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
@@ -71,7 +71,7 @@ class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
 
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * <span class="developer badge">Developer API</span>
  * Represents a one-to-one dependency between ranges of partitions in the parent and child RDDs.
  * @param rdd the parent RDD
  * @param inStart the start of the range in the parent RDD

@@ -33,12 +33,12 @@ package org.apache
  * Java programmers should reference the [[spark.api.java]] package
  * for Spark programming APIs in Java.
  *
- * Classes and methods marked with <span class="badge" style="background-color: #257080">
- * EXPERIMENTAL</span> are user-facing features which have not been officially adopted by the
+ * Classes and methods marked with <span class="experimental badge">
+ * Experimental</span> are user-facing features which have not been officially adopted by the
  * Spark project. These are subject to change or removal in minor releases.
  *
- * Classes and methods marked with <span class="badge" style="background-color: #44751E">
- * DEVELOPER API</span> are intended for advanced users want to extend Spark through lower
+ * Classes and methods marked with <span class="developer badge">
+ * Developer API</span> are intended for advanced users want to extend Spark through lower
  * level interfaces. These are subject to changes or removal in minor releases.
  */
 
