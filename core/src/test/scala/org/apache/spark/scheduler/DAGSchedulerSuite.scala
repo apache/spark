@@ -97,6 +97,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
   before {
     sc = new SparkContext("local", "DAGSchedulerSuite")
     taskSets.clear()
+    cancelledStages.clear()
     cacheLocations.clear()
     results.clear()
     mapOutputTracker = new MapOutputTrackerMaster(conf)
@@ -346,7 +347,6 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
   test("run shuffle with map stage failure") {
     val shuffleMapRdd = makeRdd(2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
-    val shuffleId = shuffleDep.shuffleId
     val reduceRdd = makeRdd(2, List(shuffleDep))
     submit(reduceRdd, Array(0, 1))
 
