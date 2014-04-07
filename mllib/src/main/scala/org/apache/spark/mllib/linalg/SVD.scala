@@ -199,14 +199,15 @@ class SVD {
     }
 
     // Compute A^T A
-    val fullata = if (useDIMS)
+    val fullATA = if (useDIMS) {
       MatrixAlgebra.squareWithDIMSUM(
         matrix, MatrixAlgebra.columnMagnitudes(matrix), gamma)
-    else
+    } else {
       MatrixAlgebra.square(matrix)
+    }
 
     // Construct jblas A^T A locally
-    val ata = new DoubleMatrix(fullata)
+    val ata = new DoubleMatrix(fullATA)
 
     // Since A^T A is small, we can compute its SVD directly
     val svd = Singular.sparseSVD(ata)
