@@ -146,4 +146,8 @@ class HiveQuerySuite extends HiveComparisonTest {
     hql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
   }
 
+  test("SchemaRDD toString") {
+    hql("SHOW TABLES").toString
+    hql("SELECT * FROM src").toString
+  }
 }

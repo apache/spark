@@ -224,6 +224,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
 
+    def simpleString: String = stringOrError(executedPlan)
+
     override def toString: String =
       s"""== Logical Plan ==
          |${stringOrError(analyzed)}
