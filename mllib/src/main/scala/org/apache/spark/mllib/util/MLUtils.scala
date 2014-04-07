@@ -78,7 +78,7 @@ object MLUtils {
       }.reduce(math.max)
     }
     parsed.map { items =>
-      val label = labelParser(items.head)
+      val label = labelParser.parse(items.head)
       val (indices, values) = items.tail.map { item =>
         val indexAndValue = item.split(':')
         val index = indexAndValue(0).toInt - 1
@@ -96,7 +96,7 @@ object MLUtils {
    * with number of features determined automatically and the default number of partitions.
    */
   def loadLibSVMData(sc: SparkContext, path: String): RDD[LabeledPoint] =
-    loadLibSVMData(sc, path, BinaryLabelParser(), -1, sc.defaultMinSplits)
+    loadLibSVMData(sc, path, BinaryLabelParser, -1, sc.defaultMinSplits)
 
   /**
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint],
