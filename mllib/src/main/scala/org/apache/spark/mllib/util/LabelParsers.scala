@@ -38,7 +38,7 @@ class BinaryLabelParser extends LabelParser {
 object BinaryLabelParser {
   private lazy val instance = new BinaryLabelParser()
   /** Gets the default instance of BinaryLabelParser. */
-  def apply() = instance
+  def apply(): BinaryLabelParser = instance
 }
 
 /**
@@ -51,5 +51,5 @@ class MulticlassLabelParser extends LabelParser {
 object MulticlassLabelParser {
   private lazy val instance = new MulticlassLabelParser()
   /** Gets the default instance of MulticlassLabelParser. */
-  def apply() = instance
+  def apply(): MulticlassLabelParser = instance
 }
