@@ -403,7 +403,7 @@ case class HiveGenericUdtf(
     }
   }
 
-  override def apply(input: Row): TraversableOnce[Row] = {
+  override def eval(input: Row): TraversableOnce[Row] = {
     outputInspectors // Make sure initialized.
 
     val inputProjection = new Projection(children)

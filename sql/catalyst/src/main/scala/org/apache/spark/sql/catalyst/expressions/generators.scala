@@ -35,17 +35,17 @@ import org.apache.spark.sql.catalyst.types._
  * requested.  The attributes produced by this function will be automatically copied anytime rules
  * result in changes to the Generator or its children.
  */
-abstract class Generator extends Expression with (Row => TraversableOnce[Row]) {
+abstract class Generator extends Expression {
   self: Product =>
 
-  type EvaluatedType = TraversableOnce[Row]
+  override type EvaluatedType = TraversableOnce[Row]
 
-  lazy val dataType =
+  override lazy val dataType =
     ArrayType(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
 
-  def nullable = false
+  override def nullable = false
 
-  def references = children.flatMap(_.references).toSet
+  override def references = children.flatMap(_.references).toSet
 
   /**
    * Should be overridden by specific generators.  Called only once for each instance to ensure
@@ -63,7 +63,7 @@ abstract class Generator extends Expression with (Row => TraversableOnce[Row]) {
   }
 
   /** Should be implemented by child classes to perform specific Generators. */
-  def apply(input: Row): TraversableOnce[Row]
+  override def eval(input: Row): TraversableOnce[Row]
 
   /** Overridden `makeCopy` also copies the attributes that are produced by this generator. */
   override def makeCopy(newArgs: Array[AnyRef]): this.type = {
@@ -83,7 +83,7 @@ case class Explode(attributeNames: Seq[String], child: Expression)
     child.resolved &&
     (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType])
 
-  lazy val elementTypes = child.dataType match {
+  private lazy val elementTypes = child.dataType match {
     case ArrayType(et) => et :: Nil
     case MapType(kt,vt) => kt :: vt :: Nil
   }
@@ -100,7 +100,7 @@ case class Explode(attributeNames: Seq[String], child: Expression)
       }
     }
 
-  override def apply(input: Row): TraversableOnce[Row] = {
+  override def eval(input: Row): TraversableOnce[Row] = {
     child.dataType match {
       case ArrayType(_) =>
         val inputArray = child.eval(input).asInstanceOf[Seq[Any]]

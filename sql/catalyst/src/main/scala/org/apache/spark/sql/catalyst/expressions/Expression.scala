@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.types.{DataType, FractionalType, IntegralType, NumericType, NativeType}
 
@@ -231,7 +231,7 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
 
   override def foldable = left.foldable && right.foldable
 
-  def references = left.references ++ right.references
+  override def references = left.references ++ right.references
 
   override def toString = s"($left $symbol $right)"
 }
@@ -243,5 +243,5 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
 
-  def references = child.references
+  override def references = child.references
 }
