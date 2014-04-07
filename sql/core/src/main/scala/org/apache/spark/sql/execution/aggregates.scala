@@ -144,20 +144,12 @@ case class Aggregate(
 
         var i = 0
         while (i < buffer.length) {
-          aggregateResults(i) = buffer(i).apply(EmptyRow)
+          aggregateResults(i) = buffer(i).eval(EmptyRow)
           i += 1
         }
 
         Iterator(resultProjection(aggregateResults))
       }
-      buildRow(aggImplementations.map(_.eval(group)))
-    }
-
-    // TODO: THIS BREAKS PIPELINING, DOUBLE COMPUTES THE ANSWER, AND USES TOO MUCH MEMORY...
-    if (groupingExpressions.isEmpty && result.count == 0) {
-      // When there there is no output to the Aggregate operator, we still output an empty row.
-      val aggImplementations = createAggregateImplementations()
-      sc.makeRDD(buildRow(aggImplementations.map(_.eval(null))) :: Nil)
     } else {
       child.execute().mapPartitions { iter =>
         val hashTable = new HashMap[Row, Array[AggregateFunction]]
@@ -198,7 +190,7 @@ case class Aggregate(
             while (i < currentBuffer.length) {
               // Evaluating an aggregate buffer returns the result.  No row is required since we
               // already added all rows in the group using update.
-              aggregateResults(i) = currentBuffer(i).apply(EmptyRow)
+              aggregateResults(i) = currentBuffer(i).eval(EmptyRow)
               i += 1
             }
             resultProjection(joinedRow(aggregateResults, currentGroup))
