@@ -18,6 +18,8 @@
 package org.apache.spark.mllib.tree.impurity
 
 /**
+ * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ *
  * Class for calculating variance during regression
  */
 object Variance extends Impurity {
@@ -25,6 +27,8 @@ object Variance extends Impurity {
      throw new UnsupportedOperationException("Variance.calculate")
 
   /**
+   * <span class="badge badge-red" style="float: right;">DEVELOPER API</span>
+   *
    * variance calculation
    * @param count number of instances
    * @param sum sum of labels

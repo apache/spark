@@ -40,4 +40,4 @@ class Strategy (
     val maxDepth: Int,
     val maxBins: Int = 100,
     val quantileCalculationStrategy: QuantileStrategy = Sort,
-    val categoricalFeaturesInfo: Map[Int,Int] = Map[Int,Int]()) extends Serializable
+    val categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int]()) extends Serializable

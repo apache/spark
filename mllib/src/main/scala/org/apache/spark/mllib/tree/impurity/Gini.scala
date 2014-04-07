@@ -18,6 +18,8 @@
 package org.apache.spark.mllib.tree.impurity
 
 /**
+ * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ *
  * Class for calculating the
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning#Gini_impurity Gini impurity]]
  * during binary classification.
@@ -25,6 +27,8 @@ package org.apache.spark.mllib.tree.impurity
 object Gini extends Impurity {
 
   /**
+   * <span class="badge badge-red" style="float: right;">DEVELOPER API</span>
+   *
    * Gini coefficient calculation
    * @param c0 count of instances with label 0
    * @param c1 count of instances with label 1
@@ -41,6 +45,6 @@ object Gini extends Impurity {
     }
   }
 
-  def calculate(count: Double, sum: Double, sumSquares: Double): Double =
+  override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
     throw new UnsupportedOperationException("Gini.calculate")
 }

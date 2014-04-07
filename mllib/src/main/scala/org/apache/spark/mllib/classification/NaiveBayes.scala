@@ -41,7 +41,7 @@ class NaiveBayesModel(
   private val brzTheta = new BDM[Double](theta.length, theta(0).length)
 
   {
-    // Need to put an extra pair of braces to prevent Scala treat `i` as a member.
+    // Need to put an extra pair of braces to prevent Scala treating `i` as a member.
     var i = 0
     while (i < theta.length) {
       var j = 0

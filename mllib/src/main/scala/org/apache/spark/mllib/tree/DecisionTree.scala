@@ -33,13 +33,15 @@ import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
+ * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ *
  * A class that implements a decision tree algorithm for classification and regression. It
  * supports both continuous and categorical features.
  * @param strategy The configuration parameters for the tree algorithm which specify the type
  *                 of algorithm (classification, regression, etc.), feature type (continuous,
  *                 categorical), depth of the tree, quantile calculation strategy, etc.
  */
-class DecisionTree private(val strategy: Strategy) extends Serializable with Logging {
+class DecisionTree (private val strategy: Strategy) extends Serializable with Logging {
 
   /**
    * Method to train a decision tree model over an RDD

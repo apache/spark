@@ -18,20 +18,24 @@
 package org.apache.spark.mllib.tree.impurity
 
 /**
+ * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ *
  * Class for calculating [[http://en.wikipedia.org/wiki/Binary_entropy_function entropy]] during
  * binary classification.
  */
 object Entropy extends Impurity {
 
-   def log2(x: Double) = scala.math.log(x) / scala.math.log(2)
+   private[tree] def log2(x: Double) = scala.math.log(x) / scala.math.log(2)
 
   /**
+   * <span class="badge badge-red" style="float: right;">DEVELOPER API</span>
+   *
    * entropy calculation
    * @param c0 count of instances with label 0
    * @param c1 count of instances with label 1
    * @return entropy value
    */
-   def calculate(c0: Double, c1: Double): Double = {
+   override def calculate(c0: Double, c1: Double): Double = {
      if (c0 == 0 || c1 == 0) {
        0
      } else {
@@ -42,6 +46,6 @@ object Entropy extends Impurity {
      }
    }
 
-  def calculate(count: Double, sum: Double, sumSquares: Double): Double =
+  override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
     throw new UnsupportedOperationException("Entropy.calculate")
 }

@@ -30,7 +30,7 @@ case class Split(
     feature: Int,
     threshold: Double,
     featureType: FeatureType,
-    categories: List[Double]){
+    categories: List[Double]) {
 
   override def toString =
     "Feature = " + feature + ", threshold = " + threshold + ", featureType =  " + featureType +
@@ -42,7 +42,7 @@ case class Split(
  * @param feature feature index
  * @param featureType type of feature -- categorical or continuous
  */
-class DummyLowSplit(feature: Int, featureType: FeatureType)
+private[tree] class DummyLowSplit(feature: Int, featureType: FeatureType)
   extends Split(feature, Double.MinValue, featureType, List())
 
 /**
@@ -50,7 +50,7 @@ class DummyLowSplit(feature: Int, featureType: FeatureType)
  * @param feature feature index
  * @param featureType type of feature -- categorical or continuous
  */
-class DummyHighSplit(feature: Int, featureType: FeatureType)
+private[tree] class DummyHighSplit(feature: Int, featureType: FeatureType)
   extends Split(feature, Double.MaxValue, featureType, List())
 
 /**
@@ -59,6 +59,6 @@ class DummyHighSplit(feature: Int, featureType: FeatureType)
  * @param feature feature index
  * @param featureType type of feature -- categorical or continuous
  */
-class DummyCategoricalSplit(feature: Int, featureType: FeatureType)
+private[tree] class DummyCategoricalSplit(feature: Int, featureType: FeatureType)
   extends Split(feature, Double.MaxValue, featureType, List())
 

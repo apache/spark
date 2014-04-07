@@ -22,6 +22,8 @@ import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.linalg.Vector
 
 /**
+ * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ *
  * Node in a decision tree
  * @param id integer node id
  * @param predict predicted value at the node
