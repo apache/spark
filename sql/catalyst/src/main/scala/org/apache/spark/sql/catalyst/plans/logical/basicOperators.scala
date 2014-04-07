@@ -130,7 +130,7 @@ case class Aggregate(
   def references = child.references
 }
 
-case class StopAfter(limit: Expression, child: LogicalPlan) extends UnaryNode {
+case class Limit(limit: Expression, child: LogicalPlan) extends UnaryNode {
   def output = child.output
   def references = limit.references
 }
@@ -162,6 +162,7 @@ case class LowerCaseSchema(child: LogicalPlan) extends UnaryNode {
         a.nullable)(
         a.exprId,
         a.qualifiers)
+    case other => other
   }
 
   def references = Set.empty

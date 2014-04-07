@@ -19,6 +19,7 @@ package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.Vector
 
 /**
  * Model to store the decision tree parameters
@@ -33,7 +34,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * @param features array representing a single data point
    * @return Double prediction from the trained model
    */
-  def predict(features: Array[Double]): Double = {
+  def predict(features: Vector): Double = {
     topNode.predictIfLeaf(features)
   }
 
@@ -43,7 +44,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * @param features RDD representing data points to be predicted
    * @return RDD[Int] where each entry contains the corresponding prediction
    */
-  def predict(features: RDD[Array[Double]]): RDD[Double] = {
+  def predict(features: RDD[Vector]): RDD[Double] = {
     features.map(x => predict(x))
   }
 }

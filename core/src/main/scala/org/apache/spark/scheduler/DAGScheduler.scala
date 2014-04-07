@@ -84,9 +84,9 @@ class DAGScheduler(
   private[scheduler] val stageIdToJobIds = new TimeStampedHashMap[Int, HashSet[Int]]
   private[scheduler] val stageIdToStage = new TimeStampedHashMap[Int, Stage]
   private[scheduler] val shuffleToMapStage = new TimeStampedHashMap[Int, Stage]
-  private[scheduler] val stageIdToActiveJob = new HashMap[Int, ActiveJob]
+  private[scheduler] val jobIdToActiveJob = new HashMap[Int, ActiveJob]
   private[scheduler] val resultStageToJob = new HashMap[Stage, ActiveJob]
-  private[spark] val stageToInfos = new TimeStampedHashMap[Stage, StageInfo]
+  private[scheduler] val stageToInfos = new TimeStampedHashMap[Stage, StageInfo]
 
   // Stages we need to run whose parents aren't done
   private[scheduler] val waitingStages = new HashSet[Stage]
@@ -536,7 +536,7 @@ class DAGScheduler(
           listenerBus.post(SparkListenerJobStart(job.jobId, Array[Int](), properties))
           runLocally(job)
         } else {
-          stageIdToActiveJob(jobId) = job
+          jobIdToActiveJob(jobId) = job
           activeJobs += job
           resultStageToJob(finalStage) = job
           listenerBus.post(
@@ -559,7 +559,7 @@ class DAGScheduler(
         // Cancel all running jobs.
         runningStages.map(_.jobId).foreach(handleJobCancellation)
         activeJobs.clear()      // These should already be empty by this point,
-        stageIdToActiveJob.clear()   // but just in case we lost track of some jobs...
+        jobIdToActiveJob.clear()   // but just in case we lost track of some jobs...
 
       case ExecutorAdded(execId, host) =>
         handleExecutorAdded(execId, host)
@@ -569,7 +569,6 @@ class DAGScheduler(
 
       case BeginEvent(task, taskInfo) =>
         for (
-          job <- stageIdToActiveJob.get(task.stageId);
           stage <- stageIdToStage.get(task.stageId);
           stageInfo <- stageToInfos.get(stage)
         ) {
@@ -697,7 +696,7 @@ class DAGScheduler(
   private def activeJobForStage(stage: Stage): Option[Int] = {
     if (stageIdToJobIds.contains(stage.id)) {
       val jobsThatUseStage: Array[Int] = stageIdToJobIds(stage.id).toArray.sorted
-      jobsThatUseStage.find(stageIdToActiveJob.contains)
+      jobsThatUseStage.find(jobIdToActiveJob.contains)
     } else {
       None
     }
@@ -750,8 +749,8 @@ class DAGScheduler(
       }
     }
 
-    val properties = if (stageIdToActiveJob.contains(jobId)) {
-      stageIdToActiveJob(stage.jobId).properties
+    val properties = if (jobIdToActiveJob.contains(jobId)) {
+      jobIdToActiveJob(stage.jobId).properties
     } else {
       // this stage will be assigned to "default" pool
       null
@@ -827,7 +826,7 @@ class DAGScheduler(
                   job.numFinished += 1
                   // If the whole job has finished, remove it
                   if (job.numFinished == job.numPartitions) {
-                    stageIdToActiveJob -= stage.jobId
+                    jobIdToActiveJob -= stage.jobId
                     activeJobs -= job
                     resultStageToJob -= stage
                     markStageAsFinished(stage)
@@ -986,11 +985,11 @@ class DAGScheduler(
       val independentStages = removeJobAndIndependentStages(jobId)
       independentStages.foreach(taskScheduler.cancelTasks)
       val error = new SparkException("Job %d cancelled".format(jobId))
-      val job = stageIdToActiveJob(jobId)
+      val job = jobIdToActiveJob(jobId)
       job.listener.jobFailed(error)
       jobIdToStageIds -= jobId
       activeJobs -= job
-      stageIdToActiveJob -= jobId
+      jobIdToActiveJob -= jobId
       listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error, job.finalStage.id)))
     }
   }
@@ -1011,7 +1010,7 @@ class DAGScheduler(
       val error = new SparkException("Job aborted: " + reason)
       job.listener.jobFailed(error)
       jobIdToStageIdsRemove(job.jobId)
-      stageIdToActiveJob -= resultStage.jobId
+      jobIdToActiveJob -= resultStage.jobId
       activeJobs -= job
       resultStageToJob -= resultStage
       listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error, failedStage.id)))

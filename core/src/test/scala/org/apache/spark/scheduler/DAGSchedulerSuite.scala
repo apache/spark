@@ -428,7 +428,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     assert(scheduler.pendingTasks.isEmpty)
     assert(scheduler.activeJobs.isEmpty)
     assert(scheduler.failedStages.isEmpty)
-    assert(scheduler.stageIdToActiveJob.isEmpty)
+    assert(scheduler.jobIdToActiveJob.isEmpty)
     assert(scheduler.jobIdToStageIds.isEmpty)
     assert(scheduler.stageIdToJobIds.isEmpty)
     assert(scheduler.stageIdToStage.isEmpty)

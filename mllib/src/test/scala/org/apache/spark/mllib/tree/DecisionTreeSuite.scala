@@ -27,6 +27,7 @@ import org.apache.spark.mllib.tree.model.Filter
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
+import org.apache.spark.mllib.linalg.Vectors
 
 class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
 
@@ -396,7 +397,7 @@ object DecisionTreeSuite {
   def generateOrderedLabeledPointsWithLabel0(): Array[LabeledPoint] = {
     val arr = new Array[LabeledPoint](1000)
     for (i <- 0 until 1000){
-      val lp = new LabeledPoint(0.0,Array(i.toDouble,1000.0-i))
+      val lp = new LabeledPoint(0.0, Vectors.dense(i.toDouble, 1000.0 - i))
       arr(i) = lp
     }
     arr
@@ -405,7 +406,7 @@ object DecisionTreeSuite {
   def generateOrderedLabeledPointsWithLabel1(): Array[LabeledPoint] = {
     val arr = new Array[LabeledPoint](1000)
     for (i <- 0 until 1000){
-      val lp = new LabeledPoint(1.0,Array(i.toDouble,999.0-i))
+      val lp = new LabeledPoint(1.0, Vectors.dense(i.toDouble, 999.0 - i))
       arr(i) = lp
     }
     arr
@@ -415,9 +416,9 @@ object DecisionTreeSuite {
     val arr = new Array[LabeledPoint](1000)
     for (i <- 0 until 1000){
       if (i < 600){
-        arr(i) = new LabeledPoint(1.0,Array(0.0,1.0))
+        arr(i) = new LabeledPoint(1.0, Vectors.dense(0.0, 1.0))
       } else {
-        arr(i) = new LabeledPoint(0.0,Array(1.0,0.0))
+        arr(i) = new LabeledPoint(0.0, Vectors.dense(1.0, 0.0))
       }
     }
     arr

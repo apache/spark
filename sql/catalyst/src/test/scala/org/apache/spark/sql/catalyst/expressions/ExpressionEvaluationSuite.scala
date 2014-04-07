@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.Timestamp
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.types._
@@ -190,6 +192,57 @@ class ExpressionEvaluationSuite extends FunSuite {
     intercept[java.util.regex.PatternSyntaxException] {
       evaluate("abbbbc" rlike regEx, new GenericRow(Array[Any]("**")))
     }
+  }
+  
+  test("data type casting") {
+    
+    val sts = "1970-01-01 00:00:01.0"
+    val ts = Timestamp.valueOf(sts)
+    
+    checkEvaluation("abdef" cast StringType, "abdef")
+    checkEvaluation("abdef" cast DecimalType, null)
+    checkEvaluation("abdef" cast TimestampType, null)
+    checkEvaluation("12.65" cast DecimalType, BigDecimal(12.65))
+
+    checkEvaluation(Literal(1) cast LongType, 1)
+    checkEvaluation(Cast(Literal(1) cast TimestampType, LongType), 1)
+    checkEvaluation(Cast(Literal(BigDecimal(1)) cast TimestampType, DecimalType), 1)
+    checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
+
+    checkEvaluation(Cast(Literal(sts) cast TimestampType, StringType), sts)
+    checkEvaluation(Cast(Literal(ts) cast StringType, TimestampType), ts)
+
+    checkEvaluation(Cast("abdef" cast BinaryType, StringType), "abdef")
+
+    checkEvaluation(Cast(Cast(Cast(Cast(
+      Cast("5" cast ByteType, ShortType), IntegerType), FloatType), DoubleType), LongType), 5)
+    checkEvaluation(Cast(Cast(Cast(Cast(
+      Cast("5" cast ByteType, TimestampType), DecimalType), LongType), StringType), ShortType), 5)
+    checkEvaluation(Cast(Cast(Cast(Cast(
+      Cast("5" cast TimestampType, ByteType), DecimalType), LongType), StringType), ShortType), null)
+    checkEvaluation(Cast(Cast(Cast(Cast(
+      Cast("5" cast DecimalType, ByteType), TimestampType), LongType), StringType), ShortType), 5)
+    checkEvaluation(Literal(true) cast IntegerType, 1)
+    checkEvaluation(Literal(false) cast IntegerType, 0)
+    checkEvaluation(Cast(Literal(1) cast BooleanType, IntegerType), 1)
+    checkEvaluation(Cast(Literal(0) cast BooleanType, IntegerType), 0)
+    checkEvaluation("23" cast DoubleType, 23)
+    checkEvaluation("23" cast IntegerType, 23)
+    checkEvaluation("23" cast FloatType, 23)
+    checkEvaluation("23" cast DecimalType, 23)
+    checkEvaluation("23" cast ByteType, 23)
+    checkEvaluation("23" cast ShortType, 23)
+    checkEvaluation("2012-12-11" cast DoubleType, null)
+    checkEvaluation(Literal(123) cast IntegerType, 123)
+    
+    intercept[Exception] {evaluate(Literal(1) cast BinaryType, null)}
+  }
+  
+  test("timestamp") {
+    val ts1 = new Timestamp(12)
+    val ts2 = new Timestamp(123)
+    checkEvaluation(Literal("ab") < Literal("abc"), true)
+    checkEvaluation(Literal(ts1) < Literal(ts2), true)
   }
 }
 

@@ -19,7 +19,12 @@ package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
 
+import scala.reflect.runtime.universe.TypeTag
+
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.execution.SparkSqlSerializer
 
 /**
  * An abstract class that represents type of a column. Used to append/extract Java objects into/from
@@ -51,9 +56,23 @@ private[sql] sealed abstract class ColumnType[T <: DataType, JvmType](
   def actualSize(v: JvmType): Int = defaultSize
 
   /**
+   * Returns `row(ordinal)`. Subclasses should override this method to avoid boxing/unboxing costs
+   * whenever possible.
+   */
+  def getField(row: Row, ordinal: Int): JvmType
+
+  /**
+   * Sets `row(ordinal)` to `field`. Subclasses should override this method to avoid boxing/unboxing
+   * costs whenever possible.
+   */
+  def setField(row: MutableRow, ordinal: Int, value: JvmType)
+
+  /**
    * Creates a duplicated copy of the value.
    */
   def clone(v: JvmType): JvmType = v
+
+  override def toString = getClass.getSimpleName.stripSuffix("$")
 }
 
 private[sql] abstract class NativeColumnType[T <: NativeType](
@@ -65,7 +84,7 @@ private[sql] abstract class NativeColumnType[T <: NativeType](
   /**
    * Scala TypeTag. Can be used to create primitive arrays and hash tables.
    */
-  def scalaTag = dataType.tag
+  def scalaTag: TypeTag[dataType.JvmType] = dataType.tag
 }
 
 private[sql] object INT extends NativeColumnType(IntegerType, 0, 4) {
@@ -76,6 +95,12 @@ private[sql] object INT extends NativeColumnType(IntegerType, 0, 4) {
   def extract(buffer: ByteBuffer) = {
     buffer.getInt()
   }
+
+  override def setField(row: MutableRow, ordinal: Int, value: Int) {
+    row.setInt(ordinal, value)
+  }
+
+  override def getField(row: Row, ordinal: Int) = row.getInt(ordinal)
 }
 
 private[sql] object LONG extends NativeColumnType(LongType, 1, 8) {
@@ -86,6 +111,12 @@ private[sql] object LONG extends NativeColumnType(LongType, 1, 8) {
   override def extract(buffer: ByteBuffer) = {
     buffer.getLong()
   }
+
+  override def setField(row: MutableRow, ordinal: Int, value: Long) {
+    row.setLong(ordinal, value)
+  }
+
+  override def getField(row: Row, ordinal: Int) = row.getLong(ordinal)
 }
 
 private[sql] object FLOAT extends NativeColumnType(FloatType, 2, 4) {
@@ -96,6 +127,12 @@ private[sql] object FLOAT extends NativeColumnType(FloatType, 2, 4) {
   override def extract(buffer: ByteBuffer) = {
     buffer.getFloat()
   }
+
+  override def setField(row: MutableRow, ordinal: Int, value: Float) {
+    row.setFloat(ordinal, value)
+  }
+
+  override def getField(row: Row, ordinal: Int) = row.getFloat(ordinal)
 }
 
 private[sql] object DOUBLE extends NativeColumnType(DoubleType, 3, 8) {
@@ -106,6 +143,12 @@ private[sql] object DOUBLE extends NativeColumnType(DoubleType, 3, 8) {
   override def extract(buffer: ByteBuffer) = {
     buffer.getDouble()
   }
+
+  override def setField(row: MutableRow, ordinal: Int, value: Double) {
+    row.setDouble(ordinal, value)
+  }
+
+  override def getField(row: Row, ordinal: Int) = row.getDouble(ordinal)
 }
 
 private[sql] object BOOLEAN extends NativeColumnType(BooleanType, 4, 1) {
@@ -116,6 +159,12 @@ private[sql] object BOOLEAN extends NativeColumnType(BooleanType, 4, 1) {
   override def extract(buffer: ByteBuffer) = {
     if (buffer.get() == 1) true else false
   }
+
+  override def setField(row: MutableRow, ordinal: Int, value: Boolean) {
+    row.setBoolean(ordinal, value)
+  }
+
+  override def getField(row: Row, ordinal: Int) = row.getBoolean(ordinal)
 }
 
 private[sql] object BYTE extends NativeColumnType(ByteType, 5, 1) {
@@ -126,6 +175,12 @@ private[sql] object BYTE extends NativeColumnType(ByteType, 5, 1) {
   override def extract(buffer: ByteBuffer) = {
     buffer.get()
   }
+
+  override def setField(row: MutableRow, ordinal: Int, value: Byte) {
+    row.setByte(ordinal, value)
+  }
+
+  override def getField(row: Row, ordinal: Int) = row.getByte(ordinal)
 }
 
 private[sql] object SHORT extends NativeColumnType(ShortType, 6, 2) {
@@ -136,6 +191,12 @@ private[sql] object SHORT extends NativeColumnType(ShortType, 6, 2) {
   override def extract(buffer: ByteBuffer) = {
     buffer.getShort()
   }
+
+  override def setField(row: MutableRow, ordinal: Int, value: Short) {
+    row.setShort(ordinal, value)
+  }
+
+  override def getField(row: Row, ordinal: Int) = row.getShort(ordinal)
 }
 
 private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
@@ -152,6 +213,12 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
     buffer.get(stringBytes, 0, length)
     new String(stringBytes)
   }
+
+  override def setField(row: MutableRow, ordinal: Int, value: String) {
+    row.setString(ordinal, value)
+  }
+
+  override def getField(row: Row, ordinal: Int) = row.getString(ordinal)
 }
 
 private[sql] sealed abstract class ByteArrayColumnType[T <: DataType](
@@ -173,15 +240,27 @@ private[sql] sealed abstract class ByteArrayColumnType[T <: DataType](
   }
 }
 
-private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](8, 16)
+private[sql] object BINARY extends ByteArrayColumnType[BinaryType.type](8, 16) {
+  override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]) {
+    row(ordinal) = value
+  }
+
+  override def getField(row: Row, ordinal: Int) = row(ordinal).asInstanceOf[Array[Byte]]
+}
 
 // Used to process generic objects (all types other than those listed above). Objects should be
 // serialized first before appending to the column `ByteBuffer`, and is also extracted as serialized
 // byte array.
-private[sql] object GENERIC extends ByteArrayColumnType[DataType](9, 16)
+private[sql] object GENERIC extends ByteArrayColumnType[DataType](9, 16) {
+  override def setField(row: MutableRow, ordinal: Int, value: Array[Byte]) {
+    row(ordinal) = SparkSqlSerializer.deserialize[Any](value)
+  }
+
+  override def getField(row: Row, ordinal: Int) = SparkSqlSerializer.serialize(row(ordinal))
+}
 
 private[sql] object ColumnType {
-  implicit def dataTypeToColumnType(dataType: DataType): ColumnType[_, _] = {
+  def apply(dataType: DataType): ColumnType[_, _] = {
     dataType match {
       case IntegerType => INT
       case LongType    => LONG
