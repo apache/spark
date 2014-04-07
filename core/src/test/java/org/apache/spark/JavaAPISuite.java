@@ -78,7 +78,7 @@ public class JavaAPISuite implements Serializable {
     }
   }
 
-  public int iteratorSize(Iterator<?> a) {
+  private int iteratorSize(Iterator<?> a) {
     int size = 0;
     while (a.hasNext()) {
       size++;
@@ -87,7 +87,12 @@ public class JavaAPISuite implements Serializable {
     return size;
   }
 
-  public String iteratorStr(Iterator<?> a) {
+  private int iterableSize(Iterable<?> a) {
+    return iteratorSize(a.iterator());
+  }
+
+
+  private String iteratorStr(Iterator<?> a) {
     StringBuilder str = new StringBuilder();
     str.append("[");
     while (a.hasNext()) {
@@ -99,6 +104,11 @@ public class JavaAPISuite implements Serializable {
     str.append("]");
     return str.toString();
   }
+
+  private String iterableStr(Iterable<?> a) {
+    return iteratorStr(a.iterator());
+  }
+
 
   @SuppressWarnings("unchecked")
   @Test
@@ -220,7 +230,7 @@ public class JavaAPISuite implements Serializable {
       new Tuple2<String, String>("Oranges", "Citrus")
       ));
     Assert.assertEquals(2, categories.lookup("Oranges").size());
-    Assert.assertEquals(2, iteratorSize(categories.groupByKey().lookup("Oranges").get(0)));
+    Assert.assertEquals(2, iterableSize(categories.groupByKey().lookup("Oranges").get(0)));
   }
 
   @Test
@@ -232,15 +242,15 @@ public class JavaAPISuite implements Serializable {
         return x % 2 == 0;
       }
     };
-    JavaPairRDD<Boolean, Iterator<Integer>> oddsAndEvens = rdd.groupBy(isOdd);
+    JavaPairRDD<Boolean, Iterable<Integer>> oddsAndEvens = rdd.groupBy(isOdd);
     Assert.assertEquals(2, oddsAndEvens.count());
-    Assert.assertEquals(2, iteratorSize(oddsAndEvens.lookup(true).get(0)));  // Evens
-    Assert.assertEquals(5, iteratorSize(oddsAndEvens.lookup(false).get(0))); // Odds
+    Assert.assertEquals(2, iterableSize(oddsAndEvens.lookup(true).get(0)));  // Evens
+    Assert.assertEquals(5, iterableSize(oddsAndEvens.lookup(false).get(0))); // Odds
 
     oddsAndEvens = rdd.groupBy(isOdd, 1);
     Assert.assertEquals(2, oddsAndEvens.count());
-    Assert.assertEquals(2, iteratorSize(oddsAndEvens.lookup(true).get(0)));  // Evens
-    Assert.assertEquals(5, iteratorSize(oddsAndEvens.lookup(false).get(0))); // Odds
+    Assert.assertEquals(2, iterableSize(oddsAndEvens.lookup(true).get(0)));  // Evens
+    Assert.assertEquals(5, iterableSize(oddsAndEvens.lookup(false).get(0))); // Odds
   }
 
   @SuppressWarnings("unchecked")
@@ -255,9 +265,9 @@ public class JavaAPISuite implements Serializable {
       new Tuple2<String, Integer>("Oranges", 2),
       new Tuple2<String, Integer>("Apples", 3)
     ));
-    JavaPairRDD<String, Tuple2<Iterator<String>, Iterator<Integer>>> cogrouped = categories.cogroup(prices);
-    Assert.assertEquals("[Fruit, Citrus]", iteratorStr(cogrouped.lookup("Oranges").get(0)._1()));
-    Assert.assertEquals("[2]", iteratorStr(cogrouped.lookup("Oranges").get(0)._2()));
+    JavaPairRDD<String, Tuple2<Iterable<String>, Iterable<Integer>>> cogrouped = categories.cogroup(prices);
+    Assert.assertEquals("[Fruit, Citrus]", iterableStr(cogrouped.lookup("Oranges").get(0)._1()));
+    Assert.assertEquals("[2]", iterableStr(cogrouped.lookup("Oranges").get(0)._2()));
 
     cogrouped.collect();
   }

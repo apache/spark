@@ -23,6 +23,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import java.io.*;
 import java.util.*;
+import java.lang.Iterable;
 
 import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
@@ -51,6 +52,11 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     }
     Assert.assertEquals(a.hasNext(), b.hasNext());
   }
+
+  public void equalIterable(Iterable<?> a, Iterable<?> b) {
+      equalIterator(a.iterator(), b.iterator());
+  }
+
 
   @SuppressWarnings("unchecked")
   @Test
@@ -1023,9 +1029,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaDStream<Tuple2<String, String>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
-    JavaPairDStream<String, Iterator<String>> grouped = pairStream.groupByKey();
+    JavaPairDStream<String, Iterable<String>> grouped = pairStream.groupByKey();
     JavaTestUtils.attachTestOutputStream(grouped);
-    List<List<Tuple2<String, Iterator<String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<String, Iterable<String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
     Assert.assertEquals(expected.size(), result.size());
     Iterator<List<Tuple2<String, Iterator<String>>>> resultItr = result.iterator();
@@ -1148,7 +1154,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
-    JavaPairDStream<String, Iterator<Integer>> groupWindowed =
+    JavaPairDStream<String, Iterable<Integer>> groupWindowed =
         pairStream.groupByKeyAndWindow(new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(groupWindowed);
     List<List<Tuple2<String, List<Integer>>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
@@ -1491,9 +1497,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         ssc, stringStringKVStream2, 1);
     JavaPairDStream<String, String> pairStream2 = JavaPairDStream.fromJavaDStream(stream2);
 
-    JavaPairDStream<String, Tuple2<Iterator<String>, Iterator<String>>> grouped = pairStream1.cogroup(pairStream2);
+    JavaPairDStream<String, Tuple2<Iterator<String>, Iterable<String>>> grouped = pairStream1.cogroup(pairStream2);
     JavaTestUtils.attachTestOutputStream(grouped);
-    List<List<Tuple2<String, Tuple2<Iterator<String>, Iterator<String>>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<String, Tuple2<Iterator<String>, Iterable<String>>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
     Assert.assertEquals(expected.size(), result.size());
     Iterator<List<Tuple2<String, Tuple2<Iterator<String>, Iterator<String>>>>> resultItr = result.iterator();
