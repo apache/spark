@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.HashMap
+
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
-
-/* Implicit conversions */
-import org.apache.spark.rdd.PartitionLocalRDDFunctions._
 
 /**
  * Groups input data by `groupingExpressions` and computes the `aggregateExpressions` for each
@@ -40,7 +39,7 @@ case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
     child: SparkPlan)(@transient sc: SparkContext)
-  extends UnaryNode {
+  extends UnaryNode with NoBind {
 
   override def requiredChildDistribution =
     if (partial) {
@@ -55,50 +54,101 @@ case class Aggregate(
 
   override def otherCopyArgs = sc :: Nil
 
+  // HACK: Generators don't correctly preserve their output through serializations so we grab
+  // out child's output attributes statically here.
+  val childOutput = child.output
+
   def output = aggregateExpressions.map(_.toAttribute)
 
-  /* Replace all aggregate expressions with spark functions that will compute the result. */
-  def createAggregateImplementations() = aggregateExpressions.map { agg =>
-    val impl = agg transform {
-      case a: AggregateExpression => a.newInstance
+  /**
+   * An aggregate that needs to be computed for each row in a group.
+   *
+   * @param unbound Unbound version of this aggregate, used for result substitution.
+   * @param aggregate A bound copy of this aggregate used to create a new aggregation buffer.
+   * @param resultAttribute An attribute used to refer to the result of this aggregate in the final
+   *                        output.
+   */
+  case class ComputedAggregate(
+      unbound: AggregateExpression,
+      aggregate: AggregateExpression,
+      resultAttribute: AttributeReference)
+
+  /** A list of aggregates that need to be computed for each group. */
+  @transient
+  lazy val computedAggregates = aggregateExpressions.flatMap { agg =>
+    agg.collect {
+      case a: AggregateExpression =>
+        ComputedAggregate(
+          a,
+          BindReferences.bindReference(a, childOutput).asInstanceOf[AggregateExpression],
+          AttributeReference(s"aggResult:$a", a.dataType, nullable = true)())
     }
+  }.toArray
 
-    val remainingAttributes = impl.collect { case a: Attribute => a }
-    // If any references exist that are not inside agg functions then the must be grouping exprs
-    // in this case we must rebind them to the grouping tuple.
-    if (remainingAttributes.nonEmpty) {
-      val unaliasedAggregateExpr = agg transform { case Alias(c, _) => c }
+  /** The schema of the result of all aggregate evaluations */
+  @transient
+  lazy val computedSchema = computedAggregates.map(_.resultAttribute)
 
-      // An exact match with a grouping expression
-      val exactGroupingExpr = groupingExpressions.indexOf(unaliasedAggregateExpr) match {
-        case -1 => None
-        case ordinal => Some(BoundReference(ordinal, Alias(impl, "AGGEXPR")().toAttribute))
-      }
+  /** Creates a new aggregate buffer for a group. */
+  def newAggregateBuffer(): Array[AggregateFunction] = {
+    val buffer = new Array[AggregateFunction](computedAggregates.length)
+    var i = 0
+    while (i < computedAggregates.length) {
+      buffer(i) = computedAggregates(i).aggregate.newInstance()
+      i += 1
+    }
+    buffer
+  }
 
-      exactGroupingExpr.getOrElse(
-        sys.error(s"$agg is not in grouping expressions: $groupingExpressions"))
-    } else {
-      impl
+  /** Named attributes used to substitute grouping attributes into the final result. */
+  @transient
+  lazy val namedGroups = groupingExpressions.map {
+    case ne: NamedExpression => ne -> ne.toAttribute
+    case e => e -> Alias(e, s"groupingExpr:$e")().toAttribute
+  }
+
+  /**
+   * A map of substitutions that are used to insert the aggregate expressions and grouping
+   * expression into the final result expression.
+   */
+  @transient
+  lazy val resultMap =
+    (computedAggregates.map { agg => agg.unbound -> agg.resultAttribute} ++ namedGroups).toMap
+
+  /**
+   * Substituted version of aggregateExpressions expressions which are used to compute final
+   * output rows given a group and the result of all aggregate computations.
+   */
+  @transient
+  lazy val resultExpressions = aggregateExpressions.map { agg =>
+    agg.transform {
+      case e: Expression if resultMap.contains(e) => resultMap(e)
     }
   }
 
   def execute() = attachTree(this, "execute") {
-    // TODO: If the child of it is an [[catalyst.execution.Exchange]],
-    // do not evaluate the groupingExpressions again since we have evaluated it
-    // in the [[catalyst.execution.Exchange]].
-    val grouped = child.execute().mapPartitions { iter =>
-      val buildGrouping = new Projection(groupingExpressions)
-      iter.map(row => (buildGrouping(row), row.copy()))
-    }.groupByKeyLocally()
+    if (groupingExpressions.isEmpty) {
+      child.execute().mapPartitions { iter =>
+        val buffer = newAggregateBuffer()
+        var currentRow: Row = null
+        while (iter.hasNext) {
+          currentRow = iter.next()
+          var i = 0
+          while (i < buffer.length) {
+            buffer(i).update(currentRow)
+            i += 1
+          }
+        }
+        val resultProjection = new Projection(resultExpressions, computedSchema)
+        val aggregateResults = new GenericMutableRow(computedAggregates.length)
 
-    val result = grouped.map { case (group, rows) =>
-      val aggImplementations = createAggregateImplementations()
+        var i = 0
+        while (i < buffer.length) {
+          aggregateResults(i) = buffer(i).apply(EmptyRow)
+          i += 1
+        }
 
-      // Pull out all the functions so we can feed each row into them.
-      val aggFunctions = aggImplementations.flatMap(_ collect { case f: AggregateFunction => f })
-
-      rows.foreach { row =>
-        aggFunctions.foreach(_.update(row))
+        Iterator(resultProjection(aggregateResults))
       }
       buildRow(aggImplementations.map(_.eval(group)))
     }
@@ -109,7 +159,52 @@ case class Aggregate(
       val aggImplementations = createAggregateImplementations()
       sc.makeRDD(buildRow(aggImplementations.map(_.eval(null))) :: Nil)
     } else {
-      result
+      child.execute().mapPartitions { iter =>
+        val hashTable = new HashMap[Row, Array[AggregateFunction]]
+        val groupingProjection = new MutableProjection(groupingExpressions, childOutput)
+
+        var currentRow: Row = null
+        while (iter.hasNext) {
+          currentRow = iter.next()
+          val currentGroup = groupingProjection(currentRow)
+          var currentBuffer = hashTable.get(currentGroup)
+          if (currentBuffer == null) {
+            currentBuffer = newAggregateBuffer()
+            hashTable.put(currentGroup.copy(), currentBuffer)
+          }
+
+          var i = 0
+          while (i < currentBuffer.length) {
+            currentBuffer(i).update(currentRow)
+            i += 1
+          }
+        }
+
+        new Iterator[Row] {
+          private[this] val hashTableIter = hashTable.entrySet().iterator()
+          private[this] val aggregateResults = new GenericMutableRow(computedAggregates.length)
+          private[this] val resultProjection =
+            new MutableProjection(resultExpressions, computedSchema ++ namedGroups.map(_._2))
+          private[this] val joinedRow = new JoinedRow
+
+          override final def hasNext: Boolean = hashTableIter.hasNext
+
+          override final def next(): Row = {
+            val currentEntry = hashTableIter.next()
+            val currentGroup = currentEntry.getKey
+            val currentBuffer = currentEntry.getValue
+
+            var i = 0
+            while (i < currentBuffer.length) {
+              // Evaluating an aggregate buffer returns the result.  No row is required since we
+              // already added all rows in the group using update.
+              aggregateResults(i) = currentBuffer(i).apply(EmptyRow)
+              i += 1
+            }
+            resultProjection(joinedRow(aggregateResults, currentGroup))
+          }
+        }
+      }
     }
   }
 }

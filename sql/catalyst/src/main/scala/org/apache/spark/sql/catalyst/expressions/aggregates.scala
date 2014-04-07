@@ -27,7 +27,7 @@ abstract class AggregateExpression extends Expression {
    * Creates a new instance that can be used to compute this aggregate expression for a group
    * of input rows/
    */
-  def newInstance: AggregateFunction
+  def newInstance(): AggregateFunction
 }
 
 /**
@@ -75,7 +75,7 @@ abstract class AggregateFunction
   override def eval(input: Row): Any
 
   // Do we really need this?
-  override def newInstance = makeCopy(productIterator.map { case a: AnyRef => a }.toArray)
+  override def newInstance() = makeCopy(productIterator.map { case a: AnyRef => a }.toArray)
 }
 
 case class Count(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
@@ -89,7 +89,7 @@ case class Count(child: Expression) extends PartialAggregate with trees.UnaryNod
     SplitEvaluation(Sum(partialCount.toAttribute), partialCount :: Nil)
   }
 
-  override def newInstance = new CountFunction(child, this)
+  override def newInstance()= new CountFunction(child, this)
 }
 
 case class CountDistinct(expressions: Seq[Expression]) extends AggregateExpression {
@@ -98,7 +98,7 @@ case class CountDistinct(expressions: Seq[Expression]) extends AggregateExpressi
   override def nullable = false
   override def dataType = IntegerType
   override def toString = s"COUNT(DISTINCT ${expressions.mkString(",")}})"
-  override def newInstance = new CountDistinctFunction(expressions, this)
+  override def newInstance()= new CountDistinctFunction(expressions, this)
 }
 
 case class Average(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
@@ -118,7 +118,7 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
       partialCount :: partialSum :: Nil)
   }
 
-  override def newInstance = new AverageFunction(child, this)
+  override def newInstance()= new AverageFunction(child, this)
 }
 
 case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
@@ -134,7 +134,7 @@ case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[
       partialSum :: Nil)
   }
 
-  override def newInstance = new SumFunction(child, this)
+  override def newInstance()= new SumFunction(child, this)
 }
 
 case class SumDistinct(child: Expression)
@@ -145,7 +145,7 @@ case class SumDistinct(child: Expression)
   override def dataType = child.dataType
   override def toString = s"SUM(DISTINCT $child)"
 
-  override def newInstance = new SumDistinctFunction(child, this)
+  override def newInstance()= new SumDistinctFunction(child, this)
 }
 
 case class First(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
@@ -160,7 +160,7 @@ case class First(child: Expression) extends PartialAggregate with trees.UnaryNod
       First(partialFirst.toAttribute),
       partialFirst :: Nil)
   }
-  override def newInstance = new FirstFunction(child, this)
+  override def newInstance()= new FirstFunction(child, this)
 }
 
 case class AverageFunction(expr: Expression, base: AggregateExpression)

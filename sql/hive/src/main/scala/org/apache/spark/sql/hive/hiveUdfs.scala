@@ -337,13 +337,16 @@ case class HiveGenericUdaf(
 
   type UDFType = AbstractGenericUDAFResolver
 
+  @transient
   protected lazy val resolver: AbstractGenericUDAFResolver = createFunction(name)
 
+  @transient
   protected lazy val objectInspector  = {
     resolver.getEvaluator(children.map(_.dataType.toTypeInfo).toArray)
       .init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors.toArray)
   }
 
+  @transient
   protected lazy val inspectors = children.map(_.dataType).map(toInspector)
 
   def dataType: DataType = inspectorToDataType(objectInspector)
