@@ -1394,6 +1394,7 @@ class SchemaRDD:
         self.ctx = pyRDD.ctx
         self.sql_ctx = self.ctx._jvm.JavaSQLContext(self.ctx._jsc)
         self._jrdd = self.ctx._pythonToJava(pyRDD._jrdd)
+        self._srdd = self.sql_ctx.applySchema(self._jrdd)
 
 
 def _test():
