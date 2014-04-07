@@ -1389,13 +1389,17 @@ class PipelinedRDD(RDD):
 
 class SchemaRDD:
 
-    def __init__(self, pyRDD):
-        self._pyRDD = pyRDD
-        self.ctx = pyRDD.ctx
-        self.sql_ctx = self.ctx._jvm.JavaSQLContext(self.ctx._jsc)
-        self._jrdd = self.ctx._pythonToJava(pyRDD._jrdd)
-        self._srdd = self.sql_ctx.applySchema(self._jrdd)
+    def __init__(self, jschema_rdd, sql_ctx):
+        self.sql_ctx = sql_ctx
+        self._sc = sql_ctx._sc
+        self._jschema_rdd = jschema_rdd
 
+    def registerAsTable(self, name):
+        self._jschema_rdd.registerAsTable(name)
+
+    def toPython(self):
+        jrdd = self._sc._javaToPython(self._jschema_rdd)
+        return RDD(jrdd, self._sc, self._sc.serializer)
 
 def _test():
     import doctest
