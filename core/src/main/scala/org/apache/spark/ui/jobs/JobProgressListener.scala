@@ -85,6 +85,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
         stageIdToTasksActive.remove(s.stageId)
         stageIdToTasksComplete.remove(s.stageId)
         stageIdToTasksFailed.remove(s.stageId)
+        stageIdToExecutorSummaries.remove(s.stageId)
         stageIdToPool.remove(s.stageId)
         if (stageIdToDescription.contains(s.stageId)) {stageIdToDescription.remove(s.stageId)}
       }
