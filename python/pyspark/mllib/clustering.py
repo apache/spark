@@ -36,10 +36,10 @@ class KMeansModel(object):
     True
     >>> clusters = KMeans.train(sc.parallelize(data), 2)
     >>> sparse_data = [
-    ...     SparseVector(3, [0, 1], [0.0, 1.0]),
-    ...     SparseVector(3, [0, 1], [0.0, 1.1]),
-    ...     SparseVector(3, [0, 2], [0.0, 1.0]),
-    ...     SparseVector(3, [0, 2], [0.0, 1.1])
+    ...     SparseVector(3, {1: 1.0}),
+    ...     SparseVector(3, {1: 1.1}),
+    ...     SparseVector(3, {2: 1.0}),
+    ...     SparseVector(3, {2: 1.1})
     ... ]
     >>> clusters = KMeans.train(sc.parallelize(sparse_data), 2, initializationMode="k-means||")
     >>> clusters.predict(array([0., 1., 0.])) == clusters.predict(array([0, 1.1, 0.]))

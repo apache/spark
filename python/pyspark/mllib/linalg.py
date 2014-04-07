@@ -34,9 +34,16 @@ class SparseVector(object):
 
     def __init__(self, size, *args):
         """
-        Create a sparse vector, using either an array of (index, value) pairs
-        or two separate arrays of indices and values (sorted by index).
+        Create a sparse vector, using either a dictionary, a list of
+        (index, value) pairs, or two separate arrays of indices and
+        values (sorted by index).
 
+        @param size: Size of the vector.
+        @param args: Non-zero entries, as a dictionary, list of tupes,
+                     or two sorted lists containing indices and values.
+
+        >>> print SparseVector(4, {1: 1.0, 3: 5.5})
+        [1: 1.0, 3: 5.5]
         >>> print SparseVector(4, [(1, 1.0), (3, 5.5)])
         [1: 1.0, 3: 5.5]
         >>> print SparseVector(4, [1, 3], [1.0, 5.5])
@@ -44,9 +51,12 @@ class SparseVector(object):
         """
         assert type(size) == int, "first argument must be an int"
         self.size = size
-        assert 1 <= len(args) <= 2, "must pass either 1 or 2 arguments"
+        assert 1 <= len(args) <= 2, "must pass either 2 or 3 arguments"
         if len(args) == 1:
-            pairs = sorted(args[0])
+            pairs = args[0]
+            if type(pairs) == dict:
+               pairs = pairs.items()
+            pairs = sorted(pairs)
             self.indices = array([p[0] for p in pairs], dtype='int32')
             self.values = array([p[1] for p in pairs], dtype='float64')
         else:
@@ -154,8 +164,8 @@ class SparseVector(object):
     def __repr__(self):
         inds = self.indices
         vals = self.values
-        entries = ", ".join(["({0}, {1})".format(inds[i], vals[i]) for i in xrange(len(inds))])
-        return "SparseVector({0}, [{1}])".format(self.size, entries)
+        entries = ", ".join(["{0}: {1}".format(inds[i], vals[i]) for i in xrange(len(inds))])
+        return "SparseVector({0}, {{{1}}})".format(self.size, entries)
 
     def __eq__(self, other):
         """
@@ -191,9 +201,16 @@ class Vectors(object):
     @staticmethod
     def sparse(size, *args):
         """
-        Create a sparse vector, using either an array of (index, value) pairs
-        or two separate arrays of indices and values (sorted by index).
+        Create a sparse vector, using either a dictionary, a list of
+        (index, value) pairs, or two separate arrays of indices and
+        values (sorted by index).
 
+        @param size: Size of the vector.
+        @param args: Non-zero entries, as a dictionary, list of tupes,
+                     or two sorted lists containing indices and values.
+
+        >>> print Vectors.sparse(4, {1: 1.0, 3: 5.5})
+        [1: 1.0, 3: 5.5]
         >>> print Vectors.sparse(4, [(1, 1.0), (3, 5.5)])
         [1: 1.0, 3: 5.5]
         >>> print Vectors.sparse(4, [1, 3], [1.0, 5.5])
