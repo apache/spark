@@ -18,7 +18,7 @@
 package org.apache.spark.examples.mllib
       
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.linalg.rdd.RowRDDMatrix
+import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.linalg.Vectors
 
 /**
@@ -52,7 +52,7 @@ object TallSkinnyPCA {
       val values = line.split(' ').map(_.toDouble)
       Vectors.dense(values)
     }
-    val mat = new RowRDDMatrix(rows)
+    val mat = new RowMatrix(rows)
 
     // Compute principal components.
     val pc = mat.computePrincipalComponents(mat.numCols().toInt)

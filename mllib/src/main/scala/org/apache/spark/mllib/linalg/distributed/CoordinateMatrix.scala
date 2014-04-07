@@ -15,59 +15,67 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg.rdd
+package org.apache.spark.mllib.linalg.distributed
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vectors
 
 /**
- * Represents a matrix in coordinate list format.
+ * Represents a matrix in coordinate format.
  *
  * @param entries matrix entries
- * @param m number of rows (default: -1L, which means unknown)
- * @param n number of column (default: -1L, which means unknown)
+ * @param nRows number of rows. A non-positive value means unknown, and then the number of rows will
+ *              be determined by the max row index plus one.
+ * @param nCols number of columns. A non-positive value means unknown, and then the number of
+ *              columns will be determined by the max column index plus one.
  */
-class CoordinateRDDMatrix(
-    val entries: RDD[RDDMatrixEntry],
-    m: Long = -1L,
-    n: Long = -1L) extends RDDMatrix {
+class CoordinateMatrix(
+    val entries: RDD[DistributedMatrixEntry],
+    private var nRows: Long,
+    private var nCols: Long) extends DistributedMatrix {
 
-  private var _m = m
-  private var _n = n
+  /** Alternative constructor leaving matrix dimensions to be determined automatically. */
+  def this(entries: RDD[DistributedMatrixEntry]) = this(entries, 0L, 0L)
 
   /** Gets or computes the number of columns. */
   override def numCols(): Long = {
-    if (_n < 0) {
+    if (nCols <= 0L) {
       computeSize()
     }
-    _n
+    nCols
   }
 
   /** Gets or computes the number of rows. */
   override def numRows(): Long = {
-    if (_m < 0) {
+    if (nRows <= 0L) {
       computeSize()
     }
-    _m
+    nRows
   }
 
   private def computeSize() {
+    // Reduce will throw an exception if `entries` is empty.
     val (m1, n1) = entries.map(entry => (entry.i, entry.j)).reduce { case ((i1, j1), (i2, j2)) =>
       (math.max(i1, i2), math.max(j1, j2))
     }
     // There may be empty columns at the very right and empty rows at the very bottom.
-    _m = math.max(_m, m1 + 1L)
-    _n = math.max(_n, n1 + 1L)
+    nRows = math.max(nRows, m1 + 1L)
+    nCols = math.max(nCols, n1 + 1L)
   }
 
-  def toIndexedRowRDDMatrix(): IndexedRowRDDMatrix = {
-    val n = numCols().toInt
+  def toIndexedRowMatrix(): IndexedRowMatrix = {
+    val nl = numCols()
+    if (nl > Int.MaxValue) {
+      sys.error(s"Cannot convert to a row-oriented format because the number of columns $nl is " +
+        "too large.")
+    }
+    val n = nl.toInt
     val indexedRows = entries.map(entry => (entry.i, (entry.j.toInt, entry.value)))
       .groupByKey()
       .map { case (i, vectorEntries) =>
-      IndexedRDDMatrixRow(i, Vectors.sparse(n, vectorEntries))
-    }
-    new IndexedRowRDDMatrix(indexedRows, numRows(), numCols())
+        IndexedMatrixRow(i, Vectors.sparse(n, vectorEntries))
+      }
+    new IndexedRowMatrix(indexedRows, numRows(), n)
   }
 }

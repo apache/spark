@@ -15,46 +15,50 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg.rdd
+package org.apache.spark.mllib.linalg.distributed
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.Vector
 
 /** Represents a row of RowRDDMatrix. */
-case class IndexedRDDMatrixRow(index: Long, vector: Vector)
+case class IndexedMatrixRow(index: Long, vector: Vector)
 
 /**
  * Represents a row-oriented RDDMatrix with indexed rows.
  *
  * @param rows indexed rows of this matrix
- * @param m number of rows, where a negative number means unknown
- * @param n number of cols, where a negative number means unknown
+ * @param nRows number of rows. A non-positive value means unknown, and then the number of rows will
+ *              be determined by the max row index plus one.
+ * @param nCols number of columns. A non-positive value means unknown, and then the number of
+ *              columns will be determined by the size of the first row.
  */
-class IndexedRowRDDMatrix(
-    val rows: RDD[IndexedRDDMatrixRow],
-    m: Long = -1L,
-    n: Long = -1L) extends RDDMatrix {
+class IndexedRowMatrix(
+    val rows: RDD[IndexedMatrixRow],
+    private var nRows: Long,
+    private var nCols: Int) extends DistributedMatrix {
 
-  private var _m = m
-  private var _n = n
+  /** Alternative constructor leaving matrix dimensions to be determined automatically. */
+  def this(rows: RDD[IndexedMatrixRow]) = this(rows, 0L, 0)
 
   /** Gets or computes the number of columns. */
   override def numCols(): Long = {
-    if (_n < 0) {
-      _n = rows.first().vector.size
+    if (nCols <= 0) {
+      // Calling `first` will throw an exception if `rows` is empty.
+      nCols = rows.first().vector.size
     }
-    _n
+    nCols
   }
 
   override def numRows(): Long = {
-    if (_m < 0) {
-      _m = rows.map(_.index).reduce(math.max) + 1
+    if (nRows <= 0L) {
+      // Reduce will throw an exception if `rows` is empty.
+      nRows = rows.map(_.index).reduce(math.max) + 1L
     }
-    _m
+    nRows
   }
 
   /** Drops row indices and converts this matrix to a RowRDDMatrix. */
-  def toRowRDDMatrix(): RowRDDMatrix = {
-    new RowRDDMatrix(rows.map(_.vector), -1, _n)
+  def toRowMatrix(): RowMatrix = {
+    new RowMatrix(rows.map(_.vector), 0L, nCols)
   }
 }

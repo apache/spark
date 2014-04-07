@@ -20,7 +20,7 @@ package org.apache.spark.mllib.linalg
 import breeze.linalg.{Matrix => BM, DenseMatrix => BDM}
 
 /**
- * Trait for matrix.
+ * Trait for a local matrix.
  */
 trait Matrix extends Serializable {
 
@@ -56,10 +56,13 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
   private[mllib] override def toBreeze: BM[Double] = new BDM[Double](numRows, numCols, values)
 }
 
+/**
+ * Factory methods for [[org.apache.spark.mllib.linalg.Matrix]].
+ */
 object Matrices {
 
   /**
-   * Creates a dense matrix.
+   * Creates a column-majored dense matrix.
    *
    * @param numRows number of rows
    * @param numCols number of columns

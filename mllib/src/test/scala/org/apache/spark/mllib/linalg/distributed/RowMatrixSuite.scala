@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg.rdd
+package org.apache.spark.mllib.linalg.distributed
 
 import org.scalatest.FunSuite
 
 import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, diag => brzDiag, norm => brzNorm}
 
 import org.apache.spark.mllib.util.LocalSparkContext
-import org.apache.spark.mllib.linalg.{Matrices, Vectors, Matrix}
+import org.apache.spark.mllib.linalg.{Matrices, Vectors, Vector, Matrix}
 
-class RowRDDMatrixSuite extends FunSuite with LocalSparkContext {
+class RowMatrixSuite extends FunSuite with LocalSparkContext {
 
   val m = 4
   val n = 3
@@ -46,13 +46,13 @@ class RowRDDMatrixSuite extends FunSuite with LocalSparkContext {
     Array(0.0, math.sqrt(2.0) / 2.0, math.sqrt(2.0) / 2.0, 1.0, 0.0, 0.0,
       0.0, math.sqrt(2.0) / 2.0, - math.sqrt(2.0) / 2.0))
 
-  var denseMat: RowRDDMatrix = _
-  var sparseMat: RowRDDMatrix = _
+  var denseMat: RowMatrix = _
+  var sparseMat: RowMatrix = _
 
   override def beforeAll() {
     super.beforeAll()
-    denseMat = new RowRDDMatrix(sc.parallelize(denseData, 2))
-    sparseMat = new RowRDDMatrix(sc.parallelize(sparseData, 2))
+    denseMat = new RowMatrix(sc.parallelize(denseData, 2))
+    sparseMat = new RowMatrix(sc.parallelize(sparseData, 2))
   }
 
   test("size") {
@@ -60,6 +60,17 @@ class RowRDDMatrixSuite extends FunSuite with LocalSparkContext {
     assert(denseMat.numCols() === n)
     assert(sparseMat.numRows() === m)
     assert(sparseMat.numCols() === n)
+  }
+
+  test("empty rows") {
+    val rows = sc.parallelize(Seq[Vector](), 1)
+    val emptyMat = new RowMatrix(rows)
+    intercept[RuntimeException] {
+      emptyMat.numCols()
+    }
+    intercept[RuntimeException] {
+      emptyMat.numRows()
+    }
   }
 
   test("gram") {

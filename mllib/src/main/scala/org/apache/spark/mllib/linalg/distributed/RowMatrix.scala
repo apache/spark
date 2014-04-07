@@ -15,11 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg.rdd
+package org.apache.spark.mllib.linalg.distributed
 
 import java.util
-
-import scala.util.control.Breaks._
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, svd => brzSvd}
 import breeze.numerics.{sqrt => brzSqrt}
@@ -33,31 +31,38 @@ import org.apache.spark.Logging
  * Represents a row-oriented RDDMatrix with no meaningful row indices.
  *
  * @param rows rows stored as an RDD[Vector]
- * @param m number of rows
- * @param n number of columns
+ * @param nRows number of rows. A non-positive value means unknown, and then the number of rows will
+ *              be determined by the number of records in the RDD `rows`.
+ * @param nCols number of columns. A non-positive value means unknown, and then the number of
+ *              columns will be determined by the size of the first row.
  */
-class RowRDDMatrix(
+class RowMatrix(
     val rows: RDD[Vector],
-    m: Long = -1L,
-    n: Long = -1) extends RDDMatrix with Logging {
+    private var nRows: Long,
+    private var nCols: Int) extends DistributedMatrix with Logging {
 
-  private var _m = m
-  private var _n = n
+  /** Alternative constructor leaving matrix dimensions to be determined automatically. */
+  def this(rows: RDD[Vector]) = this(rows, 0L, 0)
 
   /** Gets or computes the number of columns. */
   override def numCols(): Long = {
-    if (_n < 0) {
-      _n = rows.first().size
+    if (nCols <= 0) {
+      // Calling `first` will throw an exception if `rows` is empty.
+      nCols = rows.first().size
     }
-    _n
+    nCols
   }
 
   /** Gets or computes the number of rows. */
   override def numRows(): Long = {
-    if (_m < 0) {
-      _m = rows.count()
+    if (nRows <= 0L) {
+      nRows = rows.count()
+      if (nRows == 0L) {
+        sys.error("Cannot determine the number of rows because it is not specified in the " +
+          "constructor and the rows RDD is empty.")
+      }
     }
-    _m
+    nRows
   }
 
   /**
@@ -70,13 +75,13 @@ class RowRDDMatrix(
     // Compute the upper triangular part of the gram matrix.
     val GU = rows.aggregate(new BDV[Double](new Array[Double](nt)))(
       seqOp = (U, v) => {
-        RowRDDMatrix.dspr(1.0, v, U.data)
+        RowMatrix.dspr(1.0, v, U.data)
         U
       },
       combOp = (U1, U2) => U1 += U2
     )
 
-    RowRDDMatrix.triuToFull(n, GU.data)
+    RowMatrix.triuToFull(n, GU.data)
   }
 
   /**
@@ -108,10 +113,8 @@ class RowRDDMatrix(
   def computeSVD(
       k: Int,
       computeU: Boolean = false,
-      rCond: Double = 1e-9): SingularValueDecomposition[RowRDDMatrix, Matrix] = {
-
+      rCond: Double = 1e-9): SingularValueDecomposition[RowMatrix, Matrix] = {
     val n = numCols().toInt
-
     require(k > 0 && k <= n, s"Request up to n singular values k=$k n=$n.")
 
     val G = computeGramianMatrix()
@@ -125,13 +128,8 @@ class RowRDDMatrix(
     val sigma0 = sigmas(0)
     val threshold = rCond * sigma0
     var i = 0
-    breakable {
-      while (i < k) {
-        if (sigmas(i) < threshold) {
-          break()
-        }
-        i += 1
-      }
+    while (i < k && sigmas(i) >= threshold) {
+      i += 1
     }
     val sk = i
 
@@ -178,11 +176,11 @@ class RowRDDMatrix(
     )
 
     // Update _m if it is not set, or verify its value.
-    if (_m < 0L) {
-      _m = m
+    if (nRows <= 0L) {
+      nRows = m
     } else {
-      require(_m == m,
-        s"The number of rows $m is different from what specified or previously computed: ${_m}.")
+      require(nRows == m,
+        s"The number of rows $m is different from what specified or previously computed: ${nRows}.")
     }
 
     mean :/= m.toDouble
@@ -241,7 +239,7 @@ class RowRDDMatrix(
    * @param B a local matrix whose number of rows must match the number of columns of this matrix
    * @return a RowRDDMatrix representing the product, which preserves partitioning
    */
-  def multiply(B: Matrix): RowRDDMatrix = {
+  def multiply(B: Matrix): RowMatrix = {
     val n = numCols().toInt
     require(n == B.numRows, s"Dimension mismatch: $n vs ${B.numRows}")
 
@@ -254,11 +252,11 @@ class RowRDDMatrix(
       iter.map(v => Vectors.fromBreeze(Bi.t * v.toBreeze))
     }, preservesPartitioning = true)
 
-    new RowRDDMatrix(AB, _m, B.numCols)
+    new RowMatrix(AB, nRows, B.numCols)
   }
 }
 
-object RowRDDMatrix {
+object RowMatrix {
 
   /**
    * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's DSPR.

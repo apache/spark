@@ -15,18 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg.rdd
+package org.apache.spark.mllib.linalg.distributed
 
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.linalg.Vectors
 
-class CoordinateRDDMatrixSuite extends FunSuite with LocalSparkContext {
+class CoordinateMatrixSuite extends FunSuite with LocalSparkContext {
 
   val m = 5
   val n = 4
-  var mat: CoordinateRDDMatrix = _
+  var mat: CoordinateMatrix = _
 
   override def beforeAll() {
     super.beforeAll()
@@ -40,9 +40,9 @@ class CoordinateRDDMatrixSuite extends FunSuite with LocalSparkContext {
       (3, 0, 7.0),
       (3, 3, 8.0),
       (4, 1, 9.0)), 3).map { case (i, j, value) =>
-      RDDMatrixEntry(i, j, value)
+      DistributedMatrixEntry(i, j, value)
     }
-    mat = new CoordinateRDDMatrix(entries)
+    mat = new CoordinateMatrix(entries)
   }
 
   test("size") {
@@ -50,9 +50,20 @@ class CoordinateRDDMatrixSuite extends FunSuite with LocalSparkContext {
     assert(mat.numCols() === n)
   }
 
-  test("toIndexedRowRDDMatrix") {
+  test("empty entries") {
+    val entries = sc.parallelize(Seq[DistributedMatrixEntry](), 1)
+    val emptyMat = new CoordinateMatrix(entries)
+    intercept[RuntimeException] {
+      emptyMat.numCols()
+    }
+    intercept[RuntimeException] {
+      emptyMat.numRows()
+    }
+  }
+
+  test("toIndexedRowMatrix") {
     val indexedRows = mat
-      .toIndexedRowRDDMatrix()
+      .toIndexedRowMatrix()
       .rows
       .map(row => (row.index, row.vector))
       .collect()

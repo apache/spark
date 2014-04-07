@@ -15,16 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg.rdd
+package org.apache.spark.mllib.linalg.distributed
 
 /**
- * Represents a matrix backed by one or more RDDs.
+ * Represents an entry in an RDDMatrix.
+ * @param i row index
+ * @param j column index
+ * @param value value of the entry
  */
-trait RDDMatrix extends Serializable {
-
-  /** Gets or computes the number of rows. */
-  def numRows(): Long
-
-  /** Gets or computes the number of columns. */
-  def numCols(): Long
-}
+case class DistributedMatrixEntry(i: Long, j: Long, value: Double)
