@@ -23,7 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.rdd.RDD
@@ -36,41 +36,90 @@ import org.apache.spark.rdd.RDD
  */
 @DeveloperApi
 class PythonMLLibAPI extends Serializable {
-  private val DENSE_VECTOR_MAGIC = 1
-  private val SPARSE_VECTOR_MAGIC = 2
-  private val DENSE_MATRIX_MAGIC = 3
-  
-  private def deserializeDoubleVector(bytes: Array[Byte]): Array[Double] = {
-    val packetLength = bytes.length
-    if (packetLength < 5) {
-      throw new IllegalArgumentException("Byte array too short.")
+  private val DENSE_VECTOR_MAGIC: Byte = 1
+  private val SPARSE_VECTOR_MAGIC: Byte = 2
+  private val DENSE_MATRIX_MAGIC: Byte = 3
+
+  private def deserializeDoubleVector(bytes: Array[Byte]): Vector = {
+    require(bytes.length >= 5, "Byte array too short")
+    val magic = bytes(0)
+    if (magic == DENSE_VECTOR_MAGIC) {
+      deserializeDenseVector(bytes)
+    } else if (magic == SPARSE_VECTOR_MAGIC) {
+      deserializeSparseVector(bytes)
+    } else {
+      throw new IllegalArgumentException("Magic " + magic + " is wrong.")
     }
+  }
+
+  private def deserializeDenseVector(bytes: Array[Byte]): Vector = {
+    val packetLength = bytes.length
+    require(packetLength >= 5, "Byte array too short")
     val bb = ByteBuffer.wrap(bytes)
     bb.order(ByteOrder.nativeOrder())
     val magic = bb.get()
-    if (magic != DENSE_VECTOR_MAGIC) {
-      throw new IllegalArgumentException("Magic " + magic + " is wrong.")
-    }
+    require(magic == DENSE_VECTOR_MAGIC, "Invalid magic: " + magic)
     val length = bb.getInt()
-    if (packetLength != 5 + 8 * length) {
-      throw new IllegalArgumentException("Length " + length + " is wrong.")
-    }
+    require (packetLength == 5 + 8 * length, "Invalid packet length: " + packetLength)
     val db = bb.asDoubleBuffer()
     val ans = new Array[Double](length.toInt)
     db.get(ans)
-    ans
+    Vectors.dense(ans)
   }
 
-  private def serializeDoubleVector(doubles: Array[Double]): Array[Byte] = {
+  private def deserializeSparseVector(bytes: Array[Byte]): Vector = {
+    val packetLength = bytes.length
+    require(packetLength >= 9, "Byte array too short")
+    val bb = ByteBuffer.wrap(bytes)
+    bb.order(ByteOrder.nativeOrder())
+    val magic = bb.get()
+    require(magic == SPARSE_VECTOR_MAGIC, "Invalid magic: " + magic)
+    val size = bb.getInt()
+    val nonZeros = bb.getInt()
+    require (packetLength == 9 + 12 * nonZeros, "Invalid packet length: " + packetLength)
+    val ib = bb.asIntBuffer()
+    val indices = new Array[Int](nonZeros)
+    ib.get(indices)
+    bb.position(bb.position() + 4 * nonZeros)
+    val db = bb.asDoubleBuffer()
+    val values = new Array[Double](nonZeros)
+    db.get(values)
+    Vectors.sparse(size, indices, values)
+  }
+
+  private def serializeDenseVector(doubles: Array[Double]): Array[Byte] = {
     val len = doubles.length
     val bytes = new Array[Byte](5 + 8 * len)
     val bb = ByteBuffer.wrap(bytes)
     bb.order(ByteOrder.nativeOrder())
-    bb.put(1: Byte)
+    bb.put(DENSE_VECTOR_MAGIC)
     bb.putInt(len)
     val db = bb.asDoubleBuffer()
     db.put(doubles)
     bytes
+  }
+
+  private def serializeSparseVector(vector: SparseVector): Array[Byte] = {
+    val nonZeros = vector.indices.length
+    val bytes = new Array[Byte](9 + 12 * nonZeros)
+    val bb = ByteBuffer.wrap(bytes)
+    bb.order(ByteOrder.nativeOrder())
+    bb.put(SPARSE_VECTOR_MAGIC)
+    bb.putInt(vector.size)
+    bb.putInt(nonZeros)
+    val ib = bb.asIntBuffer()
+    ib.put(vector.indices)
+    bb.position(bb.position() + 4 * nonZeros)
+    val db = bb.asDoubleBuffer()
+    db.put(vector.values)
+    bytes
+  }
+
+  private def serializeDoubleVector(vector: Vector): Array[Byte] = vector match {
+    case s: SparseVector =>
+      serializeSparseVector(s)
+    case _ =>
+      serializeDenseVector(vector.toArray)
   }
 
   private def deserializeDoubleMatrix(bytes: Array[Byte]): Array[Array[Double]] = {
@@ -107,7 +156,7 @@ class PythonMLLibAPI extends Serializable {
     val bytes = new Array[Byte](9 + 8 * rows * cols)
     val bb = ByteBuffer.wrap(bytes)
     bb.order(ByteOrder.nativeOrder())
-    bb.put(2: Byte)
+    bb.put(DENSE_MATRIX_MAGIC)
     bb.putInt(rows)
     bb.putInt(cols)
     val db = bb.asDoubleBuffer()
@@ -118,17 +167,17 @@ class PythonMLLibAPI extends Serializable {
   }
 
   private def trainRegressionModel(
-      trainFunc: (RDD[LabeledPoint], Array[Double]) => GeneralizedLinearModel,
+      trainFunc: (RDD[LabeledPoint], Vector) => GeneralizedLinearModel,
       dataBytesJRDD: JavaRDD[Array[Byte]],
       initialWeightsBA: Array[Byte]): java.util.LinkedList[java.lang.Object] = {
     val data = dataBytesJRDD.rdd.map(xBytes => {
-        val x = deserializeDoubleVector(xBytes)
+        val x = deserializeDoubleVector(xBytes).toArray  // TODO: deal with sparse vectors here!
         LabeledPoint(x(0), Vectors.dense(x.slice(1, x.length)))
     })
     val initialWeights = deserializeDoubleVector(initialWeightsBA)
     val model = trainFunc(data, initialWeights)
     val ret = new java.util.LinkedList[java.lang.Object]()
-    ret.add(serializeDoubleVector(model.weights.toArray))
+    ret.add(serializeDoubleVector(model.weights))
     ret.add(model.intercept: java.lang.Double)
     ret
   }
@@ -149,7 +198,7 @@ class PythonMLLibAPI extends Serializable {
           numIterations,
           stepSize,
           miniBatchFraction,
-          Vectors.dense(initialWeights)),
+          initialWeights),
       dataBytesJRDD,
       initialWeightsBA)
   }
@@ -172,7 +221,7 @@ class PythonMLLibAPI extends Serializable {
           stepSize,
           regParam,
           miniBatchFraction,
-          Vectors.dense(initialWeights)),
+          initialWeights),
       dataBytesJRDD,
       initialWeightsBA)
   }
@@ -195,7 +244,7 @@ class PythonMLLibAPI extends Serializable {
           stepSize,
           regParam,
           miniBatchFraction,
-          Vectors.dense(initialWeights)),
+          initialWeights),
       dataBytesJRDD,
       initialWeightsBA)
   }
@@ -218,7 +267,7 @@ class PythonMLLibAPI extends Serializable {
           stepSize,
           regParam,
           miniBatchFraction,
-          Vectors.dense(initialWeights)),
+          initialWeights),
       dataBytesJRDD,
       initialWeightsBA)
   }
@@ -239,7 +288,7 @@ class PythonMLLibAPI extends Serializable {
           numIterations,
           stepSize,
           miniBatchFraction,
-          Vectors.dense(initialWeights)),
+          initialWeights),
       dataBytesJRDD,
       initialWeightsBA)
   }
@@ -251,13 +300,13 @@ class PythonMLLibAPI extends Serializable {
       dataBytesJRDD: JavaRDD[Array[Byte]],
       lambda: Double): java.util.List[java.lang.Object] = {
     val data = dataBytesJRDD.rdd.map(xBytes => {
-      val x = deserializeDoubleVector(xBytes)
+      val x = deserializeDoubleVector(xBytes).toArray // TODO: make this efficient for sparse vecs
       LabeledPoint(x(0), Vectors.dense(x.slice(1, x.length)))
     })
     val model = NaiveBayes.train(data, lambda)
     val ret = new java.util.LinkedList[java.lang.Object]()
-    ret.add(serializeDoubleVector(model.labels))
-    ret.add(serializeDoubleVector(model.pi))
+    ret.add(serializeDoubleVector(Vectors.dense(model.labels)))
+    ret.add(serializeDoubleVector(Vectors.dense(model.pi)))
     ret.add(serializeDoubleMatrix(model.theta))
     ret
   }
@@ -271,7 +320,7 @@ class PythonMLLibAPI extends Serializable {
       maxIterations: Int,
       runs: Int,
       initializationMode: String): java.util.List[java.lang.Object] = {
-    val data = dataBytesJRDD.rdd.map(xBytes => Vectors.dense(deserializeDoubleVector(xBytes)))
+    val data = dataBytesJRDD.rdd.map(deserializeDoubleVector)
     val model = KMeans.train(data, k, maxIterations, runs, initializationMode)
     val ret = new java.util.LinkedList[java.lang.Object]()
     ret.add(serializeDoubleMatrix(model.clusterCenters.map(_.toArray)))

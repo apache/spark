@@ -17,7 +17,7 @@
 
 import numpy
 
-from numpy import array, dot, shape
+from numpy import array, shape
 from pyspark import SparkContext
 from pyspark.mllib._common import \
     _get_unmangled_rdd, _get_unmangled_double_vector_rdd, \
@@ -25,6 +25,7 @@ from pyspark.mllib._common import \
     _serialize_double_vector, _deserialize_double_vector, \
     _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
     LinearModel, _linear_predictor_typecheck
+from pyspark.mllib.linalg import SparseVector
 from math import exp, log
 
 class LogisticRegressionModel(LinearModel):
@@ -34,10 +35,25 @@ class LogisticRegressionModel(LinearModel):
     >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(data))
     >>> lrm.predict(array([1.0])) > 0
     True
+    >>> lrm.predict(array([0.0])) <= 0
+    True
+    >>> sparse_data = [
+    ...     SparseVector(3, [0, 1], [0.0, 0.0]),
+    ...     SparseVector(3, [0, 2], [1.0, 1.0]),
+    ...     SparseVector(3, [0, 1], [0.0, 0.0]),
+    ...     SparseVector(3, [0, 2], [1.0, 2.0])
+    ... ]
+    >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(sparse_data))
+    >>> lrm.predict(array([0.0, 1.0])) > 0
+    True
+    >>> lrm.predict(array([0.0, 0.0])) <= 0
+    True
+    >>> lrm.predict(SparseVector(2, [1], [1.0])) > 0
+    True
     """
     def predict(self, x):
         _linear_predictor_typecheck(x, self._coeff)
-        margin = dot(x, self._coeff) + self._intercept
+        margin = x.dot(self._coeff) + self._intercept
         prob = 1/(1 + exp(-margin))
         return 1 if prob > 0.5 else 0
 
@@ -62,7 +78,7 @@ class SVMModel(LinearModel):
     """
     def predict(self, x):
         _linear_predictor_typecheck(x, self._coeff)
-        margin = dot(x, self._coeff) + self._intercept
+        margin = x.dot(self._coeff) + self._intercept
         return 1 if margin >= 0 else 0
 
 class SVMWithSGD(object):
@@ -99,7 +115,7 @@ class NaiveBayesModel(object):
 
     def predict(self, x):
         """Return the most likely class for a data vector x"""
-        return self.labels[numpy.argmax(self.pi + dot(x, self.theta))]
+        return self.labels[numpy.argmax(self.pi + x.dot(self.theta))]
 
 class NaiveBayes(object):
     @classmethod

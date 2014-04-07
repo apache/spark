@@ -41,9 +41,9 @@ DENSE_VECTOR_MAGIC = 1
 SPARSE_VECTOR_MAGIC = 2
 DENSE_MATRIX_MAGIC = 3
 
-def _deserialize_numpy_array(shape, ba, offset):
+def _deserialize_numpy_array(shape, ba, offset, dtype='float64'):
     """
-    Deserialize a numpy array of float64s from a given offset in
+    Deserialize a numpy array of the given type from an offset in
     bytearray ba, assigning it the given shape.
 
     >>> x = array([1.0, 2.0, 3.0, 4.0, 5.0])
@@ -52,8 +52,11 @@ def _deserialize_numpy_array(shape, ba, offset):
     >>> x = array([1.0, 2.0, 3.0, 4.0]).reshape(2,2)
     >>> array_equal(x, _deserialize_numpy_array(x.shape, x.data, 0))
     True
+    >>> x = array([1, 2, 3], dtype='int32')
+    >>> array_equal(x, _deserialize_numpy_array(x.shape, x.data, 0, dtype='int32'))
+    True
     """
-    ar = ndarray(shape=shape, buffer=ba, offset=offset, dtype="float64", order='C')
+    ar = ndarray(shape=shape, buffer=ba, offset=offset, dtype=dtype, order='C')
     return ar.copy()
 
 def _serialize_double_vector(v):
@@ -64,9 +67,16 @@ def _serialize_double_vector(v):
     >>> array_equal(y, array([1.0, 2.0, 3.0]))
     True
     """
-    if type(v) != ndarray:
+    if type(v) == ndarray:
+        return _serialize_dense_vector(v)
+    elif type(v) == SparseVector:
+        return _serialize_sparse_vector(v)
+    else:
         raise TypeError("_serialize_double_vector called on a %s; "
-                "wanted ndarray" % type(v))
+                "wanted ndarray or SparseVector" % type(v))
+
+def _serialize_dense_vector(v):
+    """Serialize a dense vector given as a NumPy array."""
     if v.ndim != 1:
         raise TypeError("_serialize_double_vector called on a %ddarray; "
                 "wanted a 1darray" % v.ndim)
@@ -84,11 +94,27 @@ def _serialize_double_vector(v):
     arr_mid[...] = v
     return ba
 
+def _serialize_sparse_vector(v):
+    """Serialize a pyspark.mllib.linalg.SparseVector."""
+    nonzeros = len(v.indices)
+    ba = bytearray(9 + 12 * nonzeros)
+    ba[0] = SPARSE_VECTOR_MAGIC
+    header = ndarray(shape=[2], buffer=ba, offset=1, dtype="int32")
+    header[0] = v.size
+    header[1] = nonzeros
+    copyto(ndarray(shape=[nonzeros], buffer=ba, offset=9, dtype="int32"), v.indices)
+    values_offset = 9 + 4 * nonzeros
+    copyto(ndarray(shape=[nonzeros], buffer=ba, offset=values_offset, dtype="float64"), v.values)
+    return ba
+
 def _deserialize_double_vector(ba):
     """Deserialize a double vector from a mutually understood format.
 
     >>> x = array([1.0, 2.0, 3.0, 4.0, -1.0, 0.0, -0.0])
     >>> array_equal(x, _deserialize_double_vector(_serialize_double_vector(x)))
+    True
+    >>> s = SparseVector(4, [1, 3], [3.0, 5.5])
+    >>> s == _deserialize_double_vector(_serialize_double_vector(s))
     True
     """
     if type(ba) != bytearray:
@@ -97,14 +123,39 @@ def _deserialize_double_vector(ba):
     if len(ba) < 5:
         raise TypeError("_deserialize_double_vector called on a %d-byte array, "
                 "which is too short" % len(ba))
-    if ba[0] != DENSE_VECTOR_MAGIC:
+    if ba[0] == DENSE_VECTOR_MAGIC:
+        return _deserialize_dense_vector(ba)
+    elif ba[0] == SPARSE_VECTOR_MAGIC:
+        return _deserialize_sparse_vector(ba)
+    else:
         raise TypeError("_deserialize_double_vector called on bytearray "
                         "with wrong magic")
+
+def _deserialize_dense_vector(ba):
+    """Deserialize a dense vector into a numpy array."""
+    if len(ba) < 5:
+        raise TypeError("_deserialize_dense_vector called on a %d-byte array, "
+                "which is too short" % len(ba))
     length = ndarray(shape=[1], buffer=ba, offset=1, dtype="int32")[0]
-    if len(ba) != 8*length + 5:
-        raise TypeError("_deserialize_double_vector called on bytearray "
+    if len(ba) != 8 * length + 5:
+        raise TypeError("_deserialize_dense_vector called on bytearray "
                         "with wrong length")
     return _deserialize_numpy_array([length], ba, 5)
+
+def _deserialize_sparse_vector(ba):
+    """Deserialize a sparse vector into a MLlib SparseVector object."""
+    if len(ba) < 9:
+        raise TypeError("_deserialize_sparse_vector called on a %d-byte array, "
+                "which is too short" % len(ba))
+    header = ndarray(shape=[2], buffer=ba, offset=1, dtype="int32")
+    size = header[0]
+    nonzeros = header[1]
+    if len(ba) != 9 + 12 * nonzeros:
+        raise TypeError("_deserialize_sparse_vector called on bytearray "
+                        "with wrong length")
+    indices = _deserialize_numpy_array([nonzeros], ba, 9, dtype='int32')
+    values = _deserialize_numpy_array([nonzeros], ba, 9 + 4 * nonzeros, dtype='float64')
+    return SparseVector(int(size), indices, values)
 
 def _serialize_double_matrix(m):
     """Serialize a double matrix into a mutually understood format."""
@@ -152,13 +203,15 @@ def _linear_predictor_typecheck(x, coeffs):
     This is a temporary hackaround until I actually implement bulk predict."""
     if type(x) == ndarray:
         if x.ndim == 1:
-            if x.shape == coeffs.shape:
-                pass
-            else:
+            if x.shape != coeffs.shape:
                 raise RuntimeError("Got array of %d elements; wanted %d"
-                        % (numpy.shape(x)[0], numpy.shape(coeffs)[0]))
+                        % (numpy.shape(x)[0], coeffs.shape[0]))
         else:
             raise RuntimeError("Bulk predict not yet supported.")
+    elif type(x) == SparseVector:
+        if x.size != coeffs.shape[0]:
+           raise RuntimeError("Got sparse vector of size %d; wanted %d"
+                   % (x.size, coeffs.shape[0]))
     elif (type(x) == RDD):
         raise RuntimeError("Bulk predict not yet supported.")
     else:
@@ -192,20 +245,23 @@ class LinearRegressionModelBase(LinearModel):
         """Predict the value of the dependent variable given a vector x"""
         """containing values for the independent variables."""
         _linear_predictor_typecheck(x, self._coeff)
-        return numpy.dot(self._coeff, x) + self._intercept
+        return x.dot(self._coeff) + self._intercept
 
 # If we weren't given initial weights, take a zero vector of the appropriate
 # length.
 def _get_initial_weights(initial_weights, data):
     if initial_weights is None:
         initial_weights = data.first()
-        if type(initial_weights) != ndarray:
+        if type(initial_weights) == ndarray:
+            if initial_weights.ndim != 1:
+                raise TypeError("At least one data element has "
+                        + initial_weights.ndim + " dimensions, which is not 1")
+            initial_weights = numpy.ones([initial_weights.shape[0] - 1])
+        elif type(initial_weights) == SparseVector:
+            initial_weights = numpy.ones(initial_weights.size - 1)
+        else:
             raise TypeError("At least one data element has type "
-                    + type(initial_weights).__name__ + " which is not ndarray")
-        if initial_weights.ndim != 1:
-            raise TypeError("At least one data element has "
-                    + initial_weights.ndim + " dimensions, which is not 1")
-        initial_weights = numpy.ones([initial_weights.shape[0] - 1])
+                    + type(initial_weights).__name__ + " which is not a vector")
     return initial_weights
 
 # train_func should take two parameters, namely data and initial_weights, and
