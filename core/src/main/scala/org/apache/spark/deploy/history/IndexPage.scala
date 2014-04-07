@@ -36,8 +36,10 @@ private[spark] class IndexPage(parent: HistoryServer) {
         <div class="span12">
           <ul class="unstyled">
             <li><strong>Event Log Location: </strong> {parent.baseLogDir}</li>
-            <br></br>
-            <h4>Finished Applications</h4> {appTable}
+            <h4>
+              Showing {parent.appIdToInfo.size}/{parent.getTotalApplications} Finished Applications
+            </h4>
+            {appTable}
           </ul>
         </div>
       </div>
