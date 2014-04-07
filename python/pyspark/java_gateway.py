@@ -64,5 +64,6 @@ def launch_gateway():
     java_import(gateway.jvm, "org.apache.spark.api.java.*")
     java_import(gateway.jvm, "org.apache.spark.api.python.*")
     java_import(gateway.jvm, "org.apache.spark.mllib.api.python.*")
+    java_import(gateway.jvm, "org.apache.spark.sql.api.java.JavaSQLContext")
     java_import(gateway.jvm, "scala.Tuple2")
     return gateway
