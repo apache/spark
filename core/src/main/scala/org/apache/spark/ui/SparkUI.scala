@@ -113,9 +113,12 @@ private[spark] class SparkUI(
   }
 
   /**
-   * Return the application UI address. This does not include the scheme (http://).
+   * Return the application UI host:port. This does not include the scheme (http://).
    */
-  private[spark] def appUIAddress = publicHost + ":" + boundPort
+  private[spark] def appUIHostPort = publicHost + ":" + boundPort
+
+  private[spark] def appUIAddress = "http://" + publicHost + ":" + boundPort
+
 
 }
 
