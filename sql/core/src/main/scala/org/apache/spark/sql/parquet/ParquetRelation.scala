@@ -87,6 +87,7 @@ private[sql] object ParquetRelation {
     val parquetLogger = java.util.logging.Logger.getLogger("parquet")
     parquetLogger.getHandlers.foreach(parquetLogger.removeHandler)
     if(parquetLogger.getLevel != null) parquetLogger.setLevel(null)
+    if(!parquetLogger.getUseParentHandlers) parquetLogger.setUseParentHandlers(true)
   }
 
   // The element type for the RDDs that this relation maps to.
