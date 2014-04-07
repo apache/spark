@@ -63,6 +63,9 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   private val cleaningThread = new Thread() { override def run() { keepCleaning() }}
 
+  /** Whether the cleaning thread will block on cleanup tasks */
+  private val blockOnCleanupTasks = sc.conf.getBoolean("spark.cleaner.referenceTracking.blocking", false)
+
   @volatile private var stopped = false
 
   /** Attach a listener object to get information of when objects are cleaned. */
@@ -112,9 +115,12 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
           logDebug("Got cleaning task " + task)
           referenceBuffer -= reference.get
           task match {
-            case CleanRDD(rddId) => doCleanupRDD(rddId, blocking = false)
-            case CleanShuffle(shuffleId) => doCleanupShuffle(shuffleId, blocking = false)
-            case CleanBroadcast(broadcastId) => doCleanupBroadcast(broadcastId, blocking = false)
+            case CleanRDD(rddId) =>
+              doCleanupRDD(rddId, blocking = blockOnCleanupTasks)
+            case CleanShuffle(shuffleId) =>
+              doCleanupShuffle(shuffleId, blocking = blockOnCleanupTasks)
+            case CleanBroadcast(broadcastId) =>
+              doCleanupBroadcast(broadcastId, blocking = blockOnCleanupTasks)
           }
         }
       } catch {

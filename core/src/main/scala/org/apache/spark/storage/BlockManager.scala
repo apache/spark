@@ -219,6 +219,15 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Get the ids of existing blocks that match the given filter. Note that this will
+   * query the blocks stored in the disk block manager (that the block manager
+   * may not know of).
+   */
+  def getMatchingBlockIds(filter: BlockId => Boolean): Seq[BlockId] = {
+    (blockInfo.keys ++ diskBlockManager.getAllBlocks()).filter(filter).toSeq
+  }
+
+  /**
    * Tell the master about the current storage status of a block. This will send a block update
    * message reflecting the current status, *not* the desired storage level in its block info.
    * For example, a block with MEMORY_AND_DISK set might have fallen out to be only on disk.

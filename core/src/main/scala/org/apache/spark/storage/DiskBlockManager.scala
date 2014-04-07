@@ -47,6 +47,7 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
   private var shuffleSender : ShuffleSender = null
 
+
   addShutdownHook()
 
   /**
@@ -93,6 +94,15 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
   /** Check if disk block manager has a block. */
   def containsBlock(blockId: BlockId): Boolean = {
     getBlockLocation(blockId).file.exists()
+  }
+
+  /** List all the blocks currently stored in disk by the disk manager. */
+  def getAllBlocks(): Seq[BlockId] = {
+    // Get all the files inside the array of array of directories
+    subDirs.flatten.filter(_ != null).flatMap { dir =>
+      val files = dir.list()
+      if (files != null) files else Seq.empty
+    }.map(BlockId.apply)
   }
 
   /** Produces a unique block id and File suitable for intermediate results. */

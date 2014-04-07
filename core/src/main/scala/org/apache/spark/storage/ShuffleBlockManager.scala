@@ -171,8 +171,11 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
 
   /** Remove all the blocks / files and metadata related to a particular shuffle. */
   def removeShuffle(shuffleId: ShuffleId): Boolean = {
+    // Do not change the ordering of this, if shuffleStates should be removed only
+    // after the corresponding shuffle blocks have been removed
+    val cleaned = removeShuffleBlocks(shuffleId)
     shuffleStates.remove(shuffleId)
-    removeShuffleBlocks(shuffleId)
+    cleaned
   }
 
   /** Remove all the blocks / files related to a particular shuffle. */

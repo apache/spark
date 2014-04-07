@@ -262,6 +262,78 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     master.getLocations(rdd(0, 1)) should have size 0
   }
 
+  test("removing broadcast") {
+    store = new BlockManager("<driver>", actorSystem, master, serializer, 2000, conf,
+      securityMgr, mapOutputTracker)
+    val driverStore = store
+    val executorStore = new BlockManager("executor", actorSystem, master, serializer, 2000, conf,
+      securityMgr, mapOutputTracker)
+    val a1 = new Array[Byte](400)
+    val a2 = new Array[Byte](400)
+    val a3 = new Array[Byte](400)
+    val a4 = new Array[Byte](400)
+
+    val broadcast0BlockId = BroadcastBlockId(0)
+    val broadcast1BlockId = BroadcastBlockId(1)
+    val broadcast2BlockId = BroadcastBlockId(2)
+    val broadcast2BlockId2 = BroadcastBlockId(2, "_")
+
+    // insert broadcast blocks in both the stores
+    Seq(driverStore, executorStore).foreach { case s =>
+      s.putSingle(broadcast0BlockId, a1, StorageLevel.DISK_ONLY)
+      s.putSingle(broadcast1BlockId, a2, StorageLevel.DISK_ONLY)
+      s.putSingle(broadcast2BlockId, a3, StorageLevel.DISK_ONLY)
+      s.putSingle(broadcast2BlockId2, a4, StorageLevel.DISK_ONLY)
+    }
+
+    // verify whether the blocks exist in both the stores
+    Seq(driverStore, executorStore).foreach { case s =>
+      s.getLocal(broadcast0BlockId) should not be (None)
+      s.getLocal(broadcast1BlockId) should not be (None)
+      s.getLocal(broadcast2BlockId) should not be (None)
+      s.getLocal(broadcast2BlockId2) should not be (None)
+    }
+
+    // remove broadcast 0 block only from executors
+    master.removeBroadcast(0, removeFromMaster = false, blocking = true)
+
+    // only broadcast 0 block should be removed from the executor store
+    executorStore.getLocal(broadcast0BlockId) should be (None)
+    executorStore.getLocal(broadcast1BlockId) should not be (None)
+    executorStore.getLocal(broadcast2BlockId) should not be (None)
+
+    // nothing should be removed from the driver store
+    driverStore.getLocal(broadcast0BlockId) should not be (None)
+    driverStore.getLocal(broadcast1BlockId) should not be (None)
+    driverStore.getLocal(broadcast2BlockId) should not be (None)
+
+    // remove broadcast 0 block from the driver as well
+    master.removeBroadcast(0, removeFromMaster = true, blocking = true)
+    driverStore.getLocal(broadcast0BlockId) should be (None)
+    driverStore.getLocal(broadcast1BlockId) should not be (None)
+
+    // remove broadcast 1 block from both the stores asynchronously
+    // and verify all broadcast 1 blocks have been removed
+    master.removeBroadcast(1, removeFromMaster = true, blocking = false)
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      driverStore.getLocal(broadcast1BlockId) should be (None)
+      executorStore.getLocal(broadcast1BlockId) should be (None)
+    }
+
+    // remove broadcast 2 from both the stores asynchronously
+    // and verify all broadcast 2 blocks have been removed
+    master.removeBroadcast(2, removeFromMaster = true, blocking = false)
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      driverStore.getLocal(broadcast2BlockId) should be (None)
+      driverStore.getLocal(broadcast2BlockId2) should be (None)
+      executorStore.getLocal(broadcast2BlockId) should be (None)
+      executorStore.getLocal(broadcast2BlockId2) should be (None)
+    }
+    executorStore.stop()
+    driverStore.stop()
+    store = null
+  }
+
   test("reregistration on heart beat") {
     val heartBeat = PrivateMethod[Unit]('heartBeat)
     store = new BlockManager("<driver>", actorSystem, master, serializer, 2000, conf,
@@ -783,6 +855,40 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(store.master.getBlockStatus("list4", askSlaves = true).size === 0)
     assert(store.master.getBlockStatus("list5", askSlaves = true).size === 1)
     assert(store.master.getBlockStatus("list6", askSlaves = true).size === 1)
+  }
+
+  test("get matching blocks") {
+    store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
+      securityMgr, mapOutputTracker)
+    val list = List.fill(2)(new Array[Byte](10))
+
+    // Tell master. By LRU, only list2 and list3 remains.
+    store.put("list1", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+    store.put("list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+    store.put("list3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+
+    // getLocations and getBlockStatus should yield the same locations
+    assert(store.master.getMatcinghBlockIds(_.toString.contains("list"), askSlaves = false).size === 3)
+    assert(store.master.getMatcinghBlockIds(_.toString.contains("list1"), askSlaves = false).size === 1)
+
+    // Tell master. By LRU, only list2 and list3 remains.
+    store.put("newlist1", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+    store.put("newlist2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+    store.put("newlist3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+
+    // getLocations and getBlockStatus should yield the same locations
+    assert(store.master.getMatcinghBlockIds(_.toString.contains("newlist"), askSlaves = false).size === 1)
+    assert(store.master.getMatcinghBlockIds(_.toString.contains("newlist"), askSlaves = true).size === 3)
+
+    val blockIds = Seq(RDDBlockId(1, 0), RDDBlockId(1, 1), RDDBlockId(2, 0))
+    blockIds.foreach { blockId =>
+      store.put(blockId, list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    }
+    val matchedBlockIds = store.master.getMatcinghBlockIds(_ match {
+      case RDDBlockId(1, _) => true
+      case _ => false
+    }, askSlaves = true)
+    assert(matchedBlockIds.toSet === Set(RDDBlockId(1, 0), RDDBlockId(1, 1)))
   }
 
   test("SPARK-1194 regression: fix the same-RDD rule for cache replacement") {

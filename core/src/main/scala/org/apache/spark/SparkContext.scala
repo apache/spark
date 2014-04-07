@@ -229,7 +229,7 @@ class SparkContext(
   dagScheduler.start()
 
   private[spark] val cleaner: Option[ContextCleaner] =
-    if (conf.getBoolean("spark.cleaner.automatic", true)) {
+    if (conf.getBoolean("spark.cleaner.referenceTracking", true)) {
       Some(new ContextCleaner(this))
     } else None
 

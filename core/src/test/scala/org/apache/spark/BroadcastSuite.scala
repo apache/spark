@@ -125,7 +125,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     // Verify that the broadcast file is created, and blocks are persisted only on the driver
     def afterCreation(blockIds: Seq[BroadcastBlockId], bmm: BlockManagerMaster) {
       assert(blockIds.size === 1)
-      val statuses = bmm.getBlockStatus(blockIds.head)
+      val statuses = bmm.getBlockStatus(blockIds.head, askSlaves = true)
       assert(statuses.size === 1)
       statuses.head match { case (bm, status) =>
         assert(bm.executorId === "<driver>", "Block should only be on the driver")
@@ -142,7 +142,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     // Verify that blocks are persisted in both the executors and the driver
     def afterUsingBroadcast(blockIds: Seq[BroadcastBlockId], bmm: BlockManagerMaster) {
       assert(blockIds.size === 1)
-      val statuses = bmm.getBlockStatus(blockIds.head)
+      val statuses = bmm.getBlockStatus(blockIds.head, askSlaves = true)
       assert(statuses.size === numSlaves + 1)
       statuses.foreach { case (_, status) =>
         assert(status.storageLevel === StorageLevel.MEMORY_AND_DISK)
@@ -155,7 +155,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     // is true. In the latter case, also verify that the broadcast file is deleted on the driver.
     def afterUnpersist(blockIds: Seq[BroadcastBlockId], bmm: BlockManagerMaster) {
       assert(blockIds.size === 1)
-      val statuses = bmm.getBlockStatus(blockIds.head)
+      val statuses = bmm.getBlockStatus(blockIds.head, askSlaves = true)
       val expectedNumBlocks = if (removeFromDriver) 0 else 1
       val possiblyNot = if (removeFromDriver) "" else " not"
       assert(statuses.size === expectedNumBlocks,
@@ -197,7 +197,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     // Verify that blocks are persisted only on the driver
     def afterCreation(blockIds: Seq[BroadcastBlockId], bmm: BlockManagerMaster) {
       blockIds.foreach { blockId =>
-        val statuses = bmm.getBlockStatus(blockIds.head)
+        val statuses = bmm.getBlockStatus(blockIds.head, askSlaves = true)
         assert(statuses.size === 1)
         statuses.head match { case (bm, status) =>
           assert(bm.executorId === "<driver>", "Block should only be on the driver")
@@ -211,7 +211,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     // Verify that blocks are persisted in both the executors and the driver
     def afterUsingBroadcast(blockIds: Seq[BroadcastBlockId], bmm: BlockManagerMaster) {
       blockIds.foreach { blockId =>
-        val statuses = bmm.getBlockStatus(blockId)
+        val statuses = bmm.getBlockStatus(blockId, askSlaves = true)
         if (blockId.field == "meta") {
           // Meta data is only on the driver
           assert(statuses.size === 1)
@@ -235,7 +235,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
       val expectedNumBlocks = if (removeFromDriver) 0 else 1
       val possiblyNot = if (removeFromDriver) "" else " not"
       blockIds.foreach { blockId =>
-        val statuses = bmm.getBlockStatus(blockId)
+        val statuses = bmm.getBlockStatus(blockId, askSlaves = true)
         assert(statuses.size === expectedNumBlocks,
           "Block should%s be unpersisted on the driver".format(possiblyNot))
       }

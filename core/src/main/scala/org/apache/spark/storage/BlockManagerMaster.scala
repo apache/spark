@@ -130,7 +130,8 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
 
   /** Remove all blocks belonging to the given broadcast. */
   def removeBroadcast(broadcastId: Long, removeFromMaster: Boolean, blocking: Boolean) {
-    val future = askDriverWithReply[Future[Seq[Int]]](RemoveBroadcast(broadcastId, removeFromMaster))
+    val future = askDriverWithReply[Future[Seq[Int]]](
+      RemoveBroadcast(broadcastId, removeFromMaster))
     future.onFailure {
       case e: Throwable =>
         logError("Failed to remove broadcast " + broadcastId +
@@ -156,8 +157,8 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
   }
 
   /**
-   * Return the block's status on all block managers, if any. This can potentially be an
-   * expensive operation and is used mainly for testing.
+   * Return the block's status on all block managers, if any. NOTE: This is a
+   * potentially expensive operation and should only be used for testing.
    *
    * If askSlaves is true, this invokes the master to query each block manager for the most
    * updated block statuses. This is useful when the master is not informed of the given block
@@ -182,6 +183,22 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
     blockManagerIds.zip(blockStatus).flatMap { case (blockManagerId, status) =>
       status.map { s => (blockManagerId, s) }
     }.toMap
+  }
+
+  /**
+   * Return a list of ids of existing blocks such that the ids match the given filter. NOTE: This
+   * is a potentially expensive operation and should only be used for testing.
+   *
+   * If askSlaves is true, this invokes the master to query each block manager for the most
+   * updated block statuses. This is useful when the master is not informed of the given block
+   * by all block managers.
+   */
+  def getMatcinghBlockIds(
+      filter: BlockId => Boolean,
+      askSlaves: Boolean): Seq[BlockId] = {
+    val msg = GetMatchingBlockIds(filter, askSlaves)
+    val future = askDriverWithReply[Future[Seq[BlockId]]](msg)
+    Await.result(future, timeout)
   }
 
   /** Stop the driver actor, called only on the Spark driver node */

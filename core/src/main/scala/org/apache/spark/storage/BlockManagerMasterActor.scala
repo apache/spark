@@ -96,6 +96,9 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     case GetBlockStatus(blockId, askSlaves) =>
       sender ! blockStatus(blockId, askSlaves)
 
+    case GetMatchingBlockIds(filter, askSlaves) =>
+      sender ! getMatchingBlockIds(filter, askSlaves)
+
     case RemoveRdd(rddId) =>
       sender ! removeRdd(rddId)
 
@@ -266,8 +269,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   }
 
   /**
-   * Return the block's status for all block managers, if any. This can potentially be an
-   * expensive operation and is used mainly for testing.
+   * Return the block's status for all block managers, if any. NOTE: This is a
+   * potentially expensive operation and should only be used for testing.
    *
    * If askSlaves is true, the master queries each block manager for the most updated block
    * statuses. This is useful when the master is not informed of the given block by all block
@@ -292,6 +295,32 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
         }
       (info.blockManagerId, blockStatusFuture)
     }.toMap
+  }
+
+  /**
+   * Return the ids of blocks present in all the block managers that match the given filter.
+   * NOTE: This is a potentially expensive operation and should only be used for testing.
+   *
+   * If askSlaves is true, the master queries each block manager for the most updated block
+   * statuses. This is useful when the master is not informed of the given block by all block
+   * managers.
+   */
+  private def getMatchingBlockIds(
+      filter: BlockId => Boolean,
+      askSlaves: Boolean): Future[Seq[BlockId]] = {
+    import context.dispatcher
+    val getMatchingBlockIds = GetMatchingBlockIds(filter)
+    Future.sequence(
+      blockManagerInfo.values.map { info =>
+        val future =
+          if (askSlaves) {
+            info.slaveActor.ask(getMatchingBlockIds)(akkaTimeout).mapTo[Seq[BlockId]]
+          } else {
+            Future { info.blocks.keys.filter(filter).toSeq }
+          }
+        future
+      }
+    ).map(_.flatten.toSeq)
   }
 
   private def register(id: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
