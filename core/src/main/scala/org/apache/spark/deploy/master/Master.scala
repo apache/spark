@@ -29,6 +29,7 @@ import akka.actor._
 import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import akka.serialization.SerializationExtension
+import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState}
@@ -45,7 +46,8 @@ private[spark] class Master(
     host: String,
     port: Int,
     webUiPort: Int,
-    val securityMgr: SecurityManager) extends Actor with Logging {
+    val securityMgr: SecurityManager)
+  extends Actor with Logging {
 
   import context.dispatcher   // to use Akka's scheduler.schedule()
 
@@ -71,6 +73,7 @@ private[spark] class Master(
   var nextAppNumber = 0
 
   val appIdToUI = new HashMap[String, SparkUI]
+  val fileSystems = new HashSet[FileSystem]
 
   val drivers = new HashSet[DriverInfo]
   val completedDrivers = new ArrayBuffer[DriverInfo]
@@ -149,6 +152,7 @@ private[spark] class Master(
 
   override def postStop() {
     webUi.stop()
+    fileSystems.foreach(_.close())
     masterMetricsSystem.stop()
     applicationMetricsSystem.stop()
     persistenceEngine.close()
@@ -662,11 +666,11 @@ private[spark] class Master(
     val eventLogDir = app.desc.eventLogDir.getOrElse { return None }
     val replayBus = new ReplayListenerBus(eventLogDir)
     val ui = new SparkUI(replayBus, "%s (finished)".format(appName), "/history/%s".format(app.id))
+    fileSystems += replayBus.fileSystem
 
     // Do not call ui.bind() to avoid creating a new server for each application
     ui.start()
     val success = replayBus.replay()
-    replayBus.stop()
     if (success) Some(ui) else None
   }
 

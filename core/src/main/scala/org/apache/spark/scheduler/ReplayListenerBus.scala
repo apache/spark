@@ -18,7 +18,6 @@
 package org.apache.spark.scheduler
 
 import java.io.InputStream
-import java.net.URI
 
 import scala.io.Source
 
@@ -36,8 +35,13 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  * This class expects files to be appropriately prefixed as specified in EventLoggingListener.
  * There exists a one-to-one mapping between ReplayListenerBus and event logging applications.
  */
-private[spark] class ReplayListenerBus(logDir: String) extends SparkListenerBus with Logging {
-  private val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
+private[spark] class ReplayListenerBus(
+    logDir: String,
+    val fileSystem: FileSystem)
+  extends SparkListenerBus with Logging {
+
+  def this(logDir: String) = this(logDir, Utils.getHadoopFileSystem(logDir))
+
   private var applicationComplete = false
   private var compressionCodec: Option[CompressionCodec] = None
   private var logPaths = Array[Path]()

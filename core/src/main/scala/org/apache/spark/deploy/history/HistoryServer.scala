@@ -17,13 +17,11 @@
 
 package org.apache.spark.deploy.history
 
-import java.net.URI
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable
 import scala.concurrent._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.{Failure, Success}
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.eclipse.jetty.servlet.ServletContextHandler
@@ -52,8 +50,9 @@ import org.apache.spark.scheduler.{ApplicationEventListener, ReplayListenerBus}
 class HistoryServer(val baseLogDir: String, requestedPort: Int)
   extends SparkUIContainer("History Server") with Logging {
 
-  private val fileSystem = Utils.getHadoopFileSystem(new URI(baseLogDir))
-  private val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
+  private val fileSystem = Utils.getHadoopFileSystem(baseLogDir)
+  private val bindHost = Utils.localHostName()
+  private val publicHost = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(bindHost)
   private val port = requestedPort
   private val conf = new SparkConf
   private val securityManager = new SecurityManager(conf)
@@ -73,8 +72,8 @@ class HistoryServer(val baseLogDir: String, requestedPort: Int)
   /** Bind to the HTTP server behind this web interface */
   override def bind() {
     try {
-      serverInfo = Some(startJettyServer(host, port, handlers, conf))
-      logInfo("Started HistoryServer at http://%s:%d".format(host, boundPort))
+      serverInfo = Some(startJettyServer(bindHost, port, handlers, conf))
+      logInfo("Started HistoryServer at http://%s:%d".format(publicHost, boundPort))
     } catch {
       case e: Exception =>
         logError("Failed to bind HistoryServer", e)
@@ -133,7 +132,7 @@ class HistoryServer(val baseLogDir: String, requestedPort: Int)
    * which case the server proceeds to render the SparkUI. Otherwise, the server does nothing.
    */
   private def maybeRenderUI(appId: String, logPath: String, lastUpdated: Long) {
-    val replayBus = new ReplayListenerBus(logPath)
+    val replayBus = new ReplayListenerBus(logPath, fileSystem)
     replayBus.start()
 
     // If the application completion file is found
@@ -157,14 +156,19 @@ class HistoryServer(val baseLogDir: String, requestedPort: Int)
     } else {
       logWarning("Skipping incomplete application: %s".format(logPath))
     }
-    replayBus.stop()
+  }
+
+  /** Stop the server and close the file system. */
+  override def stop() {
+    super.stop()
+    fileSystem.close()
   }
 
   /** Parse app ID from the given log path. */
   def getAppId(logPath: String): String = logPath.split("/").last
 
   /** Return the address of this server. */
-  def getAddress = "http://" + host + ":" + boundPort
+  def getAddress = "http://" + publicHost + ":" + boundPort
 
   /** Return when this directory was last modified. */
   private def getModificationTime(dir: FileStatus): Long = {
