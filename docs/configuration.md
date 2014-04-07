@@ -349,6 +349,32 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.worker.cleanup.enabled</td>
+  <td>true</td>
+  <td>
+    Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
+    mode, as YARN works differently.
+  </td>
+</tr>
+<tr>
+  <td>spark.worker.cleanup.interval</td>
+  <td>1800 (30 minutes)</td>
+  <td>
+    Controls the interval, in seconds, at which the worker cleans up old application work dirs
+    on the local machine.
+  </td>
+</tr>
+<tr>
+  <td>spark.worker.cleanup.appDataTtl</td>
+  <td>7 * 24 * 3600 (7 days)</td>
+  <td>
+    The number of seconds to retain application work directories on each worker.  This is a Time To Live
+    and should depend on the amount of available disk space you have.  Application logs and jars are
+    downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
+    especially if you run jobs very frequently.
+  </td>
+</tr>
+<tr>
   <td>spark.akka.frameSize</td>
   <td>10</td>
   <td>
