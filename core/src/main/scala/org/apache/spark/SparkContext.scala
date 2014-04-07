@@ -226,6 +226,11 @@ class SparkContext(
   }
   executorEnvs("SPARK_USER") = sparkUser
 
+  // Need to do security authentication when Hadoop security is turned on
+  if (SparkHadoopUtil.get.isSecurityEnabled()) {
+    SparkHadoopUtil.get.doUserAuthentication(this)
+  }
+
   // Create and start the scheduler
   private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
   taskScheduler.start()

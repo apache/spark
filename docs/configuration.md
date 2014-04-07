@@ -627,6 +627,41 @@ Apart from these, the following properties are also available, and may be useful
     Number of cores to allocate for each task.
   </td>
 </tr>
+<tr>
+  <td>spark.hadoop.security.authentication</td>
+  <td>(none)</td>
+  <td>
+    Method used for authenticating user when Hadoop security is turned on. A Hadoop delegation token can be obtained only after the user is authenticated.
+  </td>
+</tr>
+<tr>
+  <td>spark.hadoop.security.kerberos.renewInterval</td>
+  <td>21600000</td>
+  <td>
+    Interval for automatically renewing the Kerberos credential when Hadoop security is turned on and Kerberos is the method for user authentication.
+  </td>
+</tr>
+<tr>
+  <td>spark.hadoop.security.kerberos.keytab</td>
+  <td>{Current login user name}.keytab under the home directory of the current login user</td>
+  <td>
+    Local path of the Kerberos keytab file. The keytab usually is located on the gateway host to the Spark cluster.
+  </td>
+</tr>
+<tr>
+  <td>spark.hadoop.security.kerberos.principal</td>
+  <td>Current login user name</td>
+  <td>
+    Principal used for Kerberos login.
+  </td>
+</tr>
+<tr>
+  <td>spark.hadoop.security.token.name</td>
+  <td>spark.token</td>
+  <td>
+    Name of the file storing the Hadoop delegation token obtained by the driver.
+  </td>
+</tr>
 </table>
 
 ## Viewing Spark Properties

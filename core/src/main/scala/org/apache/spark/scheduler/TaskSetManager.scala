@@ -410,10 +410,11 @@ private[spark] class TaskSetManager(
           lastLaunchTime = curTime
           // Serialize and return the task
           val startTime = clock.getTime()
+          val userName = System.getProperty("user.name")
           // We rely on the DAGScheduler to catch non-serializable closures and RDDs, so in here
           // we assume the task can be serialized without exceptions.
           val serializedTask = Task.serializeWithDependencies(
-            task, sched.sc.addedFiles, sched.sc.addedJars, ser)
+            userName, task, sched.sc.addedFiles, sched.sc.addedJars, ser)
           val timeTaken = clock.getTime() - startTime
           addRunningTask(taskId)
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(

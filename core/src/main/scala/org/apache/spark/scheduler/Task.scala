@@ -98,6 +98,7 @@ private[spark] object Task {
    * Serialize a task and the current app dependencies (files and JARs added to the SparkContext)
    */
   def serializeWithDependencies(
+      userName: String,
       task: Task[_],
       currentFiles: HashMap[String, Long],
       currentJars: HashMap[String, Long],
@@ -106,6 +107,9 @@ private[spark] object Task {
 
     val out = new FastByteArrayOutputStream(4096)
     val dataOut = new DataOutputStream(out)
+
+    // Write the name of the user launching the task
+    dataOut.writeUTF(userName)
 
     // Write currentFiles
     dataOut.writeInt(currentFiles.size)
@@ -134,13 +138,16 @@ private[spark] object Task {
    * and return the task itself as a serialized ByteBuffer. The caller can then update its
    * ClassLoaders and deserialize the task.
    *
-   * @return (taskFiles, taskJars, taskBytes)
+   * @return (userName, taskFiles, taskJars, taskBytes)
    */
   def deserializeWithDependencies(serializedTask: ByteBuffer)
-    : (HashMap[String, Long], HashMap[String, Long], ByteBuffer) = {
+    : (String, HashMap[String, Long], HashMap[String, Long], ByteBuffer) = {
 
     val in = new ByteBufferInputStream(serializedTask)
     val dataIn = new DataInputStream(in)
+
+    // Read the name of the user launching the task
+    val userName = dataIn.readUTF()
 
     // Read task's files
     val taskFiles = new HashMap[String, Long]()
@@ -158,6 +165,6 @@ private[spark] object Task {
 
     // Create a sub-buffer for the rest of the data, which is the serialized Task object
     val subBuffer = serializedTask.slice()  // ByteBufferInputStream will have read just up to task
-    (taskFiles, taskJars, subBuffer)
+    (userName, taskFiles, taskJars, subBuffer)
   }
 }

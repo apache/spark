@@ -30,6 +30,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util.{AkkaUtils, Utils}
+import java.security.PrivilegedExceptionAction
 
 /**
  * Spark executor used with Mesos, YARN, and the standalone scheduler.
@@ -173,7 +174,7 @@ private[spark] class Executor(
       }
     }
 
-    override def run(): Unit = SparkHadoopUtil.get.runAsUser(sparkUser) { () =>
+    override def run() {
       val startTime = System.currentTimeMillis()
       SparkEnv.set(env)
       Thread.currentThread.setContextClassLoader(replClassLoader)
@@ -188,7 +189,8 @@ private[spark] class Executor(
       try {
         SparkEnv.set(env)
         Accumulators.clear()
-        val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
+        val (userName, taskFiles, taskJars, taskBytes) =
+          Task.deserializeWithDependencies(serializedTask)
         updateDependencies(taskFiles, taskJars)
         task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
 
@@ -208,7 +210,19 @@ private[spark] class Executor(
 
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
-        val value = task.run(taskId.toInt)
+        var value: Any = None
+        if (SparkHadoopUtil.get.isSecurityEnabled()) {
+          // Get the user whom the task belongs to
+          val ugi = SparkHadoopUtil.get.getTaskUser(userName)
+          // Run the task as the user whom the task belongs to
+          ugi.doAs(new PrivilegedExceptionAction[Unit] {
+            def run(): Unit = {
+              value = task.run(taskId.toInt)
+            }
+          })
+        } else {
+          value = task.run(taskId.toInt)
+        }
         val taskFinish = System.currentTimeMillis()
 
         // If the task has been killed, let's fail it.
