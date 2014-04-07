@@ -248,10 +248,10 @@ object SparkBuild extends Build {
 
     libraryDependencies ++= Seq(
         "io.netty"          % "netty-all"      % "4.0.17.Final",
-        "org.eclipse.jetty" % "jetty-server"   % "8.1.14.v20131031",
-        "org.eclipse.jetty" % "jetty-util"     % "8.1.14.v20131031",
-        "org.eclipse.jetty" % "jetty-plus"     % "8.1.14.v20131031",
-        "org.eclipse.jetty" % "jetty-security" % "8.1.14.v20131031",
+        "org.eclipse.jetty" % "jetty-server"   % jettyVersion,
+        "org.eclipse.jetty" % "jetty-util"     % jettyVersion,
+        "org.eclipse.jetty" % "jetty-plus"     % jettyVersion,
+        "org.eclipse.jetty" % "jetty-security" % jettyVersion,
         /** Workaround for SPARK-959. Dependency used by org.eclipse.jetty. Fixed in ivy 2.3.0. */
         "org.eclipse.jetty.orbit" % "javax.servlet" % "3.0.0.v201112011016" artifacts Artifact("javax.servlet", "jar", "jar"),
         "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
@@ -276,6 +276,13 @@ object SparkBuild extends Build {
     publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
   ) ++ net.virtualvoid.sbt.graph.Plugin.graphSettings ++ ScalaStyleSettings
 
+  val akkaVersion = "2.2.3-shaded-protobuf"
+  val chillVersion = "0.3.1"
+  val codahaleMetricsVersion = "3.0.0"
+  val jblasVersion = "1.2.3"
+  val jettyVersion = "8.1.14.v20131031"
+  val hiveVersion = "0.12.0"
+  val parquetVersion = "1.3.2"
   val slf4jVersion = "1.7.5"
 
   val excludeNetty = ExclusionRule(organization = "org.jboss.netty")
@@ -309,9 +316,9 @@ object SparkBuild extends Build {
         "commons-daemon"             % "commons-daemon"   % "1.0.10", // workaround for bug HADOOP-9407
         "com.ning"                   % "compress-lzf"     % "1.0.0",
         "org.xerial.snappy"          % "snappy-java"      % "1.0.5",
-        "org.spark-project.akka"    %% "akka-remote"      % "2.2.3-shaded-protobuf"  excludeAll(excludeNetty),
-        "org.spark-project.akka"    %% "akka-slf4j"       % "2.2.3-shaded-protobuf"  excludeAll(excludeNetty),
-        "org.spark-project.akka"    %% "akka-testkit"     % "2.2.3-shaded-protobuf" % "test",
+        "org.spark-project.akka"    %% "akka-remote"      % akkaVersion excludeAll(excludeNetty),
+        "org.spark-project.akka"    %% "akka-slf4j"       % akkaVersion excludeAll(excludeNetty),
+        "org.spark-project.akka"    %% "akka-testkit"     % akkaVersion % "test",
         "org.json4s"                %% "json4s-jackson"   % "3.2.6" excludeAll(excludeScalap),
         "it.unimi.dsi"               % "fastutil"         % "6.4.4",
         "colt"                       % "colt"             % "1.2.0",
@@ -321,12 +328,12 @@ object SparkBuild extends Build {
         "org.apache.derby"           % "derby"            % "10.4.2.0"                     % "test",
         "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeNetty, excludeAsm, excludeCommonsLogging, excludeSLF4J, excludeOldAsm),
         "org.apache.curator"         % "curator-recipes"  % "2.4.0" excludeAll(excludeNetty),
-        "com.codahale.metrics"       % "metrics-core"     % "3.0.0",
-        "com.codahale.metrics"       % "metrics-jvm"      % "3.0.0",
-        "com.codahale.metrics"       % "metrics-json"     % "3.0.0",
-        "com.codahale.metrics"       % "metrics-graphite" % "3.0.0",
-        "com.twitter"               %% "chill"            % "0.3.1" excludeAll(excludeAsm),
-        "com.twitter"                % "chill-java"       % "0.3.1" excludeAll(excludeAsm),
+        "com.codahale.metrics"       % "metrics-core"     % codahaleMetricsVersion,
+        "com.codahale.metrics"       % "metrics-jvm"      % codahaleMetricsVersion,
+        "com.codahale.metrics"       % "metrics-json"     % codahaleMetricsVersion,
+        "com.codahale.metrics"       % "metrics-graphite" % codahaleMetricsVersion,
+        "com.twitter"               %% "chill"            % chillVersion excludeAll(excludeAsm),
+        "com.twitter"                % "chill-java"       % chillVersion excludeAll(excludeAsm),
         "org.tachyonproject"         % "tachyon"          % "0.4.1-thrift" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
         "com.clearspring.analytics"  % "stream"           % "2.5.1"
       ),
@@ -370,7 +377,7 @@ object SparkBuild extends Build {
     name := "spark-graphx",
     previousArtifact := sparkPreviousArtifact("spark-graphx"),
     libraryDependencies ++= Seq(
-      "org.jblas" % "jblas" % "1.2.3"
+      "org.jblas" % "jblas" % jblasVersion
     )
   )
 
@@ -383,7 +390,7 @@ object SparkBuild extends Build {
     name := "spark-mllib",
     previousArtifact := sparkPreviousArtifact("spark-mllib"),
     libraryDependencies ++= Seq(
-      "org.jblas" % "jblas" % "1.2.3",
+      "org.jblas" % "jblas" % jblasVersion,
       "org.scalanlp" %% "breeze" % "0.7"
     )
   )
@@ -403,8 +410,8 @@ object SparkBuild extends Build {
   def sqlCoreSettings = sharedSettings ++ Seq(
     name := "spark-sql",
     libraryDependencies ++= Seq(
-      "com.twitter" % "parquet-column" % "1.3.2",
-      "com.twitter" % "parquet-hadoop" % "1.3.2"
+      "com.twitter" % "parquet-column" % parquetVersion,
+      "com.twitter" % "parquet-hadoop" % parquetVersion
     )
   )
 
@@ -416,9 +423,9 @@ object SparkBuild extends Build {
     jarName in packageDependency <<= version map { v => "spark-hive-assembly-" + v + "-hadoop" + hadoopVersion + "-deps.jar" },
     javaOptions += "-XX:MaxPermSize=1g",
     libraryDependencies ++= Seq(
-      "org.apache.hive" % "hive-metastore" % "0.12.0",
-      "org.apache.hive" % "hive-exec" % "0.12.0",
-      "org.apache.hive" % "hive-serde" % "0.12.0"
+      "org.apache.hive" % "hive-metastore" % hiveVersion,
+      "org.apache.hive" % "hive-exec"      % hiveVersion,
+      "org.apache.hive" % "hive-serde"     % hiveVersion
     ),
     // Multiple queries rely on the TestHive singleton.  See comments there for more details.
     parallelExecution in Test := false,
@@ -549,7 +556,7 @@ object SparkBuild extends Build {
     name := "spark-streaming-zeromq",
     previousArtifact := sparkPreviousArtifact("spark-streaming-zeromq"),
     libraryDependencies ++= Seq(
-      "org.spark-project.akka" %% "akka-zeromq" % "2.2.3-shaded-protobuf" excludeAll(excludeNetty)
+      "org.spark-project.akka" %% "akka-zeromq" % akkaVersion excludeAll(excludeNetty)
     )
   )
 
