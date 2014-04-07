@@ -28,7 +28,8 @@ import org.apache.spark.SparkException
  * attempts to distribute broadcast variables using efficient broadcast algorithms to reduce
  * communication cost.
  *
- * Broadcast variables are created from a variable `v` by calling [[SparkContext#broadcast]].
+ * Broadcast variables are created from a variable `v` by calling
+ * [[org.apache.spark.SparkContext#broadcast]].
  * The broadcast variable is a wrapper around `v`, and its value can be accessed by calling the
  * `value` method. The interpreter session below shows this:
  *
@@ -51,15 +52,17 @@ import org.apache.spark.SparkException
  */
 abstract class Broadcast[T](val id: Long) extends Serializable {
 
-  protected var _isValid: Boolean = true
-
   /**
-   * Whether this Broadcast is actually usable. This should be false once persisted state is
-   * removed from the driver.
+   * Flag signifying whether the broadcast variable is valid
+   * (that is, not already destroyed) or not.
    */
-  def isValid: Boolean = _isValid
+  @volatile private var _isValid = true
 
-  def value: T
+  /** Get the broadcasted value. */
+  def value: T = {
+    assertValid()
+    getValue()
+  }
 
   /**
    * Asynchronously delete cached copies of this broadcast on the executors.
@@ -74,23 +77,50 @@ abstract class Broadcast[T](val id: Long) extends Serializable {
    * this is called, it will need to be re-sent to each executor.
    * @param blocking Whether to block until unpersisting has completed
    */
-  def unpersist(blocking: Boolean)
-
-  /**
-   * Remove all persisted state associated with this broadcast on both the executors and
-   * the driver.
-   */
-  private[spark] def destroy(blocking: Boolean) {
-    _isValid = false
-    onDestroy(blocking)
+  def unpersist(blocking: Boolean) {
+    assertValid()
+    doUnpersist(blocking)
   }
 
-  protected def onDestroy(blocking: Boolean)
+  /**
+   * Destroy all data and metadata related to this broadcast variable. Use this with caution;
+   * once a broadcast variable has been destroyed, it cannot be used again.
+   */
+  private[spark] def destroy(blocking: Boolean) {
+    assertValid()
+    _isValid = false
+    doDestroy(blocking)
+  }
 
   /**
-   * If this broadcast is no longer valid, throw an exception.
+   * Whether this Broadcast is actually usable. This should be false once persisted state is
+   * removed from the driver.
    */
-  protected def assertValid() {
+  private[spark] def isValid: Boolean = {
+    _isValid
+  }
+
+  /**
+   * Actually get the broadcasted value. Concrete implementations of Broadcast class must
+   * define their own way to get the value.
+   */
+  private[spark] def getValue(): T
+
+  /**
+   * Actually unpersist the broadcasted value on the executors. Concrete implementations of
+   * Broadcast class must define their own logic to unpersist their own data.
+   */
+  private[spark] def doUnpersist(blocking: Boolean)
+
+  /**
+   * Actually destroy all data and metadata related to this broadcast variable.
+   * Implementation of Broadcast class must define their own logic to destroy their own
+   * state.
+   */
+  private[spark] def doDestroy(blocking: Boolean)
+
+  /** Check if this broadcast is valid. If not valid, exception is thrown. */
+  private[spark] def assertValid() {
     if (!_isValid) {
       throw new SparkException("Attempted to use %s after it has been destroyed!".format(toString))
     }

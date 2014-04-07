@@ -26,13 +26,28 @@ import org.apache.spark.{Logging, SparkConf, SparkEnv, SparkException}
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util.Utils
 
+/**
+ *  A [[org.apache.spark.broadcast.Broadcast]] implementation that uses a BitTorrent-like
+ *  protocol to do a distributed transfer of the broadcasted data to the executors.
+ *  The mechanism is as follows. The driver divides the serializes the broadcasted data,
+ *  divides it into smaller chunks, and stores them in the BlockManager of the driver.
+ *  These chunks are reported to the BlockManagerMaster so that all the executors can
+ *  learn the location of those chunks. The first time the broadcast variable (sent as
+ *  part of task) is deserialized at a executor, all the chunks are fetched using
+ *  the BlockManager. When all the chunks are fetched (initially from the driver's
+ *  BlockManager), they are combined and deserialized to recreate the broadcasted data.
+ *  However, the chunks are also stored in the BlockManager and reported to the
+ *  BlockManagerMaster. As more executors fetch the chunks, BlockManagerMaster learns
+ *  multiple locations for each chunk. Hence, subsequent fetches of each chunk will be
+ *  made to other executors who already have those chunks, resulting in a distributed
+ *  fetching. This prevents the driver from being the bottleneck in sending out multiple
+ *  copies of the broadcast data (one per executor) as done by the
+ *  [[org.apache.spark.broadcast.HttpBroadcast]].
+ */
 private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
   extends Broadcast[T](id) with Logging with Serializable {
 
-  def value = {
-    assertValid()
-    value_
-  }
+  def getValue = value_
 
   val broadcastId = BroadcastBlockId(id)
 
@@ -53,15 +68,19 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
   /**
    * Remove all persisted state associated with this Torrent broadcast on the executors.
    */
-  def unpersist(blocking: Boolean) {
+  def doUnpersist(blocking: Boolean) {
     TorrentBroadcast.unpersist(id, removeFromDriver = false, blocking)
   }
 
-  protected def onDestroy(blocking: Boolean) {
+  /**
+   * Remove all persisted state associated with this Torrent broadcast on the executors
+   * and driver.
+   */
+  def doDestroy(blocking: Boolean) {
     TorrentBroadcast.unpersist(id, removeFromDriver = true, blocking)
   }
 
-  private def sendBroadcast() {
+  def sendBroadcast() {
     val tInfo = TorrentBroadcast.blockifyObject(value_)
     totalBlocks = tInfo.totalBlocks
     totalBytes = tInfo.totalBytes
@@ -85,13 +104,13 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
     }
   }
 
-  // Used by the JVM when serializing this object
+  /** Used by the JVM when serializing this object. */
   private def writeObject(out: ObjectOutputStream) {
     assertValid()
     out.defaultWriteObject()
   }
 
-  // Used by the JVM when deserializing this object
+  /** Used by the JVM when deserializing this object. */
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     TorrentBroadcast.synchronized {
@@ -111,7 +130,11 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
 
             /* Store the merged copy in cache so that the next worker doesn't need to rebuild it.
              * This creates a trade-off between memory usage and latency. Storing copy doubles
-             * the memory footprint; not storing doubles deserialization cost. */
+             * the memory footprint; not storing doubles deserialization cost. Also,
+             * this does not need to be reported to BlockManagerMaster since other executors
+             * does not need to access this block (they only need to fetch the chunks,
+             * which are reported).
+             */
             SparkEnv.get.blockManager.putSingle(
               broadcastId, value_, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
 
@@ -135,7 +158,8 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
   }
 
   def receiveBroadcast(): Boolean = {
-    // Receive meta-info
+    // Receive meta-info about the size of broadcast data, 
+    // the number of chunks it is divided into, etc.
     val metaId = BroadcastBlockId(id, "meta")
     var attemptId = 10
     while (attemptId > 0 && totalBlocks == -1) {
@@ -158,7 +182,11 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
       return false
     }
 
-    // Receive actual blocks
+    /*
+     * Fetch actual chunks of data. Note that all these chunks are stored in
+     * the BlockManager and reported to the master, so that other executors
+     * can find out and pull the chunks from this executor.
+     */
     val recvOrder = new Random().shuffle(Array.iterate(0, totalBlocks)(_ + 1).toList)
     for (pid <- recvOrder) {
       val pieceId = BroadcastBlockId(id, "piece" + pid)

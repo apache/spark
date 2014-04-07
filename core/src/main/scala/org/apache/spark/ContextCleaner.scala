@@ -76,7 +76,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   /** Start the cleaner. */
   def start() {
     cleaningThread.setDaemon(true)
-    cleaningThread.setName("ContextCleaner")
+    cleaningThread.setName("Spark Context Cleaner")
     cleaningThread.start()
   }
 

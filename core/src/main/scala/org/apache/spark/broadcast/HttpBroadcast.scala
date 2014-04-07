@@ -28,16 +28,26 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashSet, Utils}
 
+/**
+ * A [[org.apache.spark.broadcast.Broadcast]] implementation that uses HTTP server
+ * as a broadcast mechanism. The first time a HTTP broadcast variable (sent as part of a
+ * task) is deserialized in the executor, the broadcasted data is fetched from the driver
+ * (through a HTTP server running at the driver) and stored in the BlockManager of the
+ * executor to speed up future accesses.
+ */
 private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
   extends Broadcast[T](id) with Logging with Serializable {
 
-  def value: T = {
-    assertValid()
-    value_
-  }
+  def getValue = value_
 
   val blockId = BroadcastBlockId(id)
 
+  /*
+   * Broadcasted data is also stored in the BlockManager of the driver.
+   * The BlockManagerMaster
+   * does not need to be told about this block as not only
+   * need to know about this data block.
+   */
   HttpBroadcast.synchronized {
     SparkEnv.get.blockManager.putSingle(
       blockId, value_, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
@@ -50,21 +60,24 @@ private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolea
   /**
    * Remove all persisted state associated with this HTTP broadcast on the executors.
    */
-  def unpersist(blocking: Boolean) {
+  def doUnpersist(blocking: Boolean) {
     HttpBroadcast.unpersist(id, removeFromDriver = false, blocking)
   }
 
-  protected def onDestroy(blocking: Boolean) {
+  /**
+   * Remove all persisted state associated with this HTTP broadcast on the executors and driver.
+   */
+  def doDestroy(blocking: Boolean) {
     HttpBroadcast.unpersist(id, removeFromDriver = true, blocking)
   }
 
-  // Used by the JVM when serializing this object
+  /** Used by the JVM when serializing this object. */
   private def writeObject(out: ObjectOutputStream) {
     assertValid()
     out.defaultWriteObject()
   }
 
-  // Used by the JVM when deserializing this object
+  /** Used by the JVM when deserializing this object. */
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     HttpBroadcast.synchronized {
@@ -74,6 +87,13 @@ private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolea
           logInfo("Started reading broadcast variable " + id)
           val start = System.nanoTime
           value_ = HttpBroadcast.read[T](id)
+          /*
+           * Storing the broadcast data in BlockManager so that all
+           * so that all subsequent tasks using the broadcast variable
+           * does not need to fetch it again. The BlockManagerMaster
+           * does not need to be told about this block as no one
+           * needs to know about this data block.
+           */
           SparkEnv.get.blockManager.putSingle(
             blockId, value_, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
           val time = (System.nanoTime - start) / 1e9

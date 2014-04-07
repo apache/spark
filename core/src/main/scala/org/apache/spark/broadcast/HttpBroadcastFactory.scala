@@ -20,7 +20,9 @@ package org.apache.spark.broadcast
 import org.apache.spark.{SecurityManager, SparkConf}
 
 /**
- * A [[BroadcastFactory]] implementation that uses a HTTP server as the broadcast medium.
+ * A [[org.apache.spark.broadcast.BroadcastFactory]] implementation that uses a
+ * HTTP server as the broadcast mechanism. Refer to
+ * [[org.apache.spark.broadcast.HttpBroadcast]] for more details about this mechanism.
  */
 class HttpBroadcastFactory extends BroadcastFactory {
   def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager) {

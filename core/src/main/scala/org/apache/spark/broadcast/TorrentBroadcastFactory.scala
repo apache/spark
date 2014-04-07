@@ -20,7 +20,9 @@ package org.apache.spark.broadcast
 import org.apache.spark.{SecurityManager, SparkConf}
 
 /**
- * A [[BroadcastFactory]] that creates a torrent-based implementation of broadcast.
+ * A [[org.apache.spark.broadcast.Broadcast]] implementation that uses a BitTorrent-like
+ * protocol to do a distributed transfer of the broadcasted data to the executors. Refer to
+ * [[org.apache.spark.broadcast.TorrentBroadcast]] for more details.
  */
 class TorrentBroadcastFactory extends BroadcastFactory {
 

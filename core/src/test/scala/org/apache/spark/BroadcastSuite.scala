@@ -20,7 +20,7 @@ package org.apache.spark
 import org.scalatest.FunSuite
 
 import org.apache.spark.storage._
-import org.apache.spark.broadcast.HttpBroadcast
+import org.apache.spark.broadcast.{Broadcast, HttpBroadcast}
 import org.apache.spark.storage.BroadcastBlockId
 
 class BroadcastSuite extends FunSuite with LocalSparkContext {
@@ -298,6 +298,8 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
       // Using this variable on the executors crashes them, which hangs the test.
       // Instead, crash the driver by directly accessing the broadcast value.
       intercept[SparkException] { broadcast.value }
+      intercept[SparkException] { broadcast.unpersist() }
+      intercept[SparkException] { broadcast.destroy(blocking = true) }
     } else {
       val results = sc.parallelize(1 to partitions, partitions).map(x => (x, broadcast.value.sum))
       assert(results.collect().toSet === (1 to partitions).map(x => (x, list.sum)).toSet)
