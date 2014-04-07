@@ -63,8 +63,11 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   private val cleaningThread = new Thread() { override def run() { keepCleaning() }}
 
-  /** Whether the cleaning thread will block on cleanup tasks */
-  private val blockOnCleanupTasks = sc.conf.getBoolean("spark.cleaner.referenceTracking.blocking", false)
+  /**
+   * Whether the cleaning thread will block on cleanup tasks.
+   * This is set to true only for tests. */
+  private val blockOnCleanupTasks = sc.conf.getBoolean(
+    "spark.cleaner.referenceTracking.blocking", false)
 
   @volatile private var stopped = false
 
@@ -170,7 +173,8 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   private def broadcastManager = sc.env.broadcastManager
   private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
 
-  // Used for testing, explicitly blocks until cleanup is completed
+  // Used for testing. These methods explicitly blocks until cleanup is completed
+  // to ensure that more reliable testing.
 
   def cleanupRDD(rdd: RDD[_]) {
     doCleanupRDD(rdd.id, blocking = true)
