@@ -26,7 +26,8 @@ import org.apache.hadoop.hbase.util.Bytes
 
 /**
  * A public object that provides HBase support.
- * You could save RDD into HBase through [[org.apache.spark.nosql.hbase.HBaseUtils.saveAsHBaseTable]] method.
+ * You could save RDD into HBase through
+ * [[org.apache.spark.nosql.hbase.HBaseUtils.saveAsHBaseTable]] method.
  */
 object HBaseUtils
   extends Logging {
@@ -49,8 +50,9 @@ object HBaseUtils
    * @param columns the column list. [[org.apache.spark.nosql.hbase.HBaseColumn]]
    * @param delimiter the delimiter which used to split record into fields
    */
-  def saveAsHBaseTable(rdd: RDD[Text], zkHost: String, zkPort: String, zkNode: String,
-                       table: String, rowkeyType: DataType, columns: List[HBaseColumn], delimiter: Char) {
+  def saveAsHBaseTable(rdd: RDD[Text],
+                       zkHost: String, zkPort: String, zkNode: String, table: String,
+                       rowkeyType: DataType, columns: List[HBaseColumn], delimiter: Char) {
     val conf = new HBaseConf(zkHost, zkPort, zkNode, table, rowkeyType, columns, delimiter)
 
     def writeToHBase(iter: Iterator[Text]) {

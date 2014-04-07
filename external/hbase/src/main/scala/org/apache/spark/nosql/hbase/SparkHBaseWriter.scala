@@ -172,3 +172,4 @@ class HBaseConf(val zkHost: String, val zkPort: String, val zkNode: String,
                 val table: String, val rowkeyType: DataType, val columns: List[HBaseColumn],
                 val delimiter: Char)
   extends Serializable
+
