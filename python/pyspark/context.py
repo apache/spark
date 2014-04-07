@@ -32,7 +32,7 @@ from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deseria
         PairDeserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark import rdd
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, SchemaRDD
 
 from py4j.java_collections import ListConverter
 
@@ -461,6 +461,23 @@ class SparkContext(object):
         Get SPARK_USER for user who is running SparkContext.
         """
         return self._jsc.sc().sparkUser()
+
+class SQLContext:
+
+    def __init__(self, sparkContext):
+        self._sc = sparkContext
+        self._jsc = self._sc._jsc
+        self._jvm = self._sc._jvm
+        self._jsql_ctx = self._jvm.JavaSQLContext(self._jsc)
+
+    def sql(self, sqlQuery):
+        return SchemaRDD(self._jsql_ctx.sql(sqlQuery), self)
+
+    def applySchema(self, rdd):
+        jrdd = self._sc._pythonToJava(rdd._jrdd)
+        srdd = self._jsql_ctx.applySchema(jrdd)
+        return SchemaRDD(srdd, self)
+
 
 def _test():
     import atexit
