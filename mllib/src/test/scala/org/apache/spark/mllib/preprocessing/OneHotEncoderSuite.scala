@@ -18,14 +18,14 @@
 package org.apache.spark.mllib.preprocessing
 
 import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.mllib.util.LocalSparkContext
 
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
 
-class OneHotEncoderSuite extends FunSuite with ShouldMatchers {
+class OneHotEncoderSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
 
   test("one hot encoder") {
-    val sc = new SparkContext(new SparkConf().setMaster("local").setAppName("Test OneHotEncoder"))
     val vecs = Array(
       Array("marcy playground", 1.3, "apple", 2),
       Array("pearl jam", 3.5, "banana", 4),
