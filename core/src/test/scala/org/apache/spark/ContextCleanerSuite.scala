@@ -166,8 +166,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     sc.stop()
 
     val conf2 = new SparkConf()
-      .setMaster("local[4]")
-      //.setMaster("local-cluster[2, 1, 512]")
+      .setMaster("local-cluster[2, 1, 512]")
       .setAppName("ContextCleanerSuite")
       .set("spark.cleaner.referenceTracking.blocking", "true")
     sc = new SparkContext(conf2)
@@ -180,7 +179,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     val shuffleIds = 0 until sc.newShuffleId
     val broadcastIds = 0L until numBroadcasts
 
-    val preGCTester =  new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
+    val preGCTester = new CleanerTester(sc, rddIds, shuffleIds, broadcastIds)
     runGC()
     intercept[Exception] {
       preGCTester.assertCleanup()(timeout(1000 millis))
@@ -391,22 +390,22 @@ class CleanerTester(
     toBeCleanedBroadcstIds.isEmpty
 
   private def getRDDBlocks(rddId: Int): Seq[BlockId] = {
-    blockManager.master.getMatcinghBlockIds( _ match {
-      case RDDBlockId(rddId, _) => true
+    blockManager.master.getMatchinghBlockIds( _ match {
+      case RDDBlockId(`rddId`, _) => true
       case _ => false
     }, askSlaves = true)
   }
 
   private def getShuffleBlocks(shuffleId: Int): Seq[BlockId] = {
-    blockManager.master.getMatcinghBlockIds( _ match {
-      case ShuffleBlockId(shuffleId, _, _) => true
+    blockManager.master.getMatchinghBlockIds( _ match {
+      case ShuffleBlockId(`shuffleId`, _, _) => true
       case _ => false
     }, askSlaves = true)
   }
 
   private def getBroadcastBlocks(broadcastId: Long): Seq[BlockId] = {
-    blockManager.master.getMatcinghBlockIds( _ match {
-      case BroadcastBlockId(broadcastId, _) => true
+    blockManager.master.getMatchinghBlockIds( _ match {
+      case BroadcastBlockId(`broadcastId`, _) => true
       case _ => false
     }, askSlaves = true)
   }

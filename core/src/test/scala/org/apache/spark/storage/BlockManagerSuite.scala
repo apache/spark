@@ -862,29 +862,29 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
       securityMgr, mapOutputTracker)
     val list = List.fill(2)(new Array[Byte](10))
 
-    // Tell master. By LRU, only list2 and list3 remains.
+    // insert some blocks
     store.put("list1", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
     store.put("list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
     store.put("list3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
 
     // getLocations and getBlockStatus should yield the same locations
-    assert(store.master.getMatcinghBlockIds(_.toString.contains("list"), askSlaves = false).size === 3)
-    assert(store.master.getMatcinghBlockIds(_.toString.contains("list1"), askSlaves = false).size === 1)
+    assert(store.master.getMatchinghBlockIds(_.toString.contains("list"), askSlaves = false).size === 3)
+    assert(store.master.getMatchinghBlockIds(_.toString.contains("list1"), askSlaves = false).size === 1)
 
-    // Tell master. By LRU, only list2 and list3 remains.
+    // insert some more blocks
     store.put("newlist1", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
     store.put("newlist2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
     store.put("newlist3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
 
     // getLocations and getBlockStatus should yield the same locations
-    assert(store.master.getMatcinghBlockIds(_.toString.contains("newlist"), askSlaves = false).size === 1)
-    assert(store.master.getMatcinghBlockIds(_.toString.contains("newlist"), askSlaves = true).size === 3)
+    assert(store.master.getMatchinghBlockIds(_.toString.contains("newlist"), askSlaves = false).size === 1)
+    assert(store.master.getMatchinghBlockIds(_.toString.contains("newlist"), askSlaves = true).size === 3)
 
     val blockIds = Seq(RDDBlockId(1, 0), RDDBlockId(1, 1), RDDBlockId(2, 0))
     blockIds.foreach { blockId =>
       store.put(blockId, list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     }
-    val matchedBlockIds = store.master.getMatcinghBlockIds(_ match {
+    val matchedBlockIds = store.master.getMatchinghBlockIds(_ match {
       case RDDBlockId(1, _) => true
       case _ => false
     }, askSlaves = true)

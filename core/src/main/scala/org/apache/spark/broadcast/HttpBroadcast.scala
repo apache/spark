@@ -43,10 +43,8 @@ private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolea
   val blockId = BroadcastBlockId(id)
 
   /*
-   * Broadcasted data is also stored in the BlockManager of the driver.
-   * The BlockManagerMaster
-   * does not need to be told about this block as not only
-   * need to know about this data block.
+   * Broadcasted data is also stored in the BlockManager of the driver. The BlockManagerMaster
+   * does not need to be told about this block as not only need to know about this data block.
    */
   HttpBroadcast.synchronized {
     SparkEnv.get.blockManager.putSingle(

@@ -193,7 +193,7 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
    * updated block statuses. This is useful when the master is not informed of the given block
    * by all block managers.
    */
-  def getMatcinghBlockIds(
+  def getMatchinghBlockIds(
       filter: BlockId => Boolean,
       askSlaves: Boolean): Seq[BlockId] = {
     val msg = GetMatchingBlockIds(filter, askSlaves)

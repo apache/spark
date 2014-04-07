@@ -47,7 +47,6 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
   private var shuffleSender : ShuffleSender = null
 
-
   addShutdownHook()
 
   /**

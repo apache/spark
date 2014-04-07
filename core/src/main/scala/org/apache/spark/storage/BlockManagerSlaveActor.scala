@@ -39,18 +39,18 @@ class BlockManagerSlaveActor(
   // Operations that involve removing blocks may be slow and should be done asynchronously
   override def receive = {
     case RemoveBlock(blockId) =>
-      doAsync[Boolean]("removing block", sender) {
+      doAsync[Boolean]("removing block " + blockId, sender) {
         blockManager.removeBlock(blockId)
         true
       }
 
     case RemoveRdd(rddId) =>
-      doAsync[Int]("removing RDD", sender) {
+      doAsync[Int]("removing RDD " + rddId, sender) {
         blockManager.removeRdd(rddId)
       }
 
     case RemoveShuffle(shuffleId) =>
-      doAsync[Boolean]("removing shuffle", sender) {
+      doAsync[Boolean]("removing shuffle " + shuffleId, sender) {
         if (mapOutputTracker != null) {
           mapOutputTracker.unregisterShuffle(shuffleId)
         }
@@ -58,7 +58,7 @@ class BlockManagerSlaveActor(
       }
 
     case RemoveBroadcast(broadcastId, tellMaster) =>
-      doAsync[Int]("removing RDD", sender) {
+      doAsync[Int]("removing broadcast " + broadcastId, sender) {
         blockManager.removeBroadcast(broadcastId, tellMaster)
       }
 
@@ -72,8 +72,7 @@ class BlockManagerSlaveActor(
   private def doAsync[T](actionMessage: String, responseActor: ActorRef)(body: => T) {
     val future = Future {
       logDebug(actionMessage)
-      val response = body
-      response
+      body
     }
     future.onSuccess { case response =>
       logDebug("Done " + actionMessage + ", response is " + response)
