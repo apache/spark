@@ -868,8 +868,8 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.put("list3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
 
     // getLocations and getBlockStatus should yield the same locations
-    assert(store.master.getMatchinghBlockIds(_.toString.contains("list"), askSlaves = false).size === 3)
-    assert(store.master.getMatchinghBlockIds(_.toString.contains("list1"), askSlaves = false).size === 1)
+    assert(store.master.getMatchingBlockIds(_.toString.contains("list"), askSlaves = false).size === 3)
+    assert(store.master.getMatchingBlockIds(_.toString.contains("list1"), askSlaves = false).size === 1)
 
     // insert some more blocks
     store.put("newlist1", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
@@ -877,14 +877,14 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.put("newlist3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
 
     // getLocations and getBlockStatus should yield the same locations
-    assert(store.master.getMatchinghBlockIds(_.toString.contains("newlist"), askSlaves = false).size === 1)
-    assert(store.master.getMatchinghBlockIds(_.toString.contains("newlist"), askSlaves = true).size === 3)
+    assert(store.master.getMatchingBlockIds(_.toString.contains("newlist"), askSlaves = false).size === 1)
+    assert(store.master.getMatchingBlockIds(_.toString.contains("newlist"), askSlaves = true).size === 3)
 
     val blockIds = Seq(RDDBlockId(1, 0), RDDBlockId(1, 1), RDDBlockId(2, 0))
     blockIds.foreach { blockId =>
       store.put(blockId, list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     }
-    val matchedBlockIds = store.master.getMatchinghBlockIds(_ match {
+    val matchedBlockIds = store.master.getMatchingBlockIds(_ match {
       case RDDBlockId(1, _) => true
       case _ => false
     }, askSlaves = true)
