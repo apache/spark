@@ -19,7 +19,16 @@ piFunc <- function(elem) {
   val
 }
 
+
+piFuncVec <- function(elems) {
+	message(length(elems))
+	rands1 <- runif(n = length(elems), min = -1, max = 1)
+	rands2 <- runif(n = length(elems), min = -1, max = 1)
+	val <- ifelse((rands1^2 + rands2^2) < 1, 1.0, 0.0)
+	sum(val)
+}
+
 rdd <- parallelize(sc, 1:n, slices)
-count <- reduce(lapply(rdd, piFunc), sum)
+count <- reduce(lapplyPartition(rdd, piFuncVec), sum)
 cat("Pi is roughly", 4.0 * count / n, "\n")
 cat("Num elements in RDD ", count(rdd), "\n")
