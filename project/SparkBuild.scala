@@ -346,7 +346,7 @@ object SparkBuild extends Build {
         "com.twitter"                % "chill-java"       % chillVersion excludeAll(excludeAsm),
         "org.tachyonproject"         % "tachyon"          % "0.4.1-thrift" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
         "com.clearspring.analytics"  % "stream"           % "2.5.1",
-        "net.razorvine" % "pyrolite_2.10" % "1.1"
+        "org.spark-project"          % "pyrolite"         % "2.0"
       ),
     libraryDependencies ++= maybeAvro
   )

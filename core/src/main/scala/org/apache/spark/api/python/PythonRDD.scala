@@ -208,7 +208,7 @@ private object SpecialLengths {
   val TIMING_DATA = -3
 }
 
-object PythonRDD {
+private[spark] object PythonRDD {
   val UTF8 = Charset.forName("UTF-8")
 
   def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
