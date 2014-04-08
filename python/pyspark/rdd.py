@@ -1387,10 +1387,12 @@ class PipelinedRDD(RDD):
     def _is_pipelinable(self):
         return not (self.is_cached or self.is_checkpointed)
 
-class Row:
+class Row(dict):
 
     def __init__(self, d):
-        self.__dict__ = dict(self.__dict__.items() + d.items())
+        d.update(self.__dict__)
+        self.__dict__ = d
+        dict.__init__(self, d)
 
 class SchemaRDD:
 
