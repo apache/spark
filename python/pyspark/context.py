@@ -475,9 +475,10 @@ class SQLContext:
         return SchemaRDD(self._ssql_ctx.sql(sqlQuery), self)
 
     def applySchema(self, rdd):
-        first = rdd.first()
         if (rdd.__class__ is SchemaRDD):
             raise Exception("Cannot apply schema to %s" % SchemaRDD.__name__)
+        elif type(rdd.first()) is not dict:
+            raise Exception("Only RDDs with dictionaries can be converted to %s" % SchemaRDD.__name__)
 
         jrdd = self._sc._pythonToJavaMap(rdd._jrdd)
         srdd = self._ssql_ctx.applySchema(jrdd.rdd())
