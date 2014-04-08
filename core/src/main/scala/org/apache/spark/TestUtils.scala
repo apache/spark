@@ -34,22 +34,9 @@ object TestUtils {
    * Note: if this is used during class loader tests, class names should be unique
    * in order to avoid interference between tests.
    */
-  def createJarWithClasses(classNames: Seq[String]): URL = {
+  def createJarWithClasses(classNames: Seq[String], value: String = ""): URL = {
     val tempDir = Files.createTempDir()
-    val files = for (name <- classNames) yield createCompiledClass(name, tempDir)
-    val jarFile = new File(tempDir, "testJar-%s.jar".format(System.currentTimeMillis()))
-    createJar(files, jarFile)
-  }
-
-  /**
-   * Create a jar that defines classes with the given names.
-   *
-   * Note: if this is used during class loader tests, class names should be unique
-   * in order to avoid interference between tests.
-   */
-  def createJarWithClassesAndValue(classNames: Seq[String], value: Integer): URL = {
-    val tempDir = Files.createTempDir()
-    val files = for (name <- classNames) yield createCompiledClassWithValue(name, value, tempDir)
+    val files = for (name <- classNames) yield createCompiledClass(name, tempDir, value)
     val jarFile = new File(tempDir, "testJar-%s.jar".format(System.currentTimeMillis()))
     createJar(files, jarFile)
   }
@@ -94,24 +81,7 @@ object TestUtils {
   }
 
   /** Creates a compiled class with the given name. Class file will be placed in destDir. */
-  def createCompiledClass(className: String, destDir: File): File = {
-    val compiler = ToolProvider.getSystemJavaCompiler
-    val sourceFile = new JavaSourceFromString(className, s"public class $className {}")
-
-    // Calling this outputs a class file in pwd. It's easier to just rename the file than
-    // build a custom FileManager that controls the output location.
-    compiler.getTask(null, null, null, null, null, Seq(sourceFile)).call()
-
-    val fileName = className + ".class"
-    val result = new File(fileName)
-    if (!result.exists()) throw new Exception("Compiled file not found: " + fileName)
-    val out = new File(destDir, fileName)
-    result.renameTo(out)
-    out
-  }
-
-  /** Creates a compiled class with the given name. Class file will be placed in destDir. */
-  def createCompiledClassWithValue(className: String, value: Integer, destDir: File): File = {
+  def createCompiledClass(className: String, destDir: File, value: String = ""): File = {
     val compiler = ToolProvider.getSystemJavaCompiler
     val sourceFile = new JavaSourceFromString(className,
       "public class " + className + " { @Override public String toString() { return \"" + value + "\";}}")

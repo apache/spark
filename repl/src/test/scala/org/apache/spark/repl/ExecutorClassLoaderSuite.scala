@@ -37,8 +37,8 @@ class ExecutorClassLoaderSuite extends FunSuite with BeforeAndAfterAll {
   val urls2 = List(tempDir2.toURI.toURL).toArray
 
   override def beforeAll() {
-    childClassNames.foreach(TestUtils.createCompiledClassWithValue(_, 1, tempDir1))
-    parentClassNames.foreach(TestUtils.createCompiledClassWithValue(_, 2, tempDir2))
+    childClassNames.foreach(TestUtils.createCompiledClass(_, tempDir1, "1"))
+    parentClassNames.foreach(TestUtils.createCompiledClass(_, tempDir2, "2"))
   }
 
   test("child first") {

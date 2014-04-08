@@ -28,8 +28,8 @@ class ExecutorURLClassLoaderSuite extends FunSuite {
 
   val childClassNames = List("FakeClass1", "FakeClass2")
   val parentClassNames = List("FakeClass1", "FakeClass2", "FakeClass3")
-  val urls = List(TestUtils.createJarWithClassesAndValue(childClassNames, 1)).toArray
-  val urls2 = List(TestUtils.createJarWithClassesAndValue(parentClassNames, 2)).toArray
+  val urls = List(TestUtils.createJarWithClasses(childClassNames, "1")).toArray
+  val urls2 = List(TestUtils.createJarWithClasses(parentClassNames, "2")).toArray
 
   test("child first") {
     val parentLoader = new URLClassLoader(urls2, null)

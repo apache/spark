@@ -33,16 +33,11 @@ import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 
 /**
  * A ClassLoader that reads classes from a Hadoop FileSystem or HTTP URI,
- * used to load classes defined by the interpreter when the REPL is used
- */
-class ExecutorClassLoader(classUri: String, parent: ClassLoader)
-extends FlexibleExecutorClassLoader(classUri, parent, false) {
-}
-/**
+ * used to load classes defined by the interpreter when the REPL is used.
  * Allows the user to specify if user class path should be first
  */ 
-class FlexibleExecutorClassLoader(classUri: String, parent: ClassLoader,
-  userClassPathFirst: Boolean) extends ClassLoader {
+class ExecutorClassLoader(classUri: String, parent: ClassLoader,
+    userClassPathFirst: Boolean) extends ClassLoader {
   val uri = new URI(classUri)
   val directory = uri.getPath
 
