@@ -198,7 +198,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     
     val sts = "1970-01-01 00:00:01.0"
     val ts = Timestamp.valueOf(sts)
-    
+
     checkEvaluation("abdef" cast StringType, "abdef")
     checkEvaluation("abdef" cast DecimalType, null)
     checkEvaluation("abdef" cast TimestampType, null)
@@ -206,7 +206,6 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     checkEvaluation(Literal(1) cast LongType, 1)
     checkEvaluation(Cast(Literal(1) cast TimestampType, LongType), 1)
-    checkEvaluation(Cast(Literal(BigDecimal(1)) cast TimestampType, DecimalType), 1)
     checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
 
     checkEvaluation(Cast(Literal(sts) cast TimestampType, StringType), sts)
@@ -237,12 +236,34 @@ class ExpressionEvaluationSuite extends FunSuite {
     
     intercept[Exception] {evaluate(Literal(1) cast BinaryType, null)}
   }
-  
+
   test("timestamp") {
     val ts1 = new Timestamp(12)
     val ts2 = new Timestamp(123)
     checkEvaluation(Literal("ab") < Literal("abc"), true)
     checkEvaluation(Literal(ts1) < Literal(ts2), true)
+  }
+
+  test("timestamp casting") {
+    val millis = 15 * 1000 + 2
+    val ts = new Timestamp(millis)
+    val ts1 = new Timestamp(15 * 1000)  // a timestamp without the milliseconds part
+    checkEvaluation(Cast(ts, ShortType), 15)
+    checkEvaluation(Cast(ts, IntegerType), 15)
+    checkEvaluation(Cast(ts, LongType), 15)
+    checkEvaluation(Cast(ts, FloatType), 15.002f)
+    checkEvaluation(Cast(ts, DoubleType), 15.002)
+    checkEvaluation(Cast(Cast(ts, ShortType), TimestampType), ts1)
+    checkEvaluation(Cast(Cast(ts, IntegerType), TimestampType), ts1)
+    checkEvaluation(Cast(Cast(ts, LongType), TimestampType), ts1)
+    checkEvaluation(Cast(Cast(millis.toFloat / 1000, TimestampType), FloatType),
+      millis.toFloat / 1000)
+    checkEvaluation(Cast(Cast(millis.toDouble / 1000, TimestampType), DoubleType),
+      millis.toDouble / 1000)
+    checkEvaluation(Cast(Literal(BigDecimal(1)) cast TimestampType, DecimalType), 1)
+
+    // A test for higher precision than millis
+    checkEvaluation(Cast(Cast(0.00000001, TimestampType), DoubleType), 0.00000001)
   }
 }
 
