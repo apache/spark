@@ -80,7 +80,7 @@ private[spark] class SparkUI(
   /** Bind the HTTP server which backs this web interface */
   def bind() {
     try {
-      serverInfo = Some(startJettyServer(bindHost, port, handlers, sc.conf))
+      serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, sc.conf))
       logInfo("Started Spark Web UI at http://%s:%d".format(publicHost, boundPort))
     } catch {
       case e: Exception =>
