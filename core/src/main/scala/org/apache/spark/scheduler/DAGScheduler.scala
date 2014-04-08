@@ -982,15 +982,7 @@ class DAGScheduler(
     if (!jobIdToStageIds.contains(jobId)) {
       logDebug("Trying to cancel unregistered job " + jobId)
     } else {
-      val independentStages = removeJobAndIndependentStages(jobId)
-      independentStages.foreach(taskScheduler.cancelTasks)
-      val error = new SparkException("Job %d cancelled".format(jobId))
-      val job = jobIdToActiveJob(jobId)
-      job.listener.jobFailed(error)
-      jobIdToStageIds -= jobId
-      activeJobs -= job
-      jobIdToActiveJob -= jobId
-      listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error, job.finalStage.id)))
+      failJobAndIndependentStages(jobIdToActiveJob(jobId), s"Job $jobId cancelled")
     }
   }
 
@@ -1007,17 +999,37 @@ class DAGScheduler(
     stageToInfos(failedStage).completionTime = Some(System.currentTimeMillis())
     for (resultStage <- dependentStages) {
       val job = resultStageToJob(resultStage)
-      val error = new SparkException("Job aborted: " + reason)
-      job.listener.jobFailed(error)
-      jobIdToStageIdsRemove(job.jobId)
-      jobIdToActiveJob -= resultStage.jobId
-      activeJobs -= job
-      resultStageToJob -= resultStage
-      listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error, failedStage.id)))
+      failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason")
     }
     if (dependentStages.isEmpty) {
       logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")
     }
+  }
+
+  /**
+   * Fails a job and all stages that are only used by that job, and cleans up relevant state.
+   */
+  private def failJobAndIndependentStages(job: ActiveJob, failureReason: String) {
+    val error = new SparkException(failureReason)
+    job.listener.jobFailed(error)
+
+    // Cancel all tasks in independent stages.
+    val independentStages = removeJobAndIndependentStages(job.jobId)
+    independentStages.foreach(taskScheduler.cancelTasks)
+
+    // Clean up remaining state we store for the job.
+    jobIdToActiveJob -= job.jobId
+    activeJobs -= job
+    jobIdToStageIds -= job.jobId
+    val resultStagesForJob = resultStageToJob.keySet.filter(
+      stage => resultStageToJob(stage).jobId == job.jobId)
+    if (resultStagesForJob.size != 1) {
+      logWarning(
+        s"${resultStagesForJob.size} result stages for job ${job.jobId} (expect exactly 1)")
+    }
+    resultStageToJob --= resultStagesForJob
+
+    listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error, job.finalStage.id)))
   }
 
   /**
