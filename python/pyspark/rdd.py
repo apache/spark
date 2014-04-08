@@ -1387,6 +1387,11 @@ class PipelinedRDD(RDD):
     def _is_pipelinable(self):
         return not (self.is_cached or self.is_checkpointed)
 
+class Row:
+
+    def __init__(self, d):
+        self.__dict__ = dict(self.__dict__.items() + d.items())
+
 class SchemaRDD:
 
     def __init__(self, jschema_rdd, sql_ctx):
@@ -1400,7 +1405,7 @@ class SchemaRDD:
     def toPython(self):
         jrdd = self._jschema_rdd.javaToPython()
         #jrdd = self._sc._javaToPython(self._jschema_rdd)
-        return RDD(jrdd, self._sc, self._sc.serializer)
+        return RDD(jrdd, self._sc, self._sc.serializer).map(lambda d: Row(d))
 
 def _test():
     import doctest
