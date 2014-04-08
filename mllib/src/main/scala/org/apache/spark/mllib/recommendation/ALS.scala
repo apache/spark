@@ -426,7 +426,7 @@ class ALS private (
     : Array[Array[Double]] =
   {
     // Sort the incoming block factor messages by block ID and make them an array
-    val blockFactors = messages.toArray.sortBy(_._1).map(_._2) // Array[Array[Double]]
+    val blockFactors = messages.toSeq.sortBy(_._1).map(_._2).toArray // Array[Array[Double]]
     val numBlocks = blockFactors.length
     val numUsers = inLinkBlock.elementIds.length
 
