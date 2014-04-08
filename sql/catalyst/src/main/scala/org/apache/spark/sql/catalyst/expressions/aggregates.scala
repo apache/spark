@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 
 abstract class AggregateExpression extends Expression {
   self: Product =>
@@ -28,6 +29,13 @@ abstract class AggregateExpression extends Expression {
    * of input rows/
    */
   def newInstance(): AggregateFunction
+
+  /**
+   * [[AggregateExpression.eval]] should never be invoked because [[AggregateExpression]]'s are
+   * replaced with a physical aggregate operator at runtime.
+   */
+  override def eval(input: Row = null): EvaluatedType =
+    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
 
 /**

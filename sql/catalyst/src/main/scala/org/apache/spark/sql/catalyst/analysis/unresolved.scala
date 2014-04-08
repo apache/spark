@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.{errors, trees}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.BaseRelation
 import org.apache.spark.sql.catalyst.trees.TreeNode
 
@@ -36,7 +37,7 @@ case class UnresolvedRelation(
     databaseName: Option[String],
     tableName: String,
     alias: Option[String] = None) extends BaseRelation {
-  def output = Nil
+  override def output = Nil
   override lazy val resolved = false
 }
 
@@ -44,26 +45,33 @@ case class UnresolvedRelation(
  * Holds the name of an attribute that has yet to be resolved.
  */
 case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNode[Expression] {
-  def exprId = throw new UnresolvedException(this, "exprId")
-  def dataType = throw new UnresolvedException(this, "dataType")
-  def nullable = throw new UnresolvedException(this, "nullable")
-  def qualifiers = throw new UnresolvedException(this, "qualifiers")
+  override def exprId = throw new UnresolvedException(this, "exprId")
+  override def dataType = throw new UnresolvedException(this, "dataType")
+  override def nullable = throw new UnresolvedException(this, "nullable")
+  override def qualifiers = throw new UnresolvedException(this, "qualifiers")
   override lazy val resolved = false
 
-  def newInstance = this
-  def withQualifiers(newQualifiers: Seq[String]) = this
+  override def newInstance = this
+  override def withQualifiers(newQualifiers: Seq[String]) = this
+
+  // Unresolved attributes are transient at compile time and don't get evaluated during execution.
+  override def eval(input: Row = null): EvaluatedType =
+    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   override def toString: String = s"'$name"
 }
 
 case class UnresolvedFunction(name: String, children: Seq[Expression]) extends Expression {
-  def exprId = throw new UnresolvedException(this, "exprId")
-  def dataType = throw new UnresolvedException(this, "dataType")
+  override def dataType = throw new UnresolvedException(this, "dataType")
   override def foldable = throw new UnresolvedException(this, "foldable")
-  def nullable = throw new UnresolvedException(this, "nullable")
-  def qualifiers = throw new UnresolvedException(this, "qualifiers")
-  def references = children.flatMap(_.references).toSet
+  override def nullable = throw new UnresolvedException(this, "nullable")
+  override def references = children.flatMap(_.references).toSet
   override lazy val resolved = false
+
+  // Unresolved functions are transient at compile time and don't get evaluated during execution.
+  override def eval(input: Row = null): EvaluatedType =
+    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
+
   override def toString = s"'$name(${children.mkString(",")})"
 }
 
@@ -79,15 +87,15 @@ case class Star(
     mapFunction: Attribute => Expression = identity[Attribute])
   extends Attribute with trees.LeafNode[Expression] {
 
-  def name = throw new UnresolvedException(this, "exprId")
-  def exprId = throw new UnresolvedException(this, "exprId")
-  def dataType = throw new UnresolvedException(this, "dataType")
-  def nullable = throw new UnresolvedException(this, "nullable")
-  def qualifiers = throw new UnresolvedException(this, "qualifiers")
+  override def name = throw new UnresolvedException(this, "exprId")
+  override def exprId = throw new UnresolvedException(this, "exprId")
+  override def dataType = throw new UnresolvedException(this, "dataType")
+  override def nullable = throw new UnresolvedException(this, "nullable")
+  override def qualifiers = throw new UnresolvedException(this, "qualifiers")
   override lazy val resolved = false
 
-  def newInstance = this
-  def withQualifiers(newQualifiers: Seq[String]) = this
+  override def newInstance = this
+  override def withQualifiers(newQualifiers: Seq[String]) = this
 
   def expand(input: Seq[Attribute]): Seq[NamedExpression] = {
     val expandedAttributes: Seq[Attribute] = table match {
@@ -103,6 +111,10 @@ case class Star(
     }
     mappedAttributes
   }
+
+  // Star gets expanded at runtime so we never evaluate a Star.
+  override def eval(input: Row = null): EvaluatedType =
+    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   override def toString = table.map(_ + ".").getOrElse("") + "*"
 }
