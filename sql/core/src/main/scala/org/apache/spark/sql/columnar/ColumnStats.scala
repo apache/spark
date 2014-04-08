@@ -20,6 +20,12 @@ package org.apache.spark.sql.columnar
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.types._
 
+/**
+ * Used to collect statistical information when building in-memory columns.
+ *
+ * NOTE: we intentionally avoid using `Ordering[T]` to compare values here because `Ordering[T]`
+ * brings significant performance penalty.
+ */
 private[sql] sealed abstract class ColumnStats[T <: DataType, JvmType] extends Serializable {
   /**
    * Closed lower bound of this column.

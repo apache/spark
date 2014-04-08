@@ -24,7 +24,6 @@ import org.scalatest.FunSuite
 import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 
 class DictionaryEncodingSuite extends FunSuite {
   testDictionaryEncoding(new IntColumnStats,    INT)
@@ -41,73 +40,82 @@ class DictionaryEncodingSuite extends FunSuite {
       (0 until buffer.getInt()).map(columnType.extract(buffer) -> _.toShort).toMap
     }
 
-    test(s"$DictionaryEncoding with $typeName: simple case") {
+    def stableDistinct(seq: Seq[Int]): Seq[Int] = if (seq.isEmpty) {
+      Seq.empty
+    } else {
+      seq.head +: seq.tail.filterNot(_ == seq.head)
+    }
+
+    def skeleton(uniqueValueCount: Int, inputSeq: Seq[Int]) {
       // -------------
       // Tests encoder
       // -------------
 
       val builder = TestCompressibleColumnBuilder(columnStats, columnType, DictionaryEncoding)
-      val (values, rows) = makeUniqueValuesAndSingleValueRows(columnType, 2)
+      val (values, rows) = makeUniqueValuesAndSingleValueRows(columnType, uniqueValueCount)
+      val dictValues = stableDistinct(inputSeq)
 
-      builder.initialize(0)
-      builder.appendFrom(rows(0), 0)
-      builder.appendFrom(rows(1), 0)
-      builder.appendFrom(rows(0), 0)
-      builder.appendFrom(rows(1), 0)
+      inputSeq.foreach(i => builder.appendFrom(rows(i), 0))
 
-      val buffer = builder.build()
-      val headerSize = CompressionScheme.columnHeaderSize(buffer)
-      // 4 extra bytes for dictionary size
-      val dictionarySize = 4 + values.map(columnType.actualSize).sum
-      // 4 `Short`s, 2 bytes each
-      val compressedSize = dictionarySize + 2 * 4
-      // 4 extra bytes for compression scheme type ID
-      expectResult(headerSize + 4 + compressedSize, "Wrong buffer capacity")(buffer.capacity)
+      if (dictValues.length > DictionaryEncoding.MAX_DICT_SIZE) {
+        withClue("Dictionary overflowed, compression should fail") {
+          intercept[Throwable] {
+            builder.build()
+          }
+        }
+      } else {
+        val buffer = builder.build()
+        val headerSize = CompressionScheme.columnHeaderSize(buffer)
+        // 4 extra bytes for dictionary size
+        val dictionarySize = 4 + values.map(columnType.actualSize).sum
+        // 2 bytes for each `Short`
+        val compressedSize = 4 + dictionarySize + 2 * inputSeq.length
+        // 4 extra bytes for compression scheme type ID
+        expectResult(headerSize + compressedSize, "Wrong buffer capacity")(buffer.capacity)
 
-      // Skips column header
-      buffer.position(headerSize)
-      expectResult(DictionaryEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
+        // Skips column header
+        buffer.position(headerSize)
+        expectResult(DictionaryEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
-      val dictionary = buildDictionary(buffer)
-      Array[Short](0, 1).foreach { i =>
-        expectResult(i, "Wrong dictionary entry")(dictionary(values(i)))
+        val dictionary = buildDictionary(buffer).toMap
+
+        dictValues.foreach { i =>
+          expectResult(i, "Wrong dictionary entry") {
+            dictionary(values(i))
+          }
+        }
+
+        inputSeq.foreach { i =>
+          expectResult(i.toShort, "Wrong column element value")(buffer.getShort())
+        }
+
+        // -------------
+        // Tests decoder
+        // -------------
+
+        // Rewinds, skips column header and 4 more bytes for compression scheme ID
+        buffer.rewind().position(headerSize + 4)
+
+        val decoder = DictionaryEncoding.decoder(buffer, columnType)
+
+        inputSeq.foreach { i =>
+          expectResult(values(i), "Wrong decoded value")(decoder.next())
+        }
+
+        assert(!decoder.hasNext)
       }
-
-      Array[Short](0, 1, 0, 1).foreach {
-        expectResult(_, "Wrong column element value")(buffer.getShort())
-      }
-
-      // -------------
-      // Tests decoder
-      // -------------
-
-      // Rewinds, skips column header and 4 more bytes for compression scheme ID
-      buffer.rewind().position(headerSize + 4)
-
-      val decoder = new DictionaryEncoding.Decoder[T](buffer, columnType)
-
-      Array[Short](0, 1, 0, 1).foreach { i =>
-        expectResult(values(i), "Wrong decoded value")(decoder.next())
-      }
-
-      assert(!decoder.hasNext)
-    }
-  }
-
-  test(s"$DictionaryEncoding: overflow") {
-    val builder = TestCompressibleColumnBuilder(new IntColumnStats, INT, DictionaryEncoding)
-    builder.initialize(0)
-
-    (0 to Short.MaxValue).foreach { n =>
-      val row = new GenericMutableRow(1)
-      row.setInt(0, n)
-      builder.appendFrom(row, 0)
     }
 
-    withClue("Dictionary overflowed, encoding should fail") {
-      intercept[Throwable] {
-        builder.build()
-      }
+    test(s"$DictionaryEncoding with $typeName: empty") {
+      skeleton(0, Seq.empty)
+    }
+
+    test(s"$DictionaryEncoding with $typeName: simple case") {
+      skeleton(2, Seq(0, 1, 0, 1))
+    }
+
+    test(s"$DictionaryEncoding with $typeName: dictionary overflow") {
+      skeleton(DictionaryEncoding.MAX_DICT_SIZE + 1, 0 to DictionaryEncoding.MAX_DICT_SIZE)
     }
   }
 }
