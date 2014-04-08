@@ -1,4 +1,4 @@
-require(SparkR)
+library(SparkR)
 
 args <- commandArgs(trailing = TRUE)
 
