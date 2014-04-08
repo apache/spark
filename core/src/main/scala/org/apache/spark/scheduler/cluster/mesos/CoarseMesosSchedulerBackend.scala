@@ -194,10 +194,12 @@ private[spark] class CoarseMesosSchedulerBackend(
             .addResources(createResource("cpus", cpusToUse))
             .addResources(createResource("mem", sc.executorMemory))
             .build()
-          d.launchTasks(offer.getId, Collections.singletonList(task), filters)
+          d.launchTasks(Collections.singletonList(offer.getId),
+                        Collections.singletonList(task),
+                        filters)
         } else {
           // Filter it out
-          d.launchTasks(offer.getId, Collections.emptyList[MesosTaskInfo](), filters)
+          d.declineOffer(offer.getId, filters)
         }
       }
     }
