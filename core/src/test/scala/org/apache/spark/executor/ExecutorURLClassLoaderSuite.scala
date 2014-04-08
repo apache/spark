@@ -22,11 +22,14 @@ import java.net.URLClassLoader
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.TestUtils
+
 class ExecutorURLClassLoaderSuite extends FunSuite {
 
-  val spark_home = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.home")).get
-  val urls = List(new File(spark_home + "/core/src/test/resources/fake-spark-class.jar").toURI.toURL).toArray
-  val urls2 = List(new File(spark_home + "/core/src/test/resources/fake-spark-class-2.jar").toURI.toURL).toArray
+  val classNames = List("org.apache.spark.test.FakeClass1",
+    "org.apache.spark.test.FakeClass2")
+  val urls = List(TestUtils.createJarWithClassesAndValue(classNames, 1)).toArray
+  val urls2 = List(TestUtils.createJarWithClassesAndValue(classNames, 2)).toArray
 
   test("child first") {
     val parentLoader = new URLClassLoader(urls2, null)
