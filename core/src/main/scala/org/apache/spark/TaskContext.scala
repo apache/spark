@@ -23,6 +23,7 @@ import org.apache.spark.annotations.DeveloperAPI
 import org.apache.spark.executor.TaskMetrics
 
 /**
+ * :: DeveloperAPI ::
  * Contextual information about a task which can be read or mutated during execution.
  */
 @DeveloperAPI

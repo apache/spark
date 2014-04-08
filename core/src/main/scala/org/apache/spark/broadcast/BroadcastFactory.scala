@@ -22,7 +22,8 @@ import org.apache.spark.SparkConf
 import org.apache.spark.annotations.DeveloperAPI
 
 /**
- * An interface for all the broadcast implementations in Spark (to allow 
+ * :: DeveloperAPI ::
+ * An interface for all the broadcast implementations in Spark (to allow
  * multiple broadcast implementations). SparkContext uses a user-specified
  * BroadcastFactory implementation to instantiate a particular broadcast for the
  * entire Spark job.

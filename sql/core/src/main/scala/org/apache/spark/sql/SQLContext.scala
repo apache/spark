@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 
 /**
+ * :: AlphaComponent ::
  * The entry point for running relational queries using Spark.  Allows the creation of [[SchemaRDD]]
  * objects and the execution of SQL queries.
  *
@@ -62,6 +63,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new this.QueryExecution { val logical = plan }
 
   /**
+   * :: Experimental ::
    * Allows catalyst LogicalPlans to be executed as a SchemaRDD.  Note that the LogicalPlan
    * interface is considered internal, and thus not guranteed to be stable.  As a result, using
    * them directly is not reccomended.

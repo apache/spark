@@ -57,14 +57,9 @@ if not (ENV['SKIP_API'] == '1' or ENV['SKIP_SCALADOC'] == '1')
     File.open(js_file, 'a') { |f| f.write("\n" + js.join()) }
 
     # Append custom CSS
+    css = File.readlines("./css/api-docs.css")
     css_file = dest + "/lib/template.css"
-    extra_css = [
-      "",
-      "/* Styles added by spark jekyll plug-in */",
-      ".developer {background-color: #44751E; float: right; text-transform: uppercase;}",
-      ".experimental {background-color: #257080; float: right; text-transform: uppercase;}",
-    ].join("\n")
-    File.open(css_file, 'a') { |f| f.write(extra_css) }
+    File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
   end
 
 #  # Build Epydoc for Python

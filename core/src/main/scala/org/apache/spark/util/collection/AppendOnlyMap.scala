@@ -22,6 +22,7 @@ import java.util.{Arrays, Comparator}
 import org.apache.spark.annotations.DeveloperAPI
 
 /**
+ * :: DeveloperAPI ::
  * A simple open hash table optimized for the append-only use case, where keys
  * are never removed, but the value for each key may be changed.
  *

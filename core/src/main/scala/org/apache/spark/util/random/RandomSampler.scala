@@ -25,6 +25,7 @@ import cern.jet.random.engine.DRand
 import org.apache.spark.annotations.DeveloperAPI
 
 /**
+ * :: DeveloperAPI ::
  * A pseudorandom sampler. It is possible to change the sampled item type. For example, we might
  * want to add weights for stratified sampling or importance sampling. Should only use
  * transformations that are tied to the sampler and cannot be applied after sampling.
@@ -43,6 +44,7 @@ trait RandomSampler[T, U] extends Pseudorandom with Cloneable with Serializable 
 }
 
 /**
+ * :: DeveloperAPI ::
  * A sampler based on Bernoulli trials.
  *
  * @param lb lower bound of the acceptance range
@@ -71,6 +73,7 @@ class BernoulliSampler[T](lb: Double, ub: Double, complement: Boolean = false)
 }
 
 /**
+ * :: DeveloperAPI ::
  * A sampler based on values drawn from Poisson distribution.
  *
  * @param poisson a Poisson random number generator

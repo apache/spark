@@ -21,6 +21,7 @@ import org.apache.spark.annotations.DeveloperAPI
 import org.apache.spark.util.collection.{AppendOnlyMap, ExternalAppendOnlyMap}
 
 /**
+ * :: DeveloperAPI ::
  * A set of functions used to aggregate data.
  *
  * @param createCombiner function to create the initial value of the aggregation.

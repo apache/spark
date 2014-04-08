@@ -20,6 +20,7 @@ package org.apache.spark.util.random
 import org.apache.spark.annotations.DeveloperAPI
 
 /**
+ * :: DeveloperAPI ::
  * A class with pseudorandom behavior.
  */
 @DeveloperAPI

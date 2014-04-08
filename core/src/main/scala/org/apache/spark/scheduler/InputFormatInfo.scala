@@ -31,6 +31,7 @@ import org.apache.spark.annotations.DeveloperAPI
 import org.apache.spark.deploy.SparkHadoopUtil
 
 /**
+ * :: DeveloperAPI ::
  * Parses and holds information about inputFormat (and files) specified as a parameter.
  */
 @DeveloperAPI

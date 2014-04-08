@@ -88,12 +88,14 @@ abstract class RDD[T: ClassTag](
   // =======================================================================
 
   /**
+   * :: DeveloperAPI ::
    * Implemented by subclasses to compute a given partition.
    */
   @DeveloperAPI
   def compute(split: Partition, context: TaskContext): Iterator[T]
 
   /**
+   * :: DeveloperAPI ::
    * Implemented by subclasses to return the set of partitions in this RDD. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
    */
@@ -101,6 +103,7 @@ abstract class RDD[T: ClassTag](
   protected def getPartitions: Array[Partition]
 
   /**
+   * :: DeveloperAPI ::
    * Implemented by subclasses to return how this RDD depends on parent RDDs. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
    */
@@ -108,6 +111,7 @@ abstract class RDD[T: ClassTag](
   protected def getDependencies: Seq[Dependency[_]] = deps
 
   /**
+   * :: DeveloperAPI ::
    * Optionally overridden by subclasses to specify placement preferences.
    */
   @DeveloperAPI
@@ -522,6 +526,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * :: DeveloperAPI ::
    * Return a new RDD by applying a function to each partition of this RDD. This is a variant of
    * mapPartitions that also passes the TaskContext into the closure.
    */
@@ -785,6 +790,7 @@ abstract class RDD[T: ClassTag](
   def count(): Long = sc.runJob(this, Utils.getIteratorSize _).sum
 
   /**
+   * :: Experimental ::
    * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
    */
@@ -832,6 +838,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * :: Experimental ::
    * Approximate version of countByValue().
    */
   @Experimental
@@ -855,6 +862,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * :: Experimental ::
    * Return approximate number of distinct elements in the RDD.
    *
    * The accuracy of approximation can be controlled through the relative standard deviation

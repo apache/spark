@@ -80,6 +80,7 @@ private[spark] case object SparkListenerShutdown extends SparkListenerEvent
 
 
 /**
+ * :: DeveloperAPI ::
  * Interface for listening to events from the Spark scheduler. Note that this is an internal
  * interface which might change in different Spark releases.
  */
@@ -143,6 +144,7 @@ trait SparkListener {
 }
 
 /**
+ * :: DeveloperAPI ::
  * Simple SparkListener that logs a few summary statistics when each stage completes
  */
 @DeveloperAPI

@@ -27,6 +27,7 @@ import org.apache.spark.annotations.DeveloperAPI
 import org.apache.spark.util.{ByteBufferInputStream, NextIterator}
 
 /**
+ * :: DeveloperAPI ::
  * A serializer. Because some serialization libraries are not thread safe, this class is used to
  * create [[org.apache.spark.serializer.SerializerInstance]] objects that do the actual
  * serialization and are guaranteed to only be called from one thread at a time.
@@ -55,6 +56,7 @@ object Serializer {
 
 
 /**
+ * :: DeveloperAPI ::
  * An instance of a serializer, for use by one thread at a time.
  */
 @DeveloperAPI
@@ -88,6 +90,7 @@ trait SerializerInstance {
 
 
 /**
+ * :: DeveloperAPI ::
  * A stream for writing serialized objects.
  */
 @DeveloperAPI
@@ -106,6 +109,7 @@ trait SerializationStream {
 
 
 /**
+ * :: DeveloperAPI ::
  * A stream for reading serialized objects.
  */
 @DeveloperAPI

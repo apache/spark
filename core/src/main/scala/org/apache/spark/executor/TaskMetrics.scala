@@ -21,6 +21,7 @@ import org.apache.spark.annotations.DeveloperAPI
 import org.apache.spark.storage.{BlockId, BlockStatus}
 
 /**
+ * :: DeveloperAPI ::
  * Metrics tracked during the execution of a task.
  */
 @DeveloperAPI
@@ -88,6 +89,7 @@ private[spark] object TaskMetrics {
 
 
 /**
+ * :: DeveloperAPI ::
  * Metrics pertaining to shuffle data read in a given task.
  */
 @DeveloperAPI
@@ -126,6 +128,7 @@ class ShuffleReadMetrics extends Serializable {
 }
 
 /**
+ * :: DeveloperAPI ::
  * Metrics pertaining to shuffle data written in a given task.
  */
 @DeveloperAPI

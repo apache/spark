@@ -26,6 +26,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.annotations.DeveloperAPI
 
 /**
+ * :: DeveloperAPI ::
  * CompressionCodec allows the customization of choosing different compression implementations
  * to be used in block storage.
  *
@@ -58,6 +59,7 @@ private[spark] object CompressionCodec {
 
 
 /**
+ * :: DeveloperAPI ::
  * LZF implementation of [[org.apache.spark.io.CompressionCodec]].
  *
  * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
@@ -76,6 +78,7 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
 
 /**
+ * :: DeveloperAPI ::
  * Snappy implementation of [[org.apache.spark.io.CompressionCodec]].
  * Block size can be configured by spark.io.compression.snappy.block.size.
  *

@@ -27,6 +27,7 @@ import org.apache.spark.{ComplexFutureAction, FutureAction, Logging}
 import org.apache.spark.annotations.Experimental
 
 /**
+ * :: Experimental ::
  * A set of asynchronous RDD actions available through an implicit conversion.
  * Import `org.apache.spark.SparkContext._` at the top of your program to use these functions.
  */

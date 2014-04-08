@@ -20,6 +20,7 @@ package org.apache.spark.partial
 import org.apache.spark.annotations.Experimental
 
 /**
+ * :: Experimental ::
  * A Double value with error bars and associated confidence.
  */
 @Experimental

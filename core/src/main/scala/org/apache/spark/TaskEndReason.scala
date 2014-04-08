@@ -22,6 +22,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 
 /**
+ * :: DeveloperAPI ::
  * Various possible reasons why a task ended. The low-level TaskScheduler is supposed to retry
  * tasks several times for "ephemeral" failures, and only report back failures that require some
  * old stages to be resubmitted, such as shuffle map fetch failures.
@@ -52,6 +53,7 @@ case class ExceptionFailure(
   extends TaskEndReason
 
 /**
+ * :: DeveloperAPI ::
  * The task finished successfully, but the result was lost from the executor's block manager before
  * it was fetched.
  */
@@ -62,6 +64,7 @@ case object TaskResultLost extends TaskEndReason
 case object TaskKilled extends TaskEndReason
 
 /**
+ * :: DeveloperAPI ::
  * The task failed because the executor that it was running on was lost. This may happen because
  * the task crashed the JVM.
  */
@@ -69,6 +72,7 @@ case object TaskKilled extends TaskEndReason
 case object ExecutorLostFailure extends TaskEndReason
 
 /**
+ * :: DeveloperAPI ::
  * We don't know why the task ended -- for example, because of a ClassNotFound exception when
  * deserializing the task result.
  */

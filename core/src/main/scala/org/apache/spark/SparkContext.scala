@@ -49,6 +49,7 @@ import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
 
 /**
+ * :: DeveloperAPI ::
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
  * cluster, and can be used to create RDDs, accumulators and broadcast variables on that cluster.
  *
@@ -65,6 +66,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] var preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()
 
   /**
+   * :: DeveloperAPI ::
    * Alternative constructor for setting preferred locations where Spark will create executors.
    *
    * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on. Ca
@@ -716,6 +718,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * :: DeveloperAPI ::
    * Register a listener to receive up-calls from events that happen during execution.
    */
   @DeveloperAPI
@@ -1028,6 +1031,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * :: DeveloperAPI ::
    * Run a job that can return approximate results.
    */
   @DeveloperAPI
@@ -1046,6 +1050,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   *
    * Submit a job for execution and return a FutureJob holding the result.
    */
   @Experimental

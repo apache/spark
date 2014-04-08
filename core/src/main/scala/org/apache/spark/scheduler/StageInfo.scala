@@ -21,6 +21,7 @@ import org.apache.spark.annotations.DeveloperAPI
 import org.apache.spark.storage.RDDInfo
 
 /**
+ * :: DeveloperAPI ::
  * Stores information about a stage to pass from the scheduler to SparkListeners.
  */
 @DeveloperAPI

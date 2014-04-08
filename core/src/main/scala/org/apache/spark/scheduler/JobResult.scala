@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import org.apache.spark.annotations.DeveloperAPI
 
 /**
+ * :: DeveloperAPI ::
  * A result of a job in the DAGScheduler.
  */
 @DeveloperAPI

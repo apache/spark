@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import org.apache.spark.annotations.DeveloperAPI
 
 /**
+ * :: DeveloperAPI ::
  * Information about a running task attempt inside a TaskSet.
  */
 @DeveloperAPI

@@ -95,6 +95,7 @@ private[spark] class JavaSerializerInstance(counterReset: Int) extends Serialize
 }
 
 /**
+ * :: DeveloperAPI ::
  * A Spark serializer that uses Java's built-in serialization.
  *
  * Note that this serializer is not guaranteed to be wire-compatible across different versions of
