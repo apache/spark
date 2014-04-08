@@ -34,6 +34,12 @@ import org.scalatest.FunSuite
 import org.apache.spark.SparkContext._
 
 class FileSuite extends FunSuite with LocalSparkContext {
+  val loader = Thread.currentThread.getContextClassLoader
+  override def afterEach() {
+    super.afterEach()
+    Thread.currentThread.setContextClassLoader(loader)
+  }
+
   test("adding jars to classpath at the driver") {
     val tmpDir = Files.createTempDir()
     val classFile = TestUtils.createCompiledClass("HelloSpark", tmpDir)
