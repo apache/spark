@@ -23,8 +23,8 @@ import scala.collection.mutable.HashSet
 
 import org.apache.spark.util.Utils
 
-import org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor}
-import org.objectweb.asm.Opcodes._
+import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor}
+import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 
 
 /**

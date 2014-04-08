@@ -162,19 +162,20 @@ class SparkContext(
     jars.foreach(addJar)
   }
 
+  def warnSparkMem(value: String): String = {
+    logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
+      "deprecated, please use spark.executor.memory instead.")
+    value
+  }
+
   private[spark] val executorMemory = conf.getOption("spark.executor.memory")
-    .orElse(Option(System.getenv("SPARK_MEM")))
+    .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
+    .orElse(Option(System.getenv("SPARK_MEM")).map(warnSparkMem))
     .map(Utils.memoryStringToMb)
     .getOrElse(512)
 
-  if (!conf.contains("spark.executor.memory") && sys.env.contains("SPARK_MEM")) {
-    logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
-      "deprecated, instead use spark.executor.memory")
-  }
-
   // Environment variables to pass to our executors
   private[spark] val executorEnvs = HashMap[String, String]()
-  // Note: SPARK_MEM is included for Mesos, but overwritten for standalone mode in ExecutorRunner
   for (key <- Seq("SPARK_CLASSPATH", "SPARK_LIBRARY_PATH", "SPARK_JAVA_OPTS");
       value <- Option(System.getenv(key))) {
     executorEnvs(key) = value
@@ -185,8 +186,9 @@ class SparkContext(
     value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
     executorEnvs(envKey) = value
   }
-  // Since memory can be set with a system property too, use that
-  executorEnvs("SPARK_MEM") = executorMemory + "m"
+  // The Mesos scheduler backend relies on this environment variable to set executor memory.
+  // TODO: Set this only in the Mesos scheduler.
+  executorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
   executorEnvs ++= conf.getExecutorEnv
 
   // Set SPARK_USER for user who is running SparkContext.
@@ -830,13 +832,12 @@ class SparkContext(
     setLocalProperty("externalCallSite", null)
   }
 
+  /**
+   * Capture the current user callsite and return a formatted version for printing. If the user
+   * has overridden the call site, this will return the user's version.
+   */
   private[spark] def getCallSite(): String = {
-    val callSite = getLocalProperty("externalCallSite")
-    if (callSite == null) {
-      Utils.formatSparkCallSite
-    } else {
-      callSite
-    }
+    Option(getLocalProperty("externalCallSite")).getOrElse(Utils.formatCallSiteInfo())
   }
 
   /**

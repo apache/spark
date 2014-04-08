@@ -126,14 +126,6 @@ abstract class RDD[T: ClassTag](
     this
   }
 
-  /** User-defined generator of this RDD*/
-  @transient var generator = Utils.getCallSiteInfo.firstUserClass
-
-  /** Reset generator*/
-  def setGenerator(_generator: String) = {
-    generator = _generator
-  }
-
   /**
    * Set this RDD's storage level to persist its values across operations after the first time
    * it is computed. This can only be used to assign a new storage level if the RDD does not
@@ -1031,8 +1023,9 @@ abstract class RDD[T: ClassTag](
 
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
-  /** Record user function generating this RDD. */
-  @transient private[spark] val origin = sc.getCallSite()
+  /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
+  @transient private[spark] val creationSiteInfo = Utils.getCallSiteInfo
+  private[spark] def getCreationSite = Utils.formatCallSiteInfo(creationSiteInfo)
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T]
 
@@ -1095,10 +1088,7 @@ abstract class RDD[T: ClassTag](
   }
 
   override def toString: String = "%s%s[%d] at %s".format(
-    Option(name).map(_ + " ").getOrElse(""),
-    getClass.getSimpleName,
-    id,
-    origin)
+    Option(name).map(_ + " ").getOrElse(""), getClass.getSimpleName, id, getCreationSite)
 
   def toJavaRDD() : JavaRDD[T] = {
     new JavaRDD(this)(elementClassTag)

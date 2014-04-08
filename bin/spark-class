@@ -40,34 +40,46 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
-# If this is a standalone cluster daemon, reset SPARK_JAVA_OPTS and SPARK_MEM to reasonable
-# values for that; it doesn't need a lot
-if [ "$1" = "org.apache.spark.deploy.master.Master" -o "$1" = "org.apache.spark.deploy.worker.Worker" ]; then
-  SPARK_MEM=${SPARK_DAEMON_MEMORY:-512m}
-  SPARK_DAEMON_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS -Dspark.akka.logLifecycleEvents=true"
-  # Do not overwrite SPARK_JAVA_OPTS environment variable in this script
-  OUR_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS"   # Empty by default
-else
-  OUR_JAVA_OPTS="$SPARK_JAVA_OPTS"
+if [ -n "$SPARK_MEM" ]; then
+  echo "Warning: SPARK_MEM is deprecated, please use a more specific config option"
+  echo "(e.g., spark.executor.memory or SPARK_DRIVER_MEMORY)."
 fi
 
+# Use SPARK_MEM or 512m as the default memory, to be overridden by specific options
+DEFAULT_MEM=${SPARK_MEM:-512m}
 
-# Add java opts for master, worker, executor. The opts maybe null
+SPARK_DAEMON_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS -Dspark.akka.logLifecycleEvents=true"
+
+# Add java opts and memory settings for master, worker, executors, and repl.
 case "$1" in
+  # Master and Worker use SPARK_DAEMON_JAVA_OPTS (and specific opts) + SPARK_DAEMON_MEMORY.
   'org.apache.spark.deploy.master.Master')
-    OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_MASTER_OPTS"
+    OUR_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS $SPARK_MASTER_OPTS"
+    OUR_JAVA_MEM=${SPARK_DAEMON_MEMORY:-$DEFAULT_MEM}
     ;;
   'org.apache.spark.deploy.worker.Worker')
-    OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_WORKER_OPTS"
+    OUR_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS $SPARK_WORKER_OPTS"
+    OUR_JAVA_MEM=${SPARK_DAEMON_MEMORY:-$DEFAULT_MEM}
     ;;
+
+  # Executors use SPARK_JAVA_OPTS + SPARK_EXECUTOR_MEMORY.
   'org.apache.spark.executor.CoarseGrainedExecutorBackend')
-    OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_EXECUTOR_OPTS"
+    OUR_JAVA_OPTS="$SPARK_JAVA_OPTS $SPARK_EXECUTOR_OPTS"
+    OUR_JAVA_MEM=${SPARK_EXECUTOR_MEMORY:-$DEFAULT_MEM}
     ;;
   'org.apache.spark.executor.MesosExecutorBackend')
-    OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_EXECUTOR_OPTS"
+    OUR_JAVA_OPTS="$SPARK_JAVA_OPTS $SPARK_EXECUTOR_OPTS"
+    OUR_JAVA_MEM=${SPARK_EXECUTOR_MEMORY:-$DEFAULT_MEM}
     ;;
+
+  # All drivers use SPARK_JAVA_OPTS + SPARK_DRIVER_MEMORY. The repl also uses SPARK_REPL_OPTS.
   'org.apache.spark.repl.Main')
-    OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_REPL_OPTS"
+    OUR_JAVA_OPTS="$SPARK_JAVA_OPTS $SPARK_REPL_OPTS"
+    OUR_JAVA_MEM=${SPARK_DRIVER_MEMORY:-$DEFAULT_MEM}
+    ;;
+  *)
+    OUR_JAVA_OPTS="$SPARK_JAVA_OPTS"
+    OUR_JAVA_MEM=${SPARK_DRIVER_MEMORY:-$DEFAULT_MEM}
     ;;
 esac
 
@@ -83,14 +95,10 @@ else
   fi
 fi
 
-# Set SPARK_MEM if it isn't already set since we also use it for this process
-SPARK_MEM=${SPARK_MEM:-512m}
-export SPARK_MEM
-
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
 JAVA_OPTS="$OUR_JAVA_OPTS"
 JAVA_OPTS="$JAVA_OPTS -Djava.library.path=$SPARK_LIBRARY_PATH"
-JAVA_OPTS="$JAVA_OPTS -Xms$SPARK_MEM -Xmx$SPARK_MEM"
+JAVA_OPTS="$JAVA_OPTS -Xms$OUR_JAVA_MEM -Xmx$OUR_JAVA_MEM"
 # Load extra JAVA_OPTS from conf/java-opts, if it exists
 if [ -e "$FWDIR/conf/java-opts" ] ; then
   JAVA_OPTS="$JAVA_OPTS `cat $FWDIR/conf/java-opts`"

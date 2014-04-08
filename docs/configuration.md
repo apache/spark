@@ -147,13 +147,13 @@ Apart from these, the following properties are also available, and may be useful
     How many stages the Spark UI remembers before garbage collecting.
   </td>
 </tr>
-</tr>
+<tr>
   <td>spark.ui.filters</td>
   <td>None</td>
   <td>
     Comma separated list of filter class names to apply to the Spark web ui. The filter should be a
     standard javax servlet Filter. Parameters to each filter can also be specified by setting a
-    java system property of spark.<class name of filter>.params='param1=value1,param2=value2'
+    java system property of spark.&lt;class name of filter&gt;.params='param1=value1,param2=value2'
     (e.g.-Dspark.ui.filters=com.test.filter1 -Dspark.com.test.filter1.params='param1=foo,param2=testing')
   </td>
 </tr>
@@ -515,7 +515,7 @@ Apart from these, the following properties are also available, and may be useful
     the whole cluster by default. <br/>
     <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
     applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
-</td>
+  </td>
 </tr>
 <tr>
   <td>spark.files.overwrite</td>
@@ -523,6 +523,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Whether to overwrite files added through SparkContext.addFile() when the target file exists and its contents do not match those of the source.
   </td>
+</tr>
+<tr>
+  <td>spark.files.fetchTimeout</td>
+  <td>false</td>
+  <td>
+    Communication timeout to use when fetching files added through SparkContext.addFile() from
+    the driver.
+  </td>
+</tr>
 <tr>  
   <td>spark.authenticate</td>
   <td>false</td>

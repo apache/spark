@@ -29,7 +29,7 @@ SPARK_HOME = os.environ["SPARK_HOME"]
 
 def launch_gateway():
     # Launch the Py4j gateway using Spark's run command so that we pick up the
-    # proper classpath and SPARK_MEM settings from spark-env.sh
+    # proper classpath and settings from spark-env.sh
     on_windows = platform.system() == "Windows"
     script = "./bin/spark-class.cmd" if on_windows else "./bin/spark-class"
     command = [os.path.join(SPARK_HOME, script), "py4j.GatewayServer",

@@ -20,7 +20,7 @@ package org.apache.spark.api.java.function;
 import java.io.Serializable;
 
 /**
- * A function that takes the a partition 
+ * A function that takes the a partition
  */
 public interface MapPartitionsWithIndexFunction<A, B> extends Function2<Integer,
   java.util.Iterator<A>, java.util.Iterator<B>> {

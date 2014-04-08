@@ -34,22 +34,45 @@ if not "x%1"=="x" goto arg_given
   goto exit
 :arg_given
 
-set RUNNING_DAEMON=0
-if "%1"=="spark.deploy.master.Master" set RUNNING_DAEMON=1
-if "%1"=="spark.deploy.worker.Worker" set RUNNING_DAEMON=1
-if "x%SPARK_DAEMON_MEMORY%" == "x" set SPARK_DAEMON_MEMORY=512m
-set SPARK_DAEMON_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS% -Dspark.akka.logLifecycleEvents=true
-if "%RUNNING_DAEMON%"=="1" set SPARK_MEM=%SPARK_DAEMON_MEMORY%
-rem Do not overwrite SPARK_JAVA_OPTS environment variable in this script
-if "%RUNNING_DAEMON%"=="0" set OUR_JAVA_OPTS=%SPARK_JAVA_OPTS%
-if "%RUNNING_DAEMON%"=="1" set OUR_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS%
+if not "x%SPARK_MEM%"=="x" (
+  echo Warning: SPARK_MEM is deprecated, please use a more specific config option
+  echo e.g., spark.executor.memory or SPARK_DRIVER_MEMORY.
+)
 
-rem Figure out how much memory to use per executor and set it as an environment
-rem variable so that our process sees it and can report it to Mesos
-if "x%SPARK_MEM%"=="x" set SPARK_MEM=512m
+rem Use SPARK_MEM or 512m as the default memory, to be overridden by specific options
+set OUR_JAVA_MEM=%SPARK_MEM%
+if "x%OUR_JAVA_MEM%"=="x" set OUR_JAVA_MEM=512m
+
+set SPARK_DAEMON_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS% -Dspark.akka.logLifecycleEvents=true
+
+rem Add java opts and memory settings for master, worker, executors, and repl.
+rem Master and Worker use SPARK_DAEMON_JAVA_OPTS (and specific opts) + SPARK_DAEMON_MEMORY.
+if "%1"=="org.apache.spark.deploy.master.Master" (
+  set OUR_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS% %SPARK_MASTER_OPTS%
+  if not "x%SPARK_DAEMON_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_DAEMON_MEMORY%
+) else if "%1"=="org.apache.spark.deploy.worker.Worker" (
+  set OUR_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS% %SPARK_WORKER_OPTS%
+  if not "x%SPARK_DAEMON_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_DAEMON_MEMORY%
+
+rem Executors use SPARK_JAVA_OPTS + SPARK_EXECUTOR_MEMORY.
+) else if "%1"=="org.apache.spark.executor.CoarseGrainedExecutorBackend" (
+  set OUR_JAVA_OPTS=%SPARK_JAVA_OPTS% %SPARK_EXECUTOR_OPTS%
+  if not "x%SPARK_EXECUTOR_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_EXECUTOR_MEMORY%
+) else if "%1"=="org.apache.spark.executor.MesosExecutorBackend" (
+  set OUR_JAVA_OPTS=%SPARK_JAVA_OPTS% %SPARK_EXECUTOR_OPTS%
+  if not "x%SPARK_EXECUTOR_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_EXECUTOR_MEMORY%
+
+rem All drivers use SPARK_JAVA_OPTS + SPARK_DRIVER_MEMORY. The repl also uses SPARK_REPL_OPTS.
+) else if "%1"=="org.apache.spark.repl.Main" (
+  set OUR_JAVA_OPTS=%SPARK_JAVA_OPTS% %SPARK_REPL_OPTS%
+  if not "x%SPARK_DRIVER_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_DRIVER_MEMORY%
+) else (
+  set OUR_JAVA_OPTS=%SPARK_JAVA_OPTS%
+  if not "x%SPARK_DRIVER_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_DRIVER_MEMORY%
+)
 
 rem Set JAVA_OPTS to be able to load native libraries and to set heap size
-set JAVA_OPTS=%OUR_JAVA_OPTS% -Djava.library.path=%SPARK_LIBRARY_PATH% -Xms%SPARK_MEM% -Xmx%SPARK_MEM%
+set JAVA_OPTS=%OUR_JAVA_OPTS% -Djava.library.path=%SPARK_LIBRARY_PATH% -Xms%OUR_JAVA_MEM% -Xmx%OUR_JAVA_MEM%
 rem Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in ExecutorRunner.scala!
 
 rem Test whether the user has built Spark

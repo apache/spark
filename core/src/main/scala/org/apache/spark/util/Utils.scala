@@ -278,6 +278,10 @@ private[spark] object Utils extends Logging {
           uc = new URL(url).openConnection()
         }
 
+        val timeout = conf.getInt("spark.files.fetchTimeout", 60) * 1000
+        uc.setConnectTimeout(timeout)
+        uc.setReadTimeout(timeout)
+        uc.connect()
         val in = uc.getInputStream();
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
@@ -532,8 +536,6 @@ private[spark] object Utils extends Logging {
 
   /**
    * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of megabytes.
-   * This is used to figure out how much memory to claim from Mesos based on the SPARK_MEM
-   * environment variable.
    */
   def memoryStringToMb(str: String): Int = {
     val lower = str.toLowerCase
@@ -717,8 +719,8 @@ private[spark] object Utils extends Logging {
     new CallSiteInfo(lastSparkMethod, firstUserFile, firstUserLine, firstUserClass)
   }
 
-  def formatSparkCallSite = {
-    val callSiteInfo = getCallSiteInfo
+  /** Returns a printable version of the call site info suitable for logs. */
+  def formatCallSiteInfo(callSiteInfo: CallSiteInfo = Utils.getCallSiteInfo) = {
     "%s at %s:%s".format(callSiteInfo.lastSparkMethod, callSiteInfo.firstUserFile,
                          callSiteInfo.firstUserLine)
   }

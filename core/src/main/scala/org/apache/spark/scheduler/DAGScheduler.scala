@@ -279,7 +279,7 @@ class DAGScheduler(
     } else {
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
       // since we can't do it in the RDD constructor because # of partitions is unknown
-      logInfo("Registering RDD " + rdd.id + " (" + rdd.origin + ")")
+      logInfo("Registering RDD " + rdd.id + " (" + rdd.getCreationSite + ")")
       mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.size)
     }
     stage

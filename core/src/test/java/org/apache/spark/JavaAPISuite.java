@@ -418,7 +418,9 @@ public class JavaAPISuite implements Serializable {
   public void mapPartitionsWithIndex() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
     JavaRDD<Integer> rddByIndex =
-	rdd.mapPartitionsWithIndex(new MapPartitionsWithIndexFunction<Integer, Integer>() {
+      rdd.mapPartitionsWithIndex(new Function2<Integer,
+				 java.util.Iterator<Integer>,
+				 java.util.Iterator<Integer>>() {
       @Override
       public Iterator<Integer> call(Integer start, java.util.Iterator<Integer> iter) {
 	  List<Integer> list = new ArrayList<Integer>();

@@ -103,10 +103,6 @@
       <artifactId>snappy-java</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.ow2.asm</groupId>
-      <artifactId>asm</artifactId>
-    </dependency>
-    <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>chill_${scala.binary.version}</artifactId>
       <version>0.3.1</version>
@@ -182,10 +178,6 @@
     <dependency>
       <groupId>com.codahale.metrics</groupId>
       <artifactId>metrics-json</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.codahale.metrics</groupId>
-      <artifactId>metrics-ganglia</artifactId>
     </dependency>
     <dependency>
       <groupId>com.codahale.metrics</groupId>

@@ -27,8 +27,9 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SparkEnv
 import org.apache.spark.util.Utils
 
-import org.objectweb.asm._
-import org.objectweb.asm.Opcodes._
+
+import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm._
+import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 
 
 /**

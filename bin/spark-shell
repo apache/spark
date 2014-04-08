@@ -45,13 +45,11 @@ if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
 	exit
 fi
 
-SPARK_SHELL_OPTS=""
-
 for o in "$@"; do
   if [ "$1" = "-c" -o "$1" = "--cores" ]; then
     shift
     if [[ "$1" =~ $CORE_PATTERN ]]; then
-      SPARK_SHELL_OPTS="$SPARK_SHELL_OPTS -Dspark.cores.max=$1"
+      SPARK_REPL_OPTS="$SPARK_REPL_OPTS -Dspark.cores.max=$1"
       shift
     else
       echo "ERROR: wrong format for -c/--cores"
@@ -61,7 +59,7 @@ for o in "$@"; do
   if [ "$1" = "-em" -o "$1" = "--execmem" ]; then
     shift
     if [[ $1 =~ $MEM_PATTERN ]]; then
-      SPARK_SHELL_OPTS="$SPARK_SHELL_OPTS -Dspark.executor.memory=$1"
+      SPARK_REPL_OPTS="$SPARK_REPL_OPTS -Dspark.executor.memory=$1"
       shift
     else
       echo "ERROR: wrong format for --execmem/-em"
@@ -71,7 +69,7 @@ for o in "$@"; do
   if [ "$1" = "-dm" -o "$1" = "--drivermem" ]; then
     shift
     if [[ $1 =~ $MEM_PATTERN ]]; then
-      export SPARK_MEM=$1
+      export SPARK_DRIVER_MEMORY=$1
       shift
     else
       echo "ERROR: wrong format for --drivermem/-dm"
@@ -125,16 +123,18 @@ if [[ ! $? ]]; then
 fi
 
 if $cygwin; then
-    # Workaround for issue involving JLine and Cygwin
-    # (see http://sourceforge.net/p/jline/bugs/40/).
-    # If you're using the Mintty terminal emulator in Cygwin, may need to set the
-    # "Backspace sends ^H" setting in "Keys" section of the Mintty options
-    # (see https://github.com/sbt/sbt/issues/562).
-    stty -icanon min 1 -echo > /dev/null 2>&1
-    $FWDIR/bin/spark-class -Djline.terminal=unix $SPARK_SHELL_OPTS org.apache.spark.repl.Main "$@"
-    stty icanon echo > /dev/null 2>&1
+  # Workaround for issue involving JLine and Cygwin
+  # (see http://sourceforge.net/p/jline/bugs/40/).
+  # If you're using the Mintty terminal emulator in Cygwin, may need to set the
+  # "Backspace sends ^H" setting in "Keys" section of the Mintty options
+  # (see https://github.com/sbt/sbt/issues/562).
+  stty -icanon min 1 -echo > /dev/null 2>&1
+  export SPARK_REPL_OPTS="$SPARK_REPL_OPTS -Djline.terminal=unix"
+  $FWDIR/bin/spark-class org.apache.spark.repl.Main "$@"
+  stty icanon echo > /dev/null 2>&1
 else
-    $FWDIR/bin/spark-class $SPARK_SHELL_OPTS org.apache.spark.repl.Main "$@"
+  export SPARK_REPL_OPTS
+  $FWDIR/bin/spark-class org.apache.spark.repl.Main "$@"
 fi
 
 # record the exit status lest it be overwritten:

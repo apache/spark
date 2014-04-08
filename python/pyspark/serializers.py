@@ -204,7 +204,7 @@ class CartesianDeserializer(FramedSerializer):
         self.key_ser = key_ser
         self.val_ser = val_ser
 
-    def load_stream(self, stream):
+    def prepare_keys_values(self, stream):
         key_stream = self.key_ser._load_stream_without_unbatching(stream)
         val_stream = self.val_ser._load_stream_without_unbatching(stream)
         key_is_batched = isinstance(self.key_ser, BatchedSerializer)
@@ -212,6 +212,10 @@ class CartesianDeserializer(FramedSerializer):
         for (keys, vals) in izip(key_stream, val_stream):
             keys = keys if key_is_batched else [keys]
             vals = vals if val_is_batched else [vals]
+            yield (keys, vals)
+
+    def load_stream(self, stream):
+        for (keys, vals) in self.prepare_keys_values(stream):
             for pair in product(keys, vals):
                 yield pair
 
@@ -221,6 +225,29 @@ class CartesianDeserializer(FramedSerializer):
 
     def __str__(self):
         return "CartesianDeserializer<%s, %s>" % \
+               (str(self.key_ser), str(self.val_ser))
+
+
+class PairDeserializer(CartesianDeserializer):
+    """
+    Deserializes the JavaRDD zip() of two PythonRDDs.
+    """
+
+    def __init__(self, key_ser, val_ser):
+        self.key_ser = key_ser
+        self.val_ser = val_ser
+
+    def load_stream(self, stream):
+        for (keys, vals) in self.prepare_keys_values(stream):
+            for pair in izip(keys, vals):
+                yield pair
+
+    def __eq__(self, other):
+        return isinstance(other, PairDeserializer) and \
+               self.key_ser == other.key_ser and self.val_ser == other.val_ser
+
+    def __str__(self):
+        return "PairDeserializer<%s, %s>" % \
                (str(self.key_ser), str(self.val_ser))
 
 

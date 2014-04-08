@@ -246,6 +246,24 @@ public class Java8APISuite implements Serializable {
   }
 
   @Test
+  public void mapPartitionsWithIndex() {
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4), 2);
+    JavaRDD<Integer> rddByIndex = rdd.mapPartitionsWithIndex((start, iter) -> {
+      List<Integer> list = new ArrayList<Integer>();
+      int sum = 0;
+      int pos = start;
+      while (iter.hasNext()) {
+	sum += (pos * iter.next());
+	pos += 1;
+      }
+      return list.iterator();
+    });
+   Assert.assertEquals(0, rddByIndex.first().intValue());
+   Integer[] values = {0, 2, 6, 12, 20};
+   Assert.assertEquals(Arrays.asList(values), rddByIndex.collect());
+  }
+
+  @Test
   public void sequenceFile() {
     File tempDir = Files.createTempDir();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
