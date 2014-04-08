@@ -102,7 +102,10 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   // Timestamp to long, converting milliseconds to seconds
   private def timestampToLong(ts: Timestamp) = ts.getTime / 1000
 
-  private def timestampToDouble(ts: Timestamp) = ts.getTime.toDouble / 1000
+  private def timestampToDouble(ts: Timestamp) = {
+    // First part is the seconds since the beginning of time, followed by nanosecs.
+    ts.getTime / 1000 + ts.getNanos.toDouble / 1000000000
+  }
 
   def castToLong: Any => Any = child.dataType match {
     case StringType => nullOrCast[String](_, s => try s.toLong catch {

@@ -245,14 +245,14 @@ class ExpressionEvaluationSuite extends FunSuite {
   }
 
   test("timestamp casting") {
-    val millis = 15 * 1000 + 1
+    val millis = 15 * 1000 + 2
     val ts = new Timestamp(millis)
     val ts1 = new Timestamp(15 * 1000)  // a timestamp without the milliseconds part
-    checkEvaluation(ts cast ShortType, 15)
-    checkEvaluation(ts cast IntegerType, 15)
-    checkEvaluation(ts cast LongType, 15)
-    checkEvaluation(ts cast FloatType, 15.001f)
-    checkEvaluation(ts cast DoubleType, 15.001)
+    checkEvaluation(Cast(ts, ShortType), 15)
+    checkEvaluation(Cast(ts, IntegerType), 15)
+    checkEvaluation(Cast(ts, LongType), 15)
+    checkEvaluation(Cast(ts, FloatType), 15.002f)
+    checkEvaluation(Cast(ts, DoubleType), 15.002)
     checkEvaluation(Cast(Cast(ts, ShortType), TimestampType), ts1)
     checkEvaluation(Cast(Cast(ts, IntegerType), TimestampType), ts1)
     checkEvaluation(Cast(Cast(ts, LongType), TimestampType), ts1)
@@ -261,6 +261,9 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Cast(millis.toDouble / 1000, TimestampType), DoubleType),
       millis.toDouble / 1000)
     checkEvaluation(Cast(Literal(BigDecimal(1)) cast TimestampType, DecimalType), 1)
+
+    // A test for higher precision than millis
+    checkEvaluation(Cast(Cast(0.00000001, TimestampType), DoubleType), 0.00000001)
   }
 }
 
