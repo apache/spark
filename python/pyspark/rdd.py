@@ -1388,6 +1388,15 @@ class PipelinedRDD(RDD):
         return not (self.is_cached or self.is_checkpointed)
 
 class Row(dict):
+    """
+    An extended L{dict} that takes a L{dict} in its constructor, and exposes those items as fields.
+
+    >>> r = Row({"hello" : "world", "foo" : "bar"})
+    >>> r.hello
+    'world'
+    >>> r.foo
+    'bar'
+    """
 
     def __init__(self, d):
         d.update(self.__dict__)
@@ -1395,6 +1404,14 @@ class Row(dict):
         dict.__init__(self, d)
 
 class SchemaRDD(RDD):
+    """
+    An RDD of Row objects that has an associated schema. The underlying JVM object is a SchemaRDD,
+    not a PythonRDD, so we can utilize the relational query api exposed by SparkSQL.
+
+    For normal L{RDD} operations (map, count, etc.) the L{SchemaRDD} is not operated on directly, as
+    it's underlying implementation is a RDD composed of Java objects. Instead it is converted to a
+    PythonRDD in the JVM, on which Python operations can be done.
+    """
 
     def __init__(self, jschema_rdd, sql_ctx):
         self.sql_ctx = sql_ctx
@@ -1408,6 +1425,10 @@ class SchemaRDD(RDD):
 
     @property
     def _jrdd(self):
+        """
+        Lazy evaluation of PythonRDD object. Only done when a user calls methods defined by the
+        L{RDD} super class (map, count, etc.).
+        """
         return self.toPython()._jrdd
 
     @property
