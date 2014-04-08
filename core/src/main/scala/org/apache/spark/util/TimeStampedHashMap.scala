@@ -108,7 +108,6 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
     }
   }
 
-  // Should we return previous value directly or as Option?
   def putIfAbsent(key: A, value: B): Option[B] = {
     val prev = internalMap.putIfAbsent(key, TimeStampedValue(value, currentTime))
     Option(prev).map(_.value)
@@ -148,5 +147,4 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
   def getTimestamp(key: A): Option[Long] = {
     getTimeStampedValue(key).map(_.timestamp)
   }
-
 }

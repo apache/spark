@@ -65,7 +65,8 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   /**
    * Whether the cleaning thread will block on cleanup tasks.
-   * This is set to true only for tests. */
+   * This is set to true only for tests.
+   */
   private val blockOnCleanupTasks = sc.conf.getBoolean(
     "spark.cleaner.referenceTracking.blocking", false)
 
@@ -133,7 +134,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   }
 
   /** Perform RDD cleanup. */
-  private def doCleanupRDD(rddId: Int, blocking: Boolean) {
+  def doCleanupRDD(rddId: Int, blocking: Boolean) {
     try {
       logDebug("Cleaning RDD " + rddId)
       sc.unpersistRDD(rddId, blocking)
@@ -145,7 +146,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   }
 
   /** Perform shuffle cleanup, asynchronously. */
-  private def doCleanupShuffle(shuffleId: Int, blocking: Boolean) {
+  def doCleanupShuffle(shuffleId: Int, blocking: Boolean) {
     try {
       logDebug("Cleaning shuffle " + shuffleId)
       mapOutputTrackerMaster.unregisterShuffle(shuffleId)
@@ -158,7 +159,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   }
 
   /** Perform broadcast cleanup. */
-  private def doCleanupBroadcast(broadcastId: Long, blocking: Boolean) {
+  def doCleanupBroadcast(broadcastId: Long, blocking: Boolean) {
     try {
       logDebug("Cleaning broadcast " + broadcastId)
       broadcastManager.unbroadcast(broadcastId, true, blocking)
@@ -175,18 +176,6 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   // Used for testing. These methods explicitly blocks until cleanup is completed
   // to ensure that more reliable testing.
-
-  def cleanupRDD(rdd: RDD[_]) {
-    doCleanupRDD(rdd.id, blocking = true)
-  }
-
-  def cleanupShuffle(shuffleDependency: ShuffleDependency[_, _]) {
-    doCleanupShuffle(shuffleDependency.shuffleId, blocking = true)
-  }
-
-  def cleanupBroadcast[T](broadcast: Broadcast[T]) {
-    doCleanupBroadcast(broadcast.id, blocking = true)
-  }
 }
 
 private object ContextCleaner {

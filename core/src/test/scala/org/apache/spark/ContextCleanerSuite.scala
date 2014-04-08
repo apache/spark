@@ -57,7 +57,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     val tester = new CleanerTester(sc, rddIds = Seq(rdd.id))
 
     // Explicit cleanup
-    cleaner.cleanupRDD(rdd)
+    cleaner.doCleanupRDD(rdd.id, blocking = true)
     tester.assertCleanup()
 
     // Verify that RDDs can be re-executed after cleaning up
@@ -70,7 +70,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     val tester = new CleanerTester(sc, shuffleIds = shuffleDeps.map(_.shuffleId))
 
     // Explicit cleanup
-    shuffleDeps.foreach(s => cleaner.cleanupShuffle(s))
+    shuffleDeps.foreach(s => cleaner.doCleanupShuffle(s.shuffleId, blocking = true))
     tester.assertCleanup()
 
     // Verify that shuffles can be re-executed after cleaning up
@@ -82,7 +82,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     val tester = new CleanerTester(sc, broadcastIds = Seq(broadcast.id))
 
     // Explicit cleanup
-    cleaner.cleanupBroadcast(broadcast)
+    cleaner.doCleanupBroadcast(broadcast.id, blocking = true)
     tester.assertCleanup()
   }
 

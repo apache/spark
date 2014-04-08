@@ -220,13 +220,16 @@ private[spark] class BlockManager(
     }
   }
 
-  /** Get the BlockStatus for the block identified by the given ID, if it exists. */
+  /**
+   * Get the BlockStatus for the block identified by the given ID, if it exists.
+   * NOTE: This is mainly for testing, and it doesn't fetch information from Tachyon.
+   */
   def getStatus(blockId: BlockId): Option[BlockStatus] = {
     blockInfo.get(blockId).map { info =>
       val memSize = if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
       val diskSize = if (diskStore.contains(blockId)) diskStore.getSize(blockId) else 0L
-      val tachyonSize = if (tachyonStore.contains(blockId)) tachyonStore.getSize(blockId) else 0L
-      BlockStatus(info.level, memSize, diskSize, tachyonSize)
+      // Assume that block is not in Tachyon
+      BlockStatus(info.level, memSize, diskSize, 0L)
     }
   }
 

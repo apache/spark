@@ -86,11 +86,9 @@ private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolea
           val start = System.nanoTime
           value_ = HttpBroadcast.read[T](id)
           /*
-           * Storing the broadcast data in BlockManager so that all
-           * so that all subsequent tasks using the broadcast variable
-           * does not need to fetch it again. The BlockManagerMaster
-           * does not need to be told about this block as no one
-           * needs to know about this data block.
+           * We cache broadcast data in the BlockManager so that subsequent tasks using it
+           * do not need to re-fetch. This data is only used locally and no other node
+           * needs to fetch this block, so we don't notify the master.
            */
           SparkEnv.get.blockManager.putSingle(
             blockId, value_, StorageLevel.MEMORY_AND_DISK, tellMaster = false)

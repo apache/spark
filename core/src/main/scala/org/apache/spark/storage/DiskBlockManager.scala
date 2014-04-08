@@ -95,7 +95,7 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
     getBlockLocation(blockId).file.exists()
   }
 
-  /** List all the blocks currently stored in disk by the disk manager. */
+  /** List all the blocks currently stored on disk by the disk manager. */
   def getAllBlocks(): Seq[BlockId] = {
     // Get all the files inside the array of array of directories
     subDirs.flatten.filter(_ != null).flatMap { dir =>

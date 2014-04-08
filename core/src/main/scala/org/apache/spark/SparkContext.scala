@@ -233,11 +233,13 @@ class SparkContext(
   @volatile private[spark] var dagScheduler = new DAGScheduler(this)
   dagScheduler.start()
 
-  private[spark] val cleaner: Option[ContextCleaner] =
+  private[spark] val cleaner: Option[ContextCleaner] = {
     if (conf.getBoolean("spark.cleaner.referenceTracking", true)) {
       Some(new ContextCleaner(this))
-    } else None
-
+    } else {
+      None
+    }
+  }
   cleaner.foreach(_.start())
 
   postEnvironmentUpdate()
