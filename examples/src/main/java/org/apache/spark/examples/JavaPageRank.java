@@ -20,7 +20,7 @@ package org.apache.spark.examples;
 
 import scala.Tuple2;
 
-import com.google.collect.Iterables;
+import com.google.common.collect.Iterables;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;

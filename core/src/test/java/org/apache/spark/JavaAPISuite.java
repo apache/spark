@@ -23,8 +23,8 @@ import java.util.*;
 
 import scala.Tuple2;
 
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-import com.google.collect.Iterables;
 import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
@@ -78,17 +78,6 @@ public class JavaAPISuite implements Serializable {
       else return 0;
     }
   }
-
-
-  private int iterableSize(Iterable<?> a) {
-    return Iterables.size(a.iterator());
-  }
-
-
-  private String iterableStr(Iterable<?> a) {
-    return Iterables.toString(a.iterator());
-  }
-
 
   @SuppressWarnings("unchecked")
   @Test
@@ -210,7 +199,7 @@ public class JavaAPISuite implements Serializable {
       new Tuple2<String, String>("Oranges", "Citrus")
       ));
     Assert.assertEquals(2, categories.lookup("Oranges").size());
-    Assert.assertEquals(2, iterableSize(categories.groupByKey().lookup("Oranges").get(0)));
+    Assert.assertEquals(2, Iterables.size(categories.groupByKey().lookup("Oranges").get(0)));
   }
 
   @Test
@@ -224,13 +213,13 @@ public class JavaAPISuite implements Serializable {
     };
     JavaPairRDD<Boolean, Iterable<Integer>> oddsAndEvens = rdd.groupBy(isOdd);
     Assert.assertEquals(2, oddsAndEvens.count());
-    Assert.assertEquals(2, iterableSize(oddsAndEvens.lookup(true).get(0)));  // Evens
-    Assert.assertEquals(5, iterableSize(oddsAndEvens.lookup(false).get(0))); // Odds
+    Assert.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
+    Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
 
     oddsAndEvens = rdd.groupBy(isOdd, 1);
     Assert.assertEquals(2, oddsAndEvens.count());
-    Assert.assertEquals(2, iterableSize(oddsAndEvens.lookup(true).get(0)));  // Evens
-    Assert.assertEquals(5, iterableSize(oddsAndEvens.lookup(false).get(0))); // Odds
+    Assert.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
+    Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
   }
 
   @SuppressWarnings("unchecked")
@@ -246,8 +235,8 @@ public class JavaAPISuite implements Serializable {
       new Tuple2<String, Integer>("Apples", 3)
     ));
     JavaPairRDD<String, Tuple2<Iterable<String>, Iterable<Integer>>> cogrouped = categories.cogroup(prices);
-    Assert.assertEquals("[Fruit, Citrus]", iterableStr(cogrouped.lookup("Oranges").get(0)._1()));
-    Assert.assertEquals("[2]", iterableStr(cogrouped.lookup("Oranges").get(0)._2()));
+    Assert.assertEquals("[Fruit, Citrus]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._1()));
+    Assert.assertEquals("[2]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._2()));
 
     cogrouped.collect();
   }

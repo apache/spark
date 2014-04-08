@@ -23,7 +23,7 @@ import java.util.*;
 
 import scala.Tuple2;
 
-import com.google.collections.Iterables;
+import com.google.common.collections.Iterables;
 import com.google.common.base.Optional;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
