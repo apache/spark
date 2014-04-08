@@ -31,4 +31,12 @@ class ColumnarQuerySuite extends QueryTest {
 
     checkAnswer(scan, testData.collect().toSeq)
   }
+
+  test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
+    val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
+    val scan = SparkLogicalPlan(InMemoryColumnarTableScan(plan.output, plan))
+
+    checkAnswer(scan, testData.collect().toSeq)
+    checkAnswer(scan, testData.collect().toSeq)
+  }
 }
