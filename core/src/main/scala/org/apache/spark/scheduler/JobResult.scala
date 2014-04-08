@@ -18,11 +18,12 @@
 package org.apache.spark.scheduler
 
 /**
+ * <span class="developer badge">Developer API</span>
  * A result of a job in the DAGScheduler.
  */
-private[spark] sealed trait JobResult
+sealed trait JobResult
 
-private[spark] case object JobSucceeded extends JobResult
+case object JobSucceeded extends JobResult
 
 // A failed stage ID of -1 means there is not a particular stage that caused the failure
-private[spark] case class JobFailed(exception: Exception, failedStageId: Int) extends JobResult
+case class JobFailed(exception: Exception, failedStageId: Int) extends JobResult

@@ -17,7 +17,8 @@
 
 package org.apache.spark.scheduler
 
-private[spark] object TaskLocality extends Enumeration {
+/** <span class="developer badge">Developer API</span> */
+object TaskLocality extends Enumeration {
   // Process local is expected to be used ONLY within TaskSetManager for now.
   val PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY = Value
 

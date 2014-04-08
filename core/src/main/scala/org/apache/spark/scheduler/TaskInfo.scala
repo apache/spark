@@ -18,9 +18,9 @@
 package org.apache.spark.scheduler
 
 /**
+ * <span class="developer badge">Developer API</span>
  * Information about a running task attempt inside a TaskSet.
  */
-private[spark]
 class TaskInfo(
     val taskId: Long,
     val index: Int,
@@ -46,15 +46,15 @@ class TaskInfo(
 
   var serializedSize: Int = 0
 
-  def markGettingResult(time: Long = System.currentTimeMillis) {
+  private[spark] def markGettingResult(time: Long = System.currentTimeMillis) {
     gettingResultTime = time
   }
 
-  def markSuccessful(time: Long = System.currentTimeMillis) {
+  private[spark] def markSuccessful(time: Long = System.currentTimeMillis) {
     finishTime = time
   }
 
-  def markFailed(time: Long = System.currentTimeMillis) {
+  private[spark] def markFailed(time: Long = System.currentTimeMillis) {
     finishTime = time
     failed = true
   }
@@ -83,11 +83,11 @@ class TaskInfo(
 
   def duration: Long = {
     if (!finished) {
-      throw new UnsupportedOperationException("duration() called on unfinished tasks")
+      throw new UnsupportedOperationException("duration() called on unfinished task")
     } else {
       finishTime - launchTime
     }
   }
 
-  def timeRunning(currentTime: Long): Long = currentTime - launchTime
+  private[spark] def timeRunning(currentTime: Long): Long = currentTime - launchTime
 }

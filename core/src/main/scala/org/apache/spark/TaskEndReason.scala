@@ -21,25 +21,30 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 
 /**
+ * <span class="developer badge">Developer API</span>
  * Various possible reasons why a task ended. The low-level TaskScheduler is supposed to retry
  * tasks several times for "ephemeral" failures, and only report back failures that require some
  * old stages to be resubmitted, such as shuffle map fetch failures.
  */
-private[spark] sealed trait TaskEndReason
 
-private[spark] case object Success extends TaskEndReason
+sealed trait TaskEndReason
 
-private[spark]
+/** <span class="developer badge">Developer API</span> */
+case object Success extends TaskEndReason
+
+/** <span class="developer badge">Developer API</span> */
 case object Resubmitted extends TaskEndReason // Task was finished earlier but we've now lost it
 
-private[spark] case class FetchFailed(
+/** <span class="developer badge">Developer API</span> */
+case class FetchFailed(
     bmAddress: BlockManagerId,
     shuffleId: Int,
     mapId: Int,
     reduceId: Int)
   extends TaskEndReason
 
-private[spark] case class ExceptionFailure(
+/** <span class="developer badge">Developer API</span> */
+case class ExceptionFailure(
     className: String,
     description: String,
     stackTrace: Array[StackTraceElement],
@@ -47,21 +52,25 @@ private[spark] case class ExceptionFailure(
   extends TaskEndReason
 
 /**
+ * <span class="developer badge">Developer API</span>
  * The task finished successfully, but the result was lost from the executor's block manager before
  * it was fetched.
  */
-private[spark] case object TaskResultLost extends TaskEndReason
+case object TaskResultLost extends TaskEndReason
 
-private[spark] case object TaskKilled extends TaskEndReason
+/** <span class="developer badge">Developer API</span> */
+case object TaskKilled extends TaskEndReason
 
 /**
+ * <span class="developer badge">Developer API</span>
  * The task failed because the executor that it was running on was lost. This may happen because
  * the task crashed the JVM.
  */
-private[spark] case object ExecutorLostFailure extends TaskEndReason
+case object ExecutorLostFailure extends TaskEndReason
 
 /**
+ * <span class="developer badge">Developer API</span>
  * We don't know why the task ended -- for example, because of a ClassNotFound exception when
  * deserializing the task result.
  */
-private[spark] case object UnknownReason extends TaskEndReason
+case object UnknownReason extends TaskEndReason

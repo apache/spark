@@ -81,8 +81,8 @@ class TaskMetrics extends Serializable {
   var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
 }
 
-object TaskMetrics {
-  private[spark] def empty(): TaskMetrics = new TaskMetrics
+private[spark] object TaskMetrics {
+  def empty(): TaskMetrics = new TaskMetrics
 }
 
 

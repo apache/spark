@@ -47,7 +47,8 @@ class StorageStatus(
   }
 }
 
-private[spark]
+
+/** <span class="developer badge">Developer API</span> */
 class RDDInfo(val id: Int, val name: String, val numPartitions: Int, val storageLevel: StorageLevel)
   extends Ordered[RDDInfo] {
 

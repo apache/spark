@@ -20,6 +20,7 @@ package org.apache.spark.util.collection
 import java.util.{Arrays, Comparator}
 
 /**
+ * <span class="developer badge">Developer API</span>
  * A simple open hash table optimized for the append-only use case, where keys
  * are never removed, but the value for each key may be changed.
  *
@@ -29,9 +30,8 @@ import java.util.{Arrays, Comparator}
  *
  * TODO: Cache the hash values of each key? java.util.HashMap does that.
  */
-private[spark]
-class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K,
-  V)] with Serializable {
+class AppendOnlyMap[K, V](initialCapacity: Int = 64)
+  extends Iterable[(K, V)] with Serializable {
   require(initialCapacity <= (1 << 29), "Can't make capacity bigger than 2^29 elements")
   require(initialCapacity >= 1, "Invalid initial capacity")
 
