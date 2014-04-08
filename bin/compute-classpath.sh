@@ -63,7 +63,7 @@ fi
 # built with Hive, so first check if the datanucleus jars exist, and then ensure the current Spark
 # assembly is built for Hive, before actually populating the CLASSPATH with the jars.
 # Note that this check order is faster (by up to half a second) in the case where Hive is not used.
-num_datanucleus_jars=$(ls "$FWDIR"/lib_managed/jars/ | grep "datanucleus-.*\\.jar" | wc -l)
+num_datanucleus_jars=$(ls "$FWDIR"/lib_managed/jars/ 2>/dev/null | grep "datanucleus-.*\\.jar" | wc -l)
 if [ $num_datanucleus_jars -gt 0 ]; then
   AN_ASSEMBLY_JAR=${ASSEMBLY_JAR:-$DEPS_ASSEMBLY_JAR}
   num_hive_files=$(jar tvf "$AN_ASSEMBLY_JAR" org/apache/hadoop/hive/ql/exec 2>/dev/null | wc -l)
