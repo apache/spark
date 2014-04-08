@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.api.java
 
+import net.razorvine.pickle.{Pickler, Unpickler}
+
 import org.apache.spark.api.java.{JavaRDDLike, JavaRDD}
 import org.apache.spark.sql.{SQLContext, SchemaRDD, SchemaRDDLike}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -45,4 +47,14 @@ class JavaSchemaRDD(
   override def wrapRDD(rdd: RDD[Row]): JavaRDD[Row] = JavaRDD.fromRDD(rdd)
 
   val rdd = baseSchemaRDD.map(new Row(_))
+
+  def javaToPython: JavaRDD[Array[Byte]] = {
+    this.rdd.mapPartitions { iter =>
+      val unpickle = new Pickler
+      iter.map { row =>
+        val fields: Array[Any] = (for (i <- 0 to row.length - 1) yield row.get(i)).toArray
+        unpickle.dumps(fields)
+      }
+    }
+  }
 }

@@ -1398,7 +1398,8 @@ class SchemaRDD:
         self._jschema_rdd.registerAsTable(name)
 
     def toPython(self):
-        jrdd = self._sc._javaToPython(self._jschema_rdd)
+        jrdd = self._jschema_rdd.javaToPython()
+        #jrdd = self._sc._javaToPython(self._jschema_rdd)
         return RDD(jrdd, self._sc, self._sc.serializer)
 
 def _test():
