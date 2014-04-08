@@ -60,6 +60,16 @@ public class Java8APISuite implements Serializable {
     System.clearProperty("spark.driver.port");
   }
 
+  private int iterableSize(Iterable<?> a) {
+    int count = 0;
+    Iterator aItr = a.iterator();
+    while (aItr.hasNext()) {
+      aItr.next();
+      count++;
+    }
+    return count;
+  }
+
   @Test
   public void foreachWithAnonymousClass() {
     foreachCalls = 0;
@@ -85,15 +95,15 @@ public class Java8APISuite implements Serializable {
   public void groupBy() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 1, 2, 3, 5, 8, 13));
     Function<Integer, Boolean> isOdd = x -> x % 2 == 0;
-    JavaPairRDD<Boolean, List<Integer>> oddsAndEvens = rdd.groupBy(isOdd);
+    JavaPairRDD<Boolean, Iterable<Integer>> oddsAndEvens = rdd.groupBy(isOdd);
     Assert.assertEquals(2, oddsAndEvens.count());
-    Assert.assertEquals(2, oddsAndEvens.lookup(true).get(0).size());  // Evens
-    Assert.assertEquals(5, oddsAndEvens.lookup(false).get(0).size()); // Odds
+    Assert.assertEquals(2, iterableSize(oddsAndEvens.lookup(true).get(0)));  // Evens
+    Assert.assertEquals(5, iterableSize(oddsAndEvens.lookup(false).get(0))); // Odds
 
     oddsAndEvens = rdd.groupBy(isOdd, 1);
     Assert.assertEquals(2, oddsAndEvens.count());
-    Assert.assertEquals(2, oddsAndEvens.lookup(true).get(0).size());  // Evens
-    Assert.assertEquals(5, oddsAndEvens.lookup(false).get(0).size()); // Odds
+    Assert.assertEquals(2, iterableSize(oddsAndEvens.lookup(true).get(0)));  // Evens
+    Assert.assertEquals(5, iterableSize(oddsAndEvens.lookup(false).get(0))); // Odds
   }
 
   @Test
