@@ -1419,6 +1419,9 @@ class SchemaRDD(RDD):
 
     def toPython(self):
         jrdd = self._jschema_rdd.javaToPython()
+        # TODO: This is inefficient, we should construct the Python Row object
+        # in Java land in the javaToPython function. May require a custom
+        # pickle serializer in Pyrolite
         return RDD(jrdd, self._sc, self._sc.serializer).map(lambda d: Row(d))
 
 def _test():
