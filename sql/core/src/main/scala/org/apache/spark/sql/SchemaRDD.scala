@@ -314,11 +314,10 @@ class SchemaRDD(
   def analyze = sqlContext.analyzer(logicalPlan)
 
   def javaToPython: JavaRDD[Array[Byte]] = {
-    //val fieldNames: Seq[String] = logicalPlan.references.map(_.name)
+    val fieldNames: Seq[String] = this.queryExecution.analyzed.output.map(_.name)
     this.mapPartitions { iter =>
       val pickle = new Pickler
       iter.map { row =>
-        val fieldNames: Seq[String] = (1 to row.length).map(_.toString + "KEY") //TODO: Temporary
         val map: JMap[String, Any] = new java.util.HashMap
         val arr: java.util.ArrayList[Any] = new java.util.ArrayList
         row.zip(fieldNames).foreach { case (obj, name) =>
