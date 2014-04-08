@@ -1401,13 +1401,25 @@ class SchemaRDD:
         self._sc = sql_ctx._sc
         self._jschema_rdd = jschema_rdd
 
+        self._jrdd = self.toPython()._jrdd
+        self.is_cached = False
+        self.is_checkpointed = False
+        self.ctx = self.sql_ctx._sc
+        self._jrdd_deserializer = self.ctx.serializer
+        # TODO: Figure out how to make this lazy
+        #self._id = self._jrdd.id()
+
     def registerAsTable(self, name):
         self._jschema_rdd.registerAsTable(name)
 
     def toPython(self):
         jrdd = self._jschema_rdd.javaToPython()
-        #jrdd = self._sc._javaToPython(self._jschema_rdd)
         return RDD(jrdd, self._sc, self._sc.serializer).map(lambda d: Row(d))
+
+customRDDDict = dict(RDD.__dict__)
+del customRDDDict["__init__"]
+
+SchemaRDD.__dict__.update(customRDDDict)
 
 def _test():
     import doctest
