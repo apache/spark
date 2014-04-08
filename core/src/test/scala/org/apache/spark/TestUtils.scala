@@ -17,17 +17,34 @@
 
 package org.apache.spark
 
+import java.io.{File, FileInputStream, FileOutputStream}
+import java.net.{URI, URL}
+import java.util.jar.{JarEntry, JarOutputStream}
+
 import scala.collection.JavaConversions._
 
-import java.io.{FileInputStream, FileOutputStream, File}
-import java.util.jar.{JarEntry, JarOutputStream}
-import java.net.{URL, URI}
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
+import com.google.common.io.Files
 
 object TestUtils {
 
-  /** Create a jar file that contains this set of files. All files will be located at the root
-    * of the jar. */
+  /**
+   * Create a jar that defines classes with the given names.
+   *
+   * Note: if this is used during class loader tests, class names should be unique
+   * in order to avoid interference between tests.
+   */
+  def createJarWithClasses(classNames: Seq[String]): URL = {
+    val tempDir = Files.createTempDir()
+    val files = for (name <- classNames) yield createCompiledClass(name, tempDir)
+    val jarFile = new File(tempDir, "testJar-%s.jar".format(System.currentTimeMillis()))
+    createJar(files, jarFile)
+  }
+
+  /**
+   * Create a jar file that contains this set of files. All files will be located at the root
+   * of the jar.
+   */
   def createJar(files: Seq[File], jarFile: File): URL = {
     val jarFileStream = new FileOutputStream(jarFile)
     val jarStream = new JarOutputStream(jarFileStream, new java.util.jar.Manifest())
@@ -56,6 +73,7 @@ object TestUtils {
   private def createURI(name: String) = {
     URI.create(s"string:///${name.replace(".", "/")}${SOURCE.extension}")
   }
+
   private class JavaSourceFromString(val name: String, val code: String)
     extends SimpleJavaFileObject(createURI(name), SOURCE) {
     override def getCharContent(ignoreEncodingErrors: Boolean) = code

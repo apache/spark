@@ -123,6 +123,21 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.tachyonStore.baseDir</td>
+  <td>System.getProperty("java.io.tmpdir")</td>
+  <td>
+    Directories of the Tachyon File System that store RDDs. The Tachyon file system's URL is set by <code>spark.tachyonStore.url</code>.
+    It can also be a comma-separated list of multiple directories on Tachyon file system.
+  </td>
+</tr>
+<tr>
+  <td>spark.tachyonStore.url</td>
+  <td>tachyon://localhost:19998</td>
+  <td>
+    The URL of the underlying Tachyon file system in the TachyonStore.
+  </td>
+</tr>
+<tr>
   <td>spark.mesos.coarse</td>
   <td>false</td>
   <td>
@@ -161,13 +176,13 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.ui.acls.enable</td>
   <td>false</td>
   <td>
-    Whether spark web ui acls should are enabled. If enabled, this checks to see if the user has 
+    Whether spark web ui acls should are enabled. If enabled, this checks to see if the user has
     access permissions to view the web ui. See <code>spark.ui.view.acls</code> for more details.
     Also note this requires the user to be known, if the user comes across as null no checks
     are done. Filters can be used to authenticate and set the user.
   </td>
 </tr>
-<tr>  
+<tr>
   <td>spark.ui.view.acls</td>
   <td>Empty</td>
   <td>
@@ -276,10 +291,10 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.serializer.objectStreamReset</td>
   <td>10000</td>
   <td>
-    When serializing using org.apache.spark.serializer.JavaSerializer, the serializer caches 
-    objects to prevent writing redundant data, however that stops garbage collection of those 
-    objects. By calling 'reset' you flush that info from the serializer, and allow old 
-    objects to be collected. To turn off this periodic reset set it to a value of <= 0. 
+    When serializing using org.apache.spark.serializer.JavaSerializer, the serializer caches
+    objects to prevent writing redundant data, however that stops garbage collection of those
+    objects. By calling 'reset' you flush that info from the serializer, and allow old
+    objects to be collected. To turn off this periodic reset set it to a value of <= 0.
     By default it will reset the serializer every 10,000 objects.
   </td>
 </tr>
@@ -334,6 +349,32 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.worker.cleanup.enabled</td>
+  <td>true</td>
+  <td>
+    Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
+    mode, as YARN works differently.
+  </td>
+</tr>
+<tr>
+  <td>spark.worker.cleanup.interval</td>
+  <td>1800 (30 minutes)</td>
+  <td>
+    Controls the interval, in seconds, at which the worker cleans up old application work dirs
+    on the local machine.
+  </td>
+</tr>
+<tr>
+  <td>spark.worker.cleanup.appDataTtl</td>
+  <td>7 * 24 * 3600 (7 days)</td>
+  <td>
+    The number of seconds to retain application work directories on each worker.  This is a Time To Live
+    and should depend on the amount of available disk space you have.  Application logs and jars are
+    downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
+    especially if you run jobs very frequently.
+  </td>
+</tr>
+<tr>
   <td>spark.akka.frameSize</td>
   <td>10</td>
   <td>
@@ -375,7 +416,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.akka.heartbeat.interval</td>
   <td>1000</td>
   <td>
-    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger interval value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using failure detector can be, a sensistive failure detector can help evict rogue executors really quick. However this is usually not the case as gc pauses and network lags are expected in a real spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats between nodes leading to flooding the network with those. 
+    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger interval value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using failure detector can be, a sensistive failure detector can help evict rogue executors really quick. However this is usually not the case as gc pauses and network lags are expected in a real spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats between nodes leading to flooding the network with those.
   </td>
 </tr>
 <tr>
@@ -565,7 +606,7 @@ Apart from these, the following properties are also available, and may be useful
     the driver.
   </td>
 </tr>
-<tr>  
+<tr>
   <td>spark.authenticate</td>
   <td>false</td>
   <td>
@@ -573,7 +614,7 @@ Apart from these, the following properties are also available, and may be useful
     running on Yarn.
   </td>
 </tr>
-<tr>  
+<tr>
   <td>spark.authenticate.secret</td>
   <td>None</td>
   <td>
@@ -581,12 +622,12 @@ Apart from these, the following properties are also available, and may be useful
     not running on Yarn and authentication is enabled.
   </td>
 </tr>
-<tr>  
+<tr>
   <td>spark.core.connection.auth.wait.timeout</td>
   <td>30</td>
   <td>
     Number of seconds for the connection to wait for authentication to occur before timing
-    out and giving up. 
+    out and giving up.
   </td>
 </tr>
 <tr>

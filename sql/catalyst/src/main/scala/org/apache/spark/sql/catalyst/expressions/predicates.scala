@@ -18,12 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.types.{BooleanType, StringType}
+import org.apache.spark.sql.catalyst.types.{BooleanType, StringType, TimestampType}
 
 object InterpretedPredicate {
   def apply(expression: Expression): (Row => Boolean) = {
-    (r: Row) => expression.apply(r).asInstanceOf[Boolean]
+    (r: Row) => expression.eval(r).asInstanceOf[Boolean]
   }
 }
 
@@ -53,8 +54,8 @@ case class Not(child: Expression) extends Predicate with trees.UnaryNode[Express
   def nullable = child.nullable
   override def toString = s"NOT $child"
 
-  override def apply(input: Row): Any = {
-    child.apply(input) match {
+  override def eval(input: Row): Any = {
+    child.eval(input) match {
       case null => null
       case b: Boolean => !b
     }
@@ -70,18 +71,18 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   def nullable = true // TODO: Figure out correct nullability semantics of IN.
   override def toString = s"$value IN ${list.mkString("(", ",", ")")}"
 
-  override def apply(input: Row): Any = {
-    val evaluatedValue = value.apply(input)
-    list.exists(e => e.apply(input) == evaluatedValue)
+  override def eval(input: Row): Any = {
+    val evaluatedValue = value.eval(input)
+    list.exists(e => e.eval(input) == evaluatedValue)
   }
 }
 
 case class And(left: Expression, right: Expression) extends BinaryPredicate {
   def symbol = "&&"
 
-  override def apply(input: Row): Any = {
-    val l = left.apply(input)
-    val r = right.apply(input)
+  override def eval(input: Row): Any = {
+    val l = left.eval(input)
+    val r = right.eval(input)
     if (l == false || r == false) {
       false
     } else if (l == null || r == null ) {
@@ -95,9 +96,9 @@ case class And(left: Expression, right: Expression) extends BinaryPredicate {
 case class Or(left: Expression, right: Expression) extends BinaryPredicate {
   def symbol = "||"
 
-  override def apply(input: Row): Any = {
-    val l = left.apply(input)
-    val r = right.apply(input)
+  override def eval(input: Row): Any = {
+    val l = left.eval(input)
+    val r = right.eval(input)
     if (l == true || r == true) {
       true
     } else if (l == null || r == null) {
@@ -114,79 +115,31 @@ abstract class BinaryComparison extends BinaryPredicate {
 
 case class Equals(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "="
-  override def apply(input: Row): Any = {
-    val l = left.apply(input)
-    val r = right.apply(input)
+  override def eval(input: Row): Any = {
+    val l = left.eval(input)
+    val r = right.eval(input)
     if (l == null || r == null) null else l == r
   }
 }
 
 case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "<"
-  override def apply(input: Row): Any = {
-    if (left.dataType == StringType && right.dataType == StringType) {
-      val l = left.apply(input)
-      val r = right.apply(input)
-      if(l == null || r == null) {
-        null
-      } else {
-        l.asInstanceOf[String] < r.asInstanceOf[String]
-      }
-    } else {
-      n2(input, left, right, _.lt(_, _))
-    }
-  }
+  override def eval(input: Row): Any = c2(input, left, right, _.lt(_, _))
 }
 
 case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "<="
-  override def apply(input: Row): Any = {
-    if (left.dataType == StringType && right.dataType == StringType) {
-      val l = left.apply(input)
-      val r = right.apply(input)
-      if(l == null || r == null) {
-        null
-      } else {
-        l.asInstanceOf[String] <= r.asInstanceOf[String]
-      }
-    } else {
-      n2(input, left, right, _.lteq(_, _))
-    }
-  }
+  override def eval(input: Row): Any = c2(input, left, right, _.lteq(_, _))
 }
 
 case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = ">"
-  override def apply(input: Row): Any = {
-    if (left.dataType == StringType && right.dataType == StringType) {
-      val l = left.apply(input)
-      val r = right.apply(input)
-      if(l == null || r == null) {
-        null
-      } else {
-        l.asInstanceOf[String] > r.asInstanceOf[String]
-      }
-    } else {
-      n2(input, left, right, _.gt(_, _))
-    }
-  }
+  override def eval(input: Row): Any = c2(input, left, right, _.gt(_, _))
 }
 
 case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = ">="
-  override def apply(input: Row): Any = {
-    if (left.dataType == StringType && right.dataType == StringType) {
-      val l = left.apply(input)
-      val r = right.apply(input)
-      if(l == null || r == null) {
-        null
-      } else {
-        l.asInstanceOf[String] >= r.asInstanceOf[String]
-      }
-    } else {
-      n2(input, left, right, _.gteq(_, _))
-    }
-  }
+  override def eval(input: Row): Any = c2(input, left, right, _.gteq(_, _))
 }
 
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
@@ -206,11 +159,11 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   }
 
   type EvaluatedType = Any
-  override def apply(input: Row): Any = {
-    if (predicate(input).asInstanceOf[Boolean]) {
-      trueValue.apply(input)
+  override def eval(input: Row): Any = {
+    if (predicate.eval(input).asInstanceOf[Boolean]) {
+      trueValue.eval(input)
     } else {
-      falseValue.apply(input)
+      falseValue.eval(input)
     }
   }
 

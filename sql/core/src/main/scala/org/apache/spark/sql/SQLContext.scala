@@ -80,12 +80,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd)))
 
   /**
-   * Loads a parequet file, returning the result as a [[SchemaRDD]].
+   * Loads a Parquet file, returning the result as a [[SchemaRDD]].
    *
    * @group userf
    */
   def parquetFile(path: String): SchemaRDD =
-    new SchemaRDD(this, parquet.ParquetRelation("ParquetFile", path))
+    new SchemaRDD(this, parquet.ParquetRelation(path))
 
 
   /**
@@ -223,6 +223,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
+
+    def simpleString: String = stringOrError(executedPlan)
 
     override def toString: String =
       s"""== Logical Plan ==

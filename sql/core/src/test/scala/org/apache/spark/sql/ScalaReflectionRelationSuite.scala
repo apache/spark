@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.sql.Timestamp
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.test.TestSQLContext._
@@ -31,6 +33,7 @@ case class ReflectData(
     byteField: Byte,
     booleanField: Boolean,
     decimalField: BigDecimal,
+    timestampField: Timestamp,
     seqInt: Seq[Int])
 
 case class ReflectBinary(data: Array[Byte])
@@ -38,7 +41,7 @@ case class ReflectBinary(data: Array[Byte])
 class ScalaReflectionRelationSuite extends FunSuite {
   test("query case class RDD") {
     val data = ReflectData("a", 1, 1L, 1.toFloat, 1.toDouble, 1.toShort, 1.toByte, true,
-                           BigDecimal(1), Seq(1,2,3))
+                           BigDecimal(1), new Timestamp(12345), Seq(1,2,3))
     val rdd = sparkContext.parallelize(data :: Nil)
     rdd.registerAsTable("reflectData")
 

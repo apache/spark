@@ -27,11 +27,12 @@ class Projection(expressions: Seq[Expression]) extends (Row => Row) {
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
   protected val exprArray = expressions.toArray
+
   def apply(input: Row): Row = {
-    val outputArray = new Array[Any](exprArray.size)
+    val outputArray = new Array[Any](exprArray.length)
     var i = 0
-    while (i < exprArray.size) {
-      outputArray(i) = exprArray(i).apply(input)
+    while (i < exprArray.length) {
+      outputArray(i) = exprArray(i).eval(input)
       i += 1
     }
     new GenericRow(outputArray)
@@ -57,8 +58,8 @@ case class MutableProjection(expressions: Seq[Expression]) extends (Row => Row) 
 
   def apply(input: Row): Row = {
     var i = 0
-    while (i < exprArray.size) {
-      mutableRow(i) = exprArray(i).apply(input)
+    while (i < exprArray.length) {
+      mutableRow(i) = exprArray(i).eval(input)
       i += 1
     }
     mutableRow

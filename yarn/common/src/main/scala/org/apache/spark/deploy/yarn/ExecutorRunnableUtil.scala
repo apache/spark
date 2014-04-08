@@ -50,7 +50,8 @@ trait ExecutorRunnableUtil extends Logging {
       slaveId: String,
       hostname: String,
       executorMemory: Int,
-      executorCores: Int) = {
+      executorCores: Int,
+      userSpecifiedLogFile: Boolean) = {
     // Extra options for the JVM
     var JAVA_OPTS = ""
     // Set the JVM memory
@@ -62,6 +63,10 @@ trait ExecutorRunnableUtil extends Logging {
 
     JAVA_OPTS += " -Djava.io.tmpdir=" +
       new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR) + " "
+
+    if (!userSpecifiedLogFile) {
+      JAVA_OPTS += " " + YarnSparkHadoopUtil.getLoggingArgsForContainerCommandLine()
+    }
 
     // Commenting it out for now - so that people can refer to the properties if required. Remove
     // it once cpuset version is pushed out.
@@ -88,13 +93,8 @@ trait ExecutorRunnableUtil extends Logging {
         }
     */
 
-    var javaCommand = "java"
-    val javaHome = System.getenv("JAVA_HOME")
-    if ((javaHome != null && !javaHome.isEmpty()) || env.isDefinedAt("JAVA_HOME")) {
-      javaCommand = Environment.JAVA_HOME.$() + "/bin/java"
-    }
-
-    val commands = List[String](javaCommand +
+    val commands = List[String](
+      Environment.JAVA_HOME.$() + "/bin/java" +
       " -server " +
       // Kill if OOM is raised - leverage yarn's failure handling to cause rescheduling.
       // Not killing the task leaves various aspects of the executor and (to some extent) the jvm in
