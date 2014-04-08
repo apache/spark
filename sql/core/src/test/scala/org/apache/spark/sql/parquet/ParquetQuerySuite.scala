@@ -56,8 +56,8 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
   }
 
   test("self-join parquet files") {
-    val x = ParquetTestData.testData.subquery('x)
-    val y = ParquetTestData.testData.subquery('y)
+    val x = ParquetTestData.testData.as('x)
+    val y = ParquetTestData.testData.as('y)
     val query = x.join(y).where("x.myint".attr === "y.myint".attr)
 
     // Check to make sure that the attributes from either side of the join have unique expression
