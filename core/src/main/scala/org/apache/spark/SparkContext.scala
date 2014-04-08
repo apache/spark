@@ -1050,7 +1050,6 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   *
    * Submit a job for execution and return a FutureJob holding the result.
    */
   @Experimental

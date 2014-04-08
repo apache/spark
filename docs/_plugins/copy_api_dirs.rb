@@ -62,19 +62,19 @@ if not (ENV['SKIP_API'] == '1' or ENV['SKIP_SCALADOC'] == '1')
     File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
   end
 
-#  # Build Epydoc for Python
-#  puts "Moving to python directory and building epydoc."
-#  cd("../python")
-#  puts `epydoc --config epydoc.conf`
-#
-#  puts "Moving back into docs dir."
-#  cd("../docs")
-#
-#  puts "echo making directory pyspark"
-#  mkdir_p "pyspark"
-#
-#  puts "cp -r ../python/docs/. api/pyspark"
-#  cp_r("../python/docs/.", "api/pyspark")
-#
-#  cd("..")
+  # Build Epydoc for Python
+  puts "Moving to python directory and building epydoc."
+  cd("../python")
+  puts `epydoc --config epydoc.conf`
+
+  puts "Moving back into docs dir."
+  cd("../docs")
+
+  puts "echo making directory pyspark"
+  mkdir_p "pyspark"
+
+  puts "cp -r ../python/docs/. api/pyspark"
+  cp_r("../python/docs/.", "api/pyspark")
+
+  cd("..")
 end
