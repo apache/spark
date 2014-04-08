@@ -475,23 +475,71 @@ class SQLContext:
 
         @param sparkContext: The SparkContext to wrap.
 
+        # SQLContext
         >>> from pyspark.context import SQLContext
         >>> sqlCtx = SQLContext(sc)
+
+        >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
+        ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
+
+        # applySchema
+        >>> srdd = sqlCtx.applySchema(rdd)
+
+        >>> srdd.collect() == [{"field1" : 1, "field2" : "row1"}, {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}]
+        True
+
+        # registerRDDAsTable
+        >>> sqlCtx.registerRDDAsTable(srdd, "table1")
+
+        # sql
+        >>> srdd2 = sqlCtx.sql("select field1 as f1, field2 as f2 from table1")
+        >>> srdd2.collect() == [{"f1" : 1, "f2" : "row1"}, {"f1" : 2, "f2": "row2"}, {"f1" : 3, "f2": "row3"}]
+        True
+
         """
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
         self._ssql_ctx = self._jvm.SQLContext(self._jsc.sc())
 
+    def applySchema(self, rdd):
+        """
+        Infer and apply a schema to an RDD of L{dict}s. We peek at the first row of the RDD to
+        determine the fields names and types, and then use that to extract all the dictionaries.
+
+       # >>> sc2 = SparkContext('local', 'test2') # doctest: +IGNORE_EXCEPTION_DETAIL
+       # Traceback (most recent call last):
+       #     ...
+       # ValueError:...
+        """
+        if (rdd.__class__ is SchemaRDD):
+            raise ValueError("Cannot apply schema to %s" % SchemaRDD.__name__)
+        elif not isinstance(rdd.first(), dict):
+            raise ValueError("Only RDDs with dictionaries can be converted to %s: %s" %
+                             (SchemaRDD.__name__, rdd.first().__class__.__name))
+
+        jrdd = self._sc._pythonToJavaMap(rdd._jrdd)
+        srdd = self._ssql_ctx.applySchema(jrdd.rdd())
+        return SchemaRDD(srdd, self)
+
+    def registerRDDAsTable(self, rdd, tableName):
+        """
+
+        """
+        if (rdd.__class__ is SchemaRDD):
+            jschema_rdd = rdd._jschema_rdd
+            self._ssql_ctx.registerRDDAsTable(jschema_rdd, tableName)
+        else:
+            raise ValueError("Can only register SchemaRDD as table")
+
     def parquetFile(path):
         jschema_rdd = self._ssql_ctx.parquetFile(path)
         return SchemaRDD(jschema_rdd, self)
 
-    def registerRDDAsTable(rdd, tableName):
-        jschema_rdd = rdd._jschema_rdd
-        self._ssql_ctx.registerRDDAsTable(jschema_rdd, tableName)
-
     def sql(self, sqlQuery):
+        """
+        Run a sql query over a registered table, and return a L{SchemaRDD} with the results.
+        """
         return SchemaRDD(self._ssql_ctx.sql(sqlQuery), self)
 
     def table(tableName):
@@ -502,17 +550,6 @@ class SQLContext:
 
     def uncacheTable(tableName):
         self._ssql_ctx.uncacheTable(tableName)
-
-    def applySchema(self, rdd):
-        if (rdd.__class__ is SchemaRDD):
-            raise Exception("Cannot apply schema to %s" % SchemaRDD.__name__)
-        elif isinstance(rdd.first(), dict) is not dict:
-            raise Exception("Only RDDs with dictionaries can be converted to %s" % SchemaRDD.__name__)
-
-        jrdd = self._sc._pythonToJavaMap(rdd._jrdd)
-        srdd = self._ssql_ctx.applySchema(jrdd.rdd())
-        return SchemaRDD(srdd, self)
-
 
 def _test():
     import atexit
