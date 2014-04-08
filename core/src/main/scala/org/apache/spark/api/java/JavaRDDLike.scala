@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.java
 
-import java.util.{Comparator, List => JList}
+import java.util.{Comparator, List => JList, Iterator => JIterator}
 import java.lang.{Iterable => JIterable}
 
 import scala.collection.JavaConversions._
