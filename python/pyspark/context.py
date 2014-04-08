@@ -508,7 +508,8 @@ class SQLContext:
         >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
         ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
         >>> srdd = sqlCtx.applySchema(rdd)
-        >>> srdd.collect() == [{"field1" : 1, "field2" : "row1"}, {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}]
+        >>> srdd.collect() == [{"field1" : 1, "field2" : "row1"}, {"field1" : 2, "field2": "row2"},
+        ...                    {"field1" : 3, "field2": "row3"}]
         True
         """
         if (rdd.__class__ is SchemaRDD):
@@ -566,7 +567,8 @@ class SQLContext:
         >>> srdd = sqlCtx.applySchema(rdd)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
         >>> srdd2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2 from table1")
-        >>> srdd2.collect() == [{"f1" : 1, "f2" : "row1"}, {"f1" : 2, "f2": "row2"}, {"f1" : 3, "f2": "row3"}]
+        >>> srdd2.collect() == [{"f1" : 1, "f2" : "row1"}, {"f1" : 2, "f2": "row2"},
+        ...                     {"f1" : 3, "f2": "row3"}]
         True
         """
         return SchemaRDD(self._ssql_ctx.sql(sqlQuery), self)
