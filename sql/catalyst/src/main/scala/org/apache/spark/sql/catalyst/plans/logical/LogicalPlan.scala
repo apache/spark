@@ -69,7 +69,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
       t match {
         case ArrayType(elementType) =>
           val ordinals = ordinalRegExp.findAllIn(field).matchData.map(_.group(2))
-          (ordinals.foldLeft(exp)((v1: Expression, v2: String) => GetItem(v1, Literal(v2.toInt))), elementType)
+          (ordinals.foldLeft(exp)((v1: Expression, v2: String) =>
+            GetItem(v1, Literal(v2.toInt))), elementType)
         case StructType(fields) =>
           // Note: this only works if we are not on the top-level!
           val structField = fields.find(_.name == fieldName)
@@ -80,7 +81,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
           structField.get.dataType match {
             case ArrayType(elementType) =>
               val ordinals = ordinalRegExp.findAllIn(field).matchData.map(_.group(2))
-              (ordinals.foldLeft(GetField(exp, fieldName).asInstanceOf[Expression])((v1: Expression, v2: String) => GetItem(v1, Literal(v2.toInt))), elementType)
+              (ordinals.foldLeft(
+                  GetField(exp, fieldName).asInstanceOf[Expression])((v1: Expression, v2: String) =>
+                    GetItem(v1, Literal(v2.toInt))),
+                elementType)
             case _ =>
               (GetField(exp, fieldName), structField.get.dataType)
           }
@@ -123,8 +127,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
       case (a, nestedFields) :: Nil =>
         a.dataType match {
           case StructType(fields) =>
-            // this is compatibility reasons with earlier code! TODO: why only nestedFields and not parts?
-            if ((parts(0) :: nestedFields).forall(!_.matches("\\w*\\[\\d+\\]+"))) { // not nested arrays, only fields
+            // this is compatibility reasons with earlier code!
+            // TODO: why only nestedFields and not parts?
+            // check for absence of nested arrays so there are only fields
+            if ((parts(0) :: nestedFields).forall(!_.matches("\\w*\\[\\d+\\]+"))) {
               Some(Alias(nestedFields.foldLeft(a: Expression)(GetField), nestedFields.last)())
             } else {
               val expression = parts.foldLeft((a: Expression, a.dataType))(expandFunc)._1

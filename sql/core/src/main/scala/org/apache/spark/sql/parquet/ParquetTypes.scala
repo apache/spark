@@ -38,7 +38,8 @@ import org.apache.spark.sql.catalyst.types._
 import scala.collection.JavaConversions._
 
 private[parquet] object ParquetTypesConverter {
-  def isPrimitiveType(ctype: DataType): Boolean = classOf[PrimitiveType] isAssignableFrom ctype.getClass
+  def isPrimitiveType(ctype: DataType): Boolean =
+    classOf[PrimitiveType] isAssignableFrom ctype.getClass
 
   def toPrimitiveDataType(parquetType : ParquetPrimitiveTypeName): DataType = parquetType match {
     case ParquetPrimitiveTypeName.BINARY => StringType
@@ -91,7 +92,10 @@ private[parquet] object ParquetTypesConverter {
         // it inside the metadata via the OriginalType field
         case ParquetOriginalType.LIST => { // TODO: check enums!
         val fields = groupType.getFields.map {
-            field => new StructField(field.getName, toDataType(field), field.getRepetition != Repetition.REQUIRED)
+            field => new StructField(
+              field.getName,
+              toDataType(field),
+              field.getRepetition != Repetition.REQUIRED)
           }
           if (fields.size == 1) {
             new ArrayType(fields.apply(0).dataType)
@@ -99,7 +103,8 @@ private[parquet] object ParquetTypesConverter {
             new ArrayType(StructType(fields))
           }
         }
-        case _ => { // everything else nested becomes a Struct, unless it has a single repeated field
+        case _ => {
+          // everything else nested becomes a Struct, unless it has a single repeated field
           // in which case it becomes an array (this should correspond to the inverse operation of
           // parquet.schema.ConversionPatterns.listType)
           if (groupType.getFieldCount == 1 &&
@@ -138,11 +143,13 @@ private[parquet] object ParquetTypesConverter {
    * @param ctype The type to convert
    * @return The name of the corresponding Parquet primitive type
    */
-  def fromPrimitiveDataType(ctype: DataType): Option[ParquetPrimitiveTypeName] = ctype match {
+  def fromPrimitiveDataType(ctype: DataType):
+      Option[ParquetPrimitiveTypeName] = ctype match {
     case StringType => Some(ParquetPrimitiveTypeName.BINARY)
     case BooleanType => Some(ParquetPrimitiveTypeName.BOOLEAN)
     case DoubleType => Some(ParquetPrimitiveTypeName.DOUBLE)
-    case ArrayType(ByteType) => Some(ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY)
+    case ArrayType(ByteType) =>
+      Some(ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY)
     case FloatType => Some(ParquetPrimitiveTypeName.FLOAT)
     case IntegerType => Some(ParquetPrimitiveTypeName.INT32)
     case LongType => Some(ParquetPrimitiveTypeName.INT64)
@@ -179,7 +186,8 @@ private[parquet] object ParquetTypesConverter {
    * is always set to `REPEATED`.
    *
   @param ctype The type to convert.
-   * @param name The name of the [[org.apache.spark.sql.catalyst.expressions.Attribute]] whose type is converted
+   * @param name The name of the [[org.apache.spark.sql.catalyst.expressions.Attribute]]
+   *             whose type is converted
    * @param nullable When true indicates that the attribute is nullable
    * @param inArray When true indicates that this is a nested attribute inside an array.
    * @return The corresponding Parquet type.
@@ -190,10 +198,10 @@ private[parquet] object ParquetTypesConverter {
       nullable: Boolean = true,
       inArray: Boolean = false): ParquetType = {
     val repetition =
-      if (inArray) Repetition.REPEATED
-      else {
-        if (nullable) Repetition.OPTIONAL
-        else Repetition.REQUIRED
+      if (inArray) {
+        Repetition.REPEATED
+      } else {
+        if (nullable) Repetition.OPTIONAL else Repetition.REQUIRED
       }
     val primitiveType = fromPrimitiveDataType(ctype)
     if (primitiveType.isDefined) {
@@ -205,8 +213,14 @@ private[parquet] object ParquetTypesConverter {
             case StructType(fields) => { // first case: array of structs
             val parquetFieldTypes = fields.map(
                 f => fromDataType(f.dataType, f.name, f.nullable, inArray = false))
-              assert(fields.size > 1, "Found struct inside array with a single field.. error parsing Catalyst schema")
-              new ParquetGroupType(Repetition.REPEATED, name, ParquetOriginalType.LIST, parquetFieldTypes)
+              assert(
+                fields.size > 1,
+                "Found struct inside array with a single field.. error parsing Catalyst schema")
+              new ParquetGroupType(
+                Repetition.REPEATED,
+                name,
+                ParquetOriginalType.LIST,
+                parquetFieldTypes)
             }
             case _ => { // second case: array of primitive types
             val parquetElementType = fromDataType(
