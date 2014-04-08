@@ -109,7 +109,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       while(!hasTimedOut && jobScheduler.networkInputTracker.hasMoreReceivedBlockIds) {
         Thread.sleep(pollTime)
       }
-      logInfo("Waited for all received blocsk to be consumed for job generation")
+      logInfo("Waited for all received blocks to be consumed for job generation")
 
       // Stop generating jobs
       val stopTime = timer.stop(false)

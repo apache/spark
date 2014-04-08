@@ -17,16 +17,14 @@
 
 package org.apache.spark.streaming.scheduler
 
-import scala.collection.mutable.{HashMap, SynchronizedMap, Queue}
+import scala.collection.mutable.{HashMap, Queue, SynchronizedMap}
 
 import akka.actor._
-
-import org.apache.spark.{SparkException, Logging, SparkEnv}
+import org.apache.spark.{Logging, SparkEnv, SparkException}
 import org.apache.spark.SparkContext._
 import org.apache.spark.storage.BlockId
-import org.apache.spark.streaming.{Time, StreamingContext}
-import org.apache.spark.streaming.dstream.NetworkReceiver
-import org.apache.spark.streaming.dstream.StopReceiver
+import org.apache.spark.streaming.{StreamingContext, Time}
+import org.apache.spark.streaming.dstream.{NetworkReceiver, StopReceiver}
 import org.apache.spark.util.AkkaUtils
 
 private[streaming] sealed trait NetworkInputTrackerMessage

@@ -96,7 +96,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     // Stop everything else
     listenerBus.stop()
     ssc.env.actorSystem.stop(eventActor)
-    eventActor == null
+    eventActor = null
     logInfo("Stopped JobScheduler")
   }
 
