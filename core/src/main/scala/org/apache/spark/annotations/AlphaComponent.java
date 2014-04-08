@@ -15,16 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.random
+package org.apache.spark.annotations;
 
-import org.apache.spark.annotations.DeveloperApi
+import java.lang.annotation.*;
 
-/**
- * :: DeveloperApi ::
- * A class with pseudorandom behavior.
- */
-@DeveloperApi
-trait Pseudorandom {
-  /** Set random seed. */
-  def setSeed(seed: Long)
-}
+@Retention(RetentionPolicy.SOURCE)
+@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD,
+        ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
+public @interface AlphaComponent {}

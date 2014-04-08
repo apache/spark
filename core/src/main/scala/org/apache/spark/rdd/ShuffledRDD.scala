@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Dependency, Partition, Partitioner, ShuffleDependency, SparkEnv, TaskContext}
+import org.apache.spark.annotations.DeveloperApi
 import org.apache.spark.serializer.Serializer
 
 private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
@@ -28,13 +29,14 @@ private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
 }
 
 /**
- * <span class="developer badge">Developer API</span>
+ * :: DeveloperApi ::
  * The resulting RDD from a shuffle (e.g. repartitioning of data).
  * @param prev the parent RDD.
  * @param part the partitioner used to partition the RDD
  * @tparam K the key class.
  * @tparam V the value class.
  */
+@DeveloperApi
 class ShuffledRDD[K, V, P <: Product2[K, V] : ClassTag](
     @transient var prev: RDD[P],
     part: Partitioner)

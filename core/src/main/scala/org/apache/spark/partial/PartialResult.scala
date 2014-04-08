@@ -17,9 +17,9 @@
 
 package org.apache.spark.partial
 
-/**
- * <span class="experimental badge">Experimental</span>
- */
+import org.apache.spark.annotations.Experimental
+
+@Experimental
 class PartialResult[R](initialVal: R, isFinal: Boolean) {
   private var finalValue: Option[R] = if (isFinal) Some(initialVal) else None
   private var failure: Option[Exception] = None

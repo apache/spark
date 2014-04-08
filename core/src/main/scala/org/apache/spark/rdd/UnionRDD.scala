@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Dependency, Partition, RangeDependency, SparkContext, TaskContext}
+import org.apache.spark.annotations.DeveloperApi
 
 private[spark] class UnionPartition[T: ClassTag](idx: Int, rdd: RDD[T], splitIndex: Int)
   extends Partition {
@@ -43,7 +44,7 @@ private[spark] class UnionPartition[T: ClassTag](idx: Int, rdd: RDD[T], splitInd
   }
 }
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperApi
 class UnionRDD[T: ClassTag](
     sc: SparkContext,
     @transient var rdds: Seq[RDD[T]])

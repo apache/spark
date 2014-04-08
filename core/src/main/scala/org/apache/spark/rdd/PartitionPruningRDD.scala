@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import scala.reflect.ClassTag
 
 import org.apache.spark.{NarrowDependency, Partition, TaskContext}
+import org.apache.spark.annotations.DeveloperApi
 
 private[spark] class PartitionPruningRDDPartition(idx: Int, val parentSplit: Partition)
   extends Partition {
@@ -46,12 +47,13 @@ private[spark] class PruneDependency[T](rdd: RDD[T], @transient partitionFilterF
 
 
 /**
- * <span class="developer badge">Developer API</span>
+ * :: DeveloperApi ::
  * A RDD used to prune RDD partitions/partitions so we can avoid launching tasks on
  * all partitions. An example use case: If we know the RDD is partitioned by range,
  * and the execution DAG has a filter on the key, we can avoid launching tasks
  * on partitions that don't have the range covering the key.
  */
+@DeveloperApi
 class PartitionPruningRDD[T: ClassTag](
     @transient prev: RDD[T],
     @transient partitionFilterFunc: Int => Boolean)
@@ -65,9 +67,7 @@ class PartitionPruningRDD[T: ClassTag](
 }
 
 
-/**
- * <span class="developer badge">Developer API</span>
- */
+@DeveloperApi
 object PartitionPruningRDD {
 
   /**

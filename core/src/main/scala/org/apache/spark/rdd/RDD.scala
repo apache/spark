@@ -35,6 +35,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 import org.apache.spark._
 import org.apache.spark.Partitioner._
 import org.apache.spark.SparkContext._
+import org.apache.spark.annotations.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
@@ -87,28 +88,33 @@ abstract class RDD[T: ClassTag](
   // =======================================================================
 
   /**
-   * <span class="developer badge">Developer API</span>
+   * :: DeveloperApi ::
    * Implemented by subclasses to compute a given partition.
    */
+  @DeveloperApi
   def compute(split: Partition, context: TaskContext): Iterator[T]
 
   /**
-   * <span class="developer badge">Developer API</span>
+   * :: DeveloperApi ::
    * Implemented by subclasses to return the set of partitions in this RDD. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
    */
+  @DeveloperApi
   protected def getPartitions: Array[Partition]
 
   /**
-   * <span class="developer badge">Developer API</span>
+   * :: DeveloperApi ::
    * Implemented by subclasses to return how this RDD depends on parent RDDs. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
    */
+  @DeveloperApi
   protected def getDependencies: Seq[Dependency[_]] = deps
 
   /**
-   * <span class="developer badge">Developer API</span>
-   * Optionally overridden by subclasses to specify placement preferences. */
+   * :: DeveloperApi ::
+   * Optionally overridden by subclasses to specify placement preferences.
+   */
+  @DeveloperApi
   protected def getPreferredLocations(split: Partition): Seq[String] = Nil
 
   /** Optionally overridden by subclasses to specify how they are partitioned. */
@@ -520,10 +526,11 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * <span class="developer badge">Developer API</span>
+   * :: DeveloperApi ::
    * Return a new RDD by applying a function to each partition of this RDD. This is a variant of
    * mapPartitions that also passes the TaskContext into the closure.
    */
+  @DeveloperApi
   def mapPartitionsWithContext[U: ClassTag](
       f: (TaskContext, Iterator[T]) => Iterator[U],
       preservesPartitioning: Boolean = false): RDD[U] = {
@@ -783,11 +790,11 @@ abstract class RDD[T: ClassTag](
   def count(): Long = sc.runJob(this, Utils.getIteratorSize _).sum
 
   /**
-   * <span class="experimental badge">Experimental</span>
-   *
+   * :: Experimental ::
    * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
    */
+  @Experimental
   def countApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
     val countElements: (TaskContext, Iterator[T]) => Long = { (ctx, iter) =>
       var result = 0L
@@ -831,10 +838,10 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * <span class="experimental badge">Experimental</span>
-   *
+   * :: Experimental ::
    * Approximate version of countByValue().
    */
+  @Experimental
   def countByValueApprox(
       timeout: Long,
       confidence: Double = 0.95
@@ -855,7 +862,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * <span class="experimental badge">Experimental</span>
+   * :: Experimental ::
    * Return approximate number of distinct elements in the RDD.
    *
    * The accuracy of approximation can be controlled through the relative standard deviation
@@ -863,6 +870,7 @@ abstract class RDD[T: ClassTag](
    * more accurate counts but increase the memory footprint and vise versa. The default value of
    * relativeSD is 0.05.
    */
+  @Experimental
   def countApproxDistinct(relativeSD: Double = 0.05): Long = {
     val zeroCounter = new SerializableHyperLogLog(new HyperLogLog(relativeSD))
     aggregate(zeroCounter)(_.add(_), _.merge(_)).value.cardinality()
