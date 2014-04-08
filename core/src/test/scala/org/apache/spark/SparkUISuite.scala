@@ -23,13 +23,13 @@ import org.scalatest.FunSuite
 
 class SparkUISuite extends FunSuite with SharedSparkContext {
 
-  test("verify appUIHostPort doesn't contain scheme") {
-    val appUIUri = new URI(sc.ui.appUIHostPort)
-    assert(!appUIUri.getScheme().startsWith("http"))
+  test("verify appUIAddress contains the scheme") {
+    val uiAddress = sc.ui.appUIAddress
+    assert(uiAddress.equals("http://" + sc.ui.appUIHostPort))
   }
 
-  test("verify appUIAddress contains the scheme") {
-    val appUIUri = new URI(sc.ui.appUIAddress)
-    assert(appUIUri.toString().equals("http://" + sc.ui.appUIHostPort))
+  test("verify appUIAddress contains the port") {
+    val splitUIAddress = sc.ui.appUIAddress.split(':')
+    assert(splitUIAddress(2).toInt == sc.ui.boundPort)
   }
 }
