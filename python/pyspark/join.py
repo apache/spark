@@ -31,7 +31,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
-from pyspark.resultitr import ResultItr
+from pyspark.resultiterable import ResultIterable
 
 def _do_python_join(rdd, other, numPartitions, dispatch):
     vs = rdd.map(lambda (k, v): (k, (1, v)))
@@ -89,5 +89,5 @@ def python_cogroup(rdd, other, numPartitions):
                 vbuf.append(v)
             elif n == 2:
                 wbuf.append(v)
-        return (ResultItr(vbuf), ResultItr(wbuf))
-    return vs.union(ws).groupByKey(numPartitions).mapValues(lambda x : dispatch(x.__iter__()))
+        return (ResultIterable(vbuf), ResultIterable(wbuf))
+    return vs.union(ws).groupByKey(numPartitions).mapValues(dispatch)

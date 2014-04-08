@@ -38,7 +38,7 @@ from pyspark.join import python_join, python_left_outer_join, \
 from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler
 from pyspark.storagelevel import StorageLevel
-from pyspark.resultitr import ResultItr
+from pyspark.resultiterable import ResultIterable
 
 from py4j.java_collections import ListConverter, MapConverter
 
@@ -1134,7 +1134,7 @@ class RDD(object):
             return a + b
 
         return self.combineByKey(createCombiner, mergeValue, mergeCombiners,
-                numPartitions).mapValues(lambda x: ResultItr(x))
+                numPartitions).mapValues(lambda x: ResultIterable(x))
 
     # TODO: add tests
     def flatMapValues(self, f):

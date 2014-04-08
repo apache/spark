@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 
-__all__ = ["ResultItr"]
+__all__ = ["ResultIterable"]
 
 import collections
 
-class ResultItr(collections.Iterable):
+class ResultIterable(collections.Iterator):
     """
     A special result iterable. This is used because the standard iterator can not be pickled
     """
