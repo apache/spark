@@ -86,7 +86,8 @@ private[sql] object ParquetRelation {
     // that appends to Console which needs to be cleared.
     val parquetLogger = java.util.logging.Logger.getLogger("parquet")
     parquetLogger.getHandlers.foreach(parquetLogger.removeHandler)
-    if(parquetLogger.getLevel != null) parquetLogger.setLevel(null)
+    // TODO: Need to set the log level ?
+    // if(parquetLogger.getLevel != null) parquetLogger.setLevel(null)
     if(!parquetLogger.getUseParentHandlers) parquetLogger.setUseParentHandlers(true)
   }
 
