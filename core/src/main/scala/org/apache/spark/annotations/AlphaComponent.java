@@ -15,19 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark.annotations;
 
-import org.apache.spark.annotations.DeveloperAPI
+import java.lang.annotation.*;
 
-/**
- * A result of a job in the DAGScheduler.
- */
-@DeveloperAPI
-sealed trait JobResult
-
-@DeveloperAPI
-case object JobSucceeded extends JobResult
-
-// A failed stage ID of -1 means there is not a particular stage that caused the failure
-@DeveloperAPI
-case class JobFailed(exception: Exception, failedStageId: Int) extends JobResult
+@Retention(RetentionPolicy.SOURCE)
+@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD,
+        ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
+public @interface AlphaComponent {}

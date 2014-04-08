@@ -19,12 +19,13 @@ package org.apache.spark
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.annotations.DeveloperAPI
 import org.apache.spark.executor.TaskMetrics
 
 /**
- * <span class="developer badge">Developer API</span>
  * Contextual information about a task which can be read or mutated during execution.
  */
+@DeveloperAPI
 class TaskContext(
   val stageId: Int,
   val partitionId: Int,

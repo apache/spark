@@ -17,10 +17,12 @@
 
 package org.apache.spark.scheduler
 
+import org.apache.spark.annotations.DeveloperAPI
+
 /**
- * <span class="developer badge">Developer API</span>
  * Information about a running task attempt inside a TaskSet.
  */
+@DeveloperAPI
 class TaskInfo(
     val taskId: Long,
     val index: Int,

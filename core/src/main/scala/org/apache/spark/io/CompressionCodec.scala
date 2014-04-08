@@ -23,9 +23,9 @@ import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 import org.xerial.snappy.{SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.annotations.DeveloperAPI
 
 /**
- * <span class="developer badge">Developer API</span>
  * CompressionCodec allows the customization of choosing different compression implementations
  * to be used in block storage.
  *
@@ -33,6 +33,7 @@ import org.apache.spark.SparkConf
  *       This is intended for use as an internal compression utility within a single
  *       Spark application.
  */
+@DeveloperAPI
 trait CompressionCodec {
 
   def compressedOutputStream(s: OutputStream): OutputStream
@@ -57,13 +58,13 @@ private[spark] object CompressionCodec {
 
 
 /**
- * <span class="developer badge">Developer API</span>
  * LZF implementation of [[org.apache.spark.io.CompressionCodec]].
  *
  * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
  *       of Spark. This is intended for use as an internal compression utility within a single Spark
  *       application.
  */
+@DeveloperAPI
 class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
@@ -75,7 +76,6 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
 
 /**
- * <span class="developer badge">Developer API</span>
  * Snappy implementation of [[org.apache.spark.io.CompressionCodec]].
  * Block size can be configured by spark.io.compression.snappy.block.size.
  *
@@ -83,6 +83,7 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
  *       of Spark. This is intended for use as an internal compression utility within a single Spark
  *       application.
  */
+@DeveloperAPI
 class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {

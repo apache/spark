@@ -35,6 +35,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
 
+import org.apache.spark.annotations.{DeveloperAPI, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
@@ -54,6 +55,8 @@ import org.apache.spark.util.{ClosureCleaner, MetadataCleaner, MetadataCleanerTy
  * @param config a Spark Config object describing the application configuration. Any settings in
  *   this config overrides the default configs as well as system properties.
  */
+
+@DeveloperAPI
 class SparkContext(config: SparkConf) extends Logging {
 
   // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
@@ -62,13 +65,13 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] var preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()
 
   /**
-   * <span class="developer badge">Developer API</span>
    * Alternative constructor for setting preferred locations where Spark will create executors.
    *
    * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on. Ca
    * be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
    * from a list of input files or InputFormats for the application.
    */
+    @DeveloperAPI
     def this(config: SparkConf, preferredNodeLocationData: Map[String, Set[SplitInfo]]) = {
       this(config)
       this.preferredNodeLocationData = preferredNodeLocationData
@@ -713,9 +716,9 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * <span class="developer badge">Developer API</span>
    * Register a listener to receive up-calls from events that happen during execution.
    */
+  @DeveloperAPI
   def addSparkListener(listener: SparkListener) {
     listenerBus.addListener(listener)
   }
@@ -1025,9 +1028,9 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * <span class="developer badge">Developer API</span>
    * Run a job that can return approximate results.
    */
+  @DeveloperAPI
   def runApproximateJob[T, U, R](
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
@@ -1043,9 +1046,9 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * <span class="experimental badge">Experimental</span>
    * Submit a job for execution and return a FutureJob holding the result.
    */
+  @Experimental
   def submitJob[T, U, R](
       rdd: RDD[T],
       processPartition: Iterator[T] => U,

@@ -22,8 +22,9 @@ import java.util.Random
 import cern.jet.random.Poisson
 import cern.jet.random.engine.DRand
 
+import org.apache.spark.annotations.DeveloperAPI
+
 /**
- * <span class="developer badge">Developer API</span>
  * A pseudorandom sampler. It is possible to change the sampled item type. For example, we might
  * want to add weights for stratified sampling or importance sampling. Should only use
  * transformations that are tied to the sampler and cannot be applied after sampling.
@@ -31,6 +32,7 @@ import cern.jet.random.engine.DRand
  * @tparam T item type
  * @tparam U sampled item type
  */
+@DeveloperAPI
 trait RandomSampler[T, U] extends Pseudorandom with Cloneable with Serializable {
 
   /** take a random sample */
@@ -41,7 +43,6 @@ trait RandomSampler[T, U] extends Pseudorandom with Cloneable with Serializable 
 }
 
 /**
- * <span class="developer badge">Developer API</span>
  * A sampler based on Bernoulli trials.
  *
  * @param lb lower bound of the acceptance range
@@ -49,6 +50,7 @@ trait RandomSampler[T, U] extends Pseudorandom with Cloneable with Serializable 
  * @param complement whether to use the complement of the range specified, default to false
  * @tparam T item type
  */
+@DeveloperAPI
 class BernoulliSampler[T](lb: Double, ub: Double, complement: Boolean = false)
     (implicit random: Random = new XORShiftRandom)
   extends RandomSampler[T, T] {
@@ -69,12 +71,12 @@ class BernoulliSampler[T](lb: Double, ub: Double, complement: Boolean = false)
 }
 
 /**
- * <span class="developer badge">Developer API</span>
  * A sampler based on values drawn from Poisson distribution.
  *
  * @param poisson a Poisson random number generator
  * @tparam T item type
  */
+@DeveloperAPI
 class PoissonSampler[T](mean: Double)
     (implicit var poisson: Poisson = new Poisson(mean, new DRand))
   extends RandomSampler[T, T] {

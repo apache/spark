@@ -17,10 +17,12 @@
 
 package org.apache.spark.util.random
 
+import org.apache.spark.annotations.DeveloperAPI
+
 /**
- * <span class="developer badge">Developer API</span>
  * A class with pseudorandom behavior.
  */
+@DeveloperAPI
 trait Pseudorandom {
   /** Set random seed. */
   def setSeed(seed: Long)

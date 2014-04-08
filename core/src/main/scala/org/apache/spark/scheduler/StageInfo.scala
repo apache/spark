@@ -17,8 +17,8 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.storage.RDDInfo
 import org.apache.spark.annotations.DeveloperAPI
+import org.apache.spark.storage.RDDInfo
 
 /**
  * Stores information about a stage to pass from the scheduler to SparkListeners.

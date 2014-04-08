@@ -22,11 +22,11 @@ import java.nio.ByteBuffer
 
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 
-import org.apache.spark.util.{ByteBufferInputStream, NextIterator}
 import org.apache.spark.SparkEnv
+import org.apache.spark.annotations.DeveloperAPI
+import org.apache.spark.util.{ByteBufferInputStream, NextIterator}
 
 /**
- * <span class="developer badge">Developer API</span>
  * A serializer. Because some serialization libraries are not thread safe, this class is used to
  * create [[org.apache.spark.serializer.SerializerInstance]] objects that do the actual
  * serialization and are guaranteed to only be called from one thread at a time.
@@ -41,6 +41,7 @@ import org.apache.spark.SparkEnv
  * Note that serializers are not required to be wire-compatible across different versions of Spark.
  * They are intended to be used to serialize/de-serialize data within a single Spark application.
  */
+@DeveloperAPI
 trait Serializer {
   def newInstance(): SerializerInstance
 }
@@ -54,9 +55,9 @@ object Serializer {
 
 
 /**
- * <span class="developer badge">Developer API</span>
  * An instance of a serializer, for use by one thread at a time.
  */
+@DeveloperAPI
 trait SerializerInstance {
   def serialize[T](t: T): ByteBuffer
 
@@ -87,9 +88,9 @@ trait SerializerInstance {
 
 
 /**
- * <span class="developer badge">Developer API</span>
  * A stream for writing serialized objects.
  */
+@DeveloperAPI
 trait SerializationStream {
   def writeObject[T](t: T): SerializationStream
   def flush(): Unit
@@ -105,9 +106,9 @@ trait SerializationStream {
 
 
 /**
- * <span class="developer badge">Developer API</span>
  * A stream for reading serialized objects.
  */
+@DeveloperAPI
 trait DeserializationStream {
   def readObject[T](): T
   def close(): Unit

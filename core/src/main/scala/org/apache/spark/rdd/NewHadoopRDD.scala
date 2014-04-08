@@ -25,6 +25,7 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 
 import org.apache.spark.{InterruptibleIterator, Logging, Partition, SerializableWritable, SparkContext, TaskContext}
+import org.apache.spark.annotations.DeveloperAPI
 
 private[spark]
 class NewHadoopPartition(rddId: Int, val index: Int, @transient rawSplit: InputSplit with Writable)
@@ -36,7 +37,6 @@ class NewHadoopPartition(rddId: Int, val index: Int, @transient rawSplit: InputS
 }
 
 /**
- * <span class="developer badge">Developer API</span>
  * An RDD that provides core functionality for reading data stored in Hadoop (e.g., files in HDFS,
  * sources in HBase, or S3), using the new MapReduce API (`org.apache.hadoop.mapreduce`).
  *
@@ -49,6 +49,7 @@ class NewHadoopPartition(rddId: Int, val index: Int, @transient rawSplit: InputS
  * @param valueClass Class of the value associated with the inputFormatClass.
  * @param conf The Hadoop configuration.
  */
+@DeveloperAPI
 class NewHadoopRDD[K, V](
     sc : SparkContext,
     inputFormatClass: Class[_ <: InputFormat[K, V]],

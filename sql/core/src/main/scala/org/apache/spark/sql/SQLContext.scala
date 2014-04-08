@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkContext
+import org.apache.spark.annotations.{AlphaComponent, Experimental}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl
@@ -31,13 +32,13 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 
 /**
- * <span class="experimental badge">ALPHA COMPONENT</span>
  * The entry point for running relational queries using Spark.  Allows the creation of [[SchemaRDD]]
  * objects and the execution of SQL queries.
  *
  * @groupname userf Spark SQL Functions
  * @groupname Ungrouped Support functions for language integrated queries.
  */
+@AlphaComponent
 class SQLContext(@transient val sparkContext: SparkContext)
   extends Logging
   with dsl.ExpressionConversions
@@ -61,11 +62,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new this.QueryExecution { val logical = plan }
 
   /**
-   * <span class="experimental badge">Experimental</span>
    * Allows catalyst LogicalPlans to be executed as a SchemaRDD.  Note that the LogicalPlan
    * interface is considered internal, and thus not guranteed to be stable.  As a result, using
    * them directly is not reccomended.
    */
+  @Experimental
   implicit def logicalPlanToSparkQuery(plan: LogicalPlan): SchemaRDD = new SchemaRDD(this, plan)
 
   /**

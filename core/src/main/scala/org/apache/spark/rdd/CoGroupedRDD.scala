@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{InterruptibleIterator, Partition, Partitioner, SparkEnv, TaskContext}
 import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency}
+import org.apache.spark.annotations.DeveloperAPI
 import org.apache.spark.util.collection.{ExternalAppendOnlyMap, AppendOnlyMap}
 import org.apache.spark.serializer.Serializer
 
@@ -51,7 +52,6 @@ private[spark] class CoGroupPartition(idx: Int, val deps: Array[CoGroupSplitDep]
 }
 
 /**
- * <span class="developer badge">Developer API</span>
  * A RDD that cogroups its parents. For each key k in parent RDDs, the resulting RDD contains a
  * tuple with the list of values for that key.
  *
@@ -61,6 +61,7 @@ private[spark] class CoGroupPartition(idx: Int, val deps: Array[CoGroupSplitDep]
  * @param rdds parent RDDs.
  * @param part partitioner used to partition the shuffle output
  */
+@DeveloperAPI
 class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: Partitioner)
   extends RDD[(K, Seq[Seq[_]])](rdds.head.context, Nil) {
 

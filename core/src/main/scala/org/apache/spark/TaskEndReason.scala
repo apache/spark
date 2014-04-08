@@ -29,13 +29,13 @@ import org.apache.spark.storage.BlockManagerId
 @DeveloperAPI
 sealed trait TaskEndReason
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 case object Success extends TaskEndReason
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 case object Resubmitted extends TaskEndReason // Task was finished earlier but we've now lost it
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 case class FetchFailed(
     bmAddress: BlockManagerId,
     shuffleId: Int,
@@ -43,7 +43,7 @@ case class FetchFailed(
     reduceId: Int)
   extends TaskEndReason
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 case class ExceptionFailure(
     className: String,
     description: String,
@@ -52,25 +52,25 @@ case class ExceptionFailure(
   extends TaskEndReason
 
 /**
- * <span class="developer badge">Developer API</span>
  * The task finished successfully, but the result was lost from the executor's block manager before
  * it was fetched.
  */
+@DeveloperAPI
 case object TaskResultLost extends TaskEndReason
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 case object TaskKilled extends TaskEndReason
 
 /**
- * <span class="developer badge">Developer API</span>
  * The task failed because the executor that it was running on was lost. This may happen because
  * the task crashed the JVM.
  */
+@DeveloperAPI
 case object ExecutorLostFailure extends TaskEndReason
 
 /**
- * <span class="developer badge">Developer API</span>
  * We don't know why the task ended -- for example, because of a ClassNotFound exception when
  * deserializing the task result.
  */
+@DeveloperAPI
 case object UnknownReason extends TaskEndReason

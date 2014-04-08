@@ -23,27 +23,28 @@ import scala.collection.Map
 import scala.collection.mutable
 
 import org.apache.spark.{Logging, TaskEndReason}
+import org.apache.spark.annotations.DeveloperAPI
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{Distribution, Utils}
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 sealed trait SparkListenerEvent
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Properties = null)
   extends SparkListenerEvent
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 case class SparkListenerTaskStart(stageId: Int, taskInfo: TaskInfo) extends SparkListenerEvent
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 case class SparkListenerTaskEnd(
     stageId: Int,
     taskType: String,
@@ -52,26 +53,26 @@ case class SparkListenerTaskEnd(
     taskMetrics: TaskMetrics)
   extends SparkListenerEvent
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 case class SparkListenerJobStart(jobId: Int, stageIds: Seq[Int], properties: Properties = null)
   extends SparkListenerEvent
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkListenerEvent
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(String, String)]])
   extends SparkListenerEvent
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 case class SparkListenerBlockManagerAdded(blockManagerId: BlockManagerId, maxMem: Long)
   extends SparkListenerEvent
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 case class SparkListenerBlockManagerRemoved(blockManagerId: BlockManagerId)
   extends SparkListenerEvent
 
-/** <span class="developer badge">Developer API</span> */
+@DeveloperAPI
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
 /** An event used in the listener to shutdown the listener daemon thread. */
@@ -79,10 +80,10 @@ private[spark] case object SparkListenerShutdown extends SparkListenerEvent
 
 
 /**
- * <span class="developer badge">Developer API</span>
  * Interface for listening to events from the Spark scheduler. Note that this is an internal
  * interface which might change in different Spark releases.
  */
+@DeveloperAPI
 trait SparkListener {
   /**
    * Called when a stage is completed, with information on the completed stage
@@ -142,9 +143,9 @@ trait SparkListener {
 }
 
 /**
- * <span class="developer badge">Developer API</span>
  * Simple SparkListener that logs a few summary statistics when each stage completes
  */
+@DeveloperAPI
 class StatsReportListener extends SparkListener with Logging {
 
   import org.apache.spark.scheduler.StatsReportListener._
