@@ -18,6 +18,8 @@
 package org.apache.spark.mllib.tree.configuration
 
 /**
+ * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ *
  * Enum for selecting the quantile calculation strategy
  */
 object QuantileStrategy extends Enumeration {

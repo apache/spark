@@ -18,6 +18,8 @@
 package org.apache.spark.mllib.tree.configuration
 
 /**
+ * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ *
  * Enum to describe whether a feature is "continuous" or "categorical"
  */
 object FeatureType extends Enumeration {

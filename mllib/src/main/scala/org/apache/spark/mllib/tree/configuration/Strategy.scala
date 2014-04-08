@@ -22,6 +22,8 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 
 /**
+ * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ *
  * Stores all the configuration options for tree construction
  * @param algo classification or regression
  * @param impurity criterion used for information gain calculation

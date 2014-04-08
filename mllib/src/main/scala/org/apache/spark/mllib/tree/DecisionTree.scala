@@ -1026,7 +1026,7 @@ object DecisionTree extends Serializable with Logging {
     }
   }
 
-  val usage = """
+  private val usage = """
     Usage: DecisionTreeRunner <master>[slices] --algo <Classification,
     Regression> --trainDataDir path --testDataDir path --maxDepth num [--impurity <Gini,Entropy,
     Variance>] [--maxBins num]
@@ -1115,7 +1115,7 @@ object DecisionTree extends Serializable with Logging {
    * @return An RDD of LabeledPoint. Each labeled point has two elements: the first element is
    *         the label, and the second element represents the feature values (an array of Double).
    */
-  def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
+  private def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
     sc.textFile(dir).map { line =>
       val parts = line.trim().split(",")
       val label = parts(0).toDouble

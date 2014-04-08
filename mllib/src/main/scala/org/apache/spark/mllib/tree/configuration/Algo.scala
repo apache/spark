@@ -18,6 +18,8 @@
 package org.apache.spark.mllib.tree.configuration
 
 /**
+ * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ *
  * Enum to select the algorithm for the decision tree
  */
 object Algo extends Enumeration {
