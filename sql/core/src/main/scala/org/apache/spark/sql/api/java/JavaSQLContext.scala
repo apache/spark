@@ -85,13 +85,13 @@ class JavaSQLContext(sparkContext: JavaSparkContext) {
   /**
    * Applies a schema to an RDD of Array[Any]
    */
-  def applySchema(rdd: JavaRDD[_]): JavaSchemaRDD = {
+  def applySchema(rdd: JavaRDD[_], fieldNames: java.util.ArrayList[Any]): JavaSchemaRDD = {
     val fields = rdd.first match {
       case row: java.util.ArrayList[_] => row.toArray.map(_.getClass)
       case row => throw new Exception(s"Rows must be Lists 1 ${row.getClass}")
     }
 
-    val schema = fields.zipWithIndex.map { case (klass, index) =>
+    val schema = fields.zip(fieldNames.toArray).map { case (klass, fieldName) =>
       val dataType = klass match {
         case c: Class[_] if c == classOf[java.lang.String] => StringType
         case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
@@ -104,7 +104,9 @@ class JavaSQLContext(sparkContext: JavaSparkContext) {
        // case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
       }
 
-      AttributeReference(index.toString, dataType, true)()
+      println(fieldName.toString)
+      // TODO: No bueno, fieldName.toString used because I can't figure out the casting
+      AttributeReference(fieldName.toString, dataType, true)()
     }
 
     val rowRdd = rdd.rdd.mapPartitions { iter =>

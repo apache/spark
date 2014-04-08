@@ -473,9 +473,10 @@ class SQLContext:
     def sql(self, sqlQuery):
         return SchemaRDD(self._jsql_ctx.sql(sqlQuery), self)
 
-    def applySchema(self, rdd):
+    def applySchema(self, rdd, fieldNames):
+        fieldNames = ListConverter().convert(fieldNames, self._sc._gateway._gateway_client)
         jrdd = self._sc._pythonToJava(rdd._jrdd)
-        srdd = self._jsql_ctx.applySchema(jrdd)
+        srdd = self._jsql_ctx.applySchema(jrdd, fieldNames)
         return SchemaRDD(srdd, self)
 
 
