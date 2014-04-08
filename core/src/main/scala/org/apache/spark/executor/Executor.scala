@@ -317,7 +317,7 @@ private[spark] class Executor(
       val userClassPathFirst: java.lang.Boolean =
         conf.getBoolean("spark.classpath.userClassPathFirst", false)
       try {
-        val klass = Class.forName("org.apache.spark.repl.FlexibleExecutorClassLoader")
+        val klass = Class.forName("org.apache.spark.repl.ExecutorClassLoader")
           .asInstanceOf[Class[_ <: ClassLoader]]
         val constructor = klass.getConstructor(classOf[String], classOf[ClassLoader],
           classOf[Boolean])
