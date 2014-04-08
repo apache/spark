@@ -19,7 +19,7 @@ __all__ = ["ResultIterable"]
 
 import collections
 
-class ResultIterable(collections.Iterator):
+class ResultIterable(collections.Iterable):
     """
     A special result iterable. This is used because the standard iterator can not be pickled
     """
