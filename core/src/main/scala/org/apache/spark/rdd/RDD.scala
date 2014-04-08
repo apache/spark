@@ -138,6 +138,8 @@ abstract class RDD[T: ClassTag](
         "Cannot change storage level of an RDD after it was already assigned a level")
     }
     sc.persistRDD(this)
+    // Register the RDD with the ContextCleaner for automatic GC-based cleanup
+    sc.cleaner.foreach(_.registerRDDForCleanup(this))
     storageLevel = newLevel
     this
   }
@@ -156,7 +158,7 @@ abstract class RDD[T: ClassTag](
    */
   def unpersist(blocking: Boolean = true): RDD[T] = {
     logInfo("Removing RDD " + id + " from persistence list")
-    sc.unpersistRDD(this, blocking)
+    sc.unpersistRDD(id, blocking)
     storageLevel = StorageLevel.NONE
     this
   }
@@ -1141,5 +1143,4 @@ abstract class RDD[T: ClassTag](
   def toJavaRDD() : JavaRDD[T] = {
     new JavaRDD(this)(elementClassTag)
   }
-
 }

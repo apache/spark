@@ -108,8 +108,7 @@ class JsonProtocolSuite extends FunSuite {
     // BlockId
     testBlockId(RDDBlockId(1, 2))
     testBlockId(ShuffleBlockId(1, 2, 3))
-    testBlockId(BroadcastBlockId(1L))
-    testBlockId(BroadcastHelperBlockId(BroadcastBlockId(2L), "Spark"))
+    testBlockId(BroadcastBlockId(1L, "insert_words_of_wisdom_here"))
     testBlockId(TaskResultBlockId(1L))
     testBlockId(StreamBlockId(1, 2L))
   }
@@ -555,4 +554,4 @@ class JsonProtocolSuite extends FunSuite {
       {"Event":"SparkListenerUnpersistRDD","RDD ID":12345}
     """
 
- }
+}
