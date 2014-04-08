@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
@@ -45,7 +46,8 @@ trait SchemaRDDLike {
 
   /**
    * Saves the contents of this `SchemaRDD` as a parquet file, preserving the schema.  Files that
-   * are written out using this method can be read back in as a SchemaRDD using the ``function
+   * are written out using this method can be read back in as a SchemaRDD using the `parquetFile`
+   * function.
    *
    * @group schema
    */
@@ -62,4 +64,41 @@ trait SchemaRDDLike {
   def registerAsTable(tableName: String): Unit = {
     sqlContext.registerRDDAsTable(baseSchemaRDD, tableName)
   }
+
+  /**
+   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+   *
+   * Adds the rows from this RDD to the specified table, optionally overwriting the existing data.
+   *
+   * @group schema
+   */
+  def insertInto(tableName: String, overwrite: Boolean): Unit =
+    sqlContext.executePlan(
+      InsertIntoTable(UnresolvedRelation(None, tableName), Map.empty, logicalPlan, overwrite)).toRdd
+
+  /**
+   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+   *
+   * Appends the rows from this RDD to the specified table.
+   *
+   * @group schema
+   */
+  def insertInto(tableName: String): Unit = insertInto(tableName, false)
+
+  /**
+   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+   *
+   * Creates a table from the the contents of this SchemaRDD.  This will fail if the table already
+   * exists.
+   *
+   * Note that this currently only works with SchemaRDDs that are created from a HiveContext as
+   * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
+   * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
+   * be the target of an `insertInto`.
+   *
+   * @param tableName
+   */
+  def createTableAs(tableName: String) =
+    sqlContext.executePlan(
+      InsertIntoCreatedTable(None, tableName, logicalPlan))
 }
