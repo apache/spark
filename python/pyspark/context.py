@@ -464,20 +464,49 @@ class SparkContext(object):
         return self._jsc.sc().sparkUser()
 
 class SQLContext:
+    """
+    Main entry point for SparkSQL functionality. A SQLContext can be used create L{SchemaRDD}s,
+    register L{SchemaRDD}s as tables, execute sql over tables, cache tables, and read parquet files.
+    """
 
     def __init__(self, sparkContext):
+        """
+        Create a new SQLContext.
+
+        @param sparkContext: The SparkContext to wrap.
+
+        >>> from pyspark.context import SQLContext
+        >>> sqlCtx = SQLContext(sc)
+        """
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
         self._ssql_ctx = self._jvm.SQLContext(self._jsc.sc())
 
+    def parquetFile(path):
+        jschema_rdd = self._ssql_ctx.parquetFile(path)
+        return SchemaRDD(jschema_rdd, self)
+
+    def registerRDDAsTable(rdd, tableName):
+        jschema_rdd = rdd._jschema_rdd
+        self._ssql_ctx.registerRDDAsTable(jschema_rdd, tableName)
+
     def sql(self, sqlQuery):
         return SchemaRDD(self._ssql_ctx.sql(sqlQuery), self)
+
+    def table(tableName):
+        return SchemaRDD(self._ssql_ctx.table(tableName), self)
+
+    def cacheTable(tableName):
+        self._ssql_ctx.cacheTable(tableName)
+
+    def uncacheTable(tableName):
+        self._ssql_ctx.uncacheTable(tableName)
 
     def applySchema(self, rdd):
         if (rdd.__class__ is SchemaRDD):
             raise Exception("Cannot apply schema to %s" % SchemaRDD.__name__)
-        elif type(rdd.first()) is not dict:
+        elif isinstance(rdd.first(), dict) is not dict:
             raise Exception("Only RDDs with dictionaries can be converted to %s" % SchemaRDD.__name__)
 
         jrdd = self._sc._pythonToJavaMap(rdd._jrdd)
