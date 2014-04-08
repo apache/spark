@@ -25,11 +25,13 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.{Subquery, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
 import org.apache.spark.sql.execution._
+import org.apache.spark.api.java.JavaRDD
 
 /**
  * <span class="badge" style="float: right; background-color: darkblue;">ALPHA COMPONENT</span>
@@ -238,4 +240,29 @@ class SQLContext(@transient val sparkContext: SparkContext)
      */
     def debugExec() = DebugQuery(executedPlan).execute().collect()
   }
+
+  def applySchema(rdd: RDD[Map[String, _]]): SchemaRDD = {
+    val schema = rdd.first.map { case (fieldName, obj) =>
+      val dataType = obj.getClass match {
+        case c: Class[_] if c == classOf[java.lang.String] => StringType
+        case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
+       // case c: Class[_] if c == java.lang.Short.TYPE => ShortType
+       // case c: Class[_] if c == java.lang.Integer.TYPE => IntegerType
+       // case c: Class[_] if c == java.lang.Long.TYPE => LongType
+       // case c: Class[_] if c == java.lang.Double.TYPE => DoubleType
+       // case c: Class[_] if c == java.lang.Byte.TYPE => ByteType
+       // case c: Class[_] if c == java.lang.Float.TYPE => FloatType
+       // case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
+      }
+      AttributeReference(fieldName, dataType, true)()
+    }.toSeq
+
+    val rowRdd = rdd.mapPartitions { iter =>
+      iter.map { map =>
+        new GenericRow(map.values.toArray.asInstanceOf[Array[Any]]): Row
+      }
+    }
+    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
+  }
+
 }

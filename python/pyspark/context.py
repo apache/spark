@@ -175,6 +175,7 @@ class SparkContext(object):
                 SparkContext._jvm = SparkContext._gateway.jvm
                 SparkContext._writeToFile = SparkContext._jvm.PythonRDD.writeToFile
                 SparkContext._pythonToJava = SparkContext._jvm.PythonRDD.pythonToJava
+                SparkContext._pythonToJavaMap = SparkContext._jvm.PythonRDD.pythonToJavaMap
                 SparkContext._javaToPython = SparkContext._jvm.PythonRDD.javaToPython
 
             if instance:
@@ -468,15 +469,18 @@ class SQLContext:
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
-        self._jsql_ctx = self._jvm.JavaSQLContext(self._jsc)
+        self._ssql_ctx = self._jvm.SQLContext(self._jsc.sc())
 
     def sql(self, sqlQuery):
-        return SchemaRDD(self._jsql_ctx.sql(sqlQuery), self)
+        return SchemaRDD(self._ssql_ctx.sql(sqlQuery), self)
 
-    def applySchema(self, rdd, fieldNames):
-        fieldNames = ListConverter().convert(fieldNames, self._sc._gateway._gateway_client)
-        jrdd = self._sc._pythonToJava(rdd._jrdd)
-        srdd = self._jsql_ctx.applySchema(jrdd, fieldNames)
+    def applySchema(self, rdd):
+        first = rdd.first()
+        if (rdd.__class__ is SchemaRDD):
+            raise Exception("Cannot apply schema to %s" % SchemaRDD.__name__)
+
+        jrdd = self._sc._pythonToJavaMap(rdd._jrdd)
+        srdd = self._ssql_ctx.applySchema(jrdd.rdd())
         return SchemaRDD(srdd, self)
 
 

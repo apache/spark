@@ -300,6 +300,20 @@ object PythonRDD {
     }
   }
 
+  def pythonToJavaMap(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Map[String, _]] = {
+    pyRDD.rdd.mapPartitions { iter =>
+      val unpickle = new Unpickler
+      // TODO: Figure out why flatMap is necessay for pyspark
+      iter.flatMap { row =>
+        unpickle.loads(row) match {
+          case objs: java.util.ArrayList[JMap[String, _]] => objs.map(_.toMap)
+          // Incase the partition doesn't have a collection
+          case obj: JMap[String, _] => Seq(obj.toMap)
+        }
+      }
+    }
+  }
+
   def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
     jRDD.rdd.mapPartitions { iter =>
       val unpickle = new Pickler

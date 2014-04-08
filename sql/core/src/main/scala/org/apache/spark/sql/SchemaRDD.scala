@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import net.razorvine.pickle.{Pickler, Unpickler}
+
 import org.apache.spark.{Dependency, OneToOneDependency, Partition, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
@@ -24,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.types.BooleanType
+import org.apache.spark.api.java.JavaRDD
 
 /**
  * <span class="badge" style="float: right; background-color: darkblue;">ALPHA COMPONENT</span>
@@ -307,4 +310,14 @@ class SchemaRDD(
 
   /** FOR INTERNAL USE ONLY */
   def analyze = sqlContext.analyzer(logicalPlan)
+
+  def javaToPython: JavaRDD[Array[Byte]] = {
+    this.mapPartitions { iter =>
+      val unpickle = new Pickler
+      iter.map { row =>
+        val fields: Array[Any] = (for (i <- 0 to row.length - 1) yield row(i)).toArray
+        unpickle.dumps(fields)
+      }
+    }
+  }
 }

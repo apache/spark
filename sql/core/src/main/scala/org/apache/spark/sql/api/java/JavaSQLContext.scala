@@ -18,6 +18,7 @@
 package org.apache.spark.sql.api.java
 
 import java.beans.{Introspector, PropertyDescriptor}
+import java.util.{Map => JMap}
 
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.sql.SQLContext
@@ -77,42 +78,6 @@ class JavaSQLContext(sparkContext: JavaSparkContext) {
 
       iter.map { row =>
         new GenericRow(extractors.map(e => e.invoke(row)).toArray[Any]): ScalaRow
-      }
-    }
-    new JavaSchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
-  }
-
-  /**
-   * Applies a schema to an RDD of Array[Any]
-   */
-  def applySchema(rdd: JavaRDD[_], fieldNames: java.util.ArrayList[Any]): JavaSchemaRDD = {
-    val fields = rdd.first match {
-      case row: java.util.ArrayList[_] => row.toArray.map(_.getClass)
-      case row => throw new Exception(s"Rows must be Lists 1 ${row.getClass}")
-    }
-
-    val schema = fields.zip(fieldNames.toArray).map { case (klass, fieldName) =>
-      val dataType = klass match {
-        case c: Class[_] if c == classOf[java.lang.String] => StringType
-        case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
-       // case c: Class[_] if c == java.lang.Short.TYPE => ShortType
-       // case c: Class[_] if c == java.lang.Integer.TYPE => IntegerType
-       // case c: Class[_] if c == java.lang.Long.TYPE => LongType
-       // case c: Class[_] if c == java.lang.Double.TYPE => DoubleType
-       // case c: Class[_] if c == java.lang.Byte.TYPE => ByteType
-       // case c: Class[_] if c == java.lang.Float.TYPE => FloatType
-       // case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
-      }
-
-      println(fieldName.toString)
-      // TODO: No bueno, fieldName.toString used because I can't figure out the casting
-      AttributeReference(fieldName.toString, dataType, true)()
-    }
-
-    val rowRdd = rdd.rdd.mapPartitions { iter =>
-      iter.map {
-        case row: java.util.ArrayList[_] => new GenericRow(row.toArray.asInstanceOf[Array[Any]]): ScalaRow
-        case row => throw new Exception(s"Rows must be Lists 2 ${row.getClass}")
       }
     }
     new JavaSchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
