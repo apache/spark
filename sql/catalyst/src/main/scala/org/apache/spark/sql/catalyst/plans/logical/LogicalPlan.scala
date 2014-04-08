@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.types.StructType
+import org.apache.spark.sql.catalyst.types.{DataType, ArrayType, StructType}
 import org.apache.spark.sql.catalyst.trees
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
@@ -54,9 +54,41 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   /**
    * Optionally resolves the given string to a
    * [[catalyst.expressions.NamedExpression NamedExpression]]. The attribute is expressed as
-   * as string in the following form: `[scope].AttributeName.[nested].[fields]...`.
+   * as string in the following form: `[scope].AttributeName.[nested].[fields]...`. Fields
+   * can contain ordinal expressions, such as `field[i][j][k]...`.
    */
   def resolve(name: String): Option[NamedExpression] = {
+    def expandFunc(expType: (Expression, DataType), field: String): (Expression, DataType) = {
+      val (exp, t) = expType
+      val ordinalRegExp = """(\[(\d+)\])""".r
+      val fieldName = if (field.matches("\\w*(\\[\\d\\])+")) {
+        field.substring(0, field.indexOf("["))
+      } else {
+        field
+      }
+      t match {
+        case ArrayType(elementType) =>
+          val ordinals = ordinalRegExp.findAllIn(field).matchData.map(_.group(2))
+          (ordinals.foldLeft(exp)((v1: Expression, v2: String) => GetItem(v1, Literal(v2.toInt))), elementType)
+        case StructType(fields) =>
+          // Note: this only works if we are not on the top-level!
+          val structField = fields.find(_.name == fieldName)
+          if (!structField.isDefined) {
+            throw new TreeNodeException(
+              this, s"Trying to resolve Attribute but field ${fieldName} is not defined")
+          }
+          structField.get.dataType match {
+            case ArrayType(elementType) =>
+              val ordinals = ordinalRegExp.findAllIn(field).matchData.map(_.group(2))
+              (ordinals.foldLeft(GetField(exp, fieldName).asInstanceOf[Expression])((v1: Expression, v2: String) => GetItem(v1, Literal(v2.toInt))), elementType)
+            case _ =>
+              (GetField(exp, fieldName), structField.get.dataType)
+          }
+        case _ =>
+          expType
+      }
+    }
+
     val parts = name.split("\\.")
     // Collect all attributes that are output by this nodes children where either the first part
     // matches the name or where the first part matches the scope and the second part matches the
@@ -67,16 +99,40 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
       val remainingParts =
         if (option.qualifiers.contains(parts.head) && parts.size > 1) parts.drop(1) else parts
       if (option.name == remainingParts.head) (option, remainingParts.tail.toList) :: Nil else Nil
+      // TODO from rebase!
+      /*val remainingParts = if (option.qualifiers contains parts.head) parts.drop(1) else parts
+      val relevantRemaining =
+        if (remainingParts.head.matches("\\w*\\[(\\d+)\\]")) { // array field name
+          remainingParts.head.substring(0, remainingParts.head.indexOf("["))
+        } else {
+          remainingParts.head
+        }
+      if (option.name == relevantRemaining) (option, remainingParts.tail.toList) :: Nil else Nil*/
     }
 
     options.distinct match {
-      case (a, Nil) :: Nil => Some(a) // One match, no nested fields, use it.
+      case (a, Nil) :: Nil => {
+        a.dataType match {
+          case ArrayType(elementType) =>
+            val expression = expandFunc((a: Expression, a.dataType), name)._1
+            Some(Alias(expression, name)())
+          case _ => Some(a)
+        }
+      } // One match, no nested fields, use it.
       // One match, but we also need to extract the requested nested field.
       case (a, nestedFields) :: Nil =>
         a.dataType match {
           case StructType(fields) =>
-            Some(Alias(nestedFields.foldLeft(a: Expression)(GetField), nestedFields.last)())
-          case _ => None // Don't know how to resolve these field references
+            // this is compatibility reasons with earlier code! TODO: why only nestedFields and not parts?
+            if ((parts(0) :: nestedFields).forall(!_.matches("\\w*\\[\\d+\\]+"))) { // not nested arrays, only fields
+              Some(Alias(nestedFields.foldLeft(a: Expression)(GetField), nestedFields.last)())
+            } else {
+              val expression = parts.foldLeft((a: Expression, a.dataType))(expandFunc)._1
+              Some(Alias(expression, nestedFields.last)())
+            }
+          case _ =>
+            val expression = parts.foldLeft((a: Expression, a.dataType))(expandFunc)._1
+            Some(Alias(expression, nestedFields.last)())
         }
       case Nil => None         // No matches.
       case ambiguousReferences =>

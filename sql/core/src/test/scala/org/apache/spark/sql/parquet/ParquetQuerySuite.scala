@@ -34,6 +34,11 @@ import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.IntegerType
 import org.apache.spark.util.Utils
+import org.apache.spark.sql.catalyst.types.{StringType, IntegerType, DataType}
+import org.apache.spark.sql.{parquet, SchemaRDD}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import scala.Tuple2
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 
 // Implicits
 import org.apache.spark.sql.test.TestSQLContext._
@@ -432,9 +437,9 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(result(0)(2)(0) === (1.toLong << 32))
     assert(result(0)(2)(1) === (1.toLong << 33))
     assert(result(0)(2)(2) === (1.toLong << 34))
-    assert(result(0)(3).size === 2)
-    assert(result(0)(3)(0) === 2.5)
-    assert(result(0)(3)(1) === false)
+    assert(result(0)(3)(0).size === 2)
+    assert(result(0)(3)(0)(0) === 2.5)
+    assert(result(0)(3)(0)(1) === false)
     assert(result(0)(4).size === 2)
     assert(result(0)(4)(0).size === 2)
     assert(result(0)(4)(1).size === 1)
@@ -452,23 +457,61 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(tmp(0)(0) === "Julien Le Dem")
   }
 
+  test("Projection in addressbook") {
+    implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
+    val data = TestSQLContext
+      .parquetFile(ParquetTestData.testNestedDir1.toString)
+      .toSchemaRDD
+    data.registerAsTable("data")
+    val tmp = sql("SELECT owner, contacts[1].name FROM data").collect()
+    assert(tmp.size === 2)
+    assert(tmp(0).size === 2)
+    assert(tmp(0)(0) === "Julien Le Dem")
+    assert(tmp(0)(1) === "Chris Aniszczyk")
+    assert(tmp(1)(0) === "A. Nonymous")
+    assert(tmp(1)(1) === null)
+  }
+
   test("Simple query on nested int data") {
     implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
     val data = TestSQLContext
       .parquetFile(ParquetTestData.testNestedDir2.toString)
       .toSchemaRDD
     data.registerAsTable("data")
-    val tmp = sql("SELECT booleanNumberPairs.value, booleanNumberPairs.truth FROM data").collect()
-    assert(tmp(0)(0) === 2.5)
-    assert(tmp(0)(1) === false)
-    val result = sql("SELECT outerouter FROM data").collect()
-    // TODO: why does this not work?
-    //val result = sql("SELECT outerouter.values FROM data").collect()
-    // TODO: .. or this:
-    // val result = sql("SELECT outerouter[0] FROM data").collect()
-    assert(result(0)(0)(0)(0)(0) === 7)
-    assert(result(0)(0)(0)(1)(0) === 8)
-    assert(result(0)(0)(1)(0)(0) === 9)
+    val result1 = sql("SELECT entries[0].value FROM data").collect()
+    assert(result1.size === 1)
+    assert(result1(0).size === 1)
+    assert(result1(0)(0) === 2.5)
+    val result2 = sql("SELECT entries[0] FROM data").collect()
+    assert(result2.size === 1)
+    assert(result2(0)(0).size === 2)
+    assert(result2(0)(0)(0) === 2.5)
+    assert(result2(0)(0)(1) === false)
+    val result3 = sql("SELECT outerouter FROM data").collect()
+    assert(result3(0)(0)(0)(0)(0) === 7)
+    assert(result3(0)(0)(0)(1)(0) === 8)
+    assert(result3(0)(0)(1)(0)(0) === 9)
+  }
+
+  test("nested structs") {
+    implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
+    ParquetTestData.writeNestedFile3()
+    val data = TestSQLContext
+      .parquetFile(ParquetTestData.testNestedDir3.toString)
+      .toSchemaRDD
+    data.registerAsTable("data")
+    val result1 = sql("SELECT booleanNumberPairs[0].value[0].truth FROM data").collect()
+    assert(result1.size === 1)
+    assert(result1(0).size === 1)
+    assert(result1(0)(0) === false)
+    val result2 = sql("SELECT booleanNumberPairs[0].value[1].truth FROM data").collect()
+    assert(result2.size === 1)
+    assert(result2(0).size === 1)
+    assert(result2(0)(0) === true)
+    val result3 = sql("SELECT booleanNumberPairs[1].value[0].truth FROM data").collect()
+    assert(result3.size === 1)
+    assert(result3(0).size === 1)
+    assert(result3(0)(0) === false)
   }
 
   /**

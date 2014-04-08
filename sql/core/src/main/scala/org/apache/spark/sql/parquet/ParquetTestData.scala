@@ -139,7 +139,7 @@ private[sql] object ParquetTestData {
         |optional group longs {
           |repeated int64 values;
         |}
-        |required group booleanNumberPairs {
+        |repeated group entries {
           |required double value;
           |optional boolean truth;
         |}
@@ -153,8 +153,23 @@ private[sql] object ParquetTestData {
       |}
     """.stripMargin
 
+  val testNestedSchema3 =
+    """
+      |message TestNested3 {
+      |required int32 x;
+        |repeated group booleanNumberPairs {
+          |required int32 key;
+          |repeated group value {
+            |required double nestedValue;
+            |optional boolean truth;
+          |}
+        |}
+      |}
+    """.stripMargin
+
   val testNestedDir1 = Utils.createTempDir()
   val testNestedDir2 = Utils.createTempDir()
+  val testNestedDir3 = Utils.createTempDir()
 
   lazy val testNestedData1 = new ParquetRelation(testNestedDir1.toURI.toString)
   lazy val testNestedData2 = new ParquetRelation(testNestedDir2.toURI.toString)
@@ -285,6 +300,32 @@ private[sql] object ParquetTestData {
     writer.close()
   }
 
+  def writeNestedFile3() {
+    testNestedDir3.delete()
+    val path: Path = testNestedDir3
+    val schema: MessageType = MessageTypeParser.parseMessageType(testNestedSchema3)
+
+    val r1 = new SimpleGroup(schema)
+    r1.add(0, 1)
+    val g1 = r1.addGroup(1)
+    g1.add(0, 1)
+    val ng1 = g1.addGroup(1)
+    ng1.add(0, 1.5)
+    ng1.add(1, false)
+    val ng2 = g1.addGroup(1)
+    ng2.add(0, 2.5)
+    ng2.add(1, true)
+    val g2 = r1.addGroup(1)
+    g2.add(0, 2)
+    val ng3 = g2.addGroup(1)
+    ng3.add(0, 3.5)
+    ng3.add(1, false)
+
+    val writeSupport = new TestGroupWriteSupport(schema)
+    val writer = new ParquetWriter[Group](path, writeSupport)
+    writer.write(r1)
+    writer.close()
+  }
 
   def readNestedFile(path: File, schemaString: String): Unit = {
     val configuration = new Configuration()

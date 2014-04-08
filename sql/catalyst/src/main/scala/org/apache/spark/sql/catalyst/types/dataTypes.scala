@@ -29,11 +29,15 @@ abstract class DataType {
     case e: Expression if e.dataType == this => true
     case _ => false
   }
+
+  def isPrimitive(): Boolean = false
 }
 
 case object NullType extends DataType
 
-trait PrimitiveType
+trait PrimitiveType extends DataType {
+  override def isPrimitive() = true
+}
 
 abstract class NativeType extends DataType {
   type JvmType
