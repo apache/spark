@@ -1387,6 +1387,42 @@ class PipelinedRDD(RDD):
     def _is_pipelinable(self):
         return not (self.is_cached or self.is_checkpointed)
 
+class Row(dict):
+
+    def __init__(self, d):
+        d.update(self.__dict__)
+        self.__dict__ = d
+        dict.__init__(self, d)
+
+class SchemaRDD(RDD):
+
+    def __init__(self, jschema_rdd, sql_ctx):
+        self.sql_ctx = sql_ctx
+        self._sc = sql_ctx._sc
+        self._jschema_rdd = jschema_rdd
+
+        self.is_cached = False
+        self.is_checkpointed = False
+        self.ctx = self.sql_ctx._sc
+        self._jrdd_deserializer = self.ctx.serializer
+
+    @property
+    def _jrdd(self):
+        return self.toPython()._jrdd
+
+    @property
+    def _id(self):
+        return self._jrdd.id()
+
+    def registerAsTable(self, name):
+        self._jschema_rdd.registerAsTable(name)
+
+    def toPython(self):
+        jrdd = self._jschema_rdd.javaToPython()
+        # TODO: This is inefficient, we should construct the Python Row object
+        # in Java land in the javaToPython function. May require a custom
+        # pickle serializer in Pyrolite
+        return RDD(jrdd, self._sc, self._sc.serializer).map(lambda d: Row(d))
 
 def _test():
     import doctest

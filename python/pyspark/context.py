@@ -32,7 +32,7 @@ from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deseria
         PairDeserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark import rdd
-from pyspark.rdd import RDD
+from pyspark.rdd import RDD, SchemaRDD
 
 from py4j.java_collections import ListConverter
 
@@ -174,6 +174,9 @@ class SparkContext(object):
                 SparkContext._gateway = gateway or launch_gateway()
                 SparkContext._jvm = SparkContext._gateway.jvm
                 SparkContext._writeToFile = SparkContext._jvm.PythonRDD.writeToFile
+                SparkContext._pythonToJava = SparkContext._jvm.PythonRDD.pythonToJava
+                SparkContext._pythonToJavaMap = SparkContext._jvm.PythonRDD.pythonToJavaMap
+                SparkContext._javaToPython = SparkContext._jvm.PythonRDD.javaToPython
 
             if instance:
                 if SparkContext._active_spark_context and SparkContext._active_spark_context != instance:
@@ -459,6 +462,28 @@ class SparkContext(object):
         Get SPARK_USER for user who is running SparkContext.
         """
         return self._jsc.sc().sparkUser()
+
+class SQLContext:
+
+    def __init__(self, sparkContext):
+        self._sc = sparkContext
+        self._jsc = self._sc._jsc
+        self._jvm = self._sc._jvm
+        self._ssql_ctx = self._jvm.SQLContext(self._jsc.sc())
+
+    def sql(self, sqlQuery):
+        return SchemaRDD(self._ssql_ctx.sql(sqlQuery), self)
+
+    def applySchema(self, rdd):
+        if (rdd.__class__ is SchemaRDD):
+            raise Exception("Cannot apply schema to %s" % SchemaRDD.__name__)
+        elif type(rdd.first()) is not dict:
+            raise Exception("Only RDDs with dictionaries can be converted to %s" % SchemaRDD.__name__)
+
+        jrdd = self._sc._pythonToJavaMap(rdd._jrdd)
+        srdd = self._ssql_ctx.applySchema(jrdd.rdd())
+        return SchemaRDD(srdd, self)
+
 
 def _test():
     import atexit

@@ -25,6 +25,8 @@ import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collectio
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
+import net.razorvine.pickle.{Pickler, Unpickler}
+
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
 import org.apache.spark.broadcast.Broadcast
@@ -206,7 +208,7 @@ private object SpecialLengths {
   val TIMING_DATA = -3
 }
 
-private[spark] object PythonRDD {
+object PythonRDD {
   val UTF8 = Charset.forName("UTF-8")
 
   def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
@@ -284,6 +286,42 @@ private[spark] object PythonRDD {
     file.close()
   }
 
+  def pythonToJava(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[_] = {
+    pyRDD.rdd.mapPartitions { iter =>
+      val unpickle = new Unpickler
+      // TODO: Figure out why flatMap is necessay for pyspark
+      iter.flatMap { row =>
+        unpickle.loads(row) match {
+          case objs: java.util.ArrayList[Any] => objs
+          // Incase the partition doesn't have a collection
+          case obj => Seq(obj)
+        }
+      }
+    }
+  }
+
+  def pythonToJavaMap(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Map[String, _]] = {
+    pyRDD.rdd.mapPartitions { iter =>
+      val unpickle = new Unpickler
+      // TODO: Figure out why flatMap is necessay for pyspark
+      iter.flatMap { row =>
+        unpickle.loads(row) match {
+          case objs: java.util.ArrayList[JMap[String, _]] => objs.map(_.toMap)
+          // Incase the partition doesn't have a collection
+          case obj: JMap[String, _] => Seq(obj.toMap)
+        }
+      }
+    }
+  }
+
+  def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
+    jRDD.rdd.mapPartitions { iter =>
+      val unpickle = new Pickler
+      iter.map { row =>
+        unpickle.dumps(row)
+      }
+    }
+  }
 }
 
 private

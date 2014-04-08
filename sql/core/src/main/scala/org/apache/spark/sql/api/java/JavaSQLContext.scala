@@ -18,6 +18,7 @@
 package org.apache.spark.sql.api.java
 
 import java.beans.{Introspector, PropertyDescriptor}
+import java.util.{Map => JMap}
 
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.sql.SQLContext
@@ -81,7 +82,6 @@ class JavaSQLContext(sparkContext: JavaSparkContext) {
     }
     new JavaSchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
   }
-
 
   /**
    * Loads a parquet file, returning the result as a [[JavaSchemaRDD]].
