@@ -117,7 +117,7 @@ private[spark] class SparkUI(
    */
   private[spark] def appUIHostPort = publicHost + ":" + boundPort
 
-  private[spark] def appUIAddress = s"http://appUIHostPort"
+  private[spark] def appUIAddress = s"http://$appUIHostPort"
 
 }
 
