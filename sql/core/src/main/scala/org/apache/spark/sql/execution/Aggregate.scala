@@ -56,9 +56,9 @@ case class Aggregate(
 
   // HACK: Generators don't correctly preserve their output through serializations so we grab
   // out child's output attributes statically here.
-  val childOutput = child.output
+  private[this] val childOutput = child.output
 
-  def output = aggregateExpressions.map(_.toAttribute)
+  override def output = aggregateExpressions.map(_.toAttribute)
 
   /**
    * An aggregate that needs to be computed for each row in a group.
@@ -75,7 +75,7 @@ case class Aggregate(
 
   /** A list of aggregates that need to be computed for each group. */
   @transient
-  lazy val computedAggregates = aggregateExpressions.flatMap { agg =>
+  private[this] lazy val computedAggregates = aggregateExpressions.flatMap { agg =>
     agg.collect {
       case a: AggregateExpression =>
         ComputedAggregate(
@@ -87,10 +87,10 @@ case class Aggregate(
 
   /** The schema of the result of all aggregate evaluations */
   @transient
-  lazy val computedSchema = computedAggregates.map(_.resultAttribute)
+  private[this] lazy val computedSchema = computedAggregates.map(_.resultAttribute)
 
   /** Creates a new aggregate buffer for a group. */
-  def newAggregateBuffer(): Array[AggregateFunction] = {
+  private[this] def newAggregateBuffer(): Array[AggregateFunction] = {
     val buffer = new Array[AggregateFunction](computedAggregates.length)
     var i = 0
     while (i < computedAggregates.length) {
@@ -102,7 +102,7 @@ case class Aggregate(
 
   /** Named attributes used to substitute grouping attributes into the final result. */
   @transient
-  lazy val namedGroups = groupingExpressions.map {
+  private[this] lazy val namedGroups = groupingExpressions.map {
     case ne: NamedExpression => ne -> ne.toAttribute
     case e => e -> Alias(e, s"groupingExpr:$e")().toAttribute
   }
@@ -112,7 +112,7 @@ case class Aggregate(
    * expression into the final result expression.
    */
   @transient
-  lazy val resultMap =
+  private[this] lazy val resultMap =
     (computedAggregates.map { agg => agg.unbound -> agg.resultAttribute} ++ namedGroups).toMap
 
   /**
@@ -120,13 +120,13 @@ case class Aggregate(
    * output rows given a group and the result of all aggregate computations.
    */
   @transient
-  lazy val resultExpressions = aggregateExpressions.map { agg =>
+  private[this] lazy val resultExpressions = aggregateExpressions.map { agg =>
     agg.transform {
       case e: Expression if resultMap.contains(e) => resultMap(e)
     }
   }
 
-  def execute() = attachTree(this, "execute") {
+  override def execute() = attachTree(this, "execute") {
     if (groupingExpressions.isEmpty) {
       child.execute().mapPartitions { iter =>
         val buffer = newAggregateBuffer()
