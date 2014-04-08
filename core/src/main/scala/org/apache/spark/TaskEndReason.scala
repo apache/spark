@@ -17,16 +17,16 @@
 
 package org.apache.spark
 
+import org.apache.spark.annotations.DeveloperAPI
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 
 /**
- * <span class="developer badge">Developer API</span>
  * Various possible reasons why a task ended. The low-level TaskScheduler is supposed to retry
  * tasks several times for "ephemeral" failures, and only report back failures that require some
  * old stages to be resubmitted, such as shuffle map fetch failures.
  */
-
+@DeveloperAPI
 sealed trait TaskEndReason
 
 /** <span class="developer badge">Developer API</span> */
