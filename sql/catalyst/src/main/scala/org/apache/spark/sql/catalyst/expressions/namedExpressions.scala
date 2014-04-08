@@ -79,7 +79,7 @@ case class Alias(child: Expression, name: String)
 
   type EvaluatedType = Any
 
-  override def apply(input: Row) = child.apply(input)
+  override def eval(input: Row) = child.eval(input)
 
   def dataType = child.dataType
   def nullable = child.nullable
