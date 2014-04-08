@@ -1,16 +1,14 @@
 *.class
-
 # Package Files #
 *.jar
 *.war
 *.ear
-
 .RData
 .Rhistory
-
 target/
 lib/
 work/
-
 # vim tmps
 .*.swp
+.Rproj.user
+SparkR-pkg.Rproj
