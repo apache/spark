@@ -26,8 +26,17 @@ private[spark]
 class StageInfo(val stageId: Int, val name: String, val numTasks: Int, val rddInfo: RDDInfo) {
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
+  /** Time when all tasks in the stage completed or when the stage was cancelled. */
   var completionTime: Option[Long] = None
+  /** If the stage failed, the reason why. */
+  var failureReason: Option[String] = None
+
   var emittedTaskSizeWarning = false
+
+  def stageFailed(reason: String) {
+    failureReason = Some(reason)
+    completionTime = Some(System.currentTimeMillis)
+  }
 }
 
 private[spark]

@@ -141,7 +141,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
   private def awaitResult(): Try[T] = {
     jobWaiter.awaitResult() match {
       case JobSucceeded => scala.util.Success(resultFunc)
-      case JobFailed(e: Exception, _) => scala.util.Failure(e)
+      case JobFailed(e: Exception) => scala.util.Failure(e)
     }
   }
 }

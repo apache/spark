@@ -71,7 +71,7 @@ private[spark] case object SparkListenerShutdown extends SparkListenerEvent
  */
 trait SparkListener {
   /**
-   * Called when a stage is completed, with information on the completed stage
+   * Called when a stage completes successfully or fails, with information on the completed stage.
    */
   def onStageCompleted(stageCompleted: SparkListenerStageCompleted) { }
 

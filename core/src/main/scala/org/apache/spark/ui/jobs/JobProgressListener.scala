@@ -74,8 +74,13 @@ private[ui] class JobProgressListener(conf: SparkConf) extends SparkListener {
     // Remove by stageId, rather than by StageInfo, in case the StageInfo is from storage
     poolToActiveStages(stageIdToPool(stageId)).remove(stageId)
     activeStages.remove(stageId)
-    completedStages += stage
-    trimIfNecessary(completedStages)
+    if (stage.failureReason.isEmpty) {
+      completedStages += stage
+      trimIfNecessary(completedStages)
+    } else {
+      failedStages += stage
+      trimIfNecessary(failedStages)
+    }
   }
 
   /** If stages is too large, remove and garbage collect old stages */
@@ -212,20 +217,6 @@ private[ui] class JobProgressListener(conf: SparkConf) extends SparkListener {
       val taskMap = stageIdToTaskData.getOrElse(sid, HashMap[Long, TaskUIData]())
       taskMap(info.taskId) = new TaskUIData(info, metrics, failureInfo)
       stageIdToTaskData(sid) = taskMap
-    }
-  }
-
-  override def onJobEnd(jobEnd: SparkListenerJobEnd) = synchronized {
-    jobEnd.jobResult match {
-      case JobFailed(_, stageId) =>
-        activeStages.get(stageId).foreach { s =>
-          // Remove by stageId, rather than by StageInfo, in case the StageInfo is from storage
-          activeStages.remove(s.stageId)
-          poolToActiveStages(stageIdToPool(stageId)).remove(s.stageId)
-          failedStages += s
-          trimIfNecessary(failedStages)
-        }
-      case _ =>
     }
   }
 
