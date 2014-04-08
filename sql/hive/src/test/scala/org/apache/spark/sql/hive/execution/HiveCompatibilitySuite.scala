@@ -18,6 +18,17 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.hive.TestHive
+import org.scalatest.BeforeAndAfter
+
+class HiveInMemoryCompatibilitySuite extends HiveCompatibilitySuite with BeforeAndAfter {
+  override def beforeAll() {
+    TestHive.cacheTables = true
+  }
+
+  override def afterAll() {
+    TestHive.cacheTables = false
+  }
+}
 
 /**
  * Runs the test cases that are included in the hive distribution.
