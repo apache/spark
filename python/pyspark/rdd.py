@@ -1414,7 +1414,38 @@ class SchemaRDD(RDD):
     def _id(self):
         return self._jrdd.id()
 
+    def saveAsParquetFile(self, path):
+        """
+        Saves the contents of this L{SchemaRDD} as a parquet file, preserving the schema.  Files
+        that are written out using this method can be read back in as a SchemaRDD using the
+        L{SQLContext.parquetFile} method.
+
+        >>> from pyspark.context import SQLContext
+        >>> sqlCtx = SQLContext(sc)
+        >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
+        ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
+        >>> srdd = sqlCtx.applySchema(rdd)
+        >>> srdd.saveAsParquetFile("/tmp/test.parquet")
+        >>> srdd2 = sqlCtx.parquetFile("/tmp/test.parquet")
+        >>> srdd2.collect() == srdd.collect()
+        True
+        """
+        self._jschema_rdd.saveAsParquetFile(path)
+
     def registerAsTable(self, name):
+        """
+        Registers this RDD as a temporary table using the given name.  The lifetime of this temporary
+        table is tied to the L{SQLContext} that was used to create this SchemaRDD.
+        >>> from pyspark.context import SQLContext
+        >>> sqlCtx = SQLContext(sc)
+        >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
+        ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
+        >>> srdd = sqlCtx.applySchema(rdd)
+        >>> srdd.registerAsTable("test")
+        >>> srdd2 = sqlCtx.sql("select * from test")
+        >>> srdd.collect() == srdd2.collect()
+        True
+        """
         self._jschema_rdd.registerAsTable(name)
 
     def toPython(self):

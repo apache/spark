@@ -475,19 +475,13 @@ class SQLContext:
 
         @param sparkContext: The SparkContext to wrap.
 
-        # SQLContext
         >>> from pyspark.context import SQLContext
         >>> sqlCtx = SQLContext(sc)
 
         >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
         ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
 
-        # applySchema
         >>> srdd = sqlCtx.applySchema(rdd)
-
-        >>> srdd.collect() == [{"field1" : 1, "field2" : "row1"}, {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}]
-        True
-
         >>> sqlCtx.applySchema(srdd) # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
@@ -498,21 +492,6 @@ class SQLContext:
         Traceback (most recent call last):
             ...
         ValueError:...
-
-        # registerRDDAsTable
-        >>> sqlCtx.registerRDDAsTable(srdd, "table1")
-
-        # sql
-        >>> srdd2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2 from table1")
-        >>> srdd2.collect() == [{"f1" : 1, "f2" : "row1"}, {"f1" : 2, "f2": "row2"}, {"f1" : 3, "f2": "row3"}]
-        True
-
-        # table
-        #>>> sqlCtx.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-        #>>> sqlCtx.sql('INSERT INTO src (key, value) VALUES (1, "one")')
-        #>>> sqlCtx.sql('INSERT INTO src (key, value) VALUES (2, "two")')
-        #>>> srdd3 = sqlCtx.table("src")
-        #>>> srdd3.collect() == [{"key" : 1, "value" : "one"}, {"key" : 2, "value": "two"}]
         """
         self._sc = sparkContext
         self._jsc = self._sc._jsc
@@ -523,6 +502,14 @@ class SQLContext:
         """
         Infer and apply a schema to an RDD of L{dict}s. We peek at the first row of the RDD to
         determine the fields names and types, and then use that to extract all the dictionaries.
+
+        >>> from pyspark.context import SQLContext
+        >>> sqlCtx = SQLContext(sc)
+        >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
+        ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
+        >>> srdd = sqlCtx.applySchema(rdd)
+        >>> srdd.collect() == [{"field1" : 1, "field2" : "row1"}, {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}]
+        True
         """
         if (rdd.__class__ is SchemaRDD):
             raise ValueError("Cannot apply schema to %s" % SchemaRDD.__name__)
@@ -538,6 +525,12 @@ class SQLContext:
         """
         Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
         during the lifetime of this instance of SQLContext.
+        >>> from pyspark.context import SQLContext
+        >>> sqlCtx = SQLContext(sc)
+        >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
+        ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
+        >>> srdd = sqlCtx.applySchema(rdd)
+        >>> sqlCtx.registerRDDAsTable(srdd, "table1")
         """
         if (rdd.__class__ is SchemaRDD):
             jschema_rdd = rdd._jschema_rdd
@@ -545,9 +538,19 @@ class SQLContext:
         else:
             raise ValueError("Can only register SchemaRDD as table")
 
-    def parquetFile(path):
+    def parquetFile(self, path):
         """
         Loads a Parquet file, returning the result as a L{SchemaRDD}.
+
+        >>> from pyspark.context import SQLContext
+        >>> sqlCtx = SQLContext(sc)
+        >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
+        ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
+        >>> srdd = sqlCtx.applySchema(rdd)
+        >>> srdd.saveAsParquetFile("/tmp/tmp.parquet")
+        >>> srdd2 = sqlCtx.parquetFile("/tmp/tmp.parquet")
+        >>> srdd.collect() == srdd2.collect()
+        True
         """
         jschema_rdd = self._ssql_ctx.parquetFile(path)
         return SchemaRDD(jschema_rdd, self)
@@ -555,12 +558,31 @@ class SQLContext:
     def sql(self, sqlQuery):
         """
         Executes a SQL query using Spark, returning the result as a L{SchemaRDD}.
+
+        >>> from pyspark.context import SQLContext
+        >>> sqlCtx = SQLContext(sc)
+        >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
+        ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
+        >>> srdd = sqlCtx.applySchema(rdd)
+        >>> sqlCtx.registerRDDAsTable(srdd, "table1")
+        >>> srdd2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2 from table1")
+        >>> srdd2.collect() == [{"f1" : 1, "f2" : "row1"}, {"f1" : 2, "f2": "row2"}, {"f1" : 3, "f2": "row3"}]
+        True
         """
         return SchemaRDD(self._ssql_ctx.sql(sqlQuery), self)
 
     def table(self, tableName):
         """
         Returns the specified table as a L{SchemaRDD}.
+        >>> from pyspark.context import SQLContext
+        >>> sqlCtx = SQLContext(sc)
+        >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
+        ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
+        >>> srdd = sqlCtx.applySchema(rdd)
+        >>> sqlCtx.registerRDDAsTable(srdd, "table1")
+        >>> srdd2 = sqlCtx.table("table1")
+        >>> srdd.collect() == srdd2.collect()
+        True
         """
         return SchemaRDD(self._ssql_ctx.table(tableName), self)
 
