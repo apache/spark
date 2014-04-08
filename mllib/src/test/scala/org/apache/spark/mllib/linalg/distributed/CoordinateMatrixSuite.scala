@@ -19,6 +19,8 @@ package org.apache.spark.mllib.linalg.distributed
 
 import org.scalatest.FunSuite
 
+import breeze.linalg.{DenseMatrix => BDM}
+
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.linalg.Vectors
 
@@ -40,7 +42,7 @@ class CoordinateMatrixSuite extends FunSuite with LocalSparkContext {
       (3, 0, 7.0),
       (3, 3, 8.0),
       (4, 1, 9.0)), 3).map { case (i, j, value) =>
-      DistributedMatrixEntry(i, j, value)
+      MatrixEntry(i, j, value)
     }
     mat = new CoordinateMatrix(entries)
   }
@@ -51,7 +53,7 @@ class CoordinateMatrixSuite extends FunSuite with LocalSparkContext {
   }
 
   test("empty entries") {
-    val entries = sc.parallelize(Seq[DistributedMatrixEntry](), 1)
+    val entries = sc.parallelize(Seq[MatrixEntry](), 1)
     val emptyMat = new CoordinateMatrix(entries)
     intercept[RuntimeException] {
       emptyMat.numCols()
@@ -61,20 +63,36 @@ class CoordinateMatrixSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("toBreeze") {
+    val expected = BDM(
+      (1.0, 2.0, 0.0, 0.0),
+      (0.0, 3.0, 4.0, 0.0),
+      (0.0, 0.0, 5.0, 6.0),
+      (7.0, 0.0, 0.0, 8.0),
+      (0.0, 9.0, 0.0, 0.0))
+    assert(mat.toBreeze() === expected)
+  }
+
   test("toIndexedRowMatrix") {
-    val indexedRows = mat
-      .toIndexedRowMatrix()
-      .rows
-      .map(row => (row.index, row.vector))
-      .collect()
-      .sortBy(_._1)
-      .toSeq
-    assert(indexedRows === Seq(
-      (0, Vectors.dense(1.0, 2.0, 0.0, 0.0)),
-      (1, Vectors.dense(0.0, 3.0, 4.0, 0.0)),
-      (2, Vectors.dense(0.0, 0.0, 5.0, 6.0)),
-      (3, Vectors.dense(7.0, 0.0, 0.0, 8.0)),
-      (4, Vectors.dense(0.0, 9.0, 0.0, 0.0))
-    ))
+    val indexedRowMatrix = mat.toIndexedRowMatrix()
+    val expected = BDM(
+      (1.0, 2.0, 0.0, 0.0),
+      (0.0, 3.0, 4.0, 0.0),
+      (0.0, 0.0, 5.0, 6.0),
+      (7.0, 0.0, 0.0, 8.0),
+      (0.0, 9.0, 0.0, 0.0))
+    assert(indexedRowMatrix.toBreeze() === expected)
+  }
+
+  test("toRowMatrix") {
+    val rowMatrix = mat.toRowMatrix()
+    val rows = rowMatrix.rows.collect().toSet
+    val expected = Set(
+      Vectors.dense(1.0, 2.0, 0.0, 0.0),
+      Vectors.dense(0.0, 3.0, 4.0, 0.0),
+      Vectors.dense(0.0, 0.0, 5.0, 6.0),
+      Vectors.dense(7.0, 0.0, 0.0, 8.0),
+      Vectors.dense(0.0, 9.0, 0.0, 0.0))
+    assert(rows === expected)
   }
 }

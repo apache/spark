@@ -17,9 +17,19 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
+import breeze.linalg.{DenseMatrix => BDM}
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vectors
+
+/**
+ * Represents an entry in an distributed matrix.
+ * @param i row index
+ * @param j column index
+ * @param value value of the entry
+ */
+case class MatrixEntry(i: Long, j: Long, value: Double)
 
 /**
  * Represents a matrix in coordinate format.
@@ -31,12 +41,12 @@ import org.apache.spark.mllib.linalg.Vectors
  *              columns will be determined by the max column index plus one.
  */
 class CoordinateMatrix(
-    val entries: RDD[DistributedMatrixEntry],
+    val entries: RDD[MatrixEntry],
     private var nRows: Long,
     private var nCols: Long) extends DistributedMatrix {
 
   /** Alternative constructor leaving matrix dimensions to be determined automatically. */
-  def this(entries: RDD[DistributedMatrixEntry]) = this(entries, 0L, 0L)
+  def this(entries: RDD[MatrixEntry]) = this(entries, 0L, 0L)
 
   /** Gets or computes the number of columns. */
   override def numCols(): Long = {
@@ -54,16 +64,7 @@ class CoordinateMatrix(
     nRows
   }
 
-  private def computeSize() {
-    // Reduce will throw an exception if `entries` is empty.
-    val (m1, n1) = entries.map(entry => (entry.i, entry.j)).reduce { case ((i1, j1), (i2, j2)) =>
-      (math.max(i1, i2), math.max(j1, j2))
-    }
-    // There may be empty columns at the very right and empty rows at the very bottom.
-    nRows = math.max(nRows, m1 + 1L)
-    nCols = math.max(nCols, n1 + 1L)
-  }
-
+  /** Converts to IndexedRowMatrix. The number of columns must be within the integer range. */
   def toIndexedRowMatrix(): IndexedRowMatrix = {
     val nl = numCols()
     if (nl > Int.MaxValue) {
@@ -74,8 +75,38 @@ class CoordinateMatrix(
     val indexedRows = entries.map(entry => (entry.i, (entry.j.toInt, entry.value)))
       .groupByKey()
       .map { case (i, vectorEntries) =>
-        IndexedMatrixRow(i, Vectors.sparse(n, vectorEntries))
+        IndexedRow(i, Vectors.sparse(n, vectorEntries))
       }
     new IndexedRowMatrix(indexedRows, numRows(), n)
+  }
+
+  /**
+   * Converts to RowMatrix, dropping row indices after grouping by row index.
+   * The number of columns must be within the integer range.
+   */
+  def toRowMatrix(): RowMatrix = {
+    toIndexedRowMatrix().toRowMatrix()
+  }
+
+  /** Determines the size by computing the max row/column index. */
+  private def computeSize() {
+    // Reduce will throw an exception if `entries` is empty.
+    val (m1, n1) = entries.map(entry => (entry.i, entry.j)).reduce { case ((i1, j1), (i2, j2)) =>
+      (math.max(i1, i2), math.max(j1, j2))
+    }
+    // There may be empty columns at the very right and empty rows at the very bottom.
+    nRows = math.max(nRows, m1 + 1L)
+    nCols = math.max(nCols, n1 + 1L)
+  }
+
+  /** Collects data and assembles a local matrix. */
+  private[mllib] override def toBreeze(): BDM[Double] = {
+    val m = numRows().toInt
+    val n = numCols().toInt
+    val mat = BDM.zeros[Double](m, n)
+    entries.collect().foreach { case MatrixEntry(i, j, value) =>
+      mat(i.toInt, j.toInt) = value
+    }
+    mat
   }
 }

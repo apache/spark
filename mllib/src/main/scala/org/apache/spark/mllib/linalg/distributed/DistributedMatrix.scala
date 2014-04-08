@@ -17,6 +17,10 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
+import breeze.linalg.{DenseMatrix => BDM}
+
+import org.apache.spark.mllib.linalg.Matrix
+
 /**
  * Represents a distributively stored matrix backed by one or more RDDs.
  */
@@ -27,4 +31,7 @@ trait DistributedMatrix extends Serializable {
 
   /** Gets or computes the number of columns. */
   def numCols(): Long
+
+  /** Collects data and assembles a local dense breeze matrix (for test only). */
+  private[mllib] def toBreeze(): BDM[Double]
 }

@@ -73,6 +73,17 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("toBreeze") {
+    val expected = BDM(
+      (0.0, 1.0, 2.0),
+      (3.0, 4.0, 5.0),
+      (6.0, 7.0, 8.0),
+      (9.0, 0.0, 1.0))
+    for (mat <- Seq(denseMat, sparseMat)) {
+      assert(mat.toBreeze() === expected)
+    }
+  }
+
   test("gram") {
     val expected =
       Matrices.dense(n, n, Array(126.0, 54.0, 72.0, 54.0, 66.0, 78.0, 72.0, 78.0, 94.0))

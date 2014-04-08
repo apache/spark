@@ -28,7 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.Logging
 
 /**
- * Represents a row-oriented RDDMatrix with no meaningful row indices.
+ * Represents a row-oriented distributed Matrix with no meaningful row indices.
  *
  * @param rows rows stored as an RDD[Vector]
  * @param nRows number of rows. A non-positive value means unknown, and then the number of rows will
@@ -99,7 +99,7 @@ class RowMatrix(
    * At most k largest non-zero singular values and associated vectors are returned.
    * If there are k such values, then the dimensions of the return will be:
    *
-   * U is a RowRDDMatrix of size m x k that satisfies U'U = eye(k),
+   * U is a RowMatrix of size m x k that satisfies U'U = eye(k),
    * s is a Vector of size k, holding the singular values in descending order,
    * and V is a Matrix of size n x k that satisfies V'V = eye(k).
    *
@@ -237,7 +237,8 @@ class RowMatrix(
    * Multiply this matrix by a local matrix on the right.
    *
    * @param B a local matrix whose number of rows must match the number of columns of this matrix
-   * @return a RowRDDMatrix representing the product, which preserves partitioning
+   * @return a [[org.apache.spark.mllib.linalg.distributed.RowMatrix]] representing the product,
+   *         which preserves partitioning
    */
   def multiply(B: Matrix): RowMatrix = {
     val n = numCols().toInt
@@ -253,6 +254,20 @@ class RowMatrix(
     }, preservesPartitioning = true)
 
     new RowMatrix(AB, nRows, B.numCols)
+  }
+
+  private[mllib] override def toBreeze(): BDM[Double] = {
+    val m = numRows().toInt
+    val n = numCols().toInt
+    val mat = BDM.zeros[Double](m, n)
+    var i = 0
+    rows.collect().foreach { v =>
+      v.toBreeze.activeIterator.foreach { case (j, v) =>
+        mat(i, j) = v
+      }
+      i += 1
+    }
+    mat
   }
 }
 
