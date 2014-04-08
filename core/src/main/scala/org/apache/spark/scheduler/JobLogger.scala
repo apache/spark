@@ -187,11 +187,11 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
 
   /**
    * When stage is completed, record stage completion status
-   * @param stageEnded Stage ended event
+   * @param stageCompleted Stage completed event
    */
-  override def onStageEnded(stageEnded: SparkListenerStageEnded) {
-    val stageId = stageEnded.stageInfo.stageId
-    if (stageEnded.stageInfo.failureReason.isEmpty) {
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
+    val stageId = stageCompleted.stageInfo.stageId
+    if (stageCompleted.stageInfo.failureReason.isEmpty) {
       stageLogInfo(stageId, s"STAGE_ID=$stageId STATUS=COMPLETED")
     } else {
       stageLogInfo(stageId, s"STAGE_ID=$stageId STATUS=FAILED")

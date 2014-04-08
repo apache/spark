@@ -257,7 +257,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
       }
     }
 
-    override def onStageEnded(stage: SparkListenerStageEnded) {
+    override def onStageCompleted(stage: SparkListenerStageCompleted) {
       stageInfos(stage.stageInfo) = taskInfoMetrics
       taskInfoMetrics = mutable.Buffer.empty
     }

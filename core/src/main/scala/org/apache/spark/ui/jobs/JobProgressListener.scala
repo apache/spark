@@ -68,8 +68,8 @@ private[ui] class JobProgressListener(conf: SparkConf) extends SparkListener {
 
   def blockManagerIds = executorIdToBlockManagerId.values.toSeq
 
-  override def onStageEnded(stageEnded: SparkListenerStageEnded) = synchronized {
-    val stage = stageEnded.stageInfo
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
+    val stage = stageCompleted.stageInfo
     val stageId = stage.stageId
     // Remove by stageId, rather than by StageInfo, in case the StageInfo is from storage
     poolToActiveStages(stageIdToPool(stageId)).remove(stageId)

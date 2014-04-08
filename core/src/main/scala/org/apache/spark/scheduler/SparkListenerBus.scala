@@ -41,8 +41,8 @@ private[spark] trait SparkListenerBus {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
         sparkListeners.foreach(_.onStageSubmitted(stageSubmitted))
-      case stageEnded: SparkListenerStageEnded =>
-        sparkListeners.foreach(_.onStageEnded(stageEnded))
+      case stageCompleted: SparkListenerStageCompleted =>
+        sparkListeners.foreach(_.onStageCompleted(stageCompleted))
       case jobStart: SparkListenerJobStart =>
         sparkListeners.foreach(_.onJobStart(jobStart))
       case jobEnd: SparkListenerJobEnd =>

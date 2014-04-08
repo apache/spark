@@ -32,7 +32,7 @@ sealed trait SparkListenerEvent
 case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Properties = null)
   extends SparkListenerEvent
 
-case class SparkListenerStageEnded(stageInfo: StageInfo) extends SparkListenerEvent
+case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent
 
 case class SparkListenerTaskStart(stageId: Int, taskInfo: TaskInfo) extends SparkListenerEvent
 
@@ -71,9 +71,9 @@ private[spark] case object SparkListenerShutdown extends SparkListenerEvent
  */
 trait SparkListener {
   /**
-   * Called when a stage completes or fails, with information on the completed stage
+   * Called when a stage completes successfully or fails, with information on the completed stage.
    */
-  def onStageEnded(stageEnded: SparkListenerStageEnded) { }
+  def onStageCompleted(stageCompleted: SparkListenerStageCompleted) { }
 
   /**
    * Called when a stage is submitted
@@ -144,7 +144,7 @@ class StatsReportListener extends SparkListener with Logging {
     }
   }
 
-  override def onStageEnded(stageCompleted: SparkListenerStageEnded) {
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
     implicit val sc = stageCompleted
     this.logInfo("Finished stage: " + stageCompleted.stageInfo)
     showMillisDistribution("task runtime:", (info, _) => Some(info.duration), taskInfoMetrics)

@@ -69,8 +69,8 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
   val sparkListener = new SparkListener() {
     val successfulStages = new HashSet[Int]()
     val failedStages = new HashSet[Int]()
-    override def onStageEnded(stageEnded: SparkListenerStageEnded) {
-      val stageInfo = stageEnded.stageInfo
+    override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
+      val stageInfo = stageCompleted.stageInfo
       if (stageInfo.failureReason.isEmpty) {
         successfulStages += stageInfo.stageId
       } else {
@@ -429,7 +429,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
 
     val stageFailureMessage = "Exception failure in map stage"
     failed(taskSets(0), stageFailureMessage)
- 
+
     assert(cancelledStages.contains(1))
 
     // Make sure the listeners got told about both failed stages.

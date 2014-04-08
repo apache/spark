@@ -22,7 +22,7 @@ import java.util.{Properties, UUID}
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
-import org.json4s.{DefaultFormats, JsonAST}
+import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.JsonAST._
 
@@ -42,7 +42,7 @@ private[spark] object JsonProtocol {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
         stageSubmittedToJson(stageSubmitted)
-      case stageCompleted: SparkListenerStageEnded =>
+      case stageCompleted: SparkListenerStageCompleted =>
         stageCompletedToJson(stageCompleted)
       case taskStart: SparkListenerTaskStart =>
         taskStartToJson(taskStart)
@@ -76,7 +76,7 @@ private[spark] object JsonProtocol {
     ("Properties" -> properties)
   }
 
-  def stageCompletedToJson(stageCompleted: SparkListenerStageEnded): JValue = {
+  def stageCompletedToJson(stageCompleted: SparkListenerStageCompleted): JValue = {
     val stageInfo = stageInfoToJson(stageCompleted.stageInfo)
     ("Event" -> Utils.getFormattedClassName(stageCompleted)) ~
     ("Stage Info" -> stageInfo)
@@ -166,12 +166,14 @@ private[spark] object JsonProtocol {
     val rddInfo = rddInfoToJson(stageInfo.rddInfo)
     val submissionTime = stageInfo.submissionTime.map(JInt(_)).getOrElse(JNothing)
     val completionTime = stageInfo.completionTime.map(JInt(_)).getOrElse(JNothing)
+    val failureReason = stageInfo.failureReason.map(JString(_)).getOrElse(JNothing)
     ("Stage ID" -> stageInfo.stageId) ~
     ("Stage Name" -> stageInfo.name) ~
     ("Number of Tasks" -> stageInfo.numTasks) ~
     ("RDD Info" -> rddInfo) ~
     ("Submission Time" -> submissionTime) ~
     ("Completion Time" -> completionTime) ~
+    ("Failure Reason" -> failureReason) ~
     ("Emitted Task Size Warning" -> stageInfo.emittedTaskSizeWarning)
   }
 
@@ -259,8 +261,7 @@ private[spark] object JsonProtocol {
     val json = jobResult match {
       case JobSucceeded => Utils.emptyJson
       case jobFailed: JobFailed =>
-        val exception = exceptionToJson(jobFailed.exception)
-        JsonAST.JObject("Exception" -> exception)
+        JObject("Exception" -> exceptionToJson(jobFailed.exception))
     }
     ("Result" -> result) ~ json
   }
@@ -335,7 +336,7 @@ private[spark] object JsonProtocol {
 
   def sparkEventFromJson(json: JValue): SparkListenerEvent = {
     val stageSubmitted = Utils.getFormattedClassName(SparkListenerStageSubmitted)
-    val stageCompleted = Utils.getFormattedClassName(SparkListenerStageEnded)
+    val stageCompleted = Utils.getFormattedClassName(SparkListenerStageCompleted)
     val taskStart = Utils.getFormattedClassName(SparkListenerTaskStart)
     val taskGettingResult = Utils.getFormattedClassName(SparkListenerTaskGettingResult)
     val taskEnd = Utils.getFormattedClassName(SparkListenerTaskEnd)
@@ -367,9 +368,9 @@ private[spark] object JsonProtocol {
     SparkListenerStageSubmitted(stageInfo, properties)
   }
 
-  def stageCompletedFromJson(json: JValue): SparkListenerStageEnded = {
+  def stageCompletedFromJson(json: JValue): SparkListenerStageCompleted = {
     val stageInfo = stageInfoFromJson(json \ "Stage Info")
-    SparkListenerStageEnded(stageInfo)
+    SparkListenerStageCompleted(stageInfo)
   }
 
   def taskStartFromJson(json: JValue): SparkListenerTaskStart = {
@@ -441,11 +442,13 @@ private[spark] object JsonProtocol {
     val rddInfo = rddInfoFromJson(json \ "RDD Info")
     val submissionTime = Utils.jsonOption(json \ "Submission Time").map(_.extract[Long])
     val completionTime = Utils.jsonOption(json \ "Completion Time").map(_.extract[Long])
+    val failureReason = Utils.jsonOption(json \ "Failure Reason").map(_.extract[String])
     val emittedTaskSizeWarning = (json \ "Emitted Task Size Warning").extract[Boolean]
 
     val stageInfo = new StageInfo(stageId, stageName, numTasks, rddInfo)
     stageInfo.submissionTime = submissionTime
     stageInfo.completionTime = completionTime
+    stageInfo.failureReason = failureReason
     stageInfo.emittedTaskSizeWarning = emittedTaskSizeWarning
     stageInfo
   }
