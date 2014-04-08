@@ -68,8 +68,9 @@ object MimaBuild {
           excludeSparkClass("mllib.optimization.SquaredGradient") ++
           excludeSparkClass("mllib.regression.RidgeRegressionWithSGD") ++
           excludeSparkClass("mllib.regression.LassoWithSGD") ++
-          excludeSparkClass("mllib.regression.LinearRegressionWithSGD")
-          excludeSparkClass("streaming.dstream.NetworkReceiver")
+          excludeSparkClass("mllib.regression.LinearRegressionWithSGD") ++
+          excludeSparkClass("streaming.dstream.NetworkReceiver") ++
+          excludeSparkClass("streaming.dstream.NetworkReceiver#NetworkReceiverActor")
         case _ => Seq()
       }
 
