@@ -35,7 +35,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 import org.apache.spark._
 import org.apache.spark.Partitioner._
 import org.apache.spark.SparkContext._
-import org.apache.spark.annotations.{DeveloperAPI, Experimental}
+import org.apache.spark.annotations.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
@@ -88,33 +88,33 @@ abstract class RDD[T: ClassTag](
   // =======================================================================
 
   /**
-   * :: DeveloperAPI ::
+   * :: DeveloperApi ::
    * Implemented by subclasses to compute a given partition.
    */
-  @DeveloperAPI
+  @DeveloperApi
   def compute(split: Partition, context: TaskContext): Iterator[T]
 
   /**
-   * :: DeveloperAPI ::
+   * :: DeveloperApi ::
    * Implemented by subclasses to return the set of partitions in this RDD. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
    */
-  @DeveloperAPI
+  @DeveloperApi
   protected def getPartitions: Array[Partition]
 
   /**
-   * :: DeveloperAPI ::
+   * :: DeveloperApi ::
    * Implemented by subclasses to return how this RDD depends on parent RDDs. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
    */
-  @DeveloperAPI
+  @DeveloperApi
   protected def getDependencies: Seq[Dependency[_]] = deps
 
   /**
-   * :: DeveloperAPI ::
+   * :: DeveloperApi ::
    * Optionally overridden by subclasses to specify placement preferences.
    */
-  @DeveloperAPI
+  @DeveloperApi
   protected def getPreferredLocations(split: Partition): Seq[String] = Nil
 
   /** Optionally overridden by subclasses to specify how they are partitioned. */
@@ -526,11 +526,11 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * :: DeveloperAPI ::
+   * :: DeveloperApi ::
    * Return a new RDD by applying a function to each partition of this RDD. This is a variant of
    * mapPartitions that also passes the TaskContext into the closure.
    */
-  @DeveloperAPI
+  @DeveloperApi
   def mapPartitionsWithContext[U: ClassTag](
       f: (TaskContext, Iterator[T]) => Iterator[U],
       preservesPartitioning: Boolean = false): RDD[U] = {

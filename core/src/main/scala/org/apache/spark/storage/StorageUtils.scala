@@ -21,7 +21,7 @@ import scala.collection.Map
 import scala.collection.mutable
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotations.DeveloperAPI
+import org.apache.spark.annotations.DeveloperApi
 import org.apache.spark.util.Utils
 
 private[spark]
@@ -49,7 +49,7 @@ class StorageStatus(
 }
 
 
-@DeveloperAPI
+@DeveloperApi
 class RDDInfo(val id: Int, val name: String, val numPartitions: Int, val storageLevel: StorageLevel)
   extends Ordered[RDDInfo] {
 

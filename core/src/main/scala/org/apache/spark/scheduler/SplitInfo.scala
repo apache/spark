@@ -19,11 +19,11 @@ package org.apache.spark.scheduler
 
 import collection.mutable.ArrayBuffer
 
-import org.apache.spark.annotations.DeveloperAPI
+import org.apache.spark.annotations.DeveloperApi
 
 // information about a specific split instance : handles both split instances.
 // So that we do not need to worry about the differences.
-@DeveloperAPI
+@DeveloperApi
 class SplitInfo(val inputFormatClazz: Class[_], val hostLocation: String, val path: String,
                 val length: Long, val underlyingSplit: Any) {
   override def toString(): String = {

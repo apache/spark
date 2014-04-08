@@ -35,7 +35,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
 
-import org.apache.spark.annotations.{DeveloperAPI, Experimental}
+import org.apache.spark.annotations.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
@@ -49,7 +49,7 @@ import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
 
 /**
- * :: DeveloperAPI ::
+ * :: DeveloperApi ::
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
  * cluster, and can be used to create RDDs, accumulators and broadcast variables on that cluster.
  *
@@ -57,7 +57,7 @@ import org.apache.spark.util.{ClosureCleaner, MetadataCleaner, MetadataCleanerTy
  *   this config overrides the default configs as well as system properties.
  */
 
-@DeveloperAPI
+@DeveloperApi
 class SparkContext(config: SparkConf) extends Logging {
 
   // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
@@ -66,14 +66,14 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] var preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()
 
   /**
-   * :: DeveloperAPI ::
+   * :: DeveloperApi ::
    * Alternative constructor for setting preferred locations where Spark will create executors.
    *
    * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on. Ca
    * be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
    * from a list of input files or InputFormats for the application.
    */
-    @DeveloperAPI
+    @DeveloperApi
     def this(config: SparkConf, preferredNodeLocationData: Map[String, Set[SplitInfo]]) = {
       this(config)
       this.preferredNodeLocationData = preferredNodeLocationData
@@ -718,10 +718,10 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * :: DeveloperAPI ::
+   * :: DeveloperApi ::
    * Register a listener to receive up-calls from events that happen during execution.
    */
-  @DeveloperAPI
+  @DeveloperApi
   def addSparkListener(listener: SparkListener) {
     listenerBus.addListener(listener)
   }
@@ -1031,10 +1031,10 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * :: DeveloperAPI ::
+   * :: DeveloperApi ::
    * Run a job that can return approximate results.
    */
-  @DeveloperAPI
+  @DeveloperApi
   def runApproximateJob[T, U, R](
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,

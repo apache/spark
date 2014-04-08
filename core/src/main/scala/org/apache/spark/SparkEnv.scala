@@ -25,7 +25,7 @@ import scala.util.Properties
 import akka.actor._
 import com.google.common.collect.MapMaker
 
-import org.apache.spark.annotations.DeveloperAPI
+import org.apache.spark.annotations.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
@@ -36,14 +36,14 @@ import org.apache.spark.storage._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
- * :: DeveloperAPI ::
+ * :: DeveloperApi ::
  * Holds all the runtime environment objects for a running Spark instance (either master or worker),
  * including the serializer, Akka actor system, block manager, map output tracker, etc. Currently
  * Spark code finds the SparkEnv through a thread-local variable, so each thread that accesses these
  * objects needs to have the right SparkEnv set. You can get the current environment with
  * SparkEnv.get (e.g. after creating a SparkContext) and set it with SparkEnv.set.
  */
-@DeveloperAPI
+@DeveloperApi
 class SparkEnv (
     val executorId: String,
     val actorSystem: ActorSystem,

@@ -27,14 +27,14 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark.Logging
-import org.apache.spark.annotations.DeveloperAPI
+import org.apache.spark.annotations.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 
 /**
- * :: DeveloperAPI ::
+ * :: DeveloperApi ::
  * Parses and holds information about inputFormat (and files) specified as a parameter.
  */
-@DeveloperAPI
+@DeveloperApi
 class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Class[_],
     val path: String) extends Logging {
 

@@ -19,17 +19,17 @@ package org.apache.spark.util.collection
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.annotations.DeveloperAPI
+import org.apache.spark.annotations.DeveloperApi
 
 /**
- * :: DeveloperAPI ::
+ * :: DeveloperApi ::
  * A fast hash map implementation for nullable keys. This hash map supports insertions and updates,
  * but not deletions. This map is about 5X faster than java.util.HashMap, while using much less
  * space overhead.
  *
  * Under the hood, it uses our OpenHashSet implementation.
  */
-@DeveloperAPI
+@DeveloperApi
 class OpenHashMap[K >: Null : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
     initialCapacity: Int)
   extends Iterable[(K, V)]

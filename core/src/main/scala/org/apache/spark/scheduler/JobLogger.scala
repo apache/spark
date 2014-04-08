@@ -25,11 +25,11 @@ import java.util.concurrent.LinkedBlockingQueue
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
-import org.apache.spark.annotations.DeveloperAPI
+import org.apache.spark.annotations.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 
 /**
- * :: DeveloperAPI ::
+ * :: DeveloperApi ::
  * A logger class to record runtime information for jobs in Spark. This class outputs one log file
  * for each Spark job, containing tasks start/stop and shuffle information. JobLogger is a subclass
  * of SparkListener, use addSparkListener to add JobLogger to a SparkContext after the SparkContext
@@ -40,7 +40,7 @@ import org.apache.spark.executor.TaskMetrics
  * to log application information as SparkListenerEvents. To enable this functionality, set
  * spark.eventLog.enabled to true.
  */
-@DeveloperAPI
+@DeveloperApi
 @deprecated("Log application information by setting spark.eventLog.enabled.", "1.0.0")
 class JobLogger(val user: String, val logDirName: String) extends SparkListener with Logging {
 
