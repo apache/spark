@@ -48,14 +48,11 @@ class SystemClock() extends Clock {
         minPollTime 
       }  
     }
-    
-    
+
     while (true) {
       currentTime = System.currentTimeMillis()
       waitTime = targetTime - currentTime
-      
       if (waitTime <= 0) {
-        
         return currentTime
       }
       val sleepTime = 

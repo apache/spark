@@ -58,17 +58,19 @@ object MimaBuild {
       SparkBuild.SPARK_VERSION match {
         case v if v.startsWith("1.0") =>
           Seq(
-             excludePackage("org.apache.spark.api.java"),
-             excludePackage("org.apache.spark.streaming.api.java"),
-             excludePackage("org.apache.spark.mllib")
-           ) ++
-           excludeSparkClass("rdd.ClassTags") ++
-           excludeSparkClass("util.XORShiftRandom") ++
-           excludeSparkClass("mllib.recommendation.MFDataGenerator") ++
-           excludeSparkClass("mllib.optimization.SquaredGradient") ++
-           excludeSparkClass("mllib.regression.RidgeRegressionWithSGD") ++
-           excludeSparkClass("mllib.regression.LassoWithSGD") ++
-           excludeSparkClass("mllib.regression.LinearRegressionWithSGD")
+            excludePackage("org.apache.spark.api.java"),
+            excludePackage("org.apache.spark.streaming.api.java"),
+            excludePackage("org.apache.spark.mllib")
+          ) ++
+          excludeSparkClass("rdd.ClassTags") ++
+          excludeSparkClass("util.XORShiftRandom") ++
+          excludeSparkClass("mllib.recommendation.MFDataGenerator") ++
+          excludeSparkClass("mllib.optimization.SquaredGradient") ++
+          excludeSparkClass("mllib.regression.RidgeRegressionWithSGD") ++
+          excludeSparkClass("mllib.regression.LassoWithSGD") ++
+          excludeSparkClass("mllib.regression.LinearRegressionWithSGD") ++
+          excludeSparkClass("streaming.dstream.NetworkReceiver") ++
+          excludeSparkClass("streaming.dstream.NetworkReceiver#NetworkReceiverActor")
         case _ => Seq()
       }
 

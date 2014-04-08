@@ -324,7 +324,7 @@ class BasicOperationsSuite extends TestSuiteBase {
 
     val updateStateOperation = (s: DStream[String]) => {
       val updateFunc = (values: Seq[Int], state: Option[Int]) => {
-        Some(values.foldLeft(0)(_ + _) + state.getOrElse(0))
+        Some(values.sum + state.getOrElse(0))
       }
       s.map(x => (x, 1)).updateStateByKey[Int](updateFunc)
     }
@@ -359,7 +359,7 @@ class BasicOperationsSuite extends TestSuiteBase {
       // updateFunc clears a state when a StateObject is seen without new values twice in a row
       val updateFunc = (values: Seq[Int], state: Option[StateObject]) => {
         val stateObj = state.getOrElse(new StateObject)
-        values.foldLeft(0)(_ + _) match {
+        values.sum match {
           case 0 => stateObj.expireCounter += 1 // no new values
           case n => { // has new values, increment and reset expireCounter
             stateObj.counter += n
