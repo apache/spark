@@ -40,7 +40,3 @@ work
 golden
 test.out/*
 .*iml
-./core/src/test/resources/fake-*.jar
-./core/src/test/resources/classes*/*
-core/src/test/resources/classes2/META-INF/MANIFEST.MF
-core/src/test/resources/classes2/META-INF/MANIFEST.MF
