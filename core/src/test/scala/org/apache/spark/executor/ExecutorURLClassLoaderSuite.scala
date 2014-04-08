@@ -26,15 +26,15 @@ import org.apache.spark.TestUtils
 
 class ExecutorURLClassLoaderSuite extends FunSuite {
 
-  val classNames = List("org.apache.spark.test.FakeClass1",
-    "org.apache.spark.test.FakeClass2")
-  val urls = List(TestUtils.createJarWithClassesAndValue(classNames, 1)).toArray
-  val urls2 = List(TestUtils.createJarWithClassesAndValue(classNames, 2)).toArray
+  val childClassNames = List("FakeClass1", "FakeClass2")
+  val parentClassNames = List("FakeClass1", "FakeClass2", "FakeClass3")
+  val urls = List(TestUtils.createJarWithClassesAndValue(childClassNames, 1)).toArray
+  val urls2 = List(TestUtils.createJarWithClassesAndValue(parentClassNames, 2)).toArray
 
   test("child first") {
     val parentLoader = new URLClassLoader(urls2, null)
     val classLoader = new ChildExecutorURLClassLoader(urls, parentLoader)
-    val fakeClass = classLoader.loadClass("org.apache.spark.test.FakeClass2").newInstance()
+    val fakeClass = classLoader.loadClass("FakeClass2").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "1")
   }
@@ -42,7 +42,7 @@ class ExecutorURLClassLoaderSuite extends FunSuite {
   test("parent first") {
     val parentLoader = new URLClassLoader(urls2, null)
     val classLoader = new ExecutorURLClassLoader(urls, parentLoader)
-    val fakeClass = classLoader.loadClass("org.apache.spark.test.FakeClass1").newInstance()
+    val fakeClass = classLoader.loadClass("FakeClass1").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "2")
   }
@@ -50,7 +50,7 @@ class ExecutorURLClassLoaderSuite extends FunSuite {
   test("child first can fall back") {
     val parentLoader = new URLClassLoader(urls2, null)
     val classLoader = new ChildExecutorURLClassLoader(urls, parentLoader)
-    val fakeClass = classLoader.loadClass("org.apache.spark.test.FakeClass3").newInstance()
+    val fakeClass = classLoader.loadClass("FakeClass3").newInstance()
     val fakeClassVersion = fakeClass.toString
     assert(fakeClassVersion === "2")
   }
@@ -59,7 +59,7 @@ class ExecutorURLClassLoaderSuite extends FunSuite {
     val parentLoader = new URLClassLoader(urls2, null)
     val classLoader = new ChildExecutorURLClassLoader(urls, parentLoader)
     intercept[java.lang.ClassNotFoundException] {
-      classLoader.loadClass("org.apache.spark.test.FakeClassDoesNotExist").newInstance()
+      classLoader.loadClass("FakeClassDoesNotExist").newInstance()
     }
   }
 
