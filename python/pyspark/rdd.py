@@ -584,14 +584,16 @@ class RDD(object):
         >>> combOp = (lambda x, y: (x[0] + y[0], x[1] + y[1]))
         >>> sc.parallelize([1, 2, 3, 4]).aggregate((0, 0), seqOp, combOp)
         (10, 4)
+        >>> sc.parallelize([]).aggregate((0, 0), seqOp, combOp)
+        (0, 0)
         """
         def func(iterator):
             acc = zeroValue
             for obj in iterator:
                 acc = seqOp(acc, obj)
-            if acc is not None:
-                yield acc
-        return self.mapPartitions(func).reduce(combOp)
+            yield acc
+
+        return self.mapPartitions(func).fold(zeroValue, combOp)
 
     def sum(self):
         """
