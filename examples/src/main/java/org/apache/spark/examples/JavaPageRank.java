@@ -17,7 +17,10 @@
 
 package org.apache.spark.examples;
 
+
 import scala.Tuple2;
+
+import com.google.collect.Iterables;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -90,12 +93,7 @@ public final class JavaPageRank {
         .flatMapToPair(new PairFlatMapFunction<Tuple2<Iterable<String>, Double>, String, Double>() {
           @Override
           public Iterable<Tuple2<String, Double>> call(Tuple2<Iterable<String>, Double> s) {
-	    int urlCount = 0;
-	    Iterator<String> urls = s._1.iterator();
-            while (urls.hasNext()) {
-		urls.next();
-		urlCount++;
-            }
+	    int urlCount = Iterables.size(s._1);
             List<Tuple2<String, Double>> results = new ArrayList<Tuple2<String, Double>>();
             for (String n : s._1) {
               results.add(new Tuple2<String, Double>(n, s._2() / urlCount));

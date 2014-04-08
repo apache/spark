@@ -24,6 +24,7 @@ import java.util.*;
 import scala.Tuple2;
 
 import com.google.common.collect.Lists;
+import com.google.collect.Iterables;
 import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
@@ -78,35 +79,14 @@ public class JavaAPISuite implements Serializable {
     }
   }
 
-  private int iteratorSize(Iterator<?> a) {
-    int size = 0;
-    while (a.hasNext()) {
-      size++;
-      a.next();
-    }
-    return size;
-  }
 
   private int iterableSize(Iterable<?> a) {
-    return iteratorSize(a.iterator());
+    return Iterables.size(a.iterator());
   }
 
-
-  private String iteratorStr(Iterator<?> a) {
-    StringBuilder str = new StringBuilder();
-    str.append("[");
-    while (a.hasNext()) {
-      str.append(a.next().toString());
-      if (a.hasNext()) {
-        str.append(", ");
-      }
-    }
-    str.append("]");
-    return str.toString();
-  }
 
   private String iterableStr(Iterable<?> a) {
-    return iteratorStr(a.iterator());
+    return Iterables.toString(a.iterator());
   }
 
 

@@ -23,6 +23,7 @@ import java.util.*;
 
 import scala.Tuple2;
 
+import com.google.collections.Iterables;
 import com.google.common.base.Optional;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
@@ -60,16 +61,6 @@ public class Java8APISuite implements Serializable {
     System.clearProperty("spark.driver.port");
   }
 
-  private int iterableSize(Iterable<?> a) {
-    int count = 0;
-    Iterator aItr = a.iterator();
-    while (aItr.hasNext()) {
-      aItr.next();
-      count++;
-    }
-    return count;
-  }
-
   @Test
   public void foreachWithAnonymousClass() {
     foreachCalls = 0;
@@ -97,13 +88,13 @@ public class Java8APISuite implements Serializable {
     Function<Integer, Boolean> isOdd = x -> x % 2 == 0;
     JavaPairRDD<Boolean, Iterable<Integer>> oddsAndEvens = rdd.groupBy(isOdd);
     Assert.assertEquals(2, oddsAndEvens.count());
-    Assert.assertEquals(2, iterableSize(oddsAndEvens.lookup(true).get(0)));  // Evens
-    Assert.assertEquals(5, iterableSize(oddsAndEvens.lookup(false).get(0))); // Odds
+    Assert.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
+    Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
 
     oddsAndEvens = rdd.groupBy(isOdd, 1);
     Assert.assertEquals(2, oddsAndEvens.count());
-    Assert.assertEquals(2, iterableSize(oddsAndEvens.lookup(true).get(0)));  // Evens
-    Assert.assertEquals(5, iterableSize(oddsAndEvens.lookup(false).get(0))); // Odds
+    Assert.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
+    Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
   }
 
   @Test

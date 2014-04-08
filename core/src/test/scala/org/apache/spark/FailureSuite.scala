@@ -72,8 +72,7 @@ class FailureSuite extends FunSuite with LocalSparkContext {
             throw new Exception("Intentional task failure")
           }
         }
-        val vHead = v.iterator.next()
-        (k, vHead * vHead)
+        (k, v.head * v.head)
       }.collect()
     FailureSuiteState.synchronized {
       assert(FailureSuiteState.tasksRun === 4)
