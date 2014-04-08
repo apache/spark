@@ -35,7 +35,7 @@ RELEASE_URL = "http://people.apache.org/~pwendell/spark-1.0.0-rc1/"
 RELEASE_KEY = "9E4FE3AF"
 RELEASE_REPOSITORY = "https://repository.apache.org/content/repositories/orgapachespark-1006/"
 RELEASE_VERSION = "1.0.0"
-SCALA_VERSION = "2.10.3"
+SCALA_VERSION = "2.10.4"
 SCALA_BINARY_VERSION = "2.10"
 ##
 

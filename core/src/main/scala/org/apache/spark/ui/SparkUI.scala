@@ -47,7 +47,8 @@ private[spark] class SparkUI(
 
   val securityManager = if (live) sc.env.securityManager else new SecurityManager(conf)
 
-  private val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
+  private val bindHost = Utils.localHostName()
+  private val publicHost = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(bindHost)
   private val port = conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
   private var serverInfo: Option[ServerInfo] = None
 
@@ -79,8 +80,8 @@ private[spark] class SparkUI(
   /** Bind the HTTP server which backs this web interface */
   def bind() {
     try {
-      serverInfo = Some(startJettyServer(host, port, handlers, sc.conf))
-      logInfo("Started Spark Web UI at http://%s:%d".format(host, boundPort))
+      serverInfo = Some(startJettyServer(bindHost, port, handlers, sc.conf))
+      logInfo("Started Spark Web UI at http://%s:%d".format(publicHost, boundPort))
     } catch {
       case e: Exception =>
         logError("Failed to create Spark JettyUtils", e)
@@ -111,7 +112,7 @@ private[spark] class SparkUI(
     logInfo("Stopped Spark Web UI at %s".format(appUIAddress))
   }
 
-  private[spark] def appUIAddress = "http://" + host + ":" + boundPort
+  private[spark] def appUIAddress = "http://" + publicHost + ":" + boundPort
 
 }
 

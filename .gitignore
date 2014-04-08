@@ -47,3 +47,4 @@ spark-*-bin.tar.gz
 unit-tests.log
 /lib/
 rat-results.txt
+scalastyle.txt

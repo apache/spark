@@ -32,7 +32,7 @@ import scala.collection.JavaConversions._
  * Contains util methods to interact with Hadoop from Spark.
  */
 class SparkHadoopUtil {
-  val conf = newConfiguration()
+  val conf: Configuration = newConfiguration()
   UserGroupInformation.setConfiguration(conf)
 
   def runAsUser(user: String)(func: () => Unit) {

@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.{Dependency, OneToOneDependency, Partition, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.types.BooleanType
-import org.apache.spark.{Dependency, OneToOneDependency, Partition, TaskContext}
 
 /**
  * <span class="badge" style="float: right; background-color: darkblue;">ALPHA COMPONENT</span>
@@ -92,23 +92,10 @@ import org.apache.spark.{Dependency, OneToOneDependency, Partition, TaskContext}
  */
 class SchemaRDD(
     @transient val sqlContext: SQLContext,
-    @transient val logicalPlan: LogicalPlan)
-    extends RDD[Row](sqlContext.sparkContext, Nil) {
+    @transient protected[spark] val logicalPlan: LogicalPlan)
+  extends RDD[Row](sqlContext.sparkContext, Nil) with SchemaRDDLike {
 
-  /**
-   * A lazily computed query execution workflow.  All other RDD operations are passed
-   * through to the RDD that is produced by this workflow.
-   *
-   * We want this to be lazy because invoking the whole query optimization pipeline can be
-   * expensive.
-   */
-  @transient
-  protected[spark] lazy val queryExecution = sqlContext.executePlan(logicalPlan)
-
-  override def toString =
-    s"""${super.toString}
-       |== Query Plan ==
-       |${queryExecution.executedPlan}""".stripMargin.trim
+  def baseSchemaRDD = this
 
   // =========================================================================================
   // RDD functions: Copy the interal row representation so we present immutable data to users.
@@ -161,17 +148,17 @@ class SchemaRDD(
    *
    * @param otherPlan the [[SchemaRDD]] that should be joined with this one.
    * @param joinType One of `Inner`, `LeftOuter`, `RightOuter`, or `FullOuter`. Defaults to `Inner.`
-   * @param condition An optional condition for the join operation.  This is equivilent to the `ON`
-   *                  clause in standard SQL.  In the case of `Inner` joins, specifying a
-   *                  `condition` is equivilent to adding `where` clauses after the `join`.
+   * @param on       An optional condition for the join operation.  This is equivilent to the `ON`
+   *                 clause in standard SQL.  In the case of `Inner` joins, specifying a
+   *                 `condition` is equivilent to adding `where` clauses after the `join`.
    *
    * @group Query
    */
   def join(
       otherPlan: SchemaRDD,
       joinType: JoinType = Inner,
-      condition: Option[Expression] = None): SchemaRDD =
-    new SchemaRDD(sqlContext, Join(logicalPlan, otherPlan.logicalPlan, joinType, condition))
+      on: Option[Expression] = None): SchemaRDD =
+    new SchemaRDD(sqlContext, Join(logicalPlan, otherPlan.logicalPlan, joinType, on))
 
   /**
    * Sorts the results by the given expressions.
@@ -208,14 +195,14 @@ class SchemaRDD(
    * with the same name, for example, when peforming self-joins.
    *
    * {{{
-   *   val x = schemaRDD.where('a === 1).subquery('x)
-   *   val y = schemaRDD.where('a === 2).subquery('y)
+   *   val x = schemaRDD.where('a === 1).as('x)
+   *   val y = schemaRDD.where('a === 2).as('y)
    *   x.join(y).where("x.a".attr === "y.a".attr),
    * }}}
    *
    * @group Query
    */
-  def subquery(alias: Symbol) =
+  def as(alias: Symbol) =
     new SchemaRDD(sqlContext, Subquery(alias.name, logicalPlan))
 
   /**
@@ -313,30 +300,11 @@ class SchemaRDD(
       InsertIntoTable(UnresolvedRelation(None, tableName), Map.empty, logicalPlan, overwrite))
 
   /**
-   * Saves the contents of this `SchemaRDD` as a parquet file, preserving the schema.  Files that
-   * are written out using this method can be read back in as a SchemaRDD using the ``function
-   *
-   * @group schema
-   */
-  def saveAsParquetFile(path: String): Unit = {
-    sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
-  }
-
-  /**
-   * Registers this RDD as a temporary table using the given name.  The lifetime of this temporary
-   * table is tied to the [[SQLContext]] that was used to create this SchemaRDD.
-   *
-   * @group schema
-   */
-  def registerAsTable(tableName: String): Unit = {
-    sqlContext.registerRDDAsTable(this, tableName)
-  }
-
-  /**
    * Returns this RDD as a SchemaRDD.
    * @group schema
    */
   def toSchemaRDD = this
 
+  /** FOR INTERNAL USE ONLY */
   def analyze = sqlContext.analyzer(logicalPlan)
 }

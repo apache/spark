@@ -27,7 +27,7 @@ private[spark] object ReceiverTest {
     println("Started connection manager with id = " + manager.id)
 
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
-      /*println("Received [" + msg + "] from [" + id + "] at " + System.currentTimeMillis)*/
+      /* println("Received [" + msg + "] from [" + id + "] at " + System.currentTimeMillis) */
       val buffer = ByteBuffer.wrap("response".getBytes)
       Some(Message.createBufferMessage(buffer, msg.id))
     })

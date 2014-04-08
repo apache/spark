@@ -167,7 +167,7 @@ extends Logging {
   private var initialized = false
   private var conf: SparkConf = null
   def initialize(_isDriver: Boolean, conf: SparkConf) {
-    TorrentBroadcast.conf = conf //TODO: we might have to fix it in tests
+    TorrentBroadcast.conf = conf // TODO: we might have to fix it in tests
     synchronized {
       if (!initialized) {
         initialized = true

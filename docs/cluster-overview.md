@@ -50,6 +50,50 @@ The system currently supports three cluster managers:
 In addition, Spark's [EC2 launch scripts](ec2-scripts.html) make it easy to launch a standalone
 cluster on Amazon EC2.
 
+# Launching Applications
+
+The recommended way to launch a compiled Spark application is through the spark-submit script (located in the
+bin directory), which takes care of setting up the classpath with Spark and its dependencies, as well as
+provides a layer over the different cluster managers and deploy modes that Spark supports.  It's usage is
+
+  spark-submit `<app jar>` `<options>`
+
+Where options are any of:
+
+- **\--class** - The main class to run.
+- **\--master** - The URL of the cluster manager master, e.g. spark://host:port, mesos://host:port, yarn,
+  or local.
+- **\--deploy-mode** - "client" to run the driver in the client process or "cluster" to run the driver in
+  a process on the cluster.  For Mesos, only "client" is supported.
+- **\--executor-memory** - Memory per executor (e.g. 1000M, 2G).
+- **\--executor-cores** - Number of cores per executor. (Default: 2)
+- **\--driver-memory** - Memory for driver (e.g. 1000M, 2G)
+- **\--name** - Name of the application.
+- **\--arg** - Argument to be passed to the application's main class. This option can be specified
+  multiple times to pass multiple arguments.
+- **\--jars** - A comma-separated list of local jars to include on the driver classpath and that
+  SparkContext.addJar will work with. Doesn't work on standalone with 'cluster' deploy mode.
+
+The following currently only work for Spark standalone with cluster deploy mode:
+
+- **\--driver-cores** - Cores for driver (Default: 1).
+- **\--supervise** - If given, restarts the driver on failure.
+
+The following only works for Spark standalone and Mesos only:
+
+- **\--total-executor-cores** - Total cores for all executors.
+
+The following currently only work for YARN:
+
+- **\--queue** - The YARN queue to place the application in.
+- **\--files** - Comma separated list of files to be placed in the working dir of each executor.
+- **\--archives** - Comma separated list of archives to be extracted into the working dir of each
+  executor.
+- **\--num-executors** - Number of executors (Default: 2).
+
+The master and deploy mode can also be set with the MASTER and DEPLOY_MODE environment variables.
+Values for these options passed via command line will override the environment variables.
+
 # Shipping Code to the Cluster
 
 The recommended way to ship your code to the cluster is to pass it through SparkContext's constructor,
@@ -102,6 +146,12 @@ The following table summarizes terms you'll see used to refer to cluster concept
       <td>Cluster manager</td>
       <td>An external service for acquiring resources on the cluster (e.g. standalone manager, Mesos, YARN)</td>
     </tr>
+    <tr>
+      <td>Deploy mode</td>
+      <td>Distinguishes where the driver process runs. In "cluster" mode, the framework launches
+        the driver inside of the cluster. In "client" mode, the submitter launches the driver
+        outside of the cluster.</td>
+    <tr>
     <tr>
       <td>Worker node</td>
       <td>Any node that can run application code in the cluster</td>

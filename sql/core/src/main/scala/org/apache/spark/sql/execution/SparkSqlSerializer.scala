@@ -32,6 +32,13 @@ class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
     kryo.setRegistrationRequired(false)
     kryo.register(classOf[MutablePair[_, _]])
     kryo.register(classOf[Array[Any]])
+    // This is kinda hacky...
+    kryo.register(classOf[scala.collection.immutable.Map$Map1], new MapSerializer)
+    kryo.register(classOf[scala.collection.immutable.Map$Map2], new MapSerializer)
+    kryo.register(classOf[scala.collection.immutable.Map$Map3], new MapSerializer)
+    kryo.register(classOf[scala.collection.immutable.Map$Map4], new MapSerializer)
+    kryo.register(classOf[scala.collection.immutable.Map[_,_]], new MapSerializer)
+    kryo.register(classOf[scala.collection.Map[_,_]], new MapSerializer)
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericRow])
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericMutableRow])
     kryo.register(classOf[scala.collection.mutable.ArrayBuffer[_]])
@@ -68,5 +75,22 @@ class BigDecimalSerializer extends Serializer[BigDecimal] {
 
   def read(kryo: Kryo, input: Input, tpe: Class[BigDecimal]): BigDecimal = {
     BigDecimal(input.readString())
+  }
+}
+
+/**
+ * Maps do not have a no arg constructor and so cannot be serialized by default. So, we serialize
+ * them as `Array[(k,v)]`.
+ */
+class MapSerializer extends Serializer[Map[_,_]] {
+  def write(kryo: Kryo, output: Output, map: Map[_,_]) {
+    kryo.writeObject(output, map.flatMap(e => Seq(e._1, e._2)).toArray)
+  }
+
+  def read(kryo: Kryo, input: Input, tpe: Class[Map[_,_]]): Map[_,_] = {
+    kryo.readObject(input, classOf[Array[Any]])
+      .sliding(2,2)
+      .map { case Array(k,v) => (k,v) }
+      .toMap
   }
 }

@@ -144,8 +144,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
   }
 
-
-  test("actor input stream") {
+  // TODO: This test makes assumptions about Thread.sleep() and is flaky
+  ignore("actor input stream") {
     // Start the server
     val testServer = new TestServer()
     val port = testServer.port
@@ -154,7 +154,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
     val networkStream = ssc.actorStream[String](Props(new TestActor(port)), "TestActor",
-      StorageLevel.MEMORY_AND_DISK) //Had to pass the local value of port to prevent from closing over entire scope
+      // Had to pass the local value of port to prevent from closing over entire scope
+      StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     val outputStream = new TestOutputStream(networkStream, outputBuffer)
     def output = outputBuffer.flatMap(x => x)

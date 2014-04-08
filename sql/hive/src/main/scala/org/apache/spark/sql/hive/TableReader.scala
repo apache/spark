@@ -94,7 +94,7 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: HiveCon
     val tablePath = hiveTable.getPath
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
 
-    //logDebug("Table input: %s".format(tablePath))
+    // logDebug("Table input: %s".format(tablePath))
     val ifc = hiveTable.getInputFormatClass
       .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
     val hadoopRDD = createHadoopRdd(tableDesc, inputPathStr, ifc)

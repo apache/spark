@@ -106,6 +106,8 @@ class SqlParser extends StandardTokenParsers {
   protected val IF = Keyword("IF")
   protected val IN = Keyword("IN")
   protected val INNER = Keyword("INNER")
+  protected val INSERT = Keyword("INSERT")
+  protected val INTO = Keyword("INTO")
   protected val IS = Keyword("IS")
   protected val JOIN = Keyword("JOIN")
   protected val LEFT = Keyword("LEFT")
@@ -114,6 +116,10 @@ class SqlParser extends StandardTokenParsers {
   protected val NULL = Keyword("NULL")
   protected val ON = Keyword("ON")
   protected val OR = Keyword("OR")
+  protected val OVERWRITE = Keyword("OVERWRITE")
+  protected val LIKE = Keyword("LIKE")
+  protected val RLIKE = Keyword("RLIKE")
+  protected val REGEXP = Keyword("REGEXP")
   protected val ORDER = Keyword("ORDER")
   protected val OUTER = Keyword("OUTER")
   protected val RIGHT = Keyword("RIGHT")
@@ -159,7 +165,7 @@ class SqlParser extends StandardTokenParsers {
     select * (
       UNION ~ ALL ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) } |
       UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
-    )
+    ) | insert
 
   protected lazy val select: Parser[LogicalPlan] =
     SELECT ~> opt(DISTINCT) ~ projections ~
@@ -178,9 +184,16 @@ class SqlParser extends StandardTokenParsers {
         val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
         val withHaving = h.map(h => Filter(h, withDistinct)).getOrElse(withDistinct)
         val withOrder = o.map(o => Sort(o, withHaving)).getOrElse(withHaving)
-        val withLimit = l.map { l => StopAfter(l, withOrder) }.getOrElse(withOrder)
+        val withLimit = l.map { l => Limit(l, withOrder) }.getOrElse(withOrder)
         withLimit
   }
+
+  protected lazy val insert: Parser[LogicalPlan] =
+    INSERT ~> opt(OVERWRITE) ~ inTo ~ select <~ opt(";") ^^ {
+      case o ~ r ~ s =>
+        val overwrite: Boolean = o.getOrElse("") == "OVERWRITE"
+        InsertIntoTable(r, Map[String, Option[String]](), s, overwrite)
+    }
 
   protected lazy val projections: Parser[Seq[Expression]] = repsep(projection, ",")
 
@@ -191,6 +204,8 @@ class SqlParser extends StandardTokenParsers {
     }
 
   protected lazy val from: Parser[LogicalPlan] = FROM ~> relations
+
+  protected lazy val inTo: Parser[LogicalPlan] = INTO ~> relation
 
   // Based very loosely on the MySQL Grammar.
   // http://dev.mysql.com/doc/refman/5.0/en/join.html
@@ -204,7 +219,7 @@ class SqlParser extends StandardTokenParsers {
 
   protected lazy val relationFactor: Parser[LogicalPlan] =
     ident ~ (opt(AS) ~> opt(ident)) ^^ {
-      case ident ~ alias => UnresolvedRelation(alias, ident)
+      case tableName ~ alias => UnresolvedRelation(None, tableName, alias)
     } |
     "(" ~> query ~ ")" ~ opt(AS) ~ ident ^^ { case s ~ _ ~ _ ~ a => Subquery(a, s) }
 
@@ -267,6 +282,9 @@ class SqlParser extends StandardTokenParsers {
     termExpression ~ ">=" ~ termExpression ^^ { case e1 ~ _ ~ e2 => GreaterThanOrEqual(e1, e2) } |
     termExpression ~ "!=" ~ termExpression ^^ { case e1 ~ _ ~ e2 => Not(Equals(e1, e2)) } |
     termExpression ~ "<>" ~ termExpression ^^ { case e1 ~ _ ~ e2 => Not(Equals(e1, e2)) } |
+    termExpression ~ RLIKE ~ termExpression ^^ { case e1 ~ _ ~ e2 => RLike(e1, e2) } |
+    termExpression ~ REGEXP ~ termExpression ^^ { case e1 ~ _ ~ e2 => RLike(e1, e2) } |
+    termExpression ~ LIKE ~ termExpression ^^ { case e1 ~ _ ~ e2 => Like(e1, e2) } |
     termExpression ~ IN ~ "(" ~ rep1sep(termExpression, ",") <~ ")" ^^ {
       case e1 ~ _ ~ _ ~ e2 => In(e1, e2)
     } |

@@ -17,7 +17,8 @@
 
 package org.apache.spark.api.java
 
-import java.util.{Comparator, List => JList}
+import java.util.{Comparator, Iterator => JIterator, List => JList}
+import java.lang.{Iterable => JIterable}
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
@@ -281,6 +282,17 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
+   * Return an iterator that contains all of the elements in this RDD.
+   *
+   * The iterator will consume as much memory as the largest partition in this RDD.
+   */
+  def toLocalIterator(): JIterator[T] = {
+     import scala.collection.JavaConversions._
+     rdd.toLocalIterator
+  }
+
+
+  /**
    * Return an array that contains all of the elements in this RDD.
    * @deprecated As of Spark 1.0.0, toArray() is deprecated, use {@link #collect()} instead
    */
@@ -391,19 +403,24 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Save this RDD as a text file, using string representations of elements.
    */
-  def saveAsTextFile(path: String) = rdd.saveAsTextFile(path)
+  def saveAsTextFile(path: String): Unit = {
+    rdd.saveAsTextFile(path)
+  }
 
 
   /**
    * Save this RDD as a compressed text file, using string representations of elements.
    */
-  def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]) =
+  def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]): Unit = {
     rdd.saveAsTextFile(path, codec)
+  }
 
   /**
    * Save this RDD as a SequenceFile of serialized objects.
    */
-  def saveAsObjectFile(path: String) = rdd.saveAsObjectFile(path)
+  def saveAsObjectFile(path: String): Unit = {
+    rdd.saveAsObjectFile(path)
+  }
 
   /**
    * Creates tuples of the elements in this RDD by applying `f`.
@@ -420,7 +437,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * executed on this RDD. It is strongly recommended that this RDD is persisted in
    * memory, otherwise saving it on a file will require recomputation.
    */
-  def checkpoint() = rdd.checkpoint()
+  def checkpoint(): Unit = {
+    rdd.checkpoint()
+  }
 
   /**
    * Return whether this RDD has been checkpointed or not

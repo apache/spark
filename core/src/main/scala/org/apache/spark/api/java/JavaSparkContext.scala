@@ -154,6 +154,34 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    */
   def textFile(path: String, minSplits: Int): JavaRDD[String] = sc.textFile(path, minSplits)
 
+  /**
+   * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI. Each file is read as a single record and returned in a
+   * key-value pair, where the key is the path of each file, the value is the content of each file.
+   *
+   * <p> For example, if you have the following files:
+   * {{{
+   *   hdfs://a-hdfs-path/part-00000
+   *   hdfs://a-hdfs-path/part-00001
+   *   ...
+   *   hdfs://a-hdfs-path/part-nnnnn
+   * }}}
+   *
+   * Do `JavaPairRDD<String, String> rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path")`,
+   *
+   * <p> then `rdd` contains
+   * {{{
+   *   (a-hdfs-path/part-00000, its content)
+   *   (a-hdfs-path/part-00001, its content)
+   *   ...
+   *   (a-hdfs-path/part-nnnnn, its content)
+   * }}}
+   *
+   * @note Small files are preferred, as each file will be loaded fully in memory.
+   */
+  def wholeTextFiles(path: String): JavaPairRDD[String, String] =
+    new JavaPairRDD(sc.wholeTextFiles(path))
+
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
     *
     * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
@@ -463,7 +491,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     sc.setCheckpointDir(dir)
   }
 
-  def getCheckpointDir = JavaUtils.optionToOptional(sc.getCheckpointDir)
+  def getCheckpointDir: Optional[String] = JavaUtils.optionToOptional(sc.getCheckpointDir)
 
   protected def checkpointFile[T](path: String): JavaRDD[T] = {
     implicit val ctag: ClassTag[T] = fakeClassTag

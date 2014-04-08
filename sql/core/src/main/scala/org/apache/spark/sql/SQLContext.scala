@@ -26,8 +26,9 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Subquery, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
 import org.apache.spark.sql.execution._
 
 /**
@@ -79,12 +80,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd)))
 
   /**
-   * Loads a parequet file, returning the result as a [[SchemaRDD]].
+   * Loads a Parquet file, returning the result as a [[SchemaRDD]].
    *
    * @group userf
    */
   def parquetFile(path: String): SchemaRDD =
-    new SchemaRDD(this, parquet.ParquetRelation("ParquetFile", path))
+    new SchemaRDD(this, parquet.ParquetRelation(path))
 
 
   /**
@@ -111,13 +112,42 @@ class SQLContext(@transient val sparkContext: SparkContext)
     result
   }
 
+  /** Returns the specified table as a SchemaRDD */
+  def table(tableName: String): SchemaRDD =
+    new SchemaRDD(this, catalog.lookupRelation(None, tableName))
+
+  /** Caches the specified table in-memory. */
+  def cacheTable(tableName: String): Unit = {
+    val currentTable = catalog.lookupRelation(None, tableName)
+    val asInMemoryRelation =
+      InMemoryColumnarTableScan(currentTable.output, executePlan(currentTable).executedPlan)
+
+    catalog.registerTable(None, tableName, SparkLogicalPlan(asInMemoryRelation))
+  }
+
+  /** Removes the specified table from the in-memory cache. */
+  def uncacheTable(tableName: String): Unit = {
+    EliminateAnalysisOperators(catalog.lookupRelation(None, tableName)) match {
+      // This is kind of a hack to make sure that if this was just an RDD registered as a table,
+      // we reregister the RDD as a table.
+      case SparkLogicalPlan(inMem @ InMemoryColumnarTableScan(_, e: ExistingRdd)) =>
+        inMem.cachedColumnBuffers.unpersist()
+        catalog.unregisterTable(None, tableName)
+        catalog.registerTable(None, tableName, SparkLogicalPlan(e))
+      case SparkLogicalPlan(inMem: InMemoryColumnarTableScan) =>
+        inMem.cachedColumnBuffers.unpersist()
+        catalog.unregisterTable(None, tableName)
+      case plan => throw new IllegalArgumentException(s"Table $tableName is not cached: $plan")
+    }
+  }
+
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext = self.sparkContext
 
     val strategies: Seq[Strategy] =
-      TopK ::
+      TakeOrdered ::
       PartialAggregation ::
-      SparkEquiInnerJoin ::
+      HashJoin ::
       ParquetOperations ::
       BasicOperators ::
       CartesianProduct ::
@@ -193,6 +223,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
+
+    def simpleString: String = stringOrError(executedPlan)
 
     override def toString: String =
       s"""== Logical Plan ==
