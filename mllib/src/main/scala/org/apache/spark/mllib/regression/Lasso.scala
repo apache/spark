@@ -51,7 +51,7 @@ class LassoModel(
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
  */
-class LassoWithSGD(
+class LassoWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
     private var regParam: Double,
@@ -70,7 +70,8 @@ class LassoWithSGD(
   super.setIntercept(false)
 
   /**
-   * Construct a Lasso object with default parameters
+   * Construct a Lasso object with default parameters: {stepSize: 1.0, numIterations: 100,
+   * regParam: 1.0, miniBatchFraction: 1.0}.
    */
   def this() = this(1.0, 100, 1.0, 1.0)
 

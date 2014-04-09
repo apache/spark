@@ -70,7 +70,7 @@ class LogisticRegressionModel(
  * Train a classification model for Logistic Regression using Stochastic Gradient Descent.
  * NOTE: Labels used in Logistic Regression should be {0, 1}
  */
-class LogisticRegressionWithSGD (
+class LogisticRegressionWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
     private var regParam: Double,

@@ -88,7 +88,7 @@ case class Rating(val user: Int, val product: Int, val rating: Double)
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
-class ALS(
+class ALS private (
     private var numBlocks: Int,
     private var rank: Int,
     private var iterations: Int,
@@ -97,6 +97,11 @@ class ALS(
     private var alpha: Double,
     private var seed: Long = System.nanoTime()
   ) extends Serializable with Logging {
+
+  /**
+   * Constructs an ALS instance with default parameters: {numBlocks: -1, rank: 10, iterations: 10,
+   * lambda: 0.01, implicitPrefs: false, alpha: 1.0}.
+   */
   def this() = this(-1, 10, 10, 0.01, false, 1.0)
 
   /**

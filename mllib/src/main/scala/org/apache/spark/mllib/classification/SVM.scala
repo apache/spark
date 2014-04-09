@@ -71,7 +71,7 @@ class SVMModel(
  * Train a Support Vector Machine (SVM) using Stochastic Gradient Descent.
  * NOTE: Labels used in SVM should be {0, 1}.
  */
-class SVMWithSGD(
+class SVMWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
     private var regParam: Double,

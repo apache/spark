@@ -31,7 +31,6 @@ import org.apache.spark.rdd.RDD
  * <span class="badge badge-red" style="float: right;">DEVELOPER API</span>
  *
  * The Java stubs necessary for the Python mllib bindings.
- * Users should not call the methods defined in this class directly.
  */
 class PythonMLLibAPI extends Serializable {
   private def deserializeDoubleVector(bytes: Array[Byte]): Array[Double] = {
