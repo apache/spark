@@ -22,7 +22,6 @@ import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
 
 /**
  * :: DeveloperApi ::
- *
  * Split applied to a feature
  * @param feature feature index
  * @param threshold threshold for continuous feature
