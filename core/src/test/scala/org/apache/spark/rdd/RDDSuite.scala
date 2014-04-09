@@ -510,13 +510,13 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   test("sortByKey") {
     val data = sc.parallelize(Seq("5|50|A","4|60|C", "6|40|B"))
 
-    val one   = Array("4|60|C", "5|50|A", "6|40|B")
-    val two   = Array("6|40|B", "5|50|A", "4|60|C")
-    val three = Array("5|50|A", "6|40|B", "4|60|C")
+    val col1 = Array("4|60|C", "5|50|A", "6|40|B")
+    val col2 = Array("6|40|B", "5|50|A", "4|60|C")
+    val col3 = Array("5|50|A", "6|40|B", "4|60|C")
 
-    assert(data.sortBy(_.split("\\|")(0)).collect === one)
-    assert(data.sortBy(_.split("\\|")(1)).collect === two)
-    assert(data.sortBy(_.split("\\|")(2)).collect === three)
+    assert(data.sortBy(_.split("\\|")(0)).collect === col1)
+    assert(data.sortBy(_.split("\\|")(1)).collect === col2)
+    assert(data.sortBy(_.split("\\|")(2)).collect === col3)
   }
 
   test("intersection") {
