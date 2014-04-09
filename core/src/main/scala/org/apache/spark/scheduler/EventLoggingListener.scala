@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, FileLogger}
 
@@ -58,6 +58,7 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
       val codec = conf.get("spark.io.compression.codec", CompressionCodec.DEFAULT_COMPRESSION_CODEC)
       logger.newFile(COMPRESSION_CODEC_PREFIX + codec)
     }
+    logger.newFile(SPARK_VERSION_PREFIX + SparkContext.SPARK_VERSION)
     logger.newFile(LOG_PREFIX + logger.fileIndex)
   }
 
@@ -111,20 +112,31 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
 }
 
 private[spark] object EventLoggingListener {
+  val SPARK_VERSION_PREFIX = "SPARK_VERSION_"
   val LOG_PREFIX = "EVENT_LOG_"
   val COMPRESSION_CODEC_PREFIX = "COMPRESSION_CODEC_"
   val APPLICATION_COMPLETE = "APPLICATION_COMPLETE"
 
+  def isSparkVersionFile(fileName: String): Boolean = {
+    fileName.startsWith(SPARK_VERSION_PREFIX)
+  }
+
   def isEventLogFile(fileName: String): Boolean = {
-    fileName.contains(LOG_PREFIX)
+    fileName.startsWith(LOG_PREFIX)
   }
 
   def isCompressionCodecFile(fileName: String): Boolean = {
-    fileName.contains(COMPRESSION_CODEC_PREFIX)
+    fileName.startsWith(COMPRESSION_CODEC_PREFIX)
   }
 
   def isApplicationCompleteFile(fileName: String): Boolean = {
     fileName == APPLICATION_COMPLETE
+  }
+
+  def parseSparkVersion(fileName: String): String = {
+    if (isSparkVersionFile(fileName)) {
+      fileName.replaceAll(SPARK_VERSION_PREFIX, "")
+    } else ""
   }
 
   def parseCompressionCodec(fileName: String): String = {

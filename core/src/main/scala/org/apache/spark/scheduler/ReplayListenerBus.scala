@@ -43,6 +43,7 @@ private[spark] class ReplayListenerBus(
   def this(logDir: String) = this(logDir, Utils.getHadoopFileSystem(logDir))
 
   private var applicationComplete = false
+  private var sparkVersion: Option[String] = None
   private var compressionCodec: Option[CompressionCodec] = None
   private var logPaths = Array[Path]()
   private var started = false
@@ -52,25 +53,27 @@ private[spark] class ReplayListenerBus(
    * Prepare state for reading event logs.
    *
    * This gathers relevant files in the given directory and extracts meaning from each category.
-   * More specifically, this involves looking for event logs, the compression codec file
-   * (if event logs are compressed), and the application completion file (if the application
-   * has run to completion).
+   * More specifically, this involves looking for event logs, the Spark version file, the
+   * compression codec file (if event logs are compressed), and the application completion
+   * file (if the application has run to completion).
    */
   def start() {
     val filePaths = getFilePaths(logDir, fileSystem)
-    logPaths = filePaths.filter { file => EventLoggingListener.isEventLogFile(file.getName) }
-    compressionCodec =
-      filePaths.find { file =>
-        EventLoggingListener.isCompressionCodecFile(file.getName)
-      }.map { file =>
+    logPaths = filePaths
+      .filter { file => EventLoggingListener.isEventLogFile(file.getName) }
+    sparkVersion = filePaths
+      .find { file => EventLoggingListener.isSparkVersionFile(file.getName) }
+      .map { file => EventLoggingListener.parseSparkVersion(file.getName) }
+    compressionCodec = filePaths
+      .find { file => EventLoggingListener.isCompressionCodecFile(file.getName) }
+      .map { file =>
         val codec = EventLoggingListener.parseCompressionCodec(file.getName)
         val conf = new SparkConf
         conf.set("spark.io.compression.codec", codec)
         CompressionCodec.createCodec(conf)
       }
-    applicationComplete = filePaths.exists { file =>
-      EventLoggingListener.isApplicationCompleteFile(file.getName)
-    }
+    applicationComplete = filePaths
+      .exists { file => EventLoggingListener.isApplicationCompleteFile(file.getName) }
     started = true
   }
 
@@ -78,6 +81,12 @@ private[spark] class ReplayListenerBus(
   def isApplicationComplete: Boolean = {
     assert(started, "ReplayListenerBus not started yet")
     applicationComplete
+  }
+
+  /** Return the version of Spark on which the given application was run. */
+  def getSparkVersion: String = {
+    assert(started, "ReplayListenerBus not started yet")
+    sparkVersion.getOrElse("<Unknown>")
   }
 
   /**
