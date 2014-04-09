@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.util
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -26,6 +27,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
  *
  * A collection of methods used to validate data before applying ML algorithms.
  */
+@DeveloperApi
 object DataValidators extends Logging {
 
   /**

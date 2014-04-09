@@ -21,6 +21,7 @@ import scala.util.Random
 
 import org.jblas.DoubleMatrix
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.Vectors
@@ -32,6 +33,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
  * Generate sample data used for SVM. This class generates uniform random values
  * for the features and adds Gaussian noise with weight 0.1 to generate labels.
  */
+@DeveloperApi
 object SVMDataGenerator {
 
   def main(args: Array[String]) {

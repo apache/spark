@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.tree.model
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.Logging
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.linalg.Vector
@@ -33,6 +34,7 @@ import org.apache.spark.mllib.linalg.Vector
  * @param rightNode right child
  * @param stats information gain stats
  */
+@DeveloperApi
 class Node (
     val id: Int,
     val predict: Double,

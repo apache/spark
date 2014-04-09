@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree.impurity
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
  * :: Experimental ::
  *
@@ -32,6 +34,7 @@ trait Impurity extends Serializable {
    * @param c1 count of instances with label 1
    * @return information value
    */
+  @DeveloperApi
   def calculate(c0 : Double, c1 : Double): Double
 
   /**
@@ -43,6 +46,6 @@ trait Impurity extends Serializable {
    * @param sumSquares summation of squares of the labels
    * @return information value
    */
+  @DeveloperApi
   def calculate(count: Double, sum: Double, sumSquares: Double): Double
-
 }

@@ -21,6 +21,7 @@ import scala.util.Random
 
 import org.jblas.DoubleMatrix
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 
@@ -49,6 +50,7 @@ import org.apache.spark.rdd.RDD
 *   test           (Boolean) Whether to create testing RDD.
 *   testSampFact   (Double) Percentage of training data to use as test data.
 */
+@DeveloperApi
 object MFDataGenerator {
   def main(args: Array[String]) {
     if (args.length < 2) {

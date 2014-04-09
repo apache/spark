@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree.impurity
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
  * :: Experimental ::
  *
@@ -34,6 +36,7 @@ object Gini extends Impurity {
    * @param c1 count of instances with label 1
    * @return Gini coefficient value
    */
+  @DeveloperApi
   override def calculate(c0: Double, c1: Double): Double = {
     if (c0 == 0 || c1 == 0) {
       0

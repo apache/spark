@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree.impurity
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
  * :: Experimental ::
  *
@@ -25,7 +27,7 @@ package org.apache.spark.mllib.tree.impurity
  */
 object Entropy extends Impurity {
 
-   private[tree] def log2(x: Double) = scala.math.log(x) / scala.math.log(2)
+  private[tree] def log2(x: Double) = scala.math.log(x) / scala.math.log(2)
 
   /**
    * :: DeveloperApi ::
@@ -35,16 +37,17 @@ object Entropy extends Impurity {
    * @param c1 count of instances with label 1
    * @return entropy value
    */
-   override def calculate(c0: Double, c1: Double): Double = {
-     if (c0 == 0 || c1 == 0) {
-       0
-     } else {
-       val total = c0 + c1
-       val f0 = c0 / total
-       val f1 = c1 / total
-       -(f0 * log2(f0)) - (f1 * log2(f1))
-     }
-   }
+  @DeveloperApi
+  override def calculate(c0: Double, c1: Double): Double = {
+    if (c0 == 0 || c1 == 0) {
+      0
+    } else {
+      val total = c0 + c1
+      val f0 = c0 / total
+      val f1 = c1 / total
+      -(f0 * log2(f0)) - (f1 * log2(f1))
+    }
+  }
 
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
     throw new UnsupportedOperationException("Entropy.calculate")

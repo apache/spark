@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree.model
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
  * :: DeveloperApi ::
  *
@@ -27,6 +29,7 @@ package org.apache.spark.mllib.tree.model
  * @param rightImpurity right node impurity
  * @param predict predicted value
  */
+@DeveloperApi
 class InformationGainStats(
     val gain: Double,
     val impurity: Double,

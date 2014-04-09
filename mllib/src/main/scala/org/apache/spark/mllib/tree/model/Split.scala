@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.tree.model
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
 
 /**
@@ -28,6 +29,7 @@ import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
  * @param featureType type of feature -- categorical or continuous
  * @param categories accepted values for categorical variables
  */
+@DeveloperApi
 case class Split(
     feature: Int,
     threshold: Double,

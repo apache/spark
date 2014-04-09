@@ -19,6 +19,7 @@ package org.apache.spark.mllib.util
 
 import scala.util.Random
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -30,6 +31,7 @@ import org.apache.spark.mllib.linalg.Vectors
  * Generate test data for LogisticRegression. This class chooses positive labels
  * with probability `probOne` and scales features for positive examples by `eps`.
  */
+@DeveloperApi
 object LogisticRegressionDataGenerator {
 
   /**

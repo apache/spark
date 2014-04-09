@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree.impurity
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
  * :: Experimental ::
  *
@@ -34,6 +36,7 @@ object Variance extends Impurity {
    * @param sum sum of labels
    * @param sumSquares summation of squares of the labels
    */
+  @DeveloperApi
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double = {
     val squaredLoss = sumSquares - (sum * sum) / count
     squaredLoss / count
