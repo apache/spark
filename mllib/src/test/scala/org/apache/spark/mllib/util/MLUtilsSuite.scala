@@ -35,17 +35,6 @@ import org.apache.spark.mllib.util.MLUtils._
 
 class MLUtilsSuite extends FunSuite with LocalSparkContext {
 
-  @transient private var sc: SparkContext = _
-
-  override def beforeAll() {
-    sc = new SparkContext("local", "test")
-  }
-
-  override def afterAll() {
-    sc.stop()
-    System.clearProperty("spark.driver.port")
-  }
-
   test("epsilon computation") {
     assert(1.0 + EPSILON > 1.0, s"EPSILON is too small: $EPSILON.")
     assert(1.0 + EPSILON / 2.0 === 1.0, s"EPSILON is too big: $EPSILON.")
