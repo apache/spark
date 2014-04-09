@@ -180,16 +180,17 @@ object MLUtils {
 
   /**
    * Return a k element list of pairs of RDDs with the first element of each pair
-   * containing a unique 1/Kth of the data and the second element contain the compliment of that.
+   * containing the validation data, a unique 1/Kth of the data and the second
+   * element, the training data, contain the compliment of that.
    */
-  def kFold[T : ClassTag](rdd: RDD[T], numFolds: Int, seed: Int): List[Pair[RDD[T], RDD[T]]] = {
+  def kFold[T : ClassTag](rdd: RDD[T], numFolds: Int, seed: Int): Array[(RDD[T], RDD[T])] = {
     val numFoldsF = numFolds.toFloat
     (1 to numFolds).map  { fold =>
-      val sampler = new BernoulliSampler[T]((fold-1)/numFoldsF,fold/numFoldsF, complement = false)
-      val train = new PartitionwiseSampledRDD(rdd, sampler, seed)
-      val test = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), seed)
-      (train, test)
-    }.toList
+      val sampler = new BernoulliSampler[T]((fold - 1) / numFoldsF, fold / numFoldsF, complement = false)
+      val validation = new PartitionwiseSampledRDD(rdd, sampler, seed)
+      val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), seed)
+      (validation, training)
+    }.toArray
   }
 
   /**
