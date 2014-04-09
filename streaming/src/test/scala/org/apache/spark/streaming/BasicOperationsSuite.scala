@@ -396,6 +396,16 @@ class BasicOperationsSuite extends TestSuiteBase {
     Thread.sleep(1000)
   }
 
+  test("slice - has not been initialized") {
+    val ssc = new StreamingContext(conf, Seconds(1))
+    val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
+    val stream = new TestInputStream[Int](ssc, input, 2)
+    val thrown = intercept[Exception] {
+      stream.slice(new Time(0), new Time(1000))
+    }
+    assert(thrown.getMessage.contains("has not been initialized"))
+  }
+
   val cleanupTestInput = (0 until 10).map(x => Seq(x, x + 1)).toSeq
 
   test("rdd cleanup - map and window") {

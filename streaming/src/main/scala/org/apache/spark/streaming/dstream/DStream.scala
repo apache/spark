@@ -725,6 +725,9 @@ abstract class DStream[T: ClassTag] (
    * Return all the RDDs between 'fromTime' to 'toTime' (both included)
    */
   def slice(fromTime: Time, toTime: Time): Seq[RDD[T]] = {
+    if (!isInitialized) {
+      throw new Exception(this + " has not been initialized")
+    }
     if (!(fromTime - zeroTime).isMultipleOf(slideDuration)) {
       logWarning("fromTime (" + fromTime + ") is not a multiple of slideDuration ("
         + slideDuration + ")")
