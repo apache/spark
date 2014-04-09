@@ -62,7 +62,11 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
       alias)(table.getTTable, partitions.map(part => part.getTPartition))
   }
 
-  def createTable(databaseName: String, tableName: String, schema: Seq[Attribute]) {
+  def createTable(
+      databaseName: String,
+      tableName: String,
+      schema: Seq[Attribute],
+      allowExisting: Boolean = false): Unit = {
     val table = new Table(databaseName, tableName)
     val hiveSchema =
       schema.map(attr => new FieldSchema(attr.name, toMetastoreType(attr.dataType), ""))
@@ -82,7 +86,12 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
     serDeInfo.setSerializationLib("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
     serDeInfo.setParameters(Map[String, String]())
     sd.setSerdeInfo(serDeInfo)
-    client.createTable(table)
+
+    try client.createTable(table) catch {
+      case e: org.apache.hadoop.hive.ql.metadata.HiveException
+        if e.getCause.isInstanceOf[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] &&
+           allowExisting => // Do nothing.
+    }
   }
 
   /**

@@ -23,6 +23,8 @@ import scala.language.implicitConversions
 import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
 import java.util.{ArrayList => JArrayList}
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors._
@@ -34,6 +36,7 @@ import org.apache.spark.sql.catalyst.analysis.{Analyzer, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LowerCaseSchema}
 import org.apache.spark.sql.catalyst.plans.logical.{NativeCommand, ExplainCommand}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution._
 
@@ -77,13 +80,24 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     val result = new SchemaRDD(this, HiveQl.parseSql(hqlQuery))
     // We force query optimization to happen right away instead of letting it happen lazily like
     // when using the query DSL.  This is so DDL commands behave as expected.  This is only
-    // generates the RDD lineage for DML queries, but do not perform any execution.
+    // generates the RDD lineage for DML queries, but does not perform any execution.
     result.queryExecution.toRdd
     result
   }
 
   /** An alias for `hiveql`. */
   def hql(hqlQuery: String): SchemaRDD = hiveql(hqlQuery)
+
+  /**
+   * Creates a table using the schema of the given class.
+   *
+   * @param tableName The name of the table to create.
+   * @param allowExisting When false, an exception will be thrown if the table already exists.
+   * @tparam A A case class that is used to describe the schema of the table to be created.
+   */
+  def createTable[A <: Product : TypeTag](tableName: String, allowExisting: Boolean = true) {
+    catalog.createTable("default", tableName, ScalaReflection.attributesFor[A], allowExisting)
+  }
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   @transient

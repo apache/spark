@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical._
 
@@ -66,27 +67,29 @@ trait SchemaRDDLike {
   }
 
   /**
-   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+   * :: Experimental ::
    *
    * Adds the rows from this RDD to the specified table, optionally overwriting the existing data.
    *
    * @group schema
    */
+  @Experimental
   def insertInto(tableName: String, overwrite: Boolean): Unit =
     sqlContext.executePlan(
       InsertIntoTable(UnresolvedRelation(None, tableName), Map.empty, logicalPlan, overwrite)).toRdd
 
   /**
-   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+   * :: Experimental ::
    *
    * Appends the rows from this RDD to the specified table.
    *
    * @group schema
    */
+  @Experimental
   def insertInto(tableName: String): Unit = insertInto(tableName, false)
 
   /**
-   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+   * :: Experimental ::
    *
    * Creates a table from the the contents of this SchemaRDD.  This will fail if the table already
    * exists.
@@ -98,7 +101,7 @@ trait SchemaRDDLike {
    *
    * @param tableName
    */
-  def createTableAs(tableName: String) =
-    sqlContext.executePlan(
-      InsertIntoCreatedTable(None, tableName, logicalPlan))
+  @Experimental
+  def createTableAs(tableName: String): Unit =
+    sqlContext.executePlan(InsertIntoCreatedTable(None, tableName, logicalPlan)).toRdd
 }

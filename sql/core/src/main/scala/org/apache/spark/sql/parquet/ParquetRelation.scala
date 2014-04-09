@@ -119,7 +119,7 @@ private[sql] object ParquetRelation {
         child,
         "Attempt to create Parquet table from unresolved child (when schema is not available)")
     }
-    createEmpty(pathString, child.output, conf)
+    createEmpty(pathString, child.output, false, conf)
   }
 
   /**
@@ -133,8 +133,9 @@ private[sql] object ParquetRelation {
    */
   def createEmpty(pathString: String,
                   attributes: Seq[Attribute],
+                  allowExisting: Boolean,
                   conf: Configuration): ParquetRelation = {
-    val path = checkPath(pathString, conf)
+    val path = checkPath(pathString, allowExisting, conf)
     if (conf.get(ParquetOutputFormat.COMPRESSION) == null) {
       conf.set(ParquetOutputFormat.COMPRESSION, ParquetRelation.defaultCompression.name())
     }
@@ -143,7 +144,7 @@ private[sql] object ParquetRelation {
     new ParquetRelation(path.toString)
   }
 
-  private def checkPath(pathStr: String, conf: Configuration): Path = {
+  private def checkPath(pathStr: String, allowExisting: Boolean, conf: Configuration): Path = {
     if (pathStr == null) {
       throw new IllegalArgumentException("Unable to create ParquetRelation: path is null")
     }
@@ -154,6 +155,10 @@ private[sql] object ParquetRelation {
         s"Unable to create ParquetRelation: incorrectly formatted path $pathStr")
     }
     val path = origPath.makeQualified(fs)
+    if (!allowExisting && fs.exists(path)) {
+      sys.error(s"File $pathStr already exists.")
+    }
+
     if (fs.exists(path) &&
         !fs.getFileStatus(path)
         .getPermission

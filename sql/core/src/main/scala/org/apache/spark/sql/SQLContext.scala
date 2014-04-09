@@ -20,17 +20,25 @@ package org.apache.spark.sql
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.rdd.RDD
+
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.dsl
+import org.apache.spark.sql.catalyst.{ScalaReflection, dsl}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.{Subquery, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+
 import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
+
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.SparkStrategies
+
+import org.apache.spark.sql.parquet.ParquetRelation
 
 /**
  * :: AlphaComponent ::
@@ -88,6 +96,26 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def parquetFile(path: String): SchemaRDD =
     new SchemaRDD(this, parquet.ParquetRelation(path))
 
+  /**
+   * :: Experimental ::
+   *
+   * Creates an empty parquet file with the schema of class `A`, which can be registered as a table.
+   * This registered table can be used as the target of future `insertInto` operations.
+   *
+   * @param path
+   * @param allowExisting
+   * @param conf
+   * @tparam A
+   */
+  @Experimental
+  def createParquetFile[A <: Product : TypeTag](
+      path: String,
+      allowExisting: Boolean = true,
+      conf: Configuration = new Configuration()): SchemaRDD = {
+    new SchemaRDD(
+      this,
+      ParquetRelation.createEmpty(path, ScalaReflection.attributesFor[A], allowExisting, conf))
+  }
 
   /**
    * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
