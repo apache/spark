@@ -17,11 +17,24 @@
 
 package org.apache.spark.mllib.linalg
 
-/**
- * Class that represents an entry in a sparse matrix of doubles.
- *
- * @param i row index (0 indexing used)
- * @param j column index (0 indexing used)
- * @param mval value of entry in matrix
- */
-case class MatrixEntry(val i: Int, val j: Int, val mval: Double)
+import org.scalatest.FunSuite
+
+import breeze.linalg.{DenseMatrix => BDM}
+
+class BreezeMatrixConversionSuite extends FunSuite {
+  test("dense matrix to breeze") {
+    val mat = Matrices.dense(3, 2, Array(0.0, 1.0, 2.0, 3.0, 4.0, 5.0))
+    val breeze = mat.toBreeze.asInstanceOf[BDM[Double]]
+    assert(breeze.rows === mat.numRows)
+    assert(breeze.cols === mat.numCols)
+    assert(breeze.data.eq(mat.asInstanceOf[DenseMatrix].values), "should not copy data")
+  }
+
+  test("dense breeze matrix to matrix") {
+    val breeze = new BDM[Double](3, 2, Array(0.0, 1.0, 2.0, 3.0, 4.0, 5.0))
+    val mat = Matrices.fromBreeze(breeze).asInstanceOf[DenseMatrix]
+    assert(mat.numRows === breeze.rows)
+    assert(mat.numCols === breeze.cols)
+    assert(mat.values.eq(breeze.data), "should not copy data")
+  }
+}
