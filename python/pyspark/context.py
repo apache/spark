@@ -492,6 +492,13 @@ class SQLContext:
         Traceback (most recent call last):
             ...
         ValueError:...
+
+        >>> allTypes = sc.parallelize([{"int" : 1, "string" : "string", "double" : 1.0, "long": 1L,
+        ... "boolean" : True}])
+        >>> srdd = sqlCtx.applySchema(allTypes).map(lambda x: (x.int, x.string, x.double, x.long,
+        ... x.boolean))
+        >>> srdd.collect()[0]
+        (1, u'string', 1.0, 1, True)
         """
         self._sc = sparkContext
         self._jsc = self._sc._jsc

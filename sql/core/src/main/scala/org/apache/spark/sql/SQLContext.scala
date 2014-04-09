@@ -243,18 +243,17 @@ class SQLContext(@transient val sparkContext: SparkContext)
     def debugExec() = DebugQuery(executedPlan).execute().collect()
   }
 
+  // TODO: We only support primitive types, add support for nested types. Difficult because java
+  // objects don't have classTags
   def applySchema(rdd: RDD[Map[String, _]]): SchemaRDD = {
     val schema = rdd.first.map { case (fieldName, obj) =>
       val dataType = obj.getClass match {
         case c: Class[_] if c == classOf[java.lang.String] => StringType
         case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
-       // case c: Class[_] if c == java.lang.Short.TYPE => ShortType
-       // case c: Class[_] if c == java.lang.Integer.TYPE => IntegerType
-       // case c: Class[_] if c == java.lang.Long.TYPE => LongType
-       // case c: Class[_] if c == java.lang.Double.TYPE => DoubleType
-       // case c: Class[_] if c == java.lang.Byte.TYPE => ByteType
-       // case c: Class[_] if c == java.lang.Float.TYPE => FloatType
-       // case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
+        case c: Class[_] if c == classOf[java.lang.Long] => LongType
+        case c: Class[_] if c == classOf[java.lang.Double] => DoubleType
+        case c: Class[_] if c == classOf[java.lang.Boolean] => BooleanType
+        case c => throw new Exception(s"Object of type $c cannot be used")
       }
       AttributeReference(fieldName, dataType, true)()
     }.toSeq
