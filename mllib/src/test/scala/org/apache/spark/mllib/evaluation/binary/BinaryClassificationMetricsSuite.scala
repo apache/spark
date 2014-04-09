@@ -22,11 +22,11 @@ import org.scalatest.FunSuite
 import org.apache.spark.mllib.util.LocalSparkContext
 import org.apache.spark.mllib.evaluation.AreaUnderCurve
 
-class BinaryClassificationEvaluatorSuite extends FunSuite with LocalSparkContext {
+class BinaryClassificationMetricsSuite extends FunSuite with LocalSparkContext {
   test("binary evaluation metrics") {
     val scoreAndLabels = sc.parallelize(
       Seq((0.1, 0.0), (0.1, 1.0), (0.4, 0.0), (0.6, 0.0), (0.6, 1.0), (0.6, 1.0), (0.8, 1.0)), 2)
-    val evaluator = new BinaryClassificationEvaluator(scoreAndLabels)
+    val metrics = new BinaryClassificationMetrics(scoreAndLabels)
     val score = Seq(0.8, 0.6, 0.4, 0.1)
     val tp = Seq(1, 3, 3, 4)
     val fp = Seq(0, 1, 2, 3)
@@ -39,11 +39,14 @@ class BinaryClassificationEvaluatorSuite extends FunSuite with LocalSparkContext
     val pr = recall.zip(precision)
     val f1 = pr.map { case (re, prec) => 2.0 * (prec * re) / (prec + re) }
     val f2 = pr.map { case (re, prec) => 5.0 * (prec * re) / (4.0 * prec + re)}
-    assert(evaluator.rocCurve().collect().toSeq === roc)
-    assert(evaluator.rocAUC() === AreaUnderCurve.of(roc))
-    assert(evaluator.prCurve().collect().toSeq === pr)
-    assert(evaluator.prAUC() === AreaUnderCurve.of(pr))
-    assert(evaluator.fMeasureByThreshold().collect().toSeq === score.zip(f1))
-    assert(evaluator.fMeasureByThreshold(2.0).collect().toSeq === score.zip(f2))
+    assert(metrics.thresholds().collect().toSeq === score)
+    assert(metrics.roc().collect().toSeq === roc)
+    assert(metrics.areaUnderROC() === AreaUnderCurve.of(roc))
+    assert(metrics.pr().collect().toSeq === pr)
+    assert(metrics.areaUnderPR() === AreaUnderCurve.of(pr))
+    assert(metrics.fMeasureByThreshold().collect().toSeq === score.zip(f1))
+    assert(metrics.fMeasureByThreshold(2.0).collect().toSeq === score.zip(f2))
+    assert(metrics.precisionByThreshold().collect().toSeq === score.zip(precision))
+    assert(metrics.recallByThreshold().collect().toSeq === score.zip(recall))
   }
 }
