@@ -347,8 +347,8 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
       logInfo("finishApplicationMaster with " + status)
       if (registered) {
-        // Set tracking URL to empty since we don't have a history server.
-        amClient.unregisterApplicationMaster(status, "" /* appMessage */ , "" /* appTrackingUrl */)
+        val trackingUrl = sparkConf.get("spark.historyserver.address", "")
+        amClient.unregisterApplicationMaster(status, diagnostics, trackingUrl)
       }
     }
   }
