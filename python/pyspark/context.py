@@ -496,7 +496,16 @@ class SQLContext:
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
-        self._ssql_ctx = self._jvm.SQLContext(self._jsc.sc())
+
+    @property
+    def _ssql_ctx(self):
+        """
+        Accessor for the JVM SparkSQL context.  Subclasses can overrite this property to provide
+        their own JVM Contexts.
+        """
+        if not hasattr(self, '_scala_SQLContext'):
+            self._scala_SQLContext = self._jvm.SQLContext(self._jsc.sc())
+        return self._scala_SQLContext
 
     def applySchema(self, rdd):
         """
@@ -599,6 +608,36 @@ class SQLContext:
         Removes the specified table from the in-memory cache.
         """
         self._ssql_ctx.uncacheTable(tableName)
+
+class HiveContext(SQLContext):
+
+    @property
+    def _ssql_ctx(self):
+        if not hasattr(self, '_scala_HiveContext'):
+            self._scala_HiveContext = self._jvm.HiveContext(self._jsc.sc())
+        return self._scala_HiveContext
+
+    def hiveql(self, hqlQuery):
+        return SchemaRDD(self._ssql_ctx.hiveql(hqlQuery), self)
+
+    def hql(self, hqlQuery):
+        return self.hiveql(hqlQuery)
+
+class LocalHiveContext(HiveContext):
+
+    @property
+    def _ssql_ctx(self):
+        if not hasattr(self, '_scala_LocalHiveContext'):
+            self._scala_LocalHiveContext = self._jvm.LocalHiveContext(self._jsc.sc())
+        return self._scala_LocalHiveContext
+
+class TestHiveContext(HiveContext):
+
+    @property
+    def _ssql_ctx(self):
+        if not hasattr(self, '_scala_TestHiveContext'):
+            self._scala_TestHiveContext = self._jvm.TestHiveContext(self._jsc.sc())
+        return self._scala_TestHiveContext
 
 def _test():
     import atexit
