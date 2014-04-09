@@ -15,17 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.annotations;
+package org.apache.spark.annotation;
 
 import java.lang.annotation.*;
 
 /**
- * An experimental user-facing API.
+ * A lower-level, unstable API intended for developers.
  *
- * Experimental API's might change or be removed in minor versions of Spark, or be adopted as
- * first-class Spark API's.
+ * Developer API's might change or be removed in minor versions of Spark.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
         ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
-public @interface Experimental {}
+public @interface DeveloperApi {}

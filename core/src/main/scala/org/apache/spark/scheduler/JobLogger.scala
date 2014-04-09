@@ -25,7 +25,7 @@ import java.util.concurrent.LinkedBlockingQueue
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
-import org.apache.spark.annotations.DeveloperApi
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 
 /**

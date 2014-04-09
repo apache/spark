@@ -35,7 +35,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 import org.apache.spark._
 import org.apache.spark.Partitioner._
 import org.apache.spark.SparkContext._
-import org.apache.spark.annotations.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator

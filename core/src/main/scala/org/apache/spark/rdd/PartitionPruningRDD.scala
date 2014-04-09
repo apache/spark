@@ -20,7 +20,7 @@ package org.apache.spark.rdd
 import scala.reflect.ClassTag
 
 import org.apache.spark.{NarrowDependency, Partition, TaskContext}
-import org.apache.spark.annotations.DeveloperApi
+import org.apache.spark.annotation.DeveloperApi
 
 private[spark] class PartitionPruningRDDPartition(idx: Int, val parentSplit: Partition)
   extends Partition {

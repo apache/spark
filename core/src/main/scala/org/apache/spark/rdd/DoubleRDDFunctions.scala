@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.annotations.Experimental
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.{TaskContext, Logging}
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.MeanEvaluator

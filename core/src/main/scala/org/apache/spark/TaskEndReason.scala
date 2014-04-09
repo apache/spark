@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import org.apache.spark.annotations.DeveloperApi
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 

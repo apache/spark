@@ -21,7 +21,7 @@ import java.io._
 import java.nio.ByteBuffer
 
 import org.apache.spark.SparkConf
-import org.apache.spark.annotations.DeveloperApi
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.ByteBufferInputStream
 
 private[spark] class JavaSerializationStream(out: OutputStream, counterReset: Int)

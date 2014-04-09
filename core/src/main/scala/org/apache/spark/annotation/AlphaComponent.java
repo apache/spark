@@ -15,16 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.annotations;
+package org.apache.spark.annotation;
 
 import java.lang.annotation.*;
 
-/**
- * A lower-level, unstable API intended for developers.
- *
- * Developer API's might change or be removed in minor versions of Spark.
- */
+/** A new component of Spark which may have unstable API's. */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
         ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
-public @interface DeveloperApi {}
+public @interface AlphaComponent {}

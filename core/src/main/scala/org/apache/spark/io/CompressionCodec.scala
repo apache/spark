@@ -23,7 +23,7 @@ import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 import org.xerial.snappy.{SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.annotations.DeveloperApi
+import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::

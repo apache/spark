@@ -24,7 +24,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.reflect.ClassTag
 
 import org.apache.spark.{ComplexFutureAction, FutureAction, Logging}
-import org.apache.spark.annotations.Experimental
+import org.apache.spark.annotation.Experimental
 
 /**
  * :: Experimental ::

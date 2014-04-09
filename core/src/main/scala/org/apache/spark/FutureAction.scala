@@ -21,7 +21,7 @@ import scala.concurrent._
 import scala.concurrent.duration.Duration
 import scala.util.Try
 
-import org.apache.spark.annotations.Experimental
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{JobFailed, JobSucceeded, JobWaiter}
 

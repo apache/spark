@@ -19,7 +19,7 @@ package org.apache.spark.util.collection
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.annotations.DeveloperApi
+import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::

@@ -17,7 +17,7 @@
 
 package org.apache.spark.partial
 
-import org.apache.spark.annotations.Experimental
+import org.apache.spark.annotation.Experimental
 
 @Experimental
 class PartialResult[R](initialVal: R, isFinal: Boolean) {

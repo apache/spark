@@ -27,7 +27,7 @@ import com.google.common.io.ByteStreams
 import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 
 import org.apache.spark.{Logging, SparkEnv}
-import org.apache.spark.annotations.DeveloperApi
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockId, BlockManager}
 

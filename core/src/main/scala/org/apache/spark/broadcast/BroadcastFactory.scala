@@ -19,7 +19,7 @@ package org.apache.spark.broadcast
 
 import org.apache.spark.SecurityManager
 import org.apache.spark.SparkConf
-import org.apache.spark.annotations.DeveloperApi
+import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::

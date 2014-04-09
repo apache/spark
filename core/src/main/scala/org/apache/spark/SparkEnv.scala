@@ -25,7 +25,7 @@ import scala.util.Properties
 import akka.actor._
 import com.google.common.collect.MapMaker
 
-import org.apache.spark.annotations.DeveloperApi
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem

@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.Partitioner
 import org.apache.spark.SparkContext.doubleRDDToDoubleRDDFunctions
-import org.apache.spark.annotations.Experimental
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD

@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.random
 
-import org.apache.spark.annotations.DeveloperApi
+import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::

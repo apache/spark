@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.annotations.DeveloperApi
+import org.apache.spark.annotation.DeveloperApi
 
 @DeveloperApi
 object TaskLocality extends Enumeration {

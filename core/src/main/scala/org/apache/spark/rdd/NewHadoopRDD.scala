@@ -25,7 +25,7 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 
 import org.apache.spark.{InterruptibleIterator, Logging, Partition, SerializableWritable, SparkContext, TaskContext}
-import org.apache.spark.annotations.DeveloperApi
+import org.apache.spark.annotation.DeveloperApi
 
 private[spark]
 class NewHadoopPartition(rddId: Int, val index: Int, @transient rawSplit: InputSplit with Writable)
