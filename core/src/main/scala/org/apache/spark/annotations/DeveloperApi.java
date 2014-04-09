@@ -19,7 +19,12 @@ package org.apache.spark.annotations;
 
 import java.lang.annotation.*;
 
-@Retention(RetentionPolicy.SOURCE)
-@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD,
+/**
+ * A lower-level, unstable API intended for developers.
+ *
+ * Developer API's might change or be removed in minor versions of Spark.
+ */
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
         ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
 public @interface DeveloperApi {}

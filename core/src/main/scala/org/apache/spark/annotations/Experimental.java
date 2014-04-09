@@ -19,7 +19,13 @@ package org.apache.spark.annotations;
 
 import java.lang.annotation.*;
 
-@Retention(RetentionPolicy.SOURCE)
-@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD,
+/**
+ * An experimental user-facing API.
+ *
+ * Experimental API's might change or be removed in minor versions of Spark, or be adopted as
+ * first-class Spark API's.
+ */
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
         ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
 public @interface Experimental {}

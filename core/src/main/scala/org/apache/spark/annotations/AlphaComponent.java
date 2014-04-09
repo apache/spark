@@ -19,7 +19,8 @@ package org.apache.spark.annotations;
 
 import java.lang.annotation.*;
 
-@Retention(RetentionPolicy.SOURCE)
-@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD,
+/** A new component of Spark which may have unstable API's. */
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
         ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
 public @interface AlphaComponent {}
