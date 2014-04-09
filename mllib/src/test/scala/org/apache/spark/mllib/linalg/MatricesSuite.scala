@@ -17,15 +17,23 @@
 
 package org.apache.spark.mllib.linalg
 
-/**
- * Class that represents the singular value decomposition of a matrix
- *
- * @param U such that A = USV^T is a TallSkinnyDenseMatrix
- * @param S such that A = USV^T is a simple double array
- * @param V such that A = USV^T, V is a 2d array matrix that holds
- *          singular vectors in columns. Columns are inner arrays
- *          i.e. V(i)(j) is standard math notation V_{ij}
- */
-case class TallSkinnyMatrixSVD(val U: TallSkinnyDenseMatrix,
-                               val S: Array[Double],
-                               val V: Array[Array[Double]])
+import org.scalatest.FunSuite
+
+class MatricesSuite extends FunSuite {
+  test("dense matrix construction") {
+    val m = 3
+    val n = 2
+    val values = Array(0.0, 1.0, 2.0, 3.0, 4.0, 5.0)
+    val mat = Matrices.dense(m, n, values).asInstanceOf[DenseMatrix]
+    assert(mat.numRows === m)
+    assert(mat.numCols === n)
+    assert(mat.values.eq(values), "should not copy data")
+    assert(mat.toArray.eq(values), "toArray should not copy data")
+  }
+
+  test("dense matrix construction with wrong dimension") {
+    intercept[RuntimeException] {
+      Matrices.dense(3, 2, Array(0.0, 1.0, 2.0))
+    }
+  }
+}
