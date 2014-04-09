@@ -40,25 +40,45 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
   var name: String = null
   var childArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
   var jars: String = null
+  var verbose: Boolean = false
 
   loadEnvVars()
-  parseArgs(args.toList)
+  parseOpts(args.toList)
 
-  def loadEnvVars() {
-    master = System.getenv("MASTER")
-    deployMode = System.getenv("DEPLOY_MODE")
+  // Sanity checks
+  if (args.length == 0) printUsageAndExit(-1)
+  if (primaryResource == null) SparkSubmit.printErrorAndExit("Must specify a primary resource")
+  if (mainClass == null) SparkSubmit.printErrorAndExit("Must specify a main class with --class")
+
+  override def toString =  {
+    s"""Parsed arguments:
+    |  master             $master
+    |  deployMode         $deployMode
+    |  executorMemory     $executorMemory
+    |  executorCores      $executorCores
+    |  totalExecutorCores $totalExecutorCores
+    |  driverMemory       $driverMemory
+    |  drivercores        $driverCores
+    |  supervise          $supervise
+    |  queue              $queue
+    |  numExecutors       $numExecutors
+    |  files              $files
+    |  archives           $archives
+    |  mainClass          $mainClass
+    |  primaryResource    $primaryResource
+    |  name               $name
+    |  childArgs          [${childArgs.mkString(" ")}]
+    |  jars               $jars
+    |  verbose            $verbose
+    """.stripMargin
   }
 
-  def parseArgs(args: List[String]) {
-    if (args.size == 0) {
-      printUsageAndExit(1)
-      System.exit(1)
-    }
-    primaryResource = args(0)
-    parseOpts(args.tail)
+  private def loadEnvVars() {
+    Option(System.getenv("MASTER")).map(master = _)
+    Option(System.getenv("DEPLOY_MODE")).map(deployMode = _)
   }
 
-  def parseOpts(opts: List[String]): Unit = opts match {
+  private def parseOpts(opts: List[String]): Unit = opts match {
     case ("--name") :: value :: tail =>
       name = value
       parseOpts(tail)
@@ -73,8 +93,7 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
 
     case ("--deploy-mode") :: value :: tail =>
       if (value != "client" && value != "cluster") {
-        System.err.println("--deploy-mode must be either \"client\" or \"cluster\"")
-        System.exit(1)
+        SparkSubmit.printErrorAndExit("--deploy-mode must be either \"client\" or \"cluster\"")
       }
       deployMode = value
       parseOpts(tail)
@@ -130,18 +149,29 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
     case ("--help" | "-h") :: tail =>
       printUsageAndExit(0)
 
-    case Nil =>
+    case ("--verbose" | "-v") :: tail =>
+      verbose = true
+      parseOpts(tail)
 
-    case _ =>
-      printUsageAndExit(1, opts)
+    case value :: tail =>
+      if (primaryResource != null) {
+        val error = s"Found two conflicting resources, $value and $primaryResource." +
+          " Expecting only one resource."
+        SparkSubmit.printErrorAndExit(error)
+      }
+      primaryResource = value
+      parseOpts(tail)
+
+    case Nil =>
   }
 
-  def printUsageAndExit(exitCode: Int, unknownParam: Any = null) {
+  private def printUsageAndExit(exitCode: Int, unknownParam: Any = null) {
+    val outStream = SparkSubmit.printStream
     if (unknownParam != null) {
-      System.err.println("Unknown/unsupported param " + unknownParam)
+      outStream.println("Unknown/unsupported param " + unknownParam)
     }
-    System.err.println(
-      """Usage: spark-submit <primary binary> [options]
+    outStream.println(
+      """Usage: spark-submit <app jar> [options]
         |Options:
         |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local.
         |  --deploy-mode DEPLOY_MODE   Mode to deploy the app in, either 'client' or 'cluster'.
@@ -171,6 +201,6 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
         |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
         |                              working dir of each executor.""".stripMargin
     )
-    System.exit(exitCode)
+    SparkSubmit.exitFn()
   }
 }

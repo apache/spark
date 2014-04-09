@@ -17,7 +17,8 @@
 
 package org.apache.spark.api.java
 
-import java.util.{Comparator, List => JList}
+import java.util.{Comparator, List => JList, Iterator => JIterator}
+import java.lang.{Iterable => JIterable}
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
@@ -204,7 +205,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
    * mapping to that key.
    */
-  def groupBy[K](f: JFunction[T, K]): JavaPairRDD[K, JList[T]] = {
+  def groupBy[K](f: JFunction[T, K]): JavaPairRDD[K, JIterable[T]] = {
     implicit val ctagK: ClassTag[K] = fakeClassTag
     implicit val ctagV: ClassTag[JList[T]] = fakeClassTag
     JavaPairRDD.fromRDD(groupByResultToJava(rdd.groupBy(f)(fakeClassTag)))
@@ -214,7 +215,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
    * mapping to that key.
    */
-  def groupBy[K](f: JFunction[T, K], numPartitions: Int): JavaPairRDD[K, JList[T]] = {
+  def groupBy[K](f: JFunction[T, K], numPartitions: Int): JavaPairRDD[K, JIterable[T]] = {
     implicit val ctagK: ClassTag[K] = fakeClassTag
     implicit val ctagV: ClassTag[JList[T]] = fakeClassTag
     JavaPairRDD.fromRDD(groupByResultToJava(rdd.groupBy(f, numPartitions)(fakeClassTag[K])))
@@ -280,6 +281,17 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     val arr: java.util.Collection[T] = rdd.collect().toSeq
     new java.util.ArrayList(arr)
   }
+
+  /**
+   * Return an iterator that contains all of the elements in this RDD.
+   *
+   * The iterator will consume as much memory as the largest partition in this RDD.
+   */
+  def toLocalIterator(): JIterator[T] = {
+     import scala.collection.JavaConversions._
+     rdd.toLocalIterator
+  }
+
 
   /**
    * Return an array that contains all of the elements in this RDD.

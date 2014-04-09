@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.File
+import java.io.{PrintStream, File}
 import java.net.URL
 
 import org.apache.spark.executor.ExecutorURLClassLoader
@@ -32,56 +32,70 @@ import scala.collection.mutable.Map
  * modes that Spark supports.
  */
 object SparkSubmit {
-  val YARN = 1
-  val STANDALONE = 2
-  val MESOS = 4
-  val LOCAL = 8
-  val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL
+  private val YARN = 1
+  private val STANDALONE = 2
+  private val MESOS = 4
+  private val LOCAL = 8
+  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL
 
-  var clusterManager: Int = LOCAL
+  private var clusterManager: Int = LOCAL
 
   def main(args: Array[String]) {
     val appArgs = new SparkSubmitArguments(args)
+    if (appArgs.verbose) {
+      printStream.println(appArgs)
+    }
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
-    launch(childArgs, classpath, sysProps, mainClass)
+    launch(childArgs, classpath, sysProps, mainClass, appArgs.verbose)
   }
+
+  // Exposed for testing
+  private[spark] var printStream: PrintStream = System.err
+  private[spark] var exitFn: () => Unit = () => System.exit(-1)
+
+  private[spark] def printErrorAndExit(str: String) = {
+    printStream.println("error: " + str)
+    printStream.println("run with --help for more information or --verbose for debugging output")
+    exitFn()
+  }
+  private[spark] def printWarning(str: String) = printStream.println("warning: " + str)
 
   /**
    * @return
    *         a tuple containing the arguments for the child, a list of classpath
    *         entries for the child, and the main class for the child
    */
-  def createLaunchEnv(appArgs: SparkSubmitArguments): (ArrayBuffer[String],
+  private[spark] def createLaunchEnv(appArgs: SparkSubmitArguments): (ArrayBuffer[String],
       ArrayBuffer[String], Map[String, String], String) = {
-    if (appArgs.master.startsWith("yarn")) {
+    if (appArgs.master.startsWith("local")) {
+      clusterManager = LOCAL
+    } else if (appArgs.master.startsWith("yarn")) {
       clusterManager = YARN
     } else if (appArgs.master.startsWith("spark")) {
       clusterManager = STANDALONE
     } else if (appArgs.master.startsWith("mesos")) {
       clusterManager = MESOS
-    } else if (appArgs.master.startsWith("local")) {
-      clusterManager = LOCAL
     } else {
-      System.err.println("master must start with yarn, mesos, spark, or local")
-      System.exit(1)
+      printErrorAndExit("master must start with yarn, mesos, spark, or local")
     }
 
-    // Because "yarn-standalone" and "yarn-client" encapsulate both the master
+    // Because "yarn-cluster" and "yarn-client" encapsulate both the master
     // and deploy mode, we have some logic to infer the master and deploy mode
     // from each other if only one is specified, or exit early if they are at odds.
-    if (appArgs.deployMode == null && appArgs.master == "yarn-standalone") {
+    if (appArgs.deployMode == null &&
+        (appArgs.master == "yarn-standalone" || appArgs.master == "yarn-cluster")) {
       appArgs.deployMode = "cluster"
     }
     if (appArgs.deployMode == "cluster" && appArgs.master == "yarn-client") {
-      System.err.println("Deploy mode \"cluster\" and master \"yarn-client\" are at odds")
-      System.exit(1)
+      printErrorAndExit("Deploy mode \"cluster\" and master \"yarn-client\" are not compatible")
     }
-    if (appArgs.deployMode == "client" && appArgs.master == "yarn-standalone") {
-      System.err.println("Deploy mode \"client\" and master \"yarn-standalone\" are at odds")
-      System.exit(1)
+    if (appArgs.deployMode == "client" &&
+        (appArgs.master == "yarn-standalone" || appArgs.master == "yarn-cluster")) {
+      printErrorAndExit("Deploy mode \"client\" and master \"" + appArgs.master
+        + "\" are not compatible")
     }
     if (appArgs.deployMode == "cluster" && appArgs.master.startsWith("yarn")) {
-      appArgs.master = "yarn-standalone"
+      appArgs.master = "yarn-cluster"
     }
     if (appArgs.deployMode != "cluster" && appArgs.master.startsWith("yarn")) {
       appArgs.master = "yarn-client"
@@ -95,8 +109,7 @@ object SparkSubmit {
     var childMainClass = ""
 
     if (clusterManager == MESOS && deployOnCluster) {
-      System.err.println("Mesos does not support running the driver on the cluster")
-      System.exit(1)
+      printErrorAndExit("Mesos does not support running the driver on the cluster")
     }
 
     if (!deployOnCluster) {
@@ -174,8 +187,17 @@ object SparkSubmit {
     (childArgs, childClasspath, sysProps, childMainClass)
   }
 
-  def launch(childArgs: ArrayBuffer[String], childClasspath: ArrayBuffer[String],
-      sysProps: Map[String, String], childMainClass: String) {
+  private def launch(childArgs: ArrayBuffer[String], childClasspath: ArrayBuffer[String],
+      sysProps: Map[String, String], childMainClass: String, verbose: Boolean = false) {
+
+    if (verbose) {
+      System.err.println(s"Main class:\n$childMainClass")
+      System.err.println(s"Arguments:\n${childArgs.mkString("\n")}")
+      System.err.println(s"System properties:\n${sysProps.mkString("\n")}")
+      System.err.println(s"Classpath elements:\n${childClasspath.mkString("\n")}")
+      System.err.println("\n")
+    }
+
     val loader = new ExecutorURLClassLoader(new Array[URL](0),
       Thread.currentThread.getContextClassLoader)
     Thread.currentThread.setContextClassLoader(loader)
@@ -193,10 +215,10 @@ object SparkSubmit {
     mainMethod.invoke(null, childArgs.toArray)
   }
 
-  def addJarToClasspath(localJar: String, loader: ExecutorURLClassLoader) {
+  private def addJarToClasspath(localJar: String, loader: ExecutorURLClassLoader) {
     val localJarFile = new File(localJar)
     if (!localJarFile.exists()) {
-      System.err.println("Jar does not exist: " + localJar + ". Skipping.")
+      printWarning(s"Jar $localJar does not exist, skipping.")
     }
 
     val url = localJarFile.getAbsoluteFile.toURI.toURL

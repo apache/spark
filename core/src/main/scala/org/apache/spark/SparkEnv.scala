@@ -186,29 +186,30 @@ object SparkEnv extends Logging {
       }
     }
 
+    val mapOutputTracker =  if (isDriver) {
+      new MapOutputTrackerMaster(conf)
+    } else {
+      new MapOutputTrackerWorker(conf)
+    }
+
+    // Have to assign trackerActor after initialization as MapOutputTrackerActor
+    // requires the MapOutputTracker itself
+    mapOutputTracker.trackerActor = registerOrLookup(
+      "MapOutputTracker",
+      new MapOutputTrackerMasterActor(mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
+
     val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
       new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf)
 
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
-      serializer, conf, securityManager)
+      serializer, conf, securityManager, mapOutputTracker)
 
     val connectionManager = blockManager.connectionManager
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 
     val cacheManager = new CacheManager(blockManager)
-
-    // Have to assign trackerActor after initialization as MapOutputTrackerActor
-    // requires the MapOutputTracker itself
-    val mapOutputTracker =  if (isDriver) {
-      new MapOutputTrackerMaster(conf)
-    } else {
-      new MapOutputTracker(conf)
-    }
-    mapOutputTracker.trackerActor = registerOrLookup(
-      "MapOutputTracker",
-      new MapOutputTrackerMasterActor(mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
     val shuffleFetcher = instantiateClass[ShuffleFetcher](
       "spark.shuffle.fetcher", "org.apache.spark.BlockStoreShuffleFetcher")

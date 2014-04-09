@@ -29,6 +29,5 @@ sealed trait JobResult
 @DeveloperApi
 case object JobSucceeded extends JobResult
 
-// A failed stage ID of -1 means there is not a particular stage that caused the failure
 @DeveloperApi
-case class JobFailed(exception: Exception, failedStageId: Int) extends JobResult
+private[spark] case class JobFailed(exception: Exception) extends JobResult

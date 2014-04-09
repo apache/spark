@@ -30,7 +30,8 @@ import org.apache.spark.annotation.DeveloperApi
  */
 @DeveloperApi
 trait BroadcastFactory {
-  def initialize(isDriver: Boolean, conf: SparkConf,  securityMgr: SecurityManager): Unit
+  def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager): Unit
   def newBroadcast[T](value: T, isLocal: Boolean, id: Long): Broadcast[T]
+  def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit
   def stop(): Unit
 }
