@@ -27,6 +27,7 @@ import com.google.common.base.Optional
 import org.apache.hadoop.io.compress.CompressionCodec
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, _}
@@ -343,16 +344,20 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def count(): Long = rdd.count()
 
   /**
-   * (Experimental) Approximate version of count() that returns a potentially incomplete result
+   * :: Experimental ::
+   * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
    */
+  @Experimental
   def countApprox(timeout: Long, confidence: Double): PartialResult[BoundedDouble] =
     rdd.countApprox(timeout, confidence)
 
   /**
-   * (Experimental) Approximate version of count() that returns a potentially incomplete result
+   * :: Experimental ::
+   * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
    */
+  @Experimental
   def countApprox(timeout: Long): PartialResult[BoundedDouble] =
     rdd.countApprox(timeout)
 
