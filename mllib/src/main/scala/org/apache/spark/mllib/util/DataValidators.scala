@@ -24,7 +24,6 @@ import org.apache.spark.mllib.regression.LabeledPoint
 
 /**
  * :: DeveloperApi ::
- *
  * A collection of methods used to validate data before applying ML algorithms.
  */
 @DeveloperApi
