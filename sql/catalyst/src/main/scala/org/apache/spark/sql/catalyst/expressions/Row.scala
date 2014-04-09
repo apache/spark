@@ -90,7 +90,7 @@ trait MutableRow extends Row {
   def setString(ordinal: Int, value: String)
 
   /**
-   * EXPERIMENTAL
+   * Experimental
    *
    * Returns a mutable string builder for the specified column.  A given row should return the
    * result of any mutations made to the returned buffer next time getString is called for the same

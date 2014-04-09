@@ -19,7 +19,7 @@ package org.apache.spark.api.java
 
 import com.google.common.base.Optional
 
-object JavaUtils {
+private[spark] object JavaUtils {
   def optionToOptional[T](option: Option[T]): Optional[T] =
     option match {
       case Some(value) => Optional.of(value)

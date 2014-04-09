@@ -17,29 +17,35 @@
 
 package org.apache.spark
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 
 /**
+ * :: DeveloperApi ::
  * Various possible reasons why a task ended. The low-level TaskScheduler is supposed to retry
  * tasks several times for "ephemeral" failures, and only report back failures that require some
  * old stages to be resubmitted, such as shuffle map fetch failures.
  */
-private[spark] sealed trait TaskEndReason
+@DeveloperApi
+sealed trait TaskEndReason
 
-private[spark] case object Success extends TaskEndReason
+@DeveloperApi
+case object Success extends TaskEndReason
 
-private[spark]
+@DeveloperApi
 case object Resubmitted extends TaskEndReason // Task was finished earlier but we've now lost it
 
-private[spark] case class FetchFailed(
+@DeveloperApi
+case class FetchFailed(
     bmAddress: BlockManagerId,
     shuffleId: Int,
     mapId: Int,
     reduceId: Int)
   extends TaskEndReason
 
-private[spark] case class ExceptionFailure(
+@DeveloperApi
+case class ExceptionFailure(
     className: String,
     description: String,
     stackTrace: Array[StackTraceElement],
@@ -47,21 +53,28 @@ private[spark] case class ExceptionFailure(
   extends TaskEndReason
 
 /**
+ * :: DeveloperApi ::
  * The task finished successfully, but the result was lost from the executor's block manager before
  * it was fetched.
  */
-private[spark] case object TaskResultLost extends TaskEndReason
+@DeveloperApi
+case object TaskResultLost extends TaskEndReason
 
-private[spark] case object TaskKilled extends TaskEndReason
+@DeveloperApi
+case object TaskKilled extends TaskEndReason
 
 /**
+ * :: DeveloperApi ::
  * The task failed because the executor that it was running on was lost. This may happen because
  * the task crashed the JVM.
  */
-private[spark] case object ExecutorLostFailure extends TaskEndReason
+@DeveloperApi
+case object ExecutorLostFailure extends TaskEndReason
 
 /**
+ * :: DeveloperApi ::
  * We don't know why the task ended -- for example, because of a ClassNotFound exception when
  * deserializing the task result.
  */
-private[spark] case object UnknownReason extends TaskEndReason
+@DeveloperApi
+case object UnknownReason extends TaskEndReason

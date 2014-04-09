@@ -15,11 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.metrics.source
+package org.apache.spark.annotation;
 
-import com.codahale.metrics.MetricRegistry
+import java.lang.annotation.*;
 
-private[spark] trait Source {
-  def sourceName: String
-  def metricRegistry: MetricRegistry
-}
+/**
+ * A lower-level, unstable API intended for developers.
+ *
+ * Developer API's might change or be removed in minor versions of Spark.
+ */
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
+        ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
+public @interface DeveloperApi {}

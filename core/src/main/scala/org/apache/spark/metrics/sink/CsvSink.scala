@@ -26,7 +26,7 @@ import com.codahale.metrics.{CsvReporter, MetricRegistry}
 import org.apache.spark.SecurityManager
 import org.apache.spark.metrics.MetricsSystem
 
-class CsvSink(val property: Properties, val registry: MetricRegistry,
+private[spark] class CsvSink(val property: Properties, val registry: MetricRegistry,
     securityMgr: SecurityManager) extends Sink {
   val CSV_KEY_PERIOD = "period"
   val CSV_KEY_UNIT = "unit"
