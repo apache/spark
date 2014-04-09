@@ -19,10 +19,10 @@ package org.apache.spark.mllib.linalg.distributed
 
 import org.scalatest.FunSuite
 
-import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, diag => brzDiag, norm => brzNorm}
+import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, norm => brzNorm, svd => brzSvd}
 
 import org.apache.spark.mllib.util.LocalSparkContext
-import org.apache.spark.mllib.linalg.{Matrices, Vectors, Vector, Matrix}
+import org.apache.spark.mllib.linalg.{Matrices, Vectors, Vector}
 
 class RowMatrixSuite extends FunSuite with LocalSparkContext {
 
@@ -42,9 +42,10 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
     Vectors.sparse(3, Seq((0, 9.0), (2, 1.0)))
   )
 
-  val principalComponents = Matrices.dense(n, n,
-    Array(0.0, math.sqrt(2.0) / 2.0, math.sqrt(2.0) / 2.0, 1.0, 0.0, 0.0,
-      0.0, math.sqrt(2.0) / 2.0, - math.sqrt(2.0) / 2.0))
+  val principalComponents = BDM(
+    (0.0, 1.0, 0.0),
+    (math.sqrt(2.0) / 2.0, 0.0, math.sqrt(2.0) / 2.0),
+    (math.sqrt(2.0) / 2.0, 0.0, - math.sqrt(2.0) / 2.0))
 
   var denseMat: RowMatrix = _
   var sparseMat: RowMatrix = _
@@ -93,22 +94,39 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("svd") {
-    val A = new BDM[Double](m, n, arr)
+  test("svd of a full-rank matrix") {
     for (mat <- Seq(denseMat, sparseMat)) {
-      val svd = mat.computeSVD(n, computeU = true)
-      val U = svd.U
-      val brzSigma = svd.s.toBreeze.asInstanceOf[BDV[Double]]
-      val brzV = svd.V.toBreeze.asInstanceOf[BDM[Double]]
-      val rows = U.rows.collect()
-      val brzUt = new BDM[Double](n, m, rows.flatMap(r => r.toArray))
-      val UsVt = brzUt.t * brzDiag(brzSigma) * brzV.t
-      assert(closeToZero(UsVt - A))
-      val VtV: BDM[Double] = brzV.t * brzV
-      assert(closeToZero(VtV - BDM.eye[Double](n)))
-      val UtU = U.computeGramianMatrix().toBreeze.asInstanceOf[BDM[Double]]
-      assert(closeToZero(UtU - BDM.eye[Double](n)))
+      val localMat = mat.toBreeze()
+      val (localU, localSigma, localVt) = brzSvd(localMat)
+      val localV: BDM[Double] = localVt.t.toDenseMatrix
+      for (k <- 1 to n) {
+        val svd = mat.computeSVD(k, computeU = true)
+        val U = svd.U
+        val s = svd.s
+        val V = svd.V
+        assert(U.numRows() === m)
+        assert(U.numCols() === k)
+        assert(s.size === k)
+        assert(V.numRows === n)
+        assert(V.numCols === k)
+        assertColumnEqualUpToSign(U.toBreeze(), localU, k)
+        assertColumnEqualUpToSign(V.toBreeze.asInstanceOf[BDM[Double]], localV, k)
+        assert(closeToZero(s.toBreeze.asInstanceOf[BDV[Double]] - localSigma(0 until k)))
+      }
+      val svdWithoutU = mat.computeSVD(n)
+      assert(svdWithoutU.U === null)
     }
+  }
+
+  test("svd of a low-rank matrix") {
+    val rows = sc.parallelize(Array.fill(4)(Vectors.dense(1.0, 1.0)), 2)
+    val mat = new RowMatrix(rows, 4, 2)
+    val svd = mat.computeSVD(2, computeU = true)
+    assert(svd.s.size === 1, "should not return zero singular values")
+    assert(svd.U.numRows() === 4)
+    assert(svd.U.numCols() === 1)
+    assert(svd.V.numRows === 2)
+    assert(svd.V.numCols === 1)
   }
 
   def closeToZero(G: BDM[Double]): Boolean = {
@@ -119,15 +137,13 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
     brzNorm(v, 1.0) < 1e-6
   }
 
-  def assertPrincipalComponentsEqual(a: Matrix, b: Matrix, k: Int) {
-    val brzA = a.toBreeze.asInstanceOf[BDM[Double]]
-    val brzB = b.toBreeze.asInstanceOf[BDM[Double]]
-    assert(brzA.rows === brzB.rows)
+  def assertColumnEqualUpToSign(A: BDM[Double], B: BDM[Double], k: Int) {
+    assert(A.rows === B.rows)
     for (j <- 0 until k) {
-      val aj = brzA(::, j)
-      val bj = brzB(::, j)
+      val aj = A(::, j)
+      val bj = B(::, j)
       assert(closeToZero(aj - bj) || closeToZero(aj + bj),
-        s"The $j-th components mismatch: $aj and $bj")
+        s"The $j-th columns mismatch: $aj and $bj")
     }
   }
 
@@ -136,7 +152,7 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
       val pc = denseMat.computePrincipalComponents(k)
       assert(pc.numRows === n)
       assert(pc.numCols === k)
-      assertPrincipalComponentsEqual(pc, principalComponents, k)
+      assertColumnEqualUpToSign(pc.toBreeze.asInstanceOf[BDM[Double]], principalComponents, k)
     }
   }
 

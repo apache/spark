@@ -38,10 +38,20 @@ trait Matrix extends Serializable {
 
   /** Gets the (i, j)-th element. */
   private[mllib] def apply(i: Int, j: Int): Double = toBreeze(i, j)
+
+  override def toString: String = toBreeze.toString()
 }
 
 /**
  * Column-majored dense matrix.
+ * The entry values are stored in a single array of doubles with columns listed in sequence.
+ * For example, the following matrix
+ * {{{
+ *   1.0 2.0
+ *   3.0 4.0
+ *   5.0 6.0
+ * }}}
+ * is stored as `[1.0, 3.0, 5.0, 2.0, 4.0, 6.0]`.
  *
  * @param numRows number of rows
  * @param numCols number of columns

@@ -27,11 +27,11 @@ import org.apache.spark.mllib.linalg.Vectors
  * The input matrix must be stored in row-oriented dense format, one line per row with its entries
  * separated by space. For example,
  * {{{
- * 0 1
- * 2 3
- * 4 5
+ * 0.5 1.0
+ * 2.0 3.0
+ * 4.0 5.0
  * }}}
- * represents a 3-by-2 matrix, whose first row is (0, 1).
+ * represents a 3-by-2 matrix, whose first row is (0.5, 1.0).
  */
 object TallSkinnySVD {
   def main(args: Array[String]) {

@@ -133,6 +133,10 @@ class RowMatrix(
     }
     val sk = i
 
+    if (sk < k) {
+      logWarning(s"Requested $k singular values but only found $sk nonzeros.")
+    }
+
     val s = Vectors.dense(util.Arrays.copyOfRange(sigmas.data, 0, sk))
     val V = Matrices.dense(n, sk, util.Arrays.copyOfRange(u.data, 0, n * sk))
 
