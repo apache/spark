@@ -41,8 +41,7 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
         random.nextDouble().andReturn(x)
       }
     }
-    whenExecuting(random)
-    {
+    whenExecuting(random) {
       val sampler = new BernoulliSampler[Int](0.25, 0.55)(random)
       assert(sampler.sample(a.iterator).toList == List(3, 4, 5))
     }
@@ -54,8 +53,7 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
         random.nextDouble().andReturn(x)
       }
     }
-    whenExecuting(random)
-    {
+    whenExecuting(random) {
       val sampler = new BernoulliSampler[Int](0.25, 0.55, true)(random)
       assert(sampler.sample(a.iterator).toList === List(1, 2, 6, 7, 8, 9))
     }
@@ -67,8 +65,7 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
         random.nextDouble().andReturn(x)
       }
     }
-    whenExecuting(random)
-    {
+    whenExecuting(random) {
       val sampler = new BernoulliSampler[Int](0.35)(random)
       assert(sampler.sample(a.iterator).toList == List(1, 2, 3))
     }
@@ -80,8 +77,7 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
         random.nextDouble().andReturn(x)
       }
     }
-    whenExecuting(random)
-    {
+    whenExecuting(random) {
       val sampler = new BernoulliSampler[Int](0.25, 0.55, true)(random)
       assert(sampler.sample(a.iterator).toList == List(1, 2, 6, 7, 8, 9))
     }
@@ -91,8 +87,7 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
     expecting {
       random.setSeed(10L)
     }
-    whenExecuting(random)
-    {
+    whenExecuting(random) {
       val sampler = new BernoulliSampler[Int](0.2)(random)
       sampler.setSeed(10L)
     }
