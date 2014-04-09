@@ -36,6 +36,22 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
   private var queueFullErrorMessageLogged = false
   private var started = false
+  private val listenerThread = new Thread("SparkListenerBus") {
+    setDaemon(true)
+    override def run() {
+      while (true) {
+        val event = eventQueue.take
+        if (event == SparkListenerShutdown) {
+          // Get out of the while loop and shutdown the daemon thread
+          return
+        }
+        postToAll(event)
+      }
+    }
+  }
+
+  // Exposed for testing
+  @volatile private[spark] var stopCalled = false
 
   /**
    * Start sending events to attached listeners.
@@ -48,20 +64,8 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
     if (started) {
       throw new IllegalStateException("Listener bus already started!")
     }
+    listenerThread.start()
     started = true
-    new Thread("SparkListenerBus") {
-      setDaemon(true)
-      override def run() {
-        while (true) {
-          val event = eventQueue.take
-          if (event == SparkListenerShutdown) {
-            // Get out of the while loop and shutdown the daemon thread
-            return
-          }
-          postToAll(event)
-        }
-      }
-    }.start()
   }
 
   def post(event: SparkListenerEvent) {
@@ -93,9 +97,11 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
   }
 
   def stop() {
+    stopCalled = true
     if (!started) {
       throw new IllegalStateException("Attempted to stop a listener bus that has not yet started!")
     }
     post(SparkListenerShutdown)
+    listenerThread.join()
   }
 }
