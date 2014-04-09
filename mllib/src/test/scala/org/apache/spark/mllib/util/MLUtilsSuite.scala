@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.util
 
 import java.io.File
+
 import scala.math
 import scala.util.Random
 
@@ -118,24 +119,6 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     } catch {
       case t: Throwable =>
     }
-  }
-
-  // This learner always says everything is 0
-  def terribleLearner(trainingData: RDD[LabeledPoint]): RegressionModel = {
-    object AlwaysZero extends RegressionModel {
-      override def predict(testData: RDD[Array[Double]]): RDD[Double] = {
-        testData.map(_ => 0)
-      }
-      override def predict(testData: Array[Double]): Double = {
-        0
-      }
-    }
-    AlwaysZero
-  }
-
-  // Always returns its input
-  def exactLearner(trainingData: RDD[LabeledPoint]): RegressionModel = {
-    new LinearRegressionModel(Array(1.0), 0)
   }
 
   test("kFold") {
