@@ -19,11 +19,15 @@ package org.apache.spark.mllib.optimization
 
 import breeze.linalg.{axpy => brzAxpy}
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
+ * :: DeveloperApi ::
+ *
  * Class used to compute the gradient for a loss function, given a single data point.
  */
+@DeveloperApi
 abstract class Gradient extends Serializable {
   /**
    * Compute the gradient and loss given the features of a single data point.
@@ -51,9 +55,12 @@ abstract class Gradient extends Serializable {
 }
 
 /**
+ * :: DeveloperApi ::
+ *
  * Compute gradient and loss for a logistic loss function, as used in binary classification.
  * See also the documentation for the precise formulation.
  */
+@DeveloperApi
 class LogisticGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val brzData = data.toBreeze
@@ -92,11 +99,14 @@ class LogisticGradient extends Gradient {
 }
 
 /**
+ * :: DeveloperApi ::
+ *
  * Compute gradient and loss for a Least-squared loss function, as used in linear regression.
  * This is correct for the averaged least squares loss function (mean squared error)
  *              L = 1/n ||A weights-y||^2
  * See also the documentation for the precise formulation.
  */
+@DeveloperApi
 class LeastSquaresGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val brzData = data.toBreeze
@@ -124,10 +134,13 @@ class LeastSquaresGradient extends Gradient {
 }
 
 /**
+ * :: DeveloperApi ::
+ *
  * Compute gradient and loss for a Hinge loss function, as used in SVM binary classification.
  * See also the documentation for the precise formulation.
  * NOTE: This assumes that the labels are {0,1}
  */
+@DeveloperApi
 class HingeGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val brzData = data.toBreeze

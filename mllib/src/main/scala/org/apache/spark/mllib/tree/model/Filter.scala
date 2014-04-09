@@ -22,7 +22,7 @@ package org.apache.spark.mllib.tree.model
  * @param split split specifying the feature index, type and threshold
  * @param comparison integer specifying <,=,>
  */
-case class Filter(split: Split, comparison: Int) {
+private[tree] case class Filter(split: Split, comparison: Int) {
   // Comparison -1,0,1 signifies <.=,>
   override def toString = " split = " + split + "comparison = " + comparison
 }

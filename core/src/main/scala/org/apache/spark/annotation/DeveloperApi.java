@@ -15,13 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg
+package org.apache.spark.annotation;
+
+import java.lang.annotation.*;
 
 /**
- * Class that represents an entry in a sparse matrix of doubles.
+ * A lower-level, unstable API intended for developers.
  *
- * @param i row index (0 indexing used)
- * @param j column index (0 indexing used)
- * @param mval value of entry in matrix
+ * Developer API's might change or be removed in minor versions of Spark.
  */
-case class MatrixEntry(val i: Int, val j: Int, val mval: Double)
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
+        ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
+public @interface DeveloperApi {}

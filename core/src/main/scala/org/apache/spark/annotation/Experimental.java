@@ -15,12 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg
+package org.apache.spark.annotation;
+
+import java.lang.annotation.*;
 
 /**
- * Class that represents a row of a dense matrix
+ * An experimental user-facing API.
  *
- * @param i row index (0 indexing used)
- * @param data entries of the row
+ * Experimental API's might change or be removed in minor versions of Spark, or be adopted as
+ * first-class Spark API's.
  */
-case class MatrixRow(val i: Int, val data: Array[Double])
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
+        ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
+public @interface Experimental {}

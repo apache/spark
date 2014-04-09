@@ -15,16 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg
+package org.apache.spark.mllib.linalg.distributed
 
-import org.apache.spark.rdd.RDD
-
+import breeze.linalg.{DenseMatrix => BDM}
 
 /**
- * Class that represents a dense matrix
- *
- * @param rows RDD of rows
- * @param m number of rows
- * @param n number of columns
+ * Represents a distributively stored matrix backed by one or more RDDs.
  */
-case class TallSkinnyDenseMatrix(val rows: RDD[MatrixRow], val m: Int, val n: Int)
+trait DistributedMatrix extends Serializable {
+
+  /** Gets or computes the number of rows. */
+  def numRows(): Long
+
+  /** Gets or computes the number of columns. */
+  def numCols(): Long
+
+  /** Collects data and assembles a local dense breeze matrix (for test only). */
+  private[mllib] def toBreeze(): BDM[Double]
+}

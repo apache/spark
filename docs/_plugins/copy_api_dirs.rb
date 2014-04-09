@@ -24,7 +24,9 @@ if not (ENV['SKIP_API'] == '1' or ENV['SKIP_SCALADOC'] == '1')
   external_projects = ["flume", "kafka", "mqtt", "twitter", "zeromq"]
   sql_projects = ["catalyst", "core", "hive"]
 
-  projects = core_projects + external_projects.map { |project_name| "external/" + project_name }
+  projects = core_projects
+  projects = projects + external_projects.map { |project_name| "external/" + project_name }
+  projects = projects + sql_projects.map { |project_name| "sql/" + project_name }
 
   puts "Moving to project root and building scaladoc."
   curr_dir = pwd
@@ -42,24 +44,22 @@ if not (ENV['SKIP_API'] == '1' or ENV['SKIP_SCALADOC'] == '1')
     source = "../" + project_name + "/target/scala-2.10/api"
     dest = "api/" + project_name
 
-    puts "echo making directory " + dest
+    puts "making directory " + dest
     mkdir_p dest
 
     # From the rubydoc: cp_r('src', 'dest') makes src/dest, but this doesn't.
     puts "cp -r " + source + "/. " + dest
     cp_r(source + "/.", dest)
-  end
 
-  sql_projects.each do |project_name|
-    source = "../sql/" + project_name + "/target/scala-2.10/api/"
-    dest = "api/sql/" + project_name
+    # Append custom JavaScript
+    js = File.readlines("./js/api-docs.js")
+    js_file = dest + "/lib/template.js"
+    File.open(js_file, 'a') { |f| f.write("\n" + js.join()) }
 
-    puts "echo making directory " + dest
-    mkdir_p dest
-
-    # From the rubydoc: cp_r('src', 'dest') makes src/dest, but this doesn't.
-    puts "cp -r " + source + "/. " + dest
-    cp_r(source + "/.", dest)
+    # Append custom CSS
+    css = File.readlines("./css/api-docs.css")
+    css_file = dest + "/lib/template.css"
+    File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
   end
 
   # Build Epydoc for Python

@@ -17,14 +17,23 @@
 
 package org.apache.spark.mllib.linalg
 
-import org.apache.spark.rdd.RDD
+import org.scalatest.FunSuite
 
+class MatricesSuite extends FunSuite {
+  test("dense matrix construction") {
+    val m = 3
+    val n = 2
+    val values = Array(0.0, 1.0, 2.0, 3.0, 4.0, 5.0)
+    val mat = Matrices.dense(m, n, values).asInstanceOf[DenseMatrix]
+    assert(mat.numRows === m)
+    assert(mat.numCols === n)
+    assert(mat.values.eq(values), "should not copy data")
+    assert(mat.toArray.eq(values), "toArray should not copy data")
+  }
 
-/**
- * Class that represents a sparse matrix
- *
- * @param data RDD of nonzero entries
- * @param m number of rows
- * @param n numner of columns
- */
-case class SparseMatrix(val data: RDD[MatrixEntry], val m: Int, val n: Int)
+  test("dense matrix construction with wrong dimension") {
+    intercept[RuntimeException] {
+      Matrices.dense(3, 2, Array(0.0, 1.0, 2.0))
+    }
+  }
+}

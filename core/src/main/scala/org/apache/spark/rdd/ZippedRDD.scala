@@ -44,7 +44,7 @@ private[spark] class ZippedPartition[T: ClassTag, U: ClassTag](
   }
 }
 
-class ZippedRDD[T: ClassTag, U: ClassTag](
+private[spark] class ZippedRDD[T: ClassTag, U: ClassTag](
     sc: SparkContext,
     var rdd1: RDD[T],
     var rdd2: RDD[U])

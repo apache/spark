@@ -19,6 +19,7 @@ package org.apache.spark.mllib.regression
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
@@ -79,7 +80,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   protected val validators: Seq[RDD[LabeledPoint] => Boolean] = List()
 
-  val optimizer: Optimizer
+  /** The optimizer to solve the problem. */
+  def optimizer: Optimizer
 
   /** Whether to add intercept (default: true). */
   protected var addIntercept: Boolean = true
@@ -100,8 +102,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   }
 
   /**
+   * :: Experimental ::
+   *
    * Set if the algorithm should validate data before training. Default true.
    */
+  @Experimental
   def setValidateData(validateData: Boolean): this.type = {
     this.validateData = validateData
     this

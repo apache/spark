@@ -17,12 +17,14 @@
 
 package org.apache.spark.scheduler
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.storage.RDDInfo
 
 /**
+ * :: DeveloperApi ::
  * Stores information about a stage to pass from the scheduler to SparkListeners.
  */
-private[spark]
+@DeveloperApi
 class StageInfo(val stageId: Int, val name: String, val numTasks: Int, val rddInfo: RDDInfo) {
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
