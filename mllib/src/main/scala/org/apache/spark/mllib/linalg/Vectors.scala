@@ -64,11 +64,13 @@ trait Vector extends Serializable {
 
 /**
  * Factory methods for [[org.apache.spark.mllib.linalg.Vector]].
+ * We don't use the name `Vector` because Scala imports
+ * [[scala.collection.immutable.Vector]] by default.
  */
 object Vectors {
 
   /**
-   * Creates a dense vector.
+   * Creates a dense vector from its values.
    */
   @varargs
   def dense(firstValue: Double, otherValues: Double*): Vector =
@@ -158,20 +160,21 @@ class DenseVector(val values: Array[Double]) extends Vector {
 /**
  * A sparse vector represented by an index array and an value array.
  *
- * @param n size of the vector.
+ * @param size size of the vector.
  * @param indices index array, assume to be strictly increasing.
  * @param values value array, must have the same length as the index array.
  */
-class SparseVector(val n: Int, val indices: Array[Int], val values: Array[Double]) extends Vector {
-
-  override def size: Int = n
+class SparseVector(
+    override val size: Int,
+    val indices: Array[Int],
+    val values: Array[Double]) extends Vector {
 
   override def toString: String = {
-    "(" + n + "," + indices.zip(values).mkString("[", "," ,"]") + ")"
+    "(" + size + "," + indices.zip(values).mkString("[", "," ,"]") + ")"
   }
 
   override def toArray: Array[Double] = {
-    val data = new Array[Double](n)
+    val data = new Array[Double](size)
     var i = 0
     val nnz = indices.length
     while (i < nnz) {
@@ -181,5 +184,5 @@ class SparseVector(val n: Int, val indices: Array[Int], val values: Array[Double
     data
   }
 
-  private[mllib] override def toBreeze: BV[Double] = new BSV[Double](indices, values, n)
+  private[mllib] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
 }

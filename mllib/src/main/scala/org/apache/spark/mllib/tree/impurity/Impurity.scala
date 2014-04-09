@@ -17,26 +17,36 @@
 
 package org.apache.spark.mllib.tree.impurity
 
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
+
 /**
+ * :: Experimental ::
+ *
  * Trait for calculating information gain.
  */
+@Experimental
 trait Impurity extends Serializable {
 
   /**
+   * :: DeveloperApi ::
+   *
    * information calculation for binary classification
    * @param c0 count of instances with label 0
    * @param c1 count of instances with label 1
    * @return information value
    */
+  @DeveloperApi
   def calculate(c0 : Double, c1 : Double): Double
 
   /**
+   * :: DeveloperApi ::
+   *
    * information calculation for regression
    * @param count number of instances
    * @param sum sum of labels
    * @param sumSquares summation of squares of the labels
    * @return information value
    */
+  @DeveloperApi
   def calculate(count: Double, sum: Double, sumSquares: Double): Double
-
 }

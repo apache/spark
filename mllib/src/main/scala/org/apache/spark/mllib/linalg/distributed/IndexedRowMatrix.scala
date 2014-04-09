@@ -19,14 +19,22 @@ package org.apache.spark.mllib.linalg.distributed
 
 import breeze.linalg.{DenseMatrix => BDM}
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.SingularValueDecomposition
 
-/** Represents a row of [[org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix]]. */
+/**
+ * :: Experimental ::
+ *
+ * Represents a row of [[org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix]].
+ */
+@Experimental
 case class IndexedRow(index: Long, vector: Vector)
 
 /**
+ * :: Experimental ::
+ *
  * Represents a row-oriented [[org.apache.spark.mllib.linalg.distributed.DistributedMatrix]] with
  * indexed rows.
  *
@@ -36,6 +44,7 @@ case class IndexedRow(index: Long, vector: Vector)
  * @param nCols number of columns. A non-positive value means unknown, and then the number of
  *              columns will be determined by the size of the first row.
  */
+@Experimental
 class IndexedRowMatrix(
     val rows: RDD[IndexedRow],
     private var nRows: Long,

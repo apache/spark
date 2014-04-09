@@ -52,19 +52,21 @@ class LinearRegressionModel(
  * See also the documentation for the precise formulation.
  */
 class LinearRegressionWithSGD private (
-    var stepSize: Double,
-    var numIterations: Int,
-    var miniBatchFraction: Double)
+    private var stepSize: Double,
+    private var numIterations: Int,
+    private var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[LinearRegressionModel] with Serializable {
 
-  val gradient = new LeastSquaresGradient()
-  val updater = new SimpleUpdater()
-  val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
+  private val gradient = new LeastSquaresGradient()
+  private val updater = new SimpleUpdater()
+  override val optimizer = new GradientDescent(gradient, updater)
+    .setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setMiniBatchFraction(miniBatchFraction)
 
   /**
-   * Construct a LinearRegression object with default parameters
+   * Construct a LinearRegression object with default parameters: {stepSize: 1.0,
+   * numIterations: 100, miniBatchFraction: 1.0}.
    */
   def this() = this(1.0, 100, 1.0)
 

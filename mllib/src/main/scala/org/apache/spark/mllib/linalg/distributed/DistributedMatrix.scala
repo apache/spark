@@ -19,8 +19,6 @@ package org.apache.spark.mllib.linalg.distributed
 
 import breeze.linalg.{DenseMatrix => BDM}
 
-import org.apache.spark.mllib.linalg.Matrix
-
 /**
  * Represents a distributively stored matrix backed by one or more RDDs.
  */

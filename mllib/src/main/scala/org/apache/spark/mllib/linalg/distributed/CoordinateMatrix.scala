@@ -19,6 +19,7 @@ package org.apache.spark.mllib.linalg.distributed
 
 import breeze.linalg.{DenseMatrix => BDM}
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vectors
@@ -32,6 +33,8 @@ import org.apache.spark.mllib.linalg.Vectors
 case class MatrixEntry(i: Long, j: Long, value: Double)
 
 /**
+ * :: Experimental ::
+ *
  * Represents a matrix in coordinate format.
  *
  * @param entries matrix entries
@@ -40,6 +43,7 @@ case class MatrixEntry(i: Long, j: Long, value: Double)
  * @param nCols number of columns. A non-positive value means unknown, and then the number of
  *              columns will be determined by the max column index plus one.
  */
+@Experimental
 class CoordinateMatrix(
     val entries: RDD[MatrixEntry],
     private var nRows: Long,
