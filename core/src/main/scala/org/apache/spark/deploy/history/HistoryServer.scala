@@ -76,6 +76,8 @@ class HistoryServer(
    *
    * If a log check is invoked manually in the middle of a period, this thread re-adjusts the
    * time at which it performs the next log check to maintain the same period as before.
+   *
+   * TODO: Add a mechanism to update manually.
    */
   private val logCheckingThread = new Thread {
     override def run() {
@@ -292,7 +294,7 @@ object HistoryServer {
   val UPDATE_INTERVAL_MS = conf.getInt("spark.history.updateInterval", 10) * 1000
 
   // How many applications to retain
-  val RETAINED_APPLICATIONS = conf.getInt("spark.deploy.retainedApplications", 250)
+  val RETAINED_APPLICATIONS = conf.getInt("spark.history.retainedApplications", 250)
 
   val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
 
