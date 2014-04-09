@@ -75,7 +75,7 @@ class CoordinateMatrix(
     val indexedRows = entries.map(entry => (entry.i, (entry.j.toInt, entry.value)))
       .groupByKey()
       .map { case (i, vectorEntries) =>
-        IndexedRow(i, Vectors.sparse(n, vectorEntries))
+        IndexedRow(i, Vectors.sparse(n, vectorEntries.toSeq))
       }
     new IndexedRowMatrix(indexedRows, numRows(), n)
   }
