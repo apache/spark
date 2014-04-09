@@ -274,10 +274,10 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // Create and start the scheduler
   private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
-  taskScheduler.start()
-
   @volatile private[spark] var dagScheduler = new DAGScheduler(this)
-  dagScheduler.start()
+  // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
+  // constructor
+  taskScheduler.start()
 
   private[spark] val cleaner: Option[ContextCleaner] = {
     if (conf.getBoolean("spark.cleaner.referenceTracking", true)) {
@@ -1007,6 +1007,9 @@ class SparkContext(config: SparkConf) extends Logging {
       partitions: Seq[Int],
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit) {
+    if (dagScheduler == null) {
+      throw new SparkException("SparkContext has been shutdown")
+    }
     partitions.foreach{ p =>
       require(p >= 0 && p < rdd.partitions.size, s"Invalid partition requested: $p")
     }

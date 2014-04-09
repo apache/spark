@@ -26,13 +26,14 @@ import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
 import akka.actor._
+import akka.actor.SupervisorStrategy.Stop
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, Utils}
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -54,6 +55,7 @@ import org.apache.spark.util.Utils
  */
 private[spark]
 class DAGScheduler(
+    sc: SparkContext,
     taskScheduler: TaskScheduler,
     listenerBus: LiveListenerBus,
     mapOutputTracker: MapOutputTrackerMaster,
@@ -65,6 +67,7 @@ class DAGScheduler(
 
   def this(sc: SparkContext, taskScheduler: TaskScheduler) = {
     this(
+      sc,
       taskScheduler,
       sc.listenerBus,
       sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
@@ -116,18 +119,36 @@ class DAGScheduler(
   taskScheduler.setDAGScheduler(this)
 
   /**
-   * Starts the event processing actor.  The actor has two responsibilities:
-   *
-   * 1. Waits for events like job submission, task finished, task failure etc., and calls
-   *    [[org.apache.spark.scheduler.DAGScheduler.processEvent()]] to process them.
-   * 2. Schedules a periodical task to resubmit failed stages.
-   *
-   * NOTE: the actor cannot be started in the constructor, because the periodical task references
-   * some internal states of the enclosing [[org.apache.spark.scheduler.DAGScheduler]] object, thus
-   * cannot be scheduled until the [[org.apache.spark.scheduler.DAGScheduler]] is fully constructed.
+   * Starts the event processing actor within the supervisor.  The eventProcessingActor
+   * waits for events like job submission, task finished, task failure etc., and calls
+   * [[org.apache.spark.scheduler.DAGScheduler.processEvent()]] to process them.
    */
-  def start() {
-    eventProcessActor = env.actorSystem.actorOf(Props(new Actor {
+  env.actorSystem.actorOf(Props(new Actor {
+
+    override val supervisorStrategy =
+      OneForOneStrategy() {
+        case x: Exception => {
+          logError("eventProcesserActor failed due to the error %s; shutting down SparkContext"
+            .format(x.getMessage))
+          doCancelAllJobs()
+          sc.stop()
+          Stop
+        }
+      }
+
+    // do nothing in supervisor
+    def receive = {
+      case _ =>
+    }
+
+    eventProcessActor = context.actorOf(Props(new Actor {
+
+      override def preStart() {
+        // set DAGScheduler for taskScheduler to ensure eventProcessActor is always
+        // valid when the messages arrive
+        taskScheduler.setDAGScheduler(DAGScheduler.this)
+      }
+
       /**
        * The main event loop of the DAG scheduler.
        */
@@ -137,8 +158,8 @@ class DAGScheduler(
 
           /**
            * All events are forwarded to `processEvent()`, so that the event processing logic can
-           * easily tested without starting a dedicated actor.  Please refer to `DAGSchedulerSuite`
-           * for details.
+           * be easily tested without starting a dedicated actor.  Please refer to
+           * `DAGSchedulerSuite` for details.
            */
           if (!processEvent(event)) {
             submitWaitingStages()
@@ -147,7 +168,7 @@ class DAGScheduler(
           }
       }
     }))
-  }
+  }))
 
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
@@ -511,6 +532,14 @@ class DAGScheduler(
     eventProcessActor ! AllJobsCancelled
   }
 
+  private def doCancelAllJobs() {
+    // Cancel all running jobs.
+    runningStages.map(_.jobId).foreach(handleJobCancellation(_,
+      reason = "as part of cancellation of all jobs"))
+    activeJobs.clear() // These should already be empty by this point,
+    jobIdToActiveJob.clear() // but just in case we lost track of some jobs...
+  }
+
   /**
    * Cancel all jobs associated with a running or scheduled stage.
    */
@@ -575,10 +604,7 @@ class DAGScheduler(
 
       case AllJobsCancelled =>
         // Cancel all running jobs.
-        runningStages.map(_.jobId).foreach(jobId => handleJobCancellation(jobId,
-          "as part of cancellation of all jobs"))
-        activeJobs.clear()      // These should already be empty by this point,
-        jobIdToActiveJob.clear()   // but just in case we lost track of some jobs...
+        doCancelAllJobs()
 
       case ExecutorAdded(execId, host) =>
         handleExecutorAdded(execId, host)
@@ -821,7 +847,6 @@ class DAGScheduler(
    */
   private def handleTaskCompletion(event: CompletionEvent) {
     val task = event.task
-
     if (!stageIdToStage.contains(task.stageId)) {
       // Skip all the actions if the stage has been cancelled.
       return
@@ -1152,6 +1177,7 @@ class DAGScheduler(
   }
 
   def stop() {
+    logInfo("Stopping DAGScheduler")
     if (eventProcessActor != null) {
       eventProcessActor ! StopDAGScheduler
     }
