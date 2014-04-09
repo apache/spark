@@ -342,22 +342,24 @@ class DAGScheduler(
   }
 
   /**
-   * Removes job and any stages that are not needed by any other job.  Returns the set of ids for
-   * stages that were removed.  The associated tasks for those stages need to be cancelled if we
-   * got here via job cancellation.
+   * Removes state for job and any stages that are not needed by any other job.  Does not
+   * handle cancelling tasks or notifying the SparkListener about finished jobs/stages/tasks.
+   *
+   * @param job The job whose state to cleanup.
+   * @param resultStage Specifies the result stage for the job; if set to None, this method
+   *                    searches resultStagesToJob to find and cleanup the appropriate result stage.
    */
-  private def removeJobAndIndependentStages(jobId: Int): Set[Int] = {
-    val registeredStages = jobIdToStageIds(jobId)
-    val independentStages = new HashSet[Int]()
-    if (registeredStages.isEmpty) {
-      logError("No stages registered for job " + jobId)
+  private def cleanupStateForJobAndIndependentStages(job: ActiveJob, resultStage: Option[Stage]) {
+    val registeredStages = jobIdToStageIds.get(job.jobId)
+    if (registeredStages.isEmpty || registeredStages.get.isEmpty) {
+      logError("No stages registered for job " + job.jobId)
     } else {
-      stageIdToJobIds.filterKeys(stageId => registeredStages.contains(stageId)).foreach {
+      stageIdToJobIds.filterKeys(stageId => registeredStages.get.contains(stageId)).foreach {
         case (stageId, jobSet) =>
-          if (!jobSet.contains(jobId)) {
+          if (!jobSet.contains(job.jobId)) {
             logError(
               "Job %d not registered for stage %d even though that stage was registered for the job"
-              .format(jobId, stageId))
+              .format(job.jobId, stageId))
           } else {
             def removeStage(stageId: Int) {
               // data structures based on Stage
@@ -394,23 +396,28 @@ class DAGScheduler(
                 .format(stageId, stageIdToStage.size))
             }
 
-            jobSet -= jobId
+            jobSet -= job.jobId
             if (jobSet.isEmpty) { // no other job needs this stage
-              independentStages += stageId
               removeStage(stageId)
             }
           }
       }
     }
-    independentStages.toSet
-  }
+    jobIdToStageIds -= job.jobId
+    jobIdToActiveJob -= job.jobId
+    activeJobs -= job
 
-  private def jobIdToStageIdsRemove(jobId: Int) {
-    if (!jobIdToStageIds.contains(jobId)) {
-      logDebug("Trying to remove unregistered job " + jobId)
+    if (resultStage.isEmpty) {
+      // Clean up result stages.
+      val resultStagesForJob = resultStageToJob.keySet.filter(
+        stage => resultStageToJob(stage).jobId == job.jobId)
+      if (resultStagesForJob.size != 1) {
+        logWarning(
+          s"${resultStagesForJob.size} result stages for job ${job.jobId} (expect exactly 1)")
+      }
+      resultStageToJob --= resultStagesForJob
     } else {
-      removeJobAndIndependentStages(jobId)
-      jobIdToStageIds -= jobId
+      resultStageToJob -= resultStage.get
     }
   }
 
@@ -460,7 +467,7 @@ class DAGScheduler(
     val waiter = submitJob(rdd, func, partitions, callSite, allowLocal, resultHandler, properties)
     waiter.awaitResult() match {
       case JobSucceeded => {}
-      case JobFailed(exception: Exception, _) =>
+      case JobFailed(exception: Exception) =>
         logInfo("Failed to run " + callSite)
         throw exception
     }
@@ -606,7 +613,16 @@ class DAGScheduler(
         for (job <- activeJobs) {
           val error = new SparkException("Job cancelled because SparkContext was shut down")
           job.listener.jobFailed(error)
-          listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error, -1)))
+          // Tell the listeners that all of the running stages have ended.  Don't bother
+          // cancelling the stages because if the DAG scheduler is stopped, the entire application
+          // is in the process of getting stopped.
+          val stageFailedMessage = "Stage cancelled because SparkContext was shut down"
+          runningStages.foreach { stage =>
+            val info = stageToInfos(stage)
+            info.stageFailed(stageFailedMessage)
+            listenerBus.post(SparkListenerStageCompleted(info))
+          }
+          listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error)))
         }
         return true
     }
@@ -676,7 +692,7 @@ class DAGScheduler(
       }
     } catch {
       case e: Exception =>
-        jobResult = JobFailed(e, job.finalStage.id)
+        jobResult = JobFailed(e)
         job.listener.jobFailed(e)
     } finally {
       val s = job.finalStage
@@ -826,11 +842,8 @@ class DAGScheduler(
                   job.numFinished += 1
                   // If the whole job has finished, remove it
                   if (job.numFinished == job.numPartitions) {
-                    jobIdToActiveJob -= stage.jobId
-                    activeJobs -= job
-                    resultStageToJob -= stage
                     markStageAsFinished(stage)
-                    jobIdToStageIdsRemove(job.jobId)
+                    cleanupStateForJobAndIndependentStages(job, Some(stage))
                     listenerBus.post(SparkListenerJobEnd(job.jobId, JobSucceeded))
                   }
                   job.listener.taskSucceeded(rt.outputId, event.result)
@@ -982,7 +995,7 @@ class DAGScheduler(
     if (!jobIdToStageIds.contains(jobId)) {
       logDebug("Trying to cancel unregistered job " + jobId)
     } else {
-      failJobAndIndependentStages(jobIdToActiveJob(jobId), s"Job $jobId cancelled")
+      failJobAndIndependentStages(jobIdToActiveJob(jobId), s"Job $jobId cancelled", None)
     }
   }
 
@@ -999,7 +1012,8 @@ class DAGScheduler(
     stageToInfos(failedStage).completionTime = Some(System.currentTimeMillis())
     for (resultStage <- dependentStages) {
       val job = resultStageToJob(resultStage)
-      failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason")
+      failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason",
+        Some(resultStage))
     }
     if (dependentStages.isEmpty) {
       logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")
@@ -1008,28 +1022,45 @@ class DAGScheduler(
 
   /**
    * Fails a job and all stages that are only used by that job, and cleans up relevant state.
+   *
+   * @param resultStage The result stage for the job, if known. Used to cleanup state for the job
+   *                    slightly more efficiently than when not specified.
    */
-  private def failJobAndIndependentStages(job: ActiveJob, failureReason: String) {
+  private def failJobAndIndependentStages(job: ActiveJob, failureReason: String,
+      resultStage: Option[Stage]) {
     val error = new SparkException(failureReason)
     job.listener.jobFailed(error)
 
-    // Cancel all tasks in independent stages.
-    val independentStages = removeJobAndIndependentStages(job.jobId)
-    independentStages.foreach(taskScheduler.cancelTasks)
-
-    // Clean up remaining state we store for the job.
-    jobIdToActiveJob -= job.jobId
-    activeJobs -= job
-    jobIdToStageIds -= job.jobId
-    val resultStagesForJob = resultStageToJob.keySet.filter(
-      stage => resultStageToJob(stage).jobId == job.jobId)
-    if (resultStagesForJob.size != 1) {
-      logWarning(
-        s"${resultStagesForJob.size} result stages for job ${job.jobId} (expect exactly 1)")
+    // Cancel all independent, running stages.
+    val stages = jobIdToStageIds(job.jobId)
+    if (stages.isEmpty) {
+      logError("No stages registered for job " + job.jobId)
     }
-    resultStageToJob --= resultStagesForJob
+    stages.foreach { stageId =>
+      val jobsForStage = stageIdToJobIds.get(stageId)
+      if (jobsForStage.isEmpty || !jobsForStage.get.contains(job.jobId)) {
+        logError(
+          "Job %d not registered for stage %d even though that stage was registered for the job"
+            .format(job.jobId, stageId))
+      } else if (jobsForStage.get.size == 1) {
+        if (!stageIdToStage.contains(stageId)) {
+          logError("Missing Stage for stage with id $stageId")
+        } else {
+          // This is the only job that uses this stage, so fail the stage if it is running.
+          val stage = stageIdToStage(stageId)
+          if (runningStages.contains(stage)) {
+            taskScheduler.cancelTasks(stageId)
+            val stageInfo = stageToInfos(stage)
+            stageInfo.stageFailed(failureReason)
+            listenerBus.post(SparkListenerStageCompleted(stageToInfos(stage)))
+          }
+        }
+      }
+    }
 
-    listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error, job.finalStage.id)))
+    cleanupStateForJobAndIndependentStages(job, resultStage)
+
+    listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error)))
   }
 
   /**
