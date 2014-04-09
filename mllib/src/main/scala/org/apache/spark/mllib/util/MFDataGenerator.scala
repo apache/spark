@@ -21,10 +21,13 @@ import scala.util.Random
 
 import org.jblas.DoubleMatrix
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 
 /**
+ * :: DeveloperApi ::
+ *
 * Generate RDD(s) containing data for Matrix Factorization.
 *
 * This method samples training entries according to the oversampling factor
@@ -47,9 +50,8 @@ import org.apache.spark.rdd.RDD
 *   test           (Boolean) Whether to create testing RDD.
 *   testSampFact   (Double) Percentage of training data to use as test data.
 */
-
-object MFDataGenerator{
-
+@DeveloperApi
+object MFDataGenerator {
   def main(args: Array[String]) {
     if (args.length < 2) {
       println("Usage: MFDataGenerator " +
