@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import java.util.concurrent.Semaphore
+
 import scala.collection.mutable
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
@@ -70,6 +72,53 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
       val bus = new LiveListenerBus
       bus.stop()
     }
+  }
+
+  test("bus.stop() waits for the event queue to completely drain") {
+    @volatile var drained = false
+
+    class BlockingListener(cond: AnyRef) extends SparkListener {
+      override def onJobEnd(jobEnd: SparkListenerJobEnd) = {
+        cond.synchronized { cond.wait() }
+        drained = true
+      }
+    }
+
+    val bus = new LiveListenerBus
+    val blockingListener = new BlockingListener(bus)
+    val sem = new Semaphore(0)
+
+    bus.addListener(blockingListener)
+    bus.post(SparkListenerJobEnd(0, JobSucceeded))
+    bus.start()
+    // the queue should not drain immediately
+    assert(!drained)
+
+    new Thread("ListenerBusStopper") {
+      override def run() {
+        // stop() would block until notify() is called below
+        bus.stop()
+        sem.release()
+      }
+    }.start()
+
+    val startTime = System.currentTimeMillis()
+    val waitTime = 100
+    var done = false
+    while (!done) {
+      if (System.currentTimeMillis() > startTime + waitTime) {
+        bus.synchronized {
+          bus.notify()
+        }
+        done = true
+      } else {
+        Thread.sleep(10)
+        // bus.stop() should wait until the event queue is drained
+        assert(!drained)
+      }
+    }
+    sem.acquire()
+    assert(drained)
   }
 
   test("basic creation of StageInfo") {
