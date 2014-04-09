@@ -93,7 +93,7 @@ private[spark] class FileLogger(
     val dstream = uri.getScheme match {
       case "file" | null =>
         // Second parameter is whether to append
-        new FileOutputStream(logPath, !overwrite)
+        new FileOutputStream(uri.getPath, !overwrite)
 
       case _ =>
         val path = new Path(logPath)
