@@ -27,9 +27,11 @@ private[sql] case class InMemoryColumnarTableScan(attributes: Seq[Attribute], ch
   override def output: Seq[Attribute] = attributes
 
   lazy val cachedColumnBuffers = {
+    val ordinals = attributes.map(a => child.output.indexWhere(_.name == a.name))
     val output = child.output
     val cached = child.execute().mapPartitions { iterator =>
-      val columnBuilders = output.map { attribute =>
+      val columnBuilders = ordinals.map { i =>
+        val attribute = output(i)
         ColumnBuilder(ColumnType(attribute.dataType).typeId, 0, attribute.name)
       }.toArray
 
@@ -37,8 +39,8 @@ private[sql] case class InMemoryColumnarTableScan(attributes: Seq[Attribute], ch
       while (iterator.hasNext) {
         row = iterator.next()
         var i = 0
-        while (i < row.length) {
-          columnBuilders(i).appendFrom(row, i)
+        while (i < ordinals.length) {
+          columnBuilders(i).appendFrom(row, ordinals(i))
           i += 1
         }
       }
