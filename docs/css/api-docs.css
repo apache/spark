@@ -8,6 +8,10 @@
   background-color: #257080;
 }
 
+.alphaComponent {
+  background-color: #bb0000;
+}
+
 .badge {
   font-family: Arial, san-serif;
   float: right;
