@@ -23,7 +23,6 @@ import org.apache.spark.annotation.Experimental
 
 /**
  * :: Experimental ::
- *
  * Represents a classification model that predicts to which of a set of categories an example
  * belongs. The categories are represented by double values: 0.0, 1.0, 2.0, etc.
  */

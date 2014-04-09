@@ -143,7 +143,6 @@ class ALS private (
 
   /**
    * :: Experimental ::
-   *
    * Sets the constant used in computing confidence in implicit ALS. Default: 1.0.
    */
   @Experimental
