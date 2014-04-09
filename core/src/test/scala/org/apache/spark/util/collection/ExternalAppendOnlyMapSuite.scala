@@ -174,9 +174,9 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     assert(result1.toSet == Set[(Int, Int)]((0, 5), (1, 5)))
 
     // groupByKey
-    val result2 = rdd.groupByKey().collect()
+    val result2 = rdd.groupByKey().collect().map(x => (x._1, x._2.toList)).toSet
     assert(result2.toSet == Set[(Int, Seq[Int])]
-      ((0, ArrayBuffer[Int](1, 1, 1, 1, 1)), (1, ArrayBuffer[Int](1, 1, 1, 1, 1))))
+      ((0, List[Int](1, 1, 1, 1, 1)), (1, List[Int](1, 1, 1, 1, 1))))
   }
 
   test("simple cogroup") {

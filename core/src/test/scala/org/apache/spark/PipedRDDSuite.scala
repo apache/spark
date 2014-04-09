@@ -85,7 +85,7 @@ class PipedRDDSuite extends FunSuite with SharedSparkContext {
           (f: String => Unit) => {
             bl.value.map(f(_)); f("\u0001")
           },
-          (i: Tuple2[String, Seq[String]], f: String => Unit) => {
+          (i: Tuple2[String, Iterable[String]], f: String => Unit) => {
             for (e <- i._2) {
               f(e + "_")
             }

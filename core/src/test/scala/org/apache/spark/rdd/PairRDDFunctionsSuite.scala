@@ -225,11 +225,12 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
     val joined = rdd1.groupWith(rdd2).collect()
     assert(joined.size === 4)
-    assert(joined.toSet === Set(
-      (1, (ArrayBuffer(1, 2), ArrayBuffer('x'))),
-      (2, (ArrayBuffer(1), ArrayBuffer('y', 'z'))),
-      (3, (ArrayBuffer(1), ArrayBuffer())),
-      (4, (ArrayBuffer(), ArrayBuffer('w')))
+    val joinedSet = joined.map(x => (x._1, (x._2._1.toList, x._2._2.toList))).toSet
+    assert(joinedSet === Set(
+      (1, (List(1, 2), List('x'))),
+      (2, (List(1), List('y', 'z'))),
+      (3, (List(1), List())),
+      (4, (List(), List('w')))
     ))
   }
 
@@ -447,4 +448,3 @@ class ConfigTestFormat() extends FakeFormat() with Configurable {
     super.getRecordWriter(p1)
   }
 }
-
