@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.evaluation.binary
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{UnionRDD, RDD}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.evaluation.AreaUnderCurve
 import org.apache.spark.Logging
@@ -103,10 +103,17 @@ class BinaryClassificationMetrics(scoreAndLabels: RDD[(Double, Double)])
 
   /**
    * Returns the receiver operating characteristic (ROC) curve,
-   * which is an RDD of (false positive rate, true positive rate).
+   * which is an RDD of (false positive rate, true positive rate)
+   * with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
    * @see http://en.wikipedia.org/wiki/Receiver_operating_characteristic
    */
-  def roc(): RDD[(Double, Double)] = createCurve(FalsePositiveRate, Recall)
+  def roc(): RDD[(Double, Double)] = {
+    val rocCurve = createCurve(FalsePositiveRate, Recall)
+    val sc = confusions.context
+    val first = sc.makeRDD(Seq((0.0, 0.0)), 1)
+    val last = sc.makeRDD(Seq((1.0, 1.0)), 1)
+    new UnionRDD[(Double, Double)](sc, Seq(first, rocCurve, last))
+  }
 
   /**
    * Computes the area under the receiver operating characteristic (ROC) curve.
@@ -114,11 +121,16 @@ class BinaryClassificationMetrics(scoreAndLabels: RDD[(Double, Double)])
   def areaUnderROC(): Double = AreaUnderCurve.of(roc())
 
   /**
-   * Returns the precision-recall curve,
-   * which is an RDD of (recall, precision), NOT (precision, recall).
+   * Returns the precision-recall curve, which is an RDD of (recall, precision),
+   * NOT (precision, recall), with (0.0, 1.0) prepended to it.
    * @see http://en.wikipedia.org/wiki/Precision_and_recall
    */
-  def pr(): RDD[(Double, Double)] = createCurve(Recall, Precision)
+  def pr(): RDD[(Double, Double)] = {
+    val prCurve = createCurve(Recall, Precision)
+    val sc = confusions.context
+    val first = sc.makeRDD(Seq((0.0, 1.0)), 1)
+    first.union(prCurve)
+  }
 
   /**
    * Computes the area under the precision-recall curve.

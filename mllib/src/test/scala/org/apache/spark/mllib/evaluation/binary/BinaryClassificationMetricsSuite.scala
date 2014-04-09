@@ -35,15 +35,16 @@ class BinaryClassificationMetricsSuite extends FunSuite with LocalSparkContext {
     val precision = tp.zip(fp).map { case (t, f) => t.toDouble / (t + f) }
     val recall = tp.map(t => t.toDouble / p)
     val fpr = fp.map(f => f.toDouble / n)
-    val roc = fpr.zip(recall)
+    val rocCurve = Seq((0.0, 0.0)) ++ fpr.zip(recall) ++ Seq((1.0, 1.0))
     val pr = recall.zip(precision)
+    val prCurve = Seq((0.0, 1.0)) ++ pr
     val f1 = pr.map { case (re, prec) => 2.0 * (prec * re) / (prec + re) }
     val f2 = pr.map { case (re, prec) => 5.0 * (prec * re) / (4.0 * prec + re)}
     assert(metrics.thresholds().collect().toSeq === score)
-    assert(metrics.roc().collect().toSeq === roc)
-    assert(metrics.areaUnderROC() === AreaUnderCurve.of(roc))
-    assert(metrics.pr().collect().toSeq === pr)
-    assert(metrics.areaUnderPR() === AreaUnderCurve.of(pr))
+    assert(metrics.roc().collect().toSeq === rocCurve)
+    assert(metrics.areaUnderROC() === AreaUnderCurve.of(rocCurve))
+    assert(metrics.pr().collect().toSeq === prCurve)
+    assert(metrics.areaUnderPR() === AreaUnderCurve.of(prCurve))
     assert(metrics.fMeasureByThreshold().collect().toSeq === score.zip(f1))
     assert(metrics.fMeasureByThreshold(2.0).collect().toSeq === score.zip(f2))
     assert(metrics.precisionByThreshold().collect().toSeq === score.zip(precision))
