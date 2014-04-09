@@ -57,7 +57,6 @@ private[recommendation] case class InLinkBlock(
 
 /**
  * :: Experimental ::
- *
  * A more compact class to represent a rating than Tuple3[Int, Int, Double].
  */
 @Experimental
