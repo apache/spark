@@ -874,7 +874,6 @@ class SparkContext(
   /** Shut down the SparkContext. */
   def stop() {
     ui.stop()
-    eventLogger.foreach(_.stop())
     // Do this only if not stopped already - best case effort.
     // prevent NPE if stopped more than once.
     val dagSchedulerCopy = dagScheduler
@@ -884,6 +883,7 @@ class SparkContext(
       cleaner.foreach(_.stop())
       dagSchedulerCopy.stop()
       listenerBus.stop()
+      eventLogger.foreach(_.stop())
       taskScheduler = null
       // TODO: Cache.stop()?
       env.stop()
