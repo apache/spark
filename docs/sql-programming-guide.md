@@ -210,14 +210,19 @@ row. Any RDD of dictionaries can converted to a SchemaRDD and then registered as
 can be used in subsequent SQL statements.
 
 {% highlight python %}
+# Load a text file and convert each line to a dictionary.
 lines = sc.textFile("examples/src/main/resources/people.txt")
 parts = lines.map(lambda l: l.split(","))
 people = parts.map(lambda p: {"name": p[0], "age": int(p[1])})
 
+# Infer the schema, and register the SchemaRDD as a table.
 peopleTable = sqlCtx.inferSchema(people)
 peopleTable.registerAsTable("people")
 
+# SQL can be run over SchemaRDDs that have been registered as a table.
 teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
+
+# The results of SQL queries are RDDs and support all the normal RDD operations.
 teenNames = teenagers.map(lambda p: "Name: " + p.name)
 {% endhighlight %}
 
@@ -291,11 +296,11 @@ peopleTable # The SchemaRDD from the previous example.
 # JavaSchemaRDDs can be saved as parquet files, maintaining the schema information.
 peopleTable.saveAsParquetFile("people.parquet")
 
-// Read in the parquet file created above.  Parquet files are self-describing so the schema is preserved.
-// The result of loading a parquet file is also a JavaSchemaRDD.
+# Read in the parquet file created above.  Parquet files are self-describing so the schema is preserved.
+# The result of loading a parquet file is also a JavaSchemaRDD.
 parquetFile = sqlCtx.parquetFile("people.parquet")
 
-//Parquet files can also be registered as tables and then used in SQL statements.
+# Parquet files can also be registered as tables and then used in SQL statements.
 parquetFile.registerAsTable("parquetFile");
 teenagers = sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 
@@ -401,7 +406,7 @@ hiveCtx = HiveContext(sqlCtx)
 hiveCtx.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 hiveCtx.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
-// Queries are expressed in HiveQL.
+# Queries can be expressed in HiveQL.
 results = hiveCtx.hql("FROM src SELECT key, value").collect()
 
 {% endhighlight %}
