@@ -287,4 +287,16 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("more edge partitions than vertex partitions") {
+    withSpark { sc =>
+      val verts = sc.parallelize(List((1: VertexId, "a"), (2: VertexId, "b")), 1)
+      val edges = sc.parallelize(List(Edge(1, 2, 0), Edge(2, 1, 0)), 2)
+      val graph = Graph(verts, edges)
+      val triplets = graph.triplets.map(et => (et.srcId, et.dstId, et.srcAttr, et.dstAttr))
+        .collect.toSet
+      assert(triplets ===
+        Set((1: VertexId, 2: VertexId, "a", "b"), (2: VertexId, 1: VertexId, "b", "a")))
+    }
+  }
+
 }
