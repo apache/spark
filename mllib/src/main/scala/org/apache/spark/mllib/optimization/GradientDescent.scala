@@ -19,18 +19,22 @@ package org.apache.spark.mllib.optimization
 
 import scala.collection.mutable.ArrayBuffer
 
-import breeze.linalg.{Vector => BV, DenseVector => BDV}
+import breeze.linalg.{DenseVector => BDV}
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
+ * :: DeveloperApi ::
+ *
  * Class used to solve an optimization problem using Gradient Descent.
  * @param gradient Gradient function to be used.
  * @param updater Updater to be used to update weights after every iteration.
  */
-class GradientDescent(var gradient: Gradient, var updater: Updater)
+@DeveloperApi
+class GradientDescent(private var gradient: Gradient, private var updater: Updater)
   extends Optimizer with Logging
 {
   private var stepSize: Double = 1.0
@@ -107,7 +111,12 @@ class GradientDescent(var gradient: Gradient, var updater: Updater)
 
 }
 
-// Top-level method to run gradient descent.
+/**
+ * :: DeveloperApi ::
+ *
+ * Top-level method to run gradient descent.
+ */
+@DeveloperApi
 object GradientDescent extends Logging {
   /**
    * Run stochastic gradient descent (SGD) in parallel using mini batches.

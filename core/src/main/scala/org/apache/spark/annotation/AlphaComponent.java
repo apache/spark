@@ -15,17 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.configuration
+package org.apache.spark.annotation;
 
-import org.apache.spark.annotation.Experimental
+import java.lang.annotation.*;
 
-/**
- * :: Experimental ::
- *
- * Enum to select the algorithm for the decision tree
- */
-@Experimental
-object Algo extends Enumeration {
-  type Algo = Value
-  val Classification, Regression = Value
-}
+/** A new component of Spark which may have unstable API's. */
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
+        ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
+public @interface AlphaComponent {}
