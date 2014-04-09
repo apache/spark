@@ -186,7 +186,8 @@ object MLUtils {
   def kFold[T : ClassTag](rdd: RDD[T], numFolds: Int, seed: Int): Array[(RDD[T], RDD[T])] = {
     val numFoldsF = numFolds.toFloat
     (1 to numFolds).map  { fold =>
-      val sampler = new BernoulliSampler[T]((fold - 1) / numFoldsF, fold / numFoldsF, complement = false)
+      val sampler = new BernoulliSampler[T]((fold - 1) / numFoldsF, fold / numFoldsF,
+        complement = false)
       val validation = new PartitionwiseSampledRDD(rdd, sampler, seed)
       val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), seed)
       (validation, training)
