@@ -60,7 +60,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
   /** Bind to the HTTP server behind this web interface. */
   override def bind() {
     try {
-      serverInfo = Some(startJettyServer(host, port, handlers, worker.conf))
+      serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, worker.conf))
       logInfo("Started Worker web UI at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>

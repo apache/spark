@@ -104,7 +104,7 @@ package object dsl {
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s = sym.name }
     // TODO more implicit class for literal?
     implicit class DslString(val s: String) extends ImplicitOperators {
-      def expr: Expression = Literal(s)
+      override def expr: Expression = Literal(s)
       def attr = analysis.UnresolvedAttribute(s)
     }
 
