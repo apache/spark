@@ -15,16 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg
+package org.apache.spark.mllib.util
 
-import org.apache.spark.rdd.RDD
+import org.scalatest.FunSuite
 
+class LabelParsersSuite extends FunSuite {
+  test("binary label parser") {
+    for (parser <- Seq(BinaryLabelParser, BinaryLabelParser.getInstance())) {
+      assert(parser.parse("+1") === 1.0)
+      assert(parser.parse("1") === 1.0)
+      assert(parser.parse("0") === 0.0)
+      assert(parser.parse("-1") === 0.0)
+    }
+  }
 
-/**
- * Class that represents a dense matrix
- *
- * @param rows RDD of rows
- * @param m number of rows
- * @param n number of columns
- */
-case class TallSkinnyDenseMatrix(val rows: RDD[MatrixRow], val m: Int, val n: Int)
+  test("multiclass label parser") {
+    for (parser <- Seq(MulticlassLabelParser, MulticlassLabelParser.getInstance())) {
+      assert(parser.parse("0") == 0.0)
+      assert(parser.parse("+1") === 1.0)
+      assert(parser.parse("1") === 1.0)
+      assert(parser.parse("2") === 2.0)
+      assert(parser.parse("3") === 3.0)
+    }
+  }
+}

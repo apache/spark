@@ -41,8 +41,7 @@ trait SchemaRDDLike {
   override def toString =
     s"""${super.toString}
        |== Query Plan ==
-       |${queryExecution.executedPlan}""".stripMargin.trim
-
+       |${queryExecution.simpleString}""".stripMargin.trim
 
   /**
    * Saves the contents of this `SchemaRDD` as a parquet file, preserving the schema.  Files that

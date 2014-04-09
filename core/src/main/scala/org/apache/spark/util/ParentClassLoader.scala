@@ -15,15 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg
+package org.apache.spark.util
 
 /**
- * Class that represents the SV decomposition of a matrix
- *
- * @param U such that A = USV^T
- * @param S such that A = USV^T
- * @param V such that A = USV^T
+ * A class loader which makes findClass accesible to the child
  */
-case class MatrixSVD(val U: SparseMatrix,
-                     val S: SparseMatrix,
-                     val V: SparseMatrix)
+private[spark] class ParentClassLoader(parent: ClassLoader) extends ClassLoader(parent) {
+
+  override def findClass(name: String) = {
+    super.findClass(name)
+  }
+
+  override def loadClass(name: String): Class[_] = {
+    super.loadClass(name)
+  }
+}
