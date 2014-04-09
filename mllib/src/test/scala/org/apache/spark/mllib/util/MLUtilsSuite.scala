@@ -120,10 +120,10 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
       for (seed <- 1 to 5) {
         val foldedRdds = MLUtils.kFold(data, folds, seed)
         assert(foldedRdds.size === folds)
-        foldedRdds.map{case (test, train) =>
+        foldedRdds.map { case (test, train) =>
           val result = test.union(train).collect().sorted
           val testSize = test.collect().size.toFloat
-          assert(testSize > 0, "Non empty test data")
+          assert(testSize > 0, "empty test data")
           val p = 1 / folds.toFloat
           // Within 3 standard deviations of the mean
           val range = 3 * math.sqrt(100 * p * (1-p))
@@ -131,12 +131,12 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
           val lowerBound = expected - range
           val upperBound = expected + range
           assert(testSize > lowerBound,
-            "Test data (" + testSize + ") smaller than expected (" + lowerBound +")" )
+            s"Test data ($testSize) smaller than expected ($lowerBound)" )
           assert(testSize < upperBound,
-            "Test data (" + testSize + ") larger than expected (" + upperBound +")" )
-          assert(train.collect().size > 0, "Non empty training data")
+            s"Test data ($testSize) larger than expected ($upperBound)" )
+          assert(train.collect().size > 0, "empty training data")
           assert(result ===  collectedData,
-            "Each training+test set combined contains all of the data")
+            "Each training+test set combined should contain all of the data.")
         }
         // K fold cross validation should only have each element in the test set exactly once
         assert(foldedRdds.map(_._1).reduce((x,y) => x.union(y)).collect().sorted ===
