@@ -243,9 +243,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
     def debugExec() = DebugQuery(executedPlan).execute().collect()
   }
 
-  // TODO: We only support primitive types, add support for nested types. Difficult because java
-  // objects don't have classTags
-  def applySchema(rdd: RDD[Map[String, _]]): SchemaRDD = {
+  /**
+   * Peek at the first row of the RDD and infer its schema.
+   * TODO: We only support primitive types, add support for nested types.
+   */
+  private[sql] def inferSchema(rdd: RDD[Map[String, _]]): SchemaRDD = {
     val schema = rdd.first.map { case (fieldName, obj) =>
       val dataType = obj.getClass match {
         case c: Class[_] if c == classOf[java.lang.String] => StringType

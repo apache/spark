@@ -1445,7 +1445,7 @@ class SchemaRDD(RDD):
         >>> sqlCtx = SQLContext(sc)
         >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
         ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
-        >>> srdd = sqlCtx.applySchema(rdd)
+        >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.saveAsParquetFile("/tmp/test.parquet")
         >>> srdd2 = sqlCtx.parquetFile("/tmp/test.parquet")
         >>> srdd2.collect() == srdd.collect()
@@ -1461,7 +1461,7 @@ class SchemaRDD(RDD):
         >>> sqlCtx = SQLContext(sc)
         >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
         ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
-        >>> srdd = sqlCtx.applySchema(rdd)
+        >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.registerAsTable("test")
         >>> srdd2 = sqlCtx.sql("select * from test")
         >>> srdd.collect() == srdd2.collect()

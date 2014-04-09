@@ -286,39 +286,33 @@ private[spark] object PythonRDD {
     file.close()
   }
 
-  def pythonToJava(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[_] = {
-    pyRDD.rdd.mapPartitions { iter =>
-      val unpickle = new Unpickler
-      // TODO: Figure out why flatMap is necessay for pyspark
-      iter.flatMap { row =>
-        unpickle.loads(row) match {
-          case objs: java.util.ArrayList[Any] => objs
-          // Incase the partition doesn't have a collection
-          case obj => Seq(obj)
-        }
-      }
-    }
-  }
-
+  /**
+   * Convert an RDD of serialized Python dictionaries to Scala Maps
+   * TODO: Support more Python types.
+   */
   def pythonToJavaMap(pyRDD: JavaRDD[Array[Byte]]): JavaRDD[Map[String, _]] = {
     pyRDD.rdd.mapPartitions { iter =>
       val unpickle = new Unpickler
       // TODO: Figure out why flatMap is necessay for pyspark
       iter.flatMap { row =>
         unpickle.loads(row) match {
-          case objs: java.util.ArrayList[JMap[String, _]] => objs.map(_.toMap)
+          case objs: java.util.ArrayList[JMap[String, _] @unchecked] => objs.map(_.toMap)
           // Incase the partition doesn't have a collection
-          case obj: JMap[String, _] => Seq(obj.toMap)
+          case obj: JMap[String @unchecked, _] => Seq(obj.toMap)
         }
       }
     }
   }
 
+  /**
+   * Convert and RDD of Java objects to and RDD of serialized Python objects, that is usable by
+   * PySpark.
+   */
   def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
     jRDD.rdd.mapPartitions { iter =>
-      val unpickle = new Pickler
+      val pickle = new Pickler
       iter.map { row =>
-        unpickle.dumps(row)
+        pickle.dumps(row)
       }
     }
   }

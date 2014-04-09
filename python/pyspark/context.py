@@ -174,7 +174,6 @@ class SparkContext(object):
                 SparkContext._gateway = gateway or launch_gateway()
                 SparkContext._jvm = SparkContext._gateway.jvm
                 SparkContext._writeToFile = SparkContext._jvm.PythonRDD.writeToFile
-                SparkContext._pythonToJava = SparkContext._jvm.PythonRDD.pythonToJava
                 SparkContext._pythonToJavaMap = SparkContext._jvm.PythonRDD.pythonToJavaMap
                 SparkContext._javaToPython = SparkContext._jvm.PythonRDD.javaToPython
 
@@ -481,21 +480,21 @@ class SQLContext:
         >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
         ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
 
-        >>> srdd = sqlCtx.applySchema(rdd)
-        >>> sqlCtx.applySchema(srdd) # doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> sqlCtx.inferSchema(srdd) # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
         ValueError:...
 
         >>> bad_rdd = sc.parallelize([1,2,3])
-        >>> sqlCtx.applySchema(bad_rdd) # doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> sqlCtx.inferSchema(bad_rdd) # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
         ValueError:...
 
         >>> allTypes = sc.parallelize([{"int" : 1, "string" : "string", "double" : 1.0, "long": 1L,
         ... "boolean" : True}])
-        >>> srdd = sqlCtx.applySchema(allTypes).map(lambda x: (x.int, x.string, x.double, x.long,
+        >>> srdd = sqlCtx.inferSchema(allTypes).map(lambda x: (x.int, x.string, x.double, x.long,
         ... x.boolean))
         >>> srdd.collect()[0]
         (1, u'string', 1.0, 1, True)
@@ -514,7 +513,7 @@ class SQLContext:
             self._scala_SQLContext = self._jvm.SQLContext(self._jsc.sc())
         return self._scala_SQLContext
 
-    def applySchema(self, rdd):
+    def inferSchema(self, rdd):
         """
         Infer and apply a schema to an RDD of L{dict}s. We peek at the first row of the RDD to
         determine the fields names and types, and then use that to extract all the dictionaries.
@@ -523,7 +522,7 @@ class SQLContext:
         >>> sqlCtx = SQLContext(sc)
         >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
         ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
-        >>> srdd = sqlCtx.applySchema(rdd)
+        >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.collect() == [{"field1" : 1, "field2" : "row1"}, {"field1" : 2, "field2": "row2"},
         ...                    {"field1" : 3, "field2": "row3"}]
         True
@@ -535,7 +534,7 @@ class SQLContext:
                              (SchemaRDD.__name__, rdd.first()))
 
         jrdd = self._sc._pythonToJavaMap(rdd._jrdd)
-        srdd = self._ssql_ctx.applySchema(jrdd.rdd())
+        srdd = self._ssql_ctx.inferSchema(jrdd.rdd())
         return SchemaRDD(srdd, self)
 
     def registerRDDAsTable(self, rdd, tableName):
@@ -546,7 +545,7 @@ class SQLContext:
         >>> sqlCtx = SQLContext(sc)
         >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
         ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
-        >>> srdd = sqlCtx.applySchema(rdd)
+        >>> srdd = sqlCtx.inferSchema(rdd)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
         """
         if (rdd.__class__ is SchemaRDD):
@@ -563,7 +562,7 @@ class SQLContext:
         >>> sqlCtx = SQLContext(sc)
         >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
         ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
-        >>> srdd = sqlCtx.applySchema(rdd)
+        >>> srdd = sqlCtx.inferSchema(rdd)
         >>> srdd.saveAsParquetFile("/tmp/tmp.parquet")
         >>> srdd2 = sqlCtx.parquetFile("/tmp/tmp.parquet")
         >>> srdd.collect() == srdd2.collect()
@@ -580,7 +579,7 @@ class SQLContext:
         >>> sqlCtx = SQLContext(sc)
         >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
         ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
-        >>> srdd = sqlCtx.applySchema(rdd)
+        >>> srdd = sqlCtx.inferSchema(rdd)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
         >>> srdd2 = sqlCtx.sql("SELECT field1 AS f1, field2 as f2 from table1")
         >>> srdd2.collect() == [{"f1" : 1, "f2" : "row1"}, {"f1" : 2, "f2": "row2"},
@@ -596,7 +595,7 @@ class SQLContext:
         >>> sqlCtx = SQLContext(sc)
         >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
         ... {"field1" : 2, "field2": "row2"}, {"field1" : 3, "field2": "row3"}])
-        >>> srdd = sqlCtx.applySchema(rdd)
+        >>> srdd = sqlCtx.inferSchema(rdd)
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
         >>> srdd2 = sqlCtx.table("table1")
         >>> srdd.collect() == srdd2.collect()
