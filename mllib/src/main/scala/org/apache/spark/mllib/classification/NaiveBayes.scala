@@ -19,6 +19,7 @@ package org.apache.spark.mllib.classification
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vector
@@ -36,6 +37,7 @@ import org.apache.spark.rdd.RDD
  * @param theta log of class conditional probabilities, whose dimension is C-by-D,
  *              where D is number of features
  */
+@Experimental
 class NaiveBayesModel(
     val labels: Array[Double],
     val pi: Array[Double],

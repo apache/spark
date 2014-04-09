@@ -19,6 +19,7 @@ package org.apache.spark.mllib.tree
 
 import scala.util.control.Breaks._
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -41,6 +42,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
  *                 of algorithm (classification, regression, etc.), feature type (continuous,
  *                 categorical), depth of the tree, quantile calculation strategy, etc.
  */
+@Experimental
 class DecisionTree (private val strategy: Strategy) extends Serializable with Logging {
 
   /**

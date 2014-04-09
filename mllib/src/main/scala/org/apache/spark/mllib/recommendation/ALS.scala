@@ -25,6 +25,7 @@ import scala.util.Sorting
 import com.esotericsoftware.kryo.Kryo
 import org.jblas.{DoubleMatrix, SimpleBlas, Solve}
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.{Logging, HashPartitioner, Partitioner, SparkContext, SparkConf}
 import org.apache.spark.storage.StorageLevel
@@ -142,6 +143,7 @@ class ALS private (
    *
    * Sets the constant used in computing confidence in implicit ALS. Default: 1.0.
    */
+  @Experimental
   def setAlpha(alpha: Double): ALS = {
     this.alpha = alpha
     this

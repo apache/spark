@@ -17,11 +17,14 @@
 
 package org.apache.spark.mllib.tree.configuration
 
+import org.apache.spark.annotation.Experimental
+
 /**
  * :: Experimental ::
  *
  * Enum to select the algorithm for the decision tree
  */
+@Experimental
 object Algo extends Enumeration {
   type Algo = Value
   val Classification, Regression = Value

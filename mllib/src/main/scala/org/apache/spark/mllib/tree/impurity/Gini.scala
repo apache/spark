@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 
 /**
  * :: Experimental ::
@@ -26,6 +26,7 @@ import org.apache.spark.annotation.DeveloperApi
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning#Gini_impurity Gini impurity]]
  * during binary classification.
  */
+@Experimental
 object Gini extends Impurity {
 
   /**

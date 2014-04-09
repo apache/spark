@@ -17,13 +17,14 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 
 /**
  * :: Experimental ::
  *
  * Trait for calculating information gain.
  */
+@Experimental
 trait Impurity extends Serializable {
 
   /**

@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.tree.configuration
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.tree.impurity.Impurity
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
@@ -36,6 +37,7 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                                1, 2, ... , k-1. It's important to note that features are
  *                                zero-indexed.
  */
+@Experimental
 class Strategy (
     val algo: Algo,
     val impurity: Impurity,

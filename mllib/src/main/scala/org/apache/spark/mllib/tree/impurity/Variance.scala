@@ -17,13 +17,14 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 
 /**
  * :: Experimental ::
  *
  * Class for calculating variance during regression
  */
+@Experimental
 object Variance extends Impurity {
    override def calculate(c0: Double, c1: Double): Double =
      throw new UnsupportedOperationException("Variance.calculate")

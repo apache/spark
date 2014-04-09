@@ -20,6 +20,7 @@ package org.apache.spark.mllib.util
 import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV,
   squaredDistance => breezeSquaredDistance}
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -133,6 +134,7 @@ object MLUtils {
    * @return An RDD of LabeledPoint. Each labeled point has two elements: the first element is
    *         the label, and the second element represents the feature values (an array of Double).
    */
+  @Experimental
   def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
     sc.textFile(dir).map { line =>
       val parts = line.split(',')
@@ -152,6 +154,7 @@ object MLUtils {
    * @param data An RDD of LabeledPoints containing data to be saved.
    * @param dir Directory to save the data.
    */
+  @Experimental
   def saveLabeledData(data: RDD[LabeledPoint], dir: String) {
     val dataStr = data.map(x => x.label + "," + x.features.toArray.mkString(" "))
     dataStr.saveAsTextFile(dir)

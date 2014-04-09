@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseVector => BDV, Vector => BV, norm => breezeNorm}
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -400,6 +401,7 @@ object KMeans {
   /**
    * :: Experimental ::
    */
+  @Experimental
   def main(args: Array[String]) {
     if (args.length < 4) {
       println("Usage: KMeans <master> <input_file> <k> <max_iterations> [<runs>]")
