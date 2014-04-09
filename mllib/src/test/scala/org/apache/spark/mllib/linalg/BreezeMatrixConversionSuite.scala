@@ -17,14 +17,24 @@
 
 package org.apache.spark.mllib.linalg
 
-import org.apache.spark.rdd.RDD
+import org.scalatest.FunSuite
 
+import breeze.linalg.{DenseMatrix => BDM}
 
-/**
- * Class that represents a sparse matrix
- *
- * @param data RDD of nonzero entries
- * @param m number of rows
- * @param n numner of columns
- */
-case class SparseMatrix(val data: RDD[MatrixEntry], val m: Int, val n: Int)
+class BreezeMatrixConversionSuite extends FunSuite {
+  test("dense matrix to breeze") {
+    val mat = Matrices.dense(3, 2, Array(0.0, 1.0, 2.0, 3.0, 4.0, 5.0))
+    val breeze = mat.toBreeze.asInstanceOf[BDM[Double]]
+    assert(breeze.rows === mat.numRows)
+    assert(breeze.cols === mat.numCols)
+    assert(breeze.data.eq(mat.asInstanceOf[DenseMatrix].values), "should not copy data")
+  }
+
+  test("dense breeze matrix to matrix") {
+    val breeze = new BDM[Double](3, 2, Array(0.0, 1.0, 2.0, 3.0, 4.0, 5.0))
+    val mat = Matrices.fromBreeze(breeze).asInstanceOf[DenseMatrix]
+    assert(mat.numRows === breeze.rows)
+    assert(mat.numCols === breeze.cols)
+    assert(mat.values.eq(breeze.data), "should not copy data")
+  }
+}

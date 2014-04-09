@@ -17,11 +17,5 @@
 
 package org.apache.spark.mllib.linalg
 
-/**
- * Class that represents an entry in a sparse matrix of doubles.
- *
- * @param i row index (0 indexing used)
- * @param j column index (0 indexing used)
- * @param mval value of entry in matrix
- */
-case class MatrixEntry(val i: Int, val j: Int, val mval: Double)
+/** Represents singular value decomposition (SVD) factors. */
+case class SingularValueDecomposition[UType, VType](U: UType, s: Vector, V: VType)

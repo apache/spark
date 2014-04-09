@@ -15,17 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg
+package org.apache.spark.annotation;
+
+import java.lang.annotation.*;
 
 /**
- * Class that represents the singular value decomposition of a matrix
+ * A lower-level, unstable API intended for developers.
  *
- * @param U such that A = USV^T is a TallSkinnyDenseMatrix
- * @param S such that A = USV^T is a simple double array
- * @param V such that A = USV^T, V is a 2d array matrix that holds
- *          singular vectors in columns. Columns are inner arrays
- *          i.e. V(i)(j) is standard math notation V_{ij}
+ * Developer API's might change or be removed in minor versions of Spark.
  */
-case class TallSkinnyMatrixSVD(val U: TallSkinnyDenseMatrix,
-                               val S: Array[Double],
-                               val V: Array[Array[Double]])
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
+        ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
+public @interface DeveloperApi {}

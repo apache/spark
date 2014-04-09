@@ -89,7 +89,7 @@ class JsonProtocolSuite extends FunSuite {
     // JobResult
     val exception = new Exception("Out of Memory! Please restock film.")
     exception.setStackTrace(stackTrace)
-    val jobFailed = JobFailed(exception, 2)
+    val jobFailed = JobFailed(exception)
     testJobResult(JobSucceeded)
     testJobResult(jobFailed)
 
@@ -294,7 +294,6 @@ class JsonProtocolSuite extends FunSuite {
     (result1, result2) match {
       case (JobSucceeded, JobSucceeded) =>
       case (r1: JobFailed, r2: JobFailed) =>
-        assert(r1.failedStageId === r2.failedStageId)
         assertEquals(r1.exception, r2.exception)
       case _ => fail("Job results don't match in types!")
     }
