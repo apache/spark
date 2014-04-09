@@ -17,12 +17,10 @@
 
 package org.apache.spark.mllib.util
 
+import scala.reflect.ClassTag
+
 import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV,
   squaredDistance => breezeSquaredDistance}
-
-import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
-import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -33,7 +31,6 @@ import org.apache.spark.util.random.BernoulliSampler
 import org.jblas.DoubleMatrix
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.regression.RegressionModel
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
