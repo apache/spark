@@ -39,6 +39,7 @@ RecordWriter => NewRecordWriter, SparkHadoopMapReduceUtil}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
 
 import org.apache.spark._
+import org.apache.spark.annotations.Experimental
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.SparkHadoopWriter
 import org.apache.spark.Partitioner.defaultPartitioner
@@ -201,9 +202,11 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   def countByKey(): Map[K, Long] = self.map(_._1).countByValue()
 
   /**
-   * (Experimental) Approximate version of countByKey that can return a partial result if it does
+   * :: Experimental ::
+   * Approximate version of countByKey that can return a partial result if it does
    * not finish within a timeout.
    */
+  @Experimental
   def countByKeyApprox(timeout: Long, confidence: Double = 0.95)
       : PartialResult[Map[K, BoundedDouble]] = {
     self.map(_._1).countByValueApprox(timeout, confidence)
