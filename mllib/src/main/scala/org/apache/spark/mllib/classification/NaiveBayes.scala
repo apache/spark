@@ -27,7 +27,7 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 
 /**
- * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ * :: Experimental ::
  *
  * Model for Naive Bayes Classifiers.
  *

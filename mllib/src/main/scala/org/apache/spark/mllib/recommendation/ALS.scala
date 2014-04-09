@@ -138,7 +138,7 @@ class ALS private (
   }
 
   /**
-   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+   * :: Experimental ::
    *
    * Sets the constant used in computing confidence in implicit ALS. Default: 1.0.
    */

@@ -101,7 +101,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   }
 
   /**
-   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+   * :: Experimental ::
    *
    * Set if the algorithm should validate data before training. Default true.
    */

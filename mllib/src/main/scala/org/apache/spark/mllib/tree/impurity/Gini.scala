@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.tree.impurity
 
 /**
- * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ * :: Experimental ::
  *
  * Class for calculating the
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning#Gini_impurity Gini impurity]]
@@ -27,7 +27,7 @@ package org.apache.spark.mllib.tree.impurity
 object Gini extends Impurity {
 
   /**
-   * <span class="badge badge-red" style="float: right;">DEVELOPER API</span>
+   * :: DeveloperApi ::
    *
    * Gini coefficient calculation
    * @param c0 count of instances with label 0

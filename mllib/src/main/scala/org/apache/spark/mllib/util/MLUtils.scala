@@ -122,7 +122,7 @@ object MLUtils {
     loadLibSVMData(sc, path, labelParser, numFeatures, sc.defaultMinSplits)
 
   /**
-   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+   * :: Experimental ::
    *
    * Load labeled data from a file. The data format used here is
    * <L>, <f1> <f2> ...
@@ -143,7 +143,7 @@ object MLUtils {
   }
 
   /**
-   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+   * :: Experimental ::
    *
    * Save labeled data to a file. The data format used here is
    * <L>, <f1> <f2> ...

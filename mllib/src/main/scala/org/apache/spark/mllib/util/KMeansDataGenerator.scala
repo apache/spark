@@ -23,7 +23,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * :: DeveloperApi ::
  *
  * Generate test data for KMeans. This class first chooses k cluster centers
  * from a d-dimensional Gaussian distribution scaled by factor r and then creates a Gaussian

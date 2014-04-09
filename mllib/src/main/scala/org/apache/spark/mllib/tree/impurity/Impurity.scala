@@ -18,14 +18,14 @@
 package org.apache.spark.mllib.tree.impurity
 
 /**
- * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ * :: Experimental ::
  *
  * Trait for calculating information gain.
  */
 trait Impurity extends Serializable {
 
   /**
-   * <span class="badge badge-red" style="float: right;">DEVELOPER API</span>
+   * :: DeveloperApi ::
    *
    * information calculation for binary classification
    * @param c0 count of instances with label 0
@@ -35,7 +35,7 @@ trait Impurity extends Serializable {
   def calculate(c0 : Double, c1 : Double): Double
 
   /**
-   * <span class="badge badge-red" style="float: right;">DEVELOPER API</span>
+   * :: DeveloperApi ::
    *
    * information calculation for regression
    * @param count number of instances

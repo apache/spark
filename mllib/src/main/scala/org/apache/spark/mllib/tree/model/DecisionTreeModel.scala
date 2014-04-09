@@ -22,7 +22,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.Vector
 
 /**
- * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ * :: Experimental ::
  *
  * Model to store the decision tree parameters
  * @param topNode root node

@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.tree.configuration
 
 /**
- * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ * :: Experimental ::
  *
  * Enum to select the algorithm for the decision tree
  */

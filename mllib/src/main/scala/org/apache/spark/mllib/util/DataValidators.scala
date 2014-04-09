@@ -22,7 +22,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * :: DeveloperApi ::
  *
  * A collection of methods used to validate data before applying ML algorithms.
  */

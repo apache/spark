@@ -76,7 +76,7 @@ class KMeans private (
   }
 
   /**
-   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+   * :: Experimental ::
    *
    * Set the number of runs of the algorithm to execute in parallel. We initialize the algorithm
    * this many times with random starting conditions (configured by the initialization mode), then
@@ -398,7 +398,7 @@ object KMeans {
   }
 
   /**
-   * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+   * :: Experimental ::
    */
   def main(args: Array[String]) {
     if (args.length < 4) {

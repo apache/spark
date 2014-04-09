@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * :: DeveloperApi ::
  *
  * Class used to solve an optimization problem using Gradient Descent.
  * @param gradient Gradient function to be used.
@@ -110,7 +110,7 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
 }
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * :: DeveloperApi ::
  *
  * Top-level method to run gradient descent.
  */

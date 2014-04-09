@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.tree.model
 
 /**
- * <span class="badge badge-red" style="float: right;">DEVELOPER API</span>
+ * :: DeveloperApi ::
  *
  * Information gain statistics for each split
  * @param gain information gain value

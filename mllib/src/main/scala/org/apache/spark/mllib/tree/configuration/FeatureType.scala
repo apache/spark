@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.tree.configuration
 
 /**
- * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ * :: Experimental ::
  *
  * Enum to describe whether a feature is "continuous" or "categorical"
  */

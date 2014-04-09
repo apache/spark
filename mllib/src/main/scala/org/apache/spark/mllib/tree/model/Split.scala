@@ -20,7 +20,7 @@ package org.apache.spark.mllib.tree.model
 import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
 
 /**
- * <span class="badge badge-red" style="float: right;">DEVELOPER API</span>
+ * :: DeveloperApi ::
  *
  * Split applied to a feature
  * @param feature feature index

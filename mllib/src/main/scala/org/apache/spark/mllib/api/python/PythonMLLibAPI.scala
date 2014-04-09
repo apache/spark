@@ -28,7 +28,7 @@ import org.apache.spark.mllib.regression._
 import org.apache.spark.rdd.RDD
 
 /**
- * <span class="badge badge-red" style="float: right;">DEVELOPER API</span>
+ * :: DeveloperApi ::
  *
  * The Java stubs necessary for the Python mllib bindings.
  */

@@ -27,7 +27,7 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * :: DeveloperApi ::
  *
  * Generate sample data used for SVM. This class generates uniform random values
  * for the features and adds Gaussian noise with weight 0.1 to generate labels.

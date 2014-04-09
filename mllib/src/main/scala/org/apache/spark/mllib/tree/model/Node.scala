@@ -22,7 +22,7 @@ import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.linalg.Vector
 
 /**
- * <span class="badge badge-red" style="float: right;">DEVELOPER API</span>
+ * :: DeveloperApi ::
  *
  * Node in a decision tree
  * @param id integer node id

@@ -33,7 +33,7 @@ import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
- * <span class="badge" style="float: right; background-color: #257080;">EXPERIMENTAL</span>
+ * :: Experimental ::
  *
  * A class that implements a decision tree algorithm for classification and regression. It
  * supports both continuous and categorical features.

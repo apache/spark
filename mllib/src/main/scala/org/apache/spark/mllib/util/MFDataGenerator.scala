@@ -25,7 +25,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * :: DeveloperApi ::
  *
 * Generate RDD(s) containing data for Matrix Factorization.
 *

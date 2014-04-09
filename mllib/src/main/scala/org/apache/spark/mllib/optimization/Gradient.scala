@@ -22,7 +22,7 @@ import breeze.linalg.{axpy => brzAxpy}
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * :: DeveloperApi ::
  *
  * Class used to compute the gradient for a loss function, given a single data point.
  */
@@ -53,7 +53,7 @@ abstract class Gradient extends Serializable {
 }
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * :: DeveloperApi ::
  *
  * Compute gradient and loss for a logistic loss function, as used in binary classification.
  * See also the documentation for the precise formulation.
@@ -96,7 +96,7 @@ class LogisticGradient extends Gradient {
 }
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * :: DeveloperApi ::
  *
  * Compute gradient and loss for a Least-squared loss function, as used in linear regression.
  * This is correct for the averaged least squares loss function (mean squared error)
@@ -130,7 +130,7 @@ class LeastSquaresGradient extends Gradient {
 }
 
 /**
- * <span class="badge" style="float: right; background-color: #44751E;">DEVELOPER API</span>
+ * :: DeveloperApi ::
  *
  * Compute gradient and loss for a Hinge loss function, as used in SVM binary classification.
  * See also the documentation for the precise formulation.
