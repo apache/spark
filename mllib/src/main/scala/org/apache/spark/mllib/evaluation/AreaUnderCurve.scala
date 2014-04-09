@@ -23,7 +23,7 @@ import org.apache.spark.mllib.rdd.RDDFunctions._
 /**
  * Computes the area under the curve (AUC) using the trapezoidal rule.
  */
-private[mllib] object AreaUnderCurve {
+private[evaluation] object AreaUnderCurve {
 
   /**
    * Uses the trapezoidal rule to compute the area under the line connecting the two input points.

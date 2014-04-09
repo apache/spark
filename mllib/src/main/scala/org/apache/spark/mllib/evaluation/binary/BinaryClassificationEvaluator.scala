@@ -29,8 +29,8 @@ import org.apache.spark.Logging
  * @param totalCount label counter for all labels
  */
 private case class BinaryConfusionMatrixImpl(
-    private val count: LabelCounter,
-    private val totalCount: LabelCounter) extends BinaryConfusionMatrix with Serializable {
+    count: LabelCounter,
+    totalCount: LabelCounter) extends BinaryConfusionMatrix with Serializable {
 
   /** number of true positives */
   override def tp: Long = count.numPositives
@@ -54,16 +54,16 @@ private case class BinaryConfusionMatrixImpl(
 /**
  * Evaluator for binary classification.
  *
- * @param scoreAndlabels an RDD of (score, label) pairs.
+ * @param scoreAndLabels an RDD of (score, label) pairs.
  */
-class BinaryClassificationEvaluator(scoreAndlabels: RDD[(Double, Double)]) extends Serializable with Logging {
+class BinaryClassificationEvaluator(scoreAndLabels: RDD[(Double, Double)]) extends Serializable with Logging {
 
   private lazy val (
       cumCounts: RDD[(Double, LabelCounter)],
-      confusionByThreshold: RDD[(Double, BinaryConfusionMatrix)]) = {
+      confusions: RDD[(Double, BinaryConfusionMatrix)]) = {
     // Create a bin for each distinct score value, count positives and negatives within each bin,
     // and then sort by score values in descending order.
-    val counts = scoreAndlabels.combineByKey(
+    val counts = scoreAndLabels.combineByKey(
       createCombiner = (label: Double) => new LabelCounter(0L, 0L) += label,
       mergeValue = (c: LabelCounter, label: Double) => c += label,
       mergeCombiners = (c1: LabelCounter, c2: LabelCounter) => c1 += c2
@@ -73,21 +73,21 @@ class BinaryClassificationEvaluator(scoreAndlabels: RDD[(Double, Double)]) exten
       iter.foreach(agg += _)
       Iterator(agg)
     }, preservesPartitioning = true).collect()
-    val cum = agg.scanLeft(new LabelCounter())((agg: LabelCounter, c: LabelCounter) => agg + c)
-    val totalCount = cum.last
-    logInfo(s"Total counts: totalCount")
+    val partitionwiseCumCounts = agg.scanLeft(new LabelCounter())((agg: LabelCounter, c: LabelCounter) => agg + c)
+    val totalCount = partitionwiseCumCounts.last
+    logInfo(s"Total counts: $totalCount")
     val cumCounts = counts.mapPartitionsWithIndex((index: Int, iter: Iterator[(Double, LabelCounter)]) => {
-      val cumCount = cum(index)
+      val cumCount = partitionwiseCumCounts(index)
       iter.map { case (score, c) =>
         cumCount += c
         (score, cumCount.clone())
       }
     }, preservesPartitioning = true)
     cumCounts.persist()
-    val scoreAndConfusion = cumCounts.map { case (score, cumCount) =>
-      (score, BinaryConfusionMatrixImpl(cumCount, totalCount))
+    val confusions = cumCounts.map { case (score, cumCount) =>
+      (score, BinaryConfusionMatrixImpl(cumCount, totalCount).asInstanceOf[BinaryConfusionMatrix])
     }
-    (cumCounts, totalCount, scoreAndConfusion)
+    (cumCounts, confusions)
   }
 
   /** Unpersist intermediate RDDs used in the computation. */
@@ -126,18 +126,18 @@ class BinaryClassificationEvaluator(scoreAndlabels: RDD[(Double, Double)]) exten
   def fMeasureByThreshold(beta: Double): RDD[(Double, Double)] = createCurve(FMeasure(beta))
 
   /** Returns the (threshold, F-Measure) curve with beta = 1.0. */
-  def fMeasureByThreshold() = fMeasureByThreshold(1.0)
+  def fMeasureByThreshold(): RDD[(Double, Double)] = fMeasureByThreshold(1.0)
 
   /** Creates a curve of (threshold, metric). */
   private def createCurve(y: BinaryClassificationMetric): RDD[(Double, Double)] = {
-    confusionByThreshold.map { case (s, c) =>
+    confusions.map { case (s, c) =>
       (s, y(c))
     }
   }
 
   /** Creates a curve of (metricX, metricY). */
   private def createCurve(x: BinaryClassificationMetric, y: BinaryClassificationMetric): RDD[(Double, Double)] = {
-    confusionByThreshold.map { case (_, c) =>
+    confusions.map { case (_, c) =>
       (x(c), y(c))
     }
   }
@@ -151,7 +151,7 @@ class BinaryClassificationEvaluator(scoreAndlabels: RDD[(Double, Double)]) exten
  */
 private class LabelCounter(var numPositives: Long = 0L, var numNegatives: Long = 0L) extends Serializable {
 
-  /** Process a label. */
+  /** Processes a label. */
   def +=(label: Double): LabelCounter = {
     // Though we assume 1.0 for positive and 0.0 for negative, the following check will handle
     // -1.0 for negative as well.
@@ -159,22 +159,17 @@ private class LabelCounter(var numPositives: Long = 0L, var numNegatives: Long =
     this
   }
 
-  /** Merge another counter. */
+  /** Merges another counter. */
   def +=(other: LabelCounter): LabelCounter = {
     numPositives += other.numPositives
     numNegatives += other.numNegatives
     this
   }
 
-  def +(label: Double): LabelCounter = {
-    this.clone() += label
-  }
-
+  /** Sums this counter and another counter and returns the result in a new counter. */
   def +(other: LabelCounter): LabelCounter = {
     this.clone() += other
   }
-
-  def sum: Long = numPositives + numNegatives
 
   override def clone: LabelCounter = {
     new LabelCounter(numPositives, numNegatives)
@@ -182,4 +177,3 @@ private class LabelCounter(var numPositives: Long = 0L, var numNegatives: Long =
 
   override def toString: String = s"{numPos: $numPositives, numNeg: $numNegatives}"
 }
-

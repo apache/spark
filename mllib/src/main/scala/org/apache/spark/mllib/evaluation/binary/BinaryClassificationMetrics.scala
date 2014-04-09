@@ -20,7 +20,7 @@ package org.apache.spark.mllib.evaluation.binary
 /**
  * Trait for a binary classification evaluation metric.
  */
-private[evaluation] trait BinaryClassificationMetric {
+private[evaluation] trait BinaryClassificationMetric extends Serializable {
   def apply(c: BinaryConfusionMatrix): Double
 }
 
@@ -37,7 +37,7 @@ private[evaluation] object FalsePositiveRate extends BinaryClassificationMetric 
 }
 
 /** Recall. */
-private[evalution] object Recall extends BinaryClassificationMetric {
+private[evaluation] object Recall extends BinaryClassificationMetric {
   override def apply(c: BinaryConfusionMatrix): Double =
     c.tp.toDouble / c.p
 }
