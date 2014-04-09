@@ -36,7 +36,7 @@ import org.apache.spark.io.CompressionCodec
  * @param compress Whether to compress output
  * @param overwrite Whether to overwrite existing files
  */
-class FileLogger(
+private[spark] class FileLogger(
     logDir: String,
     conf: SparkConf = new SparkConf,
     outputBufferSize: Int = 8 * 1024, // 8 KB
