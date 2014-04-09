@@ -138,16 +138,22 @@ private[spark] class ReplayListenerBus(
 
   /** Return a list of paths representing files found in the given directory. */
   private def getFilePaths(logDir: String, fileSystem: FileSystem): Array[Path] = {
-    val path = new Path(logDir)
-    if (!fileSystem.exists(path) || !fileSystem.getFileStatus(path).isDir) {
-      logWarning("Log path provided is not a valid directory: %s".format(logDir))
-      return Array[Path]()
+    try {
+      val path = new Path(logDir)
+      if (!fileSystem.exists(path) || !fileSystem.getFileStatus(path).isDir) {
+        logWarning("Log path provided is not a valid directory: %s".format(logDir))
+        return Array[Path]()
+      }
+      val logStatus = fileSystem.listStatus(path)
+      if (logStatus == null || !logStatus.exists(!_.isDir)) {
+        logWarning("No files are found in the given log directory: %s".format(logDir))
+        return Array[Path]()
+      }
+      logStatus.filter(!_.isDir).map(_.getPath).sortBy(_.getName)
+    } catch {
+      case t: Throwable =>
+        logError("Exception in accessing log files in %s".format(logDir), t)
+        Array[Path]()
     }
-    val logStatus = fileSystem.listStatus(path)
-    if (logStatus == null || !logStatus.exists(!_.isDir)) {
-      logWarning("No files are found in the given log directory: %s".format(logDir))
-      return Array[Path]()
-    }
-    logStatus.filter(!_.isDir).map(_.getPath).sortBy(_.getName)
   }
 }

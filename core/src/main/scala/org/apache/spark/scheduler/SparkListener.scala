@@ -62,7 +62,8 @@ case class SparkListenerBlockManagerRemoved(blockManagerId: BlockManagerId)
 
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
-case class SparkListenerApplicationStart(appName: String, time: Long) extends SparkListenerEvent
+case class SparkListenerApplicationStart(appName: String, time: Long, sparkUser: String)
+  extends SparkListenerEvent
 
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 

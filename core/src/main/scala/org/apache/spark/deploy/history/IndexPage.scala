@@ -26,9 +26,6 @@ import org.apache.spark.ui.{UIUtils, WebUI}
 private[spark] class IndexPage(parent: HistoryServer) {
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    parent.checkForLogs()
-
-    // Populate app table, with most recently modified app first
     val appRows = parent.appIdToInfo.values.toSeq.sortBy { app => -app.lastUpdated }
     val appTable = UIUtils.listingTable(appHeader, appRow, appRows)
     val content =
@@ -36,14 +33,20 @@ private[spark] class IndexPage(parent: HistoryServer) {
         <div class="span12">
           <ul class="unstyled">
             <li><strong>Event Log Location: </strong> {parent.baseLogDir}</li>
-            <h4>
-              Showing {parent.appIdToInfo.size}/{parent.getTotalApplications} Finished Applications
-            </h4>
-            {appTable}
           </ul>
+          {
+            if (parent.appIdToInfo.size > 0) {
+              <h4>
+                Showing {parent.appIdToInfo.size}/{parent.getTotalApplications}
+                Finished Application{if (parent.getTotalApplications > 1) "s" else ""}
+              </h4> ++
+              appTable
+            } else {
+              <h4>No Finished Applications Found</h4>
+            }
+          }
         </div>
       </div>
-
     UIUtils.basicSparkPage(content, "History Server")
   }
 
@@ -52,6 +55,7 @@ private[spark] class IndexPage(parent: HistoryServer) {
     "Started",
     "Finished",
     "Duration",
+    "Spark User",
     "Log Directory",
     "Last Updated")
 
@@ -62,6 +66,7 @@ private[spark] class IndexPage(parent: HistoryServer) {
     val endTime = if (info.finished) WebUI.formatDate(info.endTime) else "Not finished"
     val difference = if (info.started && info.finished) info.endTime - info.startTime else -1L
     val duration = if (difference > 0) WebUI.formatDuration(difference) else "---"
+    val sparkUser = if (info.started) info.sparkUser else "Unknown user"
     val logDirectory = parent.getAppId(info.logPath)
     val lastUpdated = WebUI.formatDate(info.lastUpdated)
     <tr>
@@ -69,6 +74,7 @@ private[spark] class IndexPage(parent: HistoryServer) {
       <td>{startTime}</td>
       <td>{endTime}</td>
       <td>{duration}</td>
+      <td>{sparkUser}</td>
       <td>{logDirectory}</td>
       <td>{lastUpdated}</td>
     </tr>

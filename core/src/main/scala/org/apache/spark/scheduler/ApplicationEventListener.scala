@@ -26,6 +26,7 @@ package org.apache.spark.scheduler
  */
 private[spark] class ApplicationEventListener extends SparkListener {
   var appName = "<Not Started>"
+  var sparkUser = "<Not Started>"
   var startTime = -1L
   var endTime = -1L
 
@@ -41,6 +42,7 @@ private[spark] class ApplicationEventListener extends SparkListener {
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
     appName = applicationStart.appName
     startTime = applicationStart.time
+    sparkUser = applicationStart.sparkUser
   }
 
   override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) {

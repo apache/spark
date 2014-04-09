@@ -1103,7 +1103,7 @@ class SparkContext(
 
   /** Post the application start event */
   private def postApplicationStart() {
-    listenerBus.post(SparkListenerApplicationStart(appName, startTime))
+    listenerBus.post(SparkListenerApplicationStart(appName, startTime, sparkUser))
   }
 
   /**
