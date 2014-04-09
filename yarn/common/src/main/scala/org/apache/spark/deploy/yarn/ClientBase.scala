@@ -266,11 +266,11 @@ trait ClientBase extends Logging {
       localResources: HashMap[String, LocalResource],
       stagingDir: String): HashMap[String, String] = {
     logInfo("Setting up the launch environment")
-    val log4jConfLocalRes = localResources.getOrElse(ClientBase.LOG4J_PROP, null)
 
     val env = new HashMap[String, String]()
 
-    ClientBase.populateClasspath(yarnConf, sparkConf, log4jConfLocalRes != null, env)
+    ClientBase.populateClasspath(yarnConf, sparkConf, localResources.contains(ClientBase.LOG4J_PROP),
+      env)
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
@@ -344,15 +344,13 @@ trait ClientBase extends Logging {
       JAVA_OPTS += " " + env("SPARK_JAVA_OPTS")
     }
 
-    // Command for the ApplicationMaster
-    var javaCommand = "java"
-    val javaHome = System.getenv("JAVA_HOME")
-    if ((javaHome != null && !javaHome.isEmpty()) || env.isDefinedAt("JAVA_HOME")) {
-      javaCommand = Environment.JAVA_HOME.$() + "/bin/java"
+    if (!localResources.contains(ClientBase.LOG4J_PROP)) {
+      JAVA_OPTS += " " + YarnSparkHadoopUtil.getLoggingArgsForContainerCommandLine()
     }
 
+    // Command for the ApplicationMaster
     val commands = List[String](
-      javaCommand +
+      Environment.JAVA_HOME.$() + "/bin/java" +
         " -server " +
         JAVA_OPTS +
         " " + args.amClass +

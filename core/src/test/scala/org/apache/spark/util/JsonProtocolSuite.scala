@@ -108,11 +108,9 @@ class JsonProtocolSuite extends FunSuite {
     // BlockId
     testBlockId(RDDBlockId(1, 2))
     testBlockId(ShuffleBlockId(1, 2, 3))
-    testBlockId(BroadcastBlockId(1L))
-    testBlockId(BroadcastHelperBlockId(BroadcastBlockId(2L), "Spark"))
+    testBlockId(BroadcastBlockId(1L, "insert_words_of_wisdom_here"))
     testBlockId(TaskResultBlockId(1L))
     testBlockId(StreamBlockId(1, 2L))
-    testBlockId(TempBlockId(UUID.randomUUID()))
   }
 
 
@@ -168,8 +166,8 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   private def testBlockId(blockId: BlockId) {
-    val newBlockId = JsonProtocol.blockIdFromJson(JsonProtocol.blockIdToJson(blockId))
-    blockId == newBlockId
+    val newBlockId = BlockId(blockId.toString)
+    assert(blockId === newBlockId)
   }
 
 
@@ -180,90 +178,90 @@ class JsonProtocolSuite extends FunSuite {
   private def assertEquals(event1: SparkListenerEvent, event2: SparkListenerEvent) {
     (event1, event2) match {
       case (e1: SparkListenerStageSubmitted, e2: SparkListenerStageSubmitted) =>
-        assert(e1.properties == e2.properties)
+        assert(e1.properties === e2.properties)
         assertEquals(e1.stageInfo, e2.stageInfo)
       case (e1: SparkListenerStageCompleted, e2: SparkListenerStageCompleted) =>
         assertEquals(e1.stageInfo, e2.stageInfo)
       case (e1: SparkListenerTaskStart, e2: SparkListenerTaskStart) =>
-        assert(e1.stageId == e2.stageId)
+        assert(e1.stageId === e2.stageId)
         assertEquals(e1.taskInfo, e2.taskInfo)
       case (e1: SparkListenerTaskGettingResult, e2: SparkListenerTaskGettingResult) =>
         assertEquals(e1.taskInfo, e2.taskInfo)
       case (e1: SparkListenerTaskEnd, e2: SparkListenerTaskEnd) =>
-        assert(e1.stageId == e2.stageId)
-        assert(e1.taskType == e2.taskType)
+        assert(e1.stageId === e2.stageId)
+        assert(e1.taskType === e2.taskType)
         assertEquals(e1.reason, e2.reason)
         assertEquals(e1.taskInfo, e2.taskInfo)
         assertEquals(e1.taskMetrics, e2.taskMetrics)
       case (e1: SparkListenerJobStart, e2: SparkListenerJobStart) =>
-        assert(e1.jobId == e2.jobId)
-        assert(e1.properties == e2.properties)
-        assertSeqEquals(e1.stageIds, e2.stageIds, (i1: Int, i2: Int) => assert(i1 == i2))
+        assert(e1.jobId === e2.jobId)
+        assert(e1.properties === e2.properties)
+        assertSeqEquals(e1.stageIds, e2.stageIds, (i1: Int, i2: Int) => assert(i1 === i2))
       case (e1: SparkListenerJobEnd, e2: SparkListenerJobEnd) =>
-        assert(e1.jobId == e2.jobId)
+        assert(e1.jobId === e2.jobId)
         assertEquals(e1.jobResult, e2.jobResult)
       case (e1: SparkListenerEnvironmentUpdate, e2: SparkListenerEnvironmentUpdate) =>
         assertEquals(e1.environmentDetails, e2.environmentDetails)
       case (e1: SparkListenerBlockManagerAdded, e2: SparkListenerBlockManagerAdded) =>
-        assert(e1.maxMem == e2.maxMem)
+        assert(e1.maxMem === e2.maxMem)
         assertEquals(e1.blockManagerId, e2.blockManagerId)
       case (e1: SparkListenerBlockManagerRemoved, e2: SparkListenerBlockManagerRemoved) =>
         assertEquals(e1.blockManagerId, e2.blockManagerId)
       case (e1: SparkListenerUnpersistRDD, e2: SparkListenerUnpersistRDD) =>
-        assert(e1.rddId == e2.rddId)
+        assert(e1.rddId === e2.rddId)
       case (SparkListenerShutdown, SparkListenerShutdown) =>
       case _ => fail("Events don't match in types!")
     }
   }
 
   private def assertEquals(info1: StageInfo, info2: StageInfo) {
-    assert(info1.stageId == info2.stageId)
-    assert(info1.name == info2.name)
-    assert(info1.numTasks == info2.numTasks)
-    assert(info1.submissionTime == info2.submissionTime)
-    assert(info1.completionTime == info2.completionTime)
-    assert(info1.emittedTaskSizeWarning == info2.emittedTaskSizeWarning)
+    assert(info1.stageId === info2.stageId)
+    assert(info1.name === info2.name)
+    assert(info1.numTasks === info2.numTasks)
+    assert(info1.submissionTime === info2.submissionTime)
+    assert(info1.completionTime === info2.completionTime)
+    assert(info1.emittedTaskSizeWarning === info2.emittedTaskSizeWarning)
     assertEquals(info1.rddInfo, info2.rddInfo)
   }
 
   private def assertEquals(info1: RDDInfo, info2: RDDInfo) {
-    assert(info1.id == info2.id)
-    assert(info1.name == info2.name)
-    assert(info1.numPartitions == info2.numPartitions)
-    assert(info1.numCachedPartitions == info2.numCachedPartitions)
-    assert(info1.memSize == info2.memSize)
-    assert(info1.diskSize == info2.diskSize)
+    assert(info1.id === info2.id)
+    assert(info1.name === info2.name)
+    assert(info1.numPartitions === info2.numPartitions)
+    assert(info1.numCachedPartitions === info2.numCachedPartitions)
+    assert(info1.memSize === info2.memSize)
+    assert(info1.diskSize === info2.diskSize)
     assertEquals(info1.storageLevel, info2.storageLevel)
   }
 
   private def assertEquals(level1: StorageLevel, level2: StorageLevel) {
-    assert(level1.useDisk == level2.useDisk)
-    assert(level1.useMemory == level2.useMemory)
-    assert(level1.deserialized == level2.deserialized)
-    assert(level1.replication == level2.replication)
+    assert(level1.useDisk === level2.useDisk)
+    assert(level1.useMemory === level2.useMemory)
+    assert(level1.deserialized === level2.deserialized)
+    assert(level1.replication === level2.replication)
   }
 
   private def assertEquals(info1: TaskInfo, info2: TaskInfo) {
-    assert(info1.taskId == info2.taskId)
-    assert(info1.index == info2.index)
-    assert(info1.launchTime == info2.launchTime)
-    assert(info1.executorId == info2.executorId)
-    assert(info1.host == info2.host)
-    assert(info1.taskLocality == info2.taskLocality)
-    assert(info1.gettingResultTime == info2.gettingResultTime)
-    assert(info1.finishTime == info2.finishTime)
-    assert(info1.failed == info2.failed)
-    assert(info1.serializedSize == info2.serializedSize)
+    assert(info1.taskId === info2.taskId)
+    assert(info1.index === info2.index)
+    assert(info1.launchTime === info2.launchTime)
+    assert(info1.executorId === info2.executorId)
+    assert(info1.host === info2.host)
+    assert(info1.taskLocality === info2.taskLocality)
+    assert(info1.gettingResultTime === info2.gettingResultTime)
+    assert(info1.finishTime === info2.finishTime)
+    assert(info1.failed === info2.failed)
+    assert(info1.serializedSize === info2.serializedSize)
   }
 
   private def assertEquals(metrics1: TaskMetrics, metrics2: TaskMetrics) {
-    assert(metrics1.hostname == metrics2.hostname)
-    assert(metrics1.executorDeserializeTime == metrics2.executorDeserializeTime)
-    assert(metrics1.resultSize == metrics2.resultSize)
-    assert(metrics1.jvmGCTime == metrics2.jvmGCTime)
-    assert(metrics1.resultSerializationTime == metrics2.resultSerializationTime)
-    assert(metrics1.memoryBytesSpilled == metrics2.memoryBytesSpilled)
-    assert(metrics1.diskBytesSpilled == metrics2.diskBytesSpilled)
+    assert(metrics1.hostname === metrics2.hostname)
+    assert(metrics1.executorDeserializeTime === metrics2.executorDeserializeTime)
+    assert(metrics1.resultSize === metrics2.resultSize)
+    assert(metrics1.jvmGCTime === metrics2.jvmGCTime)
+    assert(metrics1.resultSerializationTime === metrics2.resultSerializationTime)
+    assert(metrics1.memoryBytesSpilled === metrics2.memoryBytesSpilled)
+    assert(metrics1.diskBytesSpilled === metrics2.diskBytesSpilled)
     assertOptionEquals(
       metrics1.shuffleReadMetrics, metrics2.shuffleReadMetrics, assertShuffleReadEquals)
     assertOptionEquals(
@@ -272,31 +270,31 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   private def assertEquals(metrics1: ShuffleReadMetrics, metrics2: ShuffleReadMetrics) {
-    assert(metrics1.shuffleFinishTime == metrics2.shuffleFinishTime)
-    assert(metrics1.totalBlocksFetched == metrics2.totalBlocksFetched)
-    assert(metrics1.remoteBlocksFetched == metrics2.remoteBlocksFetched)
-    assert(metrics1.localBlocksFetched == metrics2.localBlocksFetched)
-    assert(metrics1.fetchWaitTime == metrics2.fetchWaitTime)
-    assert(metrics1.remoteBytesRead == metrics2.remoteBytesRead)
+    assert(metrics1.shuffleFinishTime === metrics2.shuffleFinishTime)
+    assert(metrics1.totalBlocksFetched === metrics2.totalBlocksFetched)
+    assert(metrics1.remoteBlocksFetched === metrics2.remoteBlocksFetched)
+    assert(metrics1.localBlocksFetched === metrics2.localBlocksFetched)
+    assert(metrics1.fetchWaitTime === metrics2.fetchWaitTime)
+    assert(metrics1.remoteBytesRead === metrics2.remoteBytesRead)
   }
 
   private def assertEquals(metrics1: ShuffleWriteMetrics, metrics2: ShuffleWriteMetrics) {
-    assert(metrics1.shuffleBytesWritten == metrics2.shuffleBytesWritten)
-    assert(metrics1.shuffleWriteTime == metrics2.shuffleWriteTime)
+    assert(metrics1.shuffleBytesWritten === metrics2.shuffleBytesWritten)
+    assert(metrics1.shuffleWriteTime === metrics2.shuffleWriteTime)
   }
 
   private def assertEquals(bm1: BlockManagerId, bm2: BlockManagerId) {
-    assert(bm1.executorId == bm2.executorId)
-    assert(bm1.host == bm2.host)
-    assert(bm1.port == bm2.port)
-    assert(bm1.nettyPort == bm2.nettyPort)
+    assert(bm1.executorId === bm2.executorId)
+    assert(bm1.host === bm2.host)
+    assert(bm1.port === bm2.port)
+    assert(bm1.nettyPort === bm2.nettyPort)
   }
 
   private def assertEquals(result1: JobResult, result2: JobResult) {
     (result1, result2) match {
       case (JobSucceeded, JobSucceeded) =>
       case (r1: JobFailed, r2: JobFailed) =>
-        assert(r1.failedStageId == r2.failedStageId)
+        assert(r1.failedStageId === r2.failedStageId)
         assertEquals(r1.exception, r2.exception)
       case _ => fail("Job results don't match in types!")
     }
@@ -307,13 +305,13 @@ class JsonProtocolSuite extends FunSuite {
       case (Success, Success) =>
       case (Resubmitted, Resubmitted) =>
       case (r1: FetchFailed, r2: FetchFailed) =>
-        assert(r1.shuffleId == r2.shuffleId)
-        assert(r1.mapId == r2.mapId)
-        assert(r1.reduceId == r2.reduceId)
+        assert(r1.shuffleId === r2.shuffleId)
+        assert(r1.mapId === r2.mapId)
+        assert(r1.reduceId === r2.reduceId)
         assertEquals(r1.bmAddress, r2.bmAddress)
       case (r1: ExceptionFailure, r2: ExceptionFailure) =>
-        assert(r1.className == r2.className)
-        assert(r1.description == r2.description)
+        assert(r1.className === r2.className)
+        assert(r1.description === r2.description)
         assertSeqEquals(r1.stackTrace, r2.stackTrace, assertStackTraceElementEquals)
         assertOptionEquals(r1.metrics, r2.metrics, assertTaskMetricsEquals)
       case (TaskResultLost, TaskResultLost) =>
@@ -329,13 +327,13 @@ class JsonProtocolSuite extends FunSuite {
       details2: Map[String, Seq[(String, String)]]) {
     details1.zip(details2).foreach {
       case ((key1, values1: Seq[(String, String)]), (key2, values2: Seq[(String, String)])) =>
-        assert(key1 == key2)
-        values1.zip(values2).foreach { case (v1, v2) => assert(v1 == v2) }
+        assert(key1 === key2)
+        values1.zip(values2).foreach { case (v1, v2) => assert(v1 === v2) }
     }
   }
 
   private def assertEquals(exception1: Exception, exception2: Exception) {
-    assert(exception1.getMessage == exception2.getMessage)
+    assert(exception1.getMessage === exception2.getMessage)
     assertSeqEquals(
       exception1.getStackTrace,
       exception2.getStackTrace,
@@ -344,11 +342,11 @@ class JsonProtocolSuite extends FunSuite {
 
   private def assertJsonStringEquals(json1: String, json2: String) {
     val formatJsonString = (json: String) => json.replaceAll("[\\s|]", "")
-    formatJsonString(json1) == formatJsonString(json2)
+    formatJsonString(json1) === formatJsonString(json2)
   }
 
   private def assertSeqEquals[T](seq1: Seq[T], seq2: Seq[T], assertEquals: (T, T) => Unit) {
-    assert(seq1.length == seq2.length)
+    assert(seq1.length === seq2.length)
     seq1.zip(seq2).foreach { case (t1, t2) =>
       assertEquals(t1, t2)
     }
@@ -389,11 +387,11 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   private def assertBlockEquals(b1: (BlockId, BlockStatus), b2: (BlockId, BlockStatus)) {
-    assert(b1 == b2)
+    assert(b1 === b2)
   }
 
   private def assertStackTraceElementEquals(ste1: StackTraceElement, ste2: StackTraceElement) {
-    assert(ste1 == ste2)
+    assert(ste1 === ste2)
   }
 
 
@@ -457,7 +455,7 @@ class JsonProtocolSuite extends FunSuite {
     t.shuffleWriteMetrics = Some(sw)
     // Make at most 6 blocks
     t.updatedBlocks = Some((1 to (e % 5 + 1)).map { i =>
-      (RDDBlockId(e % i, f % i), BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i))
+      (RDDBlockId(e % i, f % i), BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i, c%i))
     }.toSeq)
     t
   }
@@ -471,19 +469,19 @@ class JsonProtocolSuite extends FunSuite {
     """
       {"Event":"SparkListenerStageSubmitted","Stage Info":{"Stage ID":100,"Stage Name":
       "greetings","Number of Tasks":200,"RDD Info":{"RDD ID":100,"Name":"mayor","Storage
-      Level":{"Use Disk":true,"Use Memory":true,"Deserialized":true,"Replication":1},
-      "Number of Partitions":200,"Number of Cached Partitions":300,"Memory Size":400,
-      "Disk Size":500},"Emitted Task Size Warning":false},"Properties":{"France":"Paris",
-      "Germany":"Berlin","Russia":"Moscow","Ukraine":"Kiev"}}
+      Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":true,
+      "Replication":1},"Number of Partitions":200,"Number of Cached Partitions":300,
+      "Memory Size":400,"Disk Size":500,"Tachyon Size":0},"Emitted Task Size Warning":false},
+      "Properties":{"France":"Paris","Germany":"Berlin","Russia":"Moscow","Ukraine":"Kiev"}}
     """
 
   private val stageCompletedJsonString =
     """
       {"Event":"SparkListenerStageCompleted","Stage Info":{"Stage ID":101,"Stage Name":
       "greetings","Number of Tasks":201,"RDD Info":{"RDD ID":101,"Name":"mayor","Storage
-      Level":{"Use Disk":true,"Use Memory":true,"Deserialized":true,"Replication":1},
-      "Number of Partitions":201,"Number of Cached Partitions":301,"Memory Size":401,
-      "Disk Size":501},"Emitted Task Size Warning":false}}
+      Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":true,
+      "Replication":1},"Number of Partitions":201,"Number of Cached Partitions":301,
+      "Memory Size":401,"Disk Size":501,"Tachyon Size":0},"Emitted Task Size Warning":false}}
     """
 
   private val taskStartJsonString =
@@ -516,8 +514,8 @@ class JsonProtocolSuite extends FunSuite {
       700,"Fetch Wait Time":900,"Remote Bytes Read":1000},"Shuffle Write Metrics":
       {"Shuffle Bytes Written":1200,"Shuffle Write Time":1500},"Updated Blocks":
       [{"Block ID":{"Type":"RDDBlockId","RDD ID":0,"Split Index":0},"Status":
-      {"Storage Level":{"Use Disk":true,"Use Memory":true,"Deserialized":false,
-      "Replication":2},"Memory Size":0,"Disk Size":0}}]}}
+      {"Storage Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":false,
+      "Replication":2},"Memory Size":0,"Disk Size":0,"Tachyon Size":0}}]}}
     """
 
   private val jobStartJsonString =
@@ -556,4 +554,4 @@ class JsonProtocolSuite extends FunSuite {
       {"Event":"SparkListenerUnpersistRDD","RDD ID":12345}
     """
 
- }
+}

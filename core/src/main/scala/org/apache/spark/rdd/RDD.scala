@@ -138,6 +138,8 @@ abstract class RDD[T: ClassTag](
         "Cannot change storage level of an RDD after it was already assigned a level")
     }
     sc.persistRDD(this)
+    // Register the RDD with the ContextCleaner for automatic GC-based cleanup
+    sc.cleaner.foreach(_.registerRDDForCleanup(this))
     storageLevel = newLevel
     this
   }
@@ -156,7 +158,7 @@ abstract class RDD[T: ClassTag](
    */
   def unpersist(blocking: Boolean = true): RDD[T] = {
     logInfo("Removing RDD " + id + " from persistence list")
-    sc.unpersistRDD(this, blocking)
+    sc.unpersistRDD(id, blocking)
     storageLevel = StorageLevel.NONE
     this
   }
@@ -481,16 +483,19 @@ abstract class RDD[T: ClassTag](
    *                        instead of constructing a huge String to concat all the elements:
    *                        def printRDDElement(record:(String, Seq[String]), f:String=>Unit) =
    *                          for (e <- record._2){f(e)}
+   * @param separateWorkingDir Use separate working directories for each task.
    * @return the result RDD
    */
   def pipe(
       command: Seq[String],
       env: Map[String, String] = Map(),
       printPipeContext: (String => Unit) => Unit = null,
-      printRDDElement: (T, String => Unit) => Unit = null): RDD[String] = {
+      printRDDElement: (T, String => Unit) => Unit = null,
+      separateWorkingDir: Boolean = false): RDD[String] = {
     new PipedRDD(this, command, env,
       if (printPipeContext ne null) sc.clean(printPipeContext) else null,
-      if (printRDDElement ne null) sc.clean(printRDDElement) else null)
+      if (printRDDElement ne null) sc.clean(printRDDElement) else null,
+      separateWorkingDir)
   }
 
   /**
@@ -656,6 +661,18 @@ abstract class RDD[T: ClassTag](
   def collect(): Array[T] = {
     val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
     Array.concat(results: _*)
+  }
+
+  /**
+   * Return an iterator that contains all of the elements in this RDD.
+   *
+   * The iterator will consume as much memory as the largest partition in this RDD.
+   */
+  def toLocalIterator: Iterator[T] = {
+    def collectPartition(p: Int): Array[T] = {
+      sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p), allowLocal = false).head
+    }
+    (0 until partitions.length).iterator.flatMap(i => collectPartition(i))
   }
 
   /**
@@ -1126,5 +1143,4 @@ abstract class RDD[T: ClassTag](
   def toJavaRDD() : JavaRDD[T] = {
     new JavaRDD(this)(elementClassTag)
   }
-
 }

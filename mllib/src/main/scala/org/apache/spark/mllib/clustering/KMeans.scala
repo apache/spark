@@ -42,8 +42,7 @@ class KMeans private (
     var runs: Int,
     var initializationMode: String,
     var initializationSteps: Int,
-    var epsilon: Double)
-  extends Serializable with Logging {
+    var epsilon: Double) extends Serializable with Logging {
   def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4)
 
   /** Set the number of clusters to create (k). Default: 2. */

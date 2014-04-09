@@ -22,8 +22,6 @@ import java.util.regex.Pattern
 import org.apache.spark.sql.catalyst.types.DataType
 import org.apache.spark.sql.catalyst.types.StringType
 import org.apache.spark.sql.catalyst.types.BooleanType
-import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.errors.`package`.TreeNodeException
 
 
 trait StringRegexExpression {
@@ -52,12 +50,12 @@ trait StringRegexExpression {
 
   protected def pattern(str: String) = if(cache == null) compile(str) else cache
   
-  override def apply(input: Row): Any = {
-    val l = left.apply(input)
-    if(l == null) {
+  override def eval(input: Row): Any = {
+    val l = left.eval(input)
+    if (l == null) {
       null
     } else {
-      val r = right.apply(input)
+      val r = right.eval(input)
       if(r == null) {
         null
       } else {

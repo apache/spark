@@ -110,10 +110,10 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
 
   val describedTable = "DESCRIBE (\\w+)".r
 
-  class SqlQueryExecution(sql: String) extends this.QueryExecution {
-    lazy val logical = HiveQl.parseSql(sql)
-    def hiveExec() = runSqlHive(sql)
-    override def toString = sql + "\n" + super.toString
+  protected[hive] class HiveQLQueryExecution(hql: String) extends this.QueryExecution {
+    lazy val logical = HiveQl.parseSql(hql)
+    def hiveExec() = runSqlHive(hql)
+    override def toString = hql + "\n" + super.toString
   }
 
   /**
@@ -140,8 +140,8 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
 
   case class TestTable(name: String, commands: (()=>Unit)*)
 
-  implicit class SqlCmd(sql: String) {
-    def cmd = () => new SqlQueryExecution(sql).stringResult(): Unit
+  protected[hive] implicit class SqlCmd(sql: String) {
+    def cmd = () => new HiveQLQueryExecution(sql).stringResult(): Unit
   }
 
   /**
@@ -312,6 +312,8 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
         logger.debug(s"Dropping Database: $db")
         catalog.client.dropDatabase(db, true, false, true)
       }
+
+      catalog.unregisterAllTables()
 
       FunctionRegistry.getFunctionNames.filterNot(originalUdfs.contains(_)).foreach { udfName =>
         FunctionRegistry.unregisterTemporaryUDF(udfName)
