@@ -563,4 +563,18 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val ids = ranked.map(_._1).distinct().collect()
     assert(ids.length === n)
   }
+
+  test("sliding") {
+    val data = 0 until 6
+    for (numPartitions <- 1 to 8) {
+      val rdd = sc.parallelize(data, numPartitions)
+      for (windowSize <- 1 to 6) {
+        val slided = rdd.sliding(windowSize).collect().map(_.toList).toList
+        val expected = data.sliding(windowSize).map(_.toList).toList
+        assert(slided === expected)
+      }
+      assert(rdd.sliding(7).collect().isEmpty,
+        "Should return an empty RDD if the window size is greater than the number of items.")
+    }
+  }
 }

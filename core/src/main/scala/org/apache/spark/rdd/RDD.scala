@@ -1001,6 +1001,22 @@ abstract class RDD[T: ClassTag](
   def min()(implicit ord: Ordering[T]):T = this.reduce(ord.min)
 
   /**
+   * Returns a RDD from grouping items of its parent RDD in fixed size blocks by passing a sliding
+   * window over them. The ordering is first based on the partition index and then the ordering of
+   * items within each partition. This is similar to sliding in Scala collections, except that it
+   * becomes an empty RDD if the window size is greater than the total number of items. It needs to
+   * trigger a Spark job if the parent RDD has more than one partitions and the window size is
+   * greater than 1.
+   */
+  def sliding(windowSize: Int): RDD[Seq[T]] = {
+    if (windowSize == 1) {
+      this.map(Seq(_))
+    } else {
+      new SlidingRDD[T](this, windowSize)
+    }
+  }
+
+  /**
    * Save this RDD as a text file, using string representations of elements.
    */
   def saveAsTextFile(path: String) {
