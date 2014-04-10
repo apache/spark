@@ -22,8 +22,9 @@ import javax.servlet.http.HttpServletRequest
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.Logging
+import org.apache.spark.deploy.SparkUIContainer
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.ui.{ServerInfo, SparkUI}
+import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -31,7 +32,9 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  * Web UI server for the standalone master.
  */
 private[spark]
-class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
+class MasterWebUI(val master: Master, requestedPort: Int)
+  extends SparkUIContainer("MasterWebUI") with Logging {
+
   val masterActorRef = master.self
   val timeout = AkkaUtils.askTimeout(master.conf)
 
@@ -39,7 +42,6 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
   private val port = requestedPort
   private val applicationPage = new ApplicationPage(this)
   private val indexPage = new IndexPage(this)
-  private var serverInfo: Option[ServerInfo] = None
 
   private val handlers: Seq[ServletContextHandler] = {
     master.masterMetricsSystem.getServletHandlers ++
@@ -57,47 +59,18 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
     )
   }
 
-  def bind() {
+  /** Bind to the HTTP server behind this web interface. */
+  override def bind() {
     try {
       serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, master.conf))
       logInfo("Started Master web UI at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>
-        logError("Failed to create Master JettyUtils", e)
+        logError("Failed to create Master web UI", e)
         System.exit(1)
     }
   }
 
-  def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
-
-  /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */
-  def attachUI(ui: SparkUI) {
-    assert(serverInfo.isDefined, "Master UI must be bound to a server before attaching SparkUIs")
-    val rootHandler = serverInfo.get.rootHandler
-    for (handler <- ui.handlers) {
-      rootHandler.addHandler(handler)
-      if (!handler.isStarted) {
-        handler.start()
-      }
-    }
-  }
-
-  /** Detach a reconstructed UI from this Master UI. Only valid after bind(). */
-  def detachUI(ui: SparkUI) {
-    assert(serverInfo.isDefined, "Master UI must be bound to a server before detaching SparkUIs")
-    val rootHandler = serverInfo.get.rootHandler
-    for (handler <- ui.handlers) {
-      if (handler.isStarted) {
-        handler.stop()
-      }
-      rootHandler.removeHandler(handler)
-    }
-  }
-
-  def stop() {
-    assert(serverInfo.isDefined, "Attempted to stop a Master UI that was not bound to a server!")
-    serverInfo.get.server.stop()
-  }
 }
 
 private[spark] object MasterWebUI {

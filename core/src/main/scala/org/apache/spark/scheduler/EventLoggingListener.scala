@@ -17,11 +17,14 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable
+
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.util.{JsonProtocol, FileLogger}
+import org.apache.spark.util.{FileLogger, JsonProtocol}
 
 /**
  * A SparkListener that logs events to persistent storage.
@@ -36,6 +39,8 @@ import org.apache.spark.util.{JsonProtocol, FileLogger}
 private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
   extends SparkListener with Logging {
 
+  import EventLoggingListener._
+
   private val shouldCompress = conf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = conf.getBoolean("spark.eventLog.overwrite", false)
   private val outputBufferSize = conf.getInt("spark.eventLog.buffer.kb", 100) * 1024
@@ -46,17 +51,21 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
   private val logger =
     new FileLogger(logDir, conf, outputBufferSize, shouldCompress, shouldOverwrite)
 
-  // Information needed to replay the events logged by this listener later
-  val info = {
-    val compressionCodec = if (shouldCompress) {
-      Some(conf.get("spark.io.compression.codec", CompressionCodec.DEFAULT_COMPRESSION_CODEC))
-    } else None
-    EventLoggingInfo(logDir, compressionCodec)
+  /**
+   * Begin logging events.
+   * If compression is used, log a file that indicates which compression library is used.
+   */
+  def start() {
+    logInfo("Logging events to %s".format(logDir))
+    if (shouldCompress) {
+      val codec = conf.get("spark.io.compression.codec", CompressionCodec.DEFAULT_COMPRESSION_CODEC)
+      logger.newFile(COMPRESSION_CODEC_PREFIX + codec)
+    }
+    logger.newFile(SPARK_VERSION_PREFIX + SparkContext.SPARK_VERSION)
+    logger.newFile(LOG_PREFIX + logger.fileIndex)
   }
 
-  logInfo("Logging events to %s".format(logDir))
-
-  /** Log the event as JSON */
+  /** Log the event as JSON. */
   private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
     val eventJson = compact(render(JsonProtocol.sparkEventToJson(event)))
     logger.logLine(eventJson)
@@ -90,9 +99,118 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
     logEvent(event, flushLogger = true)
   override def onUnpersistRDD(event: SparkListenerUnpersistRDD) =
     logEvent(event, flushLogger = true)
+  override def onApplicationStart(event: SparkListenerApplicationStart) =
+    logEvent(event, flushLogger = true)
+  override def onApplicationEnd(event: SparkListenerApplicationEnd) =
+    logEvent(event, flushLogger = true)
 
-  def stop() = logger.stop()
+  /**
+   * Stop logging events.
+   * In addition, create an empty special file to indicate application completion.
+   */
+  def stop() = {
+    logger.newFile(APPLICATION_COMPLETE)
+    logger.stop()
+  }
 }
 
-// If compression is not enabled, compressionCodec is None
-private[spark] case class EventLoggingInfo(logDir: String, compressionCodec: Option[String])
+private[spark] object EventLoggingListener extends Logging {
+  val LOG_PREFIX = "EVENT_LOG_"
+  val SPARK_VERSION_PREFIX = "SPARK_VERSION_"
+  val COMPRESSION_CODEC_PREFIX = "COMPRESSION_CODEC_"
+  val APPLICATION_COMPLETE = "APPLICATION_COMPLETE"
+
+  // A cache for compression codecs to avoid creating the same codec many times
+  private val codecMap = new mutable.HashMap[String, CompressionCodec]
+
+  def isEventLogFile(fileName: String): Boolean = {
+    fileName.startsWith(LOG_PREFIX)
+  }
+
+  def isSparkVersionFile(fileName: String): Boolean = {
+    fileName.startsWith(SPARK_VERSION_PREFIX)
+  }
+
+  def isCompressionCodecFile(fileName: String): Boolean = {
+    fileName.startsWith(COMPRESSION_CODEC_PREFIX)
+  }
+
+  def isApplicationCompleteFile(fileName: String): Boolean = {
+    fileName == APPLICATION_COMPLETE
+  }
+
+  def parseSparkVersion(fileName: String): String = {
+    if (isSparkVersionFile(fileName)) {
+      fileName.replaceAll(SPARK_VERSION_PREFIX, "")
+    } else ""
+  }
+
+  def parseCompressionCodec(fileName: String): String = {
+    if (isCompressionCodecFile(fileName)) {
+      fileName.replaceAll(COMPRESSION_CODEC_PREFIX, "")
+    } else ""
+  }
+
+  /**
+   * Parse the event logging information associated with the logs in the given directory.
+   *
+   * Specifically, this looks for event log files, the Spark version file, the compression
+   * codec file (if event logs are compressed), and the application completion file (if the
+   * application has run to completion).
+   */
+  def parseLoggingInfo(logDir: Path, fileSystem: FileSystem): EventLoggingInfo = {
+    try {
+      val fileStatuses = fileSystem.listStatus(logDir)
+      val filePaths =
+        if (fileStatuses != null) {
+          fileStatuses.filter(!_.isDir).map(_.getPath).toSeq
+        } else {
+          Seq[Path]()
+        }
+      if (filePaths.isEmpty) {
+        logWarning("No files found in logging directory %s".format(logDir))
+      }
+      EventLoggingInfo(
+        logPaths = filePaths.filter { path => isEventLogFile(path.getName) },
+        sparkVersion = filePaths
+          .find { path => isSparkVersionFile(path.getName) }
+          .map { path => parseSparkVersion(path.getName) }
+          .getOrElse("<Unknown>"),
+        compressionCodec = filePaths
+          .find { path => isCompressionCodecFile(path.getName) }
+          .map { path =>
+            val codec = EventLoggingListener.parseCompressionCodec(path.getName)
+            val conf = new SparkConf
+            conf.set("spark.io.compression.codec", codec)
+            codecMap.getOrElseUpdate(codec, CompressionCodec.createCodec(conf))
+          },
+        applicationComplete = filePaths.exists { path => isApplicationCompleteFile(path.getName) }
+      )
+    } catch {
+      case t: Throwable =>
+        logError("Exception in parsing logging info from directory %s".format(logDir), t)
+      EventLoggingInfo.empty
+    }
+  }
+
+  /**
+   * Parse the event logging information associated with the logs in the given directory.
+   */
+  def parseLoggingInfo(logDir: String, fileSystem: FileSystem): EventLoggingInfo = {
+    parseLoggingInfo(new Path(logDir), fileSystem)
+  }
+}
+
+
+/**
+ * Information needed to process the event logs associated with an application.
+ */
+private[spark] case class EventLoggingInfo(
+    logPaths: Seq[Path],
+    sparkVersion: String,
+    compressionCodec: Option[CompressionCodec],
+    applicationComplete: Boolean = false)
+
+private[spark] object EventLoggingInfo {
+  def empty = EventLoggingInfo(Seq[Path](), "<Unknown>", None, applicationComplete = false)
+}

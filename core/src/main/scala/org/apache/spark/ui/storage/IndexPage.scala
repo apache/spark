@@ -28,9 +28,10 @@ import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
 private[ui] class IndexPage(parent: BlockManagerUI) {
-  private val appName = parent.appName
   private val basePath = parent.basePath
   private lazy val listener = parent.listener
+
+  private def appName = parent.appName
 
   def render(request: HttpServletRequest): Seq[Node] = {
 
