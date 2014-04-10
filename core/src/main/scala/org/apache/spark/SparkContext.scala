@@ -456,12 +456,13 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @note Small files are preferred, as each file will be loaded fully in memory.
    */
-  def wholeTextFiles(path: String): RDD[(String, String)] = {
+  def wholeTextFiles(path: String, minSplits: Int = defaultMinSplits): RDD[(String, String)] = {
     newAPIHadoopFile(
       path,
       classOf[WholeTextFileInputFormat],
       classOf[String],
-      classOf[String])
+      classOf[String],
+      minSplits = minSplits)
   }
 
   /**
@@ -584,11 +585,12 @@ class SparkContext(config: SparkConf) extends Logging {
       fClass: Class[F],
       kClass: Class[K],
       vClass: Class[V],
-      conf: Configuration = hadoopConfiguration): RDD[(K, V)] = {
+      conf: Configuration = hadoopConfiguration,
+      minSplits: Int = 1): RDD[(K, V)] = {
     val job = new NewHadoopJob(conf)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updatedConf = job.getConfiguration
-    new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf)
+    new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf, minSplits)
   }
 
   /**

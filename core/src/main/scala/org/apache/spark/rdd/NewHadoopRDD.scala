@@ -26,6 +26,7 @@ import org.apache.hadoop.mapreduce._
 
 import org.apache.spark.{InterruptibleIterator, Logging, Partition, SerializableWritable, SparkContext, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.input.WholeTextFileInputFormat
 
 private[spark]
 class NewHadoopPartition(rddId: Int, val index: Int, @transient rawSplit: InputSplit with Writable)
@@ -56,7 +57,8 @@ class NewHadoopRDD[K, V](
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
-    @transient conf: Configuration)
+    @transient conf: Configuration,
+    minSplits: Int = 1)
   extends RDD[(K, V)](sc, Nil)
   with SparkHadoopMapReduceUtil
   with Logging {
@@ -74,10 +76,17 @@ class NewHadoopRDD[K, V](
 
   override def getPartitions: Array[Partition] = {
     val inputFormat = inputFormatClass.newInstance
+
     if (inputFormat.isInstanceOf[Configurable]) {
       inputFormat.asInstanceOf[Configurable].setConf(conf)
     }
+
     val jobContext = newJobContext(conf, jobId)
+
+    if (inputFormat.isInstanceOf[WholeTextFileInputFormat]) {
+      inputFormat.asInstanceOf[WholeTextFileInputFormat].setMaxSplitSize(jobContext, minSplits)
+    }
+
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[Partition](rawSplits.size)
     for (i <- 0 until rawSplits.size) {

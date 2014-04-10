@@ -17,7 +17,10 @@
 
 package org.apache.spark.input
 
+import scala.collection.JavaConversions._
+
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.mapreduce.InputSplit
 import org.apache.hadoop.mapreduce.JobContext
 import org.apache.hadoop.mapreduce.lib.input.CombineFileInputFormat
@@ -43,5 +46,16 @@ private[spark] class WholeTextFileInputFormat extends CombineFileInputFormat[Str
       split.asInstanceOf[CombineFileSplit],
       context,
       classOf[WholeTextFileRecordReader])
+  }
+
+  /**
+   * Allow minSplits set by end-user in order to keep compatibility with old Hadoop API.
+   */
+  def setMaxSplitSize(context: JobContext, minSplits: Int) {
+    val files = listStatus(context)
+    val totalLen = files.map { file =>
+      if (file.isDir) 0L else file.getLen
+    }.sum
+    super.setMaxSplitSize(totalLen / (if (minSplits == 0) 1 else minSplits))
   }
 }
