@@ -63,8 +63,8 @@ private class ColumnStatisticsAggregator(private val n: Int)
 
     val denominator = totalCnt - 1.0
 
-    // Sample variance is computed, if the denominator is 0, the variance is just 0.
-    if (denominator != 0.0) {
+    // Sample variance is computed, if the denominator is less than 0, the variance is just 0.
+    if (denominator > 0.0) {
       val deltaMean = currMean
       var i = 0
       while (i < currM2n.size) {
@@ -107,8 +107,12 @@ private class ColumnStatisticsAggregator(private val n: Int)
     currData.activeIterator.foreach {
       case (_, 0.0) => // Skip explicit zero elements.
       case (i, value) =>
-        if (currMax(i) < value) currMax(i) = value
-        if (currMin(i) > value) currMin(i) = value
+        if (currMax(i) < value) {
+          currMax(i) = value
+        }
+        if (currMin(i) > value) {
+          currMin(i) = value
+        }
 
         val tmpPrevMean = currMean(i)
         currMean(i) = (currMean(i) * nnz(i) + value) / (nnz(i) + 1.0)
@@ -125,11 +129,9 @@ private class ColumnStatisticsAggregator(private val n: Int)
    * Merges another aggregator.
    */
   def merge(other: ColumnStatisticsAggregator): this.type = {
-
     require(n == other.n, s"Dimensions mismatch. Expecting $n but got ${other.n}.")
 
     totalCnt += other.totalCnt
-
     val deltaMean = currMean - other.currMean
 
     var i = 0
@@ -139,22 +141,21 @@ private class ColumnStatisticsAggregator(private val n: Int)
         currMean(i) = (currMean(i) * nnz(i) + other.currMean(i) * other.nnz(i)) /
           (nnz(i) + other.nnz(i))
       }
-
       // merge m2n together
       if (nnz(i) + other.nnz(i) != 0.0) {
         currM2n(i) += other.currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * other.nnz(i) /
           (nnz(i) + other.nnz(i))
       }
-
-      if (currMax(i) < other.currMax(i)) currMax(i) = other.currMax(i)
-
-      if (currMin(i) > other.currMin(i)) currMin(i) = other.currMin(i)
-
+      if (currMax(i) < other.currMax(i)) {
+        currMax(i) = other.currMax(i)
+      }
+      if (currMin(i) > other.currMin(i)) {
+        currMin(i) = other.currMin(i)
+      }
       i += 1
     }
 
     nnz += other.nnz
-
     this
   }
 }
@@ -412,17 +413,6 @@ class RowMatrix(
       i += 1
     }
     mat
-  }
-
-  /** Updates or verifies the number of columns. */
-  private def updateNumCols(n: Int) {
-    if (nCols <= 0) {
-      nCols == n
-    } else {
-      require(nCols == n,
-        s"The number of columns $n is different from " +
-          s"what specified or previously computed: ${nCols}.")
-    }
   }
 
   /** Updates or verfires the number of rows. */
