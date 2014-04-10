@@ -43,12 +43,12 @@ private class ColumnStatisticsAggregator(private val n: Int)
 
   private val currMean: BDV[Double] = BDV.zeros[Double](n)
   private val currM2n: BDV[Double] = BDV.zeros[Double](n)
-  private var totalCnt: Double = 0.0
+  private var totalCnt = 0.0
   private val nnz: BDV[Double] = BDV.zeros[Double](n)
   private val currMax: BDV[Double] = BDV.fill(n)(Double.MinValue)
   private val currMin: BDV[Double] = BDV.fill(n)(Double.MaxValue)
 
-  override def mean = {
+  override def mean: Vector = {
     val realMean = BDV.zeros[Double](n)
     var i = 0
     while (i < n) {
@@ -58,7 +58,7 @@ private class ColumnStatisticsAggregator(private val n: Int)
     Vectors.fromBreeze(realMean)
   }
 
-  override def variance = {
+  override def variance: Vector = {
     val realVariance = BDV.zeros[Double](n)
 
     val denominator = totalCnt - 1.0
