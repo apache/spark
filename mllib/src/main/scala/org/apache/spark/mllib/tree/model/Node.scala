@@ -24,7 +24,6 @@ import org.apache.spark.mllib.linalg.Vector
 
 /**
  * :: DeveloperApi ::
- *
  * Node in a decision tree
  * @param id integer node id
  * @param predict predicted value at the node

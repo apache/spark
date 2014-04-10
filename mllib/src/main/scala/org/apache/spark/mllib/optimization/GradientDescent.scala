@@ -28,7 +28,6 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
  * :: DeveloperApi ::
- *
  * Class used to solve an optimization problem using Gradient Descent.
  * @param gradient Gradient function to be used.
  * @param updater Updater to be used to update weights after every iteration.
@@ -113,7 +112,6 @@ class GradientDescent(private var gradient: Gradient, private var updater: Updat
 
 /**
  * :: DeveloperApi ::
- *
  * Top-level method to run gradient descent.
  */
 @DeveloperApi

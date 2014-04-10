@@ -26,7 +26,6 @@ import org.apache.spark.mllib.linalg.SingularValueDecomposition
 
 /**
  * :: Experimental ::
- *
  * Represents a row of [[org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix]].
  */
 @Experimental
@@ -34,7 +33,6 @@ case class IndexedRow(index: Long, vector: Vector)
 
 /**
  * :: Experimental ::
- *
  * Represents a row-oriented [[org.apache.spark.mllib.linalg.distributed.DistributedMatrix]] with
  * indexed rows.
  *
