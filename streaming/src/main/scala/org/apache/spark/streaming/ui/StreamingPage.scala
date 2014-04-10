@@ -85,7 +85,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       val headerRow = Seq(
         "Receiver",
         "Location",
-        s"Records in last batch",
+        "Records in last batch",
         "Minimum rate\n[records/sec]",
         "25th percentile rate\n[records/sec]",
         "Median rate\n[records/sec]",
@@ -102,8 +102,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         }.getOrElse {
           Seq(emptyCellTest, emptyCellTest, emptyCellTest, emptyCellTest, emptyCellTest)
         }
-        Seq(receiverName, receiverLocation, receiverLastBatchRecords) ++
-          receivedRecordStats
+        Seq(receiverName, receiverLocation, receiverLastBatchRecords) ++ receivedRecordStats
       }
       Some(listingTable(headerRow, dataRows, fixedWidth = true))
     } else {
@@ -225,15 +224,18 @@ private[ui] class StreamingPage(parent: StreamingTab)
         day -> s"$hourString $minuteString $secondString",
         week -> s"$dayString $hourString $minuteString",
         year -> s"$weekString $dayString $hourString"
-      ).foreach {
-        case (durationLimit, durationString) if (ms < durationLimit) =>
+      ).foreach { case (durationLimit, durationString) =>
+        if (ms < durationLimit) {
+          // if time is less than the limit (upto year)
           return durationString
-        case e: Any => // matcherror is thrown without this
+        }
       }
+      // if time is more than a year
       return s"$yearString $weekString $dayString"
     } catch {
       case e: Exception =>
         logError("Error converting time to string", e)
+        // if there is some error, return blank string
         return ""
     }
   }
