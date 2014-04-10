@@ -541,6 +541,7 @@ class SQLContext:
         """
         Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
         during the lifetime of this instance of SQLContext.
+
         >>> from pyspark.context import SQLContext
         >>> sqlCtx = SQLContext(sc)
         >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
@@ -591,6 +592,7 @@ class SQLContext:
     def table(self, tableName):
         """
         Returns the specified table as a L{SchemaRDD}.
+
         >>> from pyspark.context import SQLContext
         >>> sqlCtx = SQLContext(sc)
         >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},

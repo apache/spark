@@ -1457,6 +1457,7 @@ class SchemaRDD(RDD):
         """
         Registers this RDD as a temporary table using the given name.  The lifetime of this temporary
         table is tied to the L{SQLContext} that was used to create this SchemaRDD.
+
         >>> from pyspark.context import SQLContext
         >>> sqlCtx = SQLContext(sc)
         >>> rdd = sc.parallelize([{"field1" : 1, "field2" : "row1"},
