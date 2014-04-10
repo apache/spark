@@ -26,7 +26,6 @@ import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
 import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.SortedSet
 import scala.io.Source
 import scala.reflect.ClassTag
 
@@ -1021,5 +1020,12 @@ private[spark] object Utils extends Logging {
    */
   def getHadoopFileSystem(path: URI): FileSystem = {
     FileSystem.get(path, SparkHadoopUtil.get.newConfiguration())
+  }
+
+  /**
+   * Return a Hadoop FileSystem with the scheme encoded in the given path.
+   */
+  def getHadoopFileSystem(path: String): FileSystem = {
+    getHadoopFileSystem(new URI(path))
   }
 }
