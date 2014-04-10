@@ -24,7 +24,6 @@ import org.apache.spark.mllib.linalg.Vector
 
 /**
  * :: DeveloperApi ::
- *
  * Trait for optimization problem solvers.
  */
 @DeveloperApi
