@@ -82,30 +82,13 @@ private[sql] case class ParquetRelation(val path: String)
 private[sql] object ParquetRelation {
 
   def enableLogForwarding() {
-    // Note: Parquet does not use forwarding to parent loggers which
-    // is required for the JUL-SLF4J bridge to work. Also there is
-    // a default logger that appends to Console which needs to be
-    // reset.
-    import org.slf4j.bridge.SLF4JBridgeHandler
-    import java.util.logging.Logger
-    import java.util.logging.LogManager
-
-    val loggerNames = Seq(
-      "parquet.hadoop.ColumnChunkPageWriteStore",
-      "parquet.hadoop.InternalParquetRecordWriter",
-      "parquet.hadoop.ParquetRecordReader",
-      "parquet.hadoop.ParquetInputFormat",
-      "parquet.hadoop.ParquetOutputFormat",
-      "parquet.hadoop.ParquetFileReader",
-      "parquet.hadoop.InternalParquetRecordReader",
-      "parquet.hadoop.codec.CodecConfig")
-    LogManager.getLogManager.reset()
-    SLF4JBridgeHandler.install()
-    for(name <- loggerNames) {
-      val logger = Logger.getLogger(name)
-      logger.setParent(Logger.getLogger(Logger.GLOBAL_LOGGER_NAME))
-      logger.setUseParentHandlers(true)
-    }
+    // Note: Logger.getLogger("parquet") has a default logger
+    // that appends to Console which needs to be cleared.
+    val parquetLogger = java.util.logging.Logger.getLogger("parquet")
+    parquetLogger.getHandlers.foreach(parquetLogger.removeHandler)
+    // TODO(witgo): Need to set the log level ?
+    // if(parquetLogger.getLevel != null) parquetLogger.setLevel(null)
+    if (!parquetLogger.getUseParentHandlers) parquetLogger.setUseParentHandlers(true)
   }
 
   // The element type for the RDDs that this relation maps to.
