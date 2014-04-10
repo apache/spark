@@ -112,7 +112,7 @@
 
     <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
-    <mesos.version>0.17.0</mesos.version>
+    <mesos.version>0.13.0</mesos.version>
     <akka.group>org.spark-project.akka</akka.group>
     <akka.version>2.2.3-shaded-protobuf</akka.version>
     <slf4j.version>1.7.5</slf4j.version>
@@ -848,7 +848,7 @@
       </modules>
 
     </profile>
-
+    
    <!-- Build without Hadoop dependencies that are included in some runtime environments. -->
     <profile>
       <id>hadoop-provided</id>
@@ -893,6 +893,6 @@
         </dependency>
       </dependencies>
     </profile>
-
+    
   </profiles>
 </project>
