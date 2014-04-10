@@ -66,10 +66,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
       Project(projectList, Join(prunedChild(left), prunedChild(right), joinType, condition))
 
-    case Project(project1, Project(project2, child)) =>
+    case Project(projectList1, Project(projectList2, child)) =>
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
-      val aliasMap = project2.collect {
+      val aliasMap = projectList2.collect {
         case a @ Alias(e, _) => (a.toAttribute: Expression, a)
       }.toMap
 
@@ -77,7 +77,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       // eliminate it.
       // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
       // TODO: Fix TransformBase to avoid the cast below.
-      val substitutedProjection = project1.map(_.transform {
+      val substitutedProjection = projectList1.map(_.transform {
         case a if aliasMap.contains(a) => aliasMap(a)
       }).asInstanceOf[Seq[NamedExpression]]
 
