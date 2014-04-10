@@ -17,30 +17,28 @@
 
 package org.apache.spark.streaming
 
-import scala.collection.mutable.Queue
-import scala.collection.Map
-import scala.reflect.ClassTag
-
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicInteger
 
-import akka.actor.Props
-import akka.actor.SupervisorStrategy
-import org.apache.hadoop.io.LongWritable
-import org.apache.hadoop.io.Text
+import scala.collection.Map
+import scala.collection.mutable.Queue
+import scala.reflect.ClassTag
+
+import akka.actor.{Props, SupervisorStrategy}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.MetadataCleaner
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receivers._
 import org.apache.spark.streaming.scheduler._
-import org.apache.hadoop.conf.Configuration
-import org.apache.spark.streaming.ui.StreamingUI
+import org.apache.spark.streaming.ui.StreamingTab
+import org.apache.spark.util.MetadataCleaner
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -159,8 +157,8 @@ class StreamingContext private[streaming] (
 
   private[streaming] val waiter = new ContextWaiter
 
-  private[streaming] val ui = new StreamingUI(this)
-  ui.bind()
+  private[streaming] val ui = new StreamingTab(this)
+  ui.start()
 
   /** Enumeration to identify current state of the StreamingContext */
   private[streaming] object StreamingContextState extends Enumeration {

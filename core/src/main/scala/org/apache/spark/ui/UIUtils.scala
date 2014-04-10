@@ -61,7 +61,9 @@ private[spark] object UIUtils {
       appName: String,
       title: String,
       tabs: Seq[UITab],
-      activeTab: UITab) : Seq[Node] = {
+      activeTab: UITab,
+      refreshInterval: Option[Int] = None
+    ) : Seq[Node] = {
 
     val header = tabs.map { tab =>
       <li class={if (tab == activeTab) "active" else ""}>
@@ -78,8 +80,17 @@ private[spark] object UIUtils {
               type="text/css" />
         <script src={prependBaseUri("/static/sorttable.js")} ></script>
         <title>{appName} - {title}</title>
+        <script type="text/JavaScript">
+          <!--
+          function timedRefresh(timeoutPeriod) {
+            if (timeoutPeriod > 0) {
+              setTimeout("location.reload(true);",timeoutPeriod);
+            }
+          }
+          //   -->
+        </script>
       </head>
-      <body>
+      <body onload={s"JavaScript:timedRefresh(${refreshInterval.getOrElse(-1)});"}>
         <div class="navbar navbar-static-top">
           <div class="navbar-inner">
             <a href={prependBaseUri(basePath, "/")} class="brand">

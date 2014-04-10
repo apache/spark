@@ -52,7 +52,7 @@ private[streaming] case class RegisterReceiver(
     host: String,
     receiverActor: ActorRef
   ) extends NetworkInputTrackerMessage
-private[streaming] case class AddBlocks(receivedBlockInfo: ReceivedBlockInfo)
+private[streaming] case class AddBlock(receivedBlockInfo: ReceivedBlockInfo)
   extends NetworkInputTrackerMessage
 private[streaming] case class DeregisterReceiver(streamId: Int, msg: String)
   extends NetworkInputTrackerMessage
@@ -153,7 +153,7 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
       case RegisterReceiver(streamId, typ, host, receiverActor) =>
         registerReceiver(streamId, typ, host, receiverActor, sender)
         sender ! true
-      case AddBlocks(receivedBlockInfo) =>
+      case AddBlock(receivedBlockInfo) =>
         addBlocks(receivedBlockInfo)
       case DeregisterReceiver(streamId, message) =>
         deregisterReceiver(streamId, message)

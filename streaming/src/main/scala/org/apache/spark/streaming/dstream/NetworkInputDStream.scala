@@ -31,7 +31,7 @@ import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.{BlockId, StorageLevel, StreamBlockId}
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.scheduler.{AddBlocks, DeregisterReceiver, ReceivedBlockInfo, RegisterReceiver}
+import org.apache.spark.streaming.scheduler.{AddBlock, DeregisterReceiver, ReceivedBlockInfo, RegisterReceiver}
 import org.apache.spark.streaming.util.{RecurringTimer, SystemClock}
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -237,7 +237,7 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
       level: StorageLevel
     ) {
     env.blockManager.put(blockId, arrayBuffer.asInstanceOf[ArrayBuffer[Any]], level)
-    trackerActor ! AddBlocks(ReceivedBlockInfo(streamId, blockId, arrayBuffer.size, metadata))
+    trackerActor ! AddBlock(ReceivedBlockInfo(streamId, blockId, arrayBuffer.size, metadata))
     logDebug("Pushed block " + blockId)
   }
 
@@ -251,7 +251,7 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
       level: StorageLevel
     ) {
     env.blockManager.putBytes(blockId, bytes, level)
-    trackerActor ! AddBlocks(ReceivedBlockInfo(streamId, blockId, -1, metadata))
+    trackerActor ! AddBlock(ReceivedBlockInfo(streamId, blockId, -1, metadata))
   }
 
   /** Set the ID of the DStream that this receiver is associated with */
