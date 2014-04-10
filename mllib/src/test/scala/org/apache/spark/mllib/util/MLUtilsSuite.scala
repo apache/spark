@@ -120,25 +120,25 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
       for (seed <- 1 to 5) {
         val foldedRdds = MLUtils.kFold(data, folds, seed)
         assert(foldedRdds.size === folds)
-        foldedRdds.map { case (test, train) =>
-          val result = test.union(train).collect().sorted
-          val testSize = test.collect().size.toFloat
-          assert(testSize > 0, "empty test data")
+        foldedRdds.map { case (validation, training) =>
+          val result = validation.union(training).collect().sorted
+          val validationSize = validation.collect().size.toFloat
+          assert(validationSize > 0, "empty validation data")
           val p = 1 / folds.toFloat
           // Within 3 standard deviations of the mean
-          val range = 3 * math.sqrt(100 * p * (1-p))
+          val range = 3 * math.sqrt(100 * p * (1 - p))
           val expected = 100 * p
           val lowerBound = expected - range
           val upperBound = expected + range
-          assert(testSize > lowerBound,
-            s"Test data ($testSize) smaller than expected ($lowerBound)" )
-          assert(testSize < upperBound,
-            s"Test data ($testSize) larger than expected ($upperBound)" )
-          assert(train.collect().size > 0, "empty training data")
+          assert(validationSize > lowerBound,
+            s"Validation data ($validationSize) smaller than expected ($lowerBound)" )
+          assert(validationSize < upperBound,
+            s"Validation data ($validationSize) larger than expected ($upperBound)" )
+          assert(training.collect().size > 0, "empty training data")
           assert(result ===  collectedData,
-            "Each training+test set combined should contain all of the data.")
+            "Each training+validation set combined should contain all of the data.")
         }
-        // K fold cross validation should only have each element in the test set exactly once
+        // K fold cross validation should only have each element in the validation set exactly once
         assert(foldedRdds.map(_._1).reduce((x,y) => x.union(y)).collect().sorted ===
           data.collect().sorted)
       }
