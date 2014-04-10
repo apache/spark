@@ -194,19 +194,19 @@ class CheckpointWriter(
     }
   }
 
-  def stop() {
-    synchronized {
-      if (stopped) {
-        return
-      }
-      stopped = true
-    }
+  def stop(): Unit = synchronized {
+    if (stopped) return
+
     executor.shutdown()
     val startTime = System.currentTimeMillis()
     val terminated = executor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)
+    if (!terminated) {
+      executor.shutdownNow()
+    }
     val endTime = System.currentTimeMillis()
     logInfo("CheckpointWriter executor terminated ? " + terminated +
       ", waited for " + (endTime - startTime) + " ms.")
+    stopped = true
   }
 
   private def fs = synchronized {

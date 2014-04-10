@@ -33,6 +33,7 @@ private[ui] class IndexPage(parent: BlockManagerUI) {
   private lazy val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
+
     val rdds = listener.rddInfoList
     val content = UIUtils.listingTable(rddHeader, rddRow, rdds)
     UIUtils.headerSparkPage(content, basePath, appName, "Storage ", Storage)
@@ -45,6 +46,7 @@ private[ui] class IndexPage(parent: BlockManagerUI) {
     "Cached Partitions",
     "Fraction Cached",
     "Size in Memory",
+    "Size in Tachyon",
     "Size on Disk")
 
   /** Render an HTML row representing an RDD */
@@ -60,6 +62,7 @@ private[ui] class IndexPage(parent: BlockManagerUI) {
       <td>{rdd.numCachedPartitions}</td>
       <td>{"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
       <td>{Utils.bytesToString(rdd.memSize)}</td>
+      <td>{Utils.bytesToString(rdd.tachyonSize)}</td>
       <td>{Utils.bytesToString(rdd.diskSize)}</td>
     </tr>
   }

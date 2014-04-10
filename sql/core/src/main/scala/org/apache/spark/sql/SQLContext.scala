@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl
@@ -32,14 +33,14 @@ import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
 import org.apache.spark.sql.execution._
 
 /**
- * <span class="badge" style="float: right; background-color: darkblue;">ALPHA COMPONENT</span>
- *
+ * :: AlphaComponent ::
  * The entry point for running relational queries using Spark.  Allows the creation of [[SchemaRDD]]
  * objects and the execution of SQL queries.
  *
  * @groupname userf Spark SQL Functions
  * @groupname Ungrouped Support functions for language integrated queries.
  */
+@AlphaComponent
 class SQLContext(@transient val sparkContext: SparkContext)
   extends Logging
   with dsl.ExpressionConversions
@@ -63,12 +64,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new this.QueryExecution { val logical = plan }
 
   /**
-   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
-   *
+   * :: Experimental ::
    * Allows catalyst LogicalPlans to be executed as a SchemaRDD.  Note that the LogicalPlan
    * interface is considered internal, and thus not guranteed to be stable.  As a result, using
    * them directly is not reccomended.
    */
+  @Experimental
   implicit def logicalPlanToSparkQuery(plan: LogicalPlan): SchemaRDD = new SchemaRDD(this, plan)
 
   /**
@@ -80,12 +81,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd)))
 
   /**
-   * Loads a parequet file, returning the result as a [[SchemaRDD]].
+   * Loads a Parquet file, returning the result as a [[SchemaRDD]].
    *
    * @group userf
    */
   def parquetFile(path: String): SchemaRDD =
-    new SchemaRDD(this, parquet.ParquetRelation("ParquetFile", path))
+    new SchemaRDD(this, parquet.ParquetRelation(path))
 
 
   /**
@@ -223,6 +224,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
+
+    def simpleString: String = stringOrError(executedPlan)
 
     override def toString: String =
       s"""== Logical Plan ==

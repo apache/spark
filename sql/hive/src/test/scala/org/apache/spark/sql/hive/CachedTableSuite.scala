@@ -29,7 +29,7 @@ class CachedTableSuite extends HiveComparisonTest {
   }
 
   createQueryTest("read from cached table",
-    "SELECT * FROM src LIMIT 1")
+    "SELECT * FROM src LIMIT 1", reset = false)
 
   test("check that table is cached and uncache") {
     TestHive.table("src").queryExecution.analyzed match {
@@ -40,7 +40,7 @@ class CachedTableSuite extends HiveComparisonTest {
   }
 
   createQueryTest("read from uncached table",
-    "SELECT * FROM src LIMIT 1")
+    "SELECT * FROM src LIMIT 1", reset = false)
 
   test("make sure table is uncached") {
     TestHive.table("src").queryExecution.analyzed match {

@@ -58,4 +58,17 @@ class CachedTableSuite extends QueryTest {
       TestSQLContext.uncacheTable("testData")
     }
   }
+
+  test("SELECT Star Cached Table") {
+    TestSQLContext.sql("SELECT * FROM testData").registerAsTable("selectStar")
+    TestSQLContext.cacheTable("selectStar")
+    TestSQLContext.sql("SELECT * FROM selectStar")
+    TestSQLContext.uncacheTable("selectStar")
+  }
+
+  test("Self-join cached") {
+    TestSQLContext.cacheTable("testData")
+    TestSQLContext.sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key")
+    TestSQLContext.uncacheTable("testData")
+  }
 }

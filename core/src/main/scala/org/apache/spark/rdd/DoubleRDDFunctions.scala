@@ -17,6 +17,7 @@
 
 package org.apache.spark.rdd
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.{TaskContext, Logging}
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.MeanEvaluator
@@ -63,14 +64,22 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    */
   def sampleVariance(): Double = stats().sampleVariance
 
-  /** (Experimental) Approximate operation to return the mean within a timeout. */
+  /**
+   * :: Experimental ::
+   * Approximate operation to return the mean within a timeout.
+   */
+  @Experimental
   def meanApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
     val processPartition = (ctx: TaskContext, ns: Iterator[Double]) => StatCounter(ns)
     val evaluator = new MeanEvaluator(self.partitions.size, confidence)
     self.context.runApproximateJob(self, processPartition, evaluator, timeout)
   }
 
-  /** (Experimental) Approximate operation to return the sum within a timeout. */
+  /**
+   * :: Experimental ::
+   * Approximate operation to return the sum within a timeout.
+   */
+  @Experimental
   def sumApprox(timeout: Long, confidence: Double = 0.95): PartialResult[BoundedDouble] = {
     val processPartition = (ctx: TaskContext, ns: Iterator[Double]) => StatCounter(ns)
     val evaluator = new SumEvaluator(self.partitions.size, confidence)

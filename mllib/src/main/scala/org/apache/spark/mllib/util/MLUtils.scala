@@ -20,6 +20,7 @@ package org.apache.spark.mllib.util
 import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV,
   squaredDistance => breezeSquaredDistance}
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -37,17 +38,6 @@ object MLUtils {
     }
     eps
   }
-
-  /**
-   * Multiclass label parser, which parses a string into double.
-   */
-  val multiclassLabelParser: String => Double = _.toDouble
-
-  /**
-   * Binary label parser, which outputs 1.0 (positive) if the value is greater than 0.5,
-   * or 0.0 (negative) otherwise.
-   */
-  val binaryLabelParser: String => Double = label => if (label.toDouble > 0.5) 1.0 else 0.0
 
   /**
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint].
@@ -69,7 +59,7 @@ object MLUtils {
   def loadLibSVMData(
       sc: SparkContext,
       path: String,
-      labelParser: String => Double,
+      labelParser: LabelParser,
       numFeatures: Int,
       minSplits: Int): RDD[LabeledPoint] = {
     val parsed = sc.textFile(path, minSplits)
@@ -89,7 +79,7 @@ object MLUtils {
       }.reduce(math.max)
     }
     parsed.map { items =>
-      val label = labelParser(items.head)
+      val label = labelParser.parse(items.head)
       val (indices, values) = items.tail.map { item =>
         val indexAndValue = item.split(':')
         val index = indexAndValue(0).toInt - 1
@@ -107,14 +97,7 @@ object MLUtils {
    * with number of features determined automatically and the default number of partitions.
    */
   def loadLibSVMData(sc: SparkContext, path: String): RDD[LabeledPoint] =
-    loadLibSVMData(sc, path, binaryLabelParser, -1, sc.defaultMinSplits)
-
-  /**
-   * Loads binary labeled data in the LIBSVM format into an RDD[LabeledPoint],
-   * with number of features specified explicitly and the default number of partitions.
-   */
-  def loadLibSVMData(sc: SparkContext, path: String, numFeatures: Int): RDD[LabeledPoint] =
-    loadLibSVMData(sc, path, binaryLabelParser, numFeatures, sc.defaultMinSplits)
+    loadLibSVMData(sc, path, BinaryLabelParser, -1, sc.defaultMinSplits)
 
   /**
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint],
@@ -124,7 +107,7 @@ object MLUtils {
   def loadLibSVMData(
       sc: SparkContext,
       path: String,
-      labelParser: String => Double): RDD[LabeledPoint] =
+      labelParser: LabelParser): RDD[LabeledPoint] =
     loadLibSVMData(sc, path, labelParser, -1, sc.defaultMinSplits)
 
   /**
@@ -135,11 +118,13 @@ object MLUtils {
   def loadLibSVMData(
       sc: SparkContext,
       path: String,
-      labelParser: String => Double,
+      labelParser: LabelParser,
       numFeatures: Int): RDD[LabeledPoint] =
     loadLibSVMData(sc, path, labelParser, numFeatures, sc.defaultMinSplits)
 
   /**
+   * :: Experimental ::
+   *
    * Load labeled data from a file. The data format used here is
    * <L>, <f1> <f2> ...
    * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
@@ -149,6 +134,7 @@ object MLUtils {
    * @return An RDD of LabeledPoint. Each labeled point has two elements: the first element is
    *         the label, and the second element represents the feature values (an array of Double).
    */
+  @Experimental
   def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
     sc.textFile(dir).map { line =>
       val parts = line.split(',')
@@ -159,6 +145,8 @@ object MLUtils {
   }
 
   /**
+   * :: Experimental ::
+   *
    * Save labeled data to a file. The data format used here is
    * <L>, <f1> <f2> ...
    * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
@@ -166,6 +154,7 @@ object MLUtils {
    * @param data An RDD of LabeledPoints containing data to be saved.
    * @param dir Directory to save the data.
    */
+  @Experimental
   def saveLabeledData(data: RDD[LabeledPoint], dir: String) {
     val dataStr = data.map(x => x.label + "," + x.features.toArray.mkString(" "))
     dataStr.saveAsTextFile(dir)
@@ -183,7 +172,7 @@ object MLUtils {
    *     xColMean - Row vector with mean for every column (or feature) of the input data
    *     xColSd - Row vector standard deviation for every column (or feature) of the input data.
    */
-  def computeStats(
+  private[mllib] def computeStats(
       data: RDD[LabeledPoint],
       numFeatures: Int,
       numExamples: Long): (Double, Vector, Vector) = {

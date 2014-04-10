@@ -26,13 +26,12 @@ rm -rf ./work
 
 # Fail fast
 set -e
-
+set -o pipefail
 if test -x "$JAVA_HOME/bin/java"; then
     declare java_cmd="$JAVA_HOME/bin/java"
 else 
     declare java_cmd=java
 fi
-
 JAVA_VERSION=$($java_cmd -version 2>&1 | sed 's/java version "\(.*\)\.\(.*\)\..*"/\1\2/; 1q')
 [ "$JAVA_VERSION" -ge 18 ] && echo "" || echo "[Warn] Java 8 tests will not run because JDK version is < 1.8."
 
@@ -49,7 +48,9 @@ dev/scalastyle
 echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
-sbt/sbt assembly test | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
+# echo "q" is needed because sbt on encountering a build file with failure (either resolution or compilation)
+# prompts the user for input either q, r, etc to quit or retry. This echo is there to make it not block.
+echo -e "q\n" | sbt/sbt assembly test |  grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 
 echo "========================================================================="
 echo "Running PySpark tests"
@@ -63,5 +64,4 @@ echo "========================================================================="
 echo "Detecting binary incompatibilites with MiMa"
 echo "========================================================================="
 ./bin/spark-class org.apache.spark.tools.GenerateMIMAIgnore
-sbt/sbt mima-report-binary-issues | grep -v -e "info.*Resolving" 
-
+echo -e "q\n" | sbt/sbt mima-report-binary-issues | grep -v -e "info.*Resolving" 
