@@ -48,41 +48,41 @@ import org.apache.spark.streaming.dstream._
  * @param storageLevel RDD storage level.
  */
 
-private[streaming] 
+private[streaming]
 class MQTTInputDStream[T: ClassTag](
     @transient ssc_ : StreamingContext,
     brokerUrl: String,
     topic: String,
     storageLevel: StorageLevel
   ) extends NetworkInputDStream[T](ssc_) with Logging {
-  
+
   def getReceiver(): NetworkReceiver[T] = {
     new MQTTReceiver(brokerUrl, topic, storageLevel).asInstanceOf[NetworkReceiver[T]]
   }
 }
 
-private[streaming] 
+private[streaming]
 class MQTTReceiver(brokerUrl: String,
   topic: String,
   storageLevel: StorageLevel
   ) extends NetworkReceiver[Any] {
   lazy protected val blockGenerator = new BlockGenerator(storageLevel)
-  
+
   def onStop() {
     blockGenerator.stop()
   }
-  
+
   def onStart() {
 
     blockGenerator.start()
 
-    // Set up persistence for messages 
+    // Set up persistence for messages
     var peristance: MqttClientPersistence = new MemoryPersistence()
 
     // Initializing Mqtt Client specifying brokerUrl, clientID and MqttClientPersistance
     var client: MqttClient = new MqttClient(brokerUrl, MqttClient.generateClientId(), peristance)
 
-    // Connect to MqttBroker    
+    // Connect to MqttBroker
     client.connect()
 
     // Subscribe to Mqtt topic
@@ -91,7 +91,7 @@ class MQTTReceiver(brokerUrl: String,
     // Callback automatically triggers as and when new message arrives on specified topic
     var callback: MqttCallback = new MqttCallback() {
 
-      // Handles Mqtt message 
+      // Handles Mqtt message
       override def messageArrived(arg0: String, arg1: MqttMessage) {
         blockGenerator += new String(arg1.getPayload())
       }

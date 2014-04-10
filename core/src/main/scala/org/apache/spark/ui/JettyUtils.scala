@@ -136,7 +136,7 @@ private[spark] object JettyUtils extends Logging {
   private def addFilters(handlers: Seq[ServletContextHandler], conf: SparkConf) {
     val filters: Array[String] = conf.get("spark.ui.filters", "").split(',').map(_.trim())
     filters.foreach {
-      case filter : String => 
+      case filter : String =>
         if (!filter.isEmpty) {
           logInfo("Adding filter: " + filter)
           val holder : FilterHolder = new FilterHolder()
@@ -151,7 +151,7 @@ private[spark] object JettyUtils extends Logging {
                 if (parts.length == 2) holder.setInitParameter(parts(0), parts(1))
              }
           }
-          val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.ERROR, 
+          val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.ERROR,
             DispatcherType.FORWARD, DispatcherType.INCLUDE, DispatcherType.REQUEST)
           handlers.foreach { case(handler) => handler.addFilter(holder, "/*", enumDispatcher) }
         }
