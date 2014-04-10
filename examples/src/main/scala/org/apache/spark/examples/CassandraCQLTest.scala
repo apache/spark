@@ -58,7 +58,7 @@ import org.apache.spark.SparkContext._
     prod_id,
     quantity) VALUES ('charlie', 1385983649000, 'iphone', 2);
 */
- 
+
 /**
  * This example demonstrates how to read and write to cassandra column family created using CQL3
  * using Spark.

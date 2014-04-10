@@ -79,6 +79,6 @@ public final class JavaKMeans {
     double cost = model.computeCost(points.rdd());
     System.out.println("Cost: " + cost);
 
-    System.exit(0);
+    sc.stop();
   }
 }

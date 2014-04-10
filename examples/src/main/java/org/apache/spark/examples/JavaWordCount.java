@@ -48,14 +48,14 @@ public final class JavaWordCount {
         return Arrays.asList(SPACE.split(s));
       }
     });
-    
+
     JavaPairRDD<String, Integer> ones = words.mapToPair(new PairFunction<String, String, Integer>() {
       @Override
       public Tuple2<String, Integer> call(String s) {
         return new Tuple2<String, Integer>(s, 1);
       }
     });
-    
+
     JavaPairRDD<String, Integer> counts = ones.reduceByKey(new Function2<Integer, Integer, Integer>() {
       @Override
       public Integer call(Integer i1, Integer i2) {
@@ -67,6 +67,6 @@ public final class JavaWordCount {
     for (Tuple2<?,?> tuple : output) {
       System.out.println(tuple._1() + ": " + tuple._2());
     }
-    System.exit(0);
+    ctx.stop();
   }
 }

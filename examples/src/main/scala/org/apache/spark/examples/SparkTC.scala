@@ -70,6 +70,6 @@ object SparkTC {
     } while (nextCount != oldCount)
 
     println("TC has " + tc.count() + " edges.")
-    System.exit(0)
+    spark.stop()
   }
 }

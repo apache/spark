@@ -112,7 +112,7 @@ object SparkALS {
 
     val sc = new SparkContext(host, "SparkALS",
       System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
-    
+
     val R = generateR()
 
     // Initialize m and u randomly
@@ -137,6 +137,6 @@ object SparkALS {
       println()
     }
 
-    System.exit(0)
+    sc.stop()
   }
 }

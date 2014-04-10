@@ -57,7 +57,6 @@ object SparkPageRank {
     val output = ranks.collect()
     output.foreach(tup => println(tup._1 + " has rank: " + tup._2 + "."))
 
-    System.exit(0)
+    ctx.stop()
   }
 }
-

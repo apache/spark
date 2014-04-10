@@ -34,6 +34,6 @@ object ExceptionHandlingTest {
       }
     }
 
-    System.exit(0)
+    sc.stop()
   }
 }

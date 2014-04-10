@@ -79,7 +79,7 @@ object WikipediaPageRankStandalone {
     val time = (System.currentTimeMillis - startTime) / 1000.0
     println("Completed %d iterations in %f seconds: %f seconds per iteration"
       .format(numIterations, time, time / numIterations))
-    System.exit(0)
+    sc.stop()
   }
 
   def parseArticle(line: String): (String, Array[String]) = {
