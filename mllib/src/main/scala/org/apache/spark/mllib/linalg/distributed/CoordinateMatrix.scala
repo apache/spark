@@ -34,7 +34,6 @@ case class MatrixEntry(i: Long, j: Long, value: Double)
 
 /**
  * :: Experimental ::
- *
  * Represents a matrix in coordinate format.
  *
  * @param entries matrix entries

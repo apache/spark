@@ -61,7 +61,7 @@ object KafkaWordCount {
     val wordCounts = words.map(x => (x, 1L))
       .reduceByKeyAndWindow(add _, subtract _, Minutes(10), Seconds(2), 2)
     wordCounts.print()
-    
+
     ssc.start()
     ssc.awaitTermination()
   }
@@ -83,7 +83,7 @@ object KafkaWordCountProducer {
     val props = new Properties()
     props.put("metadata.broker.list", brokers)
     props.put("serializer.class", "kafka.serializer.StringEncoder")
-    
+
     val config = new ProducerConfig(props)
     val producer = new Producer[String, String](config)
 
@@ -102,4 +102,3 @@ object KafkaWordCountProducer {
   }
 
 }
-

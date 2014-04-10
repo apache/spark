@@ -35,7 +35,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
   private val host = Utils.localHostName()
   private val port = requestedPort.getOrElse(
-    worker.conf.get("worker.ui.port",  WorkerWebUI.DEFAULT_PORT).toInt)
+    worker.conf.getInt("worker.ui.port",  WorkerWebUI.DEFAULT_PORT))
   val timeout = AkkaUtils.askTimeout(worker.conf)
 
   /** Initialize all components of the server. */
@@ -63,6 +63,6 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 }
 
 private[spark] object WorkerWebUI {
+  val DEFAULT_PORT = 8081
   val STATIC_RESOURCE_BASE = SparkUI.STATIC_RESOURCE_DIR
-  val DEFAULT_PORT="8081"
 }

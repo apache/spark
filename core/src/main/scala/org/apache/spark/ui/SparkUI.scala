@@ -35,7 +35,7 @@ private[spark] class SparkUI(
     conf: SparkConf,
     val securityManager: SecurityManager,
     val listenerBus: SparkListenerBus,
-    val appName: String,
+    var appName: String,
     val basePath: String = "")
   extends WebUI(securityManager, basePath) with Logging {
 
@@ -48,11 +48,16 @@ private[spark] class SparkUI(
 
   private val bindHost = Utils.localHostName()
   private val publicHost = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(bindHost)
-  private val port = conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
+  private val port = conf.getInt("spark.ui.port", SparkUI.DEFAULT_PORT)
 
   // Maintain executor storage status through Spark events
   val storageStatusListener = new StorageStatusListener
   listenerBus.addListener(storageStatusListener)
+
+  /** Set the app name for this UI. */
+  def setAppName(name: String) {
+    appName = name
+  }
 
   /** Initialize all components of the server. */
   def start() {
@@ -95,6 +100,6 @@ private[spark] class SparkUI(
 }
 
 private[spark] object SparkUI {
-  val DEFAULT_PORT = "4040"
+  val DEFAULT_PORT = 4040
   val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
 }

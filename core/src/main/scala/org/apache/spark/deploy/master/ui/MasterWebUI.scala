@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.master.ui
 
+import javax.servlet.http.HttpServletRequest
+
 import org.apache.spark.Logging
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.ui.{SparkUI, WebUI}

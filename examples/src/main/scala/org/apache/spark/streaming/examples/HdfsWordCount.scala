@@ -53,4 +53,3 @@ object HdfsWordCount {
     ssc.awaitTermination()
   }
 }
-

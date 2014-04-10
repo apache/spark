@@ -25,7 +25,7 @@ import scala.util.Random
 
 class UISuite extends FunSuite with BeforeAndAfterAll {
 
-  ignore("Testing") {
+  test("Testing") {
     runStreaming(1000000)
   }
 

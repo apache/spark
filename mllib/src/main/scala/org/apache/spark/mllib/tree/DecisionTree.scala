@@ -35,7 +35,6 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
  * :: Experimental ::
- *
  * A class that implements a decision tree algorithm for classification and regression. It
  * supports both continuous and categorical features.
  * @param strategy The configuration parameters for the tree algorithm which specify the type

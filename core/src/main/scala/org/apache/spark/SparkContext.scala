@@ -219,14 +219,11 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val eventLogger: Option[EventLoggingListener] = {
     if (conf.getBoolean("spark.eventLog.enabled", false)) {
       val logger = new EventLoggingListener(appName, conf)
+      logger.start()
       listenerBus.addListener(logger)
       Some(logger)
     } else None
   }
-
-  // Information needed to replay logged events, if any
-  private[spark] val eventLoggingInfo: Option[EventLoggingInfo] =
-    eventLogger.map { logger => Some(logger.info) }.getOrElse(None)
 
   // At this point, all relevant SparkListeners have been registered, so begin releasing events
   listenerBus.start()
@@ -292,6 +289,7 @@ class SparkContext(config: SparkConf) extends Logging {
   cleaner.foreach(_.start())
 
   postEnvironmentUpdate()
+  postApplicationStart()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration: Configuration = {
@@ -777,6 +775,9 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.addListener(listener)
   }
 
+  /** The version of Spark on which this application is running. */
+  def version = SparkContext.SPARK_VERSION
+
   /**
    * Return a map from the slave to the max memory available for caching and the remaining
    * memory available for caching.
@@ -930,8 +931,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** Shut down the SparkContext. */
   def stop() {
+    postApplicationEnd()
     ui.stop()
-    eventLogger.foreach(_.stop())
     // Do this only if not stopped already - best case effort.
     // prevent NPE if stopped more than once.
     val dagSchedulerCopy = dagScheduler
@@ -940,13 +941,14 @@ class SparkContext(config: SparkConf) extends Logging {
       metadataCleaner.cancel()
       cleaner.foreach(_.stop())
       dagSchedulerCopy.stop()
-      listenerBus.stop()
       taskScheduler = null
       // TODO: Cache.stop()?
       env.stop()
       SparkEnv.set(null)
       ShuffleMapTask.clearCache()
       ResultTask.clearCache()
+      listenerBus.stop()
+      eventLogger.foreach(_.stop())
       logInfo("Successfully stopped SparkContext")
     } else {
       logInfo("SparkContext already stopped")
@@ -1175,6 +1177,20 @@ class SparkContext(config: SparkConf) extends Logging {
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
 
+  /** Post the application start event */
+  private def postApplicationStart() {
+    listenerBus.post(SparkListenerApplicationStart(appName, startTime, sparkUser))
+  }
+
+  /**
+   * Post the application end event to all listeners immediately, rather than adding it
+   * to the event queue for it to be asynchronously processed eventually. Otherwise, a race
+   * condition exists in which the listeners may stop before this event has been propagated.
+   */
+  private def postApplicationEnd() {
+    listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis))
+  }
+
   /** Post the environment update event once the task scheduler is ready */
   private def postEnvironmentUpdate() {
     if (taskScheduler != null) {
@@ -1199,6 +1215,8 @@ class SparkContext(config: SparkConf) extends Logging {
  * various Spark features.
  */
 object SparkContext extends Logging {
+
+  private[spark] val SPARK_VERSION = "1.0.0"
 
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
 

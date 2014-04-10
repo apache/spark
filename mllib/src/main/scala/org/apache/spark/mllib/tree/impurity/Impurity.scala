@@ -21,7 +21,6 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 
 /**
  * :: Experimental ::
- *
  * Trait for calculating information gain.
  */
 @Experimental
@@ -29,7 +28,6 @@ trait Impurity extends Serializable {
 
   /**
    * :: DeveloperApi ::
-   *
    * information calculation for binary classification
    * @param c0 count of instances with label 0
    * @param c1 count of instances with label 1
@@ -40,7 +38,6 @@ trait Impurity extends Serializable {
 
   /**
    * :: DeveloperApi ::
-   *
    * information calculation for regression
    * @param count number of instances
    * @param sum sum of labels
