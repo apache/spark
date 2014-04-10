@@ -161,6 +161,7 @@ private class ColumnStatisticsAggregator(private val n: Int)
 }
 
 /**
+ * :: Experimental ::
  * Represents a row-oriented distributed Matrix with no meaningful row indices.
  *
  * @param rows rows stored as an RDD[Vector]
