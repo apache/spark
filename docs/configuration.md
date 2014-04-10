@@ -40,7 +40,7 @@ there are at least five properties that you will commonly want to control:
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td>spark.executor.memory</td>
-  <td>512m</td>
+  <td>1g</td>
   <td>
     Amount of memory to use per executor process, in the same format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>).
   </td>
