@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 
 import akka.actor.{Actor, ActorRef, Props}
 
-import org.apache.spark.{Logging, SparkEnv, TaskState}
+import org.apache.spark.{Lifecycle, Logging, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
@@ -80,18 +80,19 @@ private[spark] class LocalActor(
  * on a single Executor (created by the LocalBackend) running locally.
  */
 private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: Int)
-  extends SchedulerBackend with ExecutorBackend {
+  extends SchedulerBackend with ExecutorBackend with Lifecycle {
 
   var localActor: ActorRef = null
 
-  override def start() {
+  override def conf = scheduler.conf
+
+  override def doStart() {
     localActor = SparkEnv.get.actorSystem.actorOf(
       Props(new LocalActor(scheduler, this, totalCores)),
       "LocalBackendActor")
   }
 
-  override def stop() {
-  }
+  override def doStop() {}
 
   override def reviveOffers() {
     localActor ! ReviveOffers
