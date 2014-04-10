@@ -117,6 +117,6 @@ public final class JavaPageRank {
         System.out.println(tuple._1() + " has rank: " + tuple._2() + ".");
     }
 
-    System.exit(0);
+    ctx.stop();
   }
 }
