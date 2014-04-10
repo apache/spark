@@ -114,7 +114,7 @@ class PythonMLLibAPI extends Serializable {
       initialWeightsBA: Array[Byte]): java.util.LinkedList[java.lang.Object] = {
     val data = dataBytesJRDD.rdd.map(xBytes => {
         val x = deserializeDoubleVector(xBytes)
-        LabeledPoint(x(0), Vectors.dense(x.slice(1, x.length)))
+        LabeledPoint(x(0), Vectors.dense(x.tail))
     })
     val initialWeights = deserializeDoubleVector(initialWeightsBA)
     val model = trainFunc(data, initialWeights)
@@ -243,7 +243,7 @@ class PythonMLLibAPI extends Serializable {
       lambda: Double): java.util.List[java.lang.Object] = {
     val data = dataBytesJRDD.rdd.map(xBytes => {
       val x = deserializeDoubleVector(xBytes)
-      LabeledPoint(x(0), Vectors.dense(x.slice(1, x.length)))
+      LabeledPoint(x(0), Vectors.dense(x.tail))
     })
     val model = NaiveBayes.train(data, lambda)
     val ret = new java.util.LinkedList[java.lang.Object]()

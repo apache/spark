@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, NodeSeq}
 
-import org.apache.spark.scheduler.Schedulable
+import org.apache.spark.scheduler.{StageInfo, Schedulable}
 import org.apache.spark.ui.Page._
 import org.apache.spark.ui.UIUtils
 
@@ -41,10 +41,11 @@ private[ui] class IndexPage(parent: JobProgressUI) {
       val failedStages = listener.failedStages.reverse.toSeq
       val now = System.currentTimeMillis()
 
-      val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
+      val mostRecentlySubmitted = (si: StageInfo) => -si.submissionTime.getOrElse(0L)
+      val activeStagesTable = new StageTable(activeStages.sortBy(mostRecentlySubmitted), parent)
       val completedStagesTable =
-        new StageTable(completedStages.sortBy(_.submissionTime).reverse, parent)
-      val failedStagesTable = new StageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
+        new StageTable(completedStages.sortBy(mostRecentlySubmitted), parent)
+      val failedStagesTable = new StageTable(failedStages.sortBy(mostRecentlySubmitted), parent)
 
       // For now, pool information is only accessible in live UIs
       val pools = if (live) sc.getAllPools else Seq[Schedulable]()

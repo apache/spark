@@ -84,7 +84,7 @@ object MFDataGenerator{
     val mn = m * n
     val shuffled = rand.shuffle(1 to mn toList)
 
-    val omega = shuffled.slice(0, sampSize)
+    val omega = shuffled.take(sampSize)
     val ordered = omega.sortWith(_ < _).toArray
     val trainData: RDD[(Int, Int, Double)] = sc.parallelize(ordered)
       .map(x => (fullData.indexRows(x - 1), fullData.indexColumns(x - 1), fullData.get(x - 1)))

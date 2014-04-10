@@ -1117,7 +1117,7 @@ object DecisionTree extends Serializable with Logging {
     sc.textFile(dir).map { line =>
       val parts = line.trim().split(",")
       val label = parts(0).toDouble
-      val features = Vectors.dense(parts.slice(1,parts.length).map(_.toDouble))
+      val features = Vectors.dense(parts.tail.map(_.toDouble))
       LabeledPoint(label, features)
     }
   }

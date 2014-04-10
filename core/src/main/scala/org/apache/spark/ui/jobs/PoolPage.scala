@@ -41,7 +41,9 @@ private[ui] class PoolPage(parent: JobProgressUI) {
         case Some(s) => s.values.toSeq
         case None => Seq[StageInfo]()
       }
-      val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
+
+      val mostRecentlySubmitted = (si: StageInfo) => -si.submissionTime.getOrElse(0L)
+      val activeStagesTable = new StageTable(activeStages.sortBy(mostRecentlySubmitted), parent)
 
       // For now, pool information is only accessible in live UIs
       val pools = if (live) Seq(sc.getPoolForName(poolName).get) else Seq[Schedulable]()

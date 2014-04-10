@@ -53,9 +53,9 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
       UIUtils.listingTable(executorHeaders, executorRow, workerState.finishedExecutors)
 
     val driverHeaders = Seq("DriverID", "Main Class", "State", "Cores", "Memory", "Logs", "Notes")
-    val runningDrivers = workerState.drivers.sortBy(_.driverId).reverse
+    val runningDrivers = workerState.drivers.sortWith(_.driverId > _.driverId)
     val runningDriverTable = UIUtils.listingTable(driverHeaders, driverRow, runningDrivers)
-    val finishedDrivers = workerState.finishedDrivers.sortBy(_.driverId).reverse
+    val finishedDrivers = workerState.finishedDrivers.sortWith(_.driverId > _.driverId)
     def finishedDriverTable = UIUtils.listingTable(driverHeaders, driverRow, finishedDrivers)
 
     // For now we only show driver information if the user has submitted drivers to the cluster.
