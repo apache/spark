@@ -68,18 +68,13 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
     started = true
   }
 
-  def post(event: SparkListenerEvent, blocking: Boolean = false) {
-    if (!blocking) {
-      val eventAdded = eventQueue.offer(event)
-      if (!eventAdded && !queueFullErrorMessageLogged) {
-        logError("Dropping SparkListenerEvent because no remaining room in event queue. " +
-          "This likely means one of the SparkListeners is too slow and cannot keep up with the " +
-          "rate at which tasks are being started by the scheduler.")
-        queueFullErrorMessageLogged = true
-      }
-    } else {
-      // Bypass the event queue and post to all attached listeners immediately
-      postToAll(event)
+  def post(event: SparkListenerEvent) {
+    val eventAdded = eventQueue.offer(event)
+    if (!eventAdded && !queueFullErrorMessageLogged) {
+      logError("Dropping SparkListenerEvent because no remaining room in event queue. " +
+        "This likely means one of the SparkListeners is too slow and cannot keep up with the " +
+        "rate at which tasks are being started by the scheduler.")
+      queueFullErrorMessageLogged = true
     }
   }
 

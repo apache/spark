@@ -1188,7 +1188,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * condition exists in which the listeners may stop before this event has been propagated.
    */
   private def postApplicationEnd() {
-    listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis), blocking = true)
+    listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis))
   }
 
   /** Post the environment update event once the task scheduler is ready */
