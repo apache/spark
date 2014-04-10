@@ -519,6 +519,44 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(data.sortBy(_.split("\\|")(2)).collect === col3)
   }
 
+  test("sortByKey ascending parameter") {
+    val data = sc.parallelize(Seq("5|50|A","4|60|C", "6|40|B"))
+
+    val asc = Array("4|60|C", "5|50|A", "6|40|B")
+    val desc = Array("6|40|B", "5|50|A", "4|60|C")
+
+    assert(data.sortBy(_.split("\\|")(0), true).collect === asc)
+    assert(data.sortBy(_.split("\\|")(0), false).collect === desc)
+  }
+
+  test("sortByKey with explicit ordering") {
+    val data = sc.parallelize(Seq("Bob|Smith|50", "Jane|Smith|40", "Thomas|Williams|30", "Karen|Williams|60"))
+
+    val ageOrdered = Array("Thomas|Williams|30", "Jane|Smith|40", "Bob|Smith|50", "Karen|Williams|60")
+    // last name, then first name
+    val nameOrdered = Array("Bob|Smith|50", "Jane|Smith|40", "Karen|Williams|60", "Thomas|Williams|30")
+
+    case class Person(first: String, last: String, age: Int)
+
+    def parse(s: String): Person = {
+      val split = s.split("\\|")
+      Person(split(0), split(1), split(2).toInt)
+    }
+
+    object AgeOrdering extends Ordering[Person] {
+      def compare(a:Person, b:Person) = a.age compare b.age
+    }
+
+    object NameOrdering extends Ordering[Person] {
+      def compare(a:Person, b:Person) =
+        implicitly[Ordering[Tuple2[String,String]]].compare((a.last, a.first), (b.last, b.first))
+    }
+
+    import scala.reflect._
+    assert(data.sortBy(parse, false, 2)(AgeOrdering, classTag[Person]) === ageOrdered)
+    assert(data.sortBy(parse, false, 2)(NameOrdering, classTag[Person]) === nameOrdered)
+  }
+
   test("intersection") {
     val all = sc.parallelize(1 to 10)
     val evens = sc.parallelize(2 to 10 by 2)
