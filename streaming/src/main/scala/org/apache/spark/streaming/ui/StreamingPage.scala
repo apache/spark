@@ -23,10 +23,10 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.Logging
-import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.ui._
 import org.apache.spark.util.Distribution
 
+/** Page for Spark Web UI that shows statistics of a streaming job */
 private[ui] class StreamingPage(parent: StreamingTab)
   extends UIPage("") with Logging {
 
@@ -287,12 +287,3 @@ private[ui] class StreamingPage(parent: StreamingTab)
   }
 }
 
-private[spark] class StreamingTab(val ssc: StreamingContext)
-  extends UITab("streaming") with Logging {
-
-  val streamingPage = new StreamingPage(this)
-  ssc.sc.ui.attachTab(this)
-
-  /** Initialize listener and attach pages. */
-  def start() { }
-}
