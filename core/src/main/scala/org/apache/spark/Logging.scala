@@ -136,6 +136,6 @@ trait Logging {
 private object Logging {
   @volatile private var initialized = false
   val initLock = new Object()
-  SLF4JBridgeHandler.removeHandlersForRootLogger()
-  SLF4JBridgeHandler.install()
+  // SLF4JBridgeHandler.removeHandlersForRootLogger()
+  if(!SLF4JBridgeHandler.isInstalled) SLF4JBridgeHandler.install()
 }
