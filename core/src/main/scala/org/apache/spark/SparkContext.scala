@@ -444,7 +444,7 @@ class SparkContext(config: SparkConf) extends Logging {
    *   hdfs://a-hdfs-path/part-nnnnn
    * }}}
    *
-   * Do `val rdd = sparkContext.wholeTextFile("hdfs://a-hdfs-path")`,
+   * Do `val rdd = sparkContext.wholeTextFile("hdfs://a-hdfs-path", minSplits)`
    *
    * <p> then `rdd` contains
    * {{{

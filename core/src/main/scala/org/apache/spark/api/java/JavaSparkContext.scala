@@ -167,7 +167,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    *   hdfs://a-hdfs-path/part-nnnnn
    * }}}
    *
-   * Do `JavaPairRDD<String, String> rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path")`,
+   * Do
+   * `JavaPairRDD<String, String> rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path", minSplit)`
    *
    * <p> then `rdd` contains
    * {{{
@@ -178,6 +179,16 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * }}}
    *
    * @note Small files are preferred, as each file will be loaded fully in memory.
+   */
+  def wholeTextFiles(path: String, minSplits: Int): JavaPairRDD[String, String] =
+    new JavaPairRDD(sc.wholeTextFiles(path, minSplits))
+
+  /**
+   * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI. Each file is read as a single record and returned in a
+   * key-value pair, where the key is the path of each file, the value is the content of each file.
+   *
+   * @see `wholeTextFiles(path: String, minSplits: Int)`.
    */
   def wholeTextFiles(path: String): JavaPairRDD[String, String] =
     new JavaPairRDD(sc.wholeTextFiles(path))
