@@ -118,7 +118,13 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
   }
 
   /** Register a receiver */
-  def registerReceiver(streamId: Int, typ: String, host: String, receiverActor: ActorRef, sender: ActorRef) {
+  def registerReceiver(
+      streamId: Int,
+      typ: String,
+      host: String,
+      receiverActor: ActorRef,
+      sender: ActorRef
+    ) {
     if (!networkInputStreamMap.contains(streamId)) {
       throw new Exception("Register received for unexpected id " + streamId)
     }
