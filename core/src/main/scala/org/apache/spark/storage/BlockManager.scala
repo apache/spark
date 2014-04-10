@@ -1045,7 +1045,7 @@ private[spark] object BlockManager extends Logging {
 
   def getMaxMemory(conf: SparkConf): Long = {
     val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
-    (Runtime.getRuntime.maxMemory * memoryFraction).toLong
+    (Utils.effectiveMaxMemory(conf) * memoryFraction).toLong
   }
 
   def getHeartBeatFrequency(conf: SparkConf): Long =

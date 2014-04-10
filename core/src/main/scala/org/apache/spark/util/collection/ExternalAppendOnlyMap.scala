@@ -77,7 +77,8 @@ class ExternalAppendOnlyMap[K, V, C](
   private val maxMemoryThreshold = {
     val memoryFraction = sparkConf.getDouble("spark.shuffle.memoryFraction", 0.3)
     val safetyFraction = sparkConf.getDouble("spark.shuffle.safetyFraction", 0.8)
-    (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
+    (org.apache.spark.util.Utils.effectiveMaxMemory(sparkConf) 
+     * memoryFraction * safetyFraction).toLong
   }
 
   // Number of pairs in the in-memory map

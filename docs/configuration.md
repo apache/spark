@@ -40,7 +40,7 @@ there are at least five properties that you will commonly want to control:
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td>spark.executor.memory</td>
-  <td>512m</td>
+  <td>1g</td>
   <td>
     Amount of memory to use per executor process, in the same format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>).
   </td>
@@ -103,23 +103,30 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.system.reservedMemorySize</td>
+  <td>300m</td>
+  <td>
+    Amount of Heap to reserve for Spark's internal components, before calculating memory available for storage 
+    and shuffle as configured in <code>spark.storage.memoryFraction</code> and <code>spark.shuffle.memoryFraction</code>
+  </td>
+</tr>
+<tr>
   <td>spark.storage.memoryFraction</td>
   <td>0.6</td>
   <td>
-    Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
-    generation of objects in the JVM, which by default is given 0.6 of the heap, but you can increase
-    it if you configure your own old generation size.
+    Fraction of Java heap to use for Spark's memory cache, after accounting for <code>spark.system.reservedMemorySize</code>.
+    The effective size should not be larger than the "old"generation of objects in the JVM.
   </td>
 </tr>
 <tr>
   <td>spark.shuffle.memoryFraction</td>
   <td>0.3</td>
   <td>
-    Fraction of Java heap to use for aggregation and cogroups during shuffles, if
-    <code>spark.shuffle.spill</code> is true. At any given time, the collective size of
-    all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
-    begin to spill to disk. If spills are often, consider increasing this value at the expense of
-    <code>spark.storage.memoryFraction</code>.
+    Fraction of Java heap to use for aggregation and cogroups during shuffles, after accounting for 
+    <code>spark.system.reservedMemorySize</code>, and if <code>spark.shuffle.spill</code> is true. 
+    At any given time, the collective size of all in-memory maps used for shuffles is bounded by this 
+    limit, beyond which the contents will begin to spill to disk. If spills are often, consider increasing
+     this value at the expense of <code>spark.storage.memoryFraction</code>.
   </td>
 </tr>
 <tr>
