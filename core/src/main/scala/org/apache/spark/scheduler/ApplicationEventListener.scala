@@ -20,9 +20,8 @@ package org.apache.spark.scheduler
 /**
  * A simple listener for application events.
  *
- * This listener assumes at most one of each of SparkListenerApplicationStart and
- * SparkListenerApplicationEnd will be received. Otherwise, only the latest event
- * of each type will take effect.
+ * This listener expects to hear events from a single application only. If events
+ * from multiple applications are seen, the behavior is unspecified.
  */
 private[spark] class ApplicationEventListener extends SparkListener {
   var appName = "<Not Started>"

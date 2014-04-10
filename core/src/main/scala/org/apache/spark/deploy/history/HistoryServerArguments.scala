@@ -55,8 +55,12 @@ private[spark] class HistoryServerArguments(args: Array[String]) {
     }
     val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
     val path = new Path(logDir)
-    if (!fileSystem.exists(path) || !fileSystem.getFileStatus(path).isDir) {
-      System.err.println("Logging directory specified is invalid: %s".format(logDir))
+    if (!fileSystem.exists(path)) {
+      System.err.println("Logging directory specified does not exist: %s".format(logDir))
+      printUsageAndExit(1)
+    }
+    if (!fileSystem.getFileStatus(path).isDir) {
+      System.err.println("Logging directory specified is not a directory: %s".format(logDir))
       printUsageAndExit(1)
     }
   }

@@ -63,8 +63,8 @@ private[spark] class IndexPage(parent: HistoryServer) {
     val appName = if (info.started) info.name else info.logDirPath.getName
     val uiAddress = parent.getAddress + info.ui.basePath
     val startTime = if (info.started) WebUI.formatDate(info.startTime) else "Not started"
-    val endTime = if (info.finished) WebUI.formatDate(info.endTime) else "Not finished"
-    val difference = if (info.started && info.finished) info.endTime - info.startTime else -1L
+    val endTime = if (info.completed) WebUI.formatDate(info.endTime) else "Not finished"
+    val difference = if (info.started && info.completed) info.endTime - info.startTime else -1L
     val duration = if (difference > 0) WebUI.formatDuration(difference) else "---"
     val sparkUser = if (info.started) info.sparkUser else "Unknown user"
     val logDirectory = info.logDirPath.getName

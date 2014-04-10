@@ -667,7 +667,7 @@ private[spark] class Master(
     if (!eventLogPaths.isEmpty) {
       try {
         val replayBus = new ReplayListenerBus(eventLogPaths, fileSystem, compressionCodec)
-        val ui = new SparkUI(replayBus, appName + " (finished)", "/history/" + app.id)
+        val ui = new SparkUI(replayBus, appName + " (completed)", "/history/" + app.id)
         ui.start()
         replayBus.replay()
         app.desc.appUiUrl = ui.basePath

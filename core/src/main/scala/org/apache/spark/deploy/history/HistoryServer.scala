@@ -32,7 +32,7 @@ import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
 
 /**
- * A web server that renders SparkUIs of finished applications.
+ * A web server that renders SparkUIs of completed applications.
  *
  * For the standalone mode, MasterWebUI already achieves this functionality. Thus, the
  * main use case of the HistoryServer is in other deploy modes (e.g. Yarn or Mesos).
@@ -61,8 +61,8 @@ class HistoryServer(
   // A timestamp of when the disk was last accessed to check for log updates
   private var lastLogCheckTime = -1L
 
-  // Number of complete applications found in this directory
-  private var numApplicationsTotal = 0
+  // Number of completed applications found in this directory
+  private var numCompletedApplications = 0
 
   @volatile private var stopped = false
 
@@ -125,11 +125,11 @@ class HistoryServer(
    * Check for any updates to event logs in the base directory. This is only effective once
    * the server has been bound.
    *
-   * If a new finished application is found, the server renders the associated SparkUI
+   * If a new completed application is found, the server renders the associated SparkUI
    * from the application's event logs, attaches this UI to itself, and stores metadata
    * information for this application.
    *
-   * If the logs for an existing finished application are no longer found, the server
+   * If the logs for an existing completed application are no longer found, the server
    * removes all associated information and detaches the SparkUI.
    */
   def checkForLogs() = synchronized {
@@ -164,8 +164,8 @@ class HistoryServer(
           }
         }
 
-        // Track the total number of complete applications observed this round
-        numApplicationsTotal = logInfos.size
+        // Track the total number of completed applications observed this round
+        numCompletedApplications = logInfos.size
 
       } catch {
         case t: Throwable => logError("Exception in checking for event log updates", t)
@@ -176,10 +176,10 @@ class HistoryServer(
   }
 
   /**
-   * Render a new SparkUI from the event logs if the associated application is finished.
+   * Render a new SparkUI from the event logs if the associated application is completed.
    *
    * HistoryServer looks for a special file that indicates application completion in the given
-   * directory. If this file exists, the associated application is regarded to be complete, in
+   * directory. If this file exists, the associated application is regarded to be completed, in
    * which case the server proceeds to render the SparkUI. Otherwise, the server does nothing.
    */
   private def renderSparkUI(logDir: FileStatus, logInfo: EventLoggingInfo) {
@@ -200,7 +200,7 @@ class HistoryServer(
       val startTime = appListener.startTime
       val endTime = appListener.endTime
       val lastUpdated = getModificationTime(logDir)
-      ui.setAppName(appName + " (finished)")
+      ui.setAppName(appName + " (completed)")
       appIdToInfo(appId) = ApplicationHistoryInfo(appId, appName, startTime, endTime,
         lastUpdated, sparkUser, path, ui)
     }
@@ -216,14 +216,14 @@ class HistoryServer(
   /** Return the address of this server. */
   def getAddress: String = "http://" + publicHost + ":" + boundPort
 
-  /** Return the total number of application logs found, whether or not the UI is retained. */
-  def getNumApplications: Int = numApplicationsTotal
+  /** Return the number of completed applications found, whether or not the UI is rendered. */
+  def getNumApplications: Int = numCompletedApplications
 
   /** Return when this directory was last modified. */
   private def getModificationTime(dir: FileStatus): Long = {
     try {
       val logFiles = fileSystem.listStatus(dir.getPath)
-      if (logFiles != null) {
+      if (logFiles != null && !logFiles.isEmpty) {
         logFiles.map(_.getModificationTime).max
       } else {
         dir.getModificationTime
@@ -283,5 +283,5 @@ private[spark] case class ApplicationHistoryInfo(
     logDirPath: Path,
     ui: SparkUI) {
   def started = startTime != -1
-  def finished = endTime != -1
+  def completed = endTime != -1
 }

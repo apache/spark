@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.jackson.JsonMethods._
 
@@ -118,6 +120,9 @@ private[spark] object EventLoggingListener extends Logging {
   val COMPRESSION_CODEC_PREFIX = "COMPRESSION_CODEC_"
   val APPLICATION_COMPLETE = "APPLICATION_COMPLETE"
 
+  // A cache for compression codecs to avoid creating the same codec many times
+  private val codecMap = new mutable.HashMap[String, CompressionCodec]
+
   def isEventLogFile(fileName: String): Boolean = {
     fileName.startsWith(LOG_PREFIX)
   }
@@ -174,11 +179,11 @@ private[spark] object EventLoggingListener extends Logging {
         compressionCodec = filePaths
           .find { path => isCompressionCodecFile(path.getName) }
           .map { path =>
-          val codec = EventLoggingListener.parseCompressionCodec(path.getName)
-          val conf = new SparkConf
-          conf.set("spark.io.compression.codec", codec)
-          CompressionCodec.createCodec(conf)
-        },
+            val codec = EventLoggingListener.parseCompressionCodec(path.getName)
+            val conf = new SparkConf
+            conf.set("spark.io.compression.codec", codec)
+            codecMap.getOrElseUpdate(codec, CompressionCodec.createCodec(conf))
+          },
         applicationComplete = filePaths.exists { path => isApplicationCompleteFile(path.getName) }
       )
     } catch {
