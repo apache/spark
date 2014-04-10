@@ -55,9 +55,9 @@ case object BooleanType extends NativeType {
 
 case object TimestampType extends NativeType {
   type JvmType = Timestamp
-  
+
   @transient lazy val tag = typeTag[JvmType]
-  
+
   val ordering = new Ordering[JvmType] {
     def compare(x: Timestamp, y: Timestamp) = x.compareTo(y)
   }

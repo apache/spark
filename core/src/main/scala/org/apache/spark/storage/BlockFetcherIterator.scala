@@ -240,7 +240,7 @@ object BlockFetcherIterator {
     override def numRemoteBlocks: Int = numRemote
     override def fetchWaitTime: Long = _fetchWaitTime
     override def remoteBytesRead: Long = _remoteBytesRead
- 
+
 
     // Implementing the Iterator methods with an iterator that reads fetched blocks off the queue
     // as they arrive.

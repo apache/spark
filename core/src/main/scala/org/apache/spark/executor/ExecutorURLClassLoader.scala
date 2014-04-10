@@ -38,7 +38,7 @@ private[spark] class ChildExecutorURLClassLoader(urls: Array[URL], parent: Class
     override def addURL(url: URL) {
       super.addURL(url)
     }
-    override def findClass(name: String): Class[_] = { 
+    override def findClass(name: String): Class[_] = {
       super.findClass(name)
     }
   }

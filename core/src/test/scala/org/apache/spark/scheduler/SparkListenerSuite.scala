@@ -216,7 +216,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
   test("onTaskGettingResult() called when result fetched remotely") {
     val listener = new SaveTaskEvents
     sc.addSparkListener(listener)
- 
+
     // Make a task whose result is larger than the akka frame size
     System.setProperty("spark.akka.frameSize", "1")
     val akkaFrameSize =
@@ -236,7 +236,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
   test("onTaskGettingResult() not called when result sent directly") {
     val listener = new SaveTaskEvents
     sc.addSparkListener(listener)
- 
+
     // Make a task whose result is larger than the akka frame size
     val result = sc.parallelize(Seq(1), 1).map(2 * _).reduce { case (x, y) => x }
     assert(result === 2)

@@ -28,7 +28,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
   override def toString = s"CAST($child, $dataType)"
 
   type EvaluatedType = Any
-  
+
   def nullOrCast[T](a: Any, func: T => Any): Any = if(a == null) {
     null
   } else {
@@ -40,7 +40,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     case BinaryType => nullOrCast[Array[Byte]](_, new String(_, "UTF-8"))
     case _ => nullOrCast[Any](_, _.toString)
   }
-  
+
   // BinaryConverter
   def castToBinary: Any => Any = child.dataType match {
     case StringType => nullOrCast[String](_, _.getBytes("UTF-8"))
@@ -58,7 +58,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     case DoubleType => nullOrCast[Double](_, _ != 0)
     case FloatType => nullOrCast[Float](_, _ != 0)
   }
-  
+
   // TimestampConverter
   def castToTimestamp: Any => Any = child.dataType match {
     case StringType => nullOrCast[String](_, s => {

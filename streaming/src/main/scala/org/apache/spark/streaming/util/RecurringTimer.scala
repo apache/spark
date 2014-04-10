@@ -22,10 +22,10 @@ import org.apache.spark.Logging
 private[streaming]
 class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name: String)
   extends Logging {
-  
+
   private val thread = new Thread("RecurringTimer - " + name) {
     setDaemon(true)
-    override def run() { loop }    
+    override def run() { loop }
   }
 
   @volatile private var prevTime = -1L
@@ -104,11 +104,11 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
 
 private[streaming]
 object RecurringTimer {
-  
+
   def main(args: Array[String]) {
     var lastRecurTime = 0L
     val period = 1000
-    
+
     def onRecur(time: Long) {
       val currentTime = System.currentTimeMillis()
       println("" + currentTime + ": " + (currentTime - lastRecurTime))

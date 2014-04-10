@@ -30,7 +30,7 @@ import org.apache.spark.mllib.linalg.Vector
 trait Optimizer extends Serializable {
 
   /**
-   * Solve the provided convex optimization problem. 
+   * Solve the provided convex optimization problem.
    */
   def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector
 }

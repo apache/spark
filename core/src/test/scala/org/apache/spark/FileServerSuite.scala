@@ -45,7 +45,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     val pw = new PrintWriter(textFile)
     pw.println("100")
     pw.close()
-    
+
     val jarFile = new File(tmpDir, "test.jar")
     val jarStream = new FileOutputStream(jarFile)
     val jar = new JarOutputStream(jarStream, new java.util.jar.Manifest())
@@ -53,7 +53,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
 
     val jarEntry = new JarEntry(textFile.getName)
     jar.putNextEntry(jarEntry)
-    
+
     val in = new FileInputStream(textFile)
     val buffer = new Array[Byte](10240)
     var nRead = 0

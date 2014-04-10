@@ -43,7 +43,7 @@ private[spark] class ClientArguments(args: Array[String]) {
 
   // kill parameters
   var driverId: String = ""
-  
+
   parse(args.toList)
 
   def parse(args: List[String]): Unit = args match {
