@@ -47,7 +47,7 @@ object ReceiverSupervisorStrategy {
  * the API for pushing received data into Spark Streaming for being processed.
  *
  * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
- * 
+ *
  * @example {{{
  *  class MyActor extends Actor with Receiver{
  *      def receive {

@@ -611,7 +611,7 @@ private[spark] object JsonProtocol {
     val rddInfo = new RDDInfo(rddId, name, numPartitions, storageLevel)
     rddInfo.numCachedPartitions = numCachedPartitions
     rddInfo.memSize = memSize
-    rddInfo.tachyonSize = tachyonSize 
+    rddInfo.tachyonSize = tachyonSize
     rddInfo.diskSize = diskSize
     rddInfo
   }

@@ -20,11 +20,11 @@ package org.apache.spark.streaming
 private[streaming]
 class Interval(val beginTime: Time, val endTime: Time) {
   def this(beginMs: Long, endMs: Long) = this(new Time(beginMs), new Time(endMs))
-  
+
   def duration(): Duration = endTime - beginTime
 
   def + (time: Duration): Interval = {
-    new Interval(beginTime + time, endTime + time) 
+    new Interval(beginTime + time, endTime + time)
   }
 
   def - (time: Duration): Interval = {
@@ -40,9 +40,9 @@ class Interval(val beginTime: Time, val endTime: Time) {
   }
 
   def <= (that: Interval) = (this < that || this == that)
- 
+
   def > (that: Interval) = !(this <= that)
-  
+
   def >= (that: Interval) = !(this < that)
 
   override def toString = "[" + beginTime + ", " + endTime + "]"

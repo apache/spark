@@ -31,7 +31,7 @@ import com.google.common.io.Files
  * projects.
  *
  * TODO: See if we can move this to the test codebase by specifying
- * test dependencies between projects. 
+ * test dependencies between projects.
  */
 private[spark] object TestUtils {
 

@@ -388,7 +388,7 @@ private[spark] class BlockManager(
               logDebug("Block " + blockId + " not found in memory")
           }
         }
-        
+
         // Look for the block in Tachyon
         if (level.useOffHeap) {
           logDebug("Getting block " + blockId + " from tachyon")
@@ -1031,7 +1031,7 @@ private[spark] class BlockManager(
     memoryStore.clear()
     diskStore.clear()
     if (tachyonInitialized) {
-      tachyonStore.clear() 
+      tachyonStore.clear()
     }
     metadataCleaner.cancel()
     broadcastCleaner.cancel()
