@@ -22,20 +22,20 @@ package org.apache.spark.mllib.evaluation.binary
  */
 private[evaluation] trait BinaryConfusionMatrix {
   /** number of true positives */
-  def tp: Long
+  def numTruePositives: Long
 
   /** number of false positives */
-  def fp: Long
+  def numFalsePositives: Long
 
   /** number of false negatives */
-  def fn: Long
+  def numFalseNegatives: Long
 
   /** number of true negatives */
-  def tn: Long
+  def numTrueNegatives: Long
 
   /** number of positives */
-  def p: Long = tp + fn
+  def numPositives: Long = numTruePositives + numFalseNegatives
 
   /** number of negatives */
-  def n: Long = fp + tn
+  def numNegatives: Long = numFalsePositives + numTrueNegatives
 }

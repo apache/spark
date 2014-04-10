@@ -33,22 +33,22 @@ private case class BinaryConfusionMatrixImpl(
     totalCount: LabelCounter) extends BinaryConfusionMatrix with Serializable {
 
   /** number of true positives */
-  override def tp: Long = count.numPositives
+  override def numTruePositives: Long = count.numPositives
 
   /** number of false positives */
-  override def fp: Long = count.numNegatives
+  override def numFalsePositives: Long = count.numNegatives
 
   /** number of false negatives */
-  override def fn: Long = totalCount.numPositives - count.numPositives
+  override def numFalseNegatives: Long = totalCount.numPositives - count.numPositives
 
   /** number of true negatives */
-  override def tn: Long = totalCount.numNegatives - count.numNegatives
+  override def numTrueNegatives: Long = totalCount.numNegatives - count.numNegatives
 
   /** number of positives */
-  override def p: Long = totalCount.numPositives
+  override def numPositives: Long = totalCount.numPositives
 
   /** number of negatives */
-  override def n: Long = totalCount.numNegatives
+  override def numNegatives: Long = totalCount.numNegatives
 }
 
 /**
@@ -57,10 +57,10 @@ private case class BinaryConfusionMatrixImpl(
  * @param scoreAndLabels an RDD of (score, label) pairs.
  */
 class BinaryClassificationMetrics(scoreAndLabels: RDD[(Double, Double)])
-    extends Serializable with Logging {
+  extends Serializable with Logging {
 
   private lazy val (
-      cumCounts: RDD[(Double, LabelCounter)],
+      cumulativeCounts: RDD[(Double, LabelCounter)],
       confusions: RDD[(Double, BinaryConfusionMatrix)]) = {
     // Create a bin for each distinct score value, count positives and negatives within each bin,
     // and then sort by score values in descending order.
@@ -74,32 +74,32 @@ class BinaryClassificationMetrics(scoreAndLabels: RDD[(Double, Double)])
       iter.foreach(agg += _)
       Iterator(agg)
     }, preservesPartitioning = true).collect()
-    val partitionwiseCumCounts =
+    val partitionwiseCumulativeCounts =
       agg.scanLeft(new LabelCounter())((agg: LabelCounter, c: LabelCounter) => agg.clone() += c)
-    val totalCount = partitionwiseCumCounts.last
+    val totalCount = partitionwiseCumulativeCounts.last
     logInfo(s"Total counts: $totalCount")
-    val cumCounts = counts.mapPartitionsWithIndex(
+    val cumulativeCounts = counts.mapPartitionsWithIndex(
       (index: Int, iter: Iterator[(Double, LabelCounter)]) => {
-        val cumCount = partitionwiseCumCounts(index)
+        val cumCount = partitionwiseCumulativeCounts(index)
         iter.map { case (score, c) =>
           cumCount += c
           (score, cumCount.clone())
         }
       }, preservesPartitioning = true)
-    cumCounts.persist()
-    val confusions = cumCounts.map { case (score, cumCount) =>
+    cumulativeCounts.persist()
+    val confusions = cumulativeCounts.map { case (score, cumCount) =>
       (score, BinaryConfusionMatrixImpl(cumCount, totalCount).asInstanceOf[BinaryConfusionMatrix])
     }
-    (cumCounts, confusions)
+    (cumulativeCounts, confusions)
   }
 
   /** Unpersist intermediate RDDs used in the computation. */
   def unpersist() {
-    cumCounts.unpersist()
+    cumulativeCounts.unpersist()
   }
 
   /** Returns thresholds in descending order. */
-  def thresholds(): RDD[Double] = cumCounts.map(_._1)
+  def thresholds(): RDD[Double] = cumulativeCounts.map(_._1)
 
   /**
    * Returns the receiver operating characteristic (ROC) curve,

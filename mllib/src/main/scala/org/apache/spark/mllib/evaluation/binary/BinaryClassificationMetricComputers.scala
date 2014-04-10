@@ -27,19 +27,19 @@ private[evaluation] trait BinaryClassificationMetricComputer extends Serializabl
 /** Precision. */
 private[evaluation] object Precision extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double =
-    c.tp.toDouble / (c.tp + c.fp)
+    c.numTruePositives.toDouble / (c.numTruePositives + c.numFalsePositives)
 }
 
 /** False positive rate. */
 private[evaluation] object FalsePositiveRate extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double =
-    c.fp.toDouble / c.n
+    c.numFalsePositives.toDouble / c.numNegatives
 }
 
 /** Recall. */
 private[evaluation] object Recall extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double =
-    c.tp.toDouble / c.p
+    c.numTruePositives.toDouble / c.numPositives
 }
 
 /**

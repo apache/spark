@@ -27,27 +27,29 @@ class BinaryClassificationMetricsSuite extends FunSuite with LocalSparkContext {
     val scoreAndLabels = sc.parallelize(
       Seq((0.1, 0.0), (0.1, 1.0), (0.4, 0.0), (0.6, 0.0), (0.6, 1.0), (0.6, 1.0), (0.8, 1.0)), 2)
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
-    val score = Seq(0.8, 0.6, 0.4, 0.1)
-    val tp = Seq(1, 3, 3, 4)
-    val fp = Seq(0, 1, 2, 3)
-    val p = 4
-    val n = 3
-    val precision = tp.zip(fp).map { case (t, f) => t.toDouble / (t + f) }
-    val recall = tp.map(t => t.toDouble / p)
-    val fpr = fp.map(f => f.toDouble / n)
+    val threshold = Seq(0.8, 0.6, 0.4, 0.1)
+    val numTruePositives = Seq(1, 3, 3, 4)
+    val numFalsePositives = Seq(0, 1, 2, 3)
+    val numPositives = 4
+    val numNegatives = 3
+    val precision = numTruePositives.zip(numFalsePositives).map { case (t, f) =>
+      t.toDouble / (t + f)
+    }
+    val recall = numTruePositives.map(t => t.toDouble / numPositives)
+    val fpr = numFalsePositives.map(f => f.toDouble / numNegatives)
     val rocCurve = Seq((0.0, 0.0)) ++ fpr.zip(recall) ++ Seq((1.0, 1.0))
     val pr = recall.zip(precision)
     val prCurve = Seq((0.0, 1.0)) ++ pr
-    val f1 = pr.map { case (re, prec) => 2.0 * (prec * re) / (prec + re) }
-    val f2 = pr.map { case (re, prec) => 5.0 * (prec * re) / (4.0 * prec + re)}
-    assert(metrics.thresholds().collect().toSeq === score)
+    val f1 = pr.map { case (r, p) => 2.0 * (p * r) / (p + r) }
+    val f2 = pr.map { case (r, p) => 5.0 * (p * r) / (4.0 * p + r)}
+    assert(metrics.thresholds().collect().toSeq === threshold)
     assert(metrics.roc().collect().toSeq === rocCurve)
     assert(metrics.areaUnderROC() === AreaUnderCurve.of(rocCurve))
     assert(metrics.pr().collect().toSeq === prCurve)
     assert(metrics.areaUnderPR() === AreaUnderCurve.of(prCurve))
-    assert(metrics.fMeasureByThreshold().collect().toSeq === score.zip(f1))
-    assert(metrics.fMeasureByThreshold(2.0).collect().toSeq === score.zip(f2))
-    assert(metrics.precisionByThreshold().collect().toSeq === score.zip(precision))
-    assert(metrics.recallByThreshold().collect().toSeq === score.zip(recall))
+    assert(metrics.fMeasureByThreshold().collect().toSeq === threshold.zip(f1))
+    assert(metrics.fMeasureByThreshold(2.0).collect().toSeq === threshold.zip(f2))
+    assert(metrics.precisionByThreshold().collect().toSeq === threshold.zip(precision))
+    assert(metrics.recallByThreshold().collect().toSeq === threshold.zip(recall))
   }
 }
