@@ -19,72 +19,80 @@ package org.apache.spark.ui.jobs
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{NodeSeq, Node}
+import scala.xml.{Node, NodeSeq}
 
-import org.apache.spark.scheduler.SchedulingMode
+import org.apache.spark.scheduler.Schedulable
 import org.apache.spark.ui.Page._
-import org.apache.spark.ui.UIUtils._
+import org.apache.spark.ui.UIUtils
 
-/** Page showing list of all ongoing and recently finished stages and pools*/
-private[spark] class IndexPage(parent: JobProgressUI) {
-  def listener = parent.listener
+/** Page showing list of all ongoing and recently finished stages and pools */
+private[ui] class IndexPage(parent: JobProgressUI) {
+  private val appName = parent.appName
+  private val basePath = parent.basePath
+  private val live = parent.live
+  private val sc = parent.sc
+  private lazy val listener = parent.listener
+  private lazy val isFairScheduler = parent.isFairScheduler
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
-      val activeStages = listener.activeStages.toSeq
+      val activeStages = listener.activeStages.values.toSeq
       val completedStages = listener.completedStages.reverse.toSeq
       val failedStages = listener.failedStages.reverse.toSeq
       val now = System.currentTimeMillis()
 
-      var activeTime = 0L
-      for (tasks <- listener.stageIdToTasksActive.values; t <- tasks) {
-        activeTime += t.timeRunning(now)
-      }
-
       val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
-      val completedStagesTable = new StageTable(completedStages.sortBy(_.submissionTime).reverse,
-        parent)
+      val completedStagesTable =
+        new StageTable(completedStages.sortBy(_.submissionTime).reverse, parent)
       val failedStagesTable = new StageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
 
-      val pools = listener.sc.getAllPools
-      val poolTable = new PoolTable(pools, listener)
+      // For now, pool information is only accessible in live UIs
+      val pools = if (live) sc.getAllPools else Seq[Schedulable]()
+      val poolTable = new PoolTable(pools, parent)
+
       val summary: NodeSeq =
-       <div>
-         <ul class="unstyled">
-           <li>
-             <strong>Total Duration: </strong>
-             {parent.formatDuration(now - listener.sc.startTime)}
-           </li>
-           <li><strong>Scheduling Mode:</strong> {parent.sc.getSchedulingMode}</li>
-           <li>
-             <a href="#active"><strong>Active Stages:</strong></a>
-             {activeStages.size}
-           </li>
-           <li>
-             <a href="#completed"><strong>Completed Stages:</strong></a>
-             {completedStages.size}
-           </li>
-           <li>
+        <div>
+          <ul class="unstyled">
+            {if (live) {
+              // Total duration is not meaningful unless the UI is live
+              <li>
+                <strong>Total Duration: </strong>
+                {parent.formatDuration(now - sc.startTime)}
+              </li>
+            }}
+            <li>
+              <strong>Scheduling Mode: </strong>
+              {listener.schedulingMode.map(_.toString).getOrElse("Unknown")}
+            </li>
+            <li>
+              <a href="#active"><strong>Active Stages:</strong></a>
+              {activeStages.size}
+            </li>
+            <li>
+              <a href="#completed"><strong>Completed Stages:</strong></a>
+              {completedStages.size}
+            </li>
+             <li>
              <a href="#failed"><strong>Failed Stages:</strong></a>
-             {failedStages.size}
-           </li>
-         </ul>
-       </div>
+              {failedStages.size}
+            </li>
+          </ul>
+        </div>
 
       val content = summary ++
-        {if (listener.sc.getSchedulingMode == SchedulingMode.FAIR) {
-           <h4>{pools.size} Fair Scheduler Pools</h4> ++ poolTable.toNodeSeq
+        {if (live && isFairScheduler) {
+          <h4>{pools.size} Fair Scheduler Pools</h4> ++ poolTable.toNodeSeq
         } else {
-          Seq()
+          Seq[Node]()
         }} ++
         <h4 id="active">Active Stages ({activeStages.size})</h4> ++
-        activeStagesTable.toNodeSeq++
+        activeStagesTable.toNodeSeq ++
         <h4 id="completed">Completed Stages ({completedStages.size})</h4> ++
-        completedStagesTable.toNodeSeq++
+        completedStagesTable.toNodeSeq ++
         <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
         failedStagesTable.toNodeSeq
 
-      headerSparkPage(content, parent.sc, "Spark Stages", Stages)
+      UIUtils.headerSparkPage(content, basePath, appName, "Spark Stages", Stages)
     }
   }
 }

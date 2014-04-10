@@ -3,3 +3,12 @@ Copyright 2014 The Apache Software Foundation.
 
 This product includes software developed at
 The Apache Software Foundation (http://www.apache.org/).
+
+In addition, this product includes:
+
+- JUnit (http://www.junit.org) is a testing framework for Java. We included it
+  under the terms of the Eclipse Public License v1.0.
+
+- JTransforms (https://sites.google.com/site/piotrwendykier/software/jtransforms)
+  provides fast transforms in Java. It is tri-licensed, and we included it under 
+  the terms of the Mozilla Public License v1.1.

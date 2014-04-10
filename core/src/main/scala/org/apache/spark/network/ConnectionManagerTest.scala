@@ -47,8 +47,8 @@ private[spark] object ConnectionManagerTest extends Logging{
     val slaves = slavesFile.mkString.split("\n")
     slavesFile.close()
 
-    /*println("Slaves")*/
-    /*slaves.foreach(println)*/
+    /* println("Slaves") */
+    /* slaves.foreach(println) */
     val tasknum = if (args.length > 2) args(2).toInt else slaves.length
     val size = ( if (args.length > 3) (args(3).toInt) else 10 ) * 1024 * 1024 
     val count = if (args.length > 4) args(4).toInt else 3

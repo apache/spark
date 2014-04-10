@@ -28,7 +28,8 @@ from pyspark.broadcast import Broadcast
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
-from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, MsgPackDeserializer
+from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
+        PairDeserializer, MsgPackDeserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark import rdd
 from pyspark.rdd import RDD
@@ -257,105 +258,44 @@ class SparkContext(object):
         return RDD(self._jsc.textFile(name, minSplits), self,
                    UTF8Deserializer())
 
-    ###
-    def sequenceFile(self, name, key_class="org.apache.hadoop.io.Text", value_class="org.apache.hadoop.io.Text",
-                     key_wrapper="", value_wrapper="", minSplits=None):
+    def wholeTextFiles(self, path):
         """
-        Read a Hadoop SequenceFile with arbitrary key and value Writable class from HDFS,
-        a local file system (available on all nodes), or any Hadoop-supported file system URI.
-        The mechanism is as follows:
-            1. A Java RDD is created from the SequenceFile, key and value classes
-            2. Serialization is attempted via MsgPack
-            3. If this fails, the fallback is to call 'toString' on each key and value
-            4. C{MsgPackDeserializer} is used to deserialize data on the Python side
+        Read a directory of text files from HDFS, a local file system
+        (available on all nodes), or any  Hadoop-supported file system
+        URI. Each file is read as a single record and returned in a
+        key-value pair, where the key is the path of each file, the
+        value is the content of each file.
 
-        >>> sc.sequenceFile("test_support/data/sfint/").collect()
-        [(1, 'aa'), (2, 'bb'), (2, 'aa'), (3, 'cc'), (2, 'bb'), (1, 'aa')]
-        >>> sc.sequenceFile("test_support/data/sfdouble/").collect()
-        [(1.0, 'aa'), (2.0, 'bb'), (2.0, 'aa'), (3.0, 'cc'), (2.0, 'bb'), (1.0, 'aa')]
-        >>> sc.sequenceFile("test_support/data/sftext/").collect()
-        [('1', 'aa'), ('2', 'bb'), ('2', 'aa'), ('3', 'cc'), ('2', 'bb'), ('1', 'aa')]
-        """
-        minSplits = minSplits or min(self.defaultParallelism, 2)
-        jrdd = self._jvm.PythonRDD.sequenceFile(self._jsc, name, key_class, value_class, key_wrapper, value_wrapper,
-                                                minSplits)
-        return RDD(jrdd, self, MsgPackDeserializer())
+        For example, if you have the following files::
 
-    def newAPIHadoopFile(self, name, inputformat_class, key_class, value_class, key_wrapper="toString",
-                         value_wrapper="toString", conf={}):
-        """
-        Read a 'new API' Hadoop InputFormat with arbitrary key and value class from HDFS,
-        a local file system (available on all nodes), or any Hadoop-supported file system URI.
-        The mechanism is as follows:
-            1. A Java RDD is created from the InputFormat, key and value classes
-            2. Serialization is attempted via MsgPack
-            3. If this fails, the fallback is to call 'toString' on each key and value
-            4. C{MsgPackDeserializer} is used to deserialize data on the Python side
+          hdfs://a-hdfs-path/part-00000
+          hdfs://a-hdfs-path/part-00001
+          ...
+          hdfs://a-hdfs-path/part-nnnnn
 
-        A Hadoop configuration can be passed in as a Python dict. This will be converted into a Configuration in Java
-        """
-        jconf = self._jvm.java.util.HashMap()
-        for k, v in conf.iteritems():
-            jconf[k] = v
-        jrdd = self._jvm.PythonRDD.newAPIHadoopFile(self._jsc, name, inputformat_class, key_class, value_class,
-                                                    key_wrapper, value_wrapper, jconf)
-        return RDD(jrdd, self, MsgPackDeserializer())
+        Do C{rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path")},
+        then C{rdd} contains::
 
-    def newAPIHadoopRDD(self, inputformat_class, key_class, value_class, key_wrapper="toString",
-                        value_wrapper="toString", conf={}):
-        """
-        Read a 'new API' Hadoop InputFormat with arbitrary key and value class, from an arbitrary Hadoop configuration,
-        that is passed in as a Python dict. This will be converted into a Configuration in Java.
-        The mechanism is as follows:
-            1. A Java RDD is created from the InputFormat, key and value classes
-            2. Serialization is attempted via MsgPack
-            3. If this fails, the fallback is to call 'toString' on each key and value
-            4. C{MsgPackDeserializer} is used to deserialize data on the Python side
-        """
-        jconf = self._jvm.java.util.HashMap()
-        for k, v in conf.iteritems():
-            jconf[k] = v
-        jrdd = self._jvm.PythonRDD.newAPIHadoopRDD(self._jsc, inputformat_class, key_class, value_class, key_wrapper,
-                                                   value_wrapper, jconf)
-        return RDD(jrdd, self, MsgPackDeserializer())
+          (a-hdfs-path/part-00000, its content)
+          (a-hdfs-path/part-00001, its content)
+          ...
+          (a-hdfs-path/part-nnnnn, its content)
 
-    def hadoopFile(self, name, inputformat_class, key_class, value_class, key_wrapper="toString",
-                   value_wrapper="toString", conf={}):
-        """
-        Read an 'old' Hadoop InputFormat with arbitrary key and value class from HDFS,
-        a local file system (available on all nodes), or any Hadoop-supported file system URI.
-        The mechanism is as follows:
-            1. A Java RDD is created from the InputFormat, key and value classes
-            2. Serialization is attempted via MsgPack
-            3. If this fails, the fallback is to call 'toString' on each key and value
-            4. C{MsgPackDeserializer} is used to deserialize data on the Python side
+        NOTE: Small files are preferred, as each file will be loaded
+        fully in memory.
 
-        A Hadoop configuration can be passed in as a Python dict. This will be converted into a Configuration in Java
+        >>> dirPath = os.path.join(tempdir, "files")
+        >>> os.mkdir(dirPath)
+        >>> with open(os.path.join(dirPath, "1.txt"), "w") as file1:
+        ...    file1.write("1")
+        >>> with open(os.path.join(dirPath, "2.txt"), "w") as file2:
+        ...    file2.write("2")
+        >>> textFiles = sc.wholeTextFiles(dirPath)
+        >>> sorted(textFiles.collect())
+        [(u'.../1.txt', u'1'), (u'.../2.txt', u'2')]
         """
-        jconf = self._jvm.java.util.HashMap()
-        for k, v in conf.iteritems():
-            jconf[k] = v
-        jrdd = self._jvm.PythonRDD.hadoopFile(self._jsc, name, inputformat_class, key_class, value_class, key_wrapper,
-                                              value_wrapper, jconf)
-        return RDD(jrdd, self, MsgPackDeserializer())
-
-    def hadoopRDD(self, inputformat_class, key_class, value_class, key_wrapper="toString",
-                  value_wrapper="toString", conf={}):
-        """
-        Read an 'old' Hadoop InputFormat with arbitrary key and value class, from an arbitrary Hadoop configuration,
-        that is passed in as a Python dict. This will be converted into a Configuration in Java.
-        The mechanism is as follows:
-            1. A Java RDD is created from the InputFormat, key and value classes
-            2. Serialization is attempted via MsgPack
-            3. If this fails, the fallback is to call 'toString' on each key and value
-            4. C{MsgPackDeserializer} is used to deserialize data on the Python side
-        """
-        jconf = self._jvm.java.util.HashMap()
-        for k, v in conf.iteritems():
-            jconf[k] = v
-        jrdd = self._jvm.PythonRDD.hadoopRDD(self._jsc, inputformat_class, key_class, value_class, key_wrapper,
-                                             value_wrapper, jconf)
-        return RDD(jrdd, self, MsgPackDeserializer())
+        return RDD(self._jsc.wholeTextFiles(path), self,
+                   PairDeserializer(UTF8Deserializer(), UTF8Deserializer()))
 
     def _checkpointFile(self, name, input_deserializer):
         jrdd = self._jsc.checkpointFile(name)

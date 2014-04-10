@@ -78,6 +78,7 @@ For this version of Spark (0.8.1) Hadoop 2.2.x (or newer) users will have to bui
   * [Java Programming Guide](java-programming-guide.html): using Spark from Java
   * [Python Programming Guide](python-programming-guide.html): using Spark from Python
 * [Spark Streaming](streaming-programming-guide.html): Spark's API for processing data streams
+* [Spark SQL](sql-programming-guide.html): Support for running relational queries on Spark
 * [MLlib (Machine Learning)](mllib-guide.html): Spark's built-in machine learning library
 * [Bagel (Pregel on Spark)](bagel-programming-guide.html): simple graph processing model
 * [GraphX (Graphs on Spark)](graphx-programming-guide.html): Spark's new API for graphs

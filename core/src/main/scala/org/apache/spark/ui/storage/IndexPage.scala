@@ -21,36 +21,39 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.storage.{RDDInfo, StorageUtils}
+import org.apache.spark.storage.RDDInfo
 import org.apache.spark.ui.Page._
-import org.apache.spark.ui.UIUtils._
+import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
-private[spark] class IndexPage(parent: BlockManagerUI) {
-  val sc = parent.sc
+private[ui] class IndexPage(parent: BlockManagerUI) {
+  private val appName = parent.appName
+  private val basePath = parent.basePath
+  private lazy val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val storageStatusList = sc.getExecutorStorageStatus
-    // Calculate macro-level statistics
 
-    val rddHeaders = Seq(
-      "RDD Name",
-      "Storage Level",
-      "Cached Partitions",
-      "Fraction Cached",
-      "Size in Memory",
-      "Size on Disk")
-    val rdds = StorageUtils.rddInfoFromStorageStatus(storageStatusList, sc)
-    val content = listingTable(rddHeaders, rddRow, rdds)
-
-    headerSparkPage(content, parent.sc, "Storage ", Storage)
+    val rdds = listener.rddInfoList
+    val content = UIUtils.listingTable(rddHeader, rddRow, rdds)
+    UIUtils.headerSparkPage(content, basePath, appName, "Storage ", Storage)
   }
 
-  def rddRow(rdd: RDDInfo): Seq[Node] = {
+  /** Header fields for the RDD table */
+  private def rddHeader = Seq(
+    "RDD Name",
+    "Storage Level",
+    "Cached Partitions",
+    "Fraction Cached",
+    "Size in Memory",
+    "Size in Tachyon",
+    "Size on Disk")
+
+  /** Render an HTML row representing an RDD */
+  private def rddRow(rdd: RDDInfo): Seq[Node] = {
     <tr>
       <td>
-        <a href={"%s/storage/rdd?id=%s".format(prependBaseUri(),rdd.id)}>
+        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(basePath), rdd.id)}>
           {rdd.name}
         </a>
       </td>
@@ -59,6 +62,7 @@ private[spark] class IndexPage(parent: BlockManagerUI) {
       <td>{rdd.numCachedPartitions}</td>
       <td>{"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
       <td>{Utils.bytesToString(rdd.memSize)}</td>
+      <td>{Utils.bytesToString(rdd.tachyonSize)}</td>
       <td>{Utils.bytesToString(rdd.diskSize)}</td>
     </tr>
   }

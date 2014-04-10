@@ -146,7 +146,7 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
 
     assert(intercept[SparkException]{ arrs.distinct() }.getMessage.contains("array"))
     // We can't catch all usages of arrays, since they might occur inside other collections:
-    //assert(fails { arrPairs.distinct() })
+    // assert(fails { arrPairs.distinct() })
     assert(intercept[SparkException]{ arrPairs.partitionBy(new HashPartitioner(2)) }.getMessage.contains("array"))
     assert(intercept[SparkException]{ arrPairs.join(arrPairs) }.getMessage.contains("array"))
     assert(intercept[SparkException]{ arrPairs.leftOuterJoin(arrPairs) }.getMessage.contains("array"))

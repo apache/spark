@@ -158,6 +158,15 @@ class StreamingContext private[streaming] (
 
   private[streaming] val waiter = new ContextWaiter
 
+  /** Enumeration to identify current state of the StreamingContext */
+  private[streaming] object StreamingContextState extends Enumeration {
+    type CheckpointState = Value
+    val Initialized, Started, Stopped = Value
+  }
+
+  import StreamingContextState._
+  private[streaming] var state = Initialized
+
   /**
    * Return the associated Spark context
    */
@@ -201,7 +210,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Create an input stream with any arbitrary user implemented network receiver.
-   * Find more details at: http://spark-project.org/docs/latest/streaming-custom-receivers.html
+   * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param receiver Custom implementation of NetworkReceiver
    */
   def networkStream[T: ClassTag](
@@ -211,7 +220,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Create an input stream with any arbitrary user implemented actor receiver.
-   * Find more details at: http://spark-project.org/docs/latest/streaming-custom-receivers.html
+   * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param props Props object defining creation of the actor
    * @param name Name of the actor
    * @param storageLevel RDD storage level. Defaults to memory-only.
@@ -405,9 +414,18 @@ class StreamingContext private[streaming] (
   /**
    * Start the execution of the streams.
    */
-  def start() = synchronized {
+  def start(): Unit = synchronized {
+    // Throw exception if the context has already been started once
+    // or if a stopped context is being started again
+    if (state == Started) {
+      throw new SparkException("StreamingContext has already been started")
+    }
+    if (state == Stopped) {
+      throw new SparkException("StreamingContext has already been stopped")
+    }
     validate()
     scheduler.start()
+    state = Started
   }
 
   /**
@@ -428,14 +446,38 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Stop the execution of the streams.
+   * Stop the execution of the streams immediately (does not wait for all received data
+   * to be processed).
    * @param stopSparkContext Stop the associated SparkContext or not
+   *
    */
-  def stop(stopSparkContext: Boolean = true) = synchronized {
-    scheduler.stop()
+  def stop(stopSparkContext: Boolean = true): Unit = synchronized {
+    stop(stopSparkContext, false)
+  }
+
+  /**
+   * Stop the execution of the streams, with option of ensuring all received data
+   * has been processed.
+   * @param stopSparkContext Stop the associated SparkContext or not
+   * @param stopGracefully Stop gracefully by waiting for the processing of all
+   *                       received data to be completed
+   */
+  def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = synchronized {
+    // Warn (but not fail) if context is stopped twice,
+    // or context is stopped before starting
+    if (state == Initialized) {
+      logWarning("StreamingContext has not been started yet")
+      return
+    }
+    if (state == Stopped) {
+      logWarning("StreamingContext has already been stopped")
+      return
+    } // no need to throw an exception as its okay to stop twice
+    scheduler.stop(stopGracefully)
     logInfo("StreamingContext stopped successfully")
     waiter.notifyStop()
     if (stopSparkContext) sc.stop()
+    state = Stopped
   }
 }
 
@@ -489,7 +531,7 @@ object StreamingContext extends Logging {
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
    * their JARs to StreamingContext.
    */
-  def jarOfClass(cls: Class[_]) = SparkContext.jarOfClass(cls)
+  def jarOfClass(cls: Class[_]): Seq[String] = SparkContext.jarOfClass(cls)
 
   private[streaming] def createNewSparkContext(conf: SparkConf): SparkContext = {
     // Set the default cleaner delay to an hour if not already set.

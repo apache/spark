@@ -17,30 +17,30 @@
 
 package org.apache.spark.ui
 
-import java.net.InetSocketAddress
-import java.net.URL
-import javax.servlet.http.{HttpServlet, HttpServletResponse, HttpServletRequest}
+import java.net.{InetSocketAddress, URL}
+import javax.servlet.DispatcherType
+import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 import scala.xml.Node
 
+import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.server.handler._
+import org.eclipse.jetty.servlet._
+import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
-import org.eclipse.jetty.server.{DispatcherType, Server}
-import org.eclipse.jetty.server.handler.HandlerList
-import org.eclipse.jetty.servlet.{DefaultServlet, FilterHolder, ServletContextHandler, ServletHolder}
-import org.eclipse.jetty.util.thread.QueuedThreadPool
-
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
-
-/** Utilities for launching a web server using Jetty's HTTP Server class */
+/**
+ * Utilities for launching a web server using Jetty's HTTP Server class
+ */
 private[spark] object JettyUtils extends Logging {
+
   // Base type for a function that returns something based on an HTTP request. Allows for
   // implicit conversion from many types of functions to jetty Handlers.
-
   type Responder[T] = HttpServletRequest => T
 
   class ServletParams[T <% AnyRef](val responder: Responder[T],
@@ -57,62 +57,73 @@ private[spark] object JettyUtils extends Logging {
   implicit def textResponderToServlet(responder: Responder[String]): ServletParams[String] =
     new ServletParams(responder, "text/plain")
 
-  def createServlet[T <% AnyRef](servletParams: ServletParams[T],
+  def createServlet[T <% AnyRef](
+      servletParams: ServletParams[T],
       securityMgr: SecurityManager): HttpServlet = {
     new HttpServlet {
-      override def doGet(request: HttpServletRequest,
-                 response: HttpServletResponse) {
-        if (securityMgr.checkUIViewPermissions(request.getRemoteUser())) {
+      override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
+        if (securityMgr.checkUIViewPermissions(request.getRemoteUser)) {
           response.setContentType("%s;charset=utf-8".format(servletParams.contentType))
           response.setStatus(HttpServletResponse.SC_OK)
           val result = servletParams.responder(request)
           response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-          response.getWriter().println(servletParams.extractFn(result))
+          response.getWriter.println(servletParams.extractFn(result))
         } else {
           response.setStatus(HttpServletResponse.SC_UNAUTHORIZED)
           response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
           response.sendError(HttpServletResponse.SC_UNAUTHORIZED,
-            "User is not authorized to access this page.");
+            "User is not authorized to access this page.")
         }
       }
     }
   }
 
-  def createServletHandler(path: String, servlet: HttpServlet): ServletContextHandler = {
-    val contextHandler = new ServletContextHandler()
+  /** Create a context handler that responds to a request with the given path prefix */
+  def createServletHandler[T <% AnyRef](
+      path: String,
+      servletParams: ServletParams[T],
+      securityMgr: SecurityManager,
+      basePath: String = ""): ServletContextHandler = {
+    createServletHandler(path, createServlet(servletParams, securityMgr), basePath)
+  }
+
+  /** Create a context handler that responds to a request with the given path prefix */
+  def createServletHandler(
+      path: String,
+      servlet: HttpServlet,
+      basePath: String = ""): ServletContextHandler = {
+    val prefixedPath = attachPrefix(basePath, path)
+    val contextHandler = new ServletContextHandler
     val holder = new ServletHolder(servlet)
-    contextHandler.setContextPath(path)
+    contextHandler.setContextPath(prefixedPath)
     contextHandler.addServlet(holder, "/")
     contextHandler
   }
 
-  /** Creates a handler that always redirects the user to a given path */
-  def createRedirectHandler(newPath: String, path: String): ServletContextHandler = {
+  /** Create a handler that always redirects the user to the given path */
+  def createRedirectHandler(
+      srcPath: String,
+      destPath: String,
+      basePath: String = ""): ServletContextHandler = {
+    val prefixedDestPath = attachPrefix(basePath, destPath)
     val servlet = new HttpServlet {
-      override def doGet(request: HttpServletRequest,
-                 response: HttpServletResponse) {
-        // make sure we don't end up with // in the middle
-        val newUri = new URL(new URL(request.getRequestURL.toString), newPath).toURI
-        response.sendRedirect(newUri.toString)
+      override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
+        // Make sure we don't end up with "//" in the middle
+        val newUrl = new URL(new URL(request.getRequestURL.toString), prefixedDestPath).toString
+        response.sendRedirect(newUrl)
       }
     }
-    val contextHandler = new ServletContextHandler()
-    val holder = new ServletHolder(servlet)
-    contextHandler.setContextPath(path)
-    contextHandler.addServlet(holder, "/")
-    contextHandler
+    createServletHandler(srcPath, servlet, basePath)
   }
 
-  /** Creates a handler for serving files from a static directory */
+  /** Create a handler for serving files from a static directory */
   def createStaticHandler(resourceBase: String, path: String): ServletContextHandler = {
-    val contextHandler = new ServletContextHandler()
+    val contextHandler = new ServletContextHandler
     val staticHandler = new DefaultServlet
     val holder = new ServletHolder(staticHandler)
     Option(getClass.getClassLoader.getResource(resourceBase)) match {
       case Some(res) =>
         holder.setInitParameter("resourceBase", res.toString)
-        holder.setInitParameter("welcomeServlets", "false")
-        holder.setInitParameter("pathInfoOnly", "false")
       case None =>
         throw new Exception("Could not find resource path for Web UI: " + resourceBase)
     }
@@ -121,6 +132,7 @@ private[spark] object JettyUtils extends Logging {
     contextHandler
   }
 
+  /** Add security filters, if any, do the given list of ServletContextHandlers */
   private def addFilters(handlers: Seq[ServletContextHandler], conf: SparkConf) {
     val filters: Array[String] = conf.get("spark.ui.filters", "").split(',').map(_.trim())
     filters.foreach {
@@ -129,7 +141,7 @@ private[spark] object JettyUtils extends Logging {
           logInfo("Adding filter: " + filter)
           val holder : FilterHolder = new FilterHolder()
           holder.setClassName(filter)
-          // get any parameters for each filter
+          // Get any parameters for each filter
           val paramName = "spark." + filter + ".params"
           val params = conf.get(paramName, "").split(',').map(_.trim()).toSet
           params.foreach {
@@ -147,18 +159,21 @@ private[spark] object JettyUtils extends Logging {
   }
 
   /**
-   * Attempts to start a Jetty server at the supplied hostName:port which uses the supplied
-   * handlers.
+   * Attempt to start a Jetty server bound to the supplied hostName:port using the given
+   * context handlers.
    *
-   * If the desired port number is contented, continues incrementing ports until a free port is
-   * found. Returns the chosen port and the jetty Server object.
+   * If the desired port number is contended, continues incrementing ports until a free port is
+   * found. Return the jetty Server object, the chosen port, and a mutable collection of handlers.
    */
-  def startJettyServer(hostName: String, port: Int, handlers: Seq[ServletContextHandler],
-      conf: SparkConf): (Server, Int) = {
+  def startJettyServer(
+      hostName: String,
+      port: Int,
+      handlers: Seq[ServletContextHandler],
+      conf: SparkConf): ServerInfo = {
 
+    val collection = new ContextHandlerCollection
+    collection.setHandlers(handlers.toArray)
     addFilters(handlers, conf)
-    val handlerList = new HandlerList
-    handlerList.setHandlers(handlers.toArray)
 
     @tailrec
     def connect(currentPort: Int): (Server, Int) = {
@@ -166,7 +181,7 @@ private[spark] object JettyUtils extends Logging {
       val pool = new QueuedThreadPool
       pool.setDaemon(true)
       server.setThreadPool(pool)
-      server.setHandler(handlerList)
+      server.setHandler(collection)
 
       Try {
         server.start()
@@ -181,6 +196,17 @@ private[spark] object JettyUtils extends Logging {
       }
     }
 
-    connect(port)
+    val (server, boundPort) = connect(port)
+    ServerInfo(server, boundPort, collection)
+  }
+
+  /** Attach a prefix to the given path, but avoid returning an empty path */
+  private def attachPrefix(basePath: String, relativePath: String): String = {
+    if (basePath == "") relativePath else (basePath + relativePath).stripSuffix("/")
   }
 }
+
+private[spark] case class ServerInfo(
+    server: Server,
+    boundPort: Int,
+    rootHandler: ContextHandlerCollection)

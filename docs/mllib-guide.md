@@ -29,6 +29,7 @@ The following links provide a detailed explanation of the methods and usage exam
   * Gradient Descent and Stochastic Gradient Descent
 * <a href="mllib-linear-algebra.html">Linear Algebra</a>
   * Singular Value Decomposition
+  * Principal Component Analysis
 
 # Dependencies
 MLlib uses the [jblas](https://github.com/mikiobraun/jblas) linear algebra library, which itself
@@ -37,6 +38,5 @@ depends on native Fortran routines. You may need to install the
 if it is not already present on your nodes. MLlib will throw a linking error if it cannot 
 detect these libraries automatically.
 
-To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.7 or newer
-and Python 2.7.
+To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.7 or newer.
 

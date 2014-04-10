@@ -19,14 +19,9 @@ package org.apache.spark.streaming
 
 import org.apache.spark.Logging
 import org.apache.spark.streaming.util.MasterFailureTest
-import StreamingContext._
+import org.apache.spark.util.Utils
 
-import org.scalatest.{FunSuite, BeforeAndAfter}
-import com.google.common.io.Files
 import java.io.File
-import org.apache.commons.io.FileUtils
-import collection.mutable.ArrayBuffer
-
 
 /**
  * This testsuite tests master failures at random times while the stream is running using
@@ -43,12 +38,12 @@ class FailureSuite extends TestSuiteBase with Logging {
 
   override def beforeFunction() {
     super.beforeFunction()
-    FileUtils.deleteDirectory(new File(directory))
+    Utils.deleteRecursively(new File(directory))
   }
 
   override def afterFunction() {
     super.afterFunction()
-    FileUtils.deleteDirectory(new File(directory))
+    Utils.deleteRecursively(new File(directory))
   }
 
   test("multiple failures with map") {

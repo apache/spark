@@ -42,7 +42,7 @@ private[spark] class MetricsConfig(val configFile: Option[String]) extends Loggi
   }
 
   def initialize() {
-    //Add default properties in case there's no properties file
+    // Add default properties in case there's no properties file
     setDefaultProperties(properties)
 
     // If spark.metrics.conf is not set, try to get file in class path

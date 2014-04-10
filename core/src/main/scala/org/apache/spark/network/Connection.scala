@@ -48,7 +48,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
   channel.socket.setTcpNoDelay(true)
   channel.socket.setReuseAddress(true)
   channel.socket.setKeepAlive(true)
-  /*channel.socket.setReceiveBufferSize(32768) */
+  /* channel.socket.setReceiveBufferSize(32768) */
 
   @volatile private var closed = false
   var onCloseCallback: Connection => Unit = null
@@ -206,12 +206,12 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
 
   private class Outbox {
     val messages = new Queue[Message]()
-    val defaultChunkSize = 65536  //32768 //16384
+    val defaultChunkSize = 65536
     var nextMessageToBeUsed = 0
 
     def addMessage(message: Message) {
       messages.synchronized{
-        /*messages += message*/
+        /* messages += message */
         messages.enqueue(message)
         logDebug("Added [" + message + "] to outbox for sending to " +
           "[" + getRemoteConnectionManagerId() + "]")
@@ -221,8 +221,8 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
     def getChunk(): Option[MessageChunk] = {
       messages.synchronized {
         while (!messages.isEmpty) {
-          /*nextMessageToBeUsed = nextMessageToBeUsed % messages.size */
-          /*val message = messages(nextMessageToBeUsed)*/
+          /* nextMessageToBeUsed = nextMessageToBeUsed % messages.size */
+          /* val message = messages(nextMessageToBeUsed) */
           val message = messages.dequeue
           val chunk = message.getChunkForSending(defaultChunkSize)
           if (chunk.isDefined) {
@@ -262,7 +262,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
 
   val currentBuffers = new ArrayBuffer[ByteBuffer]()
 
-  /*channel.socket.setSendBufferSize(256 * 1024)*/
+  /* channel.socket.setSendBufferSize(256 * 1024) */
 
   override def getRemoteAddress() = address
 
@@ -355,7 +355,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
               }
               case None => {
                 // changeConnectionKeyInterest(0)
-                /*key.interestOps(0)*/
+                /* key.interestOps(0) */
                 return false
               }
             }
@@ -540,10 +540,10 @@ private[spark] class ReceivingConnection(
           return false
         }
 
-        /*logDebug("Read " + bytesRead + " bytes for the buffer")*/
+        /* logDebug("Read " + bytesRead + " bytes for the buffer") */
 
         if (currentChunk.buffer.remaining == 0) {
-          /*println("Filled buffer at " + System.currentTimeMillis)*/
+          /* println("Filled buffer at " + System.currentTimeMillis) */
           val bufferMessage = inbox.getMessageForChunk(currentChunk).get
           if (bufferMessage.isCompletelyReceived) {
             bufferMessage.flip

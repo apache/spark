@@ -341,9 +341,11 @@ abstract class DStream[T: ClassTag] (
    */
   private[streaming] def clearMetadata(time: Time) {
     val oldRDDs = generatedRDDs.filter(_._1 <= (time - rememberDuration))
+    logDebug("Clearing references to old RDDs: [" +
+      oldRDDs.map(x => s"${x._1} -> ${x._2.id}").mkString(", ") + "]")
     generatedRDDs --= oldRDDs.keys
     if (ssc.conf.getBoolean("spark.streaming.unpersist", false)) {
-      logDebug("Unpersisting old RDDs: " + oldRDDs.keys.mkString(", "))
+      logDebug("Unpersisting old RDDs: " + oldRDDs.values.map(_.id).mkString(", "))
       oldRDDs.values.foreach(_.unpersist(false))
     }
     logDebug("Cleared " + oldRDDs.size + " RDDs that were older than " +
@@ -503,14 +505,18 @@ abstract class DStream[T: ClassTag] (
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
   @deprecated("use foreachRDD", "0.9.0")
-  def foreach(foreachFunc: RDD[T] => Unit) = this.foreachRDD(foreachFunc)
+  def foreach(foreachFunc: RDD[T] => Unit): Unit = {
+    this.foreachRDD(foreachFunc)
+  }
 
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
   @deprecated("use foreachRDD", "0.9.0")
-  def foreach(foreachFunc: (RDD[T], Time) => Unit) = this.foreachRDD(foreachFunc)
+  def foreach(foreachFunc: (RDD[T], Time) => Unit): Unit = {
+    this.foreachRDD(foreachFunc)
+  }
 
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so

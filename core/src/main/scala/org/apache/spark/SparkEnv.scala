@@ -17,8 +17,10 @@
 
 package org.apache.spark
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.concurrent.Await
+import scala.util.Properties
 
 import akka.actor._
 import com.google.common.collect.MapMaker
@@ -26,9 +28,10 @@ import com.google.common.collect.MapMaker
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.storage.{BlockManager, BlockManagerMaster, BlockManagerMasterActor}
 import org.apache.spark.network.ConnectionManager
+import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.storage._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
@@ -49,11 +52,11 @@ class SparkEnv private[spark] (
     val broadcastManager: BroadcastManager,
     val blockManager: BlockManager,
     val connectionManager: ConnectionManager,
+    val securityManager: SecurityManager,
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
-    val conf: SparkConf,
-    val securityManager: SecurityManager) extends Logging {
+    val conf: SparkConf) extends Logging {
 
   // A mapping of thread ID to amount of memory used for shuffle in bytes
   // All accesses should be manually synchronized
@@ -78,7 +81,7 @@ class SparkEnv private[spark] (
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
     // UPDATE: In Akka 2.1.x, this hangs if there are remote actors, so we can't call it.
-    //actorSystem.awaitTermination()
+    // actorSystem.awaitTermination()
   }
 
   private[spark]
@@ -120,9 +123,16 @@ object SparkEnv extends Logging {
       hostname: String,
       port: Int,
       isDriver: Boolean,
-      isLocal: Boolean): SparkEnv = {
+      isLocal: Boolean,
+      listenerBus: LiveListenerBus = null): SparkEnv = {
+
+    // Listener bus is only used on the driver
+    if (isDriver) {
+      assert(listenerBus != null, "Attempted to create driver SparkEnv with null listener bus!")
+    }
 
     val securityManager = new SecurityManager(conf)
+
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port, conf = conf,
       securityManager = securityManager)
 
@@ -170,28 +180,30 @@ object SparkEnv extends Logging {
       }
     }
 
+    val mapOutputTracker =  if (isDriver) {
+      new MapOutputTrackerMaster(conf)
+    } else {
+      new MapOutputTrackerWorker(conf)
+    }
+
+    // Have to assign trackerActor after initialization as MapOutputTrackerActor
+    // requires the MapOutputTracker itself
+    mapOutputTracker.trackerActor = registerOrLookup(
+      "MapOutputTracker",
+      new MapOutputTrackerMasterActor(mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
+
     val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
-      new BlockManagerMasterActor(isLocal, conf)), conf)
-    val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster, 
-      serializer, conf, securityManager)
+      new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf)
+
+    val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
+      serializer, conf, securityManager, mapOutputTracker)
 
     val connectionManager = blockManager.connectionManager
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 
     val cacheManager = new CacheManager(blockManager)
-
-    // Have to assign trackerActor after initialization as MapOutputTrackerActor
-    // requires the MapOutputTracker itself
-    val mapOutputTracker =  if (isDriver) {
-      new MapOutputTrackerMaster(conf)
-    } else {
-      new MapOutputTracker(conf)
-    }
-    mapOutputTracker.trackerActor = registerOrLookup(
-      "MapOutputTracker",
-      new MapOutputTrackerMasterActor(mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
     val shuffleFetcher = instantiateClass[ShuffleFetcher](
       "spark.shuffle.fetcher", "org.apache.spark.BlockStoreShuffleFetcher")
@@ -233,10 +245,63 @@ object SparkEnv extends Logging {
       broadcastManager,
       blockManager,
       connectionManager,
+      securityManager,
       httpFileServer,
       sparkFilesDir,
       metricsSystem,
-      conf,
-      securityManager)
+      conf)
+  }
+
+  /**
+   * Return a map representation of jvm information, Spark properties, system properties, and
+   * class paths. Map keys define the category, and map values represent the corresponding
+   * attributes as a sequence of KV pairs. This is used mainly for SparkListenerEnvironmentUpdate.
+   */
+  private[spark]
+  def environmentDetails(
+      conf: SparkConf,
+      schedulingMode: String,
+      addedJars: Seq[String],
+      addedFiles: Seq[String]): Map[String, Seq[(String, String)]] = {
+
+    val jvmInformation = Seq(
+      ("Java Version", "%s (%s)".format(Properties.javaVersion, Properties.javaVendor)),
+      ("Java Home", Properties.javaHome),
+      ("Scala Version", Properties.versionString),
+      ("Scala Home", Properties.scalaHome)
+    ).sorted
+
+    // Spark properties
+    // This includes the scheduling mode whether or not it is configured (used by SparkUI)
+    val schedulerMode =
+      if (!conf.contains("spark.scheduler.mode")) {
+        Seq(("spark.scheduler.mode", schedulingMode))
+      } else {
+        Seq[(String, String)]()
+      }
+    val sparkProperties = (conf.getAll ++ schedulerMode).sorted
+
+    // System properties that are not java classpaths
+    val systemProperties = System.getProperties.iterator.toSeq
+    val otherProperties = systemProperties.filter { case (k, v) =>
+      k != "java.class.path" && !k.startsWith("spark.")
+    }.sorted
+
+    // Class paths including all added jars and files
+    val classPathProperty = systemProperties.find { case (k, v) =>
+      k == "java.class.path"
+    }.getOrElse(("", ""))
+    val classPathEntries = classPathProperty._2
+      .split(conf.get("path.separator", ":"))
+      .filterNot(e => e.isEmpty)
+      .map(e => (e, "System Classpath"))
+    val addedJarsAndFiles = (addedJars ++ addedFiles).map((_, "Added By User"))
+    val classPaths = (addedJarsAndFiles ++ classPathEntries).sorted
+
+    Map[String, Seq[(String, String)]](
+      "JVM Information" -> jvmInformation,
+      "Spark Properties" -> sparkProperties,
+      "System Properties" -> otherProperties,
+      "Classpath Entries" -> classPaths)
   }
 }

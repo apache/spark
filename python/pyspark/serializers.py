@@ -65,6 +65,7 @@ from itertools import chain, izip, product
 import marshal
 import struct
 import msgpack
+import sys
 from pyspark import cloudpickle
 
 
@@ -306,17 +307,6 @@ class UTF8Deserializer(Serializer):
                 return
             except EOFError:
                 return
-
-
-class MsgPackDeserializer(FramedSerializer):
-    """
-    Deserializes streams written by Java MsgPack
-    """
-    def loads(self, obj):
-        return msgpack.loads(obj, use_list=0)
-
-    def dumps(self, obj):
-        return msgpack.dumps(obj)
 
 
 def read_long(stream):
