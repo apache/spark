@@ -1007,9 +1007,7 @@ class DAGScheduler(
 
   def stop() {
     logInfo("Stopping DAGScheduler")
-    if (dagSchedulerActorSupervisor != null) {
-      dagSchedulerActorSupervisor ! PoisonPill.getInstance
-    }
+    dagSchedulerActorSupervisor ! PoisonPill
     taskScheduler.stop()
   }
 }
@@ -1083,7 +1081,7 @@ private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGSchedule
       }
 
     case JobCancelled(jobId) =>
-      dagScheduler.handleJobCancellation(jobId, "part of cancel all jobs")
+      dagScheduler.handleJobCancellation(jobId)
 
     case JobGroupCancelled(groupId) =>
       // Cancel all jobs belonging to this job group.
