@@ -25,7 +25,6 @@ import org.apache.spark.rdd.RDD
 
 /**
  * :: DeveloperApi ::
- *
  * Generate test data for KMeans. This class first chooses k cluster centers
  * from a d-dimensional Gaussian distribution scaled by factor r and then creates a Gaussian
  * cluster with scale 1 around each center.

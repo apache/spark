@@ -21,7 +21,6 @@ import org.apache.spark.annotation.Experimental
 
 /**
  * :: Experimental ::
- *
  * Enum to select the algorithm for the decision tree
  */
 @Experimental
