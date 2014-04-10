@@ -17,38 +17,29 @@
 
 package org.apache.spark.ui.storage
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.collection.mutable
 
-import org.eclipse.jetty.servlet.ServletContextHandler
-
 import org.apache.spark.ui._
-import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{RDDInfo, StorageStatusListener, StorageUtils}
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
-private[ui] class BlockManagerUI(parent: SparkUI) {
+private[ui] class BlockManagerTab(parent: SparkUI) extends UITab("storage") {
   val appName = parent.appName
   val basePath = parent.basePath
 
-  private val indexPage = new IndexPage(this)
-  private val rddPage = new RDDPage(this)
-  private var _listener: Option[BlockManagerListener] = None
-
-  lazy val listener = _listener.get
-
   def start() {
-    _listener = Some(new BlockManagerListener(parent.storageStatusListener))
+    listener = Some(new BlockManagerListener(parent.storageStatusListener))
+    attachPage(new IndexPage(this))
+    attachPage(new RddPage(this))
   }
 
-  def getHandlers = Seq[ServletContextHandler](
-    createServletHandler("/storage/rdd",
-      (request: HttpServletRequest) => rddPage.render(request), parent.securityManager, basePath),
-    createServletHandler("/storage",
-      (request: HttpServletRequest) => indexPage.render(request), parent.securityManager, basePath)
-  )
+  def blockManagerListener: BlockManagerListener = {
+    assert(listener.isDefined, "BlockManagerTab has not started yet!")
+    listener.get.asInstanceOf[BlockManagerListener]
+  }
+
+  def headerTabs: Seq[UITab] = parent.getTabs
 }
 
 /**

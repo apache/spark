@@ -22,22 +22,22 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.storage.{BlockId, BlockStatus, StorageStatus, StorageUtils}
-import org.apache.spark.ui.Page._
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{UIPage, UIUtils}
 import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
-private[ui] class RDDPage(parent: BlockManagerUI) {
+private[ui] class RddPage(parent: BlockManagerTab) extends UIPage("rdd") {
   private val appName = parent.appName
   private val basePath = parent.basePath
-  private lazy val listener = parent.listener
+  private lazy val listener = parent.blockManagerListener
 
-  def render(request: HttpServletRequest): Seq[Node] = {
+  override def render(request: HttpServletRequest): Seq[Node] = {
     val rddId = request.getParameter("id").toInt
     val storageStatusList = listener.storageStatusList
     val rddInfo = listener.rddInfoList.find(_.id == rddId).getOrElse {
       // Rather than crashing, render an "RDD Not Found" page
-      return UIUtils.headerSparkPage(Seq[Node](), basePath, appName, "RDD Not Found", Storage)
+      return UIUtils.headerSparkPage(Seq[Node](), basePath, appName, "RDD Not Found",
+        parent.headerTabs, parent)
     }
 
     // Worker table
@@ -95,8 +95,8 @@ private[ui] class RDDPage(parent: BlockManagerUI) {
         </div>
       </div>;
 
-    UIUtils.headerSparkPage(
-      content, basePath, appName, "RDD Storage Info for " + rddInfo.name, Storage)
+    UIUtils.headerSparkPage(content, basePath, appName, "RDD Storage Info for " + rddInfo.name,
+      parent.headerTabs, parent)
   }
 
   /** Header fields for the worker table */

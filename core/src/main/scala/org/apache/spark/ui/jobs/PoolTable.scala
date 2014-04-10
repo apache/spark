@@ -24,10 +24,9 @@ import org.apache.spark.scheduler.{Schedulable, StageInfo}
 import org.apache.spark.ui.UIUtils
 
 /** Table showing list of pools */
-private[ui] class PoolTable(pools: Seq[Schedulable], parent: JobProgressUI) {
+private[ui] class PoolTable(pools: Seq[Schedulable], parent: JobProgressTab) {
   private val basePath = parent.basePath
-  private val poolToActiveStages = listener.poolToActiveStages
-  private lazy val listener = parent.listener
+  private lazy val listener = parent.jobProgressListener
 
   def toNodeSeq: Seq[Node] = {
     listener.synchronized {
@@ -48,7 +47,7 @@ private[ui] class PoolTable(pools: Seq[Schedulable], parent: JobProgressUI) {
         <th>SchedulingMode</th>
       </thead>
       <tbody>
-        {rows.map(r => makeRow(r, poolToActiveStages))}
+        {rows.map(r => makeRow(r, listener.poolToActiveStages))}
       </tbody>
     </table>
   }
