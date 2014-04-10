@@ -46,13 +46,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
   val completedStages = ListBuffer[StageInfo]()
   val failedStages = ListBuffer[StageInfo]()
 
-  // Total metrics reflect metrics only for completed tasks
-  var totalTime = 0L
-  var totalShuffleRead = 0L
-  var totalShuffleWrite = 0L
-
   // TODO: Should probably consolidate all following into a single hash map.
   val stageIdToTime = HashMap[Int, Long]()
+  val stageIdToInputBytes = HashMap[Int, Long]()
   val stageIdToShuffleRead = HashMap[Int, Long]()
   val stageIdToShuffleWrite = HashMap[Int, Long]()
   val stageIdToMemoryBytesSpilled = HashMap[Int, Long]()
@@ -93,6 +89,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
       val toRemove = math.max(retainedStages / 10, 1)
       stages.take(toRemove).foreach { s =>
         stageIdToTime.remove(s.stageId)
+        stageIdToInputBytes.remove(s.stageId)
         stageIdToShuffleRead.remove(s.stageId)
         stageIdToShuffleWrite.remove(s.stageId)
         stageIdToMemoryBytesSpilled.remove(s.stageId)
@@ -171,6 +168,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
 
           val metrics = taskEnd.taskMetrics
           if (metrics != null) {
+            metrics.inputMetrics.foreach { y.inputBytes += _.bytesRead }
             metrics.shuffleReadMetrics.foreach { y.shuffleRead += _.remoteBytesRead }
             metrics.shuffleWriteMetrics.foreach { y.shuffleWrite += _.shuffleBytesWritten }
             y.memoryBytesSpilled += metrics.memoryBytesSpilled
@@ -200,18 +198,19 @@ class JobProgressListener(conf: SparkConf) extends SparkListener {
       stageIdToTime.getOrElseUpdate(sid, 0L)
       val time = metrics.map(_.executorRunTime).getOrElse(0L)
       stageIdToTime(sid) += time
-      totalTime += time
+
+      stageIdToInputBytes.getOrElseUpdate(sid, 0L)
+      val inputBytes = metrics.flatMap(_.inputMetrics).map(_.bytesRead).getOrElse(0L)
+      stageIdToInputBytes(sid) += inputBytes
 
       stageIdToShuffleRead.getOrElseUpdate(sid, 0L)
       val shuffleRead = metrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead).getOrElse(0L)
       stageIdToShuffleRead(sid) += shuffleRead
-      totalShuffleRead += shuffleRead
 
       stageIdToShuffleWrite.getOrElseUpdate(sid, 0L)
       val shuffleWrite =
         metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleBytesWritten).getOrElse(0L)
       stageIdToShuffleWrite(sid) += shuffleWrite
-      totalShuffleWrite += shuffleWrite
 
       stageIdToMemoryBytesSpilled.getOrElseUpdate(sid, 0L)
       val memoryBytesSpilled = metrics.map(_.memoryBytesSpilled).getOrElse(0L)

@@ -251,6 +251,8 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
       taskInfoMetrics.foreach { case (taskInfo, taskMetrics) =>
         taskMetrics.resultSize should be > (0l)
         if (stageInfo.rddInfos.exists(info => info.name == d2.name || info.name == d3.name)) {
+          taskMetrics.inputMetrics should be ('defined)
+          taskMetrics.inputMetrics.get.bytesRead should be > (0l)
           taskMetrics.shuffleWriteMetrics should be ('defined)
           taskMetrics.shuffleWriteMetrics.get.shuffleBytesWritten should be > (0l)
         }
