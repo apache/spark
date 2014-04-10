@@ -27,7 +27,11 @@ import org.apache.spark.ui.{WebUI, UIUtils}
 import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished stages */
-private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI, killEnabled: Boolean = false) {
+private[ui] class StageTable(
+  stages: Seq[StageInfo],
+  parent: JobProgressUI,
+  killEnabled: Boolean = false) {
+
   private val basePath = parent.basePath
   private lazy val listener = parent.listener
   private lazy val isFairScheduler = parent.isFairScheduler
@@ -76,16 +80,15 @@ private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI, kill
       <a href={"%s/stages/stage?id=%s".format(UIUtils.prependBaseUri(basePath), s.stageId)}>
         {s.name}
       </a>
-    val killButton =  if (killEnabled) {
-      <form action={"%s/stages/stage/".format(UIUtils.prependBaseUri(basePath))}>
-        <input type="hidden" value={"true"} name="terminate" />
-        <input type="hidden" value={"" + s.stageId} name="id" />
-        <input type="submit" value="Terminate Job"/>
-      </form>
+    val killLink = if (killEnabled) {
+      <div>[<a href={"%s/stages?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}>
+        Kill
+      </a>]</div>
+
     }
     val description = listener.stageIdToDescription.get(s.stageId)
-      .map(d => <div><em>{d}</em></div><div>{nameLink} {killButton}</div>)
-      .getOrElse(<div>{nameLink} {killButton}</div>)
+      .map(d => <div><em>{d}</em></div><div>{nameLink} {killLink}</div>)
+      .getOrElse(<div>{nameLink} {killLink}</div>)
 
     return description
   }

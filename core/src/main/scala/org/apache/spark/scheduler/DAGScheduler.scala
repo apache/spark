@@ -494,7 +494,7 @@ class DAGScheduler(
   /**
    * Cancel a job that is running or waiting in the queue.
    */
-  private[spark] def cancelJob(jobId: Int) {
+  def cancelJob(jobId: Int) {
     logInfo("Asked to cancel job " + jobId)
     eventProcessActor ! JobCancelled(jobId)
   }
@@ -570,11 +570,13 @@ class DAGScheduler(
         val activeInGroup = activeJobs.filter(activeJob =>
           groupId == activeJob.properties.get(SparkContext.SPARK_JOB_GROUP_ID))
         val jobIds = activeInGroup.map(_.jobId)
-        jobIds.foreach(jobId => handleJobCancellation(jobId, "as part of cancelled job group %s".format(groupId)))
+        jobIds.foreach(jobId => handleJobCancellation(jobId,
+          "as part of cancelled job group %s".format(groupId)))
 
       case AllJobsCancelled =>
         // Cancel all running jobs.
-        runningStages.map(_.jobId).foreach(jobId => handleJobCancellation(jobId, "as part of cancellation of all jobs"))
+        runningStages.map(_.jobId).foreach(jobId => handleJobCancellation(jobId,
+          "as part of cancellation of all jobs"))
         activeJobs.clear()      // These should already be empty by this point,
         jobIdToActiveJob.clear()   // but just in case we lost track of some jobs...
 
@@ -1003,7 +1005,7 @@ class DAGScheduler(
 
   private def handleStageCancellation(stageId: Int) {
     if (stageIdToJobIds.contains(stageId)) {
-      val jobsThatUseStage: Array[Int] = stageIdToJobIds(stageId).toArray.sorted
+      val jobsThatUseStage: Array[Int] = stageIdToJobIds(stageId).toArray
       jobsThatUseStage.foreach(jobId => {
         handleJobCancellation(jobId, "because Stage %s was cancelled".format(stageId))
       })
@@ -1016,7 +1018,7 @@ class DAGScheduler(
     if (!jobIdToStageIds.contains(jobId)) {
       logDebug("Trying to cancel unregistered job " + jobId)
     } else {
-      failJobAndIndependentStages(jobIdToActiveJob(jobId), 
+      failJobAndIndependentStages(jobIdToActiveJob(jobId),
         "Job %d cancelled %s".format(jobId, reason), None)
     }
   }

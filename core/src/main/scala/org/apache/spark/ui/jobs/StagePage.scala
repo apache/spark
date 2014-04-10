@@ -32,19 +32,10 @@ private[ui] class StagePage(parent: JobProgressUI) {
   private val basePath = parent.basePath
   private lazy val listener = parent.listener
   private lazy val sc = parent.sc
-  private val killEnabled = parent.killEnabled
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val stageId = request.getParameter("id").toInt
-
-      if (killEnabled) {
-        val killFlag = Option(request.getParameter("terminate")).getOrElse("false").toBoolean
-
-        if (killFlag && listener.activeStages.contains(stageId)) {
-          sc.cancelStage(stageId)
-        }
-      }
 
       if (!listener.stageIdToTaskData.contains(stageId)) {
         val content =

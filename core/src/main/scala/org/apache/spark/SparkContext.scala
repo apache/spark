@@ -1077,12 +1077,12 @@ class SparkContext(
   }
 
   /** Cancel a given job if it's scheduled or running */
-  def cancelJob(jobId: Int) {
+  private[spark] def cancelJob(jobId: Int) {
     dagScheduler.cancelJob(jobId)
   }
 
   /** Cancel a given stage and all jobs associated with it */
-  def cancelStage(stageId: Int) {
+  private[spark] def cancelStage(stageId: Int) {
     dagScheduler.cancelStage(stageId)
   }
 

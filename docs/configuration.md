@@ -191,6 +191,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.ui.killEnabled</td>
+  <td>true</td>
+  <td>
+    Allows stages and corresponding jobs to be killed from the web ui.
+  </td>
+</tr>
+<tr>
   <td>spark.shuffle.compress</td>
   <td>true</td>
   <td>

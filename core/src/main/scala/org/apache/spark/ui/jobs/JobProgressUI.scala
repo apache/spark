@@ -57,5 +57,5 @@ private[ui] class JobProgressUI(parent: SparkUI) {
       (request: HttpServletRequest) => poolPage.render(request), parent.securityManager, basePath),
     createServletHandler("/stages",
       (request: HttpServletRequest) => indexPage.render(request), parent.securityManager, basePath)
-    )
+  )
 }
