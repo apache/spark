@@ -21,7 +21,6 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 
 /**
  * :: Experimental ::
- *
  * Class for calculating the
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning#Gini_impurity Gini impurity]]
  * during binary classification.
@@ -31,7 +30,6 @@ object Gini extends Impurity {
 
   /**
    * :: DeveloperApi ::
-   *
    * Gini coefficient calculation
    * @param c0 count of instances with label 0
    * @param c1 count of instances with label 1

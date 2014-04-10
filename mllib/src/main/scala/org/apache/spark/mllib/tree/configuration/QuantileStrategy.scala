@@ -21,7 +21,6 @@ import org.apache.spark.annotation.Experimental
 
 /**
  * :: Experimental ::
- *
  * Enum for selecting the quantile calculation strategy
  */
 @Experimental

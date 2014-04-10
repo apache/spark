@@ -27,7 +27,6 @@ import org.apache.spark.mllib.linalg.Vectors
 
 /**
  * :: DeveloperApi ::
- *
  * Generate test data for LogisticRegression. This class chooses positive labels
  * with probability `probOne` and scales features for positive examples by `eps`.
  */

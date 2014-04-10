@@ -29,7 +29,6 @@ import org.apache.spark.rdd.RDD
 
 /**
  * :: Experimental ::
- *
  * Model for Naive Bayes Classifiers.
  *
  * @param labels list of labels

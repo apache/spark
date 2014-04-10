@@ -78,7 +78,6 @@ class KMeans private (
 
   /**
    * :: Experimental ::
-   *
    * Set the number of runs of the algorithm to execute in parallel. We initialize the algorithm
    * this many times with random starting conditions (configured by the initialization mode), then
    * return the best clustering found over any run. Default: 1.
@@ -398,9 +397,6 @@ object KMeans {
     MLUtils.fastSquaredDistance(v1.vector, v1.norm, v2.vector, v2.norm)
   }
 
-  /**
-   * :: Experimental ::
-   */
   @Experimental
   def main(args: Array[String]) {
     if (args.length < 4) {

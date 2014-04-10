@@ -24,7 +24,6 @@ import org.apache.spark.mllib.linalg.Vector
 
 /**
  * :: Experimental ::
- *
  * Model to store the decision tree parameters
  * @param topNode root node
  * @param algo algorithm type -- classification or regression

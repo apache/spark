@@ -21,7 +21,6 @@ import org.apache.spark.annotation.Experimental
 
 /**
  * :: Experimental ::
- *
  * Enum to describe whether a feature is "continuous" or "categorical"
  */
 @Experimental

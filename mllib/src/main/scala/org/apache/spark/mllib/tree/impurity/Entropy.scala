@@ -21,7 +21,6 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 
 /**
  * :: Experimental ::
- *
  * Class for calculating [[http://en.wikipedia.org/wiki/Binary_entropy_function entropy]] during
  * binary classification.
  */
@@ -32,7 +31,6 @@ object Entropy extends Impurity {
 
   /**
    * :: DeveloperApi ::
-   *
    * entropy calculation
    * @param c0 count of instances with label 0
    * @param c1 count of instances with label 1

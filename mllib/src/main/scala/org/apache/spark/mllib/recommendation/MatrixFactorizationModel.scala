@@ -70,7 +70,6 @@ class MatrixFactorizationModel(
 
   /**
    * :: DeveloperApi ::
-   *
    * Predict the rating of many users for many products.
    * This is a Java stub for python predictAll()
    *

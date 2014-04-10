@@ -124,7 +124,6 @@ object MLUtils {
 
   /**
    * :: Experimental ::
-   *
    * Load labeled data from a file. The data format used here is
    * <L>, <f1> <f2> ...
    * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
@@ -146,7 +145,6 @@ object MLUtils {
 
   /**
    * :: Experimental ::
-   *
    * Save labeled data to a file. The data format used here is
    * <L>, <f1> <f2> ...
    * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.

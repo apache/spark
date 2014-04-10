@@ -103,7 +103,6 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   /**
    * :: Experimental ::
-   *
    * Set if the algorithm should validate data before training. Default true.
    */
   @Experimental

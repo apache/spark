@@ -30,7 +30,6 @@ import org.apache.spark.rdd.RDD
 
 /**
  * :: DeveloperApi ::
- *
  * The Java stubs necessary for the Python mllib bindings.
  */
 @DeveloperApi

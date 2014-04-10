@@ -21,7 +21,6 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 
 /**
  * :: Experimental ::
- *
  * Class for calculating variance during regression
  */
 @Experimental
@@ -31,7 +30,6 @@ object Variance extends Impurity {
 
   /**
    * :: DeveloperApi ::
-   *
    * variance calculation
    * @param count number of instances
    * @param sum sum of labels
