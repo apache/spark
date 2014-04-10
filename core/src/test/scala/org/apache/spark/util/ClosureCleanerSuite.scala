@@ -50,6 +50,27 @@ class ClosureCleanerSuite extends FunSuite {
     val obj = new TestClassWithNesting(1)
     assert(obj.run() === 96) // 4 * (1+2+3+4) + 4 * (1+2+3+4) + 16 * 1
   }
+  
+  test("capturing free variables in closures at RDD definition") {
+    val obj = new TestCaptureVarClass()
+    val (ones, onesPlusZeroes) = obj.run()
+    
+    assert(ones === onesPlusZeroes)
+  }
+
+  test("capturing free variable fields in closures at RDD definition") {
+    val obj = new TestCaptureFieldClass()
+    val (ones, onesPlusZeroes) = obj.run()
+    
+    assert(ones === onesPlusZeroes)
+  }
+  
+  test("capturing arrays in closures at RDD definition") {
+    val obj = new TestCaptureArrayEltClass()
+    val (observed, expected) = obj.run()
+    
+    assert(observed === expected)
+  }
 }
 
 // A non-serializable class we create in closures to make sure that we aren't
@@ -140,6 +161,53 @@ class TestClassWithNesting(val y: Int) extends Serializable {
         answer += nums.map(_ + x + getY).reduce(_ + _)
       }
       answer
+    }
+  }
+}
+
+class TestCaptureFieldClass extends Serializable {
+  class ZeroBox extends Serializable {
+    var zero = 0
+  }
+
+  def run(): (Int, Int) = {
+    val zb = new ZeroBox
+  
+    withSpark(new SparkContext("local", "test")) {sc =>
+      val ones = sc.parallelize(Array(1, 1, 1, 1, 1))
+      val onesPlusZeroes = ones.map(_ + zb.zero)
+
+      zb.zero = 5
+    
+      (ones.reduce(_ + _), onesPlusZeroes.reduce(_ + _))
+    }
+  }
+}
+
+class TestCaptureArrayEltClass extends Serializable {
+  def run(): (Int, Int) = {
+    withSpark(new SparkContext("local", "test")) {sc =>
+      val rdd = sc.parallelize(1 to 10)
+      val data = Array(1, 2, 3)
+      val expected = data(0)
+      val mapped = rdd.map(x => data(0))
+      data(0) = 4
+      (mapped.first, expected)
+    }
+  }
+}
+
+class TestCaptureVarClass extends Serializable {
+  def run(): (Int, Int) = {
+    var zero = 0
+  
+    withSpark(new SparkContext("local", "test")) {sc =>
+      val ones = sc.parallelize(Array(1, 1, 1, 1, 1))
+      val onesPlusZeroes = ones.map(_ + zero)
+
+      zero = 5
+    
+      (ones.reduce(_ + _), onesPlusZeroes.reduce(_ + _))
     }
   }
 }
