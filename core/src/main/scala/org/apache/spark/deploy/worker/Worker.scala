@@ -122,8 +122,9 @@ private[spark] class Worker(
       host, port, cores, Utils.megabytesToString(memory)))
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
-    webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+    webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
+    webUi.start()
     webUi.bind()
     registerWithMaster()
 

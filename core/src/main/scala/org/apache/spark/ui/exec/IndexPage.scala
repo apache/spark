@@ -19,36 +19,17 @@ package org.apache.spark.ui.exec
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable.HashMap
 import scala.xml.Node
 
-import org.eclipse.jetty.servlet.ServletContextHandler
-
-import org.apache.spark.ExceptionFailure
-import org.apache.spark.scheduler._
-import org.apache.spark.storage.StorageStatusListener
-import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.ui.Page.Executors
-import org.apache.spark.ui.{SparkUI, UIUtils}
+import org.apache.spark.ui.{UIPage, UIUtils}
 import org.apache.spark.util.Utils
 
-private[ui] class ExecutorsUI(parent: SparkUI) {
+private[ui] class IndexPage(parent: ExecutorsTab) extends UIPage("") {
   private val appName = parent.appName
   private val basePath = parent.basePath
-  private var _listener: Option[ExecutorsListener] = None
+  private val listener = parent.executorsListener
 
-  lazy val listener = _listener.get
-
-  def start() {
-    _listener = Some(new ExecutorsListener(parent.storageStatusListener))
-  }
-
-  def getHandlers = Seq[ServletContextHandler](
-    createServletHandler("/executors",
-      (request: HttpServletRequest) => render(request), parent.securityManager, basePath)
-  )
-
-  def render(request: HttpServletRequest): Seq[Node] = {
+  override def render(request: HttpServletRequest): Seq[Node] = {
     val storageStatusList = listener.storageStatusList
     val maxMem = storageStatusList.map(_.maxMem).fold(0L)(_ + _)
     val memUsed = storageStatusList.map(_.memUsed()).fold(0L)(_ + _)
@@ -74,8 +55,8 @@ private[ui] class ExecutorsUI(parent: SparkUI) {
         </div>
       </div>;
 
-    UIUtils.headerSparkPage(
-      content, basePath, appName, "Executors (" + execInfo.size + ")", Executors)
+    UIUtils.headerSparkPage(content, basePath, appName, "Executors (" + execInfo.size + ")",
+      parent.headerTabs, parent)
   }
 
   /** Header fields for the executors table */
@@ -157,56 +138,4 @@ private[ui] class ExecutorsUI(parent: SparkUI) {
 
     execFields.zip(execValues).toMap
   }
-}
-
-/**
- * A SparkListener that prepares information to be displayed on the ExecutorsUI
- */
-private[ui] class ExecutorsListener(storageStatusListener: StorageStatusListener)
-  extends SparkListener {
-
-  val executorToTasksActive = HashMap[String, Int]()
-  val executorToTasksComplete = HashMap[String, Int]()
-  val executorToTasksFailed = HashMap[String, Int]()
-  val executorToDuration = HashMap[String, Long]()
-  val executorToShuffleRead = HashMap[String, Long]()
-  val executorToShuffleWrite = HashMap[String, Long]()
-
-  def storageStatusList = storageStatusListener.storageStatusList
-
-  override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
-    val eid = formatExecutorId(taskStart.taskInfo.executorId)
-    executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, 0) + 1
-  }
-
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
-    val info = taskEnd.taskInfo
-    if (info != null) {
-      val eid = formatExecutorId(info.executorId)
-      executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, 1) - 1
-      executorToDuration(eid) = executorToDuration.getOrElse(eid, 0L) + info.duration
-      taskEnd.reason match {
-        case e: ExceptionFailure =>
-          executorToTasksFailed(eid) = executorToTasksFailed.getOrElse(eid, 0) + 1
-        case _ =>
-          executorToTasksComplete(eid) = executorToTasksComplete.getOrElse(eid, 0) + 1
-      }
-
-      // Update shuffle read/write
-      val metrics = taskEnd.taskMetrics
-      if (metrics != null) {
-        metrics.shuffleReadMetrics.foreach { shuffleRead =>
-          executorToShuffleRead(eid) =
-            executorToShuffleRead.getOrElse(eid, 0L) + shuffleRead.remoteBytesRead
-        }
-        metrics.shuffleWriteMetrics.foreach { shuffleWrite =>
-          executorToShuffleWrite(eid) =
-            executorToShuffleWrite.getOrElse(eid, 0L) + shuffleWrite.shuffleBytesWritten
-        }
-      }
-    }
-  }
-
-  // This addresses executor ID inconsistencies in the local mode
-  private def formatExecutorId(execId: String) = storageStatusListener.formatExecutorId(execId)
 }

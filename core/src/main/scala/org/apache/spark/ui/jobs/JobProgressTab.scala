@@ -17,44 +17,31 @@
 
 package org.apache.spark.ui.jobs
 
-import javax.servlet.http.HttpServletRequest
-
-import org.eclipse.jetty.servlet.ServletContextHandler
-
 import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.SchedulingMode
-import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.Utils
+import org.apache.spark.ui.{SparkUI, UITab}
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
-private[ui] class JobProgressUI(parent: SparkUI) {
+private[ui] class JobProgressTab(parent: SparkUI) extends UITab("stages") {
   val appName = parent.appName
   val basePath = parent.basePath
   val live = parent.live
   val sc = parent.sc
 
-  lazy val listener = _listener.get
-  lazy val isFairScheduler = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
-
-  private val indexPage = new IndexPage(this)
-  private val stagePage = new StagePage(this)
-  private val poolPage = new PoolPage(this)
-  private var _listener: Option[JobProgressListener] = None
-
   def start() {
     val conf = if (live) sc.conf else new SparkConf
-    _listener = Some(new JobProgressListener(conf))
+    listener = Some(new JobProgressListener(conf))
+    attachPage(new IndexPage(this))
+    attachPage(new StagePage(this))
+    attachPage(new PoolPage(this))
   }
 
-  def formatDuration(ms: Long) = Utils.msDurationToString(ms)
+  def jobProgressListener: JobProgressListener = {
+    assert(listener.isDefined, "JobProgressTab has not started yet!")
+    listener.get.asInstanceOf[JobProgressListener]
+  }
 
-  def getHandlers = Seq[ServletContextHandler](
-    createServletHandler("/stages/stage",
-      (request: HttpServletRequest) => stagePage.render(request), parent.securityManager, basePath),
-    createServletHandler("/stages/pool",
-      (request: HttpServletRequest) => poolPage.render(request), parent.securityManager, basePath),
-    createServletHandler("/stages",
-      (request: HttpServletRequest) => indexPage.render(request), parent.securityManager, basePath)
-  )
+  def isFairScheduler = jobProgressListener.schedulingMode.exists(_ == SchedulingMode.FAIR)
+
+  def headerTabs: Seq[UITab] = parent.getTabs
 }

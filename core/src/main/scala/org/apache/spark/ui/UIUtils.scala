@@ -17,16 +17,40 @@
 
 package org.apache.spark.ui
 
+import java.text.SimpleDateFormat
+import java.util.Date
+
 import scala.xml.Node
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils {
 
-  import Page._
+  // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
+  private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
+    override def initialValue(): SimpleDateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+  }
+
+  def formatDate(date: Date): String = dateFormat.get.format(date)
+
+  def formatDate(timestamp: Long): String = dateFormat.get.format(new Date(timestamp))
+
+  def formatDuration(milliseconds: Long): String = {
+    val seconds = milliseconds.toDouble / 1000
+    if (seconds < 60) {
+      return "%.0f s".format(seconds)
+    }
+    val minutes = seconds / 60
+    if (minutes < 10) {
+      return "%.1f min".format(minutes)
+    } else if (minutes < 60) {
+      return "%.0f min".format(minutes)
+    }
+    val hours = minutes / 60
+    "%.1f h".format(hours)
+  }
 
   // Yarn has to go through a proxy so the base uri is provided and has to be on all links
-  private[spark] val uiRoot : String = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).
-    getOrElse("")
+  val uiRoot : String = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).getOrElse("")
 
   def prependBaseUri(basePath: String = "", resource: String = "") = uiRoot + basePath + resource
 
@@ -36,26 +60,13 @@ private[spark] object UIUtils {
       basePath: String,
       appName: String,
       title: String,
-      page: Page.Value) : Seq[Node] = {
-    val jobs = page match {
-      case Stages =>
-        <li class="active"><a href={prependBaseUri(basePath, "/stages")}>Stages</a></li>
-      case _ => <li><a href={prependBaseUri(basePath, "/stages")}>Stages</a></li>
-    }
-    val storage = page match {
-      case Storage =>
-        <li class="active"><a href={prependBaseUri(basePath, "/storage")}>Storage</a></li>
-      case _ => <li><a href={prependBaseUri(basePath, "/storage")}>Storage</a></li>
-    }
-    val environment = page match {
-      case Environment => 
-        <li class="active"><a href={prependBaseUri(basePath, "/environment")}>Environment</a></li>
-      case _ => <li><a href={prependBaseUri(basePath, "/environment")}>Environment</a></li>
-    }
-    val executors = page match {
-      case Executors =>
-        <li class="active"><a href={prependBaseUri(basePath, "/executors")}>Executors</a></li>
-      case _ => <li><a href={prependBaseUri(basePath, "/executors")}>Executors</a></li>
+      tabs: Seq[UITab],
+      activeTab: UITab) : Seq[Node] = {
+
+    val header = tabs.map { tab =>
+      <li class={if (tab == activeTab) "active" else ""}>
+        <a href={prependBaseUri(basePath, "/" + tab.prefix)}>{tab.name}</a>
+      </li>
     }
 
     <html>
@@ -74,12 +85,7 @@ private[spark] object UIUtils {
             <a href={prependBaseUri(basePath, "/")} class="brand">
               <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
             </a>
-            <ul class="nav">
-              {jobs}
-              {storage}
-              {environment}
-              {executors}
-            </ul>
+            <ul class="nav">{header}</ul>
             <p class="navbar-text pull-right"><strong>{appName}</strong> application UI</p>
           </div>
         </div>
