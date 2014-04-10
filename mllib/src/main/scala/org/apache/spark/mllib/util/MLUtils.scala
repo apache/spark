@@ -17,14 +17,13 @@
 
 package org.apache.spark.mllib.util
 
-import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV,
-  squaredDistance => breezeSquaredDistance}
+import breeze.linalg.{Vector => BV, SparseVector => BSV, squaredDistance => breezeSquaredDistance}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.Vectors
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
@@ -170,7 +169,7 @@ object MLUtils {
    *     xColMean - Row vector with mean for every column (or feature) of the input data
    *     xColSd - Row vector standard deviation for every column (or feature) of the input data.
    */
-  private[mllib] def computeStats(
+  def computeStats(
       data: RDD[LabeledPoint],
       numFeatures: Int,
       numExamples: Long): (Double, Vector, Vector) = {
