@@ -20,7 +20,6 @@ package org.apache.spark
 import org.apache.log4j.{LogManager, PropertyConfigurator}
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
-import org.slf4j.bridge.SLF4JBridgeHandler
 
 import org.apache.spark.annotation.DeveloperApi
 
@@ -29,7 +28,7 @@ import org.apache.spark.annotation.DeveloperApi
  * Utility trait for classes that want to log data. Creates a SLF4J logger for the class and allows
  * logging messages at different levels using methods that only evaluate parameters lazily if the
  * log level is enabled.
- * 
+ *
  * NOTE: DO NOT USE this class outside of Spark. It is intended as an internal utility.
  *       This will likely be changed or removed in future releases.
  */
@@ -61,7 +60,7 @@ trait Logging {
   protected def logDebug(msg: => String) {
     if (log.isDebugEnabled) log.debug(msg)
   }
-  
+
   protected def logTrace(msg: => String) {
     if (log.isTraceEnabled) log.trace(msg)
   }
@@ -118,10 +117,10 @@ trait Logging {
       val defaultLogProps = "org/apache/spark/log4j-defaults.properties"
       val classLoader = this.getClass.getClassLoader
       Option(classLoader.getResource(defaultLogProps)) match {
-        case Some(url) => 
+        case Some(url) =>
           PropertyConfigurator.configure(url)
           log.info(s"Using Spark's default log4j profile: $defaultLogProps")
-        case None => 
+        case None =>
           System.err.println(s"Spark was unable to load $defaultLogProps")
       }
     }
@@ -136,6 +135,16 @@ trait Logging {
 private object Logging {
   @volatile private var initialized = false
   val initLock = new Object()
-  // SLF4JBridgeHandler.removeHandlersForRootLogger()
-  if(!SLF4JBridgeHandler.isInstalled) SLF4JBridgeHandler.install()
+  try {
+    // We use reflection here to handle the case where users remove the
+    // slf4j-to-jul bridge order to route their logs to JUL.
+    val bridgeClass = Class.forName("org.slf4j.bridge.SLF4JBridgeHandler")
+    bridgeClass.getMethod("removeHandlersForRootLogger").invoke(null)
+    val installed = bridgeClass.getMethod("isInstalled").invoke(null).asInstanceOf[Boolean]
+    if (!installed) {
+      bridgeClass.getMethod("install").invoke(null)
+    }
+  } catch {
+    case e: ClassNotFoundException => // can't log anything yet so just fail silently
+  }
 }
