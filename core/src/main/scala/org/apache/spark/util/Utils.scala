@@ -1022,4 +1022,13 @@ private[spark] object Utils extends Logging {
   def getHadoopFileSystem(path: URI): FileSystem = {
     FileSystem.get(path, SparkHadoopUtil.get.newConfiguration())
   }
+
+  /**
+   * Determine the system's effective maximum memory after taking into account
+   * `spark.system.reservedMemorySize`
+   */
+  def effectiveMaxMemory(conf: SparkConf) = {
+    Runtime.getRuntime.maxMemory - (1024 * 1024 * 
+      memoryStringToMb(conf.get("spark.system.reservedMemorySize", "300m")))
+  }
 }

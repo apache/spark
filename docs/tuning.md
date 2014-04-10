@@ -163,14 +163,15 @@ their work directories), *not* on your driver program.
 **Cache Size Tuning**
 
 One important configuration parameter for GC is the amount of memory that should be used for caching RDDs.
-By default, Spark uses 60% of the configured executor memory (`spark.executor.memory`) to
-cache RDDs. This means that 40% of memory is available for any objects created during task execution.
+By default, Spark caches RDDs using 60% of the configured executor memory (`spark.executor.memory`), after accounting for 
+the reserved memory defined by `spark.system.reservedMemorySize`. The remaining memory is used for
+other objects, for example to perform shuffles in-memory. You can change the amount of heap used for caching
+by setting `spark.storage.memoryFraction`. For example, to change this to 50%, you can call
+`conf.set("spark.storage.memoryFraction", "0.5")` on your SparkConf.
 
 In case your tasks slow down and you find that your JVM is garbage-collecting frequently or running out of
-memory, lowering this value will help reduce the memory consumption. To change this to say 50%, you can call
-`conf.set("spark.storage.memoryFraction", "0.5")` on your SparkConf. Combined with the use of serialized caching,
-using a smaller cache should be sufficient to mitigate most of the garbage collection problems.
-In case you are interested in further tuning the Java GC, continue reading below.
+memory, lowering `spark.storage.memoryFraction` or raising `spark.system.reservedMemorySize` 
+can provide enough headroom for GC.
 
 **Advanced GC Tuning**
 
