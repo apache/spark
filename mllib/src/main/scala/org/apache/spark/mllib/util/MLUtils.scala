@@ -179,8 +179,8 @@ object MLUtils {
 
   /**
    * Return a k element array of pairs of RDDs with the first element of each pair
-   * containing the validation data, a unique 1/Kth of the data and the second
-   * element, the training data, contain the complement of that.
+   * containing the training data, a complement of the validation data and the second
+   * element, the validation data, containing a unique 1/kth of the data. Where k=numFolds.
    */
   def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Int): Array[(RDD[T], RDD[T])] = {
     val numFoldsF = numFolds.toFloat
@@ -189,7 +189,7 @@ object MLUtils {
         complement = false)
       val validation = new PartitionwiseSampledRDD(rdd, sampler, seed)
       val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), seed)
-      (validation, training)
+      (training, validation)
     }.toArray
   }
 

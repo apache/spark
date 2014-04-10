@@ -120,7 +120,7 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
       for (seed <- 1 to 5) {
         val foldedRdds = MLUtils.kFold(data, folds, seed)
         assert(foldedRdds.size === folds)
-        foldedRdds.map { case (validation, training) =>
+        foldedRdds.map { case (training, validation) =>
           val result = validation.union(training).collect().sorted
           val validationSize = validation.collect().size.toFloat
           assert(validationSize > 0, "empty validation data")
