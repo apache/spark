@@ -77,6 +77,6 @@ public final class JavaLR {
 
     System.out.print("Final w: " + model.weights());
 
-    System.exit(0);
+    sc.stop();
   }
 }
