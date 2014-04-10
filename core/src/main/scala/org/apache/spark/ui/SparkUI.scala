@@ -49,7 +49,7 @@ private[spark] class SparkUI(
 
   private val localHost = Utils.localHostName()
   private val publicHost = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHost)
-  private val port = conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
+  private val port = conf.getInt("spark.ui.port", SparkUI.DEFAULT_PORT)
 
   private val storage = new BlockManagerUI(this)
   private val jobs = new JobProgressUI(this)
@@ -118,6 +118,6 @@ private[spark] class SparkUI(
 }
 
 private[spark] object SparkUI {
-  val DEFAULT_PORT = "4040"
+  val DEFAULT_PORT = 4040
   val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
 }

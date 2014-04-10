@@ -21,23 +21,18 @@ import java.net.URI
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.util.{IntParam, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Command-line parser for the master.
  */
 private[spark] class HistoryServerArguments(args: Array[String]) {
-  var port = 18080
   var logDir = ""
 
   parse(args.toList)
 
   private def parse(args: List[String]): Unit = {
     args match {
-      case ("--port" | "-p") :: IntParam(value) :: tail =>
-        port = value
-        parse(tail)
-
       case ("--dir" | "-d") :: value :: tail =>
         logDir = value
         parse(tail)
@@ -45,7 +40,7 @@ private[spark] class HistoryServerArguments(args: Array[String]) {
       case ("--help" | "-h") :: tail =>
         printUsageAndExit(0)
 
-      case Nil => {}
+      case Nil =>
 
       case _ =>
         printUsageAndExit(1)
@@ -71,7 +66,6 @@ private[spark] class HistoryServerArguments(args: Array[String]) {
       "Usage: HistoryServer [options]\n" +
       "\n" +
       "Options:\n" +
-      "  -p PORT, --port PORT   Port for web server (default: 18080)\n" +
       "  -d DIR,  --dir DIR     Location of event log files")
     System.exit(exitCode)
   }

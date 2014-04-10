@@ -27,20 +27,11 @@ sbin=`dirname "$0"`
 sbin=`cd "$sbin"; pwd`
 
 if [ $# -lt 1 ]; then
-  echo "Usage: ./start-history-server.sh <base-log-dir> [<web-ui-port>]"
-  echo "Example: ./start-history-server.sh /tmp/spark-events 18080"
+  echo "Usage: ./start-history-server.sh <base-log-dir>"
+  echo "Example: ./start-history-server.sh /tmp/spark-events"
   exit
 fi
 
-# Set up base event log directory
 LOG_DIR=$1
-shift
 
-# Set up web UI port
-if [ ! -z $1 ]; then
-  PORT=$1
-else
-  PORT=18080
-fi
-
-"$sbin"/spark-daemon.sh start org.apache.spark.deploy.history.HistoryServer 1 --dir "$LOG_DIR" --port "$PORT"
+"$sbin"/spark-daemon.sh start org.apache.spark.deploy.history.HistoryServer 1 --dir "$LOG_DIR"

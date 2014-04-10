@@ -39,8 +39,7 @@ You can start a the history server by executing:
 
 The base logging directory must be supplied, and should contain sub-directories that each
 represents an application's event logs. This creates a web interface at
-`http://<server-url>:18080` by default, but the port can be changed by supplying an extra
-parameter to the start script. The history server depends on the following variables:
+`http://<server-url>:18080` by default. The history server depends on the following variables:
 
 <table class="table">
   <tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr>
@@ -62,16 +61,23 @@ Further, the history server can be configured as follows:
     <td>spark.history.updateInterval</td>
     <td>10</td>
     <td>
-      The period at which information displayed by this history server is updated. Each update
-      checks for any changes made to the event logs in persisted storage.
+      The period, in seconds, at which information displayed by this history server is updated.
+      Each update checks for any changes made to the event logs in persisted storage.
     </td>
   </tr>
   <tr>
     <td>spark.history.retainedApplications</td>
     <td>250</td>
     <td>
-      The number of application UIs to retain. If this cap is exceeded, then the least recently
-      updated applications will be removed.
+      The number of application UIs to retain. If this cap is exceeded, then the oldest
+      applications will be removed.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.ui.port</td>
+    <td>18080</td>
+    <td>
+      The port to which the web interface of the history server binds.
     </td>
   </tr>
 </table>

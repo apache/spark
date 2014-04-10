@@ -43,11 +43,9 @@ import org.apache.spark.util.Utils
  * EventLoggingListener.
  *
  * @param baseLogDir The base directory in which event logs are found
- * @param requestedPort The requested port to which this server is to be bound
  */
 class HistoryServer(
     val baseLogDir: String,
-    requestedPort: Int,
     conf: SparkConf)
   extends SparkUIContainer("History Server") with Logging {
 
@@ -56,7 +54,7 @@ class HistoryServer(
   private val fileSystem = Utils.getHadoopFileSystem(baseLogDir)
   private val localHost = Utils.localHostName()
   private val publicHost = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHost)
-  private val port = requestedPort
+  private val port = WEB_UI_PORT
   private val securityManager = new SecurityManager(conf)
   private val indexPage = new IndexPage(this)
 
@@ -243,7 +241,7 @@ class HistoryServer(
  * start-history-server.sh and stop-history-server.sh. The path to a base log directory
  * is must be specified, while the requested UI port is optional. For example:
  *
- *   ./sbin/spark-history-server.sh /tmp/spark-events 18080
+ *   ./sbin/spark-history-server.sh /tmp/spark-events
  *   ./sbin/spark-history-server.sh hdfs://1.2.3.4:9000/spark-events
  *
  * This launches the HistoryServer as a Spark daemon.
@@ -257,11 +255,14 @@ object HistoryServer {
   // How many applications to retain
   val RETAINED_APPLICATIONS = conf.getInt("spark.history.retainedApplications", 250)
 
+  // The port to which the web UI is bound
+  val WEB_UI_PORT = conf.getInt("spark.history.ui.port", 18080)
+
   val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
 
   def main(argStrings: Array[String]) {
     val args = new HistoryServerArguments(argStrings)
-    val server = new HistoryServer(args.logDir, args.port, conf)
+    val server = new HistoryServer(args.logDir, conf)
     server.bind()
     server.start()
 
