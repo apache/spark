@@ -37,8 +37,8 @@ private[spark] class IndexPage(parent: HistoryServer) {
           {
             if (parent.appIdToInfo.size > 0) {
               <h4>
-                Showing {parent.appIdToInfo.size}/{parent.getTotalApplications}
-                Finished Application{if (parent.getTotalApplications > 1) "s" else ""}
+                Showing {parent.appIdToInfo.size}/{parent.getNumApplications}
+                Finished Application{if (parent.getNumApplications > 1) "s" else ""}
               </h4> ++
               appTable
             } else {
@@ -60,14 +60,14 @@ private[spark] class IndexPage(parent: HistoryServer) {
     "Last Updated")
 
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
-    val appName = if (info.started) info.name else parent.getAppId(info.logPath)
+    val appName = if (info.started) info.name else info.logDirPath.getName
     val uiAddress = parent.getAddress + info.ui.basePath
     val startTime = if (info.started) WebUI.formatDate(info.startTime) else "Not started"
     val endTime = if (info.finished) WebUI.formatDate(info.endTime) else "Not finished"
     val difference = if (info.started && info.finished) info.endTime - info.startTime else -1L
     val duration = if (difference > 0) WebUI.formatDuration(difference) else "---"
     val sparkUser = if (info.started) info.sparkUser else "Unknown user"
-    val logDirectory = parent.getAppId(info.logPath)
+    val logDirectory = info.logDirPath.getName
     val lastUpdated = WebUI.formatDate(info.lastUpdated)
     <tr>
       <td><a href={uiAddress}>{appName}</a></td>

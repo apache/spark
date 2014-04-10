@@ -26,10 +26,10 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkUIContainer
+import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
-import org.apache.spark.scheduler.{ApplicationEventListener, ReplayListenerBus}
 
 /**
  * A web server that renders SparkUIs of finished applications.
@@ -63,11 +63,8 @@ class HistoryServer(
   // A timestamp of when the disk was last accessed to check for log updates
   private var lastLogCheckTime = -1L
 
-  // If an application is last updated after this threshold, then its UI is retained
-  private var updateTimeThreshold = -1L
-
-  // Number of applications hidden from the UI because the application limit has been reached
-  private var numApplicationsHidden = 0
+  // Number of complete applications found in this directory
+  private var numApplicationsTotal = 0
 
   @volatile private var stopped = false
 
@@ -124,7 +121,6 @@ class HistoryServer(
         logError("Failed to bind HistoryServer", e)
         System.exit(1)
     }
-    checkForLogs()
   }
 
   /**
@@ -145,41 +141,33 @@ class HistoryServer(
       try {
         val logStatus = fileSystem.listStatus(new Path(baseLogDir))
         val logDirs = if (logStatus != null) logStatus.filter(_.isDir).toSeq else Seq[FileStatus]()
+        val logInfos = logDirs
+          .sortBy { dir => getModificationTime(dir) }
+          .map { dir => (dir, EventLoggingListener.parseLoggingInfo(dir.getPath, fileSystem)) }
+          .filter { case (dir, info) => info.applicationComplete }
 
-        // Forget about any SparkUIs that can no longer be found
-        val mostRecentAppIds = logDirs.map { dir => getAppId(dir.getPath.toString) }
+        // Logging information for applications that should be retained
+        val retainedLogInfos = logInfos.takeRight(RETAINED_APPLICATIONS)
+        val retainedAppIds = retainedLogInfos.map { case (dir, _) => dir.getPath.getName }
+
+        // Remove any applications that should no longer be retained
         appIdToInfo.foreach { case (appId, info) =>
-          if (!mostRecentAppIds.contains(appId)) {
+          if (!retainedAppIds.contains(appId)) {
             detachUI(info.ui)
             appIdToInfo.remove(appId)
-            updateTimeThreshold = -1L
           }
         }
 
-        // Keep track of the number of applications hidden from the UI this round
-        var _numApplicationsHidden = 0
-
-        // Render SparkUI for any new completed applications
-        logDirs.foreach { dir =>
-          val path = dir.getPath.toString
-          val appId = getAppId(path)
-          val lastUpdated = getModificationTime(dir)
+        // Render the application's UI if it is not already there
+        retainedLogInfos.foreach { case (dir, info) =>
+          val appId = dir.getPath.getName
           if (!appIdToInfo.contains(appId)) {
-            if (lastUpdated > updateTimeThreshold) {
-              maybeRenderUI(appId, path, lastUpdated)
-            } else {
-              // This application was previously blacklisted due to the application limit
-              _numApplicationsHidden += 1
-            }
-          }
-          // If the cap is reached, remove the least recently updated application
-          if (appIdToInfo.size > RETAINED_APPLICATIONS) {
-            removeOldestApp()
-            _numApplicationsHidden += 1
+            renderSparkUI(dir, info)
           }
         }
 
-        numApplicationsHidden = _numApplicationsHidden
+        // Track the total number of complete applications observed this round
+        numApplicationsTotal = logInfos.size
 
       } catch {
         case t: Throwable => logError("Exception in checking for event log updates", t)
@@ -196,51 +184,27 @@ class HistoryServer(
    * directory. If this file exists, the associated application is regarded to be complete, in
    * which case the server proceeds to render the SparkUI. Otherwise, the server does nothing.
    */
-  private def maybeRenderUI(appId: String, logPath: String, lastUpdated: Long) {
-    val replayBus = new ReplayListenerBus(logPath, fileSystem)
-    replayBus.start()
+  private def renderSparkUI(logDir: FileStatus, logInfo: EventLoggingInfo) {
+    val path = logDir.getPath
+    val appId = path.getName
+    val replayBus = new ReplayListenerBus(logInfo.logPaths, fileSystem, logInfo.compressionCodec)
+    val ui = new SparkUI(replayBus, appId, "/history/" + appId)
+    val appListener = new ApplicationEventListener
+    replayBus.addListener(appListener)
 
-    // If the application completion file is found
-    if (replayBus.isApplicationComplete) {
-      val ui = new SparkUI(replayBus, appId, "/history/%s".format(appId))
-      val appListener = new ApplicationEventListener
-      replayBus.addListener(appListener)
-
-      // Do not call ui.bind() to avoid creating a new server for each application
-      ui.start()
-      val success = replayBus.replay()
-      if (success && appListener.applicationStarted) {
-        attachUI(ui)
-        val appName = appListener.appName
-        val sparkUser = appListener.sparkUser
-        val startTime = appListener.startTime
-        val endTime = appListener.endTime
-        ui.setAppName("%s (finished)".format(appName))
-        appIdToInfo(appId) =
-          ApplicationHistoryInfo(appName, startTime, endTime, lastUpdated, sparkUser, logPath, ui)
-      } else {
-        logWarning("Reconstructing application UI was unsuccessful. Either no event logs were" +
-          "found or the event signaling application start is missing: %s".format(logPath))
-      }
-    } else {
-      logWarning("Skipping incomplete application: %s".format(logPath))
-    }
-  }
-
-  /**
-   * Remove the oldest application and detach its associated UI.
-   *
-   * As an optimization, record the last updated time of this application as the minimum
-   * update time threshold. Only applications with a last updated time that exceeds this
-   * threshold will be retained by the server. This avoids re-rendering an old application
-   * that is recently removed.
-   */
-  private def removeOldestApp() {
-    val appToRemove = appIdToInfo.toSeq.minBy { case (_, info) => info.lastUpdated }
-    appToRemove match { case (id, info) =>
-      appIdToInfo.remove(id)
-      detachUI(info.ui)
-      updateTimeThreshold = info.lastUpdated
+    // Do not call ui.bind() to avoid creating a new server for each application
+    ui.start()
+    replayBus.replay()
+    if (appListener.applicationStarted) {
+      attachUI(ui)
+      val appName = appListener.appName
+      val sparkUser = appListener.sparkUser
+      val startTime = appListener.startTime
+      val endTime = appListener.endTime
+      val lastUpdated = getModificationTime(logDir)
+      ui.setAppName(appName + " (finished)")
+      appIdToInfo(appId) = ApplicationHistoryInfo(appId, appName, startTime, endTime,
+        lastUpdated, sparkUser, path, ui)
     }
   }
 
@@ -251,14 +215,11 @@ class HistoryServer(
     fileSystem.close()
   }
 
-  /** Parse app ID from the given log path. */
-  def getAppId(logPath: String): String = logPath.split("/").last
-
   /** Return the address of this server. */
   def getAddress: String = "http://" + publicHost + ":" + boundPort
 
   /** Return the total number of application logs found, whether or not the UI is retained. */
-  def getTotalApplications: Int = appIdToInfo.size + numApplicationsHidden
+  def getNumApplications: Int = numApplicationsTotal
 
   /** Return when this directory was last modified. */
   private def getModificationTime(dir: FileStatus): Long = {
@@ -312,12 +273,13 @@ object HistoryServer {
 
 
 private[spark] case class ApplicationHistoryInfo(
+    id: String,
     name: String,
     startTime: Long,
     endTime: Long,
     lastUpdated: Long,
     sparkUser: String,
-    logPath: String,
+    logDirPath: Path,
     ui: SparkUI) {
   def started = startTime != -1
   def finished = endTime != -1
