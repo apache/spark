@@ -48,7 +48,7 @@ private[spark] object UIUtils {
       case _ => <li><a href={prependBaseUri(basePath, "/storage")}>Storage</a></li>
     }
     val environment = page match {
-      case Environment => 
+      case Environment =>
         <li class="active"><a href={prependBaseUri(basePath, "/environment")}>Environment</a></li>
       case _ => <li><a href={prependBaseUri(basePath, "/environment")}>Environment</a></li>
     }
