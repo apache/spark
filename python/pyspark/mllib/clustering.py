@@ -57,7 +57,7 @@ class KMeansModel(object):
     def predict(self, x):
         """Find the cluster to which x belongs in this model."""
         best = 0
-        best_distance = 1e75
+        best_distance = float("inf")
         for i in range(0, self.centers.shape[0]):
             distance = _squared_distance(x, self.centers[i])
             if distance < best_distance:

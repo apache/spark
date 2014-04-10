@@ -18,7 +18,7 @@
 from numpy import array, dot
 from pyspark import SparkContext
 from pyspark.mllib._common import \
-    _get_unmangled_rdd, _get_unmangled_double_vector_rdd, \
+    _dot, _get_unmangled_rdd, _get_unmangled_double_vector_rdd, \
     _serialize_double_matrix, _deserialize_double_matrix, \
     _serialize_double_vector, _deserialize_double_vector, \
     _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
@@ -44,7 +44,7 @@ class LinearRegressionModelBase(LinearModel):
         """Predict the value of the dependent variable given a vector x"""
         """containing values for the independent variables."""
         _linear_predictor_typecheck(x, self._coeff)
-        return x.dot(self._coeff) + self._intercept
+        return _dot(x, self._coeff) + self._intercept
 
 class LinearRegressionModel(LinearRegressionModelBase):
     """A linear regression model derived from a least-squares fit.

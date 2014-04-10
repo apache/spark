@@ -22,6 +22,29 @@ from pyspark import SparkContext, RDD
 from pyspark.mllib.linalg import SparseVector
 from pyspark.serializers import Serializer
 
+"""
+Common utilities shared throughout MLlib, primarily for dealing with
+different data types. These include:
+- Serialization utilities to / from byte arrays that Java can handle
+- Serializers for other data types, like ALS Rating objects
+- Common methods for linear models
+- Methods to deal with the different vector types we support, such as
+  SparseVector and scipy.sparse matrices.
+"""
+
+# Check whether we have SciPy. MLlib works without it too, but if we have it, some methods,
+# such as _dot and _serialize_double_vector, start to support scipy.sparse matrices.
+
+_have_scipy = False
+_scipy_issparse = None
+try:
+    import scipy.sparse
+    _have_scipy = True
+    _scipy_issparse = scipy.sparse.issparse
+except:
+    # No SciPy in environment, but that's okay
+    pass
+
 # Dense double vector format:
 #
 # [1-byte 1] [4-byte length] [length*8 bytes of data]
@@ -67,6 +90,7 @@ def _serialize_double_vector(v):
     >>> array_equal(y, array([1.0, 2.0, 3.0]))
     True
     """
+    v = _convert_vector(v)
     if type(v) == ndarray:
         return _serialize_dense_vector(v)
     elif type(v) == SparseVector:
@@ -201,6 +225,7 @@ def _deserialize_double_matrix(ba):
 def _linear_predictor_typecheck(x, coeffs):
     """Check that x is a one-dimensional vector of the right shape.
     This is a temporary hackaround until I actually implement bulk predict."""
+    x = _convert_vector(x)
     if type(x) == ndarray:
         if x.ndim == 1:
             if x.shape != coeffs.shape:
@@ -245,13 +270,13 @@ class LinearRegressionModelBase(LinearModel):
         """Predict the value of the dependent variable given a vector x"""
         """containing values for the independent variables."""
         _linear_predictor_typecheck(x, self._coeff)
-        return x.dot(self._coeff) + self._intercept
+        return _dot(x, self._coeff) + self._intercept
 
 # If we weren't given initial weights, take a zero vector of the appropriate
 # length.
 def _get_initial_weights(initial_weights, data):
     if initial_weights is None:
-        initial_weights = data.first()
+        initial_weights = _convert_vector(data.first())
         if type(initial_weights) == ndarray:
             if initial_weights.ndim != 1:
                 raise TypeError("At least one data element has "
@@ -259,9 +284,6 @@ def _get_initial_weights(initial_weights, data):
             initial_weights = numpy.ones([initial_weights.shape[0] - 1])
         elif type(initial_weights) == SparseVector:
             initial_weights = numpy.ones([initial_weights.size - 1])
-        else:
-            raise TypeError("At least one data element has type "
-                    + type(initial_weights).__name__ + " which is not a vector")
     return initial_weights
 
 # train_func should take two parameters, namely data and initial_weights, and
@@ -327,6 +349,8 @@ def _squared_distance(v1, v2):
     >>> _squared_distance(sparse1, sparse2)
     2.0
     """
+    v1 = _convert_vector(v1)
+    v2 = _convert_vector(v2)
     if type(v1) == ndarray and type(v2) == ndarray:
         diff = v1 - v2
         return diff.dot(diff)
@@ -334,6 +358,41 @@ def _squared_distance(v1, v2):
         return v2.squared_distance(v1)
     else:
         return v1.squared_distance(v2)
+
+def _convert_vector(vec):
+    """
+    Convert a vector to a format we support internally. This does
+    the following:
+
+    * For dense NumPy vectors (ndarray), returns them as is
+    * For our SparseVector class, returns that as is
+    * For scipy.sparse.*_matrix column vectors, converts them to
+      our own SparseVector type.
+
+    This should be called before passing any data to our algorithms
+    or attempting to serialize it to Java.
+    """
+    if type(vec) == ndarray or type(vec) == SparseVector:
+        return vec
+    elif _have_scipy:
+        if _scipy_issparse(vec):
+            assert vec.shape[1] == 1, "Expected column vector"
+            csc = vec.tocsc()
+            return SparseVector(vec.shape[0], csc.indices, csc.data)
+    raise TypeError("Expected NumPy array, SparseVector, or scipy.sparse matrix")
+
+def _dot(vec, target):
+    """
+    Compute the dot product of a vector of the types we support
+    (Numpy dense, SparseVector, or SciPy sparse) and a target NumPy
+    array that is either 1- or 2-dimensional. Equivalent to calling
+    numpy.dot of the two vectors, but for SciPy ones, we have to
+    transpose them because they're column vectors.
+    """
+    if type(vec) == ndarray or type(vec) == SparseVector:
+        return vec.dot(target)
+    else:
+        return vec.transpose().dot(target)[0]
 
 def _test():
     import doctest

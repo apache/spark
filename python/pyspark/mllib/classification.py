@@ -20,7 +20,7 @@ import numpy
 from numpy import array, shape
 from pyspark import SparkContext
 from pyspark.mllib._common import \
-    _get_unmangled_rdd, _get_unmangled_double_vector_rdd, \
+    _dot, _get_unmangled_rdd, _get_unmangled_double_vector_rdd, \
     _serialize_double_matrix, _deserialize_double_matrix, \
     _serialize_double_vector, _deserialize_double_vector, \
     _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
@@ -55,7 +55,7 @@ class LogisticRegressionModel(LinearModel):
     """
     def predict(self, x):
         _linear_predictor_typecheck(x, self._coeff)
-        margin = x.dot(self._coeff) + self._intercept
+        margin = _dot(x, self._coeff) + self._intercept
         prob = 1/(1 + exp(-margin))
         return 1 if prob > 0.5 else 0
 
@@ -91,7 +91,7 @@ class SVMModel(LinearModel):
     """
     def predict(self, x):
         _linear_predictor_typecheck(x, self._coeff)
-        margin = x.dot(self._coeff) + self._intercept
+        margin = _dot(x, self._coeff) + self._intercept
         return 1 if margin >= 0 else 0
 
 class SVMWithSGD(object):
@@ -138,7 +138,7 @@ class NaiveBayesModel(object):
 
     def predict(self, x):
         """Return the most likely class for a data vector x"""
-        return self.labels[numpy.argmax(self.pi + x.dot(self.theta))]
+        return self.labels[numpy.argmax(self.pi + _dot(x, self.theta))]
 
 class NaiveBayes(object):
     @classmethod

@@ -16,7 +16,7 @@
 #
 
 """
-MLlib utilities for working with vectors. For dense vectors, MLlib
+MLlib utilities for linear algebra. For dense vectors, MLlib
 uses the NumPy C{array} type, so you can simply pass NumPy arrays
 around. For sparse vectors, users can construct a L{SparseVector}
 object from MLlib or pass SciPy C{scipy.sparse} column vectors if
@@ -29,7 +29,7 @@ from numpy import array, array_equal, ndarray
 class SparseVector(object):
     """
     A simple sparse vector class for passing data to MLlib. Users may
-    alternatively pass use SciPy's {scipy.sparse} data types.
+    alternatively pass SciPy's {scipy.sparse} data types.
     """
 
     def __init__(self, size, *args):
@@ -40,7 +40,7 @@ class SparseVector(object):
 
         @param size: Size of the vector.
         @param args: Non-zero entries, as a dictionary, list of tupes,
-                     or two sorted lists containing indices and values.
+               or two sorted lists containing indices and values.
 
         >>> print SparseVector(4, {1: 1.0, 3: 5.5})
         [1: 1.0, 3: 5.5]
@@ -115,7 +115,7 @@ class SparseVector(object):
         >>> a.squared_distance(a)
         0.0
         >>> a.squared_distance(array([1., 2., 3., 4.]))
-        1.0
+        11.0
         >>> b = SparseVector(4, [2, 4], [1.0, 2.0])
         >>> a.squared_distance(b)
         30.0
@@ -125,9 +125,14 @@ class SparseVector(object):
         if type(other) == ndarray:
             if other.ndim == 1:
                 result = 0.0
-                for i in xrange(len(self.indices)):
-                    diff = self.values[i] - other[self.indices[i]]
-                    result += diff * diff
+                j = 0   # index into our own array
+                for i in xrange(other.shape[0]):
+                    if j < len(self.indices) and self.indices[j] == i:
+                        diff = self.values[j] - other[i]
+                        result += diff * diff
+                        j += 1
+                    else:
+                        result += other[i] * other[i]
                 return result
             else:
                 raise Exception("Cannot call squared_distance with %d-dimensional array" %
@@ -191,7 +196,7 @@ class SparseVector(object):
 
 class Vectors(object):
     """
-    Factory methods to create MLlib vectors. Note that dense vectors
+    Factory methods for working with vectors. Note that dense vectors
     are simply represented as NumPy array objects, so there is no need
     to covert them for use in MLlib. For sparse vectors, the factory
     methods in this class create an MLlib-compatible type, or users
