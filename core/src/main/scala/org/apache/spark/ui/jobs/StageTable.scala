@@ -81,8 +81,9 @@ private[ui] class StageTable(
         {s.name}
       </a>
     val killLink = if (killEnabled) {
-      <div>[<a href={"%s/stages?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}>
-        Kill
+      <div>[<a href=
+        {"%s/stages?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}>
+          Kill
       </a>]</div>
 
     }
