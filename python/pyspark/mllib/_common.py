@@ -329,9 +329,9 @@ def _get_initial_weights(initial_weights, data):
             if initial_weights.ndim != 1:
                 raise TypeError("At least one data element has "
                         + initial_weights.ndim + " dimensions, which is not 1")
-            initial_weights = numpy.ones([initial_weights.shape[0] - 1])
+            initial_weights = numpy.ones([initial_weights.shape[0]])
         elif type(initial_weights) == SparseVector:
-            initial_weights = numpy.ones([initial_weights.size - 1])
+            initial_weights = numpy.ones([initial_weights.size])
     return initial_weights
 
 

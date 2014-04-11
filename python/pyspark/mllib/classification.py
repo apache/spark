@@ -24,7 +24,7 @@ from pyspark.mllib._common import \
     _serialize_double_matrix, _deserialize_double_matrix, \
     _serialize_double_vector, _deserialize_double_vector, \
     _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
-    LinearModel, _linear_predictor_typecheck
+    LinearModel, _linear_predictor_typecheck, _get_unmangled_labeled_point_rdd
 from pyspark.mllib.linalg import SparseVector
 from pyspark.mllib.regression import LabeledPoint
 from math import exp, log
@@ -135,9 +135,9 @@ class NaiveBayesModel(object):
     >>> model.predict(array([1.0, 0.0]))
     1.0
     >>> sparse_data = [
-    ...     LabeledPoint(0.0, SparseVector(2, {1: 0.0}),
-    ...     LabeledPoint(0.0, SparseVector(2, {1: 1.0}),
-    ...     LabeledPoint(1.0, SparseVector(2, {0: 1.0})
+    ...     LabeledPoint(0.0, SparseVector(2, {1: 0.0})),
+    ...     LabeledPoint(0.0, SparseVector(2, {1: 1.0})),
+    ...     LabeledPoint(1.0, SparseVector(2, {0: 1.0}))
     ... ]
     >>> model = NaiveBayes.train(sc.parallelize(sparse_data))
     >>> model.predict(SparseVector(2, {1: 1.0}))
@@ -173,7 +173,7 @@ class NaiveBayes(object):
         @param lambda_: The smoothing parameter
         """
         sc = data.context
-        dataBytes = _get_unmangled_double_vector_rdd(data)
+        dataBytes = _get_unmangled_labeled_point_rdd(data)
         ans = sc._jvm.PythonMLLibAPI().trainNaiveBayes(dataBytes._jrdd, lambda_)
         return NaiveBayesModel(
             _deserialize_double_vector(ans[0]),
