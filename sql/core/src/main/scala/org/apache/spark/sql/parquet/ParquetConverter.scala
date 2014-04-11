@@ -419,7 +419,9 @@ private[parquet] class CatalystMapConverter(
     val keyConverter = CatalystConverter.createConverter(schema(0), 0, this)
     val valueConverter = CatalystConverter.createConverter(schema(1), 1, this)
 
-    override def getConverter(fieldIndex: Int): Converter = if (fieldIndex == 0) keyConverter else valueConverter
+    override def getConverter(fieldIndex: Int): Converter = {
+      if (fieldIndex == 0) keyConverter else valueConverter
+    }
 
     override def end(): Unit = CatalystMapConverter.this.map += currentKey -> currentValue
 
@@ -432,13 +434,15 @@ private[parquet] class CatalystMapConverter(
     override protected[parquet] val index: Int = 0
     override protected[parquet] val parent: CatalystConverter = CatalystMapConverter.this
 
-    override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit = fieldIndex match {
-      case 0 =>
-        currentKey = value
-      case 1 =>
-        currentValue = value
-      case _ =>
-        new RuntimePermission(s"trying to update Map with fieldIndex $fieldIndex")
+    override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit = {
+      fieldIndex match {
+        case 0 =>
+          currentKey = value
+        case 1 =>
+          currentValue = value
+        case _ =>
+          new RuntimePermission(s"trying to update Map with fieldIndex $fieldIndex")
+      }
     }
 
     override protected[parquet] def clearBuffer(): Unit = {}
