@@ -21,17 +21,15 @@ import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Attribute}
 import org.apache.spark.sql.execution.{SparkPlan, LeafNode}
 import org.apache.spark.sql.Row
 
-private[sql] case class InMemoryColumnarTableScan(attributes: Seq[Attribute], child: SparkPlan)
+private[sql] case class InMemoryColumnarTableScan(child: SparkPlan)
   extends LeafNode {
 
-  override def output: Seq[Attribute] = attributes
+  override def output: Seq[Attribute] = child.output
 
   lazy val cachedColumnBuffers = {
-    val ordinals = attributes.map(a => child.output.indexWhere(_.name == a.name))
-    val output = child.output
+    val childOutput = child.output
     val cached = child.execute().mapPartitions { iterator =>
-      val columnBuilders = ordinals.map { i =>
-        val attribute = output(i)
+      val columnBuilders = childOutput.map { attribute =>
         ColumnBuilder(ColumnType(attribute.dataType).typeId, 0, attribute.name)
       }.toArray
 
@@ -39,8 +37,8 @@ private[sql] case class InMemoryColumnarTableScan(attributes: Seq[Attribute], ch
       while (iterator.hasNext) {
         row = iterator.next()
         var i = 0
-        while (i < ordinals.length) {
-          columnBuilders(i).appendFrom(row, ordinals(i))
+        while (i < childOutput.length) {
+          columnBuilders(i).appendFrom(row, i)
           i += 1
         }
       }
