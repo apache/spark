@@ -56,6 +56,9 @@ run_test "pyspark/mllib/clustering.py"
 run_test "pyspark/mllib/recommendation.py"
 run_test "pyspark/mllib/regression.py"
 
+# Remove the metastore directory created by the HiveContext tests in SparkSQL
+rm -r metastore
+
 if [[ $FAILED == 0 ]]; then
     echo -en "\033[32m"  # Green
     echo "Tests passed."
