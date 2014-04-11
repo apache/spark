@@ -179,7 +179,7 @@ private[sql] object ParquetTestData {
         |}
         |required group data2 {
           |repeated group map {
-            |required int32 key;
+            |required binary key;
             |optional group value {
               |required int64 payload1;
               |optional binary payload2;
@@ -366,12 +366,14 @@ private[sql] object ParquetTestData {
     keyValue2.add(1, 2)
     val map2 = r1.addGroup(2)
     val keyValue3 = map2.addGroup(0)
-    keyValue3.add(0, 7)
+    // TODO: currently only string key type supported
+    keyValue3.add(0, "7")
     val valueGroup1 = keyValue3.addGroup(1)
     valueGroup1.add(0, 42.toLong)
     valueGroup1.add(1, "the answer")
     val keyValue4 = map2.addGroup(0)
-    keyValue4.add(0, 8)
+    // TODO: currently only string key type supported
+    keyValue4.add(0, "8")
     val valueGroup2 = keyValue4.addGroup(1)
     valueGroup2.add(0, 49.toLong)
 

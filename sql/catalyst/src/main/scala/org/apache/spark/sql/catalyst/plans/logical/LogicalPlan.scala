@@ -20,8 +20,16 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.types.{DataType, ArrayType, StructType}
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.trees
+import scala.util.matching.Regex
+import org.apache.spark.sql.catalyst.types.ArrayType
+import org.apache.spark.sql.catalyst.expressions.GetField
+import org.apache.spark.sql.catalyst.types.StructType
+import org.apache.spark.sql.catalyst.types.MapType
+import scala.Some
+import org.apache.spark.sql.catalyst.expressions.Alias
+import org.apache.spark.sql.catalyst.expressions.GetItem
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   self: Product =>
@@ -60,20 +68,32 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   def resolve(name: String): Option[NamedExpression] = {
     def expandFunc(expType: (Expression, DataType), field: String): (Expression, DataType) = {
       val (exp, t) = expType
-      val ordinalRegExp = """(\[(\d+)\])""".r
-      val fieldName = if (field.matches("\\w*(\\[\\d\\])+")) {
+      val ordinalRegExp = """(\[(\d+|\w+)\])""".r
+      val fieldName = if (ordinalRegExp.findFirstIn(field).isDefined) {
         field.substring(0, field.indexOf("["))
       } else {
         field
       }
       t match {
         case ArrayType(elementType) =>
-          val ordinals = ordinalRegExp.findAllIn(field).matchData.map(_.group(2))
+          val ordinals = ordinalRegExp
+            .findAllIn(field)
+            .matchData
+            .map(_.group(2))
           (ordinals.foldLeft(exp)((v1: Expression, v2: String) =>
             GetItem(v1, Literal(v2.toInt))), elementType)
+        case MapType(keyType, valueType) =>
+          val ordinals = ordinalRegExp
+            .findAllIn(field)
+            .matchData
+            .map(_.group(2))
+          // TODO: we should recover the JVM type of valueType to match the
+          // actual type of the key?! should we restrict ourselves to NativeType?
+          (ordinals.foldLeft(exp)((v1: Expression, v2: String) =>
+            GetItem(v1, Literal(v2, keyType))), valueType)
         case StructType(fields) =>
-          // Note: this only works if we are not on the top-level!
-          val structField = fields.find(_.name == fieldName)
+          val structField = fields
+            .find(_.name == fieldName)
           if (!structField.isDefined) {
             throw new TreeNodeException(
               this, s"Trying to resolve Attribute but field ${fieldName} is not defined")
@@ -106,7 +126,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
       // TODO from rebase!
       /*val remainingParts = if (option.qualifiers contains parts.head) parts.drop(1) else parts
       val relevantRemaining =
-        if (remainingParts.head.matches("\\w*\\[(\\d+)\\]")) { // array field name
+        if (remainingParts.head.matches("\\w*\\[(\\d+|\\w+)\\]")) { // array field name
           remainingParts.head.substring(0, remainingParts.head.indexOf("["))
         } else {
           remainingParts.head
@@ -117,7 +137,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
     options.distinct match {
       case (a, Nil) :: Nil => {
         a.dataType match {
-          case ArrayType(elementType) =>
+          case ArrayType(_) | MapType(_, _) =>
             val expression = expandFunc((a: Expression, a.dataType), name)._1
             Some(Alias(expression, name)())
           case _ => Some(a)
@@ -130,7 +150,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
             // this is compatibility reasons with earlier code!
             // TODO: why only nestedFields and not parts?
             // check for absence of nested arrays so there are only fields
-            if ((parts(0) :: nestedFields).forall(!_.matches("\\w*\\[\\d+\\]+"))) {
+            if ((parts(0) :: nestedFields).forall(!_.matches("\\w*\\[(\\d+|\\w+)\\]+"))) {
               Some(Alias(nestedFields.foldLeft(a: Expression)(GetField), nestedFields.last)())
             } else {
               val expression = parts.foldLeft((a: Expression, a.dataType))(expandFunc)._1

@@ -518,7 +518,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("simple map") {
-    implicit def anyToMap(value: Any) = value.asInstanceOf[collection.mutable.HashMap[String, Int]]
+    implicit def anyToMap(value: Any) = value.asInstanceOf[Map[String, Int]]
     val data = TestSQLContext
       .parquetFile(ParquetTestData.testNestedDir4.toString)
       .toSchemaRDD
@@ -527,36 +527,30 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(result1.size === 1)
     assert(result1(0)(0).toMap.getOrElse("key1", 0) === 1)
     assert(result1(0)(0).toMap.getOrElse("key2", 0) === 2)
+    val result2 = sql("SELECT data1[key1] FROM mapTable").collect()
+    assert(result2(0)(0) === 1)
   }
 
   test("map with struct values") {
-    //implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
-    implicit def anyToMap(value: Any) = value.asInstanceOf[collection.mutable.HashMap[Int, Row]]
-    //val data = TestSQLContext
-    //  .parquetFile(ParquetTestData.testNestedDir4.toString)
-    //  .toSchemaRDD
+    implicit def anyToMap(value: Any) = value.asInstanceOf[Map[String, Row]]
     val data = TestSQLContext
       .parquetFile(ParquetTestData.testNestedDir4.toString)
       .toSchemaRDD
     data.registerAsTable("mapTable")
-
-    /*ParquetTestData.readNestedFile(
-      ParquetTestData.testNestedDir4,
-      ParquetTestData.testNestedSchema4)
-    val result = TestSQLContext
-      .parquetFile(ParquetTestData.testNestedDir4.toString)
-      .toSchemaRDD
-      .collect()*/
     val result1 = sql("SELECT data2 FROM mapTable").collect()
     assert(result1.size === 1)
-    val entry1 = result1(0)(0).getOrElse(7, null)
+    val entry1 = result1(0)(0).getOrElse("7", null)
     assert(entry1 != null)
     assert(entry1(0) === 42)
     assert(entry1(1) === "the answer")
-    val entry2 = result1(0)(0).getOrElse(8, null)
+    val entry2 = result1(0)(0).getOrElse("8", null)
     assert(entry2 != null)
     assert(entry2(0) === 49)
     assert(entry2(1) === null)
+    val result2 = sql("SELECT data2[7].payload1, data2[7].payload2 FROM mapTable").collect()
+    assert(result2.size === 1)
+    assert(result2(0)(0) === 42.toLong)
+    assert(result2(0)(1) === "the answer")
   }
 
   /**

@@ -455,8 +455,7 @@ private[parquet] class CatalystMapConverter(
 
   // TODO: think about reusing the buffer
   override def end(): Unit = {
-    assert(!isRootConverter)
-    parent.updateField(index, map)
+    parent.updateField(index, map.toMap)
   }
 
   override def getConverter(fieldIndex: Int): Converter = keyValueConverter
