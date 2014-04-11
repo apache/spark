@@ -44,7 +44,7 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
   private val shouldCompress = conf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = conf.getBoolean("spark.eventLog.overwrite", false)
   private val outputBufferSize = conf.getInt("spark.eventLog.buffer.kb", 100) * 1024
-  private val logBaseDir = conf.get("spark.eventLog.dir", "/tmp/spark-events").stripSuffix("/")
+  private val logBaseDir = conf.get("spark.eventLog.dir", DEFAULT_LOG_DIR).stripSuffix("/")
   private val name = appName.replaceAll("[ :/]", "-").toLowerCase + "-" + System.currentTimeMillis
   val logDir = logBaseDir + "/" + name
 
@@ -115,6 +115,7 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
 }
 
 private[spark] object EventLoggingListener extends Logging {
+  val DEFAULT_LOG_DIR = "/tmp/spark-events"
   val LOG_PREFIX = "EVENT_LOG_"
   val SPARK_VERSION_PREFIX = "SPARK_VERSION_"
   val COMPRESSION_CODEC_PREFIX = "COMPRESSION_CODEC_"
