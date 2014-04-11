@@ -27,7 +27,11 @@ import org.apache.spark.ui.{WebUI, UIUtils}
 import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished stages */
-private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
+private[ui] class StageTable(
+  stages: Seq[StageInfo],
+  parent: JobProgressUI,
+  killEnabled: Boolean = false) {
+
   private val basePath = parent.basePath
   private lazy val listener = parent.listener
   private lazy val isFairScheduler = parent.isFairScheduler
@@ -71,15 +75,28 @@ private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
     </div>
   }
 
-  /** Render an HTML row that represents a stage */
-  private def stageRow(s: StageInfo): Seq[Node] = {
-    val poolName = listener.stageIdToPool.get(s.stageId)
+  private def makeDescription(s: StageInfo): Seq[Node] = {
     val nameLink =
       <a href={"%s/stages/stage?id=%s".format(UIUtils.prependBaseUri(basePath), s.stageId)}>
         {s.name}
       </a>
+    val killLink = if (killEnabled) {
+      <div>[<a href=
+        {"%s/stages?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}>
+          Kill
+      </a>]</div>
+
+    }
     val description = listener.stageIdToDescription.get(s.stageId)
-      .map(d => <div><em>{d}</em></div><div>{nameLink}</div>).getOrElse(nameLink)
+      .map(d => <div><em>{d}</em></div><div>{nameLink} {killLink}</div>)
+      .getOrElse(<div>{nameLink} {killLink}</div>)
+
+    return description
+  }
+
+  /** Render an HTML row that represents a stage */
+  private def stageRow(s: StageInfo): Seq[Node] = {
+    val poolName = listener.stageIdToPool.get(s.stageId)
     val submissionTime = s.submissionTime match {
       case Some(t) => WebUI.formatDate(new Date(t))
       case None => "Unknown"
@@ -118,7 +135,7 @@ private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
           </a>
         </td>
       }}
-      <td>{description}</td>
+      <td>{makeDescription(s)}</td>
       <td valign="middle">{submissionTime}</td>
       <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
       <td class="progress-cell">

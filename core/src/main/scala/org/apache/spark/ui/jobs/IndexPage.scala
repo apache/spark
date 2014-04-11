@@ -32,6 +32,7 @@ private[ui] class IndexPage(parent: JobProgressUI) {
   private val sc = parent.sc
   private lazy val listener = parent.listener
   private lazy val isFairScheduler = parent.isFairScheduler
+  private val killEnabled = parent.killEnabled
 
   private def appName = parent.appName
 
@@ -42,7 +43,18 @@ private[ui] class IndexPage(parent: JobProgressUI) {
       val failedStages = listener.failedStages.reverse.toSeq
       val now = System.currentTimeMillis()
 
-      val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
+      if (killEnabled) {
+        val killFlag = Option(request.getParameter("terminate")).getOrElse("false").toBoolean
+        val stageId = Option(request.getParameter("id")).getOrElse("-1").toInt
+
+        if (stageId >= 0 && killFlag && listener.activeStages.contains(stageId)) {
+          sc.cancelStage(stageId)
+        }
+      }
+
+
+      val activeStagesTable =
+        new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent, parent.killEnabled)
       val completedStagesTable =
         new StageTable(completedStages.sortBy(_.submissionTime).reverse, parent)
       val failedStagesTable = new StageTable(failedStages.sortBy(_.submissionTime).reverse, parent)

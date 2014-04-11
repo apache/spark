@@ -1138,6 +1138,16 @@ class SparkContext(config: SparkConf) extends Logging {
     dagScheduler.cancelAllJobs()
   }
 
+  /** Cancel a given job if it's scheduled or running */
+  private[spark] def cancelJob(jobId: Int) {
+    dagScheduler.cancelJob(jobId)
+  }
+
+  /** Cancel a given stage and all jobs associated with it */
+  private[spark] def cancelStage(stageId: Int) {
+    dagScheduler.cancelStage(stageId)
+  }
+
   /**
    * Clean a closure to make it ready to serialized and send to tasks
    * (removes unreferenced variables in $outer's, updates REPL variables)
