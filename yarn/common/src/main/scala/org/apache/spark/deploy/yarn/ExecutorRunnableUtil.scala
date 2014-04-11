@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.File
 import java.net.URI
 import java.nio.ByteBuffer
 import java.security.PrivilegedExceptionAction
@@ -167,7 +168,8 @@ trait ExecutorRunnableUtil extends Logging {
     ClientBase.populateClasspath(yarnConf, sparkConf, System.getenv("SPARK_YARN_LOG4J_PATH") != null, env)
 
     // Allow users to specify some environment variables
-    Apps.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"))
+    YarnSparkHadoopUtil.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"),
+      File.pathSeparator)
 
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k,v) => env(k) = v }
     env
