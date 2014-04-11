@@ -167,9 +167,32 @@ private[sql] object ParquetTestData {
       |}
     """.stripMargin
 
+  val testNestedSchema4 =
+    """
+      |message TestNested4 {
+        |required int32 x;
+        |optional group data1 {
+          |repeated group map {
+            |required binary key;
+            |optional int32 value;
+          |}
+        |}
+        |required group data2 {
+          |repeated group map {
+            |required int32 key;
+            |optional group value {
+              |required int64 payload1;
+              |optional binary payload2;
+            |}
+          |}
+        |}
+      |}
+    """.stripMargin
+
   val testNestedDir1 = Utils.createTempDir()
   val testNestedDir2 = Utils.createTempDir()
   val testNestedDir3 = Utils.createTempDir()
+  val testNestedDir4 = Utils.createTempDir()
 
   lazy val testNestedData1 = new ParquetRelation(testNestedDir1.toURI.toString)
   lazy val testNestedData2 = new ParquetRelation(testNestedDir2.toURI.toString)
@@ -320,6 +343,37 @@ private[sql] object ParquetTestData {
     val ng3 = g2.addGroup(1)
     ng3.add(0, 3.5)
     ng3.add(1, false)
+
+    val writeSupport = new TestGroupWriteSupport(schema)
+    val writer = new ParquetWriter[Group](path, writeSupport)
+    writer.write(r1)
+    writer.close()
+  }
+
+  def writeNestedFile4() {
+    testNestedDir4.delete()
+    val path: Path = testNestedDir4
+    val schema: MessageType = MessageTypeParser.parseMessageType(testNestedSchema4)
+
+    val r1 = new SimpleGroup(schema)
+    r1.add(0, 7)
+    val map1 = r1.addGroup(1)
+    val keyValue1 = map1.addGroup(0)
+    keyValue1.add(0, "key1")
+    keyValue1.add(1, 1)
+    val keyValue2 = map1.addGroup(0)
+    keyValue2.add(0, "key2")
+    keyValue2.add(1, 2)
+    val map2 = r1.addGroup(2)
+    val keyValue3 = map2.addGroup(0)
+    keyValue3.add(0, 7)
+    val valueGroup1 = keyValue3.addGroup(1)
+    valueGroup1.add(0, 42.toLong)
+    valueGroup1.add(1, "the answer")
+    val keyValue4 = map2.addGroup(0)
+    keyValue4.add(0, 8)
+    val valueGroup2 = keyValue4.addGroup(1)
+    valueGroup2.add(0, 49.toLong)
 
     val writeSupport = new TestGroupWriteSupport(schema)
     val writer = new ParquetWriter[Group](path, writeSupport)

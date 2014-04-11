@@ -74,6 +74,8 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     ParquetTestData.writeFilterFile()
     ParquetTestData.writeNestedFile1()
     ParquetTestData.writeNestedFile2()
+    ParquetTestData.writeNestedFile3()
+    ParquetTestData.writeNestedFile4()
     testRDD = parquetFile(ParquetTestData.testDir.toString)
     testRDD.registerAsTable("testsource")
     parquetFile(ParquetTestData.testFilterDir.toString)
@@ -85,6 +87,8 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     Utils.deleteRecursively(ParquetTestData.testFilterDir)
     Utils.deleteRecursively(ParquetTestData.testNestedDir1)
     Utils.deleteRecursively(ParquetTestData.testNestedDir2)
+    Utils.deleteRecursively(ParquetTestData.testNestedDir3)
+    Utils.deleteRecursively(ParquetTestData.testNestedDir4)
     // here we should also unregister the table??
   }
 
@@ -495,7 +499,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
 
   test("nested structs") {
     implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
-    ParquetTestData.writeNestedFile3()
     val data = TestSQLContext
       .parquetFile(ParquetTestData.testNestedDir3.toString)
       .toSchemaRDD
@@ -512,6 +515,48 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(result3.size === 1)
     assert(result3(0).size === 1)
     assert(result3(0)(0) === false)
+  }
+
+  test("simple map") {
+    implicit def anyToMap(value: Any) = value.asInstanceOf[collection.mutable.HashMap[String, Int]]
+    val data = TestSQLContext
+      .parquetFile(ParquetTestData.testNestedDir4.toString)
+      .toSchemaRDD
+    data.registerAsTable("mapTable")
+    val result1 = sql("SELECT data1 FROM mapTable").collect()
+    assert(result1.size === 1)
+    assert(result1(0)(0).toMap.getOrElse("key1", 0) === 1)
+    assert(result1(0)(0).toMap.getOrElse("key2", 0) === 2)
+  }
+
+  test("map with struct values") {
+    //implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
+    implicit def anyToMap(value: Any) = value.asInstanceOf[collection.mutable.HashMap[Int, Row]]
+    //val data = TestSQLContext
+    //  .parquetFile(ParquetTestData.testNestedDir4.toString)
+    //  .toSchemaRDD
+    val data = TestSQLContext
+      .parquetFile(ParquetTestData.testNestedDir4.toString)
+      .toSchemaRDD
+    data.registerAsTable("mapTable")
+
+    /*ParquetTestData.readNestedFile(
+      ParquetTestData.testNestedDir4,
+      ParquetTestData.testNestedSchema4)
+    val result = TestSQLContext
+      .parquetFile(ParquetTestData.testNestedDir4.toString)
+      .toSchemaRDD
+      .collect()*/
+    val result1 = sql("SELECT data2 FROM mapTable").collect()
+    assert(result1.size === 1)
+    val entry1 = result1(0)(0).getOrElse(7, null)
+    assert(entry1 != null)
+    assert(entry1(0) === 42)
+    assert(entry1(1) === "the answer")
+    val entry2 = result1(0)(0).getOrElse(8, null)
+    assert(entry2 != null)
+    assert(entry2(0) === 49)
+    assert(entry2(1) === null)
   }
 
   /**

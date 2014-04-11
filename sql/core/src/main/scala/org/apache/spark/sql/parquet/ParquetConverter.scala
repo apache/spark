@@ -26,6 +26,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Row, Attribute}
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
+import scala.collection.mutable
 
 private[parquet] object CatalystConverter {
   // The type internally used for fields
@@ -54,6 +55,14 @@ private[parquet] object CatalystConverter {
       }
       case StructType(fields: Seq[StructField]) => {
         new CatalystStructConverter(fields, fieldIndex, parent)
+      }
+      case MapType(keyType: DataType, valueType: DataType) => {
+        new CatalystMapConverter(
+          Seq(
+            new FieldType("key", keyType, false),
+            new FieldType("value", valueType, true)),
+            fieldIndex,
+            parent)
       }
       case ctype: NativeType => {
         // note: for some reason matching for StringType fails so use this ugly if instead
@@ -396,6 +405,67 @@ private[parquet] class CatalystStructConverter(
   override def getCurrentRecord: Row = throw new UnsupportedOperationException
 }
 
-// TODO: add MapConverter
+private[parquet] class CatalystMapConverter(
+    protected[parquet] val schema: Seq[FieldType],
+    override protected[parquet] val index: Int,
+    override protected[parquet] val parent: CatalystConverter)
+  extends GroupConverter with CatalystConverter {
+
+  private val map = new mutable.HashMap[Any, Any]()
+
+  private val keyValueConverter = new GroupConverter with CatalystConverter {
+    private var currentKey: Any = null
+    private var currentValue: Any = null
+    val keyConverter = CatalystConverter.createConverter(schema(0), 0, this)
+    val valueConverter = CatalystConverter.createConverter(schema(1), 1, this)
+
+    override def getConverter(fieldIndex: Int): Converter = if (fieldIndex == 0) keyConverter else valueConverter
+
+    override def end(): Unit = CatalystMapConverter.this.map += currentKey -> currentValue
+
+    override def start(): Unit = {
+      currentKey = null
+      currentValue = null
+    }
+
+    override protected[parquet] val size: Int = 2
+    override protected[parquet] val index: Int = 0
+    override protected[parquet] val parent: CatalystConverter = CatalystMapConverter.this
+
+    override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit = fieldIndex match {
+      case 0 =>
+        currentKey = value
+      case 1 =>
+        currentValue = value
+      case _ =>
+        new RuntimePermission(s"trying to update Map with fieldIndex $fieldIndex")
+    }
+
+    override protected[parquet] def clearBuffer(): Unit = {}
+    override def getCurrentRecord: Row = throw new UnsupportedOperationException
+  }
+
+  override protected[parquet] val size: Int = 1
+
+  override protected[parquet] def clearBuffer(): Unit = {}
+
+  override def start(): Unit = {
+    map.clear()
+  }
+
+  // TODO: think about reusing the buffer
+  override def end(): Unit = {
+    assert(!isRootConverter)
+    parent.updateField(index, map)
+  }
+
+  override def getConverter(fieldIndex: Int): Converter = keyValueConverter
+
+  override def getCurrentRecord: Row = throw new UnsupportedOperationException
+
+  override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit =
+    throw new UnsupportedOperationException
+}
+
 
 

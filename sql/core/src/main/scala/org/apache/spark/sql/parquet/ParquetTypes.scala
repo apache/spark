@@ -63,13 +63,17 @@ private[parquet] object ParquetTypesConverter {
    * Note that we apply the following conversion rules:
    * <ul>
    *   <li> Primitive types are converter to the corresponding primitive type.</li>
-   *   <li> Group types that have a single field with repetition `REPEATED` or themselves
-   *        have repetition level `REPEATED` are converted to an [[ArrayType]] with the
-   *        corresponding field type (possibly primitive) as element type.</li>
+   *   <li> Group types that have a single field that is itself a group, which has repetition
+   *        level `REPEATED` and two fields (named `key` and `value`), are converted to
+   *        a [[MapType]] with the corresponding key and value (value possibly complex)
+   *        as element type.</li>
    *   <li> Other group types are converted as follows:<ul>
-   *      <li> If they have a single field, they are converted into a [[StructType]] with
+   *      <li> Group types that have a single field with repetition `REPEATED` or themselves
+   *           have repetition level `REPEATED` are converted to an [[ArrayType]] with the
+   *           corresponding field type (possibly primitive) as element type.</li>
+   *      <li> Other groups with a single field are converted into a [[StructType]] with
    *           the corresponding field type.</li>
-   *      <li> If they have more than one field and repetition level `REPEATED` they are
+   *      <li> If groups have more than one field and repetition level `REPEATED` they are
    *           converted into an [[ArrayType]] with the corresponding [[StructType]] as complex
    *           element type.</li>
    *      <li> Otherwise they are converted into a [[StructType]] with the corresponding
@@ -82,16 +86,33 @@ private[parquet] object ParquetTypesConverter {
    * @return The corresponding Catalyst type.
    */
   def toDataType(parquetType: ParquetType): DataType = {
+    def correspondsToMap(groupType: ParquetGroupType): Boolean = {
+      if (groupType.getFieldCount != 1 || groupType.getFields.apply(0).isPrimitive) {
+        false
+      } else {
+        // This mostly follows the convention in ``parquet.schema.ConversionPatterns``
+        val keyValueGroup = groupType.getFields.apply(0).asGroupType()
+        keyValueGroup.getRepetition == Repetition.REPEATED &&
+          keyValueGroup.getName == "map" &&
+          keyValueGroup.getFields.apply(0).getName == "key" &&
+          keyValueGroup.getFields.apply(1).getName == "value"
+      }
+    }
+    def correspondsToArray(groupType: ParquetGroupType): Boolean = {
+      groupType.getFieldCount == 1 &&
+        (groupType.getFields.apply(0).getRepetition == Repetition.REPEATED ||
+          groupType.getRepetition == Repetition.REPEATED)
+    }
+
     if (parquetType.isPrimitive) {
       toPrimitiveDataType(parquetType.asPrimitiveType.getPrimitiveTypeName)
-    }
-    else {
+    } else {
       val groupType = parquetType.asGroupType()
       parquetType.getOriginalType match {
         // if the schema was constructed programmatically there may be hints how to convert
         // it inside the metadata via the OriginalType field
         case ParquetOriginalType.LIST => { // TODO: check enums!
-        val fields = groupType.getFields.map {
+          val fields = groupType.getFields.map {
             field => new StructField(
               field.getName,
               toDataType(field),
@@ -103,16 +124,29 @@ private[parquet] object ParquetTypesConverter {
             new ArrayType(StructType(fields))
           }
         }
+        case ParquetOriginalType.MAP => {
+          assert(
+            !groupType.getFields.apply(0).isPrimitive,
+            "Parquet Map type malformatted: expected nested group for map!")
+          val keyValueGroup = groupType.getFields.apply(0).asGroupType()
+          assert(
+            keyValueGroup.getFieldCount == 2,
+            "Parquet Map type malformatted: nested group should have 2 (key, value) fields!")
+          val keyType = toDataType(keyValueGroup.getFields.apply(0))
+          val valueType = toDataType(keyValueGroup.getFields.apply(1))
+          new MapType(keyType, valueType)
+        }
         case _ => {
-          // everything else nested becomes a Struct, unless it has a single repeated field
-          // in which case it becomes an array (this should correspond to the inverse operation of
-          // parquet.schema.ConversionPatterns.listType)
-          if (groupType.getFieldCount == 1 &&
-            (groupType.getFields.apply(0).getRepetition == Repetition.REPEATED ||
-              groupType.getRepetition == Repetition.REPEATED)) {
+          // Note: the order of these checks is important!
+          if (correspondsToMap(groupType)) { // MapType
+            val keyValueGroup = groupType.getFields.apply(0).asGroupType()
+            val keyType = toDataType(keyValueGroup.getFields.apply(0))
+            val valueType = toDataType(keyValueGroup.getFields.apply(1))
+            new MapType(keyType, valueType)
+          } else if (correspondsToArray(groupType)) { // ArrayType
             val elementType = toDataType(groupType.getFields.apply(0))
             new ArrayType(elementType)
-          } else {
+          } else { // everything else: StructType
             val fields = groupType
               .getFields
               .map(ptype => new StructField(
@@ -164,7 +198,10 @@ private[parquet] object ParquetTypesConverter {
    * <ul>
    *   <li> Primitive types are converted into Parquet's primitive types.</li>
    *   <li> [[org.apache.spark.sql.catalyst.types.StructType]]s are converted
-   *   into Parquet's `GroupType` with the corresponding field types.</li>
+   *        into Parquet's `GroupType` with the corresponding field types.</li>
+   *   <li> [[org.apache.spark.sql.catalyst.types.MapType]]s are converted
+   *        into a nested (2-level) Parquet `GroupType` with two fields: a key type and
+   *        a value type. The nested group has repetition level `REPEATED`.</li>
    *   <li> [[org.apache.spark.sql.catalyst.types.ArrayType]]s are handled as follows:<ul>
    *     <li> If their element is complex, that is of type
    *          [[org.apache.spark.sql.catalyst.types.StructType]], they are converted
@@ -174,18 +211,18 @@ private[parquet] object ParquetTypesConverter {
    *     that is also a list but has only a single field of the type corresponding to
    *     the element type.</li></ul></li>
    * </ul>
-   * Parquet's repetition level is set according to the following rule:
+   * Parquet's repetition level is generally set according to the following rule:
    * <ul>
-   *   <li> If the call to `fromDataType` is recursive inside an enclosing `ArrayType`, then
-   *   the repetition level is set to `REPEATED`.</li>
+   *   <li> If the call to `fromDataType` is recursive inside an enclosing `ArrayType` or
+   *   `MapType`, then the repetition level is set to `REPEATED`.</li>
    *   <li> Otherwise, if the attribute whose type is converted is `nullable`, the Parquet
    *   type gets repetition level `OPTIONAL` and otherwise `REQUIRED`.</li>
    * </ul>
-   * The single expection to this rule is an [[org.apache.spark.sql.catalyst.types.ArrayType]]
+   * The single exception to this rule is an [[org.apache.spark.sql.catalyst.types.ArrayType]]
    * that contains a [[org.apache.spark.sql.catalyst.types.StructType]], whose repetition level
    * is always set to `REPEATED`.
    *
-  @param ctype The type to convert.
+   * @param ctype The type to convert.
    * @param name The name of the [[org.apache.spark.sql.catalyst.expressions.Attribute]]
    *             whose type is converted
    * @param nullable When true indicates that the attribute is nullable
@@ -238,6 +275,13 @@ private[parquet] object ParquetTypesConverter {
             field => fromDataType(field.dataType, field.name, field.nullable, inArray = false)
           }
           new ParquetGroupType(repetition, name, fields)
+        }
+        case MapType(keyType, valueType) => {
+          ConversionPatterns.mapType(
+            repetition,
+            name,
+            fromDataType(keyType, "key", false, inArray = false),
+            fromDataType(valueType, "value", true, inArray = false))
         }
         case _ => sys.error(s"Unsupported datatype $ctype")
       }
