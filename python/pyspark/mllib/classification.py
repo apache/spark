@@ -26,31 +26,37 @@ from pyspark.mllib._common import \
     _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
     LinearModel, _linear_predictor_typecheck
 from pyspark.mllib.linalg import SparseVector
+from pyspark.mllib.regression import LabeledPoint
 from math import exp, log
 
 class LogisticRegressionModel(LinearModel):
     """A linear binary classification model derived from logistic regression.
 
-    >>> data = array([0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0, 3.0]).reshape(4,2)
+    >>> data = [
+    ...     LabeledPoint(0.0, [0.0]),
+    ...     LabeledPoint(1.0, [1.0]),
+    ...     LabeledPoint(1.0, [2.0]),
+    ...     LabeledPoint(1.0, [3.0])
+    ... ]
     >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(data))
     >>> lrm.predict(array([1.0])) > 0
     True
     >>> lrm.predict(array([0.0])) <= 0
     True
     >>> sparse_data = [
-    ...     SparseVector(3, [0, 1], [0.0, 0.0]),
-    ...     SparseVector(3, [0, 2], [1.0, 1.0]),
-    ...     SparseVector(3, [0, 1], [0.0, 0.0]),
-    ...     SparseVector(3, [0, 2], [1.0, 2.0])
+    ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
+    ...     LabeledPoint(1.0, SparseVector(2, {1: 1.0})),
+    ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
+    ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
     ... ]
     >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(sparse_data))
     >>> lrm.predict(array([0.0, 1.0])) > 0
     True
     >>> lrm.predict(array([0.0, 0.0])) <= 0
     True
-    >>> lrm.predict(SparseVector(2, [1], [1.0])) > 0
+    >>> lrm.predict(SparseVector(2, {1: 1.0})) > 0
     True
-    >>> lrm.predict(SparseVector(2, [1], [0.0])) <= 0
+    >>> lrm.predict(SparseVector(2, {1: 0.0})) <= 0
     True
     """
     def predict(self, x):
@@ -73,20 +79,25 @@ class LogisticRegressionWithSGD(object):
 class SVMModel(LinearModel):
     """A support vector machine.
 
-    >>> data = array([0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0, 3.0]).reshape(4,2)
+    >>> data = [
+    ...     LabeledPoint(0.0, [0.0]),
+    ...     LabeledPoint(1.0, [1.0]),
+    ...     LabeledPoint(1.0, [2.0]),
+    ...     LabeledPoint(1.0, [3.0])
+    ... ]
     >>> svm = SVMWithSGD.train(sc.parallelize(data))
     >>> svm.predict(array([1.0])) > 0
     True
     >>> sparse_data = [
-    ...     SparseVector(3, [0, 1], [0.0, 0.0]),
-    ...     SparseVector(3, [0, 2], [1.0, 1.0]),
-    ...     SparseVector(3, [0, 1], [0.0, 0.0]),
-    ...     SparseVector(3, [0, 2], [1.0, 2.0])
+    ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
+    ...     LabeledPoint(1.0, SparseVector(2, {1: 1.0})),
+    ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
+    ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
     ... ]
     >>> svm = SVMWithSGD.train(sc.parallelize(sparse_data))
-    >>> svm.predict(SparseVector(2, [1], [1.0])) > 0
+    >>> svm.predict(SparseVector(2, {1: 1.0})) > 0
     True
-    >>> svm.predict(SparseVector(2, [1], [0.0])) <= 0
+    >>> svm.predict(SparseVector(2, {1: 0.0})) <= 0
     True
     """
     def predict(self, x):
@@ -113,21 +124,25 @@ class NaiveBayesModel(object):
     - pi: vector of logs of class priors (dimension C)
     - theta: matrix of logs of class conditional probabilities (CxD)
 
-    >>> data = array([0.0, 0.0, 1.0, 0.0, 0.0, 2.0, 1.0, 1.0, 0.0]).reshape(3,3)
+    >>> data = [
+    ...     LabeledPoint(0.0, [0.0, 0.0]),
+    ...     LabeledPoint(0.0, [0.0, 1.0]),
+    ...     LabeledPoint(1.0, [1.0, 0.0]),
+    ... ]
     >>> model = NaiveBayes.train(sc.parallelize(data))
     >>> model.predict(array([0.0, 1.0]))
     0.0
     >>> model.predict(array([1.0, 0.0]))
     1.0
     >>> sparse_data = [
-    ...     SparseVector(3, [0, 2], [0.0, 1.0]),
-    ...     SparseVector(3, [0, 2], [0.0, 2.0]),
-    ...     SparseVector(3, [0, 1], [1.0, 1.0])
+    ...     LabeledPoint(0.0, SparseVector(2, {1: 0.0}),
+    ...     LabeledPoint(0.0, SparseVector(2, {1: 1.0}),
+    ...     LabeledPoint(1.0, SparseVector(2, {0: 1.0})
     ... ]
     >>> model = NaiveBayes.train(sc.parallelize(sparse_data))
-    >>> model.predict(SparseVector(2, [1], [1.0]))
+    >>> model.predict(SparseVector(2, {1: 1.0}))
     0.0
-    >>> model.predict(SparseVector(2, [0], [1.0]))
+    >>> model.predict(SparseVector(2, {0: 1.0}))
     1.0
     """
 

@@ -23,7 +23,7 @@ object from MLlib or pass SciPy C{scipy.sparse} column vectors if
 SciPy is available in their environment.
 """
 
-from numpy import array, array_equal, ndarray
+from numpy import array, array_equal, ndarray, float64, int32
 
 
 class SparseVector(object):
@@ -57,12 +57,12 @@ class SparseVector(object):
             if type(pairs) == dict:
                pairs = pairs.items()
             pairs = sorted(pairs)
-            self.indices = array([p[0] for p in pairs], dtype='int32')
-            self.values = array([p[1] for p in pairs], dtype='float64')
+            self.indices = array([p[0] for p in pairs], dtype=int32)
+            self.values = array([p[1] for p in pairs], dtype=float64)
         else:
             assert len(args[0]) == len(args[1]), "index and value arrays not same length"
-            self.indices = array(args[0], dtype='int32')
-            self.values = array(args[1], dtype='float64')
+            self.indices = array(args[0], dtype=int32)
+            self.values = array(args[1], dtype=float64)
             for i in xrange(len(self.indices) - 1):
                 if self.indices[i] >= self.indices[i + 1]:
                     raise TypeError("indices array must be sorted")
@@ -232,7 +232,7 @@ class Vectors(object):
         >>> Vectors.dense([1, 2, 3])
         array([ 1.,  2.,  3.])
         """
-        return array(elements, dtype='float64')
+        return array(elements, dtype=float64)
 
 
 def _test():
