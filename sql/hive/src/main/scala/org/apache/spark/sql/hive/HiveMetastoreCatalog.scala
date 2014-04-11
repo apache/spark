@@ -120,7 +120,7 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
         castChildOutput(p, table, child)
 
       case p @ logical.InsertIntoTable(SparkLogicalPlan(InMemoryColumnarTableScan(
-        HiveTableScan(_, table, _))), _, child, _) =>
+        _, HiveTableScan(_, table, _))), _, child, _) =>
         castChildOutput(p, table, child)
     }
 

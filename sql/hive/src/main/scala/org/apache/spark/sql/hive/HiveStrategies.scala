@@ -44,7 +44,7 @@ trait HiveStrategies {
       case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
       case logical.InsertIntoTable(SparkLogicalPlan(InMemoryColumnarTableScan(
-        HiveTableScan(_, table, _))), partition, child, overwrite) =>
+        _, HiveTableScan(_, table, _))), partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
       case _ => Nil
     }
