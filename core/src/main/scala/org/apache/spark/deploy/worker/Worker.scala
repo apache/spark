@@ -130,7 +130,6 @@ private[spark] class Worker(
     createWorkDir()
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
-    webUi.start()
     webUi.bind()
     registerWithMaster()
 

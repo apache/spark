@@ -22,14 +22,14 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.ui.{UIPage, UIUtils}
+import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.{Utils, Distribution}
 
 /** Page showing statistics and task list for a given stage */
-private[ui] class StagePage(parent: JobProgressTab) extends UIPage("stage") {
+private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
   private val appName = parent.appName
   private val basePath = parent.basePath
-  private lazy val listener = parent.jobProgressListener
+  private val listener = parent.listener
 
   override def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {

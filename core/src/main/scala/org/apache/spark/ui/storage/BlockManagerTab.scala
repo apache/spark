@@ -24,22 +24,18 @@ import org.apache.spark.scheduler._
 import org.apache.spark.storage.{RDDInfo, StorageStatusListener, StorageUtils}
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
-private[ui] class BlockManagerTab(parent: SparkUI) extends UITab("storage") {
+private[ui] class BlockManagerTab(parent: SparkUI) extends WebUITab(parent, "storage") {
   val appName = parent.appName
   val basePath = parent.basePath
+  val listener = new BlockManagerListener(parent.storageStatusListener)
 
-  def start() {
-    listener = Some(new BlockManagerListener(parent.storageStatusListener))
+  initialize()
+
+  def initialize() {
     attachPage(new IndexPage(this))
     attachPage(new RddPage(this))
+    parent.registerListener(listener)
   }
-
-  def blockManagerListener: BlockManagerListener = {
-    assert(listener.isDefined, "BlockManagerTab has not started yet!")
-    listener.get.asInstanceOf[BlockManagerListener]
-  }
-
-  def headerTabs: Seq[UITab] = parent.getTabs
 }
 
 /**

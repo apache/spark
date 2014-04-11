@@ -25,8 +25,7 @@ import scala.xml.Node
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.json4s.JsonAST.{JNothing, JValue}
 
-import org.apache.spark.SecurityManager
-import org.apache.spark.scheduler.SparkListener
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
 
@@ -36,24 +35,31 @@ import org.apache.spark.util.Utils
  * Each WebUI represents a collection of tabs, each of which in turn represents a collection of
  * pages. The use of tabs is optional, however; a WebUI may choose to include pages directly.
  */
-private[spark] abstract class WebUI(securityManager: SecurityManager, basePath: String = "") {
-  protected val tabs = ArrayBuffer[UITab]()
+private[spark] abstract class WebUI(
+    securityManager: SecurityManager,
+    port: Int,
+    conf: SparkConf,
+    basePath: String = "")
+  extends Logging {
+
+  protected val tabs = ArrayBuffer[WebUITab]()
   protected val handlers = ArrayBuffer[ServletContextHandler]()
   protected var serverInfo: Option[ServerInfo] = None
+  protected val localHostName = Utils.localHostName()
+  protected val publicHostName = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHostName)
+  private val className = Utils.getFormattedClassName(this)
 
-  def getTabs: Seq[UITab] = tabs.toSeq
+  def getTabs: Seq[WebUITab] = tabs.toSeq
   def getHandlers: Seq[ServletContextHandler] = handlers.toSeq
-  def getListeners: Seq[SparkListener] = tabs.flatMap(_.listener)
 
   /** Attach a tab to this UI, along with all of its attached pages. */
-  def attachTab(tab: UITab) {
-    tab.start()
+  def attachTab(tab: WebUITab) {
     tab.pages.foreach(attachPage)
     tabs += tab
   }
 
   /** Attach a page to this UI. */
-  def attachPage(page: UIPage) {
+  def attachPage(page: WebUIPage) {
     val pagePath = "/" + page.prefix
     attachHandler(createServletHandler(pagePath,
       (request: HttpServletRequest) => page.render(request), securityManager, basePath))
@@ -86,13 +92,20 @@ private[spark] abstract class WebUI(securityManager: SecurityManager, basePath: 
   }
 
   /** Initialize all components of the server. */
-  def start()
+  def initialize()
 
-  /**
-   * Bind to the HTTP server behind this web interface.
-   * Overridden implementation should set serverInfo.
-   */
-  def bind()
+  /** Bind to the HTTP server behind this web interface. */
+  def bind() {
+    assert(!serverInfo.isDefined, "Attempted to bind %s more than once!".format(className))
+    try {
+      serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, conf))
+      logInfo("Started %s at http://%s:%d".format(className, publicHostName, boundPort))
+    } catch {
+      case e: Exception =>
+        logError("Failed to bind %s".format(className), e)
+        System.exit(1)
+    }
+  }
 
   /** Return the actual port to which this server is bound. Only valid after bind(). */
   def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
@@ -100,39 +113,41 @@ private[spark] abstract class WebUI(securityManager: SecurityManager, basePath: 
   /** Stop the server behind this web interface. Only valid after bind(). */
   def stop() {
     assert(serverInfo.isDefined,
-      "Attempted to stop %s before binding to a server!".format(Utils.getFormattedClassName(this)))
+      "Attempted to stop %s before binding to a server!".format(className))
     serverInfo.get.server.stop()
   }
 }
 
 
 /**
- * A tab that represents a collection of pages and a unit of listening for Spark events.
- * Associating each tab with a listener is arbitrary and need not be the case.
+ * A tab that represents a collection of pages.
  */
-private[spark] abstract class UITab(val prefix: String) {
-  val pages = ArrayBuffer[UIPage]()
-  var listener: Option[SparkListener] = None
-  var name = prefix.capitalize
+private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
+  val pages = ArrayBuffer[WebUIPage]()
+  val name = prefix.capitalize
 
   /** Attach a page to this tab. This prepends the page's prefix with the tab's own prefix. */
-  def attachPage(page: UIPage) {
+  def attachPage(page: WebUIPage) {
     page.prefix = (prefix + "/" + page.prefix).stripSuffix("/")
     pages += page
   }
 
-  /** Initialize listener and attach pages. */
-  def start()
+  /** Initialize this tab and attach all relevant pages. */
+  def initialize()
+
+  /** Get a list of header tabs from the parent UI. */
+  def headerTabs: Seq[WebUITab] = parent.getTabs
 }
 
 
 /**
  * A page that represents the leaf node in the UI hierarchy.
  *
+ * The direct parent of a WebUIPage is not specified as it can be either a WebUI or a WebUITab.
  * If includeJson is true, the parent WebUI (direct or indirect) creates handlers for both the
  * HTML and the JSON content, rather than just the former.
  */
-private[spark] abstract class UIPage(var prefix: String, val includeJson: Boolean = false) {
+private[spark] abstract class WebUIPage(var prefix: String, val includeJson: Boolean = false) {
   def render(request: HttpServletRequest): Seq[Node] = Seq[Node]()
   def renderJson(request: HttpServletRequest): JValue = JNothing
 }

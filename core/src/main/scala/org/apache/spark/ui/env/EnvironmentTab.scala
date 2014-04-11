@@ -20,21 +20,17 @@ package org.apache.spark.ui.env
 import org.apache.spark.scheduler._
 import org.apache.spark.ui._
 
-private[ui] class EnvironmentTab(parent: SparkUI) extends UITab("environment") {
+private[ui] class EnvironmentTab(parent: SparkUI) extends WebUITab(parent, "environment") {
   val appName = parent.appName
   val basePath = parent.basePath
+  val listener = new EnvironmentListener
 
-  def start() {
-    listener = Some(new EnvironmentListener)
+  initialize()
+
+  def initialize() {
     attachPage(new IndexPage(this))
+    parent.registerListener(listener)
   }
-
-  def environmentListener: EnvironmentListener = {
-    assert(listener.isDefined, "EnvironmentTab has not started yet!")
-    listener.get.asInstanceOf[EnvironmentListener]
-  }
-
-  def headerTabs: Seq[UITab] = parent.getTabs
 }
 
 /**

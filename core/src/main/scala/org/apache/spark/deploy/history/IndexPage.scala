@@ -21,9 +21,9 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.ui.{UIPage, UIUtils}
+import org.apache.spark.ui.{WebUIPage, UIUtils}
 
-private[spark] class IndexPage(parent: HistoryServer) extends UIPage("") {
+private[spark] class IndexPage(parent: HistoryServer) extends WebUIPage("") {
 
   override def render(request: HttpServletRequest): Seq[Node] = {
     val appRows = parent.appIdToInfo.values.toSeq.sortBy { app => -app.lastUpdated }

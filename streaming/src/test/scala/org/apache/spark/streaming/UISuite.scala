@@ -59,15 +59,10 @@ class UISuite extends FunSuite with ShouldMatchers with BeforeAndAfterAll with B
     val ssc = new StreamingContext(sc, Seconds(1))
     eventually(timeout(10 seconds), interval(50 milliseconds)) {
       val uiData = Source.fromURL(
-        ssc.sparkContext.ui.appUIAddress.stripSuffix("/") + "/streaming").mkString
+        ssc.sparkContext.ui.appUIAddress).mkString
+      assert(!uiData.contains("random data that should not be present"))
       assert(uiData.contains("streaming"))
     }
-  }
-
-  test("multiple streaming tabs") {
-    val ssc1 = new StreamingContext(sc, Seconds(1))
-    val ssc2 = new StreamingContext(sc, Seconds(2))
-    ssc1.uiTab.prefix should not be ssc2.uiTab.prefix
   }
 
   ignore("Testing") {
@@ -75,21 +70,22 @@ class UISuite extends FunSuite with ShouldMatchers with BeforeAndAfterAll with B
   }
 
   def runStreaming(duration: Long) {
-    val ssc = new StreamingContext("local[10]", "test", Seconds(1))
-    val servers = (1 to 5).map { i => new TestServer(10000 + i) }
+    val ssc1 = new StreamingContext(sc, Seconds(1))
+    val servers1 = (1 to 3).map { i => new TestServer(10000 + i) }
 
-    val inputStream = ssc.union(servers.map(server => ssc.socketTextStream("localhost", server.port)))
-    inputStream.count.print
+    val inputStream1 = ssc1.union(servers1.map(server => ssc1.socketTextStream("localhost", server.port)))
+    inputStream1.count.print
 
-    ssc.start()
-    servers.foreach(_.start())
+    ssc1.start()
+    servers1.foreach(_.start())
+
     val startTime = System.currentTimeMillis()
     while (System.currentTimeMillis() - startTime < duration) {
-      servers.map(_.send(Random.nextString(10) + "\n"))
+      servers1.map(_.send(Random.nextString(10) + "\n"))
       //Thread.sleep(1)
     }
-    ssc.stop()
-    servers.foreach(_.stop())
+    ssc1.stop()
+    servers1.foreach(_.stop())
   }
 }
 

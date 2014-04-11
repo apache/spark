@@ -29,9 +29,9 @@ import org.apache.spark.util.Distribution
 
 /** Page for Spark Web UI that shows statistics of a streaming job */
 private[ui] class StreamingPage(parent: StreamingTab)
-  extends UIPage("") with Logging {
+  extends WebUIPage("") with Logging {
 
-  private val listener = parent.streamingListener
+  private val listener = parent.listener
   private val startTime = Calendar.getInstance().getTime()
   private val emptyCellTest = "-"
 
