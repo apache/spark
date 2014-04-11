@@ -79,7 +79,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       val headerRow = Seq(
         "Receiver",
         "Location",
-        "Records in last batch\n[" + formatDate(Calendar.getInstance().getTime())+ "]",
+        "Records in last batch\n[" + formatDate(Calendar.getInstance().getTime()) + "]",
         "Minimum rate\n[records/sec]",
         "25th percentile rate\n[records/sec]",
         "Median rate\n[records/sec]",
