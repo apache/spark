@@ -31,7 +31,7 @@ private[ui] class IndexPage(parent: StorageTab) extends WebUIPage("") {
   private val basePath = parent.basePath
   private val listener = parent.listener
 
-  override def render(request: HttpServletRequest): Seq[Node] = {
+  def render(request: HttpServletRequest): Seq[Node] = {
     val rdds = listener.rddInfoList
     val content = UIUtils.listingTable(rddHeader, rddRow, rdds)
     UIUtils.headerSparkPage(content, basePath, appName, "Storage ", parent.headerTabs, parent)

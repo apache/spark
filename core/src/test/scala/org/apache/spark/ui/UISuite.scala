@@ -65,7 +65,7 @@ class UISuite extends FunSuite {
 
       val newTab = new WebUITab(sparkUI, "foo") {
         attachPage(new WebUIPage("") {
-          override def render(request: HttpServletRequest): Seq[Node] = {
+          def render(request: HttpServletRequest): Seq[Node] = {
             <b>"html magic"</b>
           }
         })
