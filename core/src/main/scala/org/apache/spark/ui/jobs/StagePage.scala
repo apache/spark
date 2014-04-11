@@ -30,6 +30,7 @@ import org.apache.spark.util.{Utils, Distribution}
 private[ui] class StagePage(parent: JobProgressUI) {
   private val basePath = parent.basePath
   private lazy val listener = parent.listener
+  private lazy val sc = parent.sc
 
   private def appName = parent.appName
 
