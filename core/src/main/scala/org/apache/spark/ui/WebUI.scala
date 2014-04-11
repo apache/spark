@@ -132,9 +132,6 @@ private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
     pages += page
   }
 
-  /** Initialize this tab and attach all relevant pages. */
-  def initialize()
-
   /** Get a list of header tabs from the parent UI. */
   def headerTabs: Seq[WebUITab] = parent.getTabs
 }

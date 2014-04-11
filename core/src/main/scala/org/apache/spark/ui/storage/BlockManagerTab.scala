@@ -29,13 +29,9 @@ private[ui] class BlockManagerTab(parent: SparkUI) extends WebUITab(parent, "sto
   val basePath = parent.basePath
   val listener = new BlockManagerListener(parent.storageStatusListener)
 
-  initialize()
-
-  def initialize() {
-    attachPage(new IndexPage(this))
-    attachPage(new RddPage(this))
-    parent.registerListener(listener)
-  }
+  attachPage(new IndexPage(this))
+  attachPage(new RddPage(this))
+  parent.registerListener(listener)
 }
 
 /**

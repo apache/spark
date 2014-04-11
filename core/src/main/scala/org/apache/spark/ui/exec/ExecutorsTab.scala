@@ -29,12 +29,8 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends WebUITab(parent, "execut
   val basePath = parent.basePath
   val listener = new ExecutorsListener(parent.storageStatusListener)
 
-  initialize()
-
-  def initialize() {
-    attachPage(new IndexPage(this))
-    parent.registerListener(listener)
-  }
+  attachPage(new IndexPage(this))
+  parent.registerListener(listener)
 }
 
 /**

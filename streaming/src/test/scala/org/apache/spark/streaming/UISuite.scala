@@ -17,86 +17,30 @@
 
 package org.apache.spark.streaming
 
-import scala.reflect.ClassTag
-import scala.util.Random
 import scala.io.Source
 
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
+import org.scalatest.FunSuite
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
-import org.scalatest.matchers.ShouldMatchers
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.dstream.InputDStream
-
-class UISuite extends FunSuite with ShouldMatchers with BeforeAndAfterAll with BeforeAndAfter {
-  var sc: SparkContext = null
-  var ssc: StreamingContext = null
-
-  override def beforeAll() {
-    val conf = new SparkConf().setMaster("local").setAppName(this.getClass.getSimpleName)
-    conf.set("spark.cleaner.ttl", "1800")
-    sc = new SparkContext(conf)
-  }
-
-  override def afterAll() {
-    if (sc != null) sc.stop()
-  }
-
-  before {
-    ssc = new StreamingContext(sc, Seconds(1))
-  }
-
-  after {
-    if (ssc != null) {
-      ssc.stop()
-      ssc = null
-    }
-  }
+class UISuite extends FunSuite {
 
   test("streaming tab in spark UI") {
-    val ssc = new StreamingContext(sc, Seconds(1))
+    val ssc = new StreamingContext("local", "test", Seconds(1))
     eventually(timeout(10 seconds), interval(50 milliseconds)) {
-      val uiData = Source.fromURL(
-        ssc.sparkContext.ui.appUIAddress).mkString
-      assert(!uiData.contains("random data that should not be present"))
-      assert(uiData.contains("streaming"))
+      val html = Source.fromURL(ssc.sparkContext.ui.appUIAddress).mkString
+      assert(!html.contains("random data that should not be present"))
+      // test if streaming tab exist
+      assert(html.toLowerCase.contains("streaming"))
+      // test if other Spark tabs still exist
+      assert(html.toLowerCase.contains("stages"))
+    }
+
+    eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      val html = Source.fromURL(
+        ssc.sparkContext.ui.appUIAddress.stripSuffix("/") + "/streaming").mkString
+      assert(html.toLowerCase.contains("batch"))
+      assert(html.toLowerCase.contains("network"))
     }
   }
-
-  ignore("Testing") {
-    runStreaming(1000000)
-  }
-
-  def runStreaming(duration: Long) {
-    val ssc1 = new StreamingContext(sc, Seconds(1))
-    val servers1 = (1 to 3).map { i => new TestServer(10000 + i) }
-
-    val inputStream1 = ssc1.union(servers1.map(server => ssc1.socketTextStream("localhost", server.port)))
-    inputStream1.count.print
-
-    ssc1.start()
-    servers1.foreach(_.start())
-
-    val startTime = System.currentTimeMillis()
-    while (System.currentTimeMillis() - startTime < duration) {
-      servers1.map(_.send(Random.nextString(10) + "\n"))
-      //Thread.sleep(1)
-    }
-    ssc1.stop()
-    servers1.foreach(_.stop())
-  }
-}
-
-class FunctionBasedInputDStream[T: ClassTag](
-    ssc_ : StreamingContext,
-    function: (StreamingContext, Time) => Option[RDD[T]]
-  ) extends InputDStream[T](ssc_) {
-
-  def start(): Unit = {}
-
-  def stop(): Unit = {}
-
-  def compute(validTime: Time): Option[RDD[T]] = function(ssc, validTime)
 }

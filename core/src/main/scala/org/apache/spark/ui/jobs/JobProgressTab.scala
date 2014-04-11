@@ -30,14 +30,10 @@ private[ui] class JobProgressTab(parent: SparkUI) extends WebUITab(parent, "stag
   val conf = if (live) sc.conf else new SparkConf
   val listener = new JobProgressListener(conf)
 
-  initialize()
-
-  def initialize() {
-    attachPage(new IndexPage(this))
-    attachPage(new StagePage(this))
-    attachPage(new PoolPage(this))
-    parent.registerListener(listener)
-  }
+  attachPage(new IndexPage(this))
+  attachPage(new StagePage(this))
+  attachPage(new PoolPage(this))
+  parent.registerListener(listener)
 
   def isFairScheduler = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
 }

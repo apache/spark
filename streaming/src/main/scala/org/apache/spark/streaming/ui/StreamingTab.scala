@@ -17,8 +17,6 @@
 
 package org.apache.spark.streaming.ui
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import org.apache.spark.Logging
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.ui.WebUITab
@@ -32,11 +30,7 @@ private[spark] class StreamingTab(ssc: StreamingContext)
   val basePath = parent.basePath
   val listener = new StreamingJobProgressListener(ssc)
 
-  initialize()
-
-  def initialize() {
-    ssc.addStreamingListener(listener)
-    attachPage(new StreamingPage(this))
-    parent.attachTab(this)
-  }
+  ssc.addStreamingListener(listener)
+  attachPage(new StreamingPage(this))
+  parent.attachTab(this)
 }
