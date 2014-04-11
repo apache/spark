@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
 /** Top level user interface for Spark */
 private[spark] class SparkUI(
     val sc: SparkContext,
-    conf: SparkConf,
+    val conf: SparkConf,
     val listenerBus: SparkListenerBus,
     var appName: String,
     val basePath: String = "")
@@ -46,7 +46,6 @@ private[spark] class SparkUI(
   val live = sc != null
 
   val securityManager = if (live) sc.env.securityManager else new SecurityManager(conf)
-  val killEnabled = conf.getBoolean("spark.ui.killEnabled", true)
 
   private val localHost = Utils.localHostName()
   private val publicHost = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHost)
@@ -70,7 +69,7 @@ private[spark] class SparkUI(
     metricsServletHandlers ++
     Seq[ServletContextHandler] (
       createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"),
-      createRedirectHandler("/", "/stages", basePath)
+      createRedirectHandler("/", "/stages", basePath = basePath)
     )
   }
 
