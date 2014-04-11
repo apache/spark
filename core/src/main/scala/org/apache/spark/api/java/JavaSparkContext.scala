@@ -167,8 +167,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    *   hdfs://a-hdfs-path/part-nnnnn
    * }}}
    *
-   * Do
-   * `JavaPairRDD<String, String> rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path", minSplit)`
+   * Do `JavaPairRDD<String, String> rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path")`,
    *
    * <p> then `rdd` contains
    * {{{
@@ -178,7 +177,9 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    *   (a-hdfs-path/part-nnnnn, its content)
    * }}}
    *
-   * @note Small files are preferred, as each file will be loaded fully in memory.
+   * @note Small files are preferred, large file is also allowable, but may cause bad performance.
+   *
+   * @param minSplits A suggestion value of the minimal splitting number for input data.
    */
   def wholeTextFiles(path: String, minSplits: Int): JavaPairRDD[String, String] =
     new JavaPairRDD(sc.wholeTextFiles(path, minSplits))

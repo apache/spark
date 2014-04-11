@@ -28,8 +28,10 @@ import org.apache.spark.{InterruptibleIterator, Logging, Partition, Serializable
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.input.WholeTextFileInputFormat
 
-private[spark]
-class NewHadoopPartition(rddId: Int, val index: Int, @transient rawSplit: InputSplit with Writable)
+private[spark] class NewHadoopPartition(
+    rddId: Int,
+    val index: Int,
+    @transient rawSplit: InputSplit with Writable)
   extends Partition {
 
   val serializableHadoopSplit = new SerializableWritable(rawSplit)
@@ -57,8 +59,7 @@ class NewHadoopRDD[K, V](
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
-    @transient conf: Configuration,
-    minSplits: Int = 1)
+    @transient conf: Configuration)
   extends RDD[(K, V)](sc, Nil)
   with SparkHadoopMapReduceUtil
   with Logging {
@@ -67,18 +68,19 @@ class NewHadoopRDD[K, V](
   private val confBroadcast = sc.broadcast(new SerializableWritable(conf))
   // private val serializableConf = new SerializableWritable(conf)
 
-  private val jobtrackerId: String = {
+  private val jobTrackerId: String = {
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     formatter.format(new Date())
   }
 
-  @transient private val jobId = new JobID(jobtrackerId, id)
+  @transient protected val jobId = new JobID(jobTrackerId, id)
 
   override def getPartitions: Array[Partition] = {
     val inputFormat = inputFormatClass.newInstance
-
-    if (inputFormat.isInstanceOf[Configurable]) {
-      inputFormat.asInstanceOf[Configurable].setConf(conf)
+    inputFormat match {
+      case configurable: Configurable =>
+        configurable.setConf(conf)
+      case _ =>
     }
 
     val jobContext = newJobContext(conf, jobId)
@@ -100,11 +102,13 @@ class NewHadoopRDD[K, V](
       val split = theSplit.asInstanceOf[NewHadoopPartition]
       logInfo("Input split: " + split.serializableHadoopSplit)
       val conf = confBroadcast.value.value
-      val attemptId = newTaskAttemptID(jobtrackerId, id, isMap = true, split.index, 0)
+      val attemptId = newTaskAttemptID(jobTrackerId, id, isMap = true, split.index, 0)
       val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
       val format = inputFormatClass.newInstance
-      if (format.isInstanceOf[Configurable]) {
-        format.asInstanceOf[Configurable].setConf(conf)
+      format match {
+        case configurable: Configurable =>
+          configurable.setConf(conf)
+        case _ =>
       }
       val reader = format.createRecordReader(
         split.serializableHadoopSplit.value, hadoopAttemptContext)
@@ -148,5 +152,32 @@ class NewHadoopRDD[K, V](
   }
 
   def getConf: Configuration = confBroadcast.value.value
+}
+
+private[spark] class WholeTextFileRDD(
+    sc : SparkContext,
+    inputFormatClass: Class[_ <: WholeTextFileInputFormat],
+    keyClass: Class[String],
+    valueClass: Class[String],
+    @transient conf: Configuration,
+    minSplits: Int)
+  extends NewHadoopRDD[String, String](sc, inputFormatClass, keyClass, valueClass, conf) {
+
+  override def getPartitions: Array[Partition] = {
+    val inputFormat = inputFormatClass.newInstance
+    inputFormat match {
+      case configurable: Configurable =>
+        configurable.setConf(conf)
+      case _ =>
+    }
+    val jobContext = newJobContext(conf, jobId)
+    inputFormat.setMaxSplitSize(jobContext, minSplits)
+    val rawSplits = inputFormat.getSplits(jobContext).toArray
+    val result = new Array[Partition](rawSplits.size)
+    for (i <- 0 until rawSplits.size) {
+      result(i) = new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
+    }
+    result
+  }
 }
 
