@@ -165,36 +165,64 @@ case class BroadcastNestedLoopJoin(
   def execute() = {
     val broadcastedRelation = sc.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
 
-    val streamedPlusMatches = streamed.execute().mapPartitions { streamedIter =>
-      val matchedRows = new ArrayBuffer[Row]
-      // TODO: Use Spark's BitSet.
-      val includedBroadcastTuples = new BitSet(broadcastedRelation.value.size)
-      val joinedRow = new JoinedRow
+    val streamedPlusMatches = joinType match {
+      case LeftSemi =>
+        streamed.execute().mapPartitions {
+          streamedIter =>
+            val matchedRows = new ArrayBuffer[Row]
+            val joinedRow = new JoinedRow
 
-      streamedIter.foreach { streamedRow =>
-        var i = 0
-        var matched = false
+            streamedIter.foreach {
+              streamedRow =>
+                var i = 0
+                var matched = false
 
-        while (i < broadcastedRelation.value.size) {
-          // TODO: One bitset per partition instead of per row.
-          val broadcastedRow = broadcastedRelation.value(i)
-          if (boundCondition(joinedRow(streamedRow, broadcastedRow))) {
-            matchedRows += buildRow(streamedRow ++ broadcastedRow)
-            matched = true
-            includedBroadcastTuples += i
-          }
-          i += 1
+                while (i < broadcastedRelation.value.size && !matched) {
+                  // TODO: One bitset per partition instead of per row.
+                  val broadcastedRow = broadcastedRelation.value(i)
+                    if (boundCondition(joinedRow(streamedRow, broadcastedRow))) {
+                      matchedRows += buildRow(streamedRow)
+                      matched = true
+                  }
+                  i += 1
+                }
+            }
+            Iterator((matchedRows, null))
         }
+      case _ =>
+        streamed.execute().mapPartitions {
+          streamedIter =>
+            val matchedRows = new ArrayBuffer[Row]
+            // TODO: Use Spark's BitSet.
+            val includedBroadcastTuples = new BitSet(broadcastedRelation.value.size)
+            val joinedRow = new JoinedRow
 
-        if (!matched && (joinType == LeftOuter || joinType == FullOuter)) {
-          matchedRows += buildRow(streamedRow ++ Array.fill(right.output.size)(null))
+            streamedIter.foreach {
+              streamedRow =>
+                var i = 0
+                var matched = false
+
+                while (i < broadcastedRelation.value.size) {
+                  // TODO: One bitset per partition instead of per row.
+                  val broadcastedRow = broadcastedRelation.value(i)
+                  if (boundCondition(joinedRow(streamedRow, broadcastedRow))) {
+                    matchedRows += buildRow(streamedRow ++ broadcastedRow)
+                    matched = true
+                    includedBroadcastTuples += i
+                  }
+                  i += 1
+                }
+
+                if (!matched && (joinType == LeftOuter || joinType == FullOuter)) {
+                  matchedRows += buildRow(streamedRow ++ Array.fill(right.output.size)(null))
+                }
+            }
+            Iterator((matchedRows, includedBroadcastTuples))
         }
-      }
-      Iterator((matchedRows, includedBroadcastTuples))
     }
 
-    val includedBroadcastTuples = streamedPlusMatches.map(_._2)
-    val allIncludedBroadcastTuples =
+    lazy val includedBroadcastTuples = streamedPlusMatches.map(_._2)
+    lazy val allIncludedBroadcastTuples =
       if (includedBroadcastTuples.count == 0) {
         new scala.collection.mutable.BitSet(broadcastedRelation.value.size)
       } else {

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.{LeftSemi, JoinType}
 import org.apache.spark.sql.catalyst.types._
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
@@ -81,7 +81,12 @@ case class Join(
   condition: Option[Expression]) extends BinaryNode {
 
   def references = condition.map(_.references).getOrElse(Set.empty)
-  def output = left.output ++ right.output
+  def output = joinType match {
+    case LeftSemi =>
+      left.output
+    case _ =>
+      left.output ++ right.output
+  }
 }
 
 case class InsertIntoTable(
