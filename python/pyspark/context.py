@@ -619,6 +619,11 @@ class SQLContext:
         self._ssql_ctx.uncacheTable(tableName)
 
 class HiveContext(SQLContext):
+    """
+    An instance of the Spark SQL execution engine that integrates with data stored in Hive.
+    Configuration for Hive is read from hive-site.xml on the classpath. It supports running both SQL
+    and HiveQL commands.
+    """
 
     @property
     def _ssql_ctx(self):
@@ -646,6 +651,28 @@ class HiveContext(SQLContext):
         return self.hiveql(hqlQuery)
 
 class LocalHiveContext(HiveContext):
+    """
+    Starts up an instance of hive where metadata is stored locally. An in-process metadata data is
+    created with data stored in ./metadata.  Warehouse data is stored in in ./warehouse.
+
+    >>> import os
+    >>> from pyspark.context import LocalHiveContext
+    >>> hiveCtx = LocalHiveContext(sc)
+    >>> try:
+    ...     supress = hiveCtx.hql("DROP TABLE src")
+    ... except Exception:
+    ...     pass
+    >>> kv1 = os.path.join(os.environ["SPARK_HOME"], 'examples/src/main/resources/kv1.txt')
+    >>> supress = hiveCtx.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+    >>> supress = hiveCtx.hql("LOAD DATA LOCAL INPATH '%s' INTO TABLE src" % kv1)
+    >>> results = hiveCtx.hql("FROM src SELECT value").map(lambda r: int(r.value.split('_')[1]))
+    >>> num = results.count()
+    >>> reduce_sum = results.reduce(lambda x, y: x + y)
+    >>> num
+    500
+    >>> reduce_sum
+    130091
+    """
 
     def _get_hive_ctx(self):
         return self._jvm.LocalHiveContext(self._jsc.sc())
