@@ -18,15 +18,34 @@
 package org.apache.spark.streaming.ui
 
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.ui.UITab
+import org.apache.spark.ui.{SparkUI, UITab}
 import org.apache.spark.Logging
+import java.util.concurrent.atomic.AtomicInteger
 
-/** Spark Web UI tab that shows statistics of a streaming job */
-private[spark] class StreamingTab(val ssc: StreamingContext)
-  extends UITab("streaming") with Logging {
+/** Streaming tab in the Spark web UI */
+private[spark] class StreamingTab(ssc: StreamingContext)
+  extends UITab(StreamingTab.streamingTabName) with Logging {
 
-  val streamingPage = new StreamingPage(this)
-  ssc.sc.ui.attachTab(this)
+  val parent = ssc.sc.ui
+  val streamingListener = new StreamingJobProgressListener(ssc)
+  val basePath = parent.basePath
+  val appName = parent.appName
+
+  ssc.addStreamingListener(streamingListener)
+  attachPage(new StreamingPage(this))
+  parent.attachTab(this)
+
+  def headerTabs = parent.getTabs
 
   def start() { }
+}
+
+object StreamingTab {
+  private val atomicInteger = new AtomicInteger(0)
+
+  /** Generate the name of the streaming tab. For the first streaming tab it will be */
+  def streamingTabName: String = {
+    val count = atomicInteger.getAndIncrement
+    if (count == 0) "streaming" else s"streaming-$count"
+  }
 }

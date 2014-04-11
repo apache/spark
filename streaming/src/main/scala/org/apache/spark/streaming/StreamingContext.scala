@@ -157,8 +157,7 @@ class StreamingContext private[streaming] (
 
   private[streaming] val waiter = new ContextWaiter
 
-  private[streaming] val ui = new StreamingTab(this)
-  ui.start()
+  private[streaming] val uiTab = new StreamingTab(this)
 
   /** Enumeration to identify current state of the StreamingContext */
   private[streaming] object StreamingContextState extends Enumeration {

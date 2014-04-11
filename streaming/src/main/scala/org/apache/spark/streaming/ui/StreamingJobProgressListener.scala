@@ -28,7 +28,7 @@ import org.apache.spark.streaming.scheduler.StreamingListenerBatchSubmitted
 import org.apache.spark.util.Distribution
 
 
-private[ui] class StreamingProgressListener(ssc: StreamingContext) extends StreamingListener {
+private[ui] class StreamingJobProgressListener(ssc: StreamingContext) extends StreamingListener {
 
   private val waitingBatchInfos = new HashMap[Time, BatchInfo]
   private val runningBatchInfos = new HashMap[Time, BatchInfo]
