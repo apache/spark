@@ -29,10 +29,10 @@ import org.apache.spark.util.Utils
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
 private[ui] class JobProgressUI(parent: SparkUI) {
-  val appName = parent.appName
   val basePath = parent.basePath
   val live = parent.live
   val sc = parent.sc
+  val killEnabled = parent.killEnabled
 
   lazy val listener = _listener.get
   lazy val isFairScheduler = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
@@ -41,6 +41,8 @@ private[ui] class JobProgressUI(parent: SparkUI) {
   private val stagePage = new StagePage(this)
   private val poolPage = new PoolPage(this)
   private var _listener: Option[JobProgressListener] = None
+
+  def appName = parent.appName
 
   def start() {
     val conf = if (live) sc.conf else new SparkConf

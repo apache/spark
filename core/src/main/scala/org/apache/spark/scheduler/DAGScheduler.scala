@@ -512,6 +512,13 @@ class DAGScheduler(
   }
 
   /**
+   * Cancel all jobs associated with a running or scheduled stage.
+   */
+  def cancelStage(stageId: Int) {
+    eventProcessActor ! StageCancelled(stageId)
+  }
+
+  /**
    * Process one event retrieved from the event processing actor.
    *
    * @param event The event to be processed.
@@ -551,6 +558,9 @@ class DAGScheduler(
           submitStage(finalStage)
         }
 
+      case StageCancelled(stageId) =>
+        handleStageCancellation(stageId)
+
       case JobCancelled(jobId) =>
         handleJobCancellation(jobId)
 
@@ -560,11 +570,13 @@ class DAGScheduler(
         val activeInGroup = activeJobs.filter(activeJob =>
           groupId == activeJob.properties.get(SparkContext.SPARK_JOB_GROUP_ID))
         val jobIds = activeInGroup.map(_.jobId)
-        jobIds.foreach(handleJobCancellation)
+        jobIds.foreach(jobId => handleJobCancellation(jobId,
+          "as part of cancelled job group %s".format(groupId)))
 
       case AllJobsCancelled =>
         // Cancel all running jobs.
-        runningStages.map(_.jobId).foreach(handleJobCancellation)
+        runningStages.map(_.jobId).foreach(jobId => handleJobCancellation(jobId,
+          "as part of cancellation of all jobs"))
         activeJobs.clear()      // These should already be empty by this point,
         jobIdToActiveJob.clear()   // but just in case we lost track of some jobs...
 
@@ -991,11 +1003,23 @@ class DAGScheduler(
     }
   }
 
-  private def handleJobCancellation(jobId: Int) {
+  private def handleStageCancellation(stageId: Int) {
+    if (stageIdToJobIds.contains(stageId)) {
+      val jobsThatUseStage: Array[Int] = stageIdToJobIds(stageId).toArray
+      jobsThatUseStage.foreach(jobId => {
+        handleJobCancellation(jobId, "because Stage %s was cancelled".format(stageId))
+      })
+    } else {
+      logInfo("No active jobs to kill for Stage " + stageId)
+    }
+  }
+
+  private def handleJobCancellation(jobId: Int, reason: String = "") {
     if (!jobIdToStageIds.contains(jobId)) {
       logDebug("Trying to cancel unregistered job " + jobId)
     } else {
-      failJobAndIndependentStages(jobIdToActiveJob(jobId), s"Job $jobId cancelled", None)
+      failJobAndIndependentStages(jobIdToActiveJob(jobId),
+        "Job %d cancelled %s".format(jobId, reason), None)
     }
   }
 

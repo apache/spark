@@ -62,10 +62,10 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
       if (n == 0) {
         mu = other.mu
         m2 = other.m2
-        n = other.n  
+        n = other.n
         maxValue = other.maxValue
         minValue = other.minValue
-      } else if (other.n != 0) {        
+      } else if (other.n != 0) {
         val delta = other.mu - mu
         if (other.n * 10 < n) {
           mu = mu + (delta * other.n) / (n + other.n)
