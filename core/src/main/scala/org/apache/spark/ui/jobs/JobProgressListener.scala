@@ -222,12 +222,10 @@ private[ui] class JobProgressListener(conf: SparkConf) extends SparkListener {
 
   override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) {
     synchronized {
-      val schedulingModeName =
-        environmentUpdate.environmentDetails("Spark Properties").toMap.get("spark.scheduler.mode")
-      schedulingMode = schedulingModeName match {
-        case Some(name) => Some(SchedulingMode.withName(name))
-        case None => None
-      }
+      environmentUpdate
+        .environmentDetails("Spark Properties").toMap
+        .get("spark.scheduler.mode")
+        .map(SchedulingMode.withName)
     }
   }
 

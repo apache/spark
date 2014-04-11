@@ -21,12 +21,12 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.ui.{UIUtils, UIPage}
+import org.apache.spark.ui.{UIUtils, WebUIPage}
 
-private[ui] class IndexPage(parent: EnvironmentTab) extends UIPage("") {
+private[ui] class IndexPage(parent: EnvironmentTab) extends WebUIPage("") {
   private val appName = parent.appName
   private val basePath = parent.basePath
-  private val listener = parent.environmentListener
+  private val listener = parent.listener
 
   override def render(request: HttpServletRequest): Seq[Node] = {
     val runtimeInformationTable = UIUtils.listingTable(

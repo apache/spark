@@ -60,10 +60,9 @@ private[spark] object UIUtils {
       basePath: String,
       appName: String,
       title: String,
-      tabs: Seq[UITab],
-      activeTab: UITab,
-      refreshInterval: Option[Int] = None
-    ) : Seq[Node] = {
+      tabs: Seq[WebUITab],
+      activeTab: WebUITab,
+      refreshInterval: Option[Int] = None): Seq[Node] = {
 
     val header = tabs.map { tab =>
       <li class={if (tab == activeTab) "active" else ""}>

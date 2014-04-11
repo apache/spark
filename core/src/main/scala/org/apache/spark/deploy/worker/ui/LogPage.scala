@@ -22,10 +22,10 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.ui.{UIPage, UIUtils}
+import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
-private[spark] class LogPage(parent: WorkerWebUI) extends UIPage("logPage") {
+private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") {
   private val worker = parent.worker
   private val workDir = parent.workDir
 

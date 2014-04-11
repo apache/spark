@@ -17,8 +17,6 @@
 
 package org.apache.spark.deploy.master.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import org.apache.spark.Logging
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.ui.{SparkUI, WebUI}
@@ -30,32 +28,20 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  */
 private[spark]
 class MasterWebUI(val master: Master, requestedPort: Int)
-  extends WebUI(master.securityMgr) with Logging {
+  extends WebUI(master.securityMgr, requestedPort, master.conf) with Logging {
 
-  private val host = Utils.localHostName()
-  private val port = requestedPort
   val masterActorRef = master.self
   val timeout = AkkaUtils.askTimeout(master.conf)
 
+  initialize()
+
   /** Initialize all components of the server. */
-  def start() {
+  def initialize() {
     attachPage(new ApplicationPage(this))
     attachPage(new IndexPage(this))
     attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
     master.masterMetricsSystem.getServletHandlers.foreach(attachHandler)
     master.applicationMetricsSystem.getServletHandlers.foreach(attachHandler)
-  }
-
-  /** Bind to the HTTP server behind this web interface. */
-  def bind() {
-    try {
-      serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, master.conf))
-      logInfo("Started Master web UI at http://%s:%d".format(host, boundPort))
-    } catch {
-      case e: Exception =>
-        logError("Failed to create Master web UI", e)
-        System.exit(1)
-    }
   }
 
   /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */

@@ -19,29 +19,25 @@ package org.apache.spark.ui.jobs
 
 import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.SchedulingMode
-import org.apache.spark.ui.{SparkUI, UITab}
+import org.apache.spark.ui.{SparkUI, WebUITab}
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
-private[ui] class JobProgressTab(parent: SparkUI) extends UITab("stages") {
+private[ui] class JobProgressTab(parent: SparkUI) extends WebUITab(parent, "stages") {
   val appName = parent.appName
   val basePath = parent.basePath
   val live = parent.live
   val sc = parent.sc
+  val conf = if (live) sc.conf else new SparkConf
+  val listener = new JobProgressListener(conf)
 
-  def start() {
-    val conf = if (live) sc.conf else new SparkConf
-    listener = Some(new JobProgressListener(conf))
+  initialize()
+
+  def initialize() {
     attachPage(new IndexPage(this))
     attachPage(new StagePage(this))
     attachPage(new PoolPage(this))
+    parent.registerListener(listener)
   }
 
-  def jobProgressListener: JobProgressListener = {
-    assert(listener.isDefined, "JobProgressTab has not started yet!")
-    listener.get.asInstanceOf[JobProgressListener]
-  }
-
-  def isFairScheduler = jobProgressListener.schedulingMode.exists(_ == SchedulingMode.FAIR)
-
-  def headerTabs: Seq[UITab] = parent.getTabs
+  def isFairScheduler = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
 }

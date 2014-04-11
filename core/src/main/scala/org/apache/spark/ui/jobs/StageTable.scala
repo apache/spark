@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressTab) {
   private val basePath = parent.basePath
-  private lazy val listener = parent.jobProgressListener
+  private val listener = parent.listener
   private lazy val isFairScheduler = parent.isFairScheduler
 
   def toNodeSeq: Seq[Node] = {

@@ -25,7 +25,7 @@ import org.apache.spark.util.Utils
 
 /** Page showing executor summary */
 private[ui] class ExecutorTable(stageId: Int, parent: JobProgressTab) {
-  private lazy val listener = parent.jobProgressListener
+  private val listener = parent.listener
 
   def toNodeSeq: Seq[Node] = {
     listener.synchronized {

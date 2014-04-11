@@ -25,19 +25,19 @@ import org.apache.spark.ui.env.EnvironmentTab
 import org.apache.spark.ui.exec.ExecutorsTab
 import org.apache.spark.ui.jobs.JobProgressTab
 import org.apache.spark.ui.storage.BlockManagerTab
-import org.apache.spark.util.Utils
 
 /**
  * Top level user interface for Spark.
  */
 private[spark] class SparkUI(
     val sc: SparkContext,
-    conf: SparkConf,
+    val conf: SparkConf,
     val securityManager: SecurityManager,
     val listenerBus: SparkListenerBus,
     var appName: String,
     val basePath: String = "")
-  extends WebUI(securityManager, basePath) with Logging {
+  extends WebUI(securityManager, SparkUI.getUIPort(conf), conf, basePath)
+  with Logging {
 
   def this(sc: SparkContext) = this(sc, sc.conf, sc.env.securityManager, sc.listenerBus, sc.appName)
   def this(conf: SparkConf, listenerBus: SparkListenerBus, appName: String, basePath: String) =
@@ -46,21 +46,14 @@ private[spark] class SparkUI(
   // If SparkContext is not provided, assume the associated application is not live
   val live = sc != null
 
-  private val bindHost = Utils.localHostName()
-  private val publicHost = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(bindHost)
-  private val port = conf.getInt("spark.ui.port", SparkUI.DEFAULT_PORT)
-
   // Maintain executor storage status through Spark events
   val storageStatusListener = new StorageStatusListener
-  listenerBus.addListener(storageStatusListener)
 
-  /** Set the app name for this UI. */
-  def setAppName(name: String) {
-    appName = name
-  }
+  initialize()
 
   /** Initialize all components of the server. */
-  def start() {
+  def initialize() {
+    listenerBus.addListener(storageStatusListener)
     attachTab(new JobProgressTab(this))
     attachTab(new BlockManagerTab(this))
     attachTab(new EnvironmentTab(this))
@@ -72,22 +65,14 @@ private[spark] class SparkUI(
     }
   }
 
-  /** Bind to the HTTP server behind this web interface. */
-  def bind() {
-    try {
-      serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, sc.conf))
-      logInfo("Started Spark Web UI at http://%s:%d".format(publicHost, boundPort))
-    } catch {
-      case e: Exception =>
-        logError("Failed to create Spark web UI", e)
-        System.exit(1)
-    }
+  /** Set the app name for this UI. */
+  def setAppName(name: String) {
+    appName = name
   }
 
-  /** Attach a tab to this UI, along with its corresponding listener if it exists. */
-  override def attachTab(tab: UITab) {
-    super.attachTab(tab)
-    tab.listener.foreach(listenerBus.addListener)
+  /** Register the given listener with the listener bus. */
+  def registerListener(listener: SparkListener) {
+    listenerBus.addListener(listener)
   }
 
   /** Stop the server behind this web interface. Only valid after bind(). */
@@ -96,10 +81,14 @@ private[spark] class SparkUI(
     logInfo("Stopped Spark web UI at %s".format(appUIAddress))
   }
 
-  private[spark] def appUIAddress = "http://" + publicHost + ":" + boundPort
+  private[spark] def appUIAddress = "http://" + publicHostName + ":" + boundPort
 }
 
 private[spark] object SparkUI {
   val DEFAULT_PORT = 4040
   val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
+
+  def getUIPort(conf: SparkConf): Int = {
+    conf.getInt("spark.ui.port", SparkUI.DEFAULT_PORT)
+  }
 }
