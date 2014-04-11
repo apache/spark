@@ -220,7 +220,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         assert(sparkContext != null || numTries >= maxNumTries)
 
         if (sparkContext != null) {
-          uiAddress = sparkContext.ui.appUIAddress
+          uiAddress = sparkContext.ui.appUIHostPort
           this.yarnAllocator = YarnAllocationHandler.newAllocator(
             yarnConf,
             amClient,
