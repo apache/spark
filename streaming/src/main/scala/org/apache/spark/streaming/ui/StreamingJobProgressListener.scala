@@ -33,7 +33,7 @@ private[ui] class StreamingJobProgressListener(ssc: StreamingContext) extends St
   private val waitingBatchInfos = new HashMap[Time, BatchInfo]
   private val runningBatchInfos = new HashMap[Time, BatchInfo]
   private val completedaBatchInfos = new Queue[BatchInfo]
-  private val batchInfoLimit = ssc.conf.getInt("spark.steaming.ui.maxBatches", 100)
+  private val batchInfoLimit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 100)
   private var totalCompletedBatches = 0L
   private val receiverInfos = new HashMap[Int, ReceiverInfo]
 
@@ -82,7 +82,7 @@ private[ui] class StreamingJobProgressListener(ssc: StreamingContext) extends St
     runningBatchInfos.values.toSeq
   }
 
-  def completedBatches: Seq[BatchInfo] = synchronized {
+  def retainedCompletedBatches: Seq[BatchInfo] = synchronized {
     completedaBatchInfos.toSeq
   }
 
@@ -99,7 +99,7 @@ private[ui] class StreamingJobProgressListener(ssc: StreamingContext) extends St
   }
 
   def receivedRecordsDistributions: Map[Int, Option[Distribution]] = synchronized {
-    val latestBatchInfos = allBatches.reverse.take(batchInfoLimit)
+    val latestBatchInfos = retainedBatches.reverse.take(batchInfoLimit)
     val latestBlockInfos = latestBatchInfos.map(_.receivedBlockInfo)
     (0 until numNetworkReceivers).map { receiverId =>
       val blockInfoOfParticularReceiver = latestBlockInfos.map { batchInfo =>
@@ -134,10 +134,10 @@ private[ui] class StreamingJobProgressListener(ssc: StreamingContext) extends St
   }
 
   def lastReceivedBatch: Option[BatchInfo] = {
-    allBatches.lastOption
+    retainedBatches.lastOption
   }
 
-  private def allBatches: Seq[BatchInfo] = synchronized {
+  private def retainedBatches: Seq[BatchInfo] = synchronized {
     (waitingBatchInfos.values.toSeq ++
       runningBatchInfos.values.toSeq ++ completedaBatchInfos).sortBy(_.batchTime)(Time.ordering)
   }

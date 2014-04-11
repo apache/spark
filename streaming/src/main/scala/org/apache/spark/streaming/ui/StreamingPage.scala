@@ -33,13 +33,13 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
   private val listener = parent.listener
   private val startTime = Calendar.getInstance().getTime()
-  private val emptyCellTest = "-"
+  private val emptyCell = "-"
 
   /** Render the page */
   override def render(request: HttpServletRequest): Seq[Node] = {
     val content =
       generateBasicStats() ++
-      <br></br><h4>Statistics over last {listener.completedBatches.size} processed batches</h4> ++
+      <br></br><h4>Statistics over last {listener.retainedCompletedBatches.size} processed batches</h4> ++
       generateNetworkStatsTable() ++
       generateBatchStatsTable()
     UIUtils.headerSparkPage(
@@ -89,12 +89,12 @@ private[ui] class StreamingPage(parent: StreamingTab)
       val dataRows = (0 until listener.numNetworkReceivers).map { receiverId =>
         val receiverInfo = listener.receiverInfo(receiverId)
         val receiverName = receiverInfo.map(_.toString).getOrElse(s"Receiver-$receiverId")
-        val receiverLocation = receiverInfo.map(_.location).getOrElse(emptyCellTest)
+        val receiverLocation = receiverInfo.map(_.location).getOrElse(emptyCell)
         val receiverLastBatchRecords = formatDurationVerbose(lastBatchReceivedRecord(receiverId))
         val receivedRecordStats = receivedRecordDistributions(receiverId).map { d =>
           d.getQuantiles().map(r => formatDurationVerbose(r.toLong))
         }.getOrElse {
-          Seq(emptyCellTest, emptyCellTest, emptyCellTest, emptyCellTest, emptyCellTest)
+          Seq(emptyCell, emptyCell, emptyCell, emptyCell, emptyCell)
         }
         Seq(receiverName, receiverLocation, receiverLastBatchRecords) ++ receivedRecordStats
       }
@@ -112,7 +112,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
   /** Generate stats of batch jobs of the streaming program */
   private def generateBatchStatsTable(): Seq[Node] = {
-    val numBatches = listener.completedBatches.size
+    val numBatches = listener.retainedCompletedBatches.size
     val lastCompletedBatch = listener.lastCompletedBatch
     val table = if (numBatches > 0) {
       val processingDelayQuantilesRow = {
@@ -161,7 +161,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
    * Returns a human-readable string representing a duration such as "5 second 35 ms"
    */
   private def formatDurationOption(msOption: Option[Long]): String = {
-    msOption.map(formatDurationVerbose).getOrElse(emptyCellTest)
+    msOption.map(formatDurationVerbose).getOrElse(emptyCell)
   }
 
   /** Get quantiles for any time distribution */

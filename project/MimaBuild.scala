@@ -75,8 +75,8 @@ object MimaBuild {
           excludeSparkClass("streaming.dstream.NetworkReceiver#BlockGenerator") ++
           excludeSparkClass("streaming.dstream.NetworkReceiver#BlockGenerator#Block") ++
           excludeSparkClass("streaming.dstream.ReportError") ++
-          excludeSparkClass("org.apache.spark.streaming.dstream.ReportBlock") ++
-          excludeSparkClass("org.apache.spark.streaming.dstream.DStream")
+          excludeSparkClass("streaming.dstream.ReportBlock") ++
+          excludeSparkClass("streaming.dstream.DStream")
         case _ => Seq()
       }
 
