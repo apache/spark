@@ -131,7 +131,7 @@ class HistoryServer(
         // Remove any applications that should no longer be retained
         appIdToInfo.foreach { case (appId, info) =>
           if (!retainedAppIds.contains(appId)) {
-            detachUI(info.ui)
+            detachSparkUI(info.ui)
             appIdToInfo.remove(appId)
           }
         }
@@ -173,7 +173,7 @@ class HistoryServer(
     // Do not call ui.bind() to avoid creating a new server for each application
     replayBus.replay()
     if (appListener.applicationStarted) {
-      attachUI(ui)
+      attachSparkUI(ui)
       val appName = appListener.appName
       val sparkUser = appListener.sparkUser
       val startTime = appListener.startTime
@@ -193,13 +193,13 @@ class HistoryServer(
   }
 
   /** Attach a reconstructed UI to this server. Only valid after bind(). */
-  private def attachUI(ui: SparkUI) {
+  private def attachSparkUI(ui: SparkUI) {
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
     ui.getHandlers.foreach(attachHandler)
   }
 
   /** Detach a reconstructed UI from this server. Only valid after bind(). */
-  private def detachUI(ui: SparkUI) {
+  private def detachSparkUI(ui: SparkUI) {
     assert(serverInfo.isDefined, "HistoryServer must be bound before detaching SparkUIs")
     ui.getHandlers.foreach(detachHandler)
   }

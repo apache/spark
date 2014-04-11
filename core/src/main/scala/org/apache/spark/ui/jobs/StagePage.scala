@@ -31,7 +31,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
   private val basePath = parent.basePath
   private val listener = parent.listener
 
-  override def render(request: HttpServletRequest): Seq[Node] = {
+  def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val stageId = request.getParameter("id").toInt
 

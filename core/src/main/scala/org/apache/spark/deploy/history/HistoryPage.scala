@@ -25,7 +25,7 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 
 private[spark] class IndexPage(parent: HistoryServer) extends WebUIPage("") {
 
-  override def render(request: HttpServletRequest): Seq[Node] = {
+  def render(request: HttpServletRequest): Seq[Node] = {
     val appRows = parent.appIdToInfo.values.toSeq.sortBy { app => -app.lastUpdated }
     val appTable = UIUtils.listingTable(appHeader, appRow, appRows)
     val content =

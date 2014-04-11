@@ -229,7 +229,7 @@ private[spark] object UIUtils extends Logging {
       tableClass += " table-fixed"
     }
     val colWidth = 100.toDouble / headers.size
-    val colWidthAttr =if (fixedWidth) colWidth + "%" else ""
+    val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
     val headerRow: Seq[Node] = {
       // if none of the headers have "\n" in them
       if (headers.forall(!_.contains("\n"))) {

@@ -45,13 +45,13 @@ class MasterWebUI(val master: Master, requestedPort: Int)
   }
 
   /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */
-  def attachUI(ui: SparkUI) {
+  def attachSparkUI(ui: SparkUI) {
     assert(serverInfo.isDefined, "Master UI must be bound to a server before attaching SparkUIs")
     ui.getHandlers.foreach(attachHandler)
   }
 
   /** Detach a reconstructed UI from this Master UI. Only valid after bind(). */
-  def detachUI(ui: SparkUI) {
+  def detachSparkUI(ui: SparkUI) {
     assert(serverInfo.isDefined, "Master UI must be bound to a server before detaching SparkUIs")
     ui.getHandlers.foreach(detachHandler)
   }
