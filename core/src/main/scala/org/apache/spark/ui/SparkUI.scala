@@ -24,7 +24,7 @@ import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.EnvironmentTab
 import org.apache.spark.ui.exec.ExecutorsTab
 import org.apache.spark.ui.jobs.JobProgressTab
-import org.apache.spark.ui.storage.BlockManagerTab
+import org.apache.spark.ui.storage.StorageTab
 
 /**
  * Top level user interface for Spark.
@@ -55,7 +55,7 @@ private[spark] class SparkUI(
   def initialize() {
     listenerBus.addListener(storageStatusListener)
     attachTab(new JobProgressTab(this))
-    attachTab(new BlockManagerTab(this))
+    attachTab(new StorageTab(this))
     attachTab(new EnvironmentTab(this))
     attachTab(new ExecutorsTab(this))
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))

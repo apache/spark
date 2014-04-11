@@ -24,10 +24,10 @@ import org.apache.spark.scheduler._
 import org.apache.spark.storage.{RDDInfo, StorageStatusListener, StorageUtils}
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
-private[ui] class BlockManagerTab(parent: SparkUI) extends WebUITab(parent, "storage") {
+private[ui] class StorageTab(parent: SparkUI) extends WebUITab(parent, "storage") {
   val appName = parent.appName
   val basePath = parent.basePath
-  val listener = new BlockManagerListener(parent.storageStatusListener)
+  val listener = new StorageListener(parent.storageStatusListener)
 
   attachPage(new IndexPage(this))
   attachPage(new RddPage(this))
@@ -37,7 +37,7 @@ private[ui] class BlockManagerTab(parent: SparkUI) extends WebUITab(parent, "sto
 /**
  * A SparkListener that prepares information to be displayed on the BlockManagerUI
  */
-private[ui] class BlockManagerListener(storageStatusListener: StorageStatusListener)
+private[ui] class StorageListener(storageStatusListener: StorageStatusListener)
   extends SparkListener {
 
   private val _rddInfoMap = mutable.Map[Int, RDDInfo]()
