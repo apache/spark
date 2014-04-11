@@ -17,10 +17,18 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.hive.TestHive
 import org.scalatest.BeforeAndAfter
 
-class HiveInMemoryCompatibilitySuite extends HiveCompatibilitySuite with BeforeAndAfter {
+import org.apache.spark.sql.hive.TestHive
+
+/**
+ * Runs the test cases that are included in the hive distribution.
+ */
+class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
+  // TODO: bundle in jar files... get from classpath
+  lazy val hiveQueryDir = TestHive.getHiveFile("ql/src/test/queries/clientpositive")
+  def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
+
   override def beforeAll() {
     TestHive.cacheTables = true
   }
@@ -28,15 +36,6 @@ class HiveInMemoryCompatibilitySuite extends HiveCompatibilitySuite with BeforeA
   override def afterAll() {
     TestHive.cacheTables = false
   }
-}
-
-/**
- * Runs the test cases that are included in the hive distribution.
- */
-class HiveCompatibilitySuite extends HiveQueryFileTest {
-  // TODO: bundle in jar files... get from classpath
-  lazy val hiveQueryDir = TestHive.getHiveFile("ql/src/test/queries/clientpositive")
-  def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */
   override def blackList = Seq(
