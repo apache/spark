@@ -38,8 +38,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
     val content =
-      generateBasicStats() ++
-      <br></br><h4>Statistics over last {listener.retainedCompletedBatches.size} processed batches</h4> ++
+      generateBasicStats() ++ <br></br> ++
+      <h4>Statistics over last {listener.retainedCompletedBatches.size} processed batches</h4> ++
       generateNetworkStatsTable() ++
       generateBatchStatsTable()
     UIUtils.headerSparkPage(

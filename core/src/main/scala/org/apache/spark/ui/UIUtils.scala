@@ -158,7 +158,7 @@ private[spark] object UIUtils extends Logging {
           <!--
           function timedRefresh(timeoutPeriod) {
             if (timeoutPeriod > 0) {
-              setTimeout("location.reload(true);",timeoutPeriod);
+              setTimeout("location.reload(true);", timeoutPeriod);
             }
           }
           //   -->
