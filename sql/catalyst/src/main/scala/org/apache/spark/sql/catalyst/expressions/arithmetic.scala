@@ -28,7 +28,7 @@ case class UnaryMinus(child: Expression) extends UnaryExpression {
   def nullable = child.nullable
   override def toString = s"-$child"
 
-  override def apply(input: Row): Any = {
+  override def eval(input: Row): Any = {
     n1(child, input, _.negate(_))
   }
 }
@@ -55,25 +55,25 @@ abstract class BinaryArithmetic extends BinaryExpression {
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "+"
 
-  override def apply(input: Row): Any = n2(input, left, right, _.plus(_, _))
+  override def eval(input: Row): Any = n2(input, left, right, _.plus(_, _))
 }
 
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "-"
 
-  override def apply(input: Row): Any = n2(input, left, right, _.minus(_, _))
+  override def eval(input: Row): Any = n2(input, left, right, _.minus(_, _))
 }
 
 case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "*"
 
-  override def apply(input: Row): Any = n2(input, left, right, _.times(_, _))
+  override def eval(input: Row): Any = n2(input, left, right, _.times(_, _))
 }
 
 case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "/"
 
-  override def apply(input: Row): Any = dataType match {
+  override def eval(input: Row): Any = dataType match {
     case _: FractionalType => f2(input, left, right, _.div(_, _))
     case _: IntegralType => i2(input, left , right, _.quot(_, _))
   }
@@ -83,5 +83,5 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
 case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "%"
 
-  override def apply(input: Row): Any = i2(input, left, right, _.rem(_, _))
+  override def eval(input: Row): Any = i2(input, left, right, _.rem(_, _))
 }

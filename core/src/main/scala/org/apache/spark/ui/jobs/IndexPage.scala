@@ -27,12 +27,13 @@ import org.apache.spark.ui.UIUtils
 
 /** Page showing list of all ongoing and recently finished stages and pools */
 private[ui] class IndexPage(parent: JobProgressUI) {
-  private val appName = parent.appName
   private val basePath = parent.basePath
   private val live = parent.live
   private val sc = parent.sc
   private lazy val listener = parent.listener
   private lazy val isFairScheduler = parent.isFairScheduler
+
+  private def appName = parent.appName
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
@@ -41,7 +42,8 @@ private[ui] class IndexPage(parent: JobProgressUI) {
       val failedStages = listener.failedStages.reverse.toSeq
       val now = System.currentTimeMillis()
 
-      val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
+      val activeStagesTable =
+        new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent, parent.killEnabled)
       val completedStagesTable =
         new StageTable(completedStages.sortBy(_.submissionTime).reverse, parent)
       val failedStagesTable = new StageTable(failedStages.sortBy(_.submissionTime).reverse, parent)

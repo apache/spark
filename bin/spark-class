@@ -47,15 +47,19 @@ DEFAULT_MEM=${SPARK_MEM:-512m}
 
 SPARK_DAEMON_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS -Dspark.akka.logLifecycleEvents=true"
 
-# Add java opts and memory settings for master, worker, executors, and repl.
+# Add java opts and memory settings for master, worker, history server, executors, and repl.
 case "$1" in
-  # Master and Worker use SPARK_DAEMON_JAVA_OPTS (and specific opts) + SPARK_DAEMON_MEMORY.
+  # Master, Worker, and HistoryServer use SPARK_DAEMON_JAVA_OPTS (and specific opts) + SPARK_DAEMON_MEMORY.
   'org.apache.spark.deploy.master.Master')
     OUR_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS $SPARK_MASTER_OPTS"
     OUR_JAVA_MEM=${SPARK_DAEMON_MEMORY:-$DEFAULT_MEM}
     ;;
   'org.apache.spark.deploy.worker.Worker')
     OUR_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS $SPARK_WORKER_OPTS"
+    OUR_JAVA_MEM=${SPARK_DAEMON_MEMORY:-$DEFAULT_MEM}
+    ;;
+  'org.apache.spark.deploy.history.HistoryServer')
+    OUR_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS $SPARK_HISTORY_OPTS"
     OUR_JAVA_MEM=${SPARK_DAEMON_MEMORY:-$DEFAULT_MEM}
     ;;
 
@@ -154,5 +158,3 @@ if [ "$SPARK_PRINT_LAUNCH_COMMAND" == "1" ]; then
 fi
 
 exec "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"
-
-

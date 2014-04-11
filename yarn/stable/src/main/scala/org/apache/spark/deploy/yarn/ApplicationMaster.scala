@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.IOException
-import java.net.Socket
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
@@ -36,7 +35,7 @@ import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
-import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
+import org.apache.hadoop.yarn.webapp.util.WebAppUtils
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -221,7 +220,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         assert(sparkContext != null || numTries >= maxNumTries)
 
         if (sparkContext != null) {
-          uiAddress = sparkContext.ui.appUIAddress
+          uiAddress = sparkContext.ui.appUIHostPort
           this.yarnAllocator = YarnAllocationHandler.newAllocator(
             yarnConf,
             amClient,

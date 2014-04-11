@@ -6,7 +6,7 @@ title: Building Spark with Maven
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-Building Spark using Maven Requires Maven 3 (the build process is tested with Maven 3.0.4) and Java 1.6 or newer.
+Building Spark using Maven requires Maven 3.0.4 or newer and Java 1.6 or newer.
 
 
 ## Setting up Maven's Memory Usage ##

@@ -32,7 +32,7 @@ object SparkPluginDef extends Build {
     name                 :=  "spark-style",
     organization         :=  "org.apache.spark",
     version              :=  sparkVersion,
-    scalaVersion         :=  "2.10.3",
+    scalaVersion         :=  "2.10.4",
     scalacOptions        :=  Seq("-unchecked", "-deprecation"),
     libraryDependencies  ++= Dependencies.scalaStyle
   )

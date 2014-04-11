@@ -88,6 +88,10 @@ private[deploy] object DeployMessages {
 
   case class UnregisteredWorker() extends DeployMessage
 
+  // Worker internal
+
+  case object WorkDirCleanup      // Sent to Worker actor periodically for cleaning up app folders
+
   // AppClient to Master
 
   case class RegisterApplication(appDescription: ApplicationDescription)

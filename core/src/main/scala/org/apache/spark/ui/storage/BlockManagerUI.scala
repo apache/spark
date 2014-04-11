@@ -30,7 +30,6 @@ import org.apache.spark.storage.{RDDInfo, StorageStatusListener, StorageUtils}
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
 private[ui] class BlockManagerUI(parent: SparkUI) {
-  val appName = parent.appName
   val basePath = parent.basePath
 
   private val indexPage = new IndexPage(this)
@@ -38,6 +37,8 @@ private[ui] class BlockManagerUI(parent: SparkUI) {
   private var _listener: Option[BlockManagerListener] = None
 
   lazy val listener = _listener.get
+
+  def appName = parent.appName
 
   def start() {
     _listener = Some(new BlockManagerListener(parent.storageStatusListener))
@@ -84,7 +85,7 @@ private[ui] class BlockManagerListener(storageStatusListener: StorageStatusListe
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = synchronized {
     val rddInfo = stageSubmitted.stageInfo.rddInfo
-    _rddInfoMap(rddInfo.id) = rddInfo
+    _rddInfoMap.getOrElseUpdate(rddInfo.id, rddInfo)
   }
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {

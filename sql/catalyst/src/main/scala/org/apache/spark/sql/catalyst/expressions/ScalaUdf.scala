@@ -27,13 +27,13 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
   def references = children.flatMap(_.references).toSet
   def nullable = true
 
-  override def apply(input: Row): Any = {
+  override def eval(input: Row): Any = {
     children.size match {
-      case 1 => function.asInstanceOf[(Any) => Any](children(0).apply(input))
+      case 1 => function.asInstanceOf[(Any) => Any](children(0).eval(input))
       case 2 =>
         function.asInstanceOf[(Any, Any) => Any](
-          children(0).apply(input),
-          children(1).apply(input))
+          children(0).eval(input),
+          children(1).eval(input))
     }
   }
 }

@@ -17,8 +17,11 @@
 
 package org.apache.spark
 
-import org.scalatest.FunSuite
+import java.io.File
 
+import com.google.common.io.Files
+
+import org.scalatest.FunSuite
 
 import org.apache.spark.rdd.{HadoopRDD, PipedRDD, HadoopPartition}
 import org.apache.hadoop.mapred.{JobConf, TextInputFormat, FileSplit}
@@ -82,7 +85,7 @@ class PipedRDDSuite extends FunSuite with SharedSparkContext {
           (f: String => Unit) => {
             bl.value.map(f(_)); f("\u0001")
           },
-          (i: Tuple2[String, Seq[String]], f: String => Unit) => {
+          (i: Tuple2[String, Iterable[String]], f: String => Unit) => {
             for (e <- i._2) {
               f(e + "_")
             }
@@ -121,6 +124,29 @@ class PipedRDDSuite extends FunSuite with SharedSparkContext {
       intercept[SparkException] {
         piped.collect()
       }
+    } else {
+      assert(true)
+    }
+  }
+
+  test("basic pipe with separate working directory") {
+    if (testCommandAvailable("cat")) {
+      val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+      val piped = nums.pipe(Seq("cat"), separateWorkingDir = true)
+      val c = piped.collect()
+      assert(c.size === 4)
+      assert(c(0) === "1")
+      assert(c(1) === "2")
+      assert(c(2) === "3")
+      assert(c(3) === "4")
+      val pipedPwd = nums.pipe(Seq("pwd"), separateWorkingDir = true)
+      val collectPwd = pipedPwd.collect()
+      assert(collectPwd(0).contains("tasks/"))
+      val pipedLs = nums.pipe(Seq("ls"), separateWorkingDir = true).collect()
+      // make sure symlinks were created
+      assert(pipedLs.length > 0)
+      // clean up top level tasks directory
+      new File("tasks").delete()
     } else {
       assert(true)
     }

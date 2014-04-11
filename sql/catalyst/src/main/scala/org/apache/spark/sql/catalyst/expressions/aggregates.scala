@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 
 abstract class AggregateExpression extends Expression {
   self: Product =>
@@ -27,7 +28,14 @@ abstract class AggregateExpression extends Expression {
    * Creates a new instance that can be used to compute this aggregate expression for a group
    * of input rows/
    */
-  def newInstance: AggregateFunction
+  def newInstance(): AggregateFunction
+
+  /**
+   * [[AggregateExpression.eval]] should never be invoked because [[AggregateExpression]]'s are
+   * replaced with a physical aggregate operator at runtime.
+   */
+  override def eval(input: Row = null): EvaluatedType =
+    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
 
 /**
@@ -43,7 +51,7 @@ case class SplitEvaluation(
     partialEvaluations: Seq[NamedExpression])
 
 /**
- * An [[AggregateExpression]] that can be partially computed without seeing all relevent tuples.
+ * An [[AggregateExpression]] that can be partially computed without seeing all relevant tuples.
  * These partial evaluations can then be combined to compute the actual answer.
  */
 abstract class PartialAggregate extends AggregateExpression {
@@ -63,48 +71,48 @@ abstract class AggregateFunction
   extends AggregateExpression with Serializable with trees.LeafNode[Expression] {
   self: Product =>
 
-  type EvaluatedType = Any
+  override type EvaluatedType = Any
 
   /** Base should return the generic aggregate expression that this function is computing */
   val base: AggregateExpression
-  def references = base.references
-  def nullable = base.nullable
-  def dataType = base.dataType
+  override def references = base.references
+  override def nullable = base.nullable
+  override def dataType = base.dataType
 
   def update(input: Row): Unit
-  override def apply(input: Row): Any
+  override def eval(input: Row): Any
 
   // Do we really need this?
-  def newInstance = makeCopy(productIterator.map { case a: AnyRef => a }.toArray)
+  override def newInstance() = makeCopy(productIterator.map { case a: AnyRef => a }.toArray)
 }
 
 case class Count(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
-  def references = child.references
-  def nullable = false
-  def dataType = IntegerType
+  override def references = child.references
+  override def nullable = false
+  override def dataType = IntegerType
   override def toString = s"COUNT($child)"
 
-  def asPartial: SplitEvaluation = {
+  override def asPartial: SplitEvaluation = {
     val partialCount = Alias(Count(child), "PartialCount")()
     SplitEvaluation(Sum(partialCount.toAttribute), partialCount :: Nil)
   }
 
-  override def newInstance = new CountFunction(child, this)
+  override def newInstance()= new CountFunction(child, this)
 }
 
 case class CountDistinct(expressions: Seq[Expression]) extends AggregateExpression {
-  def children = expressions
-  def references = expressions.flatMap(_.references).toSet
-  def nullable = false
-  def dataType = IntegerType
+  override def children = expressions
+  override def references = expressions.flatMap(_.references).toSet
+  override def nullable = false
+  override def dataType = IntegerType
   override def toString = s"COUNT(DISTINCT ${expressions.mkString(",")}})"
-  override def newInstance = new CountDistinctFunction(expressions, this)
+  override def newInstance()= new CountDistinctFunction(expressions, this)
 }
 
 case class Average(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
-  def references = child.references
-  def nullable = false
-  def dataType = DoubleType
+  override def references = child.references
+  override def nullable = false
+  override def dataType = DoubleType
   override def toString = s"AVG($child)"
 
   override def asPartial: SplitEvaluation = {
@@ -118,13 +126,13 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
       partialCount :: partialSum :: Nil)
   }
 
-  override def newInstance = new AverageFunction(child, this)
+  override def newInstance()= new AverageFunction(child, this)
 }
 
 case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
-  def references = child.references
-  def nullable = false
-  def dataType = child.dataType
+  override def references = child.references
+  override def nullable = false
+  override def dataType = child.dataType
   override def toString = s"SUM($child)"
 
   override def asPartial: SplitEvaluation = {
@@ -134,24 +142,24 @@ case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[
       partialSum :: Nil)
   }
 
-  override def newInstance = new SumFunction(child, this)
+  override def newInstance()= new SumFunction(child, this)
 }
 
 case class SumDistinct(child: Expression)
   extends AggregateExpression with trees.UnaryNode[Expression] {
 
-  def references = child.references
-  def nullable = false
-  def dataType = child.dataType
+  override def references = child.references
+  override def nullable = false
+  override def dataType = child.dataType
   override def toString = s"SUM(DISTINCT $child)"
 
-  override def newInstance = new SumDistinctFunction(child, this)
+  override def newInstance()= new SumDistinctFunction(child, this)
 }
 
 case class First(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
-  def references = child.references
-  def nullable = child.nullable
-  def dataType = child.dataType
+  override def references = child.references
+  override def nullable = child.nullable
+  override def dataType = child.dataType
   override def toString = s"FIRST($child)"
 
   override def asPartial: SplitEvaluation = {
@@ -160,7 +168,7 @@ case class First(child: Expression) extends PartialAggregate with trees.UnaryNod
       First(partialFirst.toAttribute),
       partialFirst :: Nil)
   }
-  override def newInstance = new FirstFunction(child, this)
+  override def newInstance()= new FirstFunction(child, this)
 }
 
 case class AverageFunction(expr: Expression, base: AggregateExpression)
@@ -169,17 +177,15 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
   def this() = this(null, null) // Required for serialization.
 
   private var count: Long = _
-  private val sum = MutableLiteral(Cast(Literal(0), expr.dataType).apply(EmptyRow))
+  private val sum = MutableLiteral(Cast(Literal(0), expr.dataType).eval(EmptyRow))
   private val sumAsDouble = Cast(sum, DoubleType)
-
-
 
   private val addFunction = Add(sum, expr)
 
-  override def apply(input: Row): Any =
-    sumAsDouble.apply(EmptyRow).asInstanceOf[Double] / count.toDouble
+  override def eval(input: Row): Any =
+    sumAsDouble.eval(EmptyRow).asInstanceOf[Double] / count.toDouble
 
-  def update(input: Row): Unit = {
+  override def update(input: Row): Unit = {
     count += 1
     sum.update(addFunction, input)
   }
@@ -190,28 +196,28 @@ case class CountFunction(expr: Expression, base: AggregateExpression) extends Ag
 
   var count: Int = _
 
-  def update(input: Row): Unit = {
-    val evaluatedExpr = expr.map(_.apply(input))
+  override def update(input: Row): Unit = {
+    val evaluatedExpr = expr.map(_.eval(input))
     if (evaluatedExpr.map(_ != null).reduceLeft(_ || _)) {
       count += 1
     }
   }
 
-  override def apply(input: Row): Any = count
+  override def eval(input: Row): Any = count
 }
 
 case class SumFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
-  private val sum = MutableLiteral(Cast(Literal(0), expr.dataType).apply(null))
+  private val sum = MutableLiteral(Cast(Literal(0), expr.dataType).eval(null))
 
   private val addFunction = Add(sum, expr)
 
-  def update(input: Row): Unit = {
+  override def update(input: Row): Unit = {
     sum.update(addFunction, input)
   }
 
-  override def apply(input: Row): Any = sum.apply(null)
+  override def eval(input: Row): Any = sum.eval(null)
 }
 
 case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
@@ -219,16 +225,16 @@ case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
 
   def this() = this(null, null) // Required for serialization.
 
-  val seen = new scala.collection.mutable.HashSet[Any]()
+  private val seen = new scala.collection.mutable.HashSet[Any]()
 
-  def update(input: Row): Unit = {
-    val evaluatedExpr = expr.apply(input)
+  override def update(input: Row): Unit = {
+    val evaluatedExpr = expr.eval(input)
     if (evaluatedExpr != null) {
       seen += evaluatedExpr
     }
   }
 
-  override def apply(input: Row): Any =
+  override def eval(input: Row): Any =
     seen.reduceLeft(base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)
 }
 
@@ -239,14 +245,14 @@ case class CountDistinctFunction(expr: Seq[Expression], base: AggregateExpressio
 
   val seen = new scala.collection.mutable.HashSet[Any]()
 
-  def update(input: Row): Unit = {
-    val evaluatedExpr = expr.map(_.apply(input))
+  override def update(input: Row): Unit = {
+    val evaluatedExpr = expr.map(_.eval(input))
     if (evaluatedExpr.map(_ != null).reduceLeft(_ && _)) {
       seen += evaluatedExpr
     }
   }
 
-  override def apply(input: Row): Any = seen.size
+  override def eval(input: Row): Any = seen.size
 }
 
 case class FirstFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
@@ -254,11 +260,11 @@ case class FirstFunction(expr: Expression, base: AggregateExpression) extends Ag
 
   var result: Any = null
 
-  def update(input: Row): Unit = {
+  override def update(input: Row): Unit = {
     if (result == null) {
-      result = expr.apply(input)
+      result = expr.eval(input)
     }
   }
 
-  override def apply(input: Row): Any = result
+  override def eval(input: Row): Any = result
 }

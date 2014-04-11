@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.TestHive._
-Welcome to Scala version 2.10.3 (Java HotSpot(TM) 64-Bit Server VM, Java 1.7.0_45).
+Welcome to Scala version 2.10.4 (Java HotSpot(TM) 64-Bit Server VM, Java 1.7.0_45).
 Type in expressions to have them evaluated.
 Type :help for more information.
 
