@@ -113,7 +113,12 @@ private[spark] class SparkUI(
     logInfo("Stopped Spark Web UI at %s".format(appUIAddress))
   }
 
-  private[spark] def appUIAddress = "http://" + publicHost + ":" + boundPort
+  /**
+   * Return the application UI host:port. This does not include the scheme (http://).
+   */
+  private[spark] def appUIHostPort = publicHost + ":" + boundPort
+
+  private[spark] def appUIAddress = s"http://$appUIHostPort"
 
 }
 
