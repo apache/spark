@@ -1028,7 +1028,7 @@ private[spark] object Utils extends Logging {
    * `spark.system.reservedMemorySize`
    */
   def effectiveMaxMemory(conf: SparkConf) = {
-    Runtime.getRuntime.maxMemory - (1024 * 1024 * 
-      memoryStringToMb(conf.get("spark.system.reservedMemorySize", "300m")))
+    val reservedMemorySize = memoryStringToMb(conf.get("spark.system.reservedMemorySize", "300m"))
+    Runtime.getRuntime.maxMemory - (1024 * 1024 * reservedMemorySize)
   }
 }

@@ -106,8 +106,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.system.reservedMemorySize</td>
   <td>300m</td>
   <td>
-    Amount of Heap to reserve for Spark's internal components, before calculating memory available for storage 
-    and shuffle as configured in <code>spark.storage.memoryFraction</code> and <code>spark.shuffle.memoryFraction</code>
+    Constant amount of heap to reserve on executors for Spark's own code and user code. Taken into account before calculating
+    memory available for and shuffle as configured in <code>spark.storage.memoryFraction</code> and
+    <code>spark.shuffle.memoryFraction</code>.
   </td>
 </tr>
 <tr>
@@ -115,7 +116,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.6</td>
   <td>
     Fraction of Java heap to use for Spark's memory cache, after accounting for <code>spark.system.reservedMemorySize</code>.
-    The effective size should not be larger than the "old"generation of objects in the JVM.
+    The effective size should not be larger than the "old" generation of objects in the JVM.
   </td>
 </tr>
 <tr>
