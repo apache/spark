@@ -32,7 +32,7 @@ private[ui] class PoolPage(parent: JobProgressTab) extends WebUIPage("pool") {
   private val sc = parent.sc
   private val listener = parent.listener
 
-  override def render(request: HttpServletRequest): Seq[Node] = {
+  def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val poolName = request.getParameter("poolname")
       val poolToActiveStages = listener.poolToActiveStages

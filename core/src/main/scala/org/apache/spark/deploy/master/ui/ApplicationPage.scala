@@ -31,8 +31,7 @@ import org.apache.spark.deploy.master.ExecutorInfo
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
-private[spark] class ApplicationPage(parent: MasterWebUI)
-  extends WebUIPage("app", includeJson = true) {
+private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") {
 
   private val master = parent.masterActorRef
   private val timeout = parent.timeout
@@ -49,7 +48,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI)
   }
 
   /** Executor details for a particular application */
-  override def render(request: HttpServletRequest): Seq[Node] = {
+  def render(request: HttpServletRequest): Seq[Node] = {
     val appId = request.getParameter("appId")
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
     val state = Await.result(stateFuture, timeout)

@@ -31,7 +31,7 @@ private[ui] class RddPage(parent: StorageTab) extends WebUIPage("rdd") {
   private val basePath = parent.basePath
   private val listener = parent.listener
 
-  override def render(request: HttpServletRequest): Seq[Node] = {
+  def render(request: HttpServletRequest): Seq[Node] = {
     val rddId = request.getParameter("id").toInt
     val storageStatusList = listener.storageStatusList
     val rddInfo = listener.rddInfoList.find(_.id == rddId).getOrElse {

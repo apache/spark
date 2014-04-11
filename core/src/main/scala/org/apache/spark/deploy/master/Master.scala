@@ -625,7 +625,7 @@ private[spark] class Master(
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
         completedApps.take(toRemove).foreach( a => {
-          appIdToUI.remove(a.id).foreach { ui => webUi.detachUI(ui) }
+          appIdToUI.remove(a.id).foreach { ui => webUi.detachSparkUI(ui) }
           applicationMetricsSystem.removeSource(a.appSource)
         })
         completedApps.trimStart(toRemove)
@@ -672,7 +672,7 @@ private[spark] class Master(
         replayBus.replay()
         app.desc.appUiUrl = ui.basePath
         appIdToUI(app.id) = ui
-        webUi.attachUI(ui)
+        webUi.attachSparkUI(ui)
         return true
       } catch {
         case t: Throwable =>

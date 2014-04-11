@@ -56,7 +56,7 @@ private[spark] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") {
     pre + Utils.offsetBytes(path, startByte, endByte)
   }
 
-  override def render(request: HttpServletRequest): Seq[Node] = {
+  def render(request: HttpServletRequest): Seq[Node] = {
     val defaultBytes = 100 * 1024
     val appId = Option(request.getParameter("appId"))
     val executorId = Option(request.getParameter("executorId"))

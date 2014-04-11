@@ -33,7 +33,7 @@ private[ui] class IndexPage(parent: JobProgressTab) extends WebUIPage("") {
   private val listener = parent.listener
   private lazy val isFairScheduler = parent.isFairScheduler
 
-  override def render(request: HttpServletRequest): Seq[Node] = {
+  def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val activeStages = listener.activeStages.values.toSeq
       val completedStages = listener.completedStages.reverse.toSeq

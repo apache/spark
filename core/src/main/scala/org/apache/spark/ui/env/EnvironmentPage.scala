@@ -28,7 +28,7 @@ private[ui] class IndexPage(parent: EnvironmentTab) extends WebUIPage("") {
   private val basePath = parent.basePath
   private val listener = parent.listener
 
-  override def render(request: HttpServletRequest): Seq[Node] = {
+  def render(request: HttpServletRequest): Seq[Node] = {
     val runtimeInformationTable = UIUtils.listingTable(
       propertyHeader, jvmRow, listener.jvmInformation, fixedWidth = true)
     val sparkPropertiesTable = UIUtils.listingTable(

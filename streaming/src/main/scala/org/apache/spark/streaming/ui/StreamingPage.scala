@@ -36,7 +36,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
   private val emptyCellTest = "-"
 
   /** Render the page */
-  override def render(request: HttpServletRequest): Seq[Node] = {
+  def render(request: HttpServletRequest): Seq[Node] = {
     val content =
       generateBasicStats() ++
       <br></br><h4>Statistics over last {listener.completedBatches.size} processed batches</h4> ++

@@ -63,10 +63,8 @@ private[spark] abstract class WebUI(
     val pagePath = "/" + page.prefix
     attachHandler(createServletHandler(pagePath,
       (request: HttpServletRequest) => page.render(request), securityManager, basePath))
-    if (page.includeJson) {
-      attachHandler(createServletHandler(pagePath.stripSuffix("/") + "/json",
-        (request: HttpServletRequest) => page.renderJson(request), securityManager, basePath))
-    }
+    attachHandler(createServletHandler(pagePath.stripSuffix("/") + "/json",
+      (request: HttpServletRequest) => page.renderJson(request), securityManager, basePath))
   }
 
   /** Attach a handler to this UI. */
@@ -121,6 +119,7 @@ private[spark] abstract class WebUI(
 
 /**
  * A tab that represents a collection of pages.
+ * The prefix is appended to the parent address to form a full path, and must not contain slashes.
  */
 private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
   val pages = ArrayBuffer[WebUIPage]()
@@ -141,10 +140,11 @@ private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
  * A page that represents the leaf node in the UI hierarchy.
  *
  * The direct parent of a WebUIPage is not specified as it can be either a WebUI or a WebUITab.
- * If includeJson is true, the parent WebUI (direct or indirect) creates handlers for both the
- * HTML and the JSON content, rather than just the former.
+ * If the parent is a WebUI, the prefix is appended to the parent's address to form a full path.
+ * Else, if the parent is a WebUITab, the prefix is appended to the super prefix of the parent
+ * to form a relative path. The prefix must not contain slashes.
  */
-private[spark] abstract class WebUIPage(var prefix: String, val includeJson: Boolean = false) {
-  def render(request: HttpServletRequest): Seq[Node] = Seq[Node]()
+private[spark] abstract class WebUIPage(var prefix: String) {
+  def render(request: HttpServletRequest): Seq[Node]
   def renderJson(request: HttpServletRequest): JValue = JNothing
 }

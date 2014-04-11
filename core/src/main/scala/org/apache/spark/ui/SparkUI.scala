@@ -27,7 +27,7 @@ import org.apache.spark.ui.jobs.JobProgressTab
 import org.apache.spark.ui.storage.StorageTab
 
 /**
- * Top level user interface for Spark.
+ * Top level user interface for a Spark application.
  */
 private[spark] class SparkUI(
     val sc: SparkContext,

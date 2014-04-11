@@ -31,7 +31,7 @@ import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
-private[spark] class IndexPage(parent: WorkerWebUI) extends WebUIPage("", includeJson = true) {
+private[spark] class IndexPage(parent: WorkerWebUI) extends WebUIPage("") {
   val workerActor = parent.worker.self
   val worker = parent.worker
   val timeout = parent.timeout
@@ -42,7 +42,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) extends WebUIPage("", includ
     JsonProtocol.writeWorkerState(workerState)
   }
 
-  override def render(request: HttpServletRequest): Seq[Node] = {
+  def render(request: HttpServletRequest): Seq[Node] = {
     val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
     val workerState = Await.result(stateFuture, timeout)
 
