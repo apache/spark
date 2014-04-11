@@ -76,20 +76,22 @@ private[ui] class StageTable(
   }
 
   private def makeDescription(s: StageInfo): Seq[Node] = {
+    // scalastyle:off
+    val killLink = if (killEnabled) {
+      <span class="kill-link">
+        (<a href={"%s/stages/stage/kill?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}>kill</a>)
+      </span>
+    }
+    // scalastyle:on
+
     val nameLink =
       <a href={"%s/stages/stage?id=%s".format(UIUtils.prependBaseUri(basePath), s.stageId)}>
         {s.name}
       </a>
-    val killLink = if (killEnabled) {
-      <div>[<a href=
-        {"%s/stages?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}>
-          Kill
-      </a>]</div>
 
-    }
     val description = listener.stageIdToDescription.get(s.stageId)
       .map(d => <div><em>{d}</em></div><div>{nameLink} {killLink}</div>)
-      .getOrElse(<div>{nameLink} {killLink}</div>)
+      .getOrElse(<div> {killLink}{nameLink}</div>)
 
     return description
   }

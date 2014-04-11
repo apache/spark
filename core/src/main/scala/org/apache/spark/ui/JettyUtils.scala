@@ -104,10 +104,12 @@ private[spark] object JettyUtils extends Logging {
   def createRedirectHandler(
       srcPath: String,
       destPath: String,
+      beforeRedirect: HttpServletRequest => Unit = x => (),
       basePath: String = ""): ServletContextHandler = {
     val prefixedDestPath = attachPrefix(basePath, destPath)
     val servlet = new HttpServlet {
       override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
+        beforeRedirect(request)
         // Make sure we don't end up with "//" in the middle
         val newUrl = new URL(new URL(request.getRequestURL.toString), prefixedDestPath).toString
         response.sendRedirect(newUrl)
