@@ -35,6 +35,7 @@ from pyspark import rdd
 from pyspark.rdd import RDD, SchemaRDD
 
 from py4j.java_collections import ListConverter
+from py4j.protocol import Py4JError
 
 
 class SparkContext(object):
@@ -621,31 +622,38 @@ class HiveContext(SQLContext):
 
     @property
     def _ssql_ctx(self):
-        if not hasattr(self, '_scala_HiveContext'):
-            self._scala_HiveContext = self._jvm.HiveContext(self._jsc.sc())
-        return self._scala_HiveContext
+        try:
+            if not hasattr(self, '_scala_HiveContext'):
+                self._scala_HiveContext = self._get_hive_ctx()
+            return self._scala_HiveContext
+        except Py4JError as e:
+            raise Exception("You must build Spark with Hive. Export 'SPARK_HIVE=true' and run " \
+                            "sbt/sbt assembly" , e)
+
+    def _get_hive_ctx(self):
+        return self._jvm.HiveContext(self._jsc.sc())
 
     def hiveql(self, hqlQuery):
+        """
+        Runs a query expressed in HiveQL, returning the result as a L{SchemaRDD}.
+        """
         return SchemaRDD(self._ssql_ctx.hiveql(hqlQuery), self)
 
     def hql(self, hqlQuery):
+        """
+        Runs a query expressed in HiveQL, returning the result as a L{SchemaRDD}.
+        """
         return self.hiveql(hqlQuery)
 
 class LocalHiveContext(HiveContext):
 
-    @property
-    def _ssql_ctx(self):
-        if not hasattr(self, '_scala_LocalHiveContext'):
-            self._scala_LocalHiveContext = self._jvm.LocalHiveContext(self._jsc.sc())
-        return self._scala_LocalHiveContext
+    def _get_hive_ctx(self):
+        return self._jvm.LocalHiveContext(self._jsc.sc())
 
 class TestHiveContext(HiveContext):
 
-    @property
-    def _ssql_ctx(self):
-        if not hasattr(self, '_scala_TestHiveContext'):
-            self._scala_TestHiveContext = self._jvm.TestHiveContext(self._jsc.sc())
-        return self._scala_TestHiveContext
+    def _get_hive_ctx(self):
+        return self._jvm.TestHiveContext(self._jsc.sc())
 
 def _test():
     import atexit
