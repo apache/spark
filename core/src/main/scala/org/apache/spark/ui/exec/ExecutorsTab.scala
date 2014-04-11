@@ -22,23 +22,19 @@ import scala.collection.mutable.HashMap
 import org.apache.spark.ExceptionFailure
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.StorageStatusListener
-import org.apache.spark.ui.{SparkUI, UITab}
+import org.apache.spark.ui.{SparkUI, WebUITab}
 
-private[ui] class ExecutorsTab(parent: SparkUI) extends UITab("executors") {
+private[ui] class ExecutorsTab(parent: SparkUI) extends WebUITab(parent, "executors") {
   val appName = parent.appName
   val basePath = parent.basePath
+  val listener = new ExecutorsListener(parent.storageStatusListener)
 
-  def start() {
-    listener = Some(new ExecutorsListener(parent.storageStatusListener))
+  initialize()
+
+  def initialize() {
     attachPage(new IndexPage(this))
+    parent.registerListener(listener)
   }
-
-  def executorsListener: ExecutorsListener = {
-    assert(listener.isDefined, "ExecutorsTab has not started yet!")
-    listener.get.asInstanceOf[ExecutorsListener]
-  }
-
-  def headerTabs: Seq[UITab] = parent.getTabs
 }
 
 /**

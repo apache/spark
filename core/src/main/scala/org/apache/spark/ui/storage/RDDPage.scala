@@ -22,14 +22,14 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.storage.{BlockId, BlockStatus, StorageStatus, StorageUtils}
-import org.apache.spark.ui.{UIPage, UIUtils}
+import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
-private[ui] class RddPage(parent: BlockManagerTab) extends UIPage("rdd") {
+private[ui] class RddPage(parent: BlockManagerTab) extends WebUIPage("rdd") {
   private val appName = parent.appName
   private val basePath = parent.basePath
-  private lazy val listener = parent.blockManagerListener
+  private val listener = parent.listener
 
   override def render(request: HttpServletRequest): Seq[Node] = {
     val rddId = request.getParameter("id").toInt

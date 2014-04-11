@@ -28,10 +28,10 @@ import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
-import org.apache.spark.ui.{UIPage, UIUtils}
+import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
-private[spark] class IndexPage(parent: WorkerWebUI) extends UIPage("", includeJson = true) {
+private[spark] class IndexPage(parent: WorkerWebUI) extends WebUIPage("", includeJson = true) {
   val workerActor = parent.worker.self
   val worker = parent.worker
   val timeout = parent.timeout

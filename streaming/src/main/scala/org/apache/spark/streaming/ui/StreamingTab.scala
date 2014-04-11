@@ -18,15 +18,17 @@
 package org.apache.spark.streaming.ui
 
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.ui.UITab
+import org.apache.spark.ui.WebUITab
 import org.apache.spark.Logging
 
 /** Spark Web UI tab that shows statistics of a streaming job */
 private[spark] class StreamingTab(val ssc: StreamingContext)
-  extends UITab("streaming") with Logging {
+  extends WebUITab(ssc.sc.ui, "streaming") with Logging {
 
-  val streamingPage = new StreamingPage(this)
-  ssc.sc.ui.attachTab(this)
+  initialize()
 
-  def start() { }
+  def initialize() {
+    attachPage(new StreamingPage(this))
+    ssc.sc.ui.attachTab(this)
+  }
 }

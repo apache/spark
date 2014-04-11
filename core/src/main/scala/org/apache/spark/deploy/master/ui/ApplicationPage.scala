@@ -28,11 +28,11 @@ import org.json4s.JValue
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master.ExecutorInfo
-import org.apache.spark.ui.{UIPage, UIUtils}
+import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
 private[spark] class ApplicationPage(parent: MasterWebUI)
-  extends UIPage("app", includeJson = true) {
+  extends WebUIPage("app", includeJson = true) {
 
   private val master = parent.masterActorRef
   private val timeout = parent.timeout

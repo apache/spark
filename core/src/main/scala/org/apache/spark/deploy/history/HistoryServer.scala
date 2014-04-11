@@ -17,12 +17,9 @@
 
 package org.apache.spark.deploy.history
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.scheduler._
@@ -45,15 +42,15 @@ import org.apache.spark.util.Utils
  */
 class HistoryServer(
     val baseLogDir: String,
+    securityManager: SecurityManager,
     conf: SparkConf)
-  extends WebUI(new SecurityManager(conf)) with Logging {
+  extends WebUI(securityManager, HistoryServer.WEB_UI_PORT, conf) with Logging {
 
   import HistoryServer._
 
   private val fileSystem = Utils.getHadoopFileSystem(baseLogDir)
   private val localHost = Utils.localHostName()
   private val publicHost = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHost)
-  private val port = WEB_UI_PORT
 
   // A timestamp of when the disk was last accessed to check for log updates
   private var lastLogCheckTime = -1L
@@ -90,28 +87,18 @@ class HistoryServer(
   // A mapping of application ID to its history information, which includes the rendered UI
   val appIdToInfo = mutable.HashMap[String, ApplicationHistoryInfo]()
 
+  initialize()
+
   /**
-   * Start the history server.
+   * Initialize the history server.
    *
    * This starts a background thread that periodically synchronizes information displayed on
    * this UI with the event logs in the provided base directory.
    */
-  def start() {
+  def initialize() {
     attachPage(new IndexPage(this))
     attachHandler(createStaticHandler(STATIC_RESOURCE_DIR, "/static"))
     logCheckingThread.start()
-  }
-
-  /** Bind to the HTTP server behind this web interface. */
-  def bind() {
-    try {
-      serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, conf))
-      logInfo("Started HistoryServer at http://%s:%d".format(publicHost, boundPort))
-    } catch {
-      case e: Exception =>
-        logError("Failed to bind HistoryServer", e)
-        System.exit(1)
-    }
   }
 
   /**
@@ -179,12 +166,11 @@ class HistoryServer(
     val path = logDir.getPath
     val appId = path.getName
     val replayBus = new ReplayListenerBus(logInfo.logPaths, fileSystem, logInfo.compressionCodec)
-    val ui = new SparkUI(conf, replayBus, appId, "/history/" + appId)
     val appListener = new ApplicationEventListener
     replayBus.addListener(appListener)
+    val ui = new SparkUI(conf, replayBus, appId, "/history/" + appId)
 
     // Do not call ui.bind() to avoid creating a new server for each application
-    ui.start()
     replayBus.replay()
     if (appListener.applicationStarted) {
       attachUI(ui)
@@ -267,9 +253,9 @@ object HistoryServer {
 
   def main(argStrings: Array[String]) {
     val args = new HistoryServerArguments(argStrings)
-    val server = new HistoryServer(args.logDir, conf)
+    val securityManager = new SecurityManager(conf)
+    val server = new HistoryServer(args.logDir, securityManager, conf)
     server.bind()
-    server.start()
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
     while(true) { Thread.sleep(Int.MaxValue) }

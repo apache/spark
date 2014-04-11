@@ -22,15 +22,15 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.{Node, NodeSeq}
 
 import org.apache.spark.scheduler.Schedulable
-import org.apache.spark.ui.{UIPage, UIUtils}
+import org.apache.spark.ui.{WebUIPage, UIUtils}
 
 /** Page showing list of all ongoing and recently finished stages and pools */
-private[ui] class IndexPage(parent: JobProgressTab) extends UIPage("") {
+private[ui] class IndexPage(parent: JobProgressTab) extends WebUIPage("") {
   private val appName = parent.appName
   private val basePath = parent.basePath
   private val live = parent.live
   private val sc = parent.sc
-  private lazy val listener = parent.jobProgressListener
+  private val listener = parent.listener
   private lazy val isFairScheduler = parent.isFairScheduler
 
   override def render(request: HttpServletRequest): Seq[Node] = {

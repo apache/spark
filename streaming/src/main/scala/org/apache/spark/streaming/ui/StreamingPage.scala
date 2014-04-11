@@ -28,7 +28,7 @@ import org.apache.spark.util.Distribution
 
 /** Page for Spark Web UI that shows statistics of a streaming job */
 private[ui] class StreamingPage(parent: StreamingTab)
-  extends UIPage("") with Logging {
+  extends WebUIPage("") with Logging {
 
   private val ssc = parent.ssc
   private val sc = ssc.sparkContext

@@ -26,7 +26,7 @@ import org.apache.spark.ui.UIUtils
 /** Table showing list of pools */
 private[ui] class PoolTable(pools: Seq[Schedulable], parent: JobProgressTab) {
   private val basePath = parent.basePath
-  private lazy val listener = parent.jobProgressListener
+  private val listener = parent.listener
 
   def toNodeSeq: Seq[Node] = {
     listener.synchronized {
