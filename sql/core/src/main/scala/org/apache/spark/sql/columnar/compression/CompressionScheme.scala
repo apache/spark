@@ -57,14 +57,8 @@ private[sql] trait AllCompressionSchemes extends WithCompressionSchemes {
 }
 
 private[sql] object CompressionScheme {
-  val compressionEnabled =
-    System.getProperty("spark.sql.inMemoryCompression.enabled", "false").toBoolean
-
-  val all: Seq[CompressionScheme] = if (compressionEnabled) {
+  val all: Seq[CompressionScheme] =
     Seq(PassThrough, RunLengthEncoding, DictionaryEncoding, BooleanBitSet, IntDelta, LongDelta)
-  } else {
-    Seq(PassThrough)
-  }
 
   private val typeIdToScheme = all.map(scheme => scheme.typeId -> scheme).toMap
 
