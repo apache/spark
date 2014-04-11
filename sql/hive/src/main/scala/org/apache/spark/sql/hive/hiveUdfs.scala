@@ -130,8 +130,7 @@ trait HiveFunctionFactory {
   }
 }
 
-abstract class HiveUdf
-    extends Expression with Logging with HiveFunctionFactory {
+abstract class HiveUdf extends Expression with Logging with HiveFunctionFactory {
   self: Product =>
 
   type UDFType
@@ -146,7 +145,7 @@ abstract class HiveUdf
   lazy val functionInfo = getFunctionInfo(name)
   lazy val function = createFunction[UDFType](name)
 
-  override def toString = s"${nodeName}#${functionInfo.getDisplayName}(${children.mkString(",")})"
+  override def toString = s"$nodeName#${functionInfo.getDisplayName}(${children.mkString(",")})"
 }
 
 case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUdf {
@@ -202,10 +201,11 @@ case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUd
   }
 }
 
-case class HiveGenericUdf(
-    name: String,
-    children: Seq[Expression]) extends HiveUdf with HiveInspectors {
+case class HiveGenericUdf(name: String, children: Seq[Expression])
+  extends HiveUdf with HiveInspectors {
+
   import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
+
   type UDFType = GenericUDF
 
   @transient
@@ -357,7 +357,7 @@ case class HiveGenericUdaf(
 
   override def toString = s"$nodeName#$name(${children.mkString(",")})"
 
-  def newInstance = new HiveUdafFunction(name, children, this)
+  def newInstance() = new HiveUdafFunction(name, children, this)
 }
 
 /**
@@ -435,7 +435,7 @@ case class HiveGenericUdtf(
     }
   }
 
-  override def toString() = s"$nodeName#$name(${children.mkString(",")})"
+  override def toString = s"$nodeName#$name(${children.mkString(",")})"
 }
 
 case class HiveUdafFunction(
