@@ -40,3 +40,5 @@ work
 golden
 test.out/*
 .*iml
+python/metastore/service.properties
+python/metastore/db.lck
