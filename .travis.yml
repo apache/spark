@@ -16,5 +16,11 @@ install:
 script:
   - ./run-tests.sh
 
-on_failure:
+cache:
+  directories:
+    - $HOME/.m2
+    - $HOME/.ivy2
+    - $HOME/.sbt
+
+after_failure:
   - ./travis-tool.sh dump_logs
