@@ -216,6 +216,8 @@ parts = lines.map(lambda l: l.split(","))
 people = parts.map(lambda p: {"name": p[0], "age": int(p[1])})
 
 # Infer the schema, and register the SchemaRDD as a table.
+# In future versions of PySpark we would like to add support for registering RDDs with other
+# datatypes as tables
 peopleTable = sqlCtx.inferSchema(people)
 peopleTable.registerAsTable("people")
 
@@ -293,11 +295,11 @@ JavaSchemaRDD teenagers = sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 
 
 peopleTable # The SchemaRDD from the previous example.
 
-# JavaSchemaRDDs can be saved as parquet files, maintaining the schema information.
+# SchemaRDDs can be saved as parquet files, maintaining the schema information.
 peopleTable.saveAsParquetFile("people.parquet")
 
 # Read in the parquet file created above.  Parquet files are self-describing so the schema is preserved.
-# The result of loading a parquet file is also a JavaSchemaRDD.
+# The result of loading a parquet file is also a SchemaRDD.
 parquetFile = sqlCtx.parquetFile("people.parquet")
 
 # Parquet files can also be registered as tables and then used in SQL statements.
