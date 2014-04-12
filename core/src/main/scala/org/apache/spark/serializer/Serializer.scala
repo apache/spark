@@ -17,12 +17,13 @@
 
 package org.apache.spark.serializer
 
-import java.io.{ByteArrayOutputStream, EOFException, InputStream, OutputStream}
+import java.io.{EOFException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.{ByteBufferInputStream, NextIterator}
+import org.apache.spark.util.NextIterator
+import org.apache.spark.util.io.{ByteBufferInputStream, FastByteArrayOutputStream}
 
 /**
  * :: DeveloperApi ::
@@ -71,9 +72,9 @@ trait SerializerInstance {
 
   def serializeMany[T](iterator: Iterator[T]): ByteBuffer = {
     // Default implementation uses serializeStream
-    val stream = new ByteArrayOutputStream()
+    val stream = new FastByteArrayOutputStream()
     serializeStream(stream).writeAll(iterator)
-    val buffer = ByteBuffer.wrap(stream.toByteArray)
+    val buffer = ByteBuffer.wrap(stream.array)
     buffer.flip()
     buffer
   }

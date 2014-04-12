@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.ByteBufferInputStream
+import org.apache.spark.util.io.ByteBufferInputStream
 
 private[spark] class JavaSerializationStream(out: OutputStream, counterReset: Int)
   extends SerializationStream {

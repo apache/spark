@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.util.io
 
 import java.io.InputStream
 import java.nio.ByteBuffer
 
+// TODO(rxin): This file should not depend on BlockManager.
 import org.apache.spark.storage.BlockManager
 
 /**
