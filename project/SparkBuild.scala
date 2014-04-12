@@ -331,7 +331,6 @@ object SparkBuild extends Build {
         "org.spark-project.akka"    %% "akka-slf4j"       % akkaVersion excludeAll(excludeNetty),
         "org.spark-project.akka"    %% "akka-testkit"     % akkaVersion % "test",
         "org.json4s"                %% "json4s-jackson"   % "3.2.6" excludeAll(excludeScalap),
-        "it.unimi.dsi"               % "fastutil"         % "6.4.4",
         "colt"                       % "colt"             % "1.2.0",
         "org.apache.mesos"           % "mesos"            % "0.13.0",
         "commons-net"                % "commons-net"      % "2.2",

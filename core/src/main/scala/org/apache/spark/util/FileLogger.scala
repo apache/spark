@@ -17,12 +17,11 @@
 
 package org.apache.spark.util
 
-import java.io._
+import java.io.{FileOutputStream, BufferedOutputStream, PrintWriter, IOException}
 import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 import org.apache.hadoop.fs.{FSDataOutputStream, Path}
 
 import org.apache.spark.{Logging, SparkConf}
@@ -100,7 +99,7 @@ private[spark] class FileLogger(
         hadoopDataStream.get
     }
 
-    val bstream = new FastBufferedOutputStream(dstream, outputBufferSize)
+    val bstream = new BufferedOutputStream(dstream, outputBufferSize)
     val cstream = if (compress) compressionCodec.compressedOutputStream(bstream) else bstream
     new PrintWriter(cstream)
   }

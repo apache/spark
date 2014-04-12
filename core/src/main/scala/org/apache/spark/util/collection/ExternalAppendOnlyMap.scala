@@ -17,14 +17,13 @@
 
 package org.apache.spark.util.collection
 
-import java.io._
+import java.io.{InputStream, BufferedInputStream, FileInputStream, File, Serializable, EOFException}
 import java.util.Comparator
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.io.ByteStreams
-import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
@@ -350,7 +349,7 @@ class ExternalAppendOnlyMap[K, V, C](
   private class DiskMapIterator(file: File, blockId: BlockId, batchSizes: ArrayBuffer[Long])
     extends Iterator[(K, C)] {
     private val fileStream = new FileInputStream(file)
-    private val bufferedStream = new FastBufferedInputStream(fileStream, fileBufferSize)
+    private val bufferedStream = new BufferedInputStream(fileStream, fileBufferSize)
 
     // An intermediate stream that reads from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
