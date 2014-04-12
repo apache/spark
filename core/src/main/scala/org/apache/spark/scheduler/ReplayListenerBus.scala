@@ -31,8 +31,8 @@ import org.apache.spark.util.JsonProtocol
 /**
  * A SparkListenerBus that replays logged events from persisted storage.
  *
- * This class expects files to be appropriately prefixed as specified in EventLoggingListener.
- * There exists a one-to-one mapping between ReplayListenerBus and event logging applications.
+ * This assumes the given paths are valid log files, where each line can be deserialized into
+ * exactly one SparkListenerEvent.
  */
 private[spark] class ReplayListenerBus(
     logPaths: Seq[Path],

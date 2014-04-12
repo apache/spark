@@ -1191,11 +1191,7 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.post(SparkListenerApplicationStart(appName, startTime, sparkUser))
   }
 
-  /**
-   * Post the application end event to all listeners immediately, rather than adding it
-   * to the event queue for it to be asynchronously processed eventually. Otherwise, a race
-   * condition exists in which the listeners may stop before this event has been propagated.
-   */
+  /** Post the application end event */
   private def postApplicationEnd() {
     listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis))
   }
