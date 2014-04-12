@@ -23,7 +23,7 @@ import scala.xml.Node
 
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
-private[ui] class IndexPage(parent: EnvironmentTab) extends WebUIPage("") {
+private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") {
   private val appName = parent.appName
   private val basePath = parent.basePath
   private val listener = parent.listener

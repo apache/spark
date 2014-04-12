@@ -25,7 +25,7 @@ private[ui] class EnvironmentTab(parent: SparkUI) extends WebUITab(parent, "envi
   val basePath = parent.basePath
   val listener = new EnvironmentListener
 
-  attachPage(new IndexPage(this))
+  attachPage(new EnvironmentPage(this))
   parent.registerListener(listener)
 }
 

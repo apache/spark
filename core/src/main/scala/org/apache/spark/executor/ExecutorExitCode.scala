@@ -34,7 +34,7 @@ object ExecutorExitCode {
       logging the exception. */
   val UNCAUGHT_EXCEPTION_TWICE = 51
 
-  /** The default uncaught exception handler was reached, and the uncaught exception was an 
+  /** The default uncaught exception handler was reached, and the uncaught exception was an
       OutOfMemoryError. */
   val OOM = 52
 
@@ -43,10 +43,10 @@ object ExecutorExitCode {
 
   /** TachyonStore failed to initialize after many attempts. */
   val TACHYON_STORE_FAILED_TO_INITIALIZE = 54
-  
+
   /** TachyonStore failed to create a local temporary directory after many attempts. */
   val TACHYON_STORE_FAILED_TO_CREATE_DIR = 55
-  
+
   def explainExitCode(exitCode: Int): String = {
     exitCode match {
       case UNCAUGHT_EXCEPTION => "Uncaught exception"
@@ -57,7 +57,7 @@ object ExecutorExitCode {
       case TACHYON_STORE_FAILED_TO_INITIALIZE => "TachyonStore failed to initialize."
       case TACHYON_STORE_FAILED_TO_CREATE_DIR =>
         "TachyonStore failed to create a local temporary directory."
-      case _ => 
+      case _ =>
         "Unknown executor exit code (" + exitCode + ")" + (
           if (exitCode > 128) {
             " (died from signal " + (exitCode - 128) + "?)"

@@ -154,17 +154,8 @@ private[spark] object UIUtils extends Logging {
               type="text/css" />
         <script src={prependBaseUri("/static/sorttable.js")} ></script>
         <title>{appName} - {title}</title>
-        <script type="text/JavaScript">
-          <!--
-          function timedRefresh(timeoutPeriod) {
-            if (timeoutPeriod > 0) {
-              setTimeout("location.reload(true);", timeoutPeriod);
-            }
-          }
-          //   -->
-        </script>
       </head>
-      <body onload={s"JavaScript:timedRefresh(${refreshInterval.getOrElse(-1)});"}>
+      <body>
         <div class="navbar navbar-static-top">
           <div class="navbar-inner">
             <a href={prependBaseUri(basePath, "/")} class="brand">
@@ -174,7 +165,6 @@ private[spark] object UIUtils extends Logging {
             <p class="navbar-text pull-right"><strong>{appName}</strong> application UI</p>
           </div>
         </div>
-
         <div class="container-fluid">
           <div class="row-fluid">
             <div class="span12">

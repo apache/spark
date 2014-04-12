@@ -38,7 +38,7 @@ class MasterWebUI(val master: Master, requestedPort: Int)
   /** Initialize all components of the server. */
   def initialize() {
     attachPage(new ApplicationPage(this))
-    attachPage(new IndexPage(this))
+    attachPage(new MasterPage(this))
     attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
     master.masterMetricsSystem.getServletHandlers.foreach(attachHandler)
     master.applicationMetricsSystem.getServletHandlers.foreach(attachHandler)
