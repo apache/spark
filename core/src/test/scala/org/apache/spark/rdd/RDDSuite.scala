@@ -26,6 +26,8 @@ import org.apache.spark.rdd._
 import scala.collection.parallel.mutable
 import org.apache.spark._
 
+import org.apache.spark.rdd.RDDSuiteUtils._
+
 class RDDSuite extends FunSuite with SharedSparkContext {
 
   test("basic operations") {
@@ -536,23 +538,12 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     // last name, then first name
     val nameOrdered = Array("Bob|Smith|50", "Jane|Smith|40", "Karen|Williams|60", "Thomas|Williams|30")
 
-    case class Person(first: String, last: String, age: Int)
-
     def parse(s: String): Person = {
       val split = s.split("\\|")
       Person(split(0), split(1), split(2).toInt)
     }
 
-    object AgeOrdering extends Ordering[Person] {
-      def compare(a:Person, b:Person) = a.age compare b.age
-    }
-
-    object NameOrdering extends Ordering[Person] {
-      def compare(a:Person, b:Person) =
-        implicitly[Ordering[Tuple2[String,String]]].compare((a.last, a.first), (b.last, b.first))
-    }
-
-    import scala.reflect._
+    import scala.reflect.classTag
     assert(data.sortBy(parse, false, 2)(AgeOrdering, classTag[Person]) === ageOrdered)
     assert(data.sortBy(parse, false, 2)(NameOrdering, classTag[Person]) === nameOrdered)
   }
