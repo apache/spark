@@ -144,7 +144,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("abc"  like "b%", false)
     checkEvaluation("abc"  like "bc%", false)
   }
-  
+
   test("LIKE Non-literal Regular Expression") {
     val regEx = 'a.string.at(0)
     checkEvaluation("abcd" like regEx, null, new GenericRow(Array[Any](null)))
@@ -164,7 +164,7 @@ class ExpressionEvaluationSuite extends FunSuite {
   test("RLIKE literal Regular Expression") {
     checkEvaluation("abdef" rlike "abdef", true)
     checkEvaluation("abbbbc" rlike "a.*c", true)
-    
+
     checkEvaluation("fofo" rlike "^fo", true)
     checkEvaluation("fo\no" rlike "^fo\no$", true)
     checkEvaluation("Bn" rlike "^Ba*n", true)
@@ -196,9 +196,9 @@ class ExpressionEvaluationSuite extends FunSuite {
       evaluate("abbbbc" rlike regEx, new GenericRow(Array[Any]("**")))
     }
   }
-  
+
   test("data type casting") {
-    
+
     val sts = "1970-01-01 00:00:01.0"
     val ts = Timestamp.valueOf(sts)
 
@@ -236,7 +236,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("23" cast ShortType, 23)
     checkEvaluation("2012-12-11" cast DoubleType, null)
     checkEvaluation(Literal(123) cast IntegerType, 123)
-    
+
     intercept[Exception] {evaluate(Literal(1) cast BinaryType, null)}
   }
 

@@ -31,7 +31,7 @@ import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
-private[spark] class IndexPage(parent: WorkerWebUI) extends WebUIPage("") {
+private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
   val workerActor = parent.worker.self
   val worker = parent.worker
   val timeout = parent.timeout
@@ -137,7 +137,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) extends WebUIPage("") {
         .format(executor.appId, executor.execId)}>stdout</a>
      <a href={"logPage?appId=%s&executorId=%s&logType=stderr"
         .format(executor.appId, executor.execId)}>stderr</a>
-      </td> 
+      </td>
     </tr>
 
   }

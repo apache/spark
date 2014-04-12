@@ -26,7 +26,7 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
-private[ui] class IndexPage(parent: StorageTab) extends WebUIPage("") {
+private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
   private val appName = parent.appName
   private val basePath = parent.basePath
   private val listener = parent.listener

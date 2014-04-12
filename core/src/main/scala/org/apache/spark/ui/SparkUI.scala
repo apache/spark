@@ -54,12 +54,15 @@ private[spark] class SparkUI(
   /** Initialize all components of the server. */
   def initialize() {
     listenerBus.addListener(storageStatusListener)
-    attachTab(new JobProgressTab(this))
+    val jobProgressTab = new JobProgressTab(this)
+    attachTab(jobProgressTab)
     attachTab(new StorageTab(this))
     attachTab(new EnvironmentTab(this))
     attachTab(new ExecutorsTab(this))
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
-    attachHandler(createRedirectHandler("/", "/stages", basePath))
+    attachHandler(createRedirectHandler("/", "/stages", basePath = basePath))
+    attachHandler(
+      createRedirectHandler("/stages/stage/kill", "/stages", jobProgressTab.handleKillRequest))
     if (live) {
       sc.env.metricsSystem.getServletHandlers.foreach(attachHandler)
     }
@@ -81,7 +84,12 @@ private[spark] class SparkUI(
     logInfo("Stopped Spark web UI at %s".format(appUIAddress))
   }
 
-  private[spark] def appUIAddress = "http://" + publicHostName + ":" + boundPort
+  /**
+   * Return the application UI host:port. This does not include the scheme (http://).
+   */
+  private[spark] def appUIHostPort = publicHostName + ":" + boundPort
+
+  private[spark] def appUIAddress = s"http://$appUIHostPort"
 }
 
 private[spark] object SparkUI {

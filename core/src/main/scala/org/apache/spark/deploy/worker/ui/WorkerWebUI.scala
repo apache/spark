@@ -45,7 +45,7 @@ class WorkerWebUI(
   def initialize() {
     val logPage = new LogPage(this)
     attachPage(logPage)
-    attachPage(new IndexPage(this))
+    attachPage(new WorkerPage(this))
     attachHandler(createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static"))
     attachHandler(createServletHandler("/log",
       (request: HttpServletRequest) => logPage.renderLog(request), worker.securityMgr))

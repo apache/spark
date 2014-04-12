@@ -290,7 +290,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     val rdd = makeRdd(1, Nil)
     val jobId = submit(rdd, Array(0))
     cancel(jobId)
-    assert(failure.getMessage === s"Job $jobId cancelled")
+    assert(failure.getMessage === s"Job $jobId cancelled ")
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     assert(sparkListener.failedStages.contains(0))
     assert(sparkListener.failedStages.size === 1)

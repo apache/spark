@@ -96,7 +96,7 @@ class HistoryServer(
    * this UI with the event logs in the provided base directory.
    */
   def initialize() {
-    attachPage(new IndexPage(this))
+    attachPage(new HistoryPage(this))
     attachHandler(createStaticHandler(STATIC_RESOURCE_DIR, "/static"))
     logCheckingThread.start()
   }

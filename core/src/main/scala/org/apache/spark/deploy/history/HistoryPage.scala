@@ -23,7 +23,7 @@ import scala.xml.Node
 
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 
-private[spark] class IndexPage(parent: HistoryServer) extends WebUIPage("") {
+private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val appRows = parent.appIdToInfo.values.toSeq.sortBy { app => -app.lastUpdated }

@@ -98,8 +98,8 @@ class UISuite extends FunSuite {
     val server = new Server(startPort)
 
     Try { server.start() } match {
-      case Success(s) => 
-      case Failure(e) => 
+      case Success(s) =>
+      case Failure(e) =>
       // Either case server port is busy hence setup for test complete
     }
     val serverInfo1 = JettyUtils.startJettyServer(
@@ -123,6 +123,20 @@ class UISuite extends FunSuite {
     Try { new ServerSocket(boundPort) } match {
       case Success(s) => fail("Port %s doesn't seem used by jetty server".format(boundPort))
       case Failure(e) =>
+    }
+  }
+
+  test("verify appUIAddress contains the scheme") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val uiAddress = sc.ui.appUIAddress
+      assert(uiAddress.equals("http://" + sc.ui.appUIHostPort))
+    }
+  }
+
+  test("verify appUIAddress contains the port") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val splitUIAddress = sc.ui.appUIAddress.split(':')
+      assert(splitUIAddress(2).toInt == sc.ui.boundPort)
     }
   }
 }

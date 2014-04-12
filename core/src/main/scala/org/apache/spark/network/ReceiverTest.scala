@@ -18,7 +18,7 @@
 package org.apache.spark.network
 
 import java.nio.ByteBuffer
-import org.apache.spark.{SecurityManager, SparkConf} 
+import org.apache.spark.{SecurityManager, SparkConf}
 
 private[spark] object ReceiverTest {
   def main(args: Array[String]) {
