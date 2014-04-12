@@ -428,13 +428,16 @@ class StreamingContext private[streaming] (
     waiter.waitForStopOrError(timeout)
   }
 
+  override def stop() {
+    stop(true)
+  }
   /**
    * Stop the execution of the streams immediately (does not wait for all received data
    * to be processed).
    * @param stopSparkContext Stop the associated SparkContext or not
    *
    */
-  def stop(stopSparkContext: Boolean = true): Unit = synchronized {
+  def stop(stopSparkContext: Boolean): Unit = synchronized {
     stop(stopSparkContext, false)
   }
 
@@ -448,7 +451,7 @@ class StreamingContext private[streaming] (
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = synchronized {
     // Warn (but not fail) if context is stopped twice,
     // or context is stopped before starting
-    if (initialized) {
+    if (uninitialized || initialized) {
       logWarning("StreamingContext has not been started yet")
       return
     }

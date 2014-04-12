@@ -19,7 +19,7 @@ package org.apache.spark.streaming
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
+import org.apache.spark._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.{DStream, NetworkReceiver}
 import org.apache.spark.util.{MetadataCleaner, Utils}
@@ -126,18 +126,18 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register
 
-    assert(ssc.state === ssc.StreamingContextState.Initialized)
+    assert(ssc.state === Service.State.Uninitialized)
     ssc.start()
-    assert(ssc.state === ssc.StreamingContextState.Started)
+    assert(ssc.state === Service.State.Started)
     ssc.stop()
-    assert(ssc.state === ssc.StreamingContextState.Stopped)
+    assert(ssc.state === Service.State.Stopped)
   }
 
   test("start multiple times") {
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register
     ssc.start()
-    intercept[SparkException] {
+    intercept[IllegalArgumentException] {
       ssc.start()
     }
   }
@@ -156,7 +156,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc.stop()  // stop before start should not throw exception
     ssc.start()
     ssc.stop()
-    intercept[SparkException] {
+    intercept[IllegalStateException] {
       ssc.start() // start after stop should throw exception
     }
   }

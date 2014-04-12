@@ -504,8 +504,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Lifecycle {
    * Stop the execution of the streams. Will stop the associated JavaSparkContext as well.
    */
   override def stop(): Unit = {
-    ssc.stop()
-    super.stop()
+    stop(true)
   }
 
   /**
@@ -513,8 +512,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Lifecycle {
    * @param stopSparkContext Stop the associated SparkContext or not
    */
   def stop(stopSparkContext: Boolean): Unit = {
-    ssc.stop(stopSparkContext)
-    super.stop()
+    stop(stopSparkContext,false)
   }
 
   /**
@@ -524,8 +522,10 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Lifecycle {
    *                       received data to be completed
    */
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean) = {
-    ssc.stop(stopSparkContext, stopGracefully)
-    super.stop()
+    if (ssc.started) {
+      ssc.stop(stopSparkContext, stopGracefully)
+      super.stop()
+    }
   }
 
   override protected def doStop() { }
