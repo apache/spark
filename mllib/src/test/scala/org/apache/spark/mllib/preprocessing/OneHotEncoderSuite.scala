@@ -32,7 +32,7 @@ class OneHotEncoderSuite extends FunSuite with LocalSparkContext with ShouldMatc
       Array("nirvana", 6.7, "apple", 3)
     )
     val categoricalFields = Array(0, 2)
-    val rdd = sc.parallelize(vecs, 1)
+    val rdd = sc.parallelize(vecs, 2)
 
     val catMap = OneHotEncoder.categories(rdd, categoricalFields)
     val encoded = OneHotEncoder.encode(rdd, catMap)
@@ -41,16 +41,16 @@ class OneHotEncoderSuite extends FunSuite with LocalSparkContext with ShouldMatc
     result.size should be (vecs.size)
 
     val vec1 = Array[Any](0, 0, 0, 1.3, 0, 0, 2)
-    vec1(catMap(0).getOrElse("marcy playground", -1)) = 1
-    vec1(4 + catMap(2).getOrElse("apple", -1)) = 1
+    vec1(catMap(0)._2.getOrElse("marcy playground", -1)) = 1
+    vec1(4 + catMap(1)._2.getOrElse("apple", -1)) = 1
 
     val vec2 = Array[Any](0, 0, 0, 3.5, 0, 0, 4)
-    vec2(catMap(0).getOrElse("pearl jam", -1)) = 1
-    vec2(4 + catMap(2).getOrElse("banana", -1)) = 1
+    vec2(catMap(0)._2.getOrElse("pearl jam", -1)) = 1
+    vec2(4 + catMap(1)._2.getOrElse("banana", -1)) = 1
 
     val vec3 = Array[Any](0, 0, 0, 6.7, 0, 0, 3)
-    vec3(catMap(0).getOrElse("nirvana", -1)) = 1
-    vec3(4 + catMap(2).getOrElse("apple", -1)) = 1
+    vec3(catMap(0)._2.getOrElse("nirvana", -1)) = 1
+    vec3(4 + catMap(1)._2.getOrElse("apple", -1)) = 1
 
     result(0) should equal (vec1)
     result(1) should equal (vec2)
