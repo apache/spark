@@ -17,7 +17,7 @@
 
 package org.apache.spark.metrics.sink
 
-private[spark] trait Sink {
-  def start: Unit
-  def stop: Unit
+import org.apache.spark.Lifecycle
+
+private[spark] trait Sink extends Lifecycle {
 }

@@ -39,7 +39,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
   private val host = Utils.localHostName()
   private val port = requestedPort.getOrElse(
-    worker.conf.getInt("worker.ui.port",  WorkerWebUI.DEFAULT_PORT))
+    conf.getInt("worker.ui.port",  WorkerWebUI.DEFAULT_PORT))
   private val indexPage = new IndexPage(this)
 
   private val handlers: Seq[ServletContextHandler] = {
@@ -56,6 +56,8 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
         (request: HttpServletRequest) => indexPage.render(request), worker.securityMgr)
     )
   }
+
+  def conf = worker.conf
 
   /** Bind to the HTTP server behind this web interface. */
   override def bind() {

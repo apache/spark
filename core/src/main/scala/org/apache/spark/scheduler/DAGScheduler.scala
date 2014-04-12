@@ -59,7 +59,7 @@ class DAGScheduler(
     mapOutputTracker: MapOutputTrackerMaster,
     blockManagerMaster: BlockManagerMaster,
     env: SparkEnv)
-  extends Logging {
+  extends Logging with Lifecycle {
 
   import DAGScheduler._
 
@@ -113,6 +113,8 @@ class DAGScheduler(
   //       stray messages to detect.
   private val failedEpoch = new HashMap[String, Long]
 
+  def conf = env.conf
+
   taskScheduler.setDAGScheduler(this)
 
   /**
@@ -126,7 +128,7 @@ class DAGScheduler(
    * some internal states of the enclosing [[org.apache.spark.scheduler.DAGScheduler]] object, thus
    * cannot be scheduled until the [[org.apache.spark.scheduler.DAGScheduler]] is fully constructed.
    */
-  def start() {
+  def doStart() {
     eventProcessActor = env.actorSystem.actorOf(Props(new Actor {
       /**
        * The main event loop of the DAG scheduler.
@@ -1151,7 +1153,7 @@ class DAGScheduler(
     Nil
   }
 
-  def stop() {
+  def doStop() {
     if (eventProcessActor != null) {
       eventProcessActor ! StopDAGScheduler
     }

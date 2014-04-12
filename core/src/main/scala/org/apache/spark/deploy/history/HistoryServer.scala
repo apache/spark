@@ -46,7 +46,7 @@ import org.apache.spark.util.Utils
  */
 class HistoryServer(
     val baseLogDir: String,
-    conf: SparkConf)
+    val conf: SparkConf)
   extends SparkUIContainer("History Server") with Logging {
 
   import HistoryServer._
@@ -63,8 +63,6 @@ class HistoryServer(
 
   // Number of completed applications found in this directory
   private var numCompletedApplications = 0
-
-  @volatile private var stopped = false
 
   /**
    * A background thread that periodically checks for event log updates on disk.
@@ -105,7 +103,7 @@ class HistoryServer(
    * This starts a background thread that periodically synchronizes information displayed on
    * this UI with the event logs in the provided base directory.
    */
-  def start() {
+  override def doStart() {
     logCheckingThread.start()
   }
 
@@ -207,9 +205,8 @@ class HistoryServer(
   }
 
   /** Stop the server and close the file system. */
-  override def stop() {
-    super.stop()
-    stopped = true
+  override def doStop() {
+    super.doStop()
     fileSystem.close()
   }
 

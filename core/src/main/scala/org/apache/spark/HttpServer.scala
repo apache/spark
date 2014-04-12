@@ -42,11 +42,13 @@ private[spark] class ServerStateException(message: String) extends Exception(mes
  * around a Jetty server.
  */
 private[spark] class HttpServer(resourceBase: File, securityManager: SecurityManager)
-    extends Logging {
+    extends Logging with Lifecycle {
   private var server: Server = null
   private var port: Int = -1
 
-  def start() {
+  def conf = securityManager.sparkConf
+
+  def doStart() {
     if (server != null) {
       throw new ServerStateException("Server is already started")
     } else {
@@ -117,7 +119,7 @@ private[spark] class HttpServer(resourceBase: File, securityManager: SecurityMan
     sh
   }
 
-  def stop() {
+  def doStop() {
     if (server == null) {
       throw new ServerStateException("Server is already stopped")
     } else {

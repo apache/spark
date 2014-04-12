@@ -133,7 +133,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
  *  can take place.
  */
 
-private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
+private[spark] class SecurityManager(val sparkConf: SparkConf) extends Logging {
 
   // key used to store the spark secret in the Hadoop UGI
   private val sparkSecretLookupKey = "sparkCookie"

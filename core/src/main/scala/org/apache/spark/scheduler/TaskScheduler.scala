@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import org.apache.spark.Lifecycle
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
 /**
@@ -27,21 +28,16 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
  * them, retrying if there are failures, and mitigating stragglers. They return events to the
  * DAGScheduler.
  */
-private[spark] trait TaskScheduler {
+private[spark] trait TaskScheduler extends Lifecycle {
 
   def rootPool: Pool
 
   def schedulingMode: SchedulingMode
 
-  def start(): Unit
-
   // Invoked after system has successfully initialized (typically in spark context).
   // Yarn uses this to bootstrap allocation of resources based on preferred locations,
   // wait for slave registerations, etc.
   def postStartHook() { }
-
-  // Disconnect from the cluster.
-  def stop(): Unit
 
   // Submit a sequence of tasks to run.
   def submitTasks(taskSet: TaskSet): Unit

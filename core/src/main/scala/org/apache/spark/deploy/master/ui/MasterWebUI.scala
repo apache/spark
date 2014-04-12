@@ -59,6 +59,8 @@ class MasterWebUI(val master: Master, requestedPort: Int)
     )
   }
 
+  def conf = master.conf
+
   /** Bind to the HTTP server behind this web interface. */
   override def bind() {
     try {

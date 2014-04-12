@@ -37,8 +37,8 @@ private[spark] class SparkDeploySchedulerBackend(
 
   val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
 
-  override def start() {
-    super.start()
+  override def doStart() {
+    super.doStart()
 
     // The endpoint for executors to talk to us
     val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
@@ -55,9 +55,9 @@ private[spark] class SparkDeploySchedulerBackend(
     client.start()
   }
 
-  override def stop() {
+  override def doStop() {
     stopping = true
-    super.stop()
+    super.doStop()
     client.stop()
     if (shutdownCallback != null) {
       shutdownCallback(this)

@@ -23,6 +23,8 @@ trait Lifecycle extends Service {
 
   private var state_ = Uninitialized
 
+  def conf: SparkConf
+
   def uninitialized = state_ == Uninitialized
 
   def initialized = state_ == Initialized
@@ -56,13 +58,9 @@ trait Lifecycle extends Service {
     stop()
   }
 
-  def conf: SparkConf
-
   protected def doInitialize(): Unit = {}
 
   protected def doStart(): Unit
 
   protected def doStop(): Unit
-
-
 }

@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
 /** Top level user interface for Spark */
 private[spark] class SparkUI(
     val sc: SparkContext,
-    conf: SparkConf,
+    val conf: SparkConf,
     val listenerBus: SparkListenerBus,
     var appName: String,
     val basePath: String = "")
@@ -82,11 +82,12 @@ private[spark] class SparkUI(
   }
 
   /** Initialize all components of the server */
-  def start() {
+  override def doStart() {
     storage.start()
     jobs.start()
     env.start()
     exec.start()
+    super.doStart()
 
     // Storage status listener must receive events first, as other listeners depend on its state
     listenerBus.addListener(storageStatusListener)
@@ -109,8 +110,8 @@ private[spark] class SparkUI(
   }
 
   /** Stop the server behind this web interface. Only valid after bind(). */
-  override def stop() {
-    super.stop()
+  override def doStop() {
+    super.doStop()
     logInfo("Stopped Spark Web UI at %s".format(appUIAddress))
   }
 
