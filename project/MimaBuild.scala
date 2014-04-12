@@ -60,6 +60,7 @@ object MimaBuild {
           Seq(
             excludePackage("org.apache.spark.api.java"),
             excludePackage("org.apache.spark.streaming.api.java"),
+            excludePackage("org.apache.spark.streaming.scheduler"),
             excludePackage("org.apache.spark.mllib")
           ) ++
           excludeSparkClass("rdd.ClassTags") ++
@@ -70,7 +71,12 @@ object MimaBuild {
           excludeSparkClass("mllib.regression.LassoWithSGD") ++
           excludeSparkClass("mllib.regression.LinearRegressionWithSGD") ++
           excludeSparkClass("streaming.dstream.NetworkReceiver") ++
-          excludeSparkClass("streaming.dstream.NetworkReceiver#NetworkReceiverActor")
+          excludeSparkClass("streaming.dstream.NetworkReceiver#NetworkReceiverActor") ++
+          excludeSparkClass("streaming.dstream.NetworkReceiver#BlockGenerator") ++
+          excludeSparkClass("streaming.dstream.NetworkReceiver#BlockGenerator#Block") ++
+          excludeSparkClass("streaming.dstream.ReportError") ++
+          excludeSparkClass("streaming.dstream.ReportBlock") ++
+          excludeSparkClass("streaming.dstream.DStream")
         case _ => Seq()
       }
 

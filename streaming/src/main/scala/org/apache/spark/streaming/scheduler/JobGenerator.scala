@@ -201,7 +201,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     logInfo("Batches to reschedule (" + timesToReschedule.size + " batches): " +
       timesToReschedule.mkString(", "))
     timesToReschedule.foreach(time =>
-      jobScheduler.runJobs(time, graph.generateJobs(time))
+      jobScheduler.submitJobSet(JobSet(time, graph.generateJobs(time)))
     )
 
     // Restart the timer
@@ -214,7 +214,12 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     SparkEnv.set(ssc.env)
     Try(graph.generateJobs(time)) match {
       case Success(jobs) =>
-        jobScheduler.runJobs(time, jobs)
+        val receivedBlockInfo = graph.getNetworkInputStreams.map { stream =>
+          val streamId = stream.id
+          val receivedBlockInfo = stream.getReceivedBlockInfo(time)
+          (streamId, receivedBlockInfo)
+        }.toMap
+        jobScheduler.submitJobSet(JobSet(time, jobs, receivedBlockInfo))
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
     }
