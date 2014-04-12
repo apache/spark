@@ -19,39 +19,28 @@ package org.apache.spark.ui.jobs
 
 import javax.servlet.http.HttpServletRequest
 
-import org.eclipse.jetty.servlet.ServletContextHandler
-
 import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.SchedulingMode
-import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.Utils
+import org.apache.spark.ui.{SparkUI, WebUITab}
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
-private[ui] class JobProgressUI(parent: SparkUI) {
+private[ui] class JobProgressTab(parent: SparkUI) extends WebUITab(parent, "stages") {
+  val appName = parent.appName
   val basePath = parent.basePath
   val live = parent.live
   val sc = parent.sc
-  val killEnabled = parent.conf.getBoolean("spark.ui.killEnabled", true)
+  val conf = if (live) sc.conf else new SparkConf
+  val killEnabled = conf.getBoolean("spark.ui.killEnabled", true)
+  val listener = new JobProgressListener(conf)
 
-  lazy val listener = _listener.get
-  lazy val isFairScheduler = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
+  attachPage(new JobProgressPage(this))
+  attachPage(new StagePage(this))
+  attachPage(new PoolPage(this))
+  parent.registerListener(listener)
 
-  private val indexPage = new IndexPage(this)
-  private val stagePage = new StagePage(this)
-  private val poolPage = new PoolPage(this)
-  private var _listener: Option[JobProgressListener] = None
+  def isFairScheduler = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
 
-  def appName = parent.appName
-
-  def start() {
-    val conf = if (live) sc.conf else new SparkConf
-    _listener = Some(new JobProgressListener(conf))
-  }
-
-  def formatDuration(ms: Long) = Utils.msDurationToString(ms)
-
-  private def handleKillRequest(request: HttpServletRequest) =  {
+  def handleKillRequest(request: HttpServletRequest) =  {
     if (killEnabled) {
       val killFlag = Option(request.getParameter("terminate")).getOrElse("false").toBoolean
       val stageId = Option(request.getParameter("id")).getOrElse("-1").toInt
@@ -64,14 +53,4 @@ private[ui] class JobProgressUI(parent: SparkUI) {
       Thread.sleep(100)
     }
   }
-
-  def getHandlers = Seq[ServletContextHandler](
-    createRedirectHandler("/stages/stage/kill", "/stages", handleKillRequest),
-    createServletHandler("/stages/stage",
-      (request: HttpServletRequest) => stagePage.render(request), parent.securityManager, basePath),
-    createServletHandler("/stages/pool",
-      (request: HttpServletRequest) => poolPage.render(request), parent.securityManager, basePath),
-    createServletHandler("/stages",
-      (request: HttpServletRequest) => indexPage.render(request), parent.securityManager, basePath)
-  )
 }

@@ -523,8 +523,8 @@ class JsonProtocolSuite extends FunSuite {
       700,"Fetch Wait Time":900,"Remote Bytes Read":1000},"Shuffle Write Metrics":
       {"Shuffle Bytes Written":1200,"Shuffle Write Time":1500},"Updated Blocks":
       [{"Block ID":{"Type":"RDDBlockId","RDD ID":0,"Split Index":0},"Status":
-      {"Storage Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":false,
-      "Replication":2},"Memory Size":0,"Disk Size":0,"Tachyon Size":0}}]}}
+      {"Storage Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,
+      "Deserialized":false,"Replication":2},"Memory Size":0,"Disk Size":0,"Tachyon Size":0}}]}}
     """
 
   private val jobStartJsonString =
