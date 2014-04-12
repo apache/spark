@@ -25,17 +25,17 @@ import scala.xml.Node
 import akka.pattern.ask
 import org.json4s.JValue
 
-import org.apache.spark.deploy.{JsonProtocol}
+import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
-import org.apache.spark.ui.{WebUI, UIUtils}
+import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
-private[spark] class IndexPage(parent: MasterWebUI) {
-  val master = parent.masterActorRef
-  val timeout = parent.timeout
+private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
+  private val master = parent.masterActorRef
+  private val timeout = parent.timeout
 
-  def renderJson(request: HttpServletRequest): JValue = {
+  override def renderJson(request: HttpServletRequest): JValue = {
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
     val state = Await.result(stateFuture, timeout)
     JsonProtocol.writeMasterState(state)
@@ -139,7 +139,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
     UIUtils.basicSparkPage(content, "Spark Master at " + state.uri)
   }
 
-  def workerRow(worker: WorkerInfo): Seq[Node] = {
+  private def workerRow(worker: WorkerInfo): Seq[Node] = {
     <tr>
       <td>
         <a href={worker.webUiAddress}>{worker.id}</a>
@@ -154,8 +154,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
     </tr>
   }
 
-
-  def appRow(app: ApplicationInfo): Seq[Node] = {
+  private def appRow(app: ApplicationInfo): Seq[Node] = {
     <tr>
       <td>
         <a href={"app?appId=" + app.id}>{app.id}</a>
@@ -169,14 +168,14 @@ private[spark] class IndexPage(parent: MasterWebUI) {
       <td sorttable_customkey={app.desc.memoryPerSlave.toString}>
         {Utils.megabytesToString(app.desc.memoryPerSlave)}
       </td>
-      <td>{WebUI.formatDate(app.submitDate)}</td>
+      <td>{UIUtils.formatDate(app.submitDate)}</td>
       <td>{app.desc.user}</td>
       <td>{app.state.toString}</td>
-      <td>{WebUI.formatDuration(app.duration)}</td>
+      <td>{UIUtils.formatDuration(app.duration)}</td>
     </tr>
   }
 
-  def driverRow(driver: DriverInfo): Seq[Node] = {
+  private def driverRow(driver: DriverInfo): Seq[Node] = {
     <tr>
       <td>{driver.id} </td>
       <td>{driver.submitDate}</td>

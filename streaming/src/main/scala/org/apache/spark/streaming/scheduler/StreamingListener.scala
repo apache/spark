@@ -23,8 +23,11 @@ import org.apache.spark.util.Distribution
 /** Base trait for events related to StreamingListener */
 sealed trait StreamingListenerEvent
 
+case class StreamingListenerBatchSubmitted(batchInfo: BatchInfo) extends StreamingListenerEvent
 case class StreamingListenerBatchCompleted(batchInfo: BatchInfo) extends StreamingListenerEvent
 case class StreamingListenerBatchStarted(batchInfo: BatchInfo) extends StreamingListenerEvent
+case class StreamingListenerReceiverStarted(receiverInfo: ReceiverInfo)
+  extends StreamingListenerEvent
 
 /** An event used in the listener to shutdown the listener daemon thread. */
 private[scheduler] case object StreamingListenerShutdown extends StreamingListenerEvent
@@ -34,14 +37,17 @@ private[scheduler] case object StreamingListenerShutdown extends StreamingListen
  * computation.
  */
 trait StreamingListener {
-  /**
-   * Called when processing of a batch has completed
-   */
+
+  /** Called when a receiver has been started */
+  def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) { }
+
+  /** Called when a batch of jobs has been submitted for processing. */
+  def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted) { }
+
+  /** Called when processing of a batch of jobs has completed. */
   def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) { }
 
-  /**
-   * Called when processing of a batch has started
-   */
+  /** Called when processing of a batch of jobs has started.  */
   def onBatchStarted(batchStarted: StreamingListenerBatchStarted) { }
 }
 
