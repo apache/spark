@@ -309,6 +309,37 @@ class SchemaRDD(RDD):
         # pickle serializer in Pyrolite
         return RDD(jrdd, self._sc, self._sc.serializer).map(lambda d: Row(d))
 
+    # We override the default cache/persist/checkpoint behavior as we want to cache the underlying
+    # SchemaRDD object in the JVM, not the PythonRDD checkpointed by the super class
+    def cache(self):
+        self.is_cached = True
+        self._jschema_rdd.cache()
+        return self
+
+    def persist(self, storageLevel):
+        self.is_cached = True
+        javaStorageLevel = self.ctx._getJavaStorageLevel(storageLevel)
+        self._jschema_rdd.persist(javaStorageLevel)
+        return self
+
+    def unpersist(self):
+        self.is_cached = False
+        self._jschema_rdd.unpersist()
+        return self
+
+    def checkpoint(self):
+        self.is_checkpointed = True
+        self._jschema_rdd.checkpoint()
+
+    def isCheckpointed(self):
+        return self._jschema_rdd.isCheckpointed()
+
+    def getCheckpointFile(self):
+        checkpointFile = self._jschema_rdd.getCheckpointFile()
+        if checkpointFile.isDefined():
+            return checkpointFile.get()
+        else:
+            return None
 
 def _test():
     import doctest
