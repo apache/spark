@@ -259,26 +259,6 @@ private[parquet] object ParquetTypesConverter {
     }
   }
 
-  def consumeType(
-      consumer: RecordConsumer,
-      ctype: DataType,
-      record: Row,
-      index: Int): Unit = {
-    ctype match {
-      case StringType => consumer.addBinary(
-        Binary.fromByteArray(
-          record(index).asInstanceOf[String].getBytes("utf-8")
-        )
-      )
-      case IntegerType => consumer.addInteger(record.getInt(index))
-      case LongType => consumer.addLong(record.getLong(index))
-      case DoubleType => consumer.addDouble(record.getDouble(index))
-      case FloatType => consumer.addFloat(record.getFloat(index))
-      case BooleanType => consumer.addBoolean(record.getBoolean(index))
-      case _ => sys.error(s"Unsupported datatype $ctype, cannot write to consumer")
-    }
-  }
-
   def getSchema(schemaString: String) : MessageType =
     MessageTypeParser.parseMessageType(schemaString)
 
