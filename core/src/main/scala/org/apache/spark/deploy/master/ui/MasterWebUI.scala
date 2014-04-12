@@ -33,8 +33,10 @@ class MasterWebUI(val master: Master, requestedPort: Int)
   val masterActorRef = master.self
   val timeout = AkkaUtils.askTimeout(master.conf)
 
+  def conf = master.conf
+
   /** Initialize all components of the server. */
-  def doInitialize() {
+  override def doInitialize() {
     attachPage(new ApplicationPage(this))
     attachPage(new MasterPage(this))
     attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))

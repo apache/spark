@@ -51,7 +51,7 @@ private[spark] class SparkUI(
 
 
   /** Initialize all components of the server. */
-  def doInitialize() {
+  override def doInitialize() {
     listenerBus.addListener(storageStatusListener)
     val jobProgressTab = new JobProgressTab(this)
     attachTab(jobProgressTab)

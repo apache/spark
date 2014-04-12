@@ -91,7 +91,7 @@ class HistoryServer(
    * This starts a background thread that periodically synchronizes information displayed on
    * this UI with the event logs in the provided base directory.
    */
-  def doInitialize() {
+  override def doInitialize() {
     attachPage(new HistoryPage(this))
     attachHandler(createStaticHandler(STATIC_RESOURCE_DIR, "/static"))
     logCheckingThread.start()
