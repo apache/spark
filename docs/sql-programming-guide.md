@@ -38,8 +38,8 @@ file, or by running HiveQL against data stored in [Apache Hive](http://hive.apac
 
 Spark SQL allows relational queries expressed in SQL or HiveQL to be executed using
 Spark.  At the core of this component is a new type of RDD,
-[SchemaRDD](api/pyspark/pyspark.rdd.SchemaRDD-class.html).  SchemaRDDs are composed
-[Row](api/pyspark/pyspark.rdd.Row-class.html) objects along with
+[SchemaRDD](api/pyspark/pyspark.sql.SchemaRDD-class.html).  SchemaRDDs are composed
+[Row](api/pyspark/pyspark.sql.Row-class.html) objects along with
 a schema that describes the data types of each column in the row.  A SchemaRDD is similar to a table
 in a traditional relational database.  A SchemaRDD can be created from an existing RDD, parquet
 file, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
@@ -85,11 +85,11 @@ JavaSQLContext sqlCtx = new org.apache.spark.sql.api.java.JavaSQLContext(ctx);
 <div data-lang="python"  markdown="1">
 
 The entry point into all relational functionality in Spark is the
-[SQLContext](api/pyspark/pyspark.context.SQLContext-class.html) class, or one
+[SQLContext](api/pyspark/pyspark.sql.SQLContext-class.html) class, or one
 of its decedents.  To create a basic SQLContext, all you need is a SparkContext.
 
 {% highlight python %}
-from pyspark.context import SQLContext
+from pyspark.sql import SQLContext
 sqlCtx = SQLContext(sc)
 {% endhighlight %}
 
@@ -402,7 +402,7 @@ expressed in HiveQL.
 
 {% highlight python %}
 
-from pyspark.context import HiveContext
+from pyspark.sql import HiveContext
 hiveCtx = HiveContext(sc)
 
 hiveCtx.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
