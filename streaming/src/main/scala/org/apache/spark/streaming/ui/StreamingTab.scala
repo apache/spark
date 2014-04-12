@@ -15,8 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui
+package org.apache.spark.streaming.ui
 
-private[spark] object Page extends Enumeration {
-  val Stages, Storage, Environment, Executors = Value
+import org.apache.spark.Logging
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.ui.WebUITab
+
+/** Spark Web UI tab that shows statistics of a streaming job */
+private[spark] class StreamingTab(ssc: StreamingContext)
+  extends WebUITab(ssc.sc.ui, "streaming") with Logging {
+
+  val parent = ssc.sc.ui
+  val appName = parent.appName
+  val basePath = parent.basePath
+  val listener = new StreamingJobProgressListener(ssc)
+
+  ssc.addStreamingListener(listener)
+  attachPage(new StreamingPage(this))
+  parent.attachTab(this)
 }

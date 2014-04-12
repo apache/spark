@@ -21,9 +21,9 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.ui.{UIUtils, WebUI}
+import org.apache.spark.ui.{WebUIPage, UIUtils}
 
-private[spark] class IndexPage(parent: HistoryServer) {
+private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val appRows = parent.appIdToInfo.values.toSeq.sortBy { app => -app.lastUpdated }
@@ -62,13 +62,13 @@ private[spark] class IndexPage(parent: HistoryServer) {
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
     val appName = if (info.started) info.name else info.logDirPath.getName
     val uiAddress = parent.getAddress + info.ui.basePath
-    val startTime = if (info.started) WebUI.formatDate(info.startTime) else "Not started"
-    val endTime = if (info.completed) WebUI.formatDate(info.endTime) else "Not completed"
+    val startTime = if (info.started) UIUtils.formatDate(info.startTime) else "Not started"
+    val endTime = if (info.completed) UIUtils.formatDate(info.endTime) else "Not completed"
     val difference = if (info.started && info.completed) info.endTime - info.startTime else -1L
-    val duration = if (difference > 0) WebUI.formatDuration(difference) else "---"
+    val duration = if (difference > 0) UIUtils.formatDuration(difference) else "---"
     val sparkUser = if (info.started) info.sparkUser else "Unknown user"
     val logDirectory = info.logDirPath.getName
-    val lastUpdated = WebUI.formatDate(info.lastUpdated)
+    val lastUpdated = UIUtils.formatDate(info.lastUpdated)
     <tr>
       <td><a href={uiAddress}>{appName}</a></td>
       <td>{startTime}</td>

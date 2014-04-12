@@ -213,7 +213,6 @@ class SparkContext(config: SparkConf) extends Logging {
   // Initialize the Spark UI, registering all associated listeners
   private[spark] val ui = new SparkUI(this)
   ui.bind()
-  ui.start()
 
   // Optionally log Spark events
   private[spark] val eventLogger: Option[EventLoggingListener] = {

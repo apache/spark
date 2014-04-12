@@ -100,14 +100,13 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     logInfo("Stopped JobScheduler")
   }
 
-  def runJobs(time: Time, jobs: Seq[Job]) {
-    if (jobs.isEmpty) {
-      logInfo("No jobs added for time " + time)
+  def submitJobSet(jobSet: JobSet) {
+    if (jobSet.jobs.isEmpty) {
+      logInfo("No jobs added for time " + jobSet.time)
     } else {
-      val jobSet = new JobSet(time, jobs)
-      jobSets.put(time, jobSet)
+      jobSets.put(jobSet.time, jobSet)
       jobSet.jobs.foreach(job => jobExecutor.execute(new JobHandler(job)))
-      logInfo("Added jobs for time " + time)
+      logInfo("Added jobs for time " + jobSet.time)
     }
   }
 

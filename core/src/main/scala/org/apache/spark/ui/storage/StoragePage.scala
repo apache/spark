@@ -22,22 +22,19 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.storage.RDDInfo
-import org.apache.spark.ui.Page._
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
-private[ui] class IndexPage(parent: BlockManagerUI) {
+private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
+  private val appName = parent.appName
   private val basePath = parent.basePath
-  private lazy val listener = parent.listener
-
-  private def appName = parent.appName
+  private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-
     val rdds = listener.rddInfoList
     val content = UIUtils.listingTable(rddHeader, rddRow, rdds)
-    UIUtils.headerSparkPage(content, basePath, appName, "Storage ", Storage)
+    UIUtils.headerSparkPage(content, basePath, appName, "Storage ", parent.headerTabs, parent)
   }
 
   /** Header fields for the RDD table */

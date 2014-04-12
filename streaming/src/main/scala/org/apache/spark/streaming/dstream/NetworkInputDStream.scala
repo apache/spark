@@ -17,24 +17,23 @@
 
 package org.apache.spark.streaming.dstream
 
-import java.util.concurrent.{TimeUnit, ArrayBlockingQueue}
 import java.nio.ByteBuffer
+import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.Await
-import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
-import akka.actor.{Props, Actor}
+import akka.actor.{Actor, Props}
 import akka.pattern.ask
 
-import org.apache.spark.streaming.util.{RecurringTimer, SystemClock}
-import org.apache.spark.streaming._
 import org.apache.spark.{Logging, SparkEnv}
-import org.apache.spark.rdd.{RDD, BlockRDD}
+import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.{BlockId, StorageLevel, StreamBlockId}
-import org.apache.spark.streaming.scheduler.{DeregisterReceiver, AddBlocks, RegisterReceiver}
-import org.apache.spark.util.AkkaUtils
+import org.apache.spark.streaming._
+import org.apache.spark.streaming.scheduler.{AddBlock, DeregisterReceiver, ReceivedBlockInfo, RegisterReceiver}
+import org.apache.spark.streaming.util.{RecurringTimer, SystemClock}
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * Abstract class for defining any [[org.apache.spark.streaming.dstream.InputDStream]]
@@ -49,8 +48,10 @@ import org.apache.spark.util.AkkaUtils
 abstract class NetworkInputDStream[T: ClassTag](@transient ssc_ : StreamingContext)
   extends InputDStream[T](ssc_) {
 
-  // This is an unique identifier that is used to match the network receiver with the
-  // corresponding network input stream.
+  /** Keeps all received blocks information */
+  private lazy val receivedBlockInfo = new HashMap[Time, Array[ReceivedBlockInfo]]
+
+  /** This is an unique identifier for the network input stream. */
   val id = ssc.getNewNetworkStreamId()
 
   /**
@@ -65,25 +66,44 @@ abstract class NetworkInputDStream[T: ClassTag](@transient ssc_ : StreamingConte
 
   def stop() {}
 
+  /** Ask NetworkInputTracker for received data blocks and generates RDDs with them. */
   override def compute(validTime: Time): Option[RDD[T]] = {
     // If this is called for any time before the start time of the context,
     // then this returns an empty RDD. This may happen when recovering from a
     // master failure
     if (validTime >= graph.startTime) {
-      val blockIds = ssc.scheduler.networkInputTracker.getBlocks(id, validTime)
+      val blockInfo = ssc.scheduler.networkInputTracker.getReceivedBlockInfo(id)
+      receivedBlockInfo(validTime) = blockInfo
+      val blockIds = blockInfo.map(_.blockId.asInstanceOf[BlockId])
       Some(new BlockRDD[T](ssc.sc, blockIds))
     } else {
       Some(new BlockRDD[T](ssc.sc, Array[BlockId]()))
     }
   }
+
+  /** Get information on received blocks. */
+  private[streaming] def getReceivedBlockInfo(time: Time) = {
+    receivedBlockInfo(time)
+  }
+
+  /**
+   * Clear metadata that are older than `rememberDuration` of this DStream.
+   * This is an internal method that should not be called directly. This
+   * implementation overrides the default implementation to clear received
+   * block information.
+   */
+  private[streaming] override def clearMetadata(time: Time) {
+    super.clearMetadata(time)
+    val oldReceivedBlocks = receivedBlockInfo.filter(_._1 <= (time - rememberDuration))
+    receivedBlockInfo --= oldReceivedBlocks.keys
+    logDebug("Cleared " + oldReceivedBlocks.size + " RDDs that were older than " +
+      (time - rememberDuration) + ": " + oldReceivedBlocks.keys.mkString(", "))
+  }
 }
 
 
 private[streaming] sealed trait NetworkReceiverMessage
-private[streaming] case class StopReceiver() extends NetworkReceiverMessage
-private[streaming] case class ReportBlock(blockId: BlockId, metadata: Any)
-  extends NetworkReceiverMessage
-private[streaming] case class ReportError(msg: String) extends NetworkReceiverMessage
+private[streaming] case class StopReceiver(msg: String) extends NetworkReceiverMessage
 
 /**
  * Abstract class of a receiver that can be run on worker nodes to receive external data. See
@@ -177,6 +197,7 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
           case (e, i) => "Exception " + i + ": " + e.getMessage + "\n" + e.getStackTraceString
         }.mkString("\n")
     }
+
     logInfo("Deregistering receiver " + streamId)
     val future = trackerActor.ask(DeregisterReceiver(streamId, message))(askTimeout)
     Await.result(future, askTimeout)
@@ -209,18 +230,28 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
   /**
    * Push a block (as an ArrayBuffer filled with data) into the block manager.
    */
-  def pushBlock(blockId: BlockId, arrayBuffer: ArrayBuffer[T], metadata: Any, level: StorageLevel) {
+  def pushBlock(
+      blockId: StreamBlockId,
+      arrayBuffer: ArrayBuffer[T],
+      metadata: Any,
+      level: StorageLevel
+    ) {
     env.blockManager.put(blockId, arrayBuffer.asInstanceOf[ArrayBuffer[Any]], level)
-    trackerActor ! AddBlocks(streamId, Array(blockId), metadata)
+    trackerActor ! AddBlock(ReceivedBlockInfo(streamId, blockId, arrayBuffer.size, metadata))
     logDebug("Pushed block " + blockId)
   }
 
   /**
    * Push a block (as bytes) into the block manager.
    */
-  def pushBlock(blockId: BlockId, bytes: ByteBuffer, metadata: Any, level: StorageLevel) {
+  def pushBlock(
+      blockId: StreamBlockId,
+      bytes: ByteBuffer,
+      metadata: Any,
+      level: StorageLevel
+    ) {
     env.blockManager.putBytes(blockId, bytes, level)
-    trackerActor ! AddBlocks(streamId, Array(blockId), metadata)
+    trackerActor ! AddBlock(ReceivedBlockInfo(streamId, blockId, -1, metadata))
   }
 
   /** Set the ID of the DStream that this receiver is associated with */
@@ -232,9 +263,11 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
   private class NetworkReceiverActor extends Actor {
 
     override def preStart() {
-      logInfo("Registered receiver " + streamId)
-      val future = trackerActor.ask(RegisterReceiver(streamId, self))(askTimeout)
+      val msg = RegisterReceiver(
+        streamId, NetworkReceiver.this.getClass.getSimpleName, Utils.localHostName(), self)
+      val future = trackerActor.ask(msg)(askTimeout)
       Await.result(future, askTimeout)
+      logInfo("Registered receiver " + streamId)
     }
 
     override def receive() = {
@@ -253,7 +286,7 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
   class BlockGenerator(storageLevel: StorageLevel)
     extends Serializable with Logging {
 
-    case class Block(id: BlockId, buffer: ArrayBuffer[T], metadata: Any = null)
+    case class Block(id: StreamBlockId, buffer: ArrayBuffer[T], metadata: Any = null)
 
     val clock = new SystemClock()
     val blockInterval = env.conf.getLong("spark.streaming.blockInterval", 200)
