@@ -123,9 +123,11 @@ private[sql] object ParquetTestData {
         |optional group ownerPhoneNumbers {
           |repeated binary values;
         |}
-        |repeated group contacts {
-          |required binary name;
-          |optional binary phoneNumber;
+        |optional group contacts {
+          |repeated group values {
+            |required binary name;
+            |optional binary phoneNumber;
+          |}
         |}
       |}
     """.stripMargin
@@ -139,9 +141,11 @@ private[sql] object ParquetTestData {
         |optional group longs {
           |repeated int64 values;
         |}
-        |repeated group entries {
-          |required double value;
-          |optional boolean truth;
+        |required group entries {
+          |repeated group values {
+            |required double value;
+            |optional boolean truth;
+          |}
         |}
         |optional group outerouter {
           |repeated group values {
@@ -156,12 +160,16 @@ private[sql] object ParquetTestData {
   val testNestedSchema3 =
     """
       |message TestNested3 {
-      |required int32 x;
-        |repeated group booleanNumberPairs {
-          |required int32 key;
-          |repeated group value {
-            |required double nestedValue;
-            |optional boolean truth;
+        |required int32 x;
+        |optional group booleanNumberPairs {
+          |repeated group values {
+            |required int32 key;
+            |optional group value {
+              |repeated group values {
+                |required double nestedValue;
+                |optional boolean truth;
+              |}
+            |}
           |}
         |}
       |}
@@ -268,12 +276,11 @@ private[sql] object ParquetTestData {
       .append("values", "555 123 4567")
       .append("values", "555 666 1337")
       .append("values", "XXX XXX XXXX")
-    r1.addGroup(2)
-    //  .addGroup(0)
+    val contacts = r1.addGroup(2)
+    contacts.addGroup(0)
       .append("name", "Dmitriy Ryaboy")
       .append("phoneNumber", "555 987 6543")
-    r1.addGroup(2)
-    //  .addGroup(0)
+    contacts.addGroup(0)
       .append("name", "Chris Aniszczyk")
 
     val r2 = new SimpleGroup(schema)
@@ -298,9 +305,9 @@ private[sql] object ParquetTestData {
     longs.add(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME , 1.toLong << 32)
     longs.add(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 1.toLong << 33)
     longs.add(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 1.toLong << 34)
-    val booleanNumberPairs = r1.addGroup(3)
-    booleanNumberPairs.add("value", 2.5)
-    booleanNumberPairs.add("truth", false)
+    val booleanNumberPair = r1.addGroup(3).addGroup(0)
+    booleanNumberPair.add("value", 2.5)
+    booleanNumberPair.add("truth", false)
     val top_level = r1.addGroup(4)
     val second_level_a = top_level.addGroup(0)
     val second_level_b = top_level.addGroup(0)
@@ -330,17 +337,20 @@ private[sql] object ParquetTestData {
 
     val r1 = new SimpleGroup(schema)
     r1.add(0, 1)
-    val g1 = r1.addGroup(1)
+    val booleanNumberPairs = r1.addGroup(1)
+    val g1 = booleanNumberPairs.addGroup(0)
     g1.add(0, 1)
-    val ng1 = g1.addGroup(1)
+    val nested1 = g1.addGroup(1)
+    val ng1 = nested1.addGroup(0)
     ng1.add(0, 1.5)
     ng1.add(1, false)
-    val ng2 = g1.addGroup(1)
+    val ng2 = nested1.addGroup(0)
     ng2.add(0, 2.5)
     ng2.add(1, true)
-    val g2 = r1.addGroup(1)
+    val g2 = booleanNumberPairs.addGroup(0)
     g2.add(0, 2)
     val ng3 = g2.addGroup(1)
+      .addGroup(0)
     ng3.add(0, 3.5)
     ng3.add(1, false)
 

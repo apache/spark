@@ -32,12 +32,11 @@ private[parquet] object CatalystConverter {
   // The type internally used for fields
   type FieldType = StructField
 
-  // Note: repeated primitive fields that form an array (together with
-  // their surrounding group) need to have this name in the schema
-  // TODO: "values" is a generic name but without it the Parquet column path would
-  // be incomplete and values may be silently dropped; better would be to give
-  // primitive-type array elements a name of some sort
+  // This is mostly Parquet convention (see, e.g., `ConversionPatterns`)
   val ARRAY_ELEMENTS_SCHEMA_NAME = "values"
+  val MAP_KEY_SCHEMA_NAME = "key"
+  val MAP_VALUE_SCHEMA_NAME = "value"
+  val MAP_SCHEMA_NAME = "map"
 
   protected[parquet] def createConverter(
       field: FieldType,
@@ -46,12 +45,7 @@ private[parquet] object CatalystConverter {
     val fieldType: DataType = field.dataType
     fieldType match {
       case ArrayType(elementType: DataType) => {
-        elementType match {
-          case StructType(fields) =>
-            if (fields.size > 1) new CatalystGroupConverter(fields, fieldIndex, parent)
-            else new CatalystArrayConverter(fields(0).dataType, fieldIndex, parent)
-          case _ => new CatalystArrayConverter(elementType, fieldIndex, parent)
-        }
+        new CatalystArrayConverter(elementType, fieldIndex, parent)
       }
       case StructType(fields: Seq[StructField]) => {
         new CatalystStructConverter(fields, fieldIndex, parent)
@@ -59,8 +53,8 @@ private[parquet] object CatalystConverter {
       case MapType(keyType: DataType, valueType: DataType) => {
         new CatalystMapConverter(
           Seq(
-            new FieldType("key", keyType, false),
-            new FieldType("value", valueType, true)),
+            new FieldType(MAP_KEY_SCHEMA_NAME, keyType, false),
+            new FieldType(MAP_VALUE_SCHEMA_NAME, valueType, true)),
             fieldIndex,
             parent)
       }

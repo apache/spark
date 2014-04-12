@@ -87,7 +87,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
             .findAllIn(field)
             .matchData
             .map(_.group(2))
-          // TODO: we should recover the JVM type of valueType to match the
+          // TODO: we should recover the JVM type of keyType to match the
           // actual type of the key?! should we restrict ourselves to NativeType?
           (ordinals.foldLeft(exp)((v1: Expression, v2: String) =>
             GetItem(v1, Literal(v2, keyType))), valueType)
