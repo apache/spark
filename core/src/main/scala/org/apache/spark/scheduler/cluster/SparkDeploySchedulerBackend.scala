@@ -32,12 +32,11 @@ private[spark] class SparkDeploySchedulerBackend(
   with Logging {
 
   var client: AppClient = null
-  var stopping = false
   var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
 
   val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
 
-  override def doStart() {
+  override protected def doStart() {
     super.doStart()
 
     // The endpoint for executors to talk to us
@@ -55,8 +54,7 @@ private[spark] class SparkDeploySchedulerBackend(
     client.start()
   }
 
-  override def doStop() {
-    stopping = true
+  override protected def doStop() {
     super.doStop()
     client.stop()
     if (shutdownCallback != null) {
@@ -69,13 +67,13 @@ private[spark] class SparkDeploySchedulerBackend(
   }
 
   override def disconnected() {
-    if (!stopping) {
+    if (!stopped) {
       logWarning("Disconnected from Spark cluster! Waiting for reconnection...")
     }
   }
 
   override def dead() {
-    if (!stopping) {
+    if (!stopped) {
       logError("Spark cluster looks dead, giving up.")
       scheduler.error("Spark cluster looks down")
     }

@@ -182,7 +182,7 @@ class HistoryServer(
   }
 
   /** Stop the server and close the file system. */
-  override def doStop() {
+  override protected def doStop() {
     super.doStop()
     fileSystem.close()
   }

@@ -128,7 +128,7 @@ class DAGScheduler(
    * some internal states of the enclosing [[org.apache.spark.scheduler.DAGScheduler]] object, thus
    * cannot be scheduled until the [[org.apache.spark.scheduler.DAGScheduler]] is fully constructed.
    */
-  def doStart() {
+  override protected def doStart() {
     eventProcessActor = env.actorSystem.actorOf(Props(new Actor {
       /**
        * The main event loop of the DAG scheduler.
@@ -1153,7 +1153,7 @@ class DAGScheduler(
     Nil
   }
 
-  def doStop() {
+  override protected def doStop() {
     if (eventProcessActor != null) {
       eventProcessActor ! StopDAGScheduler
     }

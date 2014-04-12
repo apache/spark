@@ -21,7 +21,7 @@ import scala.collection.mutable.{HashMap, SynchronizedMap, SynchronizedQueue}
 
 import akka.actor._
 
-import org.apache.spark.{Logging, SparkEnv, SparkException}
+import org.apache.spark.{Lifecycle, Logging, SparkEnv, SparkException}
 import org.apache.spark.SparkContext._
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.{StreamingContext, Time}
@@ -63,7 +63,7 @@ private[streaming] case class DeregisterReceiver(streamId: Int, msg: String)
  * has been called because it needs the final set of input streams at the time of instantiation.
  */
 private[streaming]
-class NetworkInputTracker(ssc: StreamingContext) extends Logging {
+class NetworkInputTracker(ssc: StreamingContext) extends Logging with Lifecycle {
 
   val networkInputStreams = ssc.graph.getNetworkInputStreams()
   val networkInputStreamMap = Map(networkInputStreams.map(x => (x.id, x)): _*)
@@ -79,8 +79,10 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
   var actor: ActorRef = null
   var currentTime: Time = null
 
+  override def conf = ssc.conf
+
   /** Start the actor and receiver execution thread. */
-  def start() = synchronized {
+  override protected def doStart() = {
     if (actor != null) {
       throw new SparkException("NetworkInputTracker already started")
     }
@@ -94,7 +96,7 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
   }
 
   /** Stop the receiver execution thread. */
-  def stop() = synchronized {
+  override protected def doStop() = {
     if (!networkInputStreams.isEmpty && actor != null) {
       // First, stop the receivers
       receiverExecutor.stop()
@@ -168,7 +170,7 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
   }
 
   /** This thread class runs all the receivers on the cluster.  */
-  class ReceiverExecutor {
+  class ReceiverExecutor extends Lifecycle {
     @transient val env = ssc.env
     @transient val thread  = new Thread() {
       override def run() {
@@ -181,11 +183,13 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
       }
     }
 
-    def start() {
+    override def conf = ssc.conf
+
+    override protected def doStart() {
       thread.start()
     }
 
-    def stop() {
+    override protected def doStop() {
       // Send the stop signal to all the receivers
       stopReceivers()
 

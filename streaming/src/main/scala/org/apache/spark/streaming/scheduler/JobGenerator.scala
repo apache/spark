@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.scheduler
 
 import akka.actor.{ActorRef, ActorSystem, Props, Actor}
-import org.apache.spark.{SparkException, SparkEnv, Logging}
+import org.apache.spark.{Lifecycle, SparkException, SparkEnv, Logging}
 import org.apache.spark.streaming.{Checkpoint, Time, CheckpointWriter}
 import org.apache.spark.streaming.util.{ManualClock, RecurringTimer, Clock}
 import scala.util.{Failure, Success, Try}
@@ -35,7 +35,7 @@ private[scheduler] case class ClearCheckpointData(time: Time) extends JobGenerat
  * up DStream metadata.
  */
 private[streaming]
-class JobGenerator(jobScheduler: JobScheduler) extends Logging {
+class JobGenerator(jobScheduler: JobScheduler) extends Logging with Lifecycle {
 
   private val ssc = jobScheduler.ssc
   private val graph = ssc.graph
@@ -66,8 +66,10 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   // last batch whose completion,checkpointing and metadata cleanup has been completed
   private var lastProcessedBatch: Time = null
 
+  def conf = ssc.conf
+
   /** Start generation of jobs */
-  def start(): Unit = synchronized {
+  override protected def doStart(): Unit = {
     if (eventActor != null) return // generator has already been started
 
     eventActor = ssc.env.actorSystem.actorOf(Props(new Actor {
@@ -87,6 +89,12 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
    * of current ongoing time interval has been generated, processed and corresponding
    * checkpoints written.
    */
+  override def stop() {
+    stop(true)
+  }
+
+  override def doStop() { }
+
   def stop(processReceivedData: Boolean): Unit = synchronized {
     if (eventActor == null) return // generator has already been stopped
 
@@ -135,6 +143,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // Stop the actor and checkpoint writer
     if (shouldCheckpoint) checkpointWriter.stop()
     ssc.env.actorSystem.stop(eventActor)
+    super.stop()
     logInfo("Stopped JobGenerator")
   }
 

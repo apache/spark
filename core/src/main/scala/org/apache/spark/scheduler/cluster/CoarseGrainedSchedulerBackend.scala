@@ -165,7 +165,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   var driverActor: ActorRef = null
   val taskIdsOnSlave = new HashMap[String, HashSet[String]]
 
-  def doStart() {
+  override protected def doStart() {
     val properties = new ArrayBuffer[(String, String)]
     for ((key, value) <- scheduler.sc.conf.getAll) {
       if (key.startsWith("spark.")) {
@@ -190,7 +190,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     }
   }
 
-  def doStop() {
+  override protected def doStop() {
     stopExecutors()
     try {
       if (driverActor != null) {

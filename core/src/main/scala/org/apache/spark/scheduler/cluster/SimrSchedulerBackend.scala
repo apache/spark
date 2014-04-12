@@ -35,7 +35,7 @@ private[spark] class SimrSchedulerBackend(
 
   val maxCores = conf.getInt("spark.simr.executor.cores", 1)
 
-  override def doStart() {
+  override protected def doStart() {
     super.doStart()
 
     val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
@@ -60,7 +60,7 @@ private[spark] class SimrSchedulerBackend(
     fs.rename(tmpPath, filePath)
   }
 
-  override def doStop() {
+  override protected def doStop() {
     val conf = new Configuration()
     val fs = FileSystem.get(conf)
     fs.delete(new Path(driverFilePath), false)

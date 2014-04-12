@@ -21,7 +21,7 @@ import scala.util.{Failure, Success, Try}
 import scala.collection.JavaConversions._
 import java.util.concurrent.{TimeUnit, ConcurrentHashMap, Executors}
 import akka.actor.{ActorRef, Actor, Props}
-import org.apache.spark.{SparkException, Logging, SparkEnv}
+import org.apache.spark.{Lifecycle, SparkException, Logging, SparkEnv}
 import org.apache.spark.streaming._
 
 
@@ -35,22 +35,23 @@ private[scheduler] case class ErrorReported(msg: String, e: Throwable) extends J
  * the jobs and runs them using a thread pool.
  */
 private[streaming]
-class JobScheduler(val ssc: StreamingContext) extends Logging {
+class JobScheduler(val ssc: StreamingContext) extends Logging with Lifecycle {
 
   private val jobSets = new ConcurrentHashMap[Time, JobSet]
   private val numConcurrentJobs = ssc.conf.getInt("spark.streaming.concurrentJobs", 1)
   private val jobExecutor = Executors.newFixedThreadPool(numConcurrentJobs)
   private val jobGenerator = new JobGenerator(this)
   val clock = jobGenerator.clock
-  val listenerBus = new StreamingListenerBus()
+  val listenerBus = new StreamingListenerBus(ssc.conf)
 
   // These two are created only when scheduler starts.
   // eventActor not being null means the scheduler has been started and not stopped
   var networkInputTracker: NetworkInputTracker = null
   private var eventActor: ActorRef = null
 
+  def conf = ssc.conf
 
-  def start(): Unit = synchronized {
+  override protected def doStart(): Unit = {
     if (eventActor != null) return // scheduler has already been started
 
     logDebug("Starting JobScheduler")
@@ -65,6 +66,12 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     networkInputTracker.start()
     jobGenerator.start()
     logInfo("Started JobScheduler")
+  }
+
+  override protected def doStop() { }
+
+  override def stop() {
+    stop(true)
   }
 
   def stop(processAllReceivedData: Boolean): Unit = synchronized {
@@ -97,6 +104,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     listenerBus.stop()
     ssc.env.actorSystem.stop(eventActor)
     eventActor = null
+    super.stop()
     logInfo("Stopped JobScheduler")
   }
 

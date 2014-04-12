@@ -78,14 +78,14 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging with Lifec
   def conf = sc.conf
 
   /** Start the cleaner. */
-  def doStart() {
+  override protected def doStart() {
     cleaningThread.setDaemon(true)
     cleaningThread.setName("Spark Context Cleaner")
     cleaningThread.start()
   }
 
   /** Stop the cleaner. */
-  def doStop() { }
+  override protected def doStop() { }
 
   /** Register a RDD for cleanup when it is garbage collected. */
   def registerRDDForCleanup(rdd: RDD[_]) {

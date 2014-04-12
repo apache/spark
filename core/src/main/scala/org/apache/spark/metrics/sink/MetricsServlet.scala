@@ -56,7 +56,7 @@ private[spark] class MetricsServlet(val property: Properties, val registry: Metr
 
   def conf = securityMgr.sparkConf
 
-  def doStart() { }
+  override protected def doStart() { }
 
-  def doStop() { }
+  override protected def doStop() { }
 }

@@ -50,8 +50,8 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
   val taskScheduler = new TaskScheduler() {
     override def rootPool: Pool = null
     override def schedulingMode: SchedulingMode = SchedulingMode.NONE
-    override def doStart() = {}
-    override def doStop() = {}
+    override protected def doStart() = { }
+    override protected def doStop() = { }
     override def conf: SparkConf = null
     override def submitTasks(taskSet: TaskSet) = {
       // normally done by TaskSetManager

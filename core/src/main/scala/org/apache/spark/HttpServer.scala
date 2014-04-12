@@ -48,7 +48,7 @@ private[spark] class HttpServer(resourceBase: File, securityManager: SecurityMan
 
   def conf = securityManager.sparkConf
 
-  def doStart() {
+  override protected def doStart() {
     if (server != null) {
       throw new ServerStateException("Server is already started")
     } else {
@@ -119,7 +119,7 @@ private[spark] class HttpServer(resourceBase: File, securityManager: SecurityMan
     sh
   }
 
-  def doStop() {
+  override protected def doStop() {
     if (server == null) {
       throw new ServerStateException("Server is already stopped")
     } else {

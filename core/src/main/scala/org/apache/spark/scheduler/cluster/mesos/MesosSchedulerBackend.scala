@@ -64,7 +64,7 @@ private[spark] class MesosSchedulerBackend(
 
   override def conf = scheduler.conf
 
-  override def doStart() {
+  override protected def doStart() {
       classLoader = Thread.currentThread.getContextClassLoader
 
       new Thread("MesosSchedulerBackend driver") {
@@ -296,7 +296,7 @@ private[spark] class MesosSchedulerBackend(
     }
   }
 
-  override def doStop() {
+  override protected def doStop() {
     if (driver != null) {
       driver.stop()
     }

@@ -181,12 +181,12 @@ private[spark] class AppClient(
     }
   }
 
-  def doStart() {
+  override protected def doStart() {
     // Just launch an actor; it will call back into the listener.
     actor = actorSystem.actorOf(Props(new ClientActor))
   }
 
-  def doStop() {
+  override protected def doStop() {
     if (actor != null) {
       try {
         val timeout = AkkaUtils.askTimeout(conf)

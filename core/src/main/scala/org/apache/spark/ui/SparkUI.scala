@@ -78,7 +78,7 @@ private[spark] class SparkUI(
   }
 
   /** Stop the server behind this web interface. Only valid after bind(). */
-  override def doStop() {
+  override protected def doStop() {
     super.doStop()
     logInfo("Stopped Spark web UI at %s".format(appUIAddress))
   }

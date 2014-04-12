@@ -107,12 +107,12 @@ private[spark] abstract class WebUI(
   def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
 
   /** Stop the server behind this web interface. Only valid after bind(). */
-  def doStop() {
+  override protected def doStop() {
     assert(serverInfo.isDefined,
       "Attempted to stop %s before binding to a server!".format(className))
     serverInfo.get.server.stop()
   }
-  protected override def doStart() { }
+  override protected def doStart() { }
 }
 
 

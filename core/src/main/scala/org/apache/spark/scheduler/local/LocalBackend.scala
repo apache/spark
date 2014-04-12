@@ -86,13 +86,13 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
 
   override def conf = scheduler.conf
 
-  override def doStart() {
+  override protected def doStart() {
     localActor = SparkEnv.get.actorSystem.actorOf(
       Props(new LocalActor(scheduler, this, totalCores)),
       "LocalBackendActor")
   }
 
-  override def doStop() {}
+  override protected def doStop() {}
 
   override def reviveOffers() {
     localActor ! ReviveOffers

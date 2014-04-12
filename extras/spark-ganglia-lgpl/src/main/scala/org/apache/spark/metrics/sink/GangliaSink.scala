@@ -75,11 +75,11 @@ class GangliaSink(val property: Properties, val registry: MetricRegistry,
       .convertRatesTo(TimeUnit.SECONDS)
       .build(ganglia)
 
-  override def start() {
+  override protected def doStart() {
     reporter.start(pollPeriod, pollUnit)
   }
 
-  override def stop() {
+  override protected def doStop() {
     reporter.stop()
   }
 }

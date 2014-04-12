@@ -17,12 +17,12 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.apache.spark.Logging
+import org.apache.spark.{Lifecycle, SparkConf, Logging}
 import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
 import java.util.concurrent.LinkedBlockingQueue
 
 /** Asynchronously passes StreamingListenerEvents to registered StreamingListeners. */
-private[spark] class StreamingListenerBus() extends Logging {
+private[spark] class StreamingListenerBus(val conf: SparkConf) extends Logging with Lifecycle {
   private val listeners = new ArrayBuffer[StreamingListener]()
     with SynchronizedBuffer[StreamingListener]
 
@@ -55,7 +55,7 @@ private[spark] class StreamingListenerBus() extends Logging {
     }
   }
 
-  def start() {
+  override def doStart() {
     listenerThread.start()
   }
 
@@ -91,5 +91,5 @@ private[spark] class StreamingListenerBus() extends Logging {
     true
   }
 
-  def stop(): Unit = post(StreamingListenerShutdown)
+  override protected def doStop(): Unit = post(StreamingListenerShutdown)
 }

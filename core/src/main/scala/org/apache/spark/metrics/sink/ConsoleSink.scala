@@ -52,11 +52,11 @@ private[spark] class ConsoleSink(val property: Properties, val registry: MetricR
 
   def conf = securityMgr.sparkConf
 
-  def doStart() {
+  override protected def doStart() {
     reporter.start(pollPeriod, pollUnit)
   }
 
-  def doStop() {
+  override protected def doStop() {
     reporter.stop()
   }
 }
