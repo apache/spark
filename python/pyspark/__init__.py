@@ -36,12 +36,12 @@ Public classes:
       Finer-grained cache persistence levels.
 
 Spark SQL:
-  - L{SQLContext<pyspark.context.SQLContext>}
+  - L{SQLContext<pyspark.sql.SQLContext>}
       Main entry point for SQL functionality.
-  - L{SchemaRDD<pyspark.rdd.SchemaRDD>}
+  - L{SchemaRDD<pyspark.sql.SchemaRDD>}
       A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
       addition to normal RDD operations, SchemaRDDs also support SQL.
-  - L{Row<pyspark.rdd.Row>}
+  - L{Row<pyspark.sql.Row>}
       A Row of data returned by a Spark SQL query.
 
 Hive:
@@ -58,10 +58,10 @@ sys.path.insert(0, os.path.join(os.environ["SPARK_HOME"], "python/lib/py4j-0.8.1
 
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
-from pyspark.context import SQLContext
+from pyspark.sql import SQLContext
 from pyspark.rdd import RDD
-from pyspark.rdd import SchemaRDD
-from pyspark.rdd import Row
+from pyspark.sql import SchemaRDD
+from pyspark.sql import Row
 from pyspark.files import SparkFiles
 from pyspark.storagelevel import StorageLevel
 
