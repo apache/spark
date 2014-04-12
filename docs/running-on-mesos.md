@@ -138,6 +138,18 @@ it does not need to be redundantly passed in as a system property.
 {% endhighlight %}
 
 
+# Mesos Configuration Properties
+
+When running on Mesos, Spark supports the role and checkpointing features like other
+Mesos frameworks. Just set the `spark.mesos.role` and `spark.mesos.checkpoint`
+[config properties](configuration.html#spark-properties).  For example:
+
+{% highlight scala %}
+conf.set("spark.mesos.role", "spark")
+conf.set("spark.mesos.checkpoint", "true")
+{% endhighlight %}
+
+
 # Mesos Run Modes
 
 Spark can run over Mesos in two modes: "fine-grained" (default) and "coarse-grained".
