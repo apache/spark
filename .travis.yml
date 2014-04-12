@@ -22,5 +22,5 @@ cache:
     - $HOME/.ivy2
     - $HOME/.sbt
 
-on_failure:
+after_failure:
   - ./travis-tool.sh dump_logs
