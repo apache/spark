@@ -125,4 +125,18 @@ class UISuite extends FunSuite {
       case Failure(e) =>
     }
   }
+
+  test("verify appUIAddress contains the scheme") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val uiAddress = sc.ui.appUIAddress
+      assert(uiAddress.equals("http://" + sc.ui.appUIHostPort))
+    }
+  }
+
+  test("verify appUIAddress contains the port") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val splitUIAddress = sc.ui.appUIAddress.split(':')
+      assert(splitUIAddress(2).toInt == sc.ui.boundPort)
+    }
+  }
 }
