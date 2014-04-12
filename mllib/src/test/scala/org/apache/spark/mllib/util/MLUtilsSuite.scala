@@ -27,7 +27,6 @@ import com.google.common.base.Charsets
 import com.google.common.io.Files
 
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
 
 class MLUtilsSuite extends FunSuite with LocalSparkContext {
@@ -54,18 +53,6 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
       val fastSquaredDist2 = fastSquaredDistance(v1, norm1, v2.toDenseVector, norm2, precision)
       assert((fastSquaredDist2 - squaredDist) <= precision * squaredDist, s"failed with m = $m")
     }
-  }
-
-  test("compute stats") {
-    val data = Seq.fill(3)(Seq(
-      LabeledPoint(1.0, Vectors.dense(1.0, 2.0, 3.0)),
-      LabeledPoint(0.0, Vectors.dense(3.0, 4.0, 5.0))
-    )).flatten
-    val rdd = sc.parallelize(data, 2)
-    val (meanLabel, mean, std) = MLUtils.computeStats(rdd, 3, 6)
-    assert(meanLabel === 0.5)
-    assert(mean === Vectors.dense(2.0, 3.0, 4.0))
-    assert(std === Vectors.dense(1.0, 1.0, 1.0))
   }
 
   test("loadLibSVMData") {

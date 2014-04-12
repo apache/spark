@@ -23,17 +23,17 @@ import scala.collection.mutable.HashMap
 import scala.xml.Node
 
 import org.apache.spark.scheduler.{StageInfo, TaskInfo}
-import org.apache.spark.ui.{WebUI, UIUtils}
+import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StageTable(
-  stages: Seq[StageInfo],
-  parent: JobProgressUI,
-  killEnabled: Boolean = false) {
+    stages: Seq[StageInfo],
+    parent: JobProgressTab,
+    killEnabled: Boolean = false) {
 
   private val basePath = parent.basePath
-  private lazy val listener = parent.listener
+  private val listener = parent.listener
   private lazy val isFairScheduler = parent.isFairScheduler
 
   def toNodeSeq: Seq[Node] = {
@@ -76,36 +76,36 @@ private[ui] class StageTable(
   }
 
   private def makeDescription(s: StageInfo): Seq[Node] = {
+    // scalastyle:off
+    val killLink = if (killEnabled) {
+      <span class="kill-link">
+        (<a href={"%s/stages/stage/kill?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}>kill</a>)
+      </span>
+    }
+    // scalastyle:on
+
     val nameLink =
       <a href={"%s/stages/stage?id=%s".format(UIUtils.prependBaseUri(basePath), s.stageId)}>
         {s.name}
       </a>
-    val killLink = if (killEnabled) {
-      <div>[<a href=
-        {"%s/stages?id=%s&terminate=true".format(UIUtils.prependBaseUri(basePath), s.stageId)}>
-          Kill
-      </a>]</div>
 
-    }
-    val description = listener.stageIdToDescription.get(s.stageId)
+    listener.stageIdToDescription.get(s.stageId)
       .map(d => <div><em>{d}</em></div><div>{nameLink} {killLink}</div>)
-      .getOrElse(<div>{nameLink} {killLink}</div>)
-
-    return description
+      .getOrElse(<div> {killLink}{nameLink}</div>)
   }
 
   /** Render an HTML row that represents a stage */
   private def stageRow(s: StageInfo): Seq[Node] = {
     val poolName = listener.stageIdToPool.get(s.stageId)
     val submissionTime = s.submissionTime match {
-      case Some(t) => WebUI.formatDate(new Date(t))
+      case Some(t) => UIUtils.formatDate(new Date(t))
       case None => "Unknown"
     }
     val finishTime = s.completionTime.getOrElse(System.currentTimeMillis)
     val duration = s.submissionTime.map { t =>
       if (finishTime > t) finishTime - t else System.currentTimeMillis - t
     }
-    val formattedDuration = duration.map(d => parent.formatDuration(d)).getOrElse("Unknown")
+    val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
     val startedTasks =
       listener.stageIdToTasksActive.getOrElse(s.stageId, HashMap[Long, TaskInfo]()).size
     val completedTasks = listener.stageIdToTasksComplete.getOrElse(s.stageId, 0)
