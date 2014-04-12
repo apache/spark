@@ -17,12 +17,10 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{DataInputStream, DataOutputStream}
+import java.io.{ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
-
-import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 
 import org.apache.spark.TaskContext
 import org.apache.spark.executor.TaskMetrics
@@ -104,7 +102,7 @@ private[spark] object Task {
       serializer: SerializerInstance)
     : ByteBuffer = {
 
-    val out = new FastByteArrayOutputStream(4096)
+    val out = new ByteArrayOutputStream(4096)
     val dataOut = new DataOutputStream(out)
 
     // Write currentFiles
@@ -125,8 +123,7 @@ private[spark] object Task {
     dataOut.flush()
     val taskBytes = serializer.serialize(task).array()
     out.write(taskBytes)
-    out.trim()
-    ByteBuffer.wrap(out.array)
+    ByteBuffer.wrap(out.toByteArray)
   }
 
   /**
