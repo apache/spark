@@ -34,6 +34,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
 
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.input.WholeTextFileInputFormat
@@ -48,22 +49,35 @@ import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedWeakValueHashMap, Utils}
 
 /**
+ * :: DeveloperApi ::
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
  * cluster, and can be used to create RDDs, accumulators and broadcast variables on that cluster.
  *
  * @param config a Spark Config object describing the application configuration. Any settings in
  *   this config overrides the default configs as well as system properties.
- * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on. Can
- *   be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
- *   from a list of input files or InputFormats for the application.
  */
-class SparkContext(
-    config: SparkConf,
-    // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
-    // etc) too. This is typically generated from InputFormatInfo.computePreferredLocations. It
-    // contains a map from hostname to a list of input format splits on the host.
-    val preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map())
-  extends Logging {
+
+@DeveloperApi
+class SparkContext(config: SparkConf) extends Logging {
+
+  // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
+  // etc) too. This is typically generated from InputFormatInfo.computePreferredLocations. It
+  // contains a map from hostname to a list of input format splits on the host.
+  private[spark] var preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()
+
+  /**
+   * :: DeveloperApi ::
+   * Alternative constructor for setting preferred locations where Spark will create executors.
+   *
+   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on. Ca
+   * be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
+   * from a list of input files or InputFormats for the application.
+   */
+    @DeveloperApi
+    def this(config: SparkConf, preferredNodeLocationData: Map[String, Set[SplitInfo]]) = {
+      this(config)
+      this.preferredNodeLocationData = preferredNodeLocationData
+  }
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -93,9 +107,44 @@ class SparkContext(
       environment: Map[String, String] = Map(),
       preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()) =
   {
-    this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment),
-      preferredNodeLocationData)
+    this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment))
+    this.preferredNodeLocationData = preferredNodeLocationData
   }
+
+  // NOTE: The below constructors could be consolidated using default arguments. Due to
+  // Scala bug SI-8479, however, this causes the compile step to fail when generating docs.
+  // Until we have a good workaround for that bug the constructors remain broken out.
+
+  /**
+   * Alternative constructor that allows setting common Spark properties directly
+   *
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param appName A name for your application, to display on the cluster web UI.
+   */
+  private[spark] def this(master: String, appName: String) =
+    this(master, appName, null, Nil, Map(), Map())
+
+  /**
+   * Alternative constructor that allows setting common Spark properties directly
+   *
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param appName A name for your application, to display on the cluster web UI.
+   * @param sparkHome Location where Spark is installed on cluster nodes.
+   */
+  private[spark] def this(master: String, appName: String, sparkHome: String) =
+    this(master, appName, sparkHome, Nil, Map(), Map())
+
+  /**
+   * Alternative constructor that allows setting common Spark properties directly
+   *
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param appName A name for your application, to display on the cluster web UI.
+   * @param sparkHome Location where Spark is installed on cluster nodes.
+   * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
+   *             system or HDFS, HTTP, HTTPS, or FTP URLs.
+   */
+  private[spark] def this(master: String, appName: String, sparkHome: String, jars: Seq[String]) =
+    this(master, appName, sparkHome, jars, Map(), Map())
 
   private[spark] val conf = config.clone()
 
@@ -189,7 +238,7 @@ class SparkContext(
     jars.foreach(addJar)
   }
 
-  def warnSparkMem(value: String): String = {
+  private def warnSparkMem(value: String): String = {
     logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
       "deprecated, please use spark.executor.memory instead.")
     value
@@ -653,6 +702,9 @@ class SparkContext(
   def union[T: ClassTag](first: RDD[T], rest: RDD[T]*): RDD[T] =
     new UnionRDD(this, Seq(first) ++ rest)
 
+  /** Get an RDD that has no partitions or elements. */
+  def emptyRDD[T: ClassTag] = new EmptyRDD[T](this)
+
   // Methods for creating shared variables
 
   /**
@@ -716,6 +768,11 @@ class SparkContext(
     postEnvironmentUpdate()
   }
 
+  /**
+   * :: DeveloperApi ::
+   * Register a listener to receive up-calls from events that happen during execution.
+   */
+  @DeveloperApi
   def addSparkListener(listener: SparkListener) {
     listenerBus.addListener(listener)
   }
@@ -874,7 +931,6 @@ class SparkContext(
   /** Shut down the SparkContext. */
   def stop() {
     ui.stop()
-    eventLogger.foreach(_.stop())
     // Do this only if not stopped already - best case effort.
     // prevent NPE if stopped more than once.
     val dagSchedulerCopy = dagScheduler
@@ -883,13 +939,14 @@ class SparkContext(
       metadataCleaner.cancel()
       cleaner.foreach(_.stop())
       dagSchedulerCopy.stop()
-      listenerBus.stop()
       taskScheduler = null
       // TODO: Cache.stop()?
       env.stop()
       SparkEnv.set(null)
       ShuffleMapTask.clearCache()
       ResultTask.clearCache()
+      listenerBus.stop()
+      eventLogger.foreach(_.stop())
       logInfo("Successfully stopped SparkContext")
     } else {
       logInfo("SparkContext already stopped")
@@ -945,7 +1002,9 @@ class SparkContext(
       require(p >= 0 && p < rdd.partitions.size, s"Invalid partition requested: $p")
     }
     val callSite = getCallSite
-    val cleanedFunc = clean(func)
+    // There's no need to check this function for serializability,
+    // since it will be run right away.
+    val cleanedFunc = clean(func, false)
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
@@ -1021,8 +1080,10 @@ class SparkContext(
   }
 
   /**
+   * :: DeveloperApi ::
    * Run a job that can return approximate results.
    */
+  @DeveloperApi
   def runApproximateJob[T, U, R](
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
@@ -1040,6 +1101,7 @@ class SparkContext(
   /**
    * Submit a job for execution and return a FutureJob holding the result.
    */
+  @Experimental
   def submitJob[T, U, R](
       rdd: RDD[T],
       processPartition: Iterator[T] => U,
@@ -1075,14 +1137,18 @@ class SparkContext(
   def cancelAllJobs() {
     dagScheduler.cancelAllJobs()
   }
-
+  
   /**
    * Clean a closure to make it ready to serialized and send to tasks
    * (removes unreferenced variables in $outer's, updates REPL variables)
+   *
+   * @param f closure to be cleaned and optionally serialized
+   * @param captureNow whether or not to serialize this closure and capture any free 
+   * variables immediately; defaults to true.  If this is set and f is not serializable, 
+   * it will raise an exception.
    */
-  private[spark] def clean[F <: AnyRef](f: F): F = {
-    ClosureCleaner.clean(f)
-    f
+  private[spark] def clean[F <: AnyRef : ClassTag](f: F, captureNow: Boolean = true): F = {
+    ClosureCleaner.clean(f, captureNow)
   }
 
   /**

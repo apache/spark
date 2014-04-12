@@ -19,6 +19,7 @@ package org.apache.spark.mllib.api.python
 
 import java.nio.{ByteBuffer, ByteOrder}
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
@@ -28,8 +29,10 @@ import org.apache.spark.mllib.regression._
 import org.apache.spark.rdd.RDD
 
 /**
+ * :: DeveloperApi ::
  * The Java stubs necessary for the Python mllib bindings.
  */
+@DeveloperApi
 class PythonMLLibAPI extends Serializable {
   private def deserializeDoubleVector(bytes: Array[Byte]): Array[Double] = {
     val packetLength = bytes.length

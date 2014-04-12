@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{Dependency, OneToOneDependency, Partition, TaskContext}
+import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -26,8 +27,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.types.BooleanType
 
 /**
- * <span class="badge" style="float: right; background-color: darkblue;">ALPHA COMPONENT</span>
- *
+ * :: AlphaComponent ::
  * An RDD of [[Row]] objects that has an associated schema. In addition to standard RDD functions,
  * SchemaRDDs can be used in relational queries, as shown in the examples below.
  *
@@ -90,6 +90,7 @@ import org.apache.spark.sql.catalyst.types.BooleanType
  *  @groupprio schema -1
  *  @groupname Ungrouped Base RDD Functions
  */
+@AlphaComponent
 class SchemaRDD(
     @transient val sqlContext: SQLContext,
     @transient protected[spark] val logicalPlan: LogicalPlan)
@@ -228,8 +229,7 @@ class SchemaRDD(
       Filter(ScalaUdf(udf, BooleanType, Seq(UnresolvedAttribute(arg1.name))), logicalPlan))
 
   /**
-   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
-   *
+   * :: Experimental ::
    * Filters tuples using a function over a `Dynamic` version of a given Row.  DynamicRows use
    * scala's Dynamic trait to emulate an ORM of in a dynamically typed language.  Since the type of
    * the column is not known at compile time, all attributes are converted to strings before
@@ -241,18 +241,19 @@ class SchemaRDD(
    *
    * @group Query
    */
+  @Experimental
   def where(dynamicUdf: (DynamicRow) => Boolean) =
     new SchemaRDD(
       sqlContext,
       Filter(ScalaUdf(dynamicUdf, BooleanType, Seq(WrapDynamic(logicalPlan.output))), logicalPlan))
 
   /**
-   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
-   *
+   * :: Experimental ::
    * Returns a sampled version of the underlying dataset.
    *
    * @group Query
    */
+  @Experimental
   def sample(
       fraction: Double,
       withReplacement: Boolean = true,
@@ -260,8 +261,7 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Sample(fraction, withReplacement, seed, logicalPlan))
 
   /**
-   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
-   *
+   * :: Experimental ::
    * Applies the given Generator, or table generating function, to this relation.
    *
    * @param generator A table generating function.  The API for such functions is likely to change
@@ -277,6 +277,7 @@ class SchemaRDD(
    *
    * @group Query
    */
+  @Experimental
   def generate(
       generator: Generator,
       join: Boolean = false,
@@ -285,8 +286,7 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Generate(generator, join, outer, None, logicalPlan))
 
   /**
-   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
-   *
+   * :: Experimental ::
    * Adds the rows from this RDD to the specified table.  Note in a standard [[SQLContext]] there is
    * no notion of persistent tables, and thus queries that contain this operator will fail to
    * optimize.  When working with an extension of a SQLContext that has a persistent catalog, such
@@ -294,6 +294,7 @@ class SchemaRDD(
    *
    * @group schema
    */
+  @Experimental
   def insertInto(tableName: String, overwrite: Boolean = false) =
     new SchemaRDD(
       sqlContext,

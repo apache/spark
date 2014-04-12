@@ -23,11 +23,13 @@ import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, svd => brzSvd}
 import breeze.numerics.{sqrt => brzSqrt}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.Logging
 
 /**
+ * :: Experimental ::
  * Represents a row-oriented distributed Matrix with no meaningful row indices.
  *
  * @param rows rows stored as an RDD[Vector]
@@ -36,6 +38,7 @@ import org.apache.spark.Logging
  * @param nCols number of columns. A non-positive value means unknown, and then the number of
  *              columns will be determined by the size of the first row.
  */
+@Experimental
 class RowMatrix(
     val rows: RDD[Vector],
     private var nRows: Long,

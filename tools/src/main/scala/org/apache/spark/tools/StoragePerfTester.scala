@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.tools
 
 import java.util.concurrent.{CountDownLatch, Executors}
 import java.util.concurrent.atomic.AtomicLong
@@ -25,7 +25,7 @@ import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
 /**
- * Utility for micro-benchmarking shuffle write performance.
+ * Internal utility for micro-benchmarking shuffle write performance.
  *
  * Writes simulated shuffle output from several threads and records the observed throughput.
  */
