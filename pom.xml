@@ -349,11 +349,6 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>it.unimi.dsi</groupId>
-        <artifactId>fastutil</artifactId>
-        <version>6.4.4</version>
-      </dependency>
-      <dependency>
         <groupId>colt</groupId>
         <artifactId>colt</artifactId>
         <version>1.2.0</version>
