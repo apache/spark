@@ -283,7 +283,9 @@ trait ClientBase extends Logging {
     Apps.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"))
 
     // Add each SPARK_* key to the environment.
-    System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k,v) => env(k) = v }
+    val blacklist = ("SPARK_LOCAL_IP")
+    System.getenv().filterKeys(k => k.startsWith("SPARK") && !blacklist.contains(k))
+      .foreach { case (k,v) => env(k) = v }
 
     env
   }
