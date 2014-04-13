@@ -187,13 +187,13 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     val elementType = schema.elementType
     writer.startGroup()
     if (array.size > 0) {
-      writer.startField("values", 0)
+      writer.startField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
       var i = 0
       while(i < array.size) {
         writeValue(elementType, array(i))
         i = i + 1
       }
-      writer.endField("values", 0)
+      writer.endField(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, 0)
     }
     writer.endGroup()
   }
@@ -202,20 +202,20 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   private[parquet] def writeMap(schema: MapType, map: Map[_, _]): Unit = {
     writer.startGroup()
     if (map.size > 0) {
-      writer.startField("map", 0)
+      writer.startField(CatalystConverter.MAP_SCHEMA_NAME, 0)
       writer.startGroup()
-      writer.startField("key", 0)
+      writer.startField(CatalystConverter.MAP_KEY_SCHEMA_NAME, 0)
       for(key <- map.keys) {
         writeValue(schema.keyType, key)
       }
-      writer.endField("key", 0)
-      writer.startField("value", 1)
+      writer.endField(CatalystConverter.MAP_KEY_SCHEMA_NAME, 0)
+      writer.startField(CatalystConverter.MAP_VALUE_SCHEMA_NAME, 1)
       for(value <- map.values) {
         writeValue(schema.valueType, value)
       }
-      writer.endField("value", 1)
+      writer.endField(CatalystConverter.MAP_VALUE_SCHEMA_NAME, 1)
       writer.endGroup()
-      writer.endField("map", 0)
+      writer.endField(CatalystConverter.MAP_SCHEMA_NAME, 0)
     }
     writer.endGroup()
   }
