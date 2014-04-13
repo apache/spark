@@ -36,20 +36,26 @@ trait Lifecycle extends Service {
   def state: Service.State = state_
 
   def initialize(): Unit = synchronized {
-    require(uninitialized, s"Can't move to initialized state when $state_")
+    if (!uninitialized) {
+      throw new SparkException(s"Can't move to started state when $state_")
+    }
     doInitialize
     state_ = Initialized
   }
 
   override def start(): Unit = synchronized {
     if (uninitialized) initialize()
-    require(initialized || stopped, s"Can't move to started state when $state_")
+    if (started) {
+      throw new SparkException(s"Can't move to started state when $state_")
+    }
     doStart()
     state_ = Started
   }
 
   override def stop(): Unit = synchronized {
-    require(started, s"Can't move to stopped state when $state_")
+    if (!started) {
+      throw new SparkException(s"Can't move to started state when $state_")
+    }
     doStop
     state_ = Stopped
   }
