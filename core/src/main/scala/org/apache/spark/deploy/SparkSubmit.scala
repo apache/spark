@@ -144,11 +144,11 @@ object SparkSubmit {
       new OptionAssigner(appArgs.master, ALL_CLUSTER_MGRS, false, sysProp = "spark.master"),
 
       new OptionAssigner(appArgs.driverExtraClassPath, STANDALONE | YARN, true,
-        sysProp = "spark.driver.classPath"),
+        sysProp = "spark.driver.extraClassPath"),
       new OptionAssigner(appArgs.driverExtraJavaOptions, STANDALONE | YARN, true,
-        sysProp = "spark.driver.javaOpts"),
+        sysProp = "spark.driver.extraJavaOptions"),
       new OptionAssigner(appArgs.driverExtraLibraryPath, STANDALONE | YARN, true,
-        sysProp = "spark.driver.libraryPath"),
+        sysProp = "spark.driver.extraLibraryPath"),
 
       new OptionAssigner(appArgs.driverMemory, YARN, true, clOption = "--driver-memory"),
       new OptionAssigner(appArgs.name, YARN, true, clOption = "--name"),

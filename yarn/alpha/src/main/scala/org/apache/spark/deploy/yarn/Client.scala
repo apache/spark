@@ -33,7 +33,9 @@ import org.apache.hadoop.yarn.util.{Apps, Records}
 
 import org.apache.spark.{Logging, SparkConf}
 
-
+/**
+ * Version of [[org.apache.spark.deploy.yarn.ClientBase]] tailored to YARN's alpha API.
+ */
 class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: SparkConf)
   extends YarnClientImpl with ClientBase with Logging {
 

@@ -47,11 +47,16 @@ private[spark] class SparkDeploySchedulerBackend(
     val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}",
       "{{CORES}}", "{{WORKER_URL}}")
     val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
+    val classPathEntries = sys.props.get("spark.executor.extraClassPath").toSeq.flatMap { cp =>
+      cp.split(java.io.File.pathSeparator)
+    }
+    val libraryPathEntries = sys.props.get("spark.executor.extraLibraryPath").toSeq.flatMap { cp =>
+      cp.split(java.io.File.pathSeparator)
+    }
 
-    // TODO (pwendell) LOOK AT THIS
     val command = Command(
-      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.executorEnvs,
-      Seq(), Seq(), extraJavaOpts)
+      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.testExecutorEnvs,
+      classPathEntries, libraryPathEntries, extraJavaOpts)
     val sparkHome = sc.getSparkHome()
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
       sparkHome, sc.ui.appUIAddress, sc.eventLogger.map(_.logDir))

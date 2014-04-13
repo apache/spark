@@ -35,6 +35,11 @@ import org.apache.spark.scheduler.SplitInfo
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 
+/**
+ * An application master that allocates executors on behalf of a driver that is running outside the cluster.
+ *
+ * This is used only in yarn-client mode.
+ */
 class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sparkConf: SparkConf)
   extends Logging {
 

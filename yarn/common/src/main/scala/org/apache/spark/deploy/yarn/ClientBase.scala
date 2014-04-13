@@ -39,8 +39,11 @@ import org.apache.spark.{Logging, SparkConf}
 
 /**
  * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN. The
- * Client submits an application to the global ResourceManager to launch Spark's ApplicationMaster,
- * which will launch a Spark master process and negotiate resources throughout its duration.
+ * Client submits an application to the YARN ResourceManager.
+ *
+ * Depending on the deployment mode this will launch one of two application master classes:
+ * 1. In standalone mode, it will launch an [[org.apache.spark.deploy.yarn.ApplicationMaster]] which embeds a driver.
+ * 2. In client mode, it will launch an [[org.apache.spark.deploy.yarn.ExecutorLauncher]].
  */
 trait ClientBase extends Logging {
   val args: ClientArguments
@@ -259,8 +262,8 @@ trait ClientBase extends Logging {
 
     val env = new HashMap[String, String]()
 
-    ClientBase.populateClasspath(yarnConf, sparkConf, localResources.contains(ClientBase.LOG4J_PROP),
-      env)
+    val extraCp = sparkConf.getOption("spark.driver.extraClassPath")
+    ClientBase.populateClasspath(yarnConf, sparkConf, localResources.contains(ClientBase.LOG4J_PROP), env, extraCp)
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
@@ -271,9 +274,6 @@ trait ClientBase extends Logging {
 
     // Allow users to specify some environment variables.
     Apps.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"))
-
-    // Add each SPARK_* key to the environment.
-    System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k,v) => env(k) = v }
 
     env
   }
@@ -427,29 +427,29 @@ object ClientBase {
     }
   }
 
-  def populateClasspath(conf: Configuration, sparkConf: SparkConf, addLog4j: Boolean, env: HashMap[String, String]) {
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$())
-    // If log4j present, ensure ours overrides all others
-    if (addLog4j) {
-      Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
-        Path.SEPARATOR + LOG4J_PROP)
-    }
-    // Normally the users app.jar is last in case conflicts with spark jars
-    val userClasspathFirst = sparkConf.get("spark.yarn.user.classpath.first", "false")
-      .toBoolean
-    if (userClasspathFirst) {
-      Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
-        Path.SEPARATOR + APP_JAR)
-    }
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
-      Path.SEPARATOR + SPARK_JAR)
-    ClientBase.populateHadoopClasspath(conf, env)
+  def populateClasspath(conf: Configuration, sparkConf: SparkConf, addLog4j: Boolean, env: HashMap[String, String],
+      extraClassPath: Option[String] = None) {
 
-    if (!userClasspathFirst) {
-      Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
-        Path.SEPARATOR + APP_JAR)
+    /** Add entry to the classpath. */
+    def addClasspathEntry(entry: String) = pps.addToEnvironment(env, Environment.CLASSPATH.name, entry)
+    /** Add entry to the classpath. Interpreted as a path relative to the working directory. */
+    def addPwdClasspathEntry(path: String) = addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + entry)
+
+    extraClassPath.foreach(addClasspathEntry)
+
+    addClasspathEntry(Environment.PWD.$())
+    // If log4j present, ensure ours overrides all others
+    if (addLog4j) addPwdClasspathEntry(LOG4J_PROP)
+    // Normally the users app.jar is last in case conflicts with spark jars
+    if (sparkConf.get("spark.yarn.user.classpath.first", "false").toBoolean) {
+      addPwdClasspathEntry(APP_JAR)
+      addPwdClasspathEntry(SPARK_JAR)
+      ClientBase.populateHadoopClasspath(conf, env)
+    } else {
+      addPwdClasspathEntry(SPARK_JAR)
+      ClientBase.populateHadoopClasspath(conf, env)
+      addPwdClasspathEntry(APP_JAR)
     }
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
-      Path.SEPARATOR + "*")
+    addPwdClasspathEntry("*")
   }
 }
