@@ -25,6 +25,7 @@ import com.esotericsoftware.kryo.{Serializer, Kryo}
 import org.apache.spark.{SparkEnv, SparkConf}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.MutablePair
+import org.apache.spark.util.Utils
 
 class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
   override def newKryo(): Kryo = {
@@ -44,7 +45,7 @@ class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
     kryo.register(classOf[scala.collection.mutable.ArrayBuffer[_]])
     kryo.register(classOf[scala.math.BigDecimal], new BigDecimalSerializer)
     kryo.setReferences(false)
-    kryo.setClassLoader(this.getClass.getClassLoader)
+    kryo.setClassLoader(Utils.getSparkClassLoader)
     kryo
   }
 }

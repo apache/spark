@@ -23,6 +23,7 @@ import java.nio.ByteBuffer
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.ByteBufferInputStream
+import org.apache.spark.util.Utils
 
 private[spark] class JavaSerializationStream(out: OutputStream, counterReset: Int)
   extends SerializationStream {
@@ -86,7 +87,7 @@ private[spark] class JavaSerializerInstance(counterReset: Int) extends Serialize
   }
 
   def deserializeStream(s: InputStream): DeserializationStream = {
-    new JavaDeserializationStream(s, Thread.currentThread.getContextClassLoader)
+    new JavaDeserializationStream(s, Utils.getContextOrSparkClassLoader)
   }
 
   def deserializeStream(s: InputStream, loader: ClassLoader): DeserializationStream = {

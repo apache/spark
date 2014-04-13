@@ -54,7 +54,6 @@ private[spark] object ResultTask {
 
   def deserializeInfo(stageId: Int, bytes: Array[Byte]): (RDD[_], (TaskContext, Iterator[_]) => _) =
   {
-    val loader = Thread.currentThread.getContextClassLoader
     val in = new GZIPInputStream(new ByteArrayInputStream(bytes))
     val ser = SparkEnv.get.closureSerializer.newInstance()
     val objIn = ser.deserializeStream(in)

@@ -117,6 +117,21 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Get the ClassLoader which loaded Spark.
+   */
+  def getSparkClassLoader = getClass.getClassLoader
+
+  /**
+   * Get the Context ClassLoader on this thread or, if not present, the ClassLoader that
+   * loaded Spark.
+   *
+   * This should be used whenever passing a ClassLoader to Class.ForName or finding the currently
+   * active loader when setting up ClassLoader delegation chains.
+   */
+  def getContextOrSparkClassLoader =
+    Option(Thread.currentThread().getContextClassLoader).getOrElse(getSparkClassLoader)
+
+  /**
    * Primitive often used when writing {@link java.nio.ByteBuffer} to {@link java.io.DataOutput}.
    */
   def writeByteBuffer(bb: ByteBuffer, out: ObjectOutput) = {

@@ -17,12 +17,12 @@
 
 package org.apache.spark.executor
 
-import java.io.File
 import java.net.URLClassLoader
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.TestUtils
+import org.apache.spark.{LocalSparkContext, SparkContext, SparkException, TestUtils}
+import org.apache.spark.util.Utils
 
 class ExecutorURLClassLoaderSuite extends FunSuite {
 
@@ -63,5 +63,33 @@ class ExecutorURLClassLoaderSuite extends FunSuite {
     }
   }
 
+  test("driver sets context class loader in local mode") {
+    // Test the case where the driver program sets a context classloader and then runs a job
+    // in local mode. This is what happens when ./spark-submit is called with "local" as the
+    // master.
+    val original = Thread.currentThread().getContextClassLoader
 
+    val className = "ClassForDriverTest"
+    val jar = TestUtils.createJarWithClasses(Seq(className))
+    val contextLoader = new URLClassLoader(Array(jar), Utils.getContextOrSparkClassLoader)
+    Thread.currentThread().setContextClassLoader(contextLoader)
+
+    val sc = new SparkContext("local", "driverLoaderTest")
+
+    try {
+      sc.makeRDD(1 to 5, 2).mapPartitions { x =>
+        val loader = Thread.currentThread().getContextClassLoader
+        Class.forName(className, true, loader).newInstance()
+        Seq().iterator
+      }.count()
+    }
+    catch {
+      case e: SparkException if e.getMessage.contains("ClassNotFoundException") =>
+        fail("Local executor could not find class", e)
+      case t: Throwable => fail("Unexpected exception ", t)
+    }
+
+    sc.stop()
+    Thread.currentThread().setContextClassLoader(original)
+  }
 }

@@ -24,6 +24,7 @@ import scala.collection.mutable
 import scala.util.matching.Regex
 
 import org.apache.spark.Logging
+import org.apache.spark.util.Utils
 
 private[spark] class MetricsConfig(val configFile: Option[String]) extends Logging {
 
@@ -50,7 +51,7 @@ private[spark] class MetricsConfig(val configFile: Option[String]) extends Loggi
     try {
       is = configFile match {
         case Some(f) => new FileInputStream(f)
-        case None => getClass.getClassLoader.getResourceAsStream(METRICS_CONF)
+        case None => Utils.getSparkClassLoader.getResourceAsStream(METRICS_CONF)
       }
 
       if (is != null) {
