@@ -36,6 +36,9 @@ For Apache Hadoop versions 1.x, Cloudera CDH MRv1, and other Hadoop versions wit
     # Apache Hadoop 1.2.1
     $ mvn -Dhadoop.version=1.2.1 -DskipTests clean package
 
+    # Apache Hadoop 0.23.10
+    $ mvn -Phadoop-0.23 -Dhadoop.version=0.23.10 -DskipTests clean package
+
     # Cloudera CDH 4.2.0 with MapReduce v1
     $ mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -DskipTests clean package
 
@@ -43,6 +46,9 @@ For Apache Hadoop 2.x, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions with
 
     # Apache Hadoop 2.0.5-alpha
     $ mvn -Pyarn-alpha -Dhadoop.version=2.0.5-alpha -Dyarn.version=2.0.5-alpha -DskipTests clean package
+
+    # Apache Hadoop 0.23.10
+    $ mvn -Pyarn-alpha -Phadoop-0.23 -Dhadoop.version=0.23.10 -Dyarn.version=0.23.10 -DskipTests clean package
 
     # Cloudera CDH 4.2.0 with MapReduce v2
     $ mvn -Pyarn-alpha -Dhadoop.version=2.0.0-cdh4.2.0 -Dyarn.version=2.0.0-chd4.2.0 -DskipTests clean package
