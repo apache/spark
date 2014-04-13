@@ -3,12 +3,9 @@ layout: global
 title: Machine Learning Library (MLlib)
 ---
 
-
-MLlib is a Spark implementation of some common machine learning (ML)
-functionality, as well associated tests and data generators.  MLlib
-currently supports four common types of machine learning problem settings,
-namely, binary classification, regression, clustering and collaborative
-filtering, as well as an underlying gradient descent optimization primitive.
+MLlib is a Spark implementation of some common machine learning algorithms and utilities,
+including classification, regression, clustering, collaborative
+filtering, dimension reduction, as well as underlying optimization primitives.
 
 # Available Methods
 The following links provide a detailed explanation of the methods and usage examples for each of them:
@@ -25,12 +22,17 @@ The following links provide a detailed explanation of the methods and usage exam
 * <a href="mllib-clustering.html">Clustering</a>
   * k-Means
 * <a href="mllib-collaborative-filtering.html">Collaborative Filtering</a>
-  * Matrix Factorization using Alternating Least Squares
+  * matrix factorization using alternating least squares
+* <a href="mllib-clustering.html">Clustering</a>
+  * k-means
+* <a href="mllib-linear-algebra.html">Distributed Linear Algebra</a>
+  * tall-and-skinny matrices
+    * column summary statistics
+    * singular value decomposition (SVD)
+    * principal component analysis (PCA)
 * <a href="mllib-optimization.html">Optimization</a>
-  * Gradient Descent and Stochastic Gradient Descent
-* <a href="mllib-linear-algebra.html">Linear Algebra</a>
-  * Singular Value Decomposition
-  * Principal Component Analysis
+  * gradient descent and stochastic gradient descent
+  * L-BFGS
 
 # Dependencies
 MLlib uses the [jblas](https://github.com/mikiobraun/jblas) linear algebra library, which itself
