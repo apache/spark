@@ -60,7 +60,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends 
         val libraryPathEntries = sys.props.get("spark.driver.libraryPath").toSeq.flatMap { cp =>
           cp.split(java.io.File.pathSeparator)
         }
-        val javaOpts = sys.props.get("spark.driver.javaOpts").toSeq
+        val javaOpts = sys.props.get("spark.driver.extraJavaOptions")
         val command = new Command(mainClass, Seq("{{WORKER_URL}}", driverArgs.mainClass) ++
           driverArgs.driverOptions, env, classPathEntries, libraryPathEntries, javaOpts)
 

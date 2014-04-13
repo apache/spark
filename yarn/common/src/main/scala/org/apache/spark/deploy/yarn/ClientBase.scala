@@ -330,7 +330,6 @@ trait ClientBase extends Logging {
       JAVA_OPTS += " -XX:CMSIncrementalDutyCycle=10 "
     }
 
-
     if (args.amClass == classOf[ExecutorLauncher].getName) {
       // If we are being launched in client mode, forward the spark-conf options
       // onto the executor launcher
@@ -344,7 +343,7 @@ trait ClientBase extends Logging {
         JAVA_OPTS += s"-D$k=$v"
       }
       // TODO: honor driver classpath here: sys.props.get("spark.driver.classPath")
-      sys.props.get("spark.driver.javaOpts").foreach(opts => JAVA_OPTS += opts)
+      sys.props.get("spark.driver.extraJavaOptions").foreach(opts => JAVA_OPTS += opts)
       sys.props.get("spark.driver.libraryPath").foreach(p => JAVA_OPTS += s"-Djava.library.path=$p")
     }
 

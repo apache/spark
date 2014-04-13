@@ -47,6 +47,8 @@ object CommandUtils extends Logging {
    */
   def buildJavaOpts(command: Command, memory: Int, sparkHome: String): Seq[String] = {
     val memoryOpts = Seq(s"-Xms${memory}M", s"-Xmx${memory}M")
+    // Note, this will coalesce multiple options into a single command component
+    val extraOpts = command.extraJavaOptions.toSeq
     val libraryOpts =
       if (command.libraryPathEntries.size > 0) {
         val joined = command.libraryPathEntries.mkString(File.pathSeparator)
@@ -63,7 +65,7 @@ object CommandUtils extends Logging {
     val userClassPath = command.classPathEntries.mkString(File.pathSeparator)
     val classPathWithUser = classPath + File.pathSeparator + userClassPath
 
-    Seq("-cp", classPathWithUser) ++ libraryOpts ++ memoryOpts ++ command.javaOptions
+    Seq("-cp", classPathWithUser) ++ libraryOpts ++ extraOpts ++ memoryOpts
   }
 
   /** Spawn a thread that will redirect a given stream to a file */

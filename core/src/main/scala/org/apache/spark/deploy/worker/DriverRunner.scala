@@ -74,14 +74,14 @@ private[spark] class DriverRunner(
 
           // Make sure user application jar is on the classpath
           // TODO: If we add ability to submit multiple jars they should also be added here
-          val classPath = driverDesc.command.classPathEntries ++ Seq(s":$localJarFilename")
+          val classPath = driverDesc.command.classPathEntries ++ Seq(s"$localJarFilename")
           val newCommand = Command(
             driverDesc.command.mainClass,
             driverDesc.command.arguments.map(substituteVariables),
             driverDesc.command.environment,
             classPath,
             driverDesc.command.libraryPathEntries,
-            driverDesc.command.javaOptions)
+            driverDesc.command.extraJavaOptions)
           val command = CommandUtils.buildCommandSeq(newCommand, driverDesc.mem,
             sparkHome.getAbsolutePath)
           launchDriver(command, driverDesc.command.environment, driverDir, driverDesc.supervise)

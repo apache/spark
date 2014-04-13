@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
  */
 private[spark] class YarnClientClusterScheduler(sc: SparkContext, conf: Configuration) extends TaskSchedulerImpl(sc) {
 
-  def this(sc: SparkContext) = this(sc, sc.getConf)
+  def this(sc: SparkContext) = this(sc, new Configuration())
 
   // By default, rack is unknown
   override def getRackForHost(hostPort: String): Option[String] = {

@@ -44,14 +44,14 @@ private[spark] class SparkDeploySchedulerBackend(
     val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
       conf.get("spark.driver.host"), conf.get("spark.driver.port"),
       CoarseGrainedSchedulerBackend.ACTOR_NAME)
-    val args = sc.conf.get("spark.executor.extraJavaOptions").split(" ") ++
-      Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}",
+    val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}",
       "{{CORES}}", "{{WORKER_URL}}")
+    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
 
     // TODO (pwendell) LOOK AT THIS
     val command = Command(
       "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.executorEnvs,
-      Seq(), Seq(), Seq())
+      Seq(), Seq(), extraJavaOpts)
     val sparkHome = sc.getSparkHome()
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
       sparkHome, sc.ui.appUIAddress, sc.eventLogger.map(_.logDir))

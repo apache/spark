@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{FileInputStream, PrintStream, File}
+import java.io.{IOException, FileInputStream, PrintStream, File}
 import java.net.URL
 import java.util.Properties
 
@@ -27,6 +27,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.Map
+import org.apache.spark.SparkException
 
 /**
  * Scala code behind the spark-submit script.  The script handles setting up the classpath with
@@ -252,9 +253,14 @@ object SparkSubmit {
   }
 
   private def getDefaultProperties(file: File): Seq[(String, String)] = {
+    require(file.exists(), s"Default properties file ${file.getName} does not exist")
     val inputStream = new FileInputStream(file)
     val properties = new Properties()
-    properties.load(inputStream)
+    try {
+      properties.load(inputStream)
+    } catch {
+      case e: IOException => throw new SparkException(s"Failed when loading Spark properties file ${file.getName}", e)
+    }
     properties.stringPropertyNames().toSeq.map(k => (k, properties(k)))
   }
 }

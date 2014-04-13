@@ -224,7 +224,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
         throw new Exception(msg)
       }
       if (javaOpts.contains("-Xmx") || javaOpts.contains("-Xms")) {
-        val msg = s"$executorOptsKey is not allowed to alter memory settings. Was '$javaOpts'"
+        val msg = s"$executorOptsKey is not allowed to alter memory settings (was '$javaOpts'). Please use " +
+          "spark.executor.memory."
         throw new Exception(msg)
       }
     }
