@@ -121,10 +121,10 @@ private[sql] object ParquetTestData {
       |message AddressBook {
         |required binary owner;
         |optional group ownerPhoneNumbers {
-          |repeated binary values;
+          |repeated binary array;
         |}
         |optional group contacts {
-          |repeated group values {
+          |repeated group array {
             |required binary name;
             |optional binary phoneNumber;
           |}
@@ -139,18 +139,18 @@ private[sql] object ParquetTestData {
         |required int32 firstInt;
         |optional int32 secondInt;
         |optional group longs {
-          |repeated int64 values;
+          |repeated int64 array;
         |}
         |required group entries {
-          |repeated group values {
+          |repeated group array {
             |required double value;
             |optional boolean truth;
           |}
         |}
         |optional group outerouter {
-          |repeated group values {
-            |repeated group values {
-              |repeated int32 values;
+          |repeated group array {
+            |repeated group array {
+              |repeated int32 array;
             |}
           |}
         |}
@@ -162,10 +162,10 @@ private[sql] object ParquetTestData {
       |message TestNested3 {
         |required int32 x;
         |optional group booleanNumberPairs {
-          |repeated group values {
+          |repeated group array {
             |required int32 key;
             |optional group value {
-              |repeated group values {
+              |repeated group array {
                 |required double nestedValue;
                 |optional boolean truth;
               |}
@@ -273,9 +273,9 @@ private[sql] object ParquetTestData {
     val r1 = new SimpleGroup(schema)
     r1.add(0, "Julien Le Dem")
     r1.addGroup(1)
-      .append("values", "555 123 4567")
-      .append("values", "555 666 1337")
-      .append("values", "XXX XXX XXXX")
+      .append(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, "555 123 4567")
+      .append(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, "555 666 1337")
+      .append(CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME, "XXX XXX XXXX")
     val contacts = r1.addGroup(2)
     contacts.addGroup(0)
       .append("name", "Dmitriy Ryaboy")
@@ -398,10 +398,10 @@ private[sql] object ParquetTestData {
     val fs: FileSystem = path.getFileSystem(configuration)
     val schema: MessageType = MessageTypeParser.parseMessageType(schemaString)
     assert(schema != null)
-    val outputStatus: FileStatus = fs.getFileStatus(path)
+    val outputStatus: FileStatus = fs.getFileStatus(new Path(path.toString))
     val footers = ParquetFileReader.readFooter(configuration, outputStatus)
     assert(footers != null)
-    val reader = new ParquetReader(path, new GroupReadSupport())
+    val reader = new ParquetReader(new Path(path.toString), new GroupReadSupport())
     val first = reader.read()
     assert(first != null)
   }

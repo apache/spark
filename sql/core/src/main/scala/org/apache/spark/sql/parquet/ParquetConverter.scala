@@ -32,8 +32,10 @@ private[parquet] object CatalystConverter {
   // The type internally used for fields
   type FieldType = StructField
 
-  // This is mostly Parquet convention (see, e.g., `ConversionPatterns`)
-  val ARRAY_ELEMENTS_SCHEMA_NAME = "values"
+  // This is mostly Parquet convention (see, e.g., `ConversionPatterns`).
+  // Note that "array" for the array elements is chosen by ParquetAvro.
+  // Using a different value will result in Parquet silently dropping columns.
+  val ARRAY_ELEMENTS_SCHEMA_NAME = "array"
   val MAP_KEY_SCHEMA_NAME = "key"
   val MAP_VALUE_SCHEMA_NAME = "value"
   val MAP_SCHEMA_NAME = "map"

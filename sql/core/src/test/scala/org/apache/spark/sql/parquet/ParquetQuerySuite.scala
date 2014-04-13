@@ -19,9 +19,13 @@ package org.apache.spark.sql.parquet
 
 import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
 
+import org.apache.avro.{SchemaBuilder, Schema}
+import org.apache.avro.generic.{GenericData, GenericRecord}
+
 import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.mapreduce.Job
 
+import parquet.avro.AvroParquetWriter
 import parquet.hadoop.ParquetFileWriter
 import parquet.hadoop.util.ContextUtil
 import parquet.schema.MessageTypeParser
@@ -34,11 +38,12 @@ import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.IntegerType
 import org.apache.spark.util.Utils
+import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.sql.catalyst.util.getTempFilePath
+import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.types.{StringType, IntegerType, DataType}
-import org.apache.spark.sql.{parquet, SchemaRDD}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import scala.Tuple2
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.util.Utils
 
 // Implicits
 import org.apache.spark.sql.test.TestSQLContext._
@@ -398,9 +403,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
 
   test("Importing nested Parquet file (Addressbook)") {
     implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
-    ParquetTestData.readNestedFile(
-      ParquetTestData.testNestedDir1,
-      ParquetTestData.testNestedSchema1)
     val result = TestSQLContext
       .parquetFile(ParquetTestData.testNestedDir1.toString)
       .toSchemaRDD
@@ -426,9 +428,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
 
   test("Importing nested Parquet file (nested numbers)") {
     implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
-    ParquetTestData.readNestedFile(
-      ParquetTestData.testNestedDir2,
-      ParquetTestData.testNestedSchema2)
     val result = TestSQLContext
       .parquetFile(ParquetTestData.testNestedDir2.toString)
       .toSchemaRDD
@@ -602,6 +601,145 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     Utils.deleteRecursively(tmpdir)
   }
 
+  test("Importing data generated with Avro") {
+    val tmpdir = Utils.createTempDir()
+    val file: File = new File(tmpdir, "test.avro")
+
+    val primitiveArrayType: Schema = SchemaBuilder.array.items.intType
+    val complexArrayType: Schema = SchemaBuilder.array.items.map.values.stringType
+    val primitiveMapType: Schema = SchemaBuilder.map.values.booleanType
+    val complexMapType: Schema = SchemaBuilder.map.values.array.items.floatType
+    val schema: Schema = SchemaBuilder
+      .record("TestRecord")
+      .namespace("")
+      .fields
+        .name("testInt")
+          .`type`.
+          intType
+          .noDefault
+      .name("testDouble")
+        .`type`
+        .doubleType
+        .noDefault
+      .name("testString")
+        .`type`
+        .nullable
+        .stringType
+        .stringDefault("")
+      .name("testPrimitiveArray")
+        .`type`(primitiveArrayType)
+        .noDefault
+      .name("testComplexArray")
+        .`type`(complexArrayType)
+        .noDefault
+      .name("testPrimitiveMap")
+        .`type`(primitiveMapType)
+        .noDefault
+      .name("testComplexMap")
+        .`type`(complexMapType)
+        .noDefault
+      .endRecord
+
+    val record1: GenericRecord = new GenericData.Record(schema)
+
+    // primitive fields
+    record1.put("testInt", 256)
+    record1.put("testDouble", 0.5)
+    record1.put("testString", "foo")
+
+    val primitiveArrayData = new GenericData.Array[Integer](10, primitiveArrayType)
+    val complexArrayData: GenericData.Array[java.util.Map[String, String]] =
+      new GenericData.Array[java.util.Map[String, String]](10, SchemaBuilder.array.items.map.values.stringType)
+
+    // two arrays: one primitive (array of ints), one complex (array of string->string maps)
+    primitiveArrayData.add(1)
+    primitiveArrayData.add(2)
+    primitiveArrayData.add(3)
+    val map1 = new java.util.HashMap[String, String]
+    map1.put("key11", "data11")
+    map1.put("key12", "data12")
+    val map2 = new java.util.HashMap[String, String]
+    map2.put("key21", "data21")
+    map2.put("key22", "data22")
+    complexArrayData.add(0, map1)
+    complexArrayData.add(1, map2)
+    
+    record1.put("testPrimitiveArray", primitiveArrayData)
+    record1.put("testComplexArray", complexArrayData)
+
+    // two maps: one primitive (string->boolean), one complex (string->array of floats)
+    val primitiveMap = new java.util.HashMap[String, Boolean](10)
+    primitiveMap.put("key1", true)
+    primitiveMap.put("key2", false)
+    val complexMap = new java.util.HashMap[String, GenericData.Array[Float]](10)
+    val value1: GenericData.Array[Float] = new GenericData.Array[Float](10, SchemaBuilder.array.items.floatType)
+    value1.add(0.1f)
+    value1.add(0.2f)
+    value1.add(0.3f)
+    complexMap.put("compKey1", value1)
+    val value2: GenericData.Array[Float] = new GenericData.Array[Float](10, SchemaBuilder.array.items.floatType)
+    value2.add(1.1f)
+    value2.add(1.2f)
+    value2.add(1.3f)
+    complexMap.put("compKey2", value2)
+
+    record1.put("testPrimitiveMap", primitiveMap)
+    record1.put("testComplexMap", complexMap)
+
+    // TODO: test array or map with value type Avro record
+
+    val writer = new AvroParquetWriter[GenericRecord](new Path(file.toString), schema)
+    writer.write(record1)
+    writer.close()
+
+    val data = TestSQLContext
+      .parquetFile(tmpdir.toString)
+      .toSchemaRDD
+    data.registerAsTable("avroTable")
+    val resultPrimitives = sql("SELECT testInt, testDouble, testString FROM avroTable").collect()
+    assert(resultPrimitives(0)(0) === 256)
+    assert(resultPrimitives(0)(1) === 0.5)
+    assert(resultPrimitives(0)(2) === "foo")
+    val resultPrimitiveArray = sql("SELECT testPrimitiveArray FROM avroTable").collect()
+    assert(resultPrimitiveArray(0)(0).asInstanceOf[Row](0) === 1)
+    assert(resultPrimitiveArray(0)(0).asInstanceOf[Row](1) === 2)
+    assert(resultPrimitiveArray(0)(0).asInstanceOf[Row](2) === 3)
+    val resultComplexArray = sql("SELECT testComplexArray FROM avroTable").collect()
+    assert(resultComplexArray(0)(0).asInstanceOf[Row].size === 2)
+    assert(
+      resultComplexArray(0)(0)
+      .asInstanceOf[Row]
+      .apply(0)
+      .asInstanceOf[Map[String, String]].get("key11").get.equals("data11"))
+    assert(
+      resultComplexArray(0)(0)
+      .asInstanceOf[Row]
+      .apply(1)
+      .asInstanceOf[Map[String, String]].get("key22").get.equals("data22"))
+    val resultPrimitiveMap = sql("SELECT testPrimitiveMap FROM avroTable").collect()
+    assert(
+      resultPrimitiveMap(0)(0)
+      .asInstanceOf[Map[String, Boolean]].get("key1").get === true)
+    assert(
+      resultPrimitiveMap(0)(0)
+      .asInstanceOf[Map[String, Boolean]].get("key2").get === false)
+    val resultComplexMap = sql("SELECT testComplexMap FROM avroTable").collect()
+    val mapResult1 =
+      resultComplexMap(0)(0)
+      .asInstanceOf[Map[String, Row]]
+      .get("compKey1")
+      .get
+    val mapResult2 =
+      resultComplexMap(0)(0)
+        .asInstanceOf[Map[String, Row]]
+        .get("compKey2")
+        .get
+    assert(mapResult1(0) === 0.1f)
+    assert(mapResult1(2) === 0.3f)
+    assert(mapResult2(0) === 1.1f)
+    assert(mapResult2(2) === 1.3f)
+  }
+
   /**
    * Creates an empty SchemaRDD backed by a ParquetRelation.
    *
@@ -613,6 +751,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val attributes = schema.map(t => new AttributeReference(t._1, t._2)())
     new SchemaRDD(
       TestSQLContext,
-      parquet.ParquetRelation.createEmpty(path, attributes, sparkContext.hadoopConfiguration))
+      ParquetRelation.createEmpty(path, attributes, sparkContext.hadoopConfiguration))
   }
 }
