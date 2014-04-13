@@ -18,26 +18,18 @@
 package org.apache.spark.deploy.yarn
 
 import java.net.URI
-import java.nio.ByteBuffer
-import java.security.PrivilegedExceptionAction
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.HashMap
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.DataOutputBuffer
-import org.apache.hadoop.net.NetUtils
-import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.api.protocolrecords._
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.{Apps, ConverterUtils, Records}
 
-import org.apache.spark.{SparkConf, Logging}
-import org.apache.hadoop.yarn.conf.YarnConfiguration
-
+import org.apache.spark.{Logging, SparkConf}
 
 trait ExecutorRunnableUtil extends Logging {
 
@@ -58,9 +50,10 @@ trait ExecutorRunnableUtil extends Logging {
     val executorMemoryString = executorMemory + "m"
     JAVA_OPTS += "-Xms" + executorMemoryString + " -Xmx" + executorMemoryString + " "
 
-    // Set extra Java options for the executor
-    val executorOpts = sys.props.find(_._1.contains("spark.executor.extraJavaOptions"))
-    JAVA_OPTS += executorOpts
+    // Set extra Java options for the executor, if defined
+    sys.props.get("spark.executor.extraJavaOptions").foreach { opts =>
+      JAVA_OPTS += opts
+    }
 
     JAVA_OPTS += " -Djava.io.tmpdir=" +
       new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR) + " "

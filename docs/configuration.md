@@ -650,9 +650,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.executor.extraJavaOptions</td>
   <td>(none)</td>
   <td>
-    A string of extra JVM options to pass to executors. For instance, GC settings or custom
-    paths for native code. Note that it is illegal to set Spark properties or heap size 
-    settings with this option.
+    A string of extra JVM options to pass to executors. For instance, GC settings or other
+    logging. Note that it is illegal to set Spark properties or heap size settings with this 
+    option.
   </td>
 </tr>
 

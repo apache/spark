@@ -17,20 +17,16 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.net.{InetAddress, UnknownHostException, URI}
-import java.nio.ByteBuffer
+import java.net.{InetAddress, URI, UnknownHostException}
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.Map
+import scala.collection.mutable.{HashMap, Map}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
-import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.io.DataOutputBuffer
+import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.mapreduce.MRJobConfig
-import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
@@ -38,15 +34,8 @@ import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.ipc.YarnRPC
-import org.apache.hadoop.yarn.util.{Records, Apps}
-
+import org.apache.hadoop.yarn.util.{Apps, Records}
 import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.util.Utils
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.ExecutorLauncher
-import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
-
 
 /**
  * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN. The
@@ -355,8 +344,8 @@ trait ClientBase extends Logging {
         JAVA_OPTS += s"-D$k=$v"
       }
       // TODO: honor driver classpath here: sys.props.get("spark.driver.classPath")
-      sys.props.get("spark.driver.javaOpts").map(opts => JAVA_OPTS += opts)
-      sys.props.get("spark.driver.libraryPath").map(p => JAVA_OPTS + s"-Djava.library.path=$p")
+      sys.props.get("spark.driver.javaOpts").foreach(opts => JAVA_OPTS += opts)
+      sys.props.get("spark.driver.libraryPath").foreach(p => JAVA_OPTS += s"-Djava.library.path=$p")
     }
 
     if (!localResources.contains(ClientBase.LOG4J_PROP)) {
