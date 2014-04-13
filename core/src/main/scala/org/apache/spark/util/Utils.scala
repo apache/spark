@@ -117,15 +117,16 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Get the classloader which loaded Spark itself.
+   * Get the ClassLoader which loaded Spark.
    */
   def getSparkClassLoader = getClass.getClassLoader
 
   /**
-   * Get the context classloader on this thread or the classloader that loaded Spark itself.
+   * Get the Context ClassLoader on this thread or, if not present, the ClassLoader that
+   * loaded Spark.
    *
-   * In general this should be used when calling Class.forName or finding the currently active
-   * class loader when setting up class loader delegation chains.
+   * This should be used whenever passing a ClassLoader to Class.ForName or finding the currently
+   * active loader when setting up ClassLoader delegation chains.
    */
   def getContextOrSparkClassLoader =
     Option(Thread.currentThread().getContextClassLoader).getOrElse(getSparkClassLoader)
