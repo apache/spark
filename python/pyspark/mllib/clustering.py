@@ -52,7 +52,7 @@ class KMeansModel(object):
     >>> model.predict(sparse_data[2]) == model.predict(sparse_data[3])
     True
     >>> type(model.clusterCenters)
-    list
+    <type 'list'>
     """
     def __init__(self, centers):
         self.centers = centers
