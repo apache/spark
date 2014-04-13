@@ -21,6 +21,7 @@ The following links provide a detailed explanation of the methods and usage exam
     * Least Squares
     * Lasso
     * Ridge Regression
+  * Classification and Regression (Decision) Trees
 * <a href="mllib-clustering.html">Clustering</a>
   * k-Means
 * <a href="mllib-collaborative-filtering.html">Collaborative Filtering</a>

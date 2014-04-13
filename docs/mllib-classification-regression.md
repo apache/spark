@@ -40,8 +40,9 @@ Supervised Learning involves executing a learning *Algorithm* on a set of *label
 examples. The algorithm returns a trained *Model* (such as for example a linear function) that
 can predict the label for new data examples for which the label is unknown.
 
+## Discriminative Training of Linear Classifiers
 
-## Mathematical Formulation
+### Mathematical Formulation
 Many standard *machine learning* methods can be formulated as a convex optimization problem, i.e.
 the task of finding a minimizer of a convex function `$f$` that depends on a variable vector
 `$\wv$` (called `weights` in the code), which has `$d$` entries. 
@@ -71,7 +72,7 @@ The fixed regularization parameter `$\lambda\ge0$` (`regParam` in the code) defi
 between the two goals of small loss and small model complexity.
 
 
-## Binary Classification
+### Binary Classification
 
 **Input:** Datapoints `$\x_i\in\R^{d}$`, labels `$y_i\in\{+1,-1\}$`, for `$1\le i\le n$`.
 
@@ -83,7 +84,7 @@ In other words, the input distributed dataset
 ([RDD](scala-programming-guide.html#resilient-distributed-datasets-rdds)) must be the set of
 vectors `$\x_i\in\R^d$`.
 
-### Support Vector Machine
+#### Support Vector Machine
 The linear [Support Vector Machine (SVM)](http://en.wikipedia.org/wiki/Support_vector_machine)
 has become a standard choice for classification tasks.
 Here the loss function in formulation `$\eqref{eq:regPrimal}$` is given by the hinge-loss 
@@ -95,7 +96,7 @@ By default, SVMs are trained with an L2 regularization, which gives rise to the 
 interpretation if these classifiers. We also support alternative L1 regularization. In this case,
 the primal optimization problem becomes an [LP](http://en.wikipedia.org/wiki/Linear_programming).
 
-### Logistic Regression
+#### Logistic Regression
 Despite its name, [Logistic Regression](http://en.wikipedia.org/wiki/Logistic_regression) is a
 binary classification method, again when the labels are given by binary values
 `$y_i\in\{+1,-1\}$`. The logistic loss function in formulation `$\eqref{eq:regPrimal}$` is
@@ -105,7 +106,7 @@ L(\wv;\x_i,y_i) :=  \log(1+\exp( -y_i \wv^T \x_i)) \ .
 \]`
 
 
-## Linear Regression (Least Squares, Lasso and Ridge Regression)
+### Linear Regression (Least Squares, Lasso and Ridge Regression)
 
 **Input:** Data matrix `$A\in\R^{n\times d}$`, right hand side vector `$\y\in\R^n$`.
 
@@ -121,17 +122,17 @@ linear combination of our observed data `$A\in\R^{n\times d}$`, which is given a
 
 It comes in 3 flavors:
 
-### Least Squares
+#### Least Squares
 Plain old [least squares](http://en.wikipedia.org/wiki/Least_squares) linear regression is the
 problem of minimizing 
   `\[ f_{\text{LS}}(\wv) := \frac1n \|A\wv-\y\|_2^2 \ . \]`
 
-### Lasso
+#### Lasso
 The popular [Lasso](http://en.wikipedia.org/wiki/Lasso_(statistics)#Lasso_method) (alternatively
 also known as  `$L_1$`-regularized least squares regression) is given by
   `\[ f_{\text{Lasso}}(\wv) := \frac1n \|A\wv-\y\|_2^2  + \lambda \|\wv\|_1 \ . \]`
 
-### Ridge Regression
+#### Ridge Regression
 [Ridge regression](http://en.wikipedia.org/wiki/Ridge_regression) uses the same loss function but
 with a L2 regularizer term:
   `\[ f_{\text{Ridge}}(\wv) := \frac1n \|A\wv-\y\|_2^2  + \frac{\lambda}{2}\|\wv\|^2 \ . \]`
@@ -150,7 +151,7 @@ In our generic problem formulation `$\eqref{eq:regPrimal}$`, this means the loss
 the data matrix `$A$`.
 
 
-## Using Different Regularizers
+### Using Different Regularizers
 
 As we have mentioned above, the purpose of *regularizer* in `$\eqref{eq:regPrimal}$` is to
 encourage simple models, by punishing the complexity of the model `$\wv$`, in order to e.g. avoid
@@ -178,7 +179,7 @@ the 3 mentioned here can be conveniently optimized with gradient descent type me
 SGD) which is implemented in `MLlib` currently, and explained in the next section.
 
 
-# Optimization Methods Working on the Primal Formulation
+### Optimization Methods Working on the Primal Formulation
 
 **Stochastic subGradient Descent (SGD).**
 For optimization objectives `$f$` written as a sum, *stochastic subgradient descent (SGD)* can be
@@ -239,6 +240,42 @@ Here `$\mathop{sign}(\wv)$` is the vector consisting of the signs (`$\pm1$`) of 
 of `$\wv$`.
 Also, note that `$A_{i:} \in \R^d$` is a row-vector, but the gradient is a column vector.
 
+## Classification and Regression (Decision) Trees
+
+Decision trees and their ensembles are popular methods for the machine learning tasks of classification and regression. Decision trees are widely used since they are easy to interpret, handle categorical variables, extend to the multi-class classification setting, do not require feature scaling and are able to capture non-linearities and feature interactions. Tree ensemble algorithms such as decision forest and boosting are among the top performers for classification and regression tasks.
+
+### Mathematical Formulation
+
+### Information Gain
+
+#### Classification
+
+#### Regression
+
+### Feature Binning
+
+#### Classfication
+
+#### Regression
+
+### Implementation
+
+#### Code Optimizations
+
+#### Experimental Results
+
+### Training Parameters
+
+### Upcoming features
+
+#### Multiclass Classification
+
+#### Decision Forest
+
+#### AdaBoost
+
+#### Gradient Boosting
+
 
 
 ## Implementation in MLlib
@@ -262,6 +299,10 @@ Available algorithms for linear regression:
 * [LinearRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.LinearRegressionWithSGD)
 * [RidgeRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
 * [LassoWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.LassoWithSGD)
+
+Decision Tree algorithm that supports binary classification and regression:
+
+* [DecisionTee](api/mllib/index.html#org.apache.spark.mllib.tree.DecisionTree)
 
 Behind the scenes, all above methods use the SGD implementation from the
 gradient descent primitive in MLlib, see the 
