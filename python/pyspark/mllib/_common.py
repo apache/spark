@@ -299,27 +299,6 @@ def _linear_predictor_typecheck(x, coeffs):
         raise TypeError("Argument of type " + type(x).__name__ + " unsupported")
 
 
-class LinearModel(object):
-    """Something that has a vector of coefficients and an intercept."""
-    def __init__(self, coeff, intercept):
-        self._coeff = coeff
-        self._intercept = intercept
-
-
-class LinearRegressionModelBase(LinearModel):
-    """A linear regression model.
-
-    >>> lrmb = LinearRegressionModelBase(array([1.0, 2.0]), 0.1)
-    >>> abs(lrmb.predict(array([-1.03, 7.777])) - 14.624) < 1e-6
-    True
-    """
-    def predict(self, x):
-        """Predict the value of the dependent variable given a vector x"""
-        """containing values for the independent variables."""
-        _linear_predictor_typecheck(x, self._coeff)
-        return _dot(x, self._coeff) + self._intercept
-
-
 # If we weren't given initial weights, take a zero vector of the appropriate
 # length.
 def _get_initial_weights(initial_weights, data):

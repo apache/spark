@@ -24,9 +24,9 @@ from pyspark.mllib._common import \
     _serialize_double_matrix, _deserialize_double_matrix, \
     _serialize_double_vector, _deserialize_double_vector, \
     _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
-    LinearModel, _linear_predictor_typecheck, _get_unmangled_labeled_point_rdd
+    _linear_predictor_typecheck, _get_unmangled_labeled_point_rdd
 from pyspark.mllib.linalg import SparseVector
-from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.regression import LabeledPoint, LinearModel
 from math import exp, log
 
 class LogisticRegressionModel(LinearModel):
@@ -64,6 +64,7 @@ class LogisticRegressionModel(LinearModel):
         margin = _dot(x, self._coeff) + self._intercept
         prob = 1/(1 + exp(-margin))
         return 1 if prob > 0.5 else 0
+
 
 class LogisticRegressionWithSGD(object):
     @classmethod

@@ -16,8 +16,9 @@
 #
 
 """
-The K-means algorithm written from scratch against PySpark. In practice, one
-may prefer to use the KMeans algorithm in MLlib, as shown in mllib_kmeans.py.
+The K-means algorithm written from scratch against PySpark. In practice,
+one may prefer to use the KMeans algorithm in MLlib, as shown in
+python/examples/mllib/kmeans.py.
 
 This example requires NumPy (http://www.numpy.org/).
 """

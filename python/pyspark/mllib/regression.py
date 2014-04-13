@@ -46,10 +46,18 @@ class LabeledPoint(object):
 
 
 class LinearModel(object):
-    """Something that has a vector of coefficients and an intercept."""
-    def __init__(self, coeff, intercept):
-        self._coeff = coeff
+    """A linear model that has a vector of coefficients and an intercept."""
+    def __init__(self, weights, intercept):
+        self._coeff = weights
         self._intercept = intercept
+
+    @property
+    def weights(self):
+        return self._coeff
+
+    @property
+    def intercept(self):
+        return self._intercept
 
 
 class LinearRegressionModelBase(LinearModel):

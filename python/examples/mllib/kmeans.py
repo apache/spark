@@ -18,7 +18,7 @@
 """
 A K-means clustering program using MLlib.
 
-This example requires NuMpy (http://www.numpy.org/).
+This example requires NumPy (http://www.numpy.org/).
 """
 
 import sys
