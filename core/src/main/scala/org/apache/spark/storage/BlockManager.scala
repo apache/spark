@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, InputStream, OutputStream, BufferedOutputStream, ByteArrayOutputStream}
+import java.io.{File, InputStream, OutputStream, BufferedOutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -33,6 +33,8 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util._
+import org.apache.spark.util.io.{ByteBufferInputStream, FastByteArrayOutputStream}
+
 
 private[spark] sealed trait Values
 
@@ -1001,9 +1003,9 @@ private[spark] class BlockManager(
       blockId: BlockId,
       values: Iterator[Any],
       serializer: Serializer = defaultSerializer): ByteBuffer = {
-    val byteStream = new ByteArrayOutputStream(4096)
+    val byteStream = new FastByteArrayOutputStream(4096)
     dataSerializeStream(blockId, byteStream, values, serializer)
-    ByteBuffer.wrap(byteStream.toByteArray)
+    byteStream.toByteBuffer
   }
 
   /**

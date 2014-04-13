@@ -31,7 +31,8 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{MapOutputTrackerMaster, SecurityManager, SparkConf}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
-import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
+import org.apache.spark.util.{AkkaUtils, SizeEstimator, Utils}
+import org.apache.spark.util.io.ByteBufferInputStream
 
 class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodTester {
   private val conf = new SparkConf(false)

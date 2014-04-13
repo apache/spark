@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.util
 
-import java.io.{ByteArrayOutputStream, IOException}
+import java.io.IOException
 import java.net.ServerSocket
 import java.nio.ByteBuffer
 
@@ -26,6 +26,8 @@ import scala.io.Source
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.IntParam
+import org.apache.spark.util.io.FastByteArrayOutputStream
+
 
 /**
  * A helper program that sends blocks of Kryo-serialized text strings out on a socket at a
@@ -43,18 +45,18 @@ object RawTextSender extends Logging {
 
     // Repeat the input data multiple times to fill in a buffer
     val lines = Source.fromFile(file).getLines().toArray
-    val bufferStream = new ByteArrayOutputStream(blockSize + 1000)
+    val bufferStream = new FastByteArrayOutputStream(blockSize + 1000)
     val ser = new KryoSerializer(new SparkConf()).newInstance()
     val serStream = ser.serializeStream(bufferStream)
     var i = 0
-    while (bufferStream.size < blockSize) {
+    while (bufferStream.length < blockSize) {
       serStream.writeObject(lines(i))
       i = (i + 1) % lines.length
     }
-    val array = bufferStream.toByteArray
+    val (array, len) = bufferStream.toArray
 
     val countBuf = ByteBuffer.wrap(new Array[Byte](4))
-    countBuf.putInt(array.length)
+    countBuf.putInt(len)
     countBuf.flip()
 
     val serverSocket = new ServerSocket(port)
@@ -67,7 +69,7 @@ object RawTextSender extends Logging {
       try {
         while (true) {
           out.write(countBuf.array)
-          out.write(array)
+          out.write(array, 0, len)  // array's offset is 0, as returned by FastByteArrayOutputStream
         }
       } catch {
         case e: IOException =>
