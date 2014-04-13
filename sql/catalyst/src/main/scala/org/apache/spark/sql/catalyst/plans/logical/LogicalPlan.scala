@@ -20,16 +20,8 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.trees
-import scala.util.matching.Regex
-import org.apache.spark.sql.catalyst.types.ArrayType
-import org.apache.spark.sql.catalyst.expressions.GetField
-import org.apache.spark.sql.catalyst.types.StructType
-import org.apache.spark.sql.catalyst.types.MapType
-import scala.Some
-import org.apache.spark.sql.catalyst.expressions.Alias
-import org.apache.spark.sql.catalyst.expressions.GetItem
+import org.apache.spark.sql.catalyst.types._
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   self: Product =>

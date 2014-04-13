@@ -29,9 +29,6 @@ import parquet.schema.{MessageType, MessageTypeParser}
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.ArrayType
-import org.apache.spark.sql.catalyst.types.StructType
-import org.apache.spark.sql.catalyst.types.MapType
 
 /**
  * A `parquet.io.api.RecordMaterializer` for Rows.
