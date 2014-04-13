@@ -156,7 +156,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc.stop()  // stop before start should not throw exception
     ssc.start()
     ssc.stop()
-    intercept[IllegalArgumentException] {
+    intercept[SparkException] {
       ssc.start() // start after stop should throw exception
     }
   }

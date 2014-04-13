@@ -409,7 +409,7 @@ class StreamingContext private[streaming] (
   override def start() {
     // Throw exception if the context has already been started once
     // or if a stopped context is being started again
-    if (started) {
+    if (stopped) {
       throw new SparkException("StreamingContext has already been stopped")
     }
     super.start()
