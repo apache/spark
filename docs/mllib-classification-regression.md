@@ -240,7 +240,7 @@ Here `$\mathop{sign}(\wv)$` is the vector consisting of the signs (`$\pm1$`) of 
 of `$\wv$`.
 Also, note that `$A_{i:} \in \R^d$` is a row-vector, but the gradient is a column vector.
 
-## Classification and Regression (Decision) Trees
+## Decision Tree Classification and Regression
 
 Decision trees and their ensembles are popular methods for the machine learning tasks of classification and regression. Decision trees are widely used since they are easy to interpret, handle categorical variables, extend to the multi-class classification setting, do not require feature scaling and are able to capture non-linearities and feature interactions. Tree ensemble algorithms such as decision forest and boosting are among the top performers for classification and regression tasks.
 
