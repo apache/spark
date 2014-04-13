@@ -40,7 +40,7 @@ Supervised Learning involves executing a learning *Algorithm* on a set of *label
 examples. The algorithm returns a trained *Model* (such as for example a linear function) that
 can predict the label for new data examples for which the label is unknown.
 
-## Discriminative Training of Linear Classifiers
+## Discriminative Training using Linear Methods
 
 ### Mathematical Formulation
 Many standard *machine learning* methods can be formulated as a convex optimization problem, i.e.
@@ -289,35 +289,23 @@ For `$M$` categorical features, one could come up with `$2^M-1$` split candidate
 
 #### Stopping Rule
 
-The recursive tree construction is stopped when one of the two conditions is met: a) the node depth is equal to the `maxDepth` training paramemter, b) no split candidate leads to an information gain at the node.
+The recursive tree construction is stopped at a node when one of the two conditions is met:
 
-### Training Parameters
+1. The node depth is equal to the `maxDepth` training paramemter
+2. No split candidate leads to an information gain at the node.
 
-`maxBins`:
+### Practical Limitations
 
-`maxDepth`:
+The tree implementation stores an Array[Double] of *O(#features\*#splits\*2^{maxDepth})* in memory for aggregation histogram over partitions. The current implementation might not scale to very deep trees since the memory requirement grows exponentially with tree depth. 
 
-`impurity`:
-
-`categoricalFeaturesInfo`:
-
-`quantileCalculationStrategy`:
-
-`algo`:
-
-`strategy`:
-
-### Code Optimizations
-
-### Experimental Results
-
-### Current Limitations
-
+Please drop us a line if you encounter any issues. We are planning to solve this problem in the near future and real-world examples will be great.
 
 
 ## Implementation in MLlib
 
-For both classification and regression, `MLlib` implements a simple distributed version of
+#### Linear Methods
+
+For both classification and regression algorithms with convex loss functions, `MLlib` implements a simple distributed version of
 stochastic subgradient descent (SGD), building on the underlying gradient descent primitive (as
 described in the
 <a href="mllib-optimization.html">optimization section</a>).
@@ -337,15 +325,17 @@ Available algorithms for linear regression:
 * [RidgeRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
 * [LassoWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.LassoWithSGD)
 
-Decision Tree algorithm that supports binary classification and regression:
-
-* [DecisionTee](api/mllib/index.html#org.apache.spark.mllib.tree.DecisionTree)
-
 Behind the scenes, all above methods use the SGD implementation from the
 gradient descent primitive in MLlib, see the 
 <a href="mllib-optimization.html">optimization</a> part:
 
 * [GradientDescent](api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent)
+
+#### Tree-based Methods
+
+The decision tree algorithm supports binary classification and regression:
+
+* [DecisionTee](api/mllib/index.html#org.apache.spark.mllib.tree.DecisionTree)
 
 
 
@@ -355,7 +345,10 @@ gradient descent primitive in MLlib, see the
 
 Following code snippets can be executed in `spark-shell`.
 
-## Binary Classification
+## Linear Methods
+
+
+#### Binary Classification
 
 The following code snippet illustrates how to load a sample dataset, execute a
 training algorithm on this training data using a static method in the algorithm
@@ -406,7 +399,7 @@ svmAlg.optimizer.setNumIterations(200)
 val modelL1 = svmAlg.run(parsedData)
 {% endhighlight %}
 
-## Linear Regression
+#### Linear Regression
 
 The following example demonstrate how to load training data, parse it as an RDD of LabeledPoint.
 The example then uses LinearRegressionWithSGD to build a simple linear model to predict label 
@@ -441,7 +434,7 @@ println("training Mean Squared Error = " + MSE)
 Similarly you can use RidgeRegressionWithSGD and LassoWithSGD and compare training
 [Mean Squared Errors](http://en.wikipedia.org/wiki/Mean_squared_error).
 
-## Decision Tree
+## Tree-based Methods
 
 1. Classification: **TODO Write code and explain**
 2. Classification with Categorical Features: **TODO Write code and explain**
