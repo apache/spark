@@ -250,7 +250,7 @@ The decision tree is a greedy algorithm performs a recursive binary partitioning
 
 **TODO: Math formula** 
 
-### Node Impurity and Information Gain
+#### Node Impurity and Information Gain
 
 The node impurity is a measure of the homogeneity of the labels at the node. The current implementation provides two impurity measures for classification and one impurity measure for regression.
 
@@ -262,19 +262,15 @@ The information gain is the difference in the parent node impurity and the weigh
 
 TODO: **Write and explain formula**
 
-### Feature Binning
+#### Splits and Bins
 
 **Continuous Features**
 
 **Categorical Features**
 
-### Stopping Rule
+#### Stopping Rule
 
 **TODO: Explain maxDepth**
-
-### Experimental Results
-
-### Current Limitations
 
 ### Training Parameters
 
@@ -291,6 +287,13 @@ TODO: **Write and explain formula**
 `algo`:
 
 `strategy`:
+
+### Code Optimizations
+
+### Experimental Results
+
+### Current Limitations
+
 
 
 ## Implementation in MLlib
