@@ -73,7 +73,7 @@ class WholeTextFileRecordReaderSuite extends FunSuite with BeforeAndAfterAll {
       createNativeFile(dir, filename, contents)
     }
 
-    val res = sc.wholeTextFiles(dir.toString).collect()
+    val res = sc.wholeTextFiles(dir.toString, 3).collect()
 
     assert(res.size === WholeTextFileRecordReaderSuite.fileNames.size,
       "Number of files read out does not fit with the actual value.")
