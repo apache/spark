@@ -553,6 +553,55 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(result2(0)(1) === "the answer")
   }
 
+  test("Writing out Addressbook and reading it back in") {
+    implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
+    val tmpdir = Utils.createTempDir()
+    val result = TestSQLContext
+      .parquetFile(ParquetTestData.testNestedDir1.toString)
+      .toSchemaRDD
+    result.saveAsParquetFile(tmpdir.toString)
+    TestSQLContext
+      .parquetFile(tmpdir.toString)
+      .toSchemaRDD
+      .registerAsTable("tmpcopy")
+    val tmpdata = sql("SELECT owner, contacts[1].name FROM tmpcopy").collect()
+    assert(tmpdata.size === 2)
+    assert(tmpdata(0).size === 2)
+    assert(tmpdata(0)(0) === "Julien Le Dem")
+    assert(tmpdata(0)(1) === "Chris Aniszczyk")
+    assert(tmpdata(1)(0) === "A. Nonymous")
+    assert(tmpdata(1)(1) === null)
+    Utils.deleteRecursively(tmpdir)
+  }
+
+  test("Writing out Map and reading it back in") {
+    implicit def anyToMap(value: Any) = value.asInstanceOf[Map[String, Row]]
+    val data = TestSQLContext
+      .parquetFile(ParquetTestData.testNestedDir4.toString)
+      .toSchemaRDD
+    val tmpdir = Utils.createTempDir()
+    data.saveAsParquetFile(tmpdir.toString)
+    TestSQLContext
+      .parquetFile(tmpdir.toString)
+      .toSchemaRDD
+      .registerAsTable("tmpmapcopy")
+    val result1 = sql("SELECT data2 FROM tmpmapcopy").collect()
+    assert(result1.size === 1)
+    val entry1 = result1(0)(0).getOrElse("7", null)
+    assert(entry1 != null)
+    assert(entry1(0) === 42)
+    assert(entry1(1) === "the answer")
+    val entry2 = result1(0)(0).getOrElse("8", null)
+    assert(entry2 != null)
+    assert(entry2(0) === 49)
+    assert(entry2(1) === null)
+    val result2 = sql("SELECT data2[7].payload1, data2[7].payload2 FROM tmpmapcopy").collect()
+    assert(result2.size === 1)
+    assert(result2(0)(0) === 42.toLong)
+    assert(result2(0)(1) === "the answer")
+    Utils.deleteRecursively(tmpdir)
+  }
+
   /**
    * Creates an empty SchemaRDD backed by a ParquetRelation.
    *

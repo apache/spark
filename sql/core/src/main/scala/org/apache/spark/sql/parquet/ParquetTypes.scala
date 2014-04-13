@@ -64,13 +64,14 @@ private[parquet] object ParquetTypesConverter {
    * <ul>
    *   <li> Primitive types are converter to the corresponding primitive type.</li>
    *   <li> Group types that have a single field that is itself a group, which has repetition
-   *        level `REPEATED` are treated as follows:<ul>
-   *          <li> If the nested group has name `values` and repetition level `REPEATED`, the
-   *               surrounding group is converted into an [[ArrayType]] with the
-   *               corresponding field type (primitive or complex) as element type.</li>
-   *          <li> If the nested group has name `map`, repetition level `REPEATED` and two fields
-   *               (named `key` and `value`), the surrounding group is converted into a [[MapType]]
-   *               with the corresponding key and value (value possibly complex) types.</li>
+   *        level `REPEATED`, are treated as follows:<ul>
+   *          <li> If the nested group has name `values`, the surrounding group is converted
+   *               into an [[ArrayType]] with the corresponding field type (primitive or
+   *               complex) as element type.</li>
+   *          <li> If the nested group has name `map` and two fields (named `key` and `value`),
+   *               the surrounding group is converted into a [[MapType]]
+   *               with the corresponding key and value (value possibly complex) types.
+   *               Note that we currently assume map values are not nullable.</li>
    *   <li> Other group types are converted into a [[StructType]] with the corresponding
    *        field types.</li></ul></li>
    * </ul>
@@ -121,7 +122,9 @@ private[parquet] object ParquetTypesConverter {
             keyValueGroup.getFieldCount == 2,
             "Parquet Map type malformatted: nested group should have 2 (key, value) fields!")
           val keyType = toDataType(keyValueGroup.getFields.apply(0))
+          assert(keyValueGroup.getFields.apply(0).getRepetition == Repetition.REQUIRED)
           val valueType = toDataType(keyValueGroup.getFields.apply(1))
+          assert(keyValueGroup.getFields.apply(1).getRepetition == Repetition.REQUIRED)
           new MapType(keyType, valueType)
         }
         case _ => {
@@ -129,7 +132,9 @@ private[parquet] object ParquetTypesConverter {
           if (correspondsToMap(groupType)) { // MapType
             val keyValueGroup = groupType.getFields.apply(0).asGroupType()
             val keyType = toDataType(keyValueGroup.getFields.apply(0))
+            assert(keyValueGroup.getFields.apply(0).getRepetition == Repetition.REQUIRED)
             val valueType = toDataType(keyValueGroup.getFields.apply(1))
+            assert(keyValueGroup.getFields.apply(1).getRepetition == Repetition.REQUIRED)
             new MapType(keyType, valueType)
           } else if (correspondsToArray(groupType)) { // ArrayType
             val elementType = toDataType(groupType.getFields.apply(0))
@@ -240,13 +245,13 @@ private[parquet] object ParquetTypesConverter {
             fromDataType(
               keyType,
               CatalystConverter.MAP_KEY_SCHEMA_NAME,
-              false,
+              nullable = false,
               inArray = false)
           val parquetValueType =
             fromDataType(
               valueType,
               CatalystConverter.MAP_VALUE_SCHEMA_NAME,
-              true,
+              nullable = false,
               inArray = false)
           ConversionPatterns.mapType(
             repetition,

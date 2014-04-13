@@ -182,13 +182,13 @@ private[sql] object ParquetTestData {
         |optional group data1 {
           |repeated group map {
             |required binary key;
-            |optional int32 value;
+            |required int32 value;
           |}
         |}
         |required group data2 {
           |repeated group map {
             |required binary key;
-            |optional group value {
+            |required group value {
               |required int64 payload1;
               |optional binary payload2;
             |}
