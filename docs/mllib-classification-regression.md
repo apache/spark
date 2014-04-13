@@ -246,7 +246,9 @@ Decision trees and their ensembles are popular methods for the machine learning 
 
 ### Basic Algorithm
 
-The decision tree is a greedy algorithm performs a recursive binary partitioning of the feature space by finding the best *split* that maximimizes the information gain at each node. 
+The decision tree is a greedy algorithm performs a recursive binary partitioning of the feature space by finding the best *split* that maximimizes the information gain at each node.
+
+**TODO: Math formula** 
 
 ### Node Impurity and Information Gain
 
