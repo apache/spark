@@ -273,15 +273,23 @@ The *information gain* is the difference in the parent node impurity and the wei
 
 `$IG(D,s) = Impurity(D) - \frac{N_{left}}{N} Impurity(D_{left}) - \frac{N_{right}}{N} Impurity(D_{right})$`
 
-#### Splits and Bins
+#### Split Candidates
 
 **Continuous Features**
 
+For small datasets in single machine implementations, the split candidates for each continuous feature are typically the unique values for a feature. Some implementations sort the feature values and then use the ordered unique values as split candidates for faster tree calculations.
+
+Finding ordered unique feature values is computationally intensive for large distributed datasets. One can get an approximate set of split candidates by performing a quantile calculation over a sampled fraction of the data. The ordered splits create "bins" and the maximum number of such bins can be specified using the `maxBins` parameters. 
+
+Note that the number of bins cannot be greater than the number of instances `$N$` (a rare scenario since the default `maxBins` value is 100). The tree algorithm automatically reduces the number of bins if the condition is not satisfied.
+
 **Categorical Features**
+
+For `$M$` categorical features, one could come up with `$2^M-1$` split candidates. However, for binary classification, the number of split candidates can be reduced to `$M-1$` by ordering the categorical feature values by the proportion of labels falling in one of the two classes (see 9.2.4 in [Elements of Statistical Machine Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for details). For example, for a binary classification problem with one categorical feature with three categories A, B and C with corresponding proportion of label 1 as 0.2, 0.6 and 0.4, the categorical features will be orded as A, C and B. The two split candidates will be (A \| C, B) and (A , B \| C) where \| denotes the split.
 
 #### Stopping Rule
 
-**TODO: Explain maxDepth**
+The recursive tree construction is stopped when one of the two conditions is met: a) the node depth is equal to the `maxDepth` training paramemter, b) no split candidate leads to an information gain at the node.
 
 ### Training Parameters
 
