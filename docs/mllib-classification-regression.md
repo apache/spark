@@ -246,21 +246,32 @@ Decision trees and their ensembles are popular methods for the machine learning 
 
 ### Basic Algorithm
 
-The decision tree is a greedy algorithm performs a recursive binary partitioning of the feature space by finding the best *split* that maximimizes the information gain at each node.
-
-**TODO: Math formula** 
+The decision tree is a greedy algorithm performs a recursive binary partitioning of the feature space by choosing a single element from the *best split set* where each element of the set maximimizes the information gain at a tree node. In other words, the split chosen at each tree node is chosen from the set `$\underset{s}{\operatorname{argmax}} IG(D,s)$` where `$IG(D,s)$` is the information gain when a split `$s$` is applied to a dataset `$D$`.
 
 #### Node Impurity and Information Gain
 
-The node impurity is a measure of the homogeneity of the labels at the node. The current implementation provides two impurity measures for classification and one impurity measure for regression.
+The *node impurity* is a measure of the homogeneity of the labels at the node. The current implementation provides two impurity measures for classification (Gini index and entropy) and one impurity measure for regression.
 
-1. Gini index: **TODO: Write and explain formula**
-1. Entropy: **TODO: Write and explain formula**
-1. Variance: **TODO: Write and explain formula**
+<table class="table">
+  <thead>
+    <tr><th>Impurity</th><th>Task</th><th>Formula</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Gini index</td><td>Classification</td><td>$\sum_{i=1}^{M} f_i(1-f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $M$ is the number of unique labels.</td>
+    </tr>
+    <tr>
+      <td>Entropy</td><td>Classification</td><td>$\sum_{i=1}^{M} -f_ilog(f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $M$ is the number of unique labels.</td>
+    </tr>
+    <tr>
+      <td>Variance</td><td>Classification</td><td>$\frac{1}{n} \sum_{i=1}^{N} (x_i - \mu)^2$</td><td>$y_i$ is label for an instance, $N$ is the #instances and $\mu$ is the mean $\frac{1}{N} \sum_{i=1}^n x_i$.</td>
+    </tr>
+  </tbody>
+</table>
 
-The information gain is the difference in the parent node impurity and the weighted sum of the two child node impurities.
+The *information gain* is the difference in the parent node impurity and the weighted sum of the two child node impurities. Assuming that a split $s$ partitions the dataset `$D$` of size `$N$`  into two datasets `$D_{left}$` and `$D_{right}$` of sizes `$N_{left}$` and `$N_{right}$`, respectively:
 
-TODO: **Write and explain formula**
+`$IG(D,s) = Impurity(D) - \frac{N_{left}}{N} Impurity(D_{left}) - \frac{N_{right}}{N} Impurity(D_{right})$`
 
 #### Splits and Bins
 
