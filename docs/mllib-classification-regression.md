@@ -244,38 +244,51 @@ Also, note that `$A_{i:} \in \R^d$` is a row-vector, but the gradient is a colum
 
 Decision trees and their ensembles are popular methods for the machine learning tasks of classification and regression. Decision trees are widely used since they are easy to interpret, handle categorical variables, extend to the multi-class classification setting, do not require feature scaling and are able to capture non-linearities and feature interactions. Tree ensemble algorithms such as decision forest and boosting are among the top performers for classification and regression tasks.
 
-### Mathematical Formulation
+### Basic Algorithm
 
-### Information Gain
+The decision tree is a greedy algorithm performs a recursive binary partitioning of the feature space by finding the best *split* that maximimizes the information gain at each node. 
 
-#### Classification
+### Node Impurity and Information Gain
 
-#### Regression
+The node impurity is a measure of the homogeneity of the labels at the node. The current implementation provides two impurity measures for classification and one impurity measure for regression.
+
+1. Gini index: **TODO: Write and explain formula**
+1. Entropy: **TODO: Write and explain formula**
+1. Variance: **TODO: Write and explain formula**
+
+The information gain is the difference in the parent node impurity and the weighted sum of the two child node impurities.
+
+TODO: **Write and explain formula**
 
 ### Feature Binning
 
-#### Classfication
+**Continuous Features**
 
-#### Regression
+**Categorical Features**
 
-### Implementation
+### Stopping Rule
 
-#### Code Optimizations
+**TODO: Explain maxDepth**
 
-#### Experimental Results
+### Experimental Results
+
+### Current Limitations
 
 ### Training Parameters
 
-### Upcoming features
+`maxBins`:
 
-#### Multiclass Classification
+`maxDepth`:
 
-#### Decision Forest
+`impurity`:
 
-#### AdaBoost
+`categoricalFeaturesInfo`:
 
-#### Gradient Boosting
+`quantileCalculationStrategy`:
 
+`algo`:
+
+`strategy`:
 
 
 ## Implementation in MLlib
@@ -403,6 +416,13 @@ println("training Mean Squared Error = " + MSE)
 
 Similarly you can use RidgeRegressionWithSGD and LassoWithSGD and compare training
 [Mean Squared Errors](http://en.wikipedia.org/wiki/Mean_squared_error).
+
+## Decision Tree
+
+1. Classification: **TODO Write code and explain**
+2. Classification with Categorical Features: **TODO Write code and explain**
+3. Regression: **TODO Write code and explain**
+4. Regression with Categorical Features: **TODO Write code and explain**
 
 
 # Usage in Java
