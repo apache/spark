@@ -150,10 +150,6 @@
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>it.unimi.dsi</groupId>
-      <artifactId>fastutil</artifactId>
-    </dependency>
-    <dependency>
       <groupId>colt</groupId>
       <artifactId>colt</artifactId>
     </dependency>

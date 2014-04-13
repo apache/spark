@@ -44,6 +44,8 @@ private[scheduler] case class JobSubmitted(
     properties: Properties = null)
   extends DAGSchedulerEvent
 
+private[scheduler] case class StageCancelled(stageId: Int) extends DAGSchedulerEvent
+
 private[scheduler] case class JobCancelled(jobId: Int) extends DAGSchedulerEvent
 
 private[scheduler] case class JobGroupCancelled(groupId: String) extends DAGSchedulerEvent
@@ -54,7 +56,7 @@ private[scheduler]
 case class BeginEvent(task: Task[_], taskInfo: TaskInfo) extends DAGSchedulerEvent
 
 private[scheduler]
-case class GettingResultEvent(task: Task[_], taskInfo: TaskInfo) extends DAGSchedulerEvent 
+case class GettingResultEvent(task: Task[_], taskInfo: TaskInfo) extends DAGSchedulerEvent
 
 private[scheduler] case class CompletionEvent(
     task: Task[_],

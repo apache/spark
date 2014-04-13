@@ -21,7 +21,6 @@ import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::
- *
  * Information gain statistics for each split
  * @param gain information gain value
  * @param impurity current node impurity

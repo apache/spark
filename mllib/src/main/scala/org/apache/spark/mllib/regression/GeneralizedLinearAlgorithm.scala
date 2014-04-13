@@ -26,7 +26,7 @@ import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
- * GeneralizedLinearModel (GLM) represents a model trained using 
+ * GeneralizedLinearModel (GLM) represents a model trained using
  * GeneralizedLinearAlgorithm. GLMs consist of a weight vector and
  * an intercept.
  *
@@ -38,7 +38,7 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
 
   /**
    * Predict the result given a data point and the weights learned.
-   * 
+   *
    * @param dataMatrix Row vector containing the features for this data point
    * @param weightMatrix Column vector containing the weights of the model
    * @param intercept Intercept of the model.
@@ -103,7 +103,6 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   /**
    * :: Experimental ::
-   *
    * Set if the algorithm should validate data before training. Default true.
    */
   @Experimental

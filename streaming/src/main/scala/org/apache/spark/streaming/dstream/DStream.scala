@@ -353,15 +353,6 @@ abstract class DStream[T: ClassTag] (
     dependencies.foreach(_.clearMetadata(time))
   }
 
-  /* Adds metadata to the Stream while it is running.
-   * This method should be overwritten by sublcasses of InputDStream.
-   */
-  private[streaming] def addMetadata(metadata: Any) {
-    if (metadata != null) {
-      logInfo("Dropping Metadata: " + metadata.toString)
-    }
-  }
-
   /**
    * Refresh the list of checkpointed RDDs that will be saved along with checkpoint of
    * this stream. This is an internal method that should not be called directly. This is

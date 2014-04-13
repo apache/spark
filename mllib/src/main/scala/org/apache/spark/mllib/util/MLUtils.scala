@@ -17,14 +17,13 @@
 
 package org.apache.spark.mllib.util
 
-import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV,
-  squaredDistance => breezeSquaredDistance}
+import breeze.linalg.{Vector => BV, SparseVector => BSV, squaredDistance => breezeSquaredDistance}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.Vectors
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
@@ -124,7 +123,6 @@ object MLUtils {
 
   /**
    * :: Experimental ::
-   *
    * Load labeled data from a file. The data format used here is
    * <L>, <f1> <f2> ...
    * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
@@ -146,7 +144,6 @@ object MLUtils {
 
   /**
    * :: Experimental ::
-   *
    * Save labeled data to a file. The data format used here is
    * <L>, <f1> <f2> ...
    * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
@@ -158,58 +155,6 @@ object MLUtils {
   def saveLabeledData(data: RDD[LabeledPoint], dir: String) {
     val dataStr = data.map(x => x.label + "," + x.features.toArray.mkString(" "))
     dataStr.saveAsTextFile(dir)
-  }
-
-  /**
-   * Utility function to compute mean and standard deviation on a given dataset.
-   *
-   * @param data - input data set whose statistics are computed
-   * @param numFeatures - number of features
-   * @param numExamples - number of examples in input dataset
-   *
-   * @return (yMean, xColMean, xColSd) - Tuple consisting of
-   *     yMean - mean of the labels
-   *     xColMean - Row vector with mean for every column (or feature) of the input data
-   *     xColSd - Row vector standard deviation for every column (or feature) of the input data.
-   */
-  private[mllib] def computeStats(
-      data: RDD[LabeledPoint],
-      numFeatures: Int,
-      numExamples: Long): (Double, Vector, Vector) = {
-    val brzData = data.map { case LabeledPoint(label, features) =>
-      (label, features.toBreeze)
-    }
-    val aggStats = brzData.aggregate(
-      (0L, 0.0, BDV.zeros[Double](numFeatures), BDV.zeros[Double](numFeatures))
-    )(
-      seqOp = (c, v) => (c, v) match {
-        case ((n, sumLabel, sum, sumSq), (label, features)) =>
-          features.activeIterator.foreach { case (i, x) =>
-            sumSq(i) += x * x
-          }
-          (n + 1L, sumLabel + label, sum += features, sumSq)
-      },
-      combOp = (c1, c2) => (c1, c2) match {
-        case ((n1, sumLabel1, sum1, sumSq1), (n2, sumLabel2, sum2, sumSq2)) =>
-          (n1 + n2, sumLabel1 + sumLabel2, sum1 += sum2, sumSq1 += sumSq2)
-      }
-    )
-    val (nl, sumLabel, sum, sumSq) = aggStats
-
-    require(nl > 0, "Input data is empty.")
-    require(nl == numExamples)
-
-    val n = nl.toDouble
-    val yMean = sumLabel / n
-    val mean = sum / n
-    val std = new Array[Double](sum.length)
-    var i = 0
-    while (i < numFeatures) {
-      std(i) = sumSq(i) / n - mean(i) * mean(i)
-      i += 1
-    }
-
-    (yMean, Vectors.fromBreeze(mean), Vectors.dense(std))
   }
 
   /**

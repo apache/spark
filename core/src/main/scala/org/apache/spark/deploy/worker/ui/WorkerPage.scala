@@ -28,15 +28,15 @@ import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
-private[spark] class IndexPage(parent: WorkerWebUI) {
+private[spark] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
   val workerActor = parent.worker.self
   val worker = parent.worker
   val timeout = parent.timeout
 
-  def renderJson(request: HttpServletRequest): JValue = {
+  override def renderJson(request: HttpServletRequest): JValue = {
     val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
     val workerState = Await.result(stateFuture, timeout)
     JsonProtocol.writeWorkerState(workerState)
@@ -137,7 +137,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
         .format(executor.appId, executor.execId)}>stdout</a>
      <a href={"logPage?appId=%s&executorId=%s&logType=stderr"
         .format(executor.appId, executor.execId)}>stderr</a>
-      </td> 
+      </td>
     </tr>
 
   }

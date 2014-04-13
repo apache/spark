@@ -29,6 +29,9 @@ from pyspark.storagelevel import StorageLevel
 # this is the equivalent of ADD_JARS
 add_files = os.environ.get("ADD_FILES").split(',') if os.environ.get("ADD_FILES") != None else None
 
+if os.environ.get("SPARK_EXECUTOR_URI"):
+    SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
+
 sc = SparkContext(os.environ.get("MASTER", "local[*]"), "PySparkShell", pyFiles=add_files)
 
 print """Welcome to

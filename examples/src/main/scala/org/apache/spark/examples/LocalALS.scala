@@ -120,7 +120,7 @@ object LocalALS {
       }
     }
     printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
-    
+
     val R = generateR()
 
     // Initialize m and u randomly

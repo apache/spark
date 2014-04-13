@@ -19,6 +19,8 @@ package org.apache.spark.util.collection
 
 import java.util.{Arrays, Comparator}
 
+import com.google.common.hash.Hashing
+
 import org.apache.spark.annotation.DeveloperApi
 
 /**
@@ -199,11 +201,8 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
 
   /**
    * Re-hash a value to deal better with hash functions that don't differ in the lower bits.
-   * We use the Murmur Hash 3 finalization step that's also used in fastutil.
    */
-  private def rehash(h: Int): Int = {
-    it.unimi.dsi.fastutil.HashCommon.murmurHash3(h)
-  }
+  private def rehash(h: Int): Int = Hashing.murmur3_32().hashInt(h).asInt()
 
   /** Double the table's size and re-hash everything */
   protected def growTable() {
