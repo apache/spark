@@ -929,7 +929,7 @@ class SparkContext(config: SparkConf) extends Logging with Lifecycle {
   }
 
   override def start() {
-    if (started) {
+    if (stopped) {
       throw new SparkException("SparkContext has already been stopped")
     }
     super.start()
