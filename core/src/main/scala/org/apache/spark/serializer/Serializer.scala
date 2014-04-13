@@ -74,7 +74,7 @@ trait SerializerInstance {
     // Default implementation uses serializeStream
     val stream = new FastByteArrayOutputStream()
     serializeStream(stream).writeAll(iterator)
-    val buffer = ByteBuffer.wrap(stream.array)
+    val buffer = stream.toByteBuffer
     buffer.flip()
     buffer
   }

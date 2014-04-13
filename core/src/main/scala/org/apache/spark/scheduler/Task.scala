@@ -123,7 +123,7 @@ private[spark] object Task {
     dataOut.flush()
     val taskBytes = serializer.serialize(task).array()
     out.write(taskBytes)
-    ByteBuffer.wrap(out.array)
+    out.toByteBuffer
   }
 
   /**

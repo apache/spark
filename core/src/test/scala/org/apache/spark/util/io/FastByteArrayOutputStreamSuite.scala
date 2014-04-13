@@ -26,18 +26,20 @@ class FastByteArrayOutputStreamSuite extends FunSuite {
     val out = new FastByteArrayOutputStream(initialCapacity = 4)
     out.write(0)
     out.write(1)
-    assert(out.array(0) === 0)
-    assert(out.array(1) === 1)
+    assert(out.toArray._1(0) === 0)
+    assert(out.toArray._1(1) === 1)
+    assert(out.toArray._2 === 2)
     assert(out.length === 2)
 
     out.write(2)
     out.write(3)
-    assert(out.array(2) === 2)
-    assert(out.array(3) === 3)
+    assert(out.toArray._1(2) === 2)
+    assert(out.toArray._1(3) === 3)
     assert(out.length === 4)
 
     out.write(4)
-    assert(out.array(4) === 4)
+    assert(out.toArray._1(4) === 4)
+    assert(out.toArray._2 === 5)
     assert(out.length === 5)
 
     for (i <- 5 to 100) {
@@ -45,7 +47,7 @@ class FastByteArrayOutputStreamSuite extends FunSuite {
     }
 
     for (i <- 5 to 100) {
-      assert(out.array(i) === i)
+      assert(out.toArray._1(i) === i)
     }
   }
 
@@ -53,42 +55,44 @@ class FastByteArrayOutputStreamSuite extends FunSuite {
     val out = new FastByteArrayOutputStream(initialCapacity = 4)
     out.write(Array[Byte](0.toByte, 1.toByte))
     assert(out.length === 2)
-    assert(out.array(0) === 0)
-    assert(out.array(1) === 1)
+    assert(out.toArray._1(0) === 0)
+    assert(out.toArray._1(1) === 1)
 
     out.write(Array[Byte](2.toByte, 3.toByte, 4.toByte))
     assert(out.length === 5)
-    assert(out.array(2) === 2)
-    assert(out.array(3) === 3)
-    assert(out.array(4) === 4)
+    assert(out.toArray._1(2) === 2)
+    assert(out.toArray._1(3) === 3)
+    assert(out.toArray._1(4) === 4)
 
     // Write more than double the size of the current array
     out.write((1 to 100).map(_.toByte).toArray)
     assert(out.length === 105)
-    assert(out.array(104) === 100)
+    assert(out.toArray._1(104) === 100)
   }
 
   test("test large writes") {
     val out = new FastByteArrayOutputStream(initialCapacity = 4096)
     out.write(Array.tabulate[Byte](4096 * 1000)(_.toByte))
     assert(out.length === 4096 * 1000)
-    assert(out.array(0) === 0)
-    assert(out.array(4096 * 1000 - 1) === (4096 * 1000 - 1).toByte)
+    assert(out.toArray._1(0) === 0)
+    assert(out.toArray._1(4096 * 1000 - 1) === (4096 * 1000 - 1).toByte)
+    assert(out.toArray._2 === 4096 * 1000)
 
     out.write(Array.tabulate[Byte](4096 * 1000)(_.toByte))
     assert(out.length === 2 * 4096 * 1000)
-    assert(out.array(0) === 0)
-    assert(out.array(4096 * 1000) === 0)
-    assert(out.array(2 * 4096 * 1000 - 1) === (4096 * 1000 - 1).toByte)
+    assert(out.toArray._1(0) === 0)
+    assert(out.toArray._1(4096 * 1000) === 0)
+    assert(out.toArray._1(2 * 4096 * 1000 - 1) === (4096 * 1000 - 1).toByte)
+    assert(out.toArray._2 === 2 * 4096 * 1000)
   }
 
   test("trim") {
     val out = new FastByteArrayOutputStream(initialCapacity = 4096)
     out.write(1)
-    assert(out.trim().array.length === 1)
+    assert(out.trim().toArray._2 === 1)
 
     val out1 = new FastByteArrayOutputStream(initialCapacity = 1)
     out1.write(1)
-    assert(out1.trim().array.length === 1)
+    assert(out1.trim().toArray._2 === 1)
   }
 }

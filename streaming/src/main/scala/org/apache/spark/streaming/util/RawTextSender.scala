@@ -53,10 +53,10 @@ object RawTextSender extends Logging {
       serStream.writeObject(lines(i))
       i = (i + 1) % lines.length
     }
-    val array = bufferStream.trim().array
+    val (array, len) = bufferStream.toArray
 
     val countBuf = ByteBuffer.wrap(new Array[Byte](4))
-    countBuf.putInt(array.length)
+    countBuf.putInt(len)
     countBuf.flip()
 
     val serverSocket = new ServerSocket(port)
@@ -69,7 +69,7 @@ object RawTextSender extends Logging {
       try {
         while (true) {
           out.write(countBuf.array)
-          out.write(array)
+          out.write(array, 0, len)  // array's offset is 0, as returned by FastByteArrayOutputStream
         }
       } catch {
         case e: IOException =>

@@ -1005,7 +1005,7 @@ private[spark] class BlockManager(
       serializer: Serializer = defaultSerializer): ByteBuffer = {
     val byteStream = new FastByteArrayOutputStream(4096)
     dataSerializeStream(blockId, byteStream, values, serializer)
-    ByteBuffer.wrap(byteStream.array)
+    byteStream.toByteBuffer
   }
 
   /**

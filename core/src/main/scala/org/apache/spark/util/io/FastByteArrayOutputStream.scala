@@ -18,6 +18,7 @@
 package org.apache.spark.util.io
 
 import java.io.OutputStream
+import java.nio.ByteBuffer
 
 /**
  * A simple, fast byte-array output stream that exposes the backing array,
@@ -35,9 +36,6 @@ private[spark] class FastByteArrayOutputStream(initialCapacity: Int = 16) extend
 
   /** The current writing position. */
   private[this] var _position: Int = 0
-
-  /** The array backing the output stream. */
-  def array: Array[Byte] = _array
 
   /** The number of valid bytes in array. */
   def length: Int = _position
@@ -59,7 +57,7 @@ private[spark] class FastByteArrayOutputStream(initialCapacity: Int = 16) extend
     }
     if (off + len > b.length) {
       throw new ArrayIndexOutOfBoundsException(
-        s"Last index (${off+len}) is greater than array length (${b.length})")
+        s"Last index (${off + len}) is greater than array length (${b.length})")
     }
     if ( _position + len > _array.length ) {
       _array = FastByteArrayOutputStream.growArray(_array, _position + len, _position)
@@ -67,6 +65,17 @@ private[spark] class FastByteArrayOutputStream(initialCapacity: Int = 16) extend
     System.arraycopy(b, off, _array, _position, len)
     _position += len
   }
+
+  /** Return a ByteBuffer wrapping around the filled content of the underlying array. */
+  def toByteBuffer: ByteBuffer = {
+    ByteBuffer.wrap(_array, 0, _position)
+  }
+
+  /**
+   * Return a tuple, where the first element is the underlying array, and the second element
+   * is the length of the filled content.
+   */
+  def toArray: (Array[Byte], Int) = (_array, _position)
 
   /** Ensures that the length of the backing array is equal to [[length]]. */
   def trim(): this.type = {
