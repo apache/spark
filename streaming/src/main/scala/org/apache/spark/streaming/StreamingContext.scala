@@ -406,6 +406,15 @@ class StreamingContext private[streaming] (
   /**
    * Start the execution of the streams.
    */
+  override def start() {
+    // Throw exception if the context has already been started once
+    // or if a stopped context is being started again
+    if (started) {
+      throw new SparkException("StreamingContext has already been stopped")
+    }
+    super.start()
+  }
+
   override protected def doStart() {
     validate()
     scheduler.start()

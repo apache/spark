@@ -137,7 +137,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc = new StreamingContext(master, appName, batchDuration)
     addInputStream(ssc).register
     ssc.start()
-    intercept[IllegalArgumentException] {
+    intercept[SparkException] {
       ssc.start()
     }
   }
@@ -156,7 +156,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc.stop()  // stop before start should not throw exception
     ssc.start()
     ssc.stop()
-    intercept[SparkException] {
+    intercept[IllegalArgumentException] {
       ssc.start() // start after stop should throw exception
     }
   }
