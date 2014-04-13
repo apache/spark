@@ -76,16 +76,6 @@ private[spark] class FastByteArrayOutputStream(initialCapacity: Int = 16) extend
    * is the length of the filled content.
    */
   def toArray: (Array[Byte], Int) = (_array, _position)
-
-  /** Ensures that the length of the backing array is equal to [[length]]. */
-  def trim(): this.type = {
-    if (_position < _array.length) {
-      val newArr = new Array[Byte](_position)
-      System.arraycopy(_array, 0, newArr, 0, _position)
-      _array = newArr
-    }
-    this
-  }
 }
 
 private object FastByteArrayOutputStream {

@@ -85,14 +85,4 @@ class FastByteArrayOutputStreamSuite extends FunSuite {
     assert(out.toArray._1(2 * 4096 * 1000 - 1) === (4096 * 1000 - 1).toByte)
     assert(out.toArray._2 === 2 * 4096 * 1000)
   }
-
-  test("trim") {
-    val out = new FastByteArrayOutputStream(initialCapacity = 4096)
-    out.write(1)
-    assert(out.trim().toArray._2 === 1)
-
-    val out1 = new FastByteArrayOutputStream(initialCapacity = 1)
-    out1.write(1)
-    assert(out1.trim().toArray._2 === 1)
-  }
 }
