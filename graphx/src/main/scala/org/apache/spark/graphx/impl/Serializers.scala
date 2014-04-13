@@ -26,6 +26,33 @@ import org.apache.spark.serializer._
 import scala.language.existentials
 
 private[graphx]
+class RoutingTableMessageSerializer extends Serializer with Serializable {
+  override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
+
+    override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
+      def writeObject[T](t: T) = {
+        val msg = t.asInstanceOf[RoutingTableMessage]
+        writeVarLong(msg.vid, optimizePositive = false)
+        writeUnsignedVarInt(msg.pid)
+        // TODO: Write only the bottom two bits of msg.position
+        s.write(msg.position)
+        this
+      }
+    }
+
+    override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
+      override def readObject[T](): T = {
+        val a = readVarLong(optimizePositive = false)
+        val b = readUnsignedVarInt()
+        val c = s.read()
+        if (c == -1) throw new EOFException
+        new RoutingTableMessage(a, b, c.toByte).asInstanceOf[T]
+      }
+    }
+  }
+}
+
+private[graphx]
 class VertexIdMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 

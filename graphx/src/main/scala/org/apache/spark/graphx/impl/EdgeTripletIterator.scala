@@ -29,24 +29,26 @@ import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
  */
 private[impl]
 class EdgeTripletIterator[VD: ClassTag, ED: ClassTag](
-    val vidToIndex: VertexIdToIndexMap,
-    val vertexArray: Array[VD],
-    val edgePartition: EdgePartition[ED])
+    val edgePartition: EdgePartition[ED, VD],
+    val includeSrc: Boolean,
+    val includeDst: Boolean)
   extends Iterator[EdgeTriplet[VD, ED]] {
 
   // Current position in the array.
   private var pos = 0
-
-  private val vmap = new PrimitiveKeyOpenHashMap[VertexId, VD](vidToIndex, vertexArray)
 
   override def hasNext: Boolean = pos < edgePartition.size
 
   override def next() = {
     val triplet = new EdgeTriplet[VD, ED]
     triplet.srcId = edgePartition.srcIds(pos)
-    triplet.srcAttr = vmap(triplet.srcId)
+    if (includeSrc) {
+      triplet.srcAttr = edgePartition.vertices(triplet.srcId)
+    }
     triplet.dstId = edgePartition.dstIds(pos)
-    triplet.dstAttr = vmap(triplet.dstId)
+    if (includeDst) {
+      triplet.dstAttr = edgePartition.vertices(triplet.dstId)
+    }
     triplet.attr = edgePartition.data(pos)
     pos += 1
     triplet
