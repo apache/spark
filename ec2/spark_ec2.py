@@ -103,6 +103,9 @@ def parse_args():
       help="When destroying a cluster, delete the security groups that were created")
   parser.add_option("--use-existing-master", action="store_true", default=False,
       help="Launch fresh slaves, but use an existing stopped master if possible")
+  parser.add_option("--worker-instances", type="int", default=1,
+      help="Number of instances per worker: variable SPARK_WORKER_INSTANCES (default: 1)")
+
 
   (opts, args) = parser.parse_args()
   if len(args) != 2:
@@ -223,7 +226,7 @@ def launch_cluster(conn, opts, cluster_name):
     sys.exit(1)
   if opts.key_pair is None:
     print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
-    sys.exit(1)    
+    sys.exit(1)
   print "Setting up security groups..."
   master_group = get_or_make_group(conn, cluster_name + "-master")
   slave_group = get_or_make_group(conn, cluster_name + "-slaves")
@@ -551,7 +554,8 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
     "modules": '\n'.join(modules),
     "spark_version": spark_v,
     "shark_version": shark_v,
-    "hadoop_major_version": opts.hadoop_major_version
+    "hadoop_major_version": opts.hadoop_major_version,
+    "spark_worker_instances": opts.worker_instances
   }
 
   # Create a temp directory in which we will place all the files to be
