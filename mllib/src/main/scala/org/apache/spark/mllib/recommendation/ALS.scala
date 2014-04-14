@@ -96,6 +96,7 @@ class ALS private (
     private var lambda: Double,
     private var implicitPrefs: Boolean,
     private var alpha: Double,
+    private var partitioner: Partitioner = null,
     private var seed: Long = System.nanoTime()
   ) extends Serializable with Logging {
 
@@ -103,7 +104,7 @@ class ALS private (
    * Constructs an ALS instance with default parameters: {numBlocks: -1, rank: 10, iterations: 10,
    * lambda: 0.01, implicitPrefs: false, alpha: 1.0}.
    */
-  def this() = this(-1, 10, 10, 0.01, false, 1.0)
+  def this() = this(-1, 10, 10, 0.01, false, 1.0, null)
 
   /**
    * Set the number of blocks to parallelize the computation into; pass -1 for an auto-configured
@@ -167,11 +168,11 @@ class ALS private (
       this.numBlocks
     }
 
-    val partitioner = new HashPartitioner(numBlocks)
+    this.partitioner = new HashPartitioner(numBlocks)
 
-    val ratingsByUserBlock = ratings.map{ rating => (rating.user % numBlocks, rating) }
+    val ratingsByUserBlock = ratings.map{ rating => (partitioner.getPartition(rating.user), rating) }
     val ratingsByProductBlock = ratings.map{ rating =>
-      (rating.product % numBlocks, Rating(rating.product, rating.user, rating.rating))
+      (partitioner.getPartition(rating.product), Rating(rating.product, rating.user, rating.rating))
     }
 
     val (userInLinks, userOutLinks) = makeLinkRDDs(numBlocks, ratingsByUserBlock)
@@ -322,7 +323,7 @@ class ALS private (
     val userIdToPos = userIds.zipWithIndex.toMap
     val shouldSend = Array.fill(numUsers)(new BitSet(numBlocks))
     for (r <- ratings) {
-      shouldSend(userIdToPos(r.user))(r.product % numBlocks) = true
+      shouldSend(userIdToPos(r.user))(partitioner.getPartition(r.product)) = true
     }
     OutLinkBlock(userIds, shouldSend)
   }
@@ -338,7 +339,7 @@ class ALS private (
     // Split out our ratings by product block
     val blockRatings = Array.fill(numBlocks)(new ArrayBuffer[Rating])
     for (r <- ratings) {
-      blockRatings(r.product % numBlocks) += r
+      blockRatings(partitioner.getPartition(r.product)) += r
     }
     val ratingsForBlock = new Array[Array[(Array[Int], Array[Double])]](numBlocks)
     for (productBlock <- 0 until numBlocks) {
@@ -543,7 +544,7 @@ object ALS {
       blocks: Int,
       seed: Long
     ): MatrixFactorizationModel = {
-    new ALS(blocks, rank, iterations, lambda, false, 1.0, seed).run(ratings)
+    new ALS(blocks, rank, iterations, lambda, false, 1.0, null, seed).run(ratings)
   }
 
   /**
@@ -566,7 +567,7 @@ object ALS {
       lambda: Double,
       blocks: Int
     ): MatrixFactorizationModel = {
-    new ALS(blocks, rank, iterations, lambda, false, 1.0).run(ratings)
+    new ALS(blocks, rank, iterations, lambda, false, 1.0, null).run(ratings)
   }
 
   /**
@@ -626,7 +627,7 @@ object ALS {
       alpha: Double,
       seed: Long
     ): MatrixFactorizationModel = {
-    new ALS(blocks, rank, iterations, lambda, true, alpha, seed).run(ratings)
+    new ALS(blocks, rank, iterations, lambda, true, alpha, null, seed).run(ratings)
   }
 
   /**
@@ -651,7 +652,7 @@ object ALS {
       blocks: Int,
       alpha: Double
     ): MatrixFactorizationModel = {
-    new ALS(blocks, rank, iterations, lambda, true, alpha).run(ratings)
+    new ALS(blocks, rank, iterations, lambda, true, alpha, null).run(ratings)
   }
 
   /**
