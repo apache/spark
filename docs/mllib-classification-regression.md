@@ -285,7 +285,7 @@ Note that the number of bins cannot be greater than the number of instances `$N$
 
 **Categorical Features**
 
-For `$M$` categorical features, one could come up with `$2^M-1$` split candidates. However, for binary classification, the number of split candidates can be reduced to `$M-1$` by ordering the categorical feature values by the proportion of labels falling in one of the two classes (see 9.2.4 in [Elements of Statistical Machine Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for details). For example, for a binary classification problem with one categorical feature with three categories A, B and C with corresponding proportion of label 1 as 0.2, 0.6 and 0.4, the categorical features will be orded as A, C and B. The two split candidates will be (A \| C, B) and (A , B \| C) where \| denotes the split.
+For `$M$` categorical features, one could come up with `$2^M-1$` split candidates. However, for binary classification, the number of split candidates can be reduced to `$M-1$` by ordering the categorical feature values by the proportion of labels falling in one of the two classes (see 9.2.4 in [Elements of Statistical Machine Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for details). For example, for a binary classification problem with one categorical feature with three categories A, B and C with corresponding proportion of label 1 as 0.2, 0.6 and 0.4, the categorical features are orded as A followed by C followed B (A, B, C). The two split candidates are A \| C, B and A , B \| C where \| denotes the split.
 
 #### Stopping Rule
 
@@ -296,7 +296,7 @@ The recursive tree construction is stopped at a node when one of the two conditi
 
 ### Practical Limitations
 
-The tree implementation stores an Array[Double] of *O(#features\*#splits\*2^{maxDepth})* in memory for aggregation histogram over partitions. The current implementation might not scale to very deep trees since the memory requirement grows exponentially with tree depth. 
+The tree implementation stores an Array[Double] of *O(#features \* #splits \* 2^maxDepth)* in memory for aggregating histograms over partitions. The current implementation might not scale to very deep trees since the memory requirement grows exponentially with tree depth. 
 
 Please drop us a line if you encounter any issues. We are planning to solve this problem in the near future and real-world examples will be great.
 
@@ -336,9 +336,6 @@ gradient descent primitive in MLlib, see the
 The decision tree algorithm supports binary classification and regression:
 
 * [DecisionTee](api/mllib/index.html#org.apache.spark.mllib.tree.DecisionTree)
-
-
-
 
 
 # Usage in Scala
