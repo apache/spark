@@ -58,7 +58,7 @@ object AllocationType extends Enumeration {
 // more info on how we are requesting for containers.
 
 /**
- * Acquires resources for executors from a ResourceMAnager and launches executors in new containers.
+ * Acquires resources for executors from a ResourceManager and launches executors in new containers.
  */
 private[yarn] class YarnAllocationHandler(
     val conf: Configuration,
