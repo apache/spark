@@ -113,10 +113,13 @@ private[spark] class CoarseMesosSchedulerBackend(
     val environment = Environment.newBuilder()
     val extraClassPath = conf.getOption("spark.executor.extraClassPath")
     extraClassPath.foreach { cp =>
-      envrionment.addVariables(Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
+      environment.addVariables(
+        Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions", "")
-    val extraLibraryPath = conf.getOption("spark.executor.extraLibraryPath").map(p => s"-Djava.library.path=$p")
+    val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions")
+
+    val libraryPathOption = "spark.executor.extraLibraryPath"
+    val extraLibraryPath = conf.getOption(libraryPathOption).map(p => s"-Djava.library.path=$p")
     val extraOpts = Seq(extraJavaOpts, extraLibraryPath).flatten.mkString(" ")
 
     sc.testExecutorEnvs.foreach { case (key, value) =>

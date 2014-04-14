@@ -146,7 +146,7 @@ object SparkSubmit {
       new OptionAssigner(appArgs.driverExtraClassPath, STANDALONE | YARN, true,
         sysProp = "spark.driver.extraClassPath"),
       new OptionAssigner(appArgs.driverExtraJavaOptions, STANDALONE | YARN, true,
-        sysProp = "spark.driver.extraJavaOptions"),
+        sysProp = "spark.driver.extraJavaOpts"),
       new OptionAssigner(appArgs.driverExtraLibraryPath, STANDALONE | YARN, true,
         sysProp = "spark.driver.extraLibraryPath"),
 
@@ -259,7 +259,9 @@ object SparkSubmit {
     try {
       properties.load(inputStream)
     } catch {
-      case e: IOException => throw new SparkException(s"Failed when loading Spark properties file ${file.getName}", e)
+      case e: IOException =>
+        val message = s"Failed when loading Spark properties file ${file.getName}"
+        throw new SparkException(message, e)
     }
     properties.stringPropertyNames().toSeq.map(k => (k, properties(k)))
   }

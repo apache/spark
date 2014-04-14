@@ -652,7 +652,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     A string of extra JVM options to pass to executors. For instance, GC settings or other
     logging. Note that it is illegal to set Spark properties or heap size settings with this 
-    option.
+    option. Spark properties should be set using a SparkConf object or the 
+    spark-defaults.conf file used with the spark-submit script. Heap size settings can be set
+    with spark.executor.memory.
   </td>
 </tr>
 <tr>
@@ -694,9 +696,6 @@ The following variables can be set in `spark-env.sh`:
 * `JAVA_HOME`, the location where Java is installed (if it's not on your default `PATH`)
 * `PYSPARK_PYTHON`, the Python binary to use for PySpark
 * `SPARK_LOCAL_IP`, to configure which IP address of the machine to bind to.
-* `SPARK_CLASSPATH`, to add elements to Spark's classpath that you want to be present for _all_ applications.
-   Note that applications can also add dependencies for themselves through `SparkContext.addJar` -- we recommend
-   doing that when possible.
 * `SPARK_PUBLIC_DNS`, the hostname your Spark program will advertise to other machines.
 * Options for the Spark [standalone cluster scripts](spark-standalone.html#cluster-launch-scripts), such as number of cores
   to use on each machine and maximum memory.

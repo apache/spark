@@ -147,6 +147,7 @@ class SparkContext(config: SparkConf) extends Logging {
     this(master, appName, sparkHome, jars, Map(), Map())
 
   private[spark] val conf = config.clone()
+  conf.validateSettings()
 
   /**
    * Return a copy of this SparkContext's configuration. The configuration ''cannot'' be

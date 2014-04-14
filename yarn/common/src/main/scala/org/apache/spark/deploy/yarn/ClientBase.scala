@@ -42,8 +42,10 @@ import org.apache.spark.{Logging, SparkConf}
  * Client submits an application to the YARN ResourceManager.
  *
  * Depending on the deployment mode this will launch one of two application master classes:
- * 1. In standalone mode, it will launch an [[org.apache.spark.deploy.yarn.ApplicationMaster]] which embeds a driver.
- * 2. In client mode, it will launch an [[org.apache.spark.deploy.yarn.ExecutorLauncher]].
+ * 1. In standalone mode, it will launch an [[org.apache.spark.deploy.yarn.ApplicationMaster]]
+ *      which launches a driver program inside of the cluster.
+ * 2. In client mode, it will launch an [[org.apache.spark.deploy.yarn.ExecutorLauncher]] to
+ *      request executors on behalf of a driver running outside of the cluster.
  */
 trait ClientBase extends Logging {
   val args: ClientArguments
@@ -263,7 +265,8 @@ trait ClientBase extends Logging {
     val env = new HashMap[String, String]()
 
     val extraCp = sparkConf.getOption("spark.driver.extraClassPath")
-    ClientBase.populateClasspath(yarnConf, sparkConf, localResources.contains(ClientBase.LOG4J_PROP), env, extraCp)
+    ClientBase.populateClasspath(yarnConf, sparkConf,
+      localResources.contains(ClientBase.LOG4J_PROP), env, extraCp)
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
@@ -342,7 +345,6 @@ trait ClientBase extends Logging {
       for ((k, v) <- sys.props.filterKeys(_.startsWith("spark"))) {
         JAVA_OPTS += s"-D$k=$v"
       }
-      // TODO: honor driver classpath here: sys.props.get("spark.driver.classPath")
       sys.props.get("spark.driver.extraJavaOptions").foreach(opts => JAVA_OPTS += opts)
       sys.props.get("spark.driver.libraryPath").foreach(p => JAVA_OPTS += s"-Djava.library.path=$p")
     }

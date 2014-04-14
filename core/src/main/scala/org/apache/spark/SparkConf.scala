@@ -52,8 +52,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     }
   }
 
-  validateSettings()
-
   /** Set a configuration variable. */
   def set(key: String, value: String): SparkConf = {
     if (key == null) {
@@ -210,23 +208,77 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     new SparkConf(false).setAll(settings)
   }
 
-  /** Checks for illegal or deprecated config settings. Throws an exception for the former. */
-  private def validateSettings() {
+  /** Checks for illegal or deprecated config settings. Throws an exception for the former. Not
+    * idempotent - may mutate this conf object to convert deprecated settings to supported ones. */
+  private[spark] def validateSettings() {
     if (settings.contains("spark.local.dir")) {
       val msg = "In Spark 1.0 and later spark.local.dir will be overridden by the value set by " +
         "the cluster manager (via SPARK_LOCAL_DIRS in mesos/standalone and LOCAL_DIRS in YARN)."
       logWarning(msg)
     }
+
     val executorOptsKey = "spark.executor.extraJavaOptions"
+    val executorClasspathKey = "spark.executor.extraClassPath"
+    val driverOptsKey = "spark.driver.extraJavaOptions"
+    val driverClassPathKey = "spark.driver.extraClassPath"
+
+    // Validate spark.executor.extraJavaOptions
     settings.get(executorOptsKey).map { javaOpts =>
       if (javaOpts.contains("-Dspark")) {
         val msg = s"$executorOptsKey is not allowed to set Spark options. Was '$javaOpts'"
         throw new Exception(msg)
       }
       if (javaOpts.contains("-Xmx") || javaOpts.contains("-Xms")) {
-        val msg = s"$executorOptsKey is not allowed to alter memory settings (was '$javaOpts'). Use " +
-          "spark.executor.memory instead."
+        val msg = s"$executorOptsKey is not allowed to alter memory settings (was '$javaOpts'). " +
+          "Use spark.executor.memory instead."
         throw new Exception(msg)
+      }
+    }
+
+    // Check for legacy configs
+    sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
+      val error =
+        s"""
+          |SPARK_JAVA_OPTS was detected (set to '$value').
+          |This has undefined behavior when running on a cluster and is deprecated in Spark 1.0+.
+          |
+          |Please instead use:
+          | - ./spark-submit with conf/spark-defaults.conf to set properties for an application
+          | - ./spark-submit with --driver-java-options to set -X options for a driver
+          | - spark.executor.executor.extraJavaOptions to set -X options for executors
+          | - SPARK_DAEMON_OPTS to set java options for standalone daemons (i.e. master, worker)
+        """.stripMargin
+      logError(error)
+
+      for (key <- Seq(executorOptsKey, driverOptsKey)) {
+        if (getOption(key).isDefined) {
+          throw new SparkException(s"Found both $key and SPARK_JAVA_OPTS. Use only the former.")
+        } else {
+          logWarning(s"Setting '$key' to '$value' as a work-around.")
+          set(key, value)
+        }
+      }
+    }
+
+    sys.env.get("SPARK_CLASSPATH").foreach { value =>
+      val error =
+        s"""
+          |SPARK_CLASSPATH was detected (set to '$value').
+          | This has undefined behavior when running on a cluster and is deprecated in Spark 1.0+.
+          |
+          |Please instead use:
+          | - ./spark-submit with --driver-class-path to augment the driver classpath
+          | - spark.executor.executor.extraClassPath to augment the executor classpath
+        """.stripMargin
+      logError(error)
+
+      for (key <- Seq(executorClasspathKey, driverClassPathKey)) {
+        if (getOption(key).isDefined) {
+          throw new SparkException(s"Found both $key and SPARK_CLASSPATH. Use only the former.")
+        } else {
+          logWarning(s"Setting '$key' to '$value' as a work-around.")
+          set(key, value)
+        }
       }
     }
   }
