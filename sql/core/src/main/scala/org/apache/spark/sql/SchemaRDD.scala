@@ -99,7 +99,7 @@ class SchemaRDD(
   def baseSchemaRDD = this
 
   // =========================================================================================
-  // RDD functions: Copy the interal row representation so we present immutable data to users.
+  // RDD functions: Copy the internal row representation so we present immutable data to users.
   // =========================================================================================
 
   override def compute(split: Partition, context: TaskContext): Iterator[Row] =
