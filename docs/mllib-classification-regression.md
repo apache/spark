@@ -434,10 +434,15 @@ println("training Mean Squared Error = " + MSE)
 Similarly you can use RidgeRegressionWithSGD and LassoWithSGD and compare training
 [Mean Squared Errors](http://en.wikipedia.org/wiki/Mean_squared_error).
 
-## Tree-based Methods
+## Decision Tree
+
+#### Classification
 
 1. Classification: **TODO Write code and explain**
 2. Classification with Categorical Features: **TODO Write code and explain**
+
+#### Regression
+
 3. Regression: **TODO Write code and explain**
 4. Regression with Categorical Features: **TODO Write code and explain**
 
