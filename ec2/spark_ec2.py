@@ -555,7 +555,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
     "spark_version": spark_v,
     "shark_version": shark_v,
     "hadoop_major_version": opts.hadoop_major_version,
-    "spark_worker_instances": opts.worker_instances
+    "spark_worker_instances": "%d" % opts.worker_instances
   }
 
   # Create a temp directory in which we will place all the files to be
