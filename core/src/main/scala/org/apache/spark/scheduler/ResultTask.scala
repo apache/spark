@@ -20,17 +20,21 @@ package org.apache.spark.scheduler
 import java.io._
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
-import scala.collection.mutable.HashMap
-
 import org.apache.spark._
-import org.apache.spark.rdd.{RDD, RDDCheckpointData}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.RDDCheckpointData
+import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
 
 private[spark] object ResultTask {
 
   // A simple map between the stage id to the serialized byte array of a task.
   // Served as a cache for task serialization because serialization can be
   // expensive on the master node if it needs to launch thousands of tasks.
-  private val serializedInfoCache = new HashMap[Int, Array[Byte]]
+  val serializedInfoCache = new TimeStampedHashMap[Int, Array[Byte]]
+
+  // TODO: This object shouldn't have global variables
+  val metadataCleaner = new MetadataCleaner(
+    MetadataCleanerType.RESULT_TASK, serializedInfoCache.clearOldValues, new SparkConf)
 
   def serializeInfo(stageId: Int, rdd: RDD[_], func: (TaskContext, Iterator[_]) => _): Array[Byte] =
   {
@@ -61,10 +65,6 @@ private[spark] object ResultTask {
     val rdd = objIn.readObject().asInstanceOf[RDD[_]]
     val func = objIn.readObject().asInstanceOf[(TaskContext, Iterator[_]) => _]
     (rdd, func)
-  }
-
-  def removeStage(stageId: Int) {
-    serializedInfoCache.remove(stageId)
   }
 
   def clearCache() {

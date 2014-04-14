@@ -53,8 +53,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     case RegisteredExecutor(sparkProperties) =>
       logInfo("Successfully registered with driver")
       // Make this host instead of hostPort ?
-      executor = new Executor(executorId, Utils.parseHostPort(hostPort)._1, sparkProperties,
-        false)
+      executor = new Executor(executorId, Utils.parseHostPort(hostPort)._1, sparkProperties)
 
     case RegisterExecutorFailed(message) =>
       logError("Slave registration failed: " + message)
@@ -106,8 +105,7 @@ private[spark] object CoarseGrainedExecutorBackend {
     // set it
     val sparkHostPort = hostname + ":" + boundPort
     actorSystem.actorOf(
-      Props(classOf[CoarseGrainedExecutorBackend], driverUrl, executorId,
-        sparkHostPort, cores),
+      Props(classOf[CoarseGrainedExecutorBackend], driverUrl, executorId, sparkHostPort, cores),
       name = "Executor")
     workerUrl.foreach{ url =>
       actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")

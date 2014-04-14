@@ -62,8 +62,8 @@ private[spark] class MetadataCleaner(
 
 private[spark] object MetadataCleanerType extends Enumeration {
 
-  val MAP_OUTPUT_TRACKER, SPARK_CONTEXT, HTTP_BROADCAST, BLOCK_MANAGER,
-  SHUFFLE_BLOCK_MANAGER, BROADCAST_VARS = Value
+  val MAP_OUTPUT_TRACKER, SPARK_CONTEXT, HTTP_BROADCAST, DAG_SCHEDULER, RESULT_TASK,
+    SHUFFLE_MAP_TASK, BLOCK_MANAGER, SHUFFLE_BLOCK_MANAGER, BROADCAST_VARS = Value
 
   type MetadataCleanerType = Value
 
@@ -78,16 +78,15 @@ private[spark] object MetadataCleaner {
     conf.getInt("spark.cleaner.ttl", -1)
   }
 
-  def getDelaySeconds(
-      conf: SparkConf,
-      cleanerType: MetadataCleanerType.MetadataCleanerType): Int = {
-    conf.get(MetadataCleanerType.systemProperty(cleanerType), getDelaySeconds(conf).toString).toInt
+  def getDelaySeconds(conf: SparkConf, cleanerType: MetadataCleanerType.MetadataCleanerType): Int =
+  {
+    conf.get(MetadataCleanerType.systemProperty(cleanerType), getDelaySeconds(conf).toString)
+      .toInt
   }
 
-  def setDelaySeconds(
-      conf: SparkConf,
-      cleanerType: MetadataCleanerType.MetadataCleanerType,
-      delay: Int) {
+  def setDelaySeconds(conf: SparkConf, cleanerType: MetadataCleanerType.MetadataCleanerType,
+      delay: Int)
+  {
     conf.set(MetadataCleanerType.systemProperty(cleanerType),  delay.toString)
   }
 

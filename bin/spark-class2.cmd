@@ -45,16 +45,13 @@ if "x%OUR_JAVA_MEM%"=="x" set OUR_JAVA_MEM=512m
 
 set SPARK_DAEMON_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS% -Dspark.akka.logLifecycleEvents=true
 
-rem Add java opts and memory settings for master, worker, history server, executors, and repl.
-rem Master, Worker and HistoryServer use SPARK_DAEMON_JAVA_OPTS (and specific opts) + SPARK_DAEMON_MEMORY.
+rem Add java opts and memory settings for master, worker, executors, and repl.
+rem Master and Worker use SPARK_DAEMON_JAVA_OPTS (and specific opts) + SPARK_DAEMON_MEMORY.
 if "%1"=="org.apache.spark.deploy.master.Master" (
   set OUR_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS% %SPARK_MASTER_OPTS%
   if not "x%SPARK_DAEMON_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_DAEMON_MEMORY%
 ) else if "%1"=="org.apache.spark.deploy.worker.Worker" (
   set OUR_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS% %SPARK_WORKER_OPTS%
-  if not "x%SPARK_DAEMON_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_DAEMON_MEMORY%
-) else if "%1"=="org.apache.spark.deploy.history.HistoryServer" (
-  set OUR_JAVA_OPTS=%SPARK_DAEMON_JAVA_OPTS% %SPARK_HISTORY_OPTS%
   if not "x%SPARK_DAEMON_MEMORY%"=="x" set OUR_JAVA_MEM=%SPARK_DAEMON_MEMORY%
 
 rem Executors use SPARK_JAVA_OPTS + SPARK_EXECUTOR_MEMORY.

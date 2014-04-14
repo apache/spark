@@ -17,33 +17,35 @@
 
 package org.apache.spark.mllib.regression
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
-
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+
+import org.jblas.DoubleMatrix
 
 /**
- * GeneralizedLinearModel (GLM) represents a model trained using
+ * GeneralizedLinearModel (GLM) represents a model trained using 
  * GeneralizedLinearAlgorithm. GLMs consist of a weight vector and
  * an intercept.
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
  */
-abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double)
+abstract class GeneralizedLinearModel(val weights: Array[Double], val intercept: Double)
   extends Serializable {
+
+  // Create a column vector that can be used for predictions
+  private val weightsMatrix = new DoubleMatrix(weights.length, 1, weights:_*)
 
   /**
    * Predict the result given a data point and the weights learned.
-   *
+   * 
    * @param dataMatrix Row vector containing the features for this data point
    * @param weightMatrix Column vector containing the weights of the model
    * @param intercept Intercept of the model.
    */
-  protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector, intercept: Double): Double
+  def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
+    intercept: Double): Double
 
   /**
    * Predict values for the given data set using the model trained.
@@ -51,13 +53,16 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    * @param testData RDD representing data points to be predicted
    * @return RDD[Double] where each entry contains the corresponding prediction
    */
-  def predict(testData: RDD[Vector]): RDD[Double] = {
+  def predict(testData: RDD[Array[Double]]): RDD[Double] = {
     // A small optimization to avoid serializing the entire model. Only the weightsMatrix
     // and intercept is needed.
-    val localWeights = weights
+    val localWeights = weightsMatrix
     val localIntercept = intercept
 
-    testData.map(v => predictPoint(v, localWeights, localIntercept))
+    testData.map { x =>
+      val dataMatrix = new DoubleMatrix(1, x.length, x:_*)
+      predictPoint(dataMatrix, localWeights, localIntercept)
+    }
   }
 
   /**
@@ -66,13 +71,14 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    * @param testData array representing a single data point
    * @return Double prediction from the trained model
    */
-  def predict(testData: Vector): Double = {
-    predictPoint(testData, weights, intercept)
+  def predict(testData: Array[Double]): Double = {
+    val dataMat = new DoubleMatrix(1, testData.length, testData:_*)
+    predictPoint(dataMat, weightsMatrix, intercept)
   }
 }
 
 /**
- * GeneralizedLinearAlgorithm implements methods to train a Generalized Linear Model (GLM).
+ * GeneralizedLinearAlgorithm implements methods to train a Genearalized Linear Model (GLM).
  * This class should be extended with an Optimizer to create a new GLM.
  */
 abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
@@ -80,10 +86,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
   protected val validators: Seq[RDD[LabeledPoint] => Boolean] = List()
 
-  /** The optimizer to solve the problem. */
-  def optimizer: Optimizer
+  val optimizer: Optimizer
 
-  /** Whether to add intercept (default: true). */
   protected var addIntercept: Boolean = true
 
   protected var validateData: Boolean = true
@@ -91,7 +95,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   /**
    * Create a model given the weights and intercept
    */
-  protected def createModel(weights: Vector, intercept: Double): M
+  protected def createModel(weights: Array[Double], intercept: Double): M
 
   /**
    * Set if the algorithm should add an intercept. Default true.
@@ -102,10 +106,8 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   }
 
   /**
-   * :: Experimental ::
    * Set if the algorithm should validate data before training. Default true.
    */
-  @Experimental
   def setValidateData(validateData: Boolean): this.type = {
     this.validateData = validateData
     this
@@ -115,27 +117,17 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * Run the algorithm with the configured parameters on an input
    * RDD of LabeledPoint entries.
    */
-  def run(input: RDD[LabeledPoint]): M = {
-    val numFeatures: Int = input.first().features.size
-    val initialWeights = Vectors.dense(new Array[Double](numFeatures))
+  def run(input: RDD[LabeledPoint]) : M = {
+    val nfeatures: Int = input.first().features.length
+    val initialWeights = new Array[Double](nfeatures)
     run(input, initialWeights)
-  }
-
-  /** Prepends one to the input vector. */
-  private def prependOne(vector: Vector): Vector = {
-    val vector1 = vector.toBreeze match {
-      case dv: BDV[Double] => BDV.vertcat(BDV.ones[Double](1), dv)
-      case sv: BSV[Double] => BSV.vertcat(new BSV[Double](Array(0), Array(1.0), 1), sv)
-      case v: Any => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
-    }
-    Vectors.fromBreeze(vector1)
   }
 
   /**
    * Run the algorithm with the configured parameters on an input RDD
    * of LabeledPoint entries starting from the initial weights provided.
    */
-  def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
+  def run(input: RDD[LabeledPoint], initialWeights: Array[Double]) : M = {
 
     // Check the data properties before running the optimizer
     if (validateData && !validators.forall(func => func(input))) {
@@ -144,26 +136,27 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
     // Prepend an extra variable consisting of all 1.0's for the intercept.
     val data = if (addIntercept) {
-      input.map(labeledPoint => (labeledPoint.label, prependOne(labeledPoint.features)))
+      input.map(labeledPoint => (labeledPoint.label, 1.0 +: labeledPoint.features))
     } else {
       input.map(labeledPoint => (labeledPoint.label, labeledPoint.features))
     }
 
     val initialWeightsWithIntercept = if (addIntercept) {
-      prependOne(initialWeights)
+      0.0 +: initialWeights
     } else {
       initialWeights
     }
 
     val weightsWithIntercept = optimizer.optimize(data, initialWeightsWithIntercept)
 
-    val intercept = if (addIntercept) weightsWithIntercept(0) else 0.0
-    val weights =
-      if (addIntercept) {
-        Vectors.dense(weightsWithIntercept.toArray.slice(1, weightsWithIntercept.size))
-      } else {
-        weightsWithIntercept
-      }
+    val (intercept, weights) = if (addIntercept) {
+      (weightsWithIntercept(0), weightsWithIntercept.tail)
+    } else {
+      (0.0, weightsWithIntercept)
+    }
+
+    logInfo("Final weights " + weights.mkString(","))
+    logInfo("Final intercept " + intercept)
 
     createModel(weights, intercept)
   }

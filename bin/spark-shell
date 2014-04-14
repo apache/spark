@@ -34,7 +34,7 @@ set -o posix
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
 SPARK_REPL_OPTS="${SPARK_REPL_OPTS:-""}"
-DEFAULT_MASTER="local[*]"
+DEFAULT_MASTER="local"
 MASTER=${MASTER:-""}
 
 info_log=0
@@ -64,7 +64,7 @@ ${txtbld}OPTIONS${txtrst}:
                               is followed by m for megabytes or g for gigabytes, e.g. "1g".
     -dm --driver-memory     : The memory used by the Spark Shell, the number is followed 
                               by m for megabytes or g for gigabytes, e.g. "1g".
-    -m  --master            : A full string that describes the Spark Master, defaults to "local[*]"
+    -m  --master            : A full string that describes the Spark Master, defaults to "local"
                               e.g. "spark://localhost:7077".
     --log-conf              : Enables logging of the supplied SparkConf as INFO at start of the
                               Spark Context.
@@ -127,7 +127,7 @@ function set_spark_log_conf(){
 
 function set_spark_master(){
     if ! [[ "$1" =~ $ARG_FLAG_PATTERN ]]; then
-        export MASTER="$1"
+        MASTER="$1"
     else
         out_error "wrong format for $2"
     fi
@@ -145,7 +145,7 @@ function resolve_spark_master(){
     fi
 
     if [ -z "$MASTER" ]; then
-        export MASTER="$DEFAULT_MASTER"
+        MASTER="$DEFAULT_MASTER"
     fi
 
 }

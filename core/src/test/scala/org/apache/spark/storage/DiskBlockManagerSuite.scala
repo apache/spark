@@ -59,16 +59,8 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach {
     val newFile = diskBlockManager.getFile(blockId)
     writeToFile(newFile, 10)
     assertSegmentEquals(blockId, blockId.name, 0, 10)
-    assert(diskBlockManager.containsBlock(blockId))
-    newFile.delete()
-    assert(!diskBlockManager.containsBlock(blockId))
-  }
 
-  test("enumerating blocks") {
-    val ids = (1 to 100).map(i => TestBlockId("test_" + i))
-    val files = ids.map(id => diskBlockManager.getFile(id))
-    files.foreach(file => writeToFile(file, 10))
-    assert(diskBlockManager.getAllBlocks.toSet === ids.toSet)
+    newFile.delete()
   }
 
   test("block appending") {

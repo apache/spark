@@ -28,8 +28,7 @@ from pyspark.broadcast import Broadcast
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
-from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
-        PairDeserializer
+from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark import rdd
 from pyspark.rdd import RDD
@@ -262,45 +261,6 @@ class SparkContext(object):
         return RDD(self._jsc.textFile(name, minSplits), self,
                    UTF8Deserializer())
 
-    def wholeTextFiles(self, path):
-        """
-        Read a directory of text files from HDFS, a local file system
-        (available on all nodes), or any  Hadoop-supported file system
-        URI. Each file is read as a single record and returned in a
-        key-value pair, where the key is the path of each file, the
-        value is the content of each file.
-
-        For example, if you have the following files::
-
-          hdfs://a-hdfs-path/part-00000
-          hdfs://a-hdfs-path/part-00001
-          ...
-          hdfs://a-hdfs-path/part-nnnnn
-
-        Do C{rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path")},
-        then C{rdd} contains::
-
-          (a-hdfs-path/part-00000, its content)
-          (a-hdfs-path/part-00001, its content)
-          ...
-          (a-hdfs-path/part-nnnnn, its content)
-
-        NOTE: Small files are preferred, as each file will be loaded
-        fully in memory.
-
-        >>> dirPath = os.path.join(tempdir, "files")
-        >>> os.mkdir(dirPath)
-        >>> with open(os.path.join(dirPath, "1.txt"), "w") as file1:
-        ...    file1.write("1")
-        >>> with open(os.path.join(dirPath, "2.txt"), "w") as file2:
-        ...    file2.write("2")
-        >>> textFiles = sc.wholeTextFiles(dirPath)
-        >>> sorted(textFiles.collect())
-        [(u'.../1.txt', u'1'), (u'.../2.txt', u'2')]
-        """
-        return RDD(self._jsc.wholeTextFiles(path), self,
-                   PairDeserializer(UTF8Deserializer(), UTF8Deserializer()))
-
     def _checkpointFile(self, name, input_deserializer):
         jrdd = self._jsc.checkpointFile(name)
         return RDD(jrdd, self, input_deserializer)
@@ -427,11 +387,8 @@ class SparkContext(object):
             raise Exception("storageLevel must be of type pyspark.StorageLevel")
 
         newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
-        return newStorageLevel(storageLevel.useDisk,
-                               storageLevel.useMemory,
-                               storageLevel.useOffHeap,
-                               storageLevel.deserialized,
-                               storageLevel.replication)
+        return newStorageLevel(storageLevel.useDisk, storageLevel.useMemory,
+            storageLevel.deserialized, storageLevel.replication)
 
     def setJobGroup(self, groupId, description):
         """
@@ -472,7 +429,7 @@ def _test():
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
     globs['tempdir'] = tempfile.mkdtemp()
     atexit.register(lambda: shutil.rmtree(globs['tempdir']))
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs)
     globs['sc'].stop()
     if failure_count:
         exit(-1)

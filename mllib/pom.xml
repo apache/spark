@@ -58,7 +58,7 @@
     <dependency>
       <groupId>org.jblas</groupId>
       <artifactId>jblas</artifactId>
-      <version>${jblas.version}</version>
+      <version>1.2.3</version>
     </dependency>
     <dependency>
       <groupId>org.scalanlp</groupId>

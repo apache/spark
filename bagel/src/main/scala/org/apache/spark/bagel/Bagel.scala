@@ -220,23 +220,20 @@ object Bagel extends Logging {
    */
   private def comp[K: Manifest, V <: Vertex, M <: Message[K], C](
     sc: SparkContext,
-    grouped: RDD[(K, (Iterable[C], Iterable[V]))],
+    grouped: RDD[(K, (Seq[C], Seq[V]))],
     compute: (V, Option[C]) => (V, Array[M]),
     storageLevel: StorageLevel
   ): (RDD[(K, (V, Array[M]))], Int, Int) = {
     var numMsgs = sc.accumulator(0)
     var numActiveVerts = sc.accumulator(0)
-    val processed = grouped.mapValues(x => (x._1.iterator, x._2.iterator))
-      .flatMapValues {
-      case (_, vs) if !vs.hasNext => None
-      case (c, vs) => {
+    val processed = grouped.flatMapValues {
+      case (_, vs) if vs.size == 0 => None
+      case (c, vs) =>
         val (newVert, newMsgs) =
-          compute(vs.next,
-            c.hasNext match {
-              case true => Some(c.next)
-              case false => None
-            }
-          )
+          compute(vs(0), c match {
+            case Seq(comb) => Some(comb)
+            case Seq() => None
+          })
 
         numMsgs += newMsgs.size
         if (newVert.active) {
@@ -244,7 +241,6 @@ object Bagel extends Logging {
         }
 
         Some((newVert, newMsgs))
-      }
     }.persist(storageLevel)
 
     // Force evaluation of processed RDD for accurate performance measurements

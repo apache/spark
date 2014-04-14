@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.InputStream
+import java.net.URI
 
 import scala.io.Source
 
@@ -25,47 +26,63 @@ import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 import org.apache.hadoop.fs.{Path, FileSystem}
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.util.JsonProtocol
+import org.apache.spark.util.{JsonProtocol, Utils}
 
 /**
- * A SparkListenerBus that replays logged events from persisted storage.
- *
- * This class expects files to be appropriately prefixed as specified in EventLoggingListener.
- * There exists a one-to-one mapping between ReplayListenerBus and event logging applications.
+ * An EventBus that replays logged events from persisted storage
  */
-private[spark] class ReplayListenerBus(
-    logPaths: Seq[Path],
-    fileSystem: FileSystem,
-    compressionCodec: Option[CompressionCodec])
-  extends SparkListenerBus with Logging {
+private[spark] class ReplayListenerBus(conf: SparkConf) extends SparkListenerBus with Logging {
+  private val compressed = conf.getBoolean("spark.eventLog.compress", false)
 
-  private var replayed = false
+  // Only used if compression is enabled
+  private lazy val compressionCodec = CompressionCodec.createCodec(conf)
 
-  if (logPaths.length == 0) {
-    logWarning("Log path provided contains no log files.")
+  /**
+   * Return a list of paths representing log files in the given directory.
+   */
+  private def getLogFilePaths(logDir: String, fileSystem: FileSystem): Array[Path] = {
+    val path = new Path(logDir)
+    if (!fileSystem.exists(path) || !fileSystem.getFileStatus(path).isDir) {
+      logWarning("Log path provided is not a valid directory: %s".format(logDir))
+      return Array[Path]()
+    }
+    val logStatus = fileSystem.listStatus(path)
+    if (logStatus == null || !logStatus.exists(!_.isDir)) {
+      logWarning("Log path provided contains no log files: %s".format(logDir))
+      return Array[Path]()
+    }
+    logStatus.filter(!_.isDir).map(_.getPath).sortBy(_.getName)
   }
 
   /**
    * Replay each event in the order maintained in the given logs.
-   * This should only be called exactly once.
    */
-  def replay() {
-    assert(!replayed, "ReplayListenerBus cannot replay events more than once")
+  def replay(logDir: String): Boolean = {
+    val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
+    val logPaths = getLogFilePaths(logDir, fileSystem)
+    if (logPaths.length == 0) {
+      return false
+    }
+
     logPaths.foreach { path =>
       // Keep track of input streams at all levels to close them later
       // This is necessary because an exception can occur in between stream initializations
       var fileStream: Option[InputStream] = None
       var bufferedStream: Option[InputStream] = None
       var compressStream: Option[InputStream] = None
-      var currentLine = "<not started>"
+      var currentLine = ""
       try {
+        currentLine = "<not started>"
         fileStream = Some(fileSystem.open(path))
         bufferedStream = Some(new FastBufferedInputStream(fileStream.get))
-        compressStream = Some(wrapForCompression(bufferedStream.get))
+        compressStream =
+          if (compressed) {
+            Some(compressionCodec.compressedInputStream(bufferedStream.get))
+          } else bufferedStream
 
-        // Parse each line as an event and post the event to all attached listeners
+        // Parse each line as an event and post it to all attached listeners
         val lines = Source.fromInputStream(compressStream.get).getLines()
         lines.foreach { line =>
           currentLine = line
@@ -81,11 +98,7 @@ private[spark] class ReplayListenerBus(
         compressStream.foreach(_.close())
       }
     }
-    replayed = true
-  }
-
-  /** If a compression codec is specified, wrap the given stream in a compression stream. */
-  private def wrapForCompression(stream: InputStream): InputStream = {
-    compressionCodec.map(_.compressedInputStream(stream)).getOrElse(stream)
+    fileSystem.close()
+    true
   }
 }

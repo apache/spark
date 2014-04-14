@@ -45,8 +45,7 @@ class EdgeRDD[@specialized ED: ClassTag](
     partitionsRDD.partitioner.orElse(Some(Partitioner.defaultPartitioner(partitionsRDD)))
 
   override def compute(part: Partition, context: TaskContext): Iterator[Edge[ED]] = {
-    val p = firstParent[(PartitionID, EdgePartition[ED])].iterator(part, context)
-    p.next._2.iterator.map(_.copy())
+    firstParent[(PartitionID, EdgePartition[ED])].iterator(part, context).next._2.iterator
   }
 
   override def collect(): Array[Edge[ED]] = this.map(_.copy()).collect()

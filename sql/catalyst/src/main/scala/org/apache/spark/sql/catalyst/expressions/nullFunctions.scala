@@ -41,11 +41,11 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     throw new UnresolvedException(this, "Coalesce cannot have children of different types.")
   }
 
-  override def eval(input: Row): Any = {
+  override def apply(input: Row): Any = {
     var i = 0
     var result: Any = null
     while(i < children.size && result == null) {
-      result = children(i).eval(input)
+      result = children(i).apply(input)
       i += 1
     }
     result
@@ -57,8 +57,8 @@ case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expr
   override def foldable = child.foldable
   def nullable = false
 
-  override def eval(input: Row): Any = {
-    child.eval(input) == null
+  override def apply(input: Row): Any = {
+    child.apply(input) == null
   }
 }
 
@@ -68,7 +68,7 @@ case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[E
   def nullable = false
   override def toString = s"IS NOT NULL $child"
 
-  override def eval(input: Row): Any = {
-    child.eval(input) != null
+  override def apply(input: Row): Any = {
+    child.apply(input) != null
   }
 }

@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{Expression, Row, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder}
 import org.apache.spark.sql.catalyst.types.IntegerType
 
 /**
@@ -140,12 +139,12 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   extends Expression
   with Partitioning {
 
-  override def children = expressions
-  override def references = expressions.flatMap(_.references).toSet
-  override def nullable = false
-  override def dataType = IntegerType
+  def children = expressions
+  def references = expressions.flatMap(_.references).toSet
+  def nullable = false
+  def dataType = IntegerType
 
-  private[this] lazy val clusteringSet = expressions.toSet
+  lazy val clusteringSet = expressions.toSet
 
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
@@ -159,9 +158,6 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     case h: HashPartitioning if h == this => true
     case _ => false
   }
-
-  override def eval(input: Row = null): EvaluatedType =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
 
 /**
@@ -172,20 +168,17 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
  *    partition.
  *  - Each partition will have a `min` and `max` row, relative to the given ordering.  All rows
  *    that are in between `min` and `max` in this `ordering` will reside in this partition.
- *
- * This class extends expression primarily so that transformations over expression will descend
- * into its child.
  */
 case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   extends Expression
   with Partitioning {
 
-  override def children = ordering
-  override def references = ordering.flatMap(_.references).toSet
-  override def nullable = false
-  override def dataType = IntegerType
+  def children = ordering
+  def references = ordering.flatMap(_.references).toSet
+  def nullable = false
+  def dataType = IntegerType
 
-  private[this] lazy val clusteringSet = ordering.map(_.child).toSet
+  lazy val clusteringSet = ordering.map(_.child).toSet
 
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
@@ -202,7 +195,4 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
     case r: RangePartitioning if r == this => true
     case _ => false
   }
-
-  override def eval(input: Row): EvaluatedType =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }

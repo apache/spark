@@ -19,9 +19,10 @@ package org.apache.spark.mllib.regression
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.util.MLUtils
+
+import org.jblas.DoubleMatrix
 
 /**
  * Regression model trained using LinearRegression.
@@ -30,15 +31,15 @@ import org.apache.spark.mllib.util.MLUtils
  * @param intercept Intercept computed for this model.
  */
 class LinearRegressionModel(
-    override val weights: Vector,
+    override val weights: Array[Double],
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with RegressionModel with Serializable {
 
-  override protected def predictPoint(
-      dataMatrix: Vector,
-      weightMatrix: Vector,
+  override def predictPoint(
+      dataMatrix: DoubleMatrix,
+      weightMatrix: DoubleMatrix,
       intercept: Double): Double = {
-    weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
+    dataMatrix.dot(weightMatrix) + intercept
   }
 }
 
@@ -52,25 +53,23 @@ class LinearRegressionModel(
  * See also the documentation for the precise formulation.
  */
 class LinearRegressionWithSGD private (
-    private var stepSize: Double,
-    private var numIterations: Int,
-    private var miniBatchFraction: Double)
+    var stepSize: Double,
+    var numIterations: Int,
+    var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[LinearRegressionModel] with Serializable {
 
-  private val gradient = new LeastSquaresGradient()
-  private val updater = new SimpleUpdater()
-  override val optimizer = new GradientDescent(gradient, updater)
-    .setStepSize(stepSize)
+  val gradient = new LeastSquaresGradient()
+  val updater = new SimpleUpdater()
+  val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setMiniBatchFraction(miniBatchFraction)
 
   /**
-   * Construct a LinearRegression object with default parameters: {stepSize: 1.0,
-   * numIterations: 100, miniBatchFraction: 1.0}.
+   * Construct a LinearRegression object with default parameters
    */
   def this() = this(1.0, 100, 1.0)
 
-  override protected def createModel(weights: Vector, intercept: Double) = {
+  override def createModel(weights: Array[Double], intercept: Double) = {
     new LinearRegressionModel(weights, intercept)
   }
 }
@@ -99,9 +98,11 @@ object LinearRegressionWithSGD {
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double,
-      initialWeights: Vector): LinearRegressionModel = {
-    new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
-      .run(input, initialWeights)
+      initialWeights: Array[Double])
+    : LinearRegressionModel =
+  {
+    new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction).run(input,
+      initialWeights)
   }
 
   /**
@@ -119,7 +120,9 @@ object LinearRegressionWithSGD {
       input: RDD[LabeledPoint],
       numIterations: Int,
       stepSize: Double,
-      miniBatchFraction: Double): LinearRegressionModel = {
+      miniBatchFraction: Double)
+    : LinearRegressionModel =
+  {
     new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction).run(input)
   }
 
@@ -137,7 +140,9 @@ object LinearRegressionWithSGD {
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,
-      stepSize: Double): LinearRegressionModel = {
+      stepSize: Double)
+    : LinearRegressionModel =
+  {
     train(input, numIterations, stepSize, 1.0)
   }
 
@@ -153,7 +158,9 @@ object LinearRegressionWithSGD {
    */
   def train(
       input: RDD[LabeledPoint],
-      numIterations: Int): LinearRegressionModel = {
+      numIterations: Int)
+    : LinearRegressionModel =
+  {
     train(input, numIterations, 1.0, 1.0)
   }
 
@@ -165,7 +172,7 @@ object LinearRegressionWithSGD {
     val sc = new SparkContext(args(0), "LinearRegression")
     val data = MLUtils.loadLabeledData(sc, args(1))
     val model = LinearRegressionWithSGD.train(data, args(3).toInt, args(2).toDouble)
-    println("Weights: " + model.weights)
+    println("Weights: " + model.weights.mkString("[", ", ", "]"))
     println("Intercept: " + model.intercept)
 
     sc.stop()

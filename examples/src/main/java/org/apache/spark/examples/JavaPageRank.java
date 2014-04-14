@@ -17,10 +17,7 @@
 
 package org.apache.spark.examples;
 
-
 import scala.Tuple2;
-
-import com.google.common.collect.Iterables;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -29,9 +26,8 @@ import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
 import org.apache.spark.api.java.function.PairFunction;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Iterator;
+import java.util.ArrayList;
 import java.util.regex.Pattern;
 
 /**
@@ -70,7 +66,7 @@ public final class JavaPageRank {
     JavaRDD<String> lines = ctx.textFile(args[1], 1);
 
     // Loads all URLs from input file and initialize their neighbors.
-    JavaPairRDD<String, Iterable<String>> links = lines.mapToPair(new PairFunction<String, String, String>() {
+    JavaPairRDD<String, List<String>> links = lines.mapToPair(new PairFunction<String, String, String>() {
       @Override
       public Tuple2<String, String> call(String s) {
         String[] parts = SPACES.split(s);
@@ -79,9 +75,9 @@ public final class JavaPageRank {
     }).distinct().groupByKey().cache();
 
     // Loads all URLs with other URL(s) link to from input file and initialize ranks of them to one.
-    JavaPairRDD<String, Double> ranks = links.mapValues(new Function<Iterable<String>, Double>() {
+    JavaPairRDD<String, Double> ranks = links.mapValues(new Function<List<String>, Double>() {
       @Override
-      public Double call(Iterable<String> rs) {
+      public Double call(List<String> rs) {
         return 1.0;
       }
     });
@@ -90,13 +86,12 @@ public final class JavaPageRank {
     for (int current = 0; current < Integer.parseInt(args[2]); current++) {
       // Calculates URL contributions to the rank of other URLs.
       JavaPairRDD<String, Double> contribs = links.join(ranks).values()
-        .flatMapToPair(new PairFlatMapFunction<Tuple2<Iterable<String>, Double>, String, Double>() {
+        .flatMapToPair(new PairFlatMapFunction<Tuple2<List<String>, Double>, String, Double>() {
           @Override
-          public Iterable<Tuple2<String, Double>> call(Tuple2<Iterable<String>, Double> s) {
-	    int urlCount = Iterables.size(s._1);
+          public Iterable<Tuple2<String, Double>> call(Tuple2<List<String>, Double> s) {
             List<Tuple2<String, Double>> results = new ArrayList<Tuple2<String, Double>>();
-            for (String n : s._1) {
-              results.add(new Tuple2<String, Double>(n, s._2() / urlCount));
+            for (String n : s._1()) {
+              results.add(new Tuple2<String, Double>(n, s._2() / s._1().size()));
             }
             return results;
           }
@@ -117,6 +112,6 @@ public final class JavaPageRank {
         System.out.println(tuple._1() + " has rank: " + tuple._2() + ".");
     }
 
-    ctx.stop();
+    System.exit(0);
   }
 }

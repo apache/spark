@@ -32,24 +32,25 @@ import org.apache.spark.util.Utils
 /** Top level user interface for Spark */
 private[spark] class SparkUI(
     val sc: SparkContext,
-    val conf: SparkConf,
+    conf: SparkConf,
     val listenerBus: SparkListenerBus,
-    var appName: String,
+    val appName: String,
     val basePath: String = "")
-  extends WebUI("SparkUI") with Logging {
+  extends Logging {
 
   def this(sc: SparkContext) = this(sc, sc.conf, sc.listenerBus, sc.appName)
-  def this(listenerBus: SparkListenerBus, appName: String, basePath: String) =
-    this(null, new SparkConf, listenerBus, appName, basePath)
+  def this(conf: SparkConf, listenerBus: SparkListenerBus, appName: String, basePath: String) =
+    this(null, conf, listenerBus, appName, basePath)
 
   // If SparkContext is not provided, assume the associated application is not live
   val live = sc != null
 
   val securityManager = if (live) sc.env.securityManager else new SecurityManager(conf)
 
-  private val localHost = Utils.localHostName()
-  private val publicHost = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHost)
-  private val port = conf.getInt("spark.ui.port", SparkUI.DEFAULT_PORT)
+  private val bindHost = Utils.localHostName()
+  private val publicHost = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(bindHost)
+  private val port = conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
+  private var serverInfo: Option[ServerInfo] = None
 
   private val storage = new BlockManagerUI(this)
   private val jobs = new JobProgressUI(this)
@@ -69,16 +70,26 @@ private[spark] class SparkUI(
     metricsServletHandlers ++
     Seq[ServletContextHandler] (
       createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"),
-      createRedirectHandler("/", "/stages", basePath = basePath)
+      createRedirectHandler("/", "/stages", basePath)
     )
   }
 
   // Maintain executor storage status through Spark events
   val storageStatusListener = new StorageStatusListener
 
-  def setAppName(name: String) {
-    appName = name
+  /** Bind the HTTP server which backs this web interface */
+  def bind() {
+    try {
+      serverInfo = Some(startJettyServer(bindHost, port, handlers, sc.conf))
+      logInfo("Started Spark Web UI at http://%s:%d".format(publicHost, boundPort))
+    } catch {
+      case e: Exception =>
+        logError("Failed to create Spark JettyUtils", e)
+        System.exit(1)
+    }
   }
+
+  def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
 
   /** Initialize all components of the server */
   def start() {
@@ -95,34 +106,17 @@ private[spark] class SparkUI(
     listenerBus.addListener(exec.listener)
   }
 
-  /** Bind to the HTTP server behind this web interface. */
-  override def bind() {
-    try {
-      serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, sc.conf))
-      logInfo("Started Spark web UI at http://%s:%d".format(publicHost, boundPort))
-    } catch {
-      case e: Exception =>
-        logError("Failed to create Spark web UI", e)
-        System.exit(1)
-    }
-  }
-
-  /** Stop the server behind this web interface. Only valid after bind(). */
-  override def stop() {
-    super.stop()
+  def stop() {
+    assert(serverInfo.isDefined, "Attempted to stop a SparkUI that was not bound to a server!")
+    serverInfo.get.server.stop()
     logInfo("Stopped Spark Web UI at %s".format(appUIAddress))
   }
 
-  /**
-   * Return the application UI host:port. This does not include the scheme (http://).
-   */
-  private[spark] def appUIHostPort = publicHost + ":" + boundPort
-
-  private[spark] def appUIAddress = s"http://$appUIHostPort"
+  private[spark] def appUIAddress = "http://" + publicHost + ":" + boundPort
 
 }
 
 private[spark] object SparkUI {
-  val DEFAULT_PORT = 4040
+  val DEFAULT_PORT = "4040"
   val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
 }

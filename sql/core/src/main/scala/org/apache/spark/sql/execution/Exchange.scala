@@ -76,7 +76,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
  */
 object AddExchange extends Rule[SparkPlan] {
   // TODO: Determine the number of partitions.
-  val numPartitions = 150
+  val numPartitions = 8
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     case operator: SparkPlan =>

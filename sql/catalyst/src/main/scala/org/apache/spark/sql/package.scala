@@ -32,5 +32,18 @@ package object sql {
 
   type Row = catalyst.expressions.Row
 
-  val Row = catalyst.expressions.Row
+  object Row {
+    /**
+     * This method can be used to extract fields from a [[Row]] object in a pattern match. Example:
+     * {{{
+     * import org.apache.spark.sql._
+     *
+     * val pairs = sql("SELECT key, value FROM src").rdd.map {
+     *   case Row(key: Int, value: String) =>
+     *     key -> value
+     * }
+     * }}}
+     */
+    def unapplySeq(row: Row): Some[Seq[Any]] = Some(row)
+  }
 }

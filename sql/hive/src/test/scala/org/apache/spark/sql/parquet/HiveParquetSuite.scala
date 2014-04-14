@@ -17,138 +17,147 @@
 
 package org.apache.spark.sql.parquet
 
+import java.io.File
+
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Row}
-import org.apache.spark.sql.catalyst.types.{DataType, StringType, IntegerType}
-import org.apache.spark.sql.{parquet, SchemaRDD}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.getTempFilePath
 import org.apache.spark.sql.hive.TestHive
-import org.apache.spark.util.Utils
-
-// Implicits
-import org.apache.spark.sql.hive.TestHive._
 
 class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
+  val filename = getTempFilePath("parquettest").getCanonicalFile.toURI.toString
 
-  val dirname = Utils.createTempDir()
+  // runs a SQL and optionally resolves one Parquet table
+  def runQuery(
+      querystr: String,
+      tableName: Option[String] = None,
+      filename: Option[String] = None): Array[Row] = {
 
-  var testRDD: SchemaRDD = null
+    // call to resolve references in order to get CREATE TABLE AS to work
+    val query = TestHive
+      .parseSql(querystr)
+    val finalQuery =
+      if (tableName.nonEmpty && filename.nonEmpty)
+        resolveParquetTable(tableName.get, filename.get, query)
+      else
+        query
+    TestHive.executePlan(finalQuery)
+      .toRdd
+      .collect()
+  }
+
+  // stores a query output to a Parquet file
+  def storeQuery(querystr: String, filename: String): Unit = {
+    val query = WriteToFile(
+      filename,
+      TestHive.parseSql(querystr))
+    TestHive
+      .executePlan(query)
+      .stringResult()
+  }
+
+  /**
+   * TODO: This function is necessary as long as there is no notion of a Catalog for
+   * Parquet tables. Once such a thing exists this functionality should be moved there.
+   */
+  def resolveParquetTable(tableName: String, filename: String, plan: LogicalPlan): LogicalPlan = {
+    TestHive.loadTestTable("src") // may not be loaded now
+    plan.transform {
+      case relation @ UnresolvedRelation(databaseName, name, alias) =>
+        if (name == tableName)
+          ParquetRelation(tableName, filename)
+        else
+          relation
+      case op @ InsertIntoCreatedTable(databaseName, name, child) =>
+        if (name == tableName) {
+          // note: at this stage the plan is not yet analyzed but Parquet needs to know the schema
+          // and for that we need the child to be resolved
+          val relation = ParquetRelation.create(
+              filename,
+              TestHive.analyzer(child),
+              TestHive.sparkContext.hadoopConfiguration,
+              Some(tableName))
+          InsertIntoTable(
+            relation.asInstanceOf[BaseRelation],
+            Map.empty,
+            child,
+            overwrite = false)
+        } else
+          op
+    }
+  }
 
   override def beforeAll() {
     // write test data
-    ParquetTestData.writeFile
-    testRDD = parquetFile(ParquetTestData.testDir.toString)
-    testRDD.registerAsTable("testsource")
+    ParquetTestData.writeFile()
+    // Override initial Parquet test table
+    TestHive.catalog.registerTable(Some[String]("parquet"), "testsource", ParquetTestData.testData)
   }
 
   override def afterAll() {
-    Utils.deleteRecursively(ParquetTestData.testDir)
-    Utils.deleteRecursively(dirname)
-    reset() // drop all tables that were registered as part of the tests
+    ParquetTestData.testFile.delete()
   }
 
-  // in case tests are failing we delete before and after each test
   override def beforeEach() {
-    Utils.deleteRecursively(dirname)
+    new File(filename).getAbsoluteFile.delete()
   }
 
   override def afterEach() {
-    Utils.deleteRecursively(dirname)
+    new File(filename).getAbsoluteFile.delete()
   }
 
   test("SELECT on Parquet table") {
-    val rdd = hql("SELECT * FROM testsource").collect()
+    val rdd = runQuery("SELECT * FROM parquet.testsource")
     assert(rdd != null)
     assert(rdd.forall(_.size == 6))
   }
 
   test("Simple column projection + filter on Parquet table") {
-    val rdd = hql("SELECT myboolean, mylong FROM testsource WHERE myboolean=true").collect()
+    val rdd = runQuery("SELECT myboolean, mylong FROM parquet.testsource WHERE myboolean=true")
     assert(rdd.size === 5, "Filter returned incorrect number of rows")
     assert(rdd.forall(_.getBoolean(0)), "Filter returned incorrect Boolean field value")
   }
 
-  test("Converting Hive to Parquet Table via saveAsParquetFile") {
-    hql("SELECT * FROM src").saveAsParquetFile(dirname.getAbsolutePath)
-    parquetFile(dirname.getAbsolutePath).registerAsTable("ptable")
-    val rddOne = hql("SELECT * FROM src").collect().sortBy(_.getInt(0))
-    val rddTwo = hql("SELECT * from ptable").collect().sortBy(_.getInt(0))
+  test("Converting Hive to Parquet Table via WriteToFile") {
+    storeQuery("SELECT * FROM src", filename)
+    val rddOne = runQuery("SELECT * FROM src").sortBy(_.getInt(0))
+    val rddTwo = runQuery("SELECT * from ptable", Some("ptable"), Some(filename)).sortBy(_.getInt(0))
     compareRDDs(rddOne, rddTwo, "src (Hive)", Seq("key:Int", "value:String"))
   }
 
   test("INSERT OVERWRITE TABLE Parquet table") {
-    hql("SELECT * FROM testsource").saveAsParquetFile(dirname.getAbsolutePath)
-    parquetFile(dirname.getAbsolutePath).registerAsTable("ptable")
-    // let's do three overwrites for good measure
-    hql("INSERT OVERWRITE TABLE ptable SELECT * FROM testsource").collect()
-    hql("INSERT OVERWRITE TABLE ptable SELECT * FROM testsource").collect()
-    hql("INSERT OVERWRITE TABLE ptable SELECT * FROM testsource").collect()
-    val rddCopy = hql("SELECT * FROM ptable").collect()
-    val rddOrig = hql("SELECT * FROM testsource").collect()
-    assert(rddCopy.size === rddOrig.size, "INSERT OVERWRITE changed size of table??")
-    compareRDDs(rddOrig, rddCopy, "testsource", ParquetTestData.testSchemaFieldNames)
+    storeQuery("SELECT * FROM parquet.testsource", filename)
+    runQuery("INSERT OVERWRITE TABLE ptable SELECT * FROM parquet.testsource", Some("ptable"), Some(filename))
+    runQuery("INSERT OVERWRITE TABLE ptable SELECT * FROM parquet.testsource", Some("ptable"), Some(filename))
+    val rddCopy = runQuery("SELECT * FROM ptable", Some("ptable"), Some(filename))
+    val rddOrig = runQuery("SELECT * FROM parquet.testsource")
+    compareRDDs(rddOrig, rddCopy, "parquet.testsource", ParquetTestData.testSchemaFieldNames)
   }
 
-  test("CREATE TABLE of Parquet table") {
-    createParquetFile(dirname.getAbsolutePath, ("key", IntegerType), ("value", StringType))
-      .registerAsTable("tmp")
-    val rddCopy =
-      hql("INSERT INTO TABLE tmp SELECT * FROM src")
-      .collect()
+  test("CREATE TABLE AS Parquet table") {
+    runQuery("CREATE TABLE ptable AS SELECT * FROM src", Some("ptable"), Some(filename))
+    val rddCopy = runQuery("SELECT * FROM ptable", Some("ptable"), Some(filename))
       .sortBy[Int](_.apply(0) match {
         case x: Int => x
         case _ => 0
       })
-    val rddOrig = hql("SELECT * FROM src")
-      .collect()
-      .sortBy(_.getInt(0))
+    val rddOrig = runQuery("SELECT * FROM src").sortBy(_.getInt(0))
     compareRDDs(rddOrig, rddCopy, "src (Hive)", Seq("key:Int", "value:String"))
-  }
-
-  test("Appending to Parquet table") {
-    createParquetFile(dirname.getAbsolutePath, ("key", IntegerType), ("value", StringType))
-      .registerAsTable("tmpnew")
-    hql("INSERT INTO TABLE tmpnew SELECT * FROM src").collect()
-    hql("INSERT INTO TABLE tmpnew SELECT * FROM src").collect()
-    hql("INSERT INTO TABLE tmpnew SELECT * FROM src").collect()
-    val rddCopies = hql("SELECT * FROM tmpnew").collect()
-    val rddOrig = hql("SELECT * FROM src").collect()
-    assert(rddCopies.size === 3 * rddOrig.size, "number of copied rows via INSERT INTO did not match correct number")
-  }
-
-  test("Appending to and then overwriting Parquet table") {
-    createParquetFile(dirname.getAbsolutePath, ("key", IntegerType), ("value", StringType))
-      .registerAsTable("tmp")
-    hql("INSERT INTO TABLE tmp SELECT * FROM src").collect()
-    hql("INSERT INTO TABLE tmp SELECT * FROM src").collect()
-    hql("INSERT OVERWRITE TABLE tmp SELECT * FROM src").collect()
-    val rddCopies = hql("SELECT * FROM tmp").collect()
-    val rddOrig = hql("SELECT * FROM src").collect()
-    assert(rddCopies.size === rddOrig.size, "INSERT OVERWRITE did not actually overwrite")
   }
 
   private def compareRDDs(rddOne: Array[Row], rddTwo: Array[Row], tableName: String, fieldNames: Seq[String]) {
     var counter = 0
     (rddOne, rddTwo).zipped.foreach {
       (a,b) => (a,b).zipped.toArray.zipWithIndex.foreach {
+        case ((value_1:Array[Byte], value_2:Array[Byte]), index) =>
+          assert(new String(value_1) === new String(value_2), s"table $tableName row $counter field ${fieldNames(index)} don't match")
         case ((value_1, value_2), index) =>
           assert(value_1 === value_2, s"table $tableName row $counter field ${fieldNames(index)} don't match")
       }
     counter = counter + 1
     }
-  }
-
-  /**
-   * Creates an empty SchemaRDD backed by a ParquetRelation.
-   *
-   * TODO: since this is so experimental it is better to have it here and not
-   * in SQLContext. Also note that when creating new AttributeReferences
-   * one needs to take care not to create duplicate Attribute ID's.
-   */
-  private def createParquetFile(path: String, schema: (Tuple2[String, DataType])*): SchemaRDD = {
-    val attributes = schema.map(t => new AttributeReference(t._1, t._2)())
-    new SchemaRDD(
-      TestHive,
-      parquet.ParquetRelation.createEmpty(path, attributes, sparkContext.hadoopConfiguration))
   }
 }

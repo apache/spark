@@ -29,10 +29,9 @@ import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.Page.Environment
 
 private[ui] class EnvironmentUI(parent: SparkUI) {
+  private val appName = parent.appName
   private val basePath = parent.basePath
   private var _listener: Option[EnvironmentListener] = None
-
-  private def appName = parent.appName
 
   lazy val listener = _listener.get
 

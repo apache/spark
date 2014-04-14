@@ -21,7 +21,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseVector => BDV, Vector => BV, norm => breezeNorm}
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -38,17 +37,13 @@ import org.apache.spark.util.random.XORShiftRandom
  * to it should be cached by the user.
  */
 class KMeans private (
-    private var k: Int,
-    private var maxIterations: Int,
-    private var runs: Int,
-    private var initializationMode: String,
-    private var initializationSteps: Int,
-    private var epsilon: Double) extends Serializable with Logging {
-
-  /**
-   * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
-   * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4}.
-   */
+    var k: Int,
+    var maxIterations: Int,
+    var runs: Int,
+    var initializationMode: String,
+    var initializationSteps: Int,
+    var epsilon: Double)
+  extends Serializable with Logging {
   def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4)
 
   /** Set the number of clusters to create (k). Default: 2. */
@@ -77,7 +72,6 @@ class KMeans private (
   }
 
   /**
-   * :: Experimental ::
    * Set the number of runs of the algorithm to execute in parallel. We initialize the algorithm
    * this many times with random starting conditions (configured by the initialization mode), then
    * return the best clustering found over any run. Default: 1.
@@ -323,34 +317,13 @@ object KMeans {
       data: RDD[Vector],
       k: Int,
       maxIterations: Int,
-      runs: Int,
-      initializationMode: String): KMeansModel = {
+      runs: Int = 1,
+      initializationMode: String = K_MEANS_PARALLEL): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
       .run(data)
-  }
-
-  /**
-   * Trains a k-means model using specified parameters and the default values for unspecified.
-   */
-  def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int): KMeansModel = {
-    train(data, k, maxIterations, 1, K_MEANS_PARALLEL)
-  }
-
-  /**
-   * Trains a k-means model using specified parameters and the default values for unspecified.
-   */
-  def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int): KMeansModel = {
-    train(data, k, maxIterations, runs, K_MEANS_PARALLEL)
   }
 
   /**
@@ -397,7 +370,6 @@ object KMeans {
     MLUtils.fastSquaredDistance(v1.vector, v1.norm, v2.vector, v2.norm)
   }
 
-  @Experimental
   def main(args: Array[String]) {
     if (args.length < 4) {
       println("Usage: KMeans <master> <input_file> <k> <max_iterations> [<runs>]")

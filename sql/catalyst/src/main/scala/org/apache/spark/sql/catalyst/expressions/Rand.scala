@@ -17,18 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.Random
 import org.apache.spark.sql.catalyst.types.DoubleType
 
-
 case object Rand extends LeafExpression {
-  override def dataType = DoubleType
-  override def nullable = false
-  override def references = Set.empty
-
-  private[this] lazy val rand = new Random
-
-  override def eval(input: Row = null) = rand.nextDouble().asInstanceOf[EvaluatedType]
-
+  def dataType = DoubleType
+  def nullable = false
+  def references = Set.empty
   override def toString = "RAND()"
 }

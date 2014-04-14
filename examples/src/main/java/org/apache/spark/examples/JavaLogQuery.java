@@ -126,6 +126,6 @@ public final class JavaLogQuery {
     for (Tuple2<?,?> t : output) {
       System.out.println(t._1() + "\t" + t._2());
     }
-    jsc.stop();
+    System.exit(0);
   }
 }

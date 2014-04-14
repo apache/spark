@@ -51,7 +51,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
    * Return a new DStream by applying `groupByKey` to each RDD. Hash partitioning is used to
    * generate the RDDs with Spark's default number of partitions.
    */
-  def groupByKey(): DStream[(K, Iterable[V])] = {
+  def groupByKey(): DStream[(K, Seq[V])] = {
     groupByKey(defaultPartitioner())
   }
 
@@ -59,7 +59,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
    * Return a new DStream by applying `groupByKey` to each RDD. Hash partitioning is used to
    * generate the RDDs with `numPartitions` partitions.
    */
-  def groupByKey(numPartitions: Int): DStream[(K, Iterable[V])] = {
+  def groupByKey(numPartitions: Int): DStream[(K, Seq[V])] = {
     groupByKey(defaultPartitioner(numPartitions))
   }
 
@@ -67,12 +67,12 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
    * Return a new DStream by applying `groupByKey` on each RDD. The supplied
    * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
    */
-  def groupByKey(partitioner: Partitioner): DStream[(K, Iterable[V])] = {
+  def groupByKey(partitioner: Partitioner): DStream[(K, Seq[V])] = {
     val createCombiner = (v: V) => ArrayBuffer[V](v)
     val mergeValue = (c: ArrayBuffer[V], v: V) => (c += v)
     val mergeCombiner = (c1: ArrayBuffer[V], c2: ArrayBuffer[V]) => (c1 ++ c2)
     combineByKey(createCombiner, mergeValue, mergeCombiner, partitioner)
-      .asInstanceOf[DStream[(K, Iterable[V])]]
+      .asInstanceOf[DStream[(K, Seq[V])]]
   }
 
   /**
@@ -126,7 +126,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    */
-  def groupByKeyAndWindow(windowDuration: Duration): DStream[(K, Iterable[V])] = {
+  def groupByKeyAndWindow(windowDuration: Duration): DStream[(K, Seq[V])] = {
     groupByKeyAndWindow(windowDuration, self.slideDuration, defaultPartitioner())
   }
 
@@ -140,8 +140,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
    *                       the new DStream will generate RDDs); must be a multiple of this
    *                       DStream's batching interval
    */
-  def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration)
-      : DStream[(K, Iterable[V])] =
+  def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration): DStream[(K, Seq[V])] =
   {
     groupByKeyAndWindow(windowDuration, slideDuration, defaultPartitioner())
   }
@@ -162,7 +161,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
       windowDuration: Duration,
       slideDuration: Duration,
       numPartitions: Int
-    ): DStream[(K, Iterable[V])] = {
+    ): DStream[(K, Seq[V])] = {
     groupByKeyAndWindow(windowDuration, slideDuration, defaultPartitioner(numPartitions))
   }
 
@@ -181,14 +180,14 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
       windowDuration: Duration,
       slideDuration: Duration,
       partitioner: Partitioner
-    ): DStream[(K, Iterable[V])] = {
-    val createCombiner = (v: Iterable[V]) => new ArrayBuffer[V] ++= v
-    val mergeValue = (buf: ArrayBuffer[V], v: Iterable[V]) => buf ++= v
+    ): DStream[(K, Seq[V])] = {
+    val createCombiner = (v: Seq[V]) => new ArrayBuffer[V] ++= v
+    val mergeValue = (buf: ArrayBuffer[V], v: Seq[V]) => buf ++= v
     val mergeCombiner = (buf1: ArrayBuffer[V], buf2: ArrayBuffer[V]) => buf1 ++= buf2
     self.groupByKey(partitioner)
         .window(windowDuration, slideDuration)
         .combineByKey[ArrayBuffer[V]](createCombiner, mergeValue, mergeCombiner, partitioner)
-        .asInstanceOf[DStream[(K, Iterable[V])]]
+        .asInstanceOf[DStream[(K, Seq[V])]]
   }
 
   /**
@@ -439,7 +438,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
    * Hash partitioning is used to generate the RDDs with Spark's default number
    * of partitions.
    */
-  def cogroup[W: ClassTag](other: DStream[(K, W)]): DStream[(K, (Iterable[V], Iterable[W]))] = {
+  def cogroup[W: ClassTag](other: DStream[(K, W)]): DStream[(K, (Seq[V], Seq[W]))] = {
     cogroup(other, defaultPartitioner())
   }
 
@@ -448,7 +447,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
    * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
    */
   def cogroup[W: ClassTag](other: DStream[(K, W)], numPartitions: Int)
-  : DStream[(K, (Iterable[V], Iterable[W]))] = {
+  : DStream[(K, (Seq[V], Seq[W]))] = {
     cogroup(other, defaultPartitioner(numPartitions))
   }
 
@@ -459,7 +458,7 @@ class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
   def cogroup[W: ClassTag](
       other: DStream[(K, W)],
       partitioner: Partitioner
-    ): DStream[(K, (Iterable[V], Iterable[W]))] = {
+    ): DStream[(K, (Seq[V], Seq[W]))] = {
     self.transformWith(
       other,
       (rdd1: RDD[(K, V)], rdd2: RDD[(K, W)]) => rdd1.cogroup(rdd2, partitioner)

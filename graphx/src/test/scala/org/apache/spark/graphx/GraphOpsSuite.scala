@@ -55,7 +55,7 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
       }
     }
   }
-
+  
   test ("filter") {
     withSpark { sc =>
       val n = 5

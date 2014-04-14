@@ -87,20 +87,11 @@ def merge_pr(pr_num, target_ref):
   run_cmd("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, target_ref, target_branch_name))
   run_cmd("git checkout %s" % target_branch_name)
   
-  had_conflicts = False
-  try:
-    run_cmd(['git', 'merge', pr_branch_name, '--squash'])
-  except Exception as e:
-    msg = "Error merging: %s\nWould you like to manually fix-up this merge?" % e
-    continue_maybe(msg)
-    msg = "Okay, please fix any conflicts and 'git add' conflicting files... Finished?"
-    continue_maybe(msg)
-    had_conflicts = True
+  run_cmd(['git', 'merge', pr_branch_name, '--squash'])
 
   commit_authors = run_cmd(['git', 'log', 'HEAD..%s' % pr_branch_name, 
     '--pretty=format:%an <%ae>']).split("\n")
-  distinct_authors = sorted(set(commit_authors), key=lambda x: commit_authors.count(x), 
-    reverse=True)
+  distinct_authors = sorted(set(commit_authors), key=lambda x: commit_authors.count(x), reverse=True)
   primary_author = distinct_authors[0]
   commits = run_cmd(['git', 'log', 'HEAD..%s' % pr_branch_name, 
     '--pretty=format:%h [%an] %s']).split("\n\n")
@@ -113,13 +104,6 @@ def merge_pr(pr_num, target_ref):
   authors = "\n".join(["Author: %s" % a for a in distinct_authors])
 
   merge_message_flags += ["-m", authors]
-
-  if had_conflicts:
-    committer_name = run_cmd("git config --get user.name").strip()
-    committer_email = run_cmd("git config --get user.email").strip()
-    message = "This patch had conflicts when merged, resolved by\nCommitter: %s <%s>" % (
-      committer_name, committer_email)
-    merge_message_flags += ["-m", message]
 
   # The string "Closes #%s" string is required for GitHub to correctly close the PR
   merge_message_flags += ["-m",
@@ -202,10 +186,8 @@ if pr["merged"] == True:
   maybe_cherry_pick(pr_num, merge_hash, latest_branch)
   sys.exit(0)
 
-if not bool(pr["mergeable"]):
-  msg = "Pull request %s is not mergeable in its current form.\n" % pr_num + \
-    "Continue? (experts only!)"
-  continue_maybe(msg)
+if bool(pr["mergeable"]) == False:
+  fail("Pull request %s is not mergeable in its current form" % pr_num)
 
 print ("\n=== Pull Request #%s ===" % pr_num)
 print("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (

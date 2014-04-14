@@ -138,6 +138,6 @@ public final class JavaHdfsLR {
 
     System.out.print("Final w: ");
     printWeights(w);
-    sc.stop();
+    System.exit(0);
   }
 }

@@ -51,7 +51,7 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
                                        .map(x => (x._1, x._2.getCheckpointFile.get))
     logDebug("Current checkpoint files:\n" + checkpointFiles.toSeq.mkString("\n"))
 
-    // Add the checkpoint files to the data to be serialized
+    // Add the checkpoint files to the data to be serialized 
     if (!checkpointFiles.isEmpty) {
       currentCheckpointFiles.clear()
       currentCheckpointFiles ++= checkpointFiles

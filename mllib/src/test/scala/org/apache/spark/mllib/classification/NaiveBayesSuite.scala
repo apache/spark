@@ -19,9 +19,9 @@ package org.apache.spark.mllib.classification
 
 import scala.util.Random
 
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.LocalSparkContext
 
@@ -54,7 +54,7 @@ object NaiveBayesSuite {
         if (rnd.nextDouble() < _theta(y)(j)) 1 else 0
       }
 
-      LabeledPoint(y, Vectors.dense(xi))
+      LabeledPoint(y, xi)
     }
   }
 }

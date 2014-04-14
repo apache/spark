@@ -16,22 +16,18 @@
  */
 
 package org.apache.spark.broadcast
-
 import org.apache.spark.SecurityManager
+
 import org.apache.spark.SparkConf
-import org.apache.spark.annotation.DeveloperApi
 
 /**
- * :: DeveloperApi ::
- * An interface for all the broadcast implementations in Spark (to allow
+ * An interface for all the broadcast implementations in Spark (to allow 
  * multiple broadcast implementations). SparkContext uses a user-specified
  * BroadcastFactory implementation to instantiate a particular broadcast for the
  * entire Spark job.
  */
-@DeveloperApi
 trait BroadcastFactory {
-  def initialize(isDriver: Boolean, conf: SparkConf, securityMgr: SecurityManager): Unit
+  def initialize(isDriver: Boolean, conf: SparkConf,  securityMgr: SecurityManager): Unit
   def newBroadcast[T](value: T, isLocal: Boolean, id: Long): Broadcast[T]
-  def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit
   def stop(): Unit
 }

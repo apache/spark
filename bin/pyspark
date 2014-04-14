@@ -55,8 +55,7 @@ if [ -n "$IPYTHON_OPTS" ]; then
   IPYTHON=1
 fi
 
-# Only use ipython if no command line arguments were provided [SPARK-1134]
-if [[ "$IPYTHON" = "1" && $# = 0 ]] ; then
+if [[ "$IPYTHON" = "1" ]] ; then
   exec ipython $IPYTHON_OPTS
 else
   exec "$PYSPARK_PYTHON" "$@"

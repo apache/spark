@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.types
 
-import java.sql.Timestamp
-
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -51,16 +49,6 @@ case object BooleanType extends NativeType {
   type JvmType = Boolean
   @transient lazy val tag = typeTag[JvmType]
   val ordering = implicitly[Ordering[JvmType]]
-}
-
-case object TimestampType extends NativeType {
-  type JvmType = Timestamp
-
-  @transient lazy val tag = typeTag[JvmType]
-
-  val ordering = new Ordering[JvmType] {
-    def compare(x: Timestamp, y: Timestamp) = x.compareTo(y)
-  }
 }
 
 abstract class NumericType extends NativeType {

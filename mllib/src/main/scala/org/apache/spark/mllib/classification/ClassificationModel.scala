@@ -17,27 +17,22 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 
-/**
- * Represents a classification model that predicts to which of a set of categories an example
- * belongs. The categories are represented by double values: 0.0, 1.0, 2.0, etc.
- */
 trait ClassificationModel extends Serializable {
   /**
    * Predict values for the given data set using the model trained.
    *
    * @param testData RDD representing data points to be predicted
-   * @return an RDD[Double] where each entry contains the corresponding prediction
+   * @return RDD[Int] where each entry contains the corresponding prediction
    */
-  def predict(testData: RDD[Vector]): RDD[Double]
+  def predict(testData: RDD[Array[Double]]): RDD[Double]
 
   /**
    * Predict values for a single data point using the model trained.
    *
    * @param testData array representing a single data point
-   * @return predicted category from the trained model
+   * @return Int prediction from the trained model
    */
-  def predict(testData: Vector): Double
+  def predict(testData: Array[Double]): Double
 }

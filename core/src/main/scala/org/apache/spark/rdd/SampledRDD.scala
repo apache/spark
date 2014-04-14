@@ -33,7 +33,7 @@ class SampledRDDPartition(val prev: Partition, val seed: Int) extends Partition 
 }
 
 @deprecated("Replaced by PartitionwiseSampledRDD", "1.0.0")
-private[spark] class SampledRDD[T: ClassTag](
+class SampledRDD[T: ClassTag](
     prev: RDD[T],
     withReplacement: Boolean,
     frac: Double,

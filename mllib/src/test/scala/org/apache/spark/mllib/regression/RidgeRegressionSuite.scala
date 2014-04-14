@@ -17,9 +17,8 @@
 
 package org.apache.spark.mllib.regression
 
-import org.scalatest.FunSuite
-
 import org.jblas.DoubleMatrix
+import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.util.{LinearDataGenerator, LocalSparkContext}
 
@@ -31,22 +30,22 @@ class RidgeRegressionSuite extends FunSuite with LocalSparkContext {
     }.reduceLeft(_ + _) / predictions.size
   }
 
-  test("ridge regression can help avoid overfitting") {
-
-    // For small number of examples and large variance of error distribution,
-    // ridge regression should give smaller generalization error that linear regression.
-
-    val numExamples = 50
-    val numFeatures = 20
+  test("regularization with skewed weights") {
+    val nexamples = 200
+    val nfeatures = 20
+    val eps = 10
 
     org.jblas.util.Random.seed(42)
     // Pick weights as random values distributed uniformly in [-0.5, 0.5]
-    val w = DoubleMatrix.rand(numFeatures, 1).subi(0.5)
+    val w = DoubleMatrix.rand(nfeatures, 1).subi(0.5)
+    // Set first two weights to eps
+    w.put(0, 0, eps)
+    w.put(1, 0, eps)
 
     // Use half of data for training and other half for validation
-    val data = LinearDataGenerator.generateLinearInput(3.0, w.toArray, 2 * numExamples, 42, 10.0)
-    val testData = data.take(numExamples)
-    val validationData = data.takeRight(numExamples)
+    val data = LinearDataGenerator.generateLinearInput(3.0, w.toArray, 2*nexamples, 42, eps)
+    val testData = data.take(nexamples)
+    val validationData = data.takeRight(nexamples)
 
     val testRDD = sc.parallelize(testData, 2).cache()
     val validationRDD = sc.parallelize(validationData, 2).cache()
@@ -68,7 +67,7 @@ class RidgeRegressionSuite extends FunSuite with LocalSparkContext {
     val ridgeErr = predictionError(
         ridgeModel.predict(validationRDD.map(_.features)).collect(), validationData)
 
-    // Ridge validation error should be lower than linear regression.
+    // Ridge CV-error should be lower than linear regression
     assert(ridgeErr < linearErr,
       "ridgeError (" + ridgeErr + ") was not less than linearError(" + linearErr + ")")
   }

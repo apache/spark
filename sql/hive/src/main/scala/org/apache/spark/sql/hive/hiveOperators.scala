@@ -106,7 +106,7 @@ case class HiveTableScan(
   }
 
   private def castFromString(value: String, dataType: DataType) = {
-    Cast(Literal(value), dataType).eval(null)
+    Cast(Literal(value), dataType).apply(null)
   }
 
   @transient
@@ -134,7 +134,7 @@ case class HiveTableScan(
         // Only partitioned values are needed here, since the predicate has already been bound to
         // partition key attribute references.
         val row = new GenericRow(castedValues.toArray)
-        shouldKeep.eval(row).asInstanceOf[Boolean]
+        shouldKeep.apply(row).asInstanceOf[Boolean]
       }
     }
   }

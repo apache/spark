@@ -69,7 +69,7 @@ object TestObject {
 
 class TestClass extends Serializable {
   var x = 5
-
+  
   def getX = x
 
   def run(): Int = {

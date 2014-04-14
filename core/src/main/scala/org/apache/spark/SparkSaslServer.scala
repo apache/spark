@@ -64,7 +64,7 @@ private[spark] class SparkSaslServer(securityMgr: SecurityManager) extends Loggi
   }
 
   /**
-   * Disposes of any system resources or security-sensitive information the
+   * Disposes of any system resources or security-sensitive information the 
    * SaslServer might be using.
    */
   def dispose() {
@@ -88,7 +88,7 @@ private[spark] class SparkSaslServer(securityMgr: SecurityManager) extends Loggi
   private class SparkSaslDigestCallbackHandler(securityMgr: SecurityManager)
     extends CallbackHandler {
 
-    private val userName: String =
+    private val userName: String = 
       SparkSaslServer.encodeIdentifier(securityMgr.getSaslUser().getBytes())
 
     override def handle(callbacks: Array[Callback]) {
@@ -123,7 +123,7 @@ private[spark] class SparkSaslServer(securityMgr: SecurityManager) extends Loggi
             ac.setAuthorizedID(authzid)
           }
         }
-        case cb: Callback => throw
+        case cb: Callback => throw 
           new UnsupportedCallbackException(cb, "handle: Unrecognized SASL DIGEST-MD5 Callback")
       }
     }

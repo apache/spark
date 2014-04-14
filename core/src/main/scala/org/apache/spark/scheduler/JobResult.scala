@@ -17,17 +17,12 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.annotation.DeveloperApi
-
 /**
- * :: DeveloperApi ::
  * A result of a job in the DAGScheduler.
  */
-@DeveloperApi
-sealed trait JobResult
+private[spark] sealed trait JobResult
 
-@DeveloperApi
-case object JobSucceeded extends JobResult
+private[spark] case object JobSucceeded extends JobResult
 
-@DeveloperApi
-private[spark] case class JobFailed(exception: Exception) extends JobResult
+// A failed stage ID of -1 means there is not a particular stage that caused the failure
+private[spark] case class JobFailed(exception: Exception, failedStageId: Int) extends JobResult

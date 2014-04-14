@@ -21,7 +21,6 @@ import scala.collection.Map
 import scala.collection.mutable
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
 private[spark]
@@ -48,25 +47,18 @@ class StorageStatus(
   }
 }
 
-@DeveloperApi
 private[spark]
-class RDDInfo(
-  val id: Int,
-  val name: String,
-  val numPartitions: Int,
-  val storageLevel: StorageLevel) extends Ordered[RDDInfo] {
+class RDDInfo(val id: Int, val name: String, val numPartitions: Int, val storageLevel: StorageLevel)
+  extends Ordered[RDDInfo] {
 
   var numCachedPartitions = 0
   var memSize = 0L
   var diskSize = 0L
-  var tachyonSize= 0L
 
   override def toString = {
-    import Utils.bytesToString
-    ("RDD \"%s\" (%d) Storage: %s; CachedPartitions: %d; TotalPartitions: %d; MemorySize: %s;" +
-      "TachyonSize: %s; DiskSize: %s").format(
-        name, id, storageLevel.toString, numCachedPartitions, numPartitions,
-        bytesToString(memSize), bytesToString(tachyonSize), bytesToString(diskSize))
+    ("RDD \"%s\" (%d) Storage: %s; CachedPartitions: %d; TotalPartitions: %d; MemorySize: %s; " +
+       "DiskSize: %s").format(name, id, storageLevel.toString, numCachedPartitions,
+         numPartitions, Utils.bytesToString(memSize), Utils.bytesToString(diskSize))
   }
 
   override def compare(that: RDDInfo) = {
@@ -113,17 +105,14 @@ object StorageUtils {
     val rddInfoMap = rddInfos.map { info => (info.id, info) }.toMap
 
     val rddStorageInfos = blockStatusMap.flatMap { case (rddId, blocks) =>
-      // Add up memory, disk and Tachyon sizes
-      val persistedBlocks =
-        blocks.filter { status => status.memSize + status.diskSize + status.tachyonSize > 0 }
+      // Add up memory and disk sizes
+      val persistedBlocks = blocks.filter { status => status.memSize + status.diskSize > 0 }
       val memSize = persistedBlocks.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
       val diskSize = persistedBlocks.map(_.diskSize).reduceOption(_ + _).getOrElse(0L)
-      val tachyonSize = persistedBlocks.map(_.tachyonSize).reduceOption(_ + _).getOrElse(0L)
       rddInfoMap.get(rddId).map { rddInfo =>
         rddInfo.numCachedPartitions = persistedBlocks.length
         rddInfo.memSize = memSize
         rddInfo.diskSize = diskSize
-        rddInfo.tachyonSize = tachyonSize
         rddInfo
       }
     }.toArray

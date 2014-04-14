@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.columnar
 
-import org.apache.spark.sql.{QueryTest, TestData}
 import org.apache.spark.sql.execution.SparkLogicalPlan
 import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.{TestData, DslQuerySuite}
 
-class ColumnarQuerySuite extends QueryTest {
+class ColumnarQuerySuite extends DslQuerySuite {
   import TestData._
   import TestSQLContext._
 
@@ -29,14 +29,6 @@ class ColumnarQuerySuite extends QueryTest {
     val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
     val scan = SparkLogicalPlan(InMemoryColumnarTableScan(plan.output, plan))
 
-    checkAnswer(scan, testData.collect().toSeq)
-  }
-
-  test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
-    val plan = TestSQLContext.executePlan(testData.logicalPlan).executedPlan
-    val scan = SparkLogicalPlan(InMemoryColumnarTableScan(plan.output, plan))
-
-    checkAnswer(scan, testData.collect().toSeq)
     checkAnswer(scan, testData.collect().toSeq)
   }
 }

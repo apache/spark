@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.sql.Timestamp
-
 import scala.language.implicitConversions
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -70,11 +68,10 @@ package object dsl {
     def > (other: Expression) = GreaterThan(expr, other)
     def >= (other: Expression) = GreaterThanOrEqual(expr, other)
     def === (other: Expression) = Equals(expr, other)
-    def !== (other: Expression) = Not(Equals(expr, other))
+    def != (other: Expression) = Not(Equals(expr, other))
 
     def like(other: Expression) = Like(expr, other)
     def rlike(other: Expression) = RLike(expr, other)
-    def cast(to: DataType) = Cast(expr, to)
 
     def asc = SortOrder(expr, Ascending)
     def desc = SortOrder(expr, Descending)
@@ -87,24 +84,17 @@ package object dsl {
       def expr = e
     }
 
-    implicit def booleanToLiteral(b: Boolean) = Literal(b)
-    implicit def byteToLiteral(b: Byte) = Literal(b)
-    implicit def shortToLiteral(s: Short) = Literal(s)
     implicit def intToLiteral(i: Int) = Literal(i)
     implicit def longToLiteral(l: Long) = Literal(l)
     implicit def floatToLiteral(f: Float) = Literal(f)
     implicit def doubleToLiteral(d: Double) = Literal(d)
     implicit def stringToLiteral(s: String) = Literal(s)
-    implicit def decimalToLiteral(d: BigDecimal) = Literal(d)
-    implicit def timestampToLiteral(t: Timestamp) = Literal(t)
-    implicit def binaryToLiteral(a: Array[Byte]) = Literal(a)
 
     implicit def symbolToUnresolvedAttribute(s: Symbol) = analysis.UnresolvedAttribute(s.name)
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s = sym.name }
-    // TODO more implicit class for literal?
     implicit class DslString(val s: String) extends ImplicitOperators {
-      override def expr: Expression = Literal(s)
+      def expr: Expression = Literal(s)
       def attr = analysis.UnresolvedAttribute(s)
     }
 
@@ -113,38 +103,11 @@ package object dsl {
       def expr = attr
       def attr = analysis.UnresolvedAttribute(s)
 
-      /** Creates a new AttributeReference of type boolean */
-      def boolean = AttributeReference(s, BooleanType, nullable = false)()
-
-      /** Creates a new AttributeReference of type byte */
-      def byte = AttributeReference(s, ByteType, nullable = false)()
-
-      /** Creates a new AttributeReference of type short */
-      def short = AttributeReference(s, ShortType, nullable = false)()
-
-      /** Creates a new AttributeReference of type int */
+      /** Creates a new typed attributes of type int */
       def int = AttributeReference(s, IntegerType, nullable = false)()
 
-      /** Creates a new AttributeReference of type long */
-      def long = AttributeReference(s, LongType, nullable = false)()
-
-      /** Creates a new AttributeReference of type float */
-      def float = AttributeReference(s, FloatType, nullable = false)()
-
-      /** Creates a new AttributeReference of type double */
-      def double = AttributeReference(s, DoubleType, nullable = false)()
-
-      /** Creates a new AttributeReference of type string */
+      /** Creates a new typed attributes of type string */
       def string = AttributeReference(s, StringType, nullable = false)()
-
-      /** Creates a new AttributeReference of type decimal */
-      def decimal = AttributeReference(s, DecimalType, nullable = false)()
-
-      /** Creates a new AttributeReference of type timestamp */
-      def timestamp = AttributeReference(s, TimestampType, nullable = false)()
-
-      /** Creates a new AttributeReference of type binary */
-      def binary = AttributeReference(s, BinaryType, nullable = false)()
     }
 
     implicit class DslAttribute(a: AttributeReference) {

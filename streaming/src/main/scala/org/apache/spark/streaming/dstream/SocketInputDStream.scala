@@ -67,6 +67,7 @@ class SocketReceiver[T: ClassTag](
   protected def onStop() {
     blockGenerator.stop()
   }
+
 }
 
 private[streaming]

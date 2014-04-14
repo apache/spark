@@ -66,6 +66,6 @@ object SparkLR {
     }
 
     println("Final w: " + w)
-    sc.stop()
+    System.exit(0)
   }
 }

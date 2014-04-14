@@ -33,10 +33,9 @@ import org.apache.spark.ui.{SparkUI, UIUtils}
 import org.apache.spark.util.Utils
 
 private[ui] class ExecutorsUI(parent: SparkUI) {
+  private val appName = parent.appName
   private val basePath = parent.basePath
   private var _listener: Option[ExecutorsListener] = None
-
-  private def appName = parent.appName
 
   lazy val listener = _listener.get
 

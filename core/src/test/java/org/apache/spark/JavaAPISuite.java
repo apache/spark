@@ -17,14 +17,13 @@
 
 package org.apache.spark;
 
-import java.io.*;
-import java.lang.StringBuilder;
+import java.io.File;
+import java.io.IOException;
+import java.io.Serializable;
 import java.util.*;
 
 import scala.Tuple2;
 
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
 import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
@@ -182,14 +181,6 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(2, foreachCalls);
   }
 
-    @Test
-    public void toLocalIterator() {
-        List<Integer> correct = Arrays.asList(1, 2, 3, 4);
-        JavaRDD<Integer> rdd = sc.parallelize(correct);
-        List<Integer> result = Lists.newArrayList(rdd.toLocalIterator());
-        Assert.assertTrue(correct.equals(result));
-    }
-
   @SuppressWarnings("unchecked")
   @Test
   public void lookup() {
@@ -199,7 +190,7 @@ public class JavaAPISuite implements Serializable {
       new Tuple2<String, String>("Oranges", "Citrus")
       ));
     Assert.assertEquals(2, categories.lookup("Oranges").size());
-    Assert.assertEquals(2, Iterables.size(categories.groupByKey().lookup("Oranges").get(0)));
+    Assert.assertEquals(2, categories.groupByKey().lookup("Oranges").get(0).size());
   }
 
   @Test
@@ -211,15 +202,15 @@ public class JavaAPISuite implements Serializable {
         return x % 2 == 0;
       }
     };
-    JavaPairRDD<Boolean, Iterable<Integer>> oddsAndEvens = rdd.groupBy(isOdd);
+    JavaPairRDD<Boolean, List<Integer>> oddsAndEvens = rdd.groupBy(isOdd);
     Assert.assertEquals(2, oddsAndEvens.count());
-    Assert.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
-    Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
+    Assert.assertEquals(2, oddsAndEvens.lookup(true).get(0).size());  // Evens
+    Assert.assertEquals(5, oddsAndEvens.lookup(false).get(0).size()); // Odds
 
     oddsAndEvens = rdd.groupBy(isOdd, 1);
     Assert.assertEquals(2, oddsAndEvens.count());
-    Assert.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
-    Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
+    Assert.assertEquals(2, oddsAndEvens.lookup(true).get(0).size());  // Evens
+    Assert.assertEquals(5, oddsAndEvens.lookup(false).get(0).size()); // Odds
   }
 
   @SuppressWarnings("unchecked")
@@ -234,9 +225,9 @@ public class JavaAPISuite implements Serializable {
       new Tuple2<String, Integer>("Oranges", 2),
       new Tuple2<String, Integer>("Apples", 3)
     ));
-    JavaPairRDD<String, Tuple2<Iterable<String>, Iterable<Integer>>> cogrouped = categories.cogroup(prices);
-    Assert.assertEquals("[Fruit, Citrus]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._1()));
-    Assert.assertEquals("[2]", Iterables.toString(cogrouped.lookup("Oranges").get(0)._2()));
+    JavaPairRDD<String, Tuple2<List<String>, List<Integer>>> cogrouped = categories.cogroup(prices);
+    Assert.assertEquals("[Fruit, Citrus]", cogrouped.lookup("Oranges").get(0)._1().toString());
+    Assert.assertEquals("[2]", cogrouped.lookup("Oranges").get(0)._2().toString());
 
     cogrouped.collect();
   }
@@ -606,32 +597,6 @@ public class JavaAPISuite implements Serializable {
     List<String> expected = Arrays.asList("1", "2", "3", "4");
     JavaRDD<String> readRDD = sc.textFile(outputDir);
     Assert.assertEquals(expected, readRDD.collect());
-  }
-
-  @Test
-  public void wholeTextFiles() throws IOException {
-    byte[] content1 = "spark is easy to use.\n".getBytes();
-    byte[] content2 = "spark is also easy to use.\n".getBytes();
-
-    File tempDir = Files.createTempDir();
-    String tempDirName = tempDir.getAbsolutePath();
-    DataOutputStream ds = new DataOutputStream(new FileOutputStream(tempDirName + "/part-00000"));
-    ds.write(content1);
-    ds.close();
-    ds = new DataOutputStream(new FileOutputStream(tempDirName + "/part-00001"));
-    ds.write(content2);
-    ds.close();
-
-    HashMap<String, String> container = new HashMap<String, String>();
-    container.put(tempDirName+"/part-00000", new Text(content1).toString());
-    container.put(tempDirName+"/part-00001", new Text(content2).toString());
-
-    JavaPairRDD<String, String> readRDD = sc.wholeTextFiles(tempDirName);
-    List<Tuple2<String, String>> result = readRDD.collect();
-
-    for (Tuple2<String, String> res : result) {
-      Assert.assertEquals(res._2(), container.get(res._1()));
-    }
   }
 
   @Test

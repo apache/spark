@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.types.{DataType, FractionalType, IntegralType, NumericType, NativeType}
+import org.apache.spark.sql.catalyst.types.{DataType, FractionalType, IntegralType, NumericType}
 
 abstract class Expression extends TreeNode[Expression] {
   self: Product =>
@@ -50,7 +50,8 @@ abstract class Expression extends TreeNode[Expression] {
   def references: Set[Attribute]
 
   /** Returns the result of evaluating this expression on a given input Row */
-  def eval(input: Row = null): EvaluatedType
+  def apply(input: Row = null): EvaluatedType =
+    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
@@ -72,7 +73,7 @@ abstract class Expression extends TreeNode[Expression] {
    */
   @inline
   def n1(e: Expression, i: Row, f: ((Numeric[Any], Any) => Any)): Any  = {
-    val evalE = e.eval(i)
+    val evalE = e.apply(i)
     if (evalE == null) {
       null
     } else {
@@ -85,11 +86,6 @@ abstract class Expression extends TreeNode[Expression] {
     }
   }
 
-  /**
-   * Evaluation helper function for 2 Numeric children expressions. Those expressions are supposed
-   * to be in the same data type, and also the return type.
-   * Either one of the expressions result is null, the evaluation result should be null.
-   */
   @inline
   protected final def n2(
       i: Row,
@@ -101,11 +97,11 @@ abstract class Expression extends TreeNode[Expression] {
       throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
     }
 
-    val evalE1 = e1.eval(i)
+    val evalE1 = e1.apply(i)
     if(evalE1 == null) {
       null
     } else {
-      val evalE2 = e2.eval(i)
+      val evalE2 = e2.apply(i)
       if (evalE2 == null) {
         null
       } else {
@@ -119,11 +115,6 @@ abstract class Expression extends TreeNode[Expression] {
     }
   }
 
-  /**
-   * Evaluation helper function for 2 Fractional children expressions. Those expressions are
-   * supposed to be in the same data type, and also the return type.
-   * Either one of the expressions result is null, the evaluation result should be null.
-   */
   @inline
   protected final def f2(
       i: Row,
@@ -134,11 +125,11 @@ abstract class Expression extends TreeNode[Expression] {
       throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
     }
 
-    val evalE1 = e1.eval(i: Row)
+    val evalE1 = e1.apply(i: Row)
     if(evalE1 == null) {
       null
     } else {
-      val evalE2 = e2.eval(i: Row)
+      val evalE2 = e2.apply(i: Row)
       if (evalE2 == null) {
         null
       } else {
@@ -152,11 +143,6 @@ abstract class Expression extends TreeNode[Expression] {
     }
   }
 
-  /**
-   * Evaluation helper function for 2 Integral children expressions. Those expressions are
-   * supposed to be in the same data type, and also the return type.
-   * Either one of the expressions result is null, the evaluation result should be null.
-   */
   @inline
   protected final def i2(
       i: Row,
@@ -167,11 +153,11 @@ abstract class Expression extends TreeNode[Expression] {
       throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
     }
 
-    val evalE1 = e1.eval(i)
+    val evalE1 = e1.apply(i)
     if(evalE1 == null) {
       null
     } else {
-      val evalE2 = e2.eval(i)
+      val evalE2 = e2.apply(i)
       if (evalE2 == null) {
         null
       } else {
@@ -180,43 +166,6 @@ abstract class Expression extends TreeNode[Expression] {
             f.asInstanceOf[(Integral[i.JvmType], i.JvmType, i.JvmType) => i.JvmType](
               i.integral, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
           case other => sys.error(s"Type $other does not support numeric operations")
-        }
-      }
-    }
-  }
-
-  /**
-   * Evaluation helper function for 2 Comparable children expressions. Those expressions are
-   * supposed to be in the same data type, and the return type should be Integer:
-   * Negative value: 1st argument less than 2nd argument
-   * Zero:  1st argument equals 2nd argument
-   * Positive value: 1st argument greater than 2nd argument
-   *
-   * Either one of the expressions result is null, the evaluation result should be null.
-   */
-  @inline
-  protected final def c2(
-      i: Row,
-      e1: Expression,
-      e2: Expression,
-      f: ((Ordering[Any], Any, Any) => Any)): Any  = {
-    if (e1.dataType != e2.dataType) {
-      throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
-    }
-
-    val evalE1 = e1.eval(i)
-    if(evalE1 == null) {
-      null
-    } else {
-      val evalE2 = e2.eval(i)
-      if (evalE2 == null) {
-        null
-      } else {
-        e1.dataType match {
-          case i: NativeType =>
-            f.asInstanceOf[(Ordering[i.JvmType], i.JvmType, i.JvmType) => Boolean](
-              i.ordering, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
-          case other => sys.error(s"Type $other does not support ordered operations")
         }
       }
     }
@@ -230,7 +179,7 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
 
   override def foldable = left.foldable && right.foldable
 
-  override def references = left.references ++ right.references
+  def references = left.references ++ right.references
 
   override def toString = s"($left $symbol $right)"
 }
@@ -242,5 +191,5 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
 
-  override def references = child.references
+  def references = child.references
 }

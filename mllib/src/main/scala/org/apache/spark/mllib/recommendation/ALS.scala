@@ -22,16 +22,16 @@ import scala.math.{abs, sqrt}
 import scala.util.Random
 import scala.util.Sorting
 
-import com.esotericsoftware.kryo.Kryo
-import org.jblas.{DoubleMatrix, SimpleBlas, Solve}
-
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.{Logging, HashPartitioner, Partitioner, SparkContext, SparkConf}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.KryoRegistrator
 import org.apache.spark.SparkContext._
+
+import com.esotericsoftware.kryo.Kryo
+import org.jblas.{DoubleMatrix, SimpleBlas, Solve}
+
 
 /**
  * Out-link information for a user or product block. This includes the original user/product IDs
@@ -90,19 +90,14 @@ case class Rating(val user: Int, val product: Int, val rating: Double)
  * preferences rather than explicit ratings given to items.
  */
 class ALS private (
-    private var numBlocks: Int,
-    private var rank: Int,
-    private var iterations: Int,
-    private var lambda: Double,
-    private var implicitPrefs: Boolean,
-    private var alpha: Double,
-    private var seed: Long = System.nanoTime()
+    var numBlocks: Int,
+    var rank: Int,
+    var iterations: Int,
+    var lambda: Double,
+    var implicitPrefs: Boolean,
+    var alpha: Double,
+    var seed: Long = System.nanoTime()
   ) extends Serializable with Logging {
-
-  /**
-   * Constructs an ALS instance with default parameters: {numBlocks: -1, rank: 10, iterations: 10,
-   * lambda: 0.01, implicitPrefs: false, alpha: 1.0}.
-   */
   def this() = this(-1, 10, 10, 0.01, false, 1.0)
 
   /**
@@ -132,17 +127,11 @@ class ALS private (
     this
   }
 
-  /** Sets whether to use implicit preference. Default: false. */
   def setImplicitPrefs(implicitPrefs: Boolean): ALS = {
     this.implicitPrefs = implicitPrefs
     this
   }
 
-  /**
-   * :: Experimental ::
-   * Sets the constant used in computing confidence in implicit ALS. Default: 1.0.
-   */
-  @Experimental
   def setAlpha(alpha: Double): ALS = {
     this.alpha = alpha
     this
@@ -432,12 +421,12 @@ class ALS private (
    * Compute the new feature vectors for a block of the users matrix given the list of factors
    * it received from each product and its InLinkBlock.
    */
-  private def updateBlock(messages: Iterable[(Int, Array[Array[Double]])], inLinkBlock: InLinkBlock,
+  private def updateBlock(messages: Seq[(Int, Array[Array[Double]])], inLinkBlock: InLinkBlock,
       rank: Int, lambda: Double, alpha: Double, YtY: Option[Broadcast[DoubleMatrix]])
     : Array[Array[Double]] =
   {
     // Sort the incoming block factor messages by block ID and make them an array
-    val blockFactors = messages.toSeq.sortBy(_._1).map(_._2).toArray // Array[Array[Double]]
+    val blockFactors = messages.sortBy(_._1).map(_._2).toArray // Array[Array[Double]]
     val numBlocks = blockFactors.length
     val numUsers = inLinkBlock.elementIds.length
 

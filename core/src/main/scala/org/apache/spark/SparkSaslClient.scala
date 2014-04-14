@@ -44,12 +44,12 @@ private[spark] class SparkSaslClient(securityMgr: SecurityManager)  extends Logg
    * configurable in the future.
    */
   private var saslClient: SaslClient = Sasl.createSaslClient(Array[String](SparkSaslServer.DIGEST),
-    null, null, SparkSaslServer.SASL_DEFAULT_REALM, SparkSaslServer.SASL_PROPS,
+    null, null, SparkSaslServer.SASL_DEFAULT_REALM, SparkSaslServer.SASL_PROPS, 
     new SparkSaslClientCallbackHandler(securityMgr))
 
   /**
    * Used to initiate SASL handshake with server.
-   * @return response to challenge if needed
+   * @return response to challenge if needed 
    */
   def firstToken(): Array[Byte] = {
     synchronized {
@@ -86,7 +86,7 @@ private[spark] class SparkSaslClient(securityMgr: SecurityManager)  extends Logg
   }
 
   /**
-   * Disposes of any system resources or security-sensitive information the
+   * Disposes of any system resources or security-sensitive information the 
    * SaslClient might be using.
    */
   def dispose() {
@@ -110,7 +110,7 @@ private[spark] class SparkSaslClient(securityMgr: SecurityManager)  extends Logg
   private class SparkSaslClientCallbackHandler(securityMgr: SecurityManager) extends
     CallbackHandler {
 
-    private val userName: String =
+    private val userName: String = 
       SparkSaslServer.encodeIdentifier(securityMgr.getSaslUser().getBytes())
     private val secretKey = securityMgr.getSecretKey()
     private val userPassword: Array[Char] =
@@ -138,7 +138,7 @@ private[spark] class SparkSaslClient(securityMgr: SecurityManager)  extends Logg
           rc.setText(rc.getDefaultText())
         }
         case cb: RealmChoiceCallback => {}
-        case cb: Callback => throw
+        case cb: Callback => throw 
           new UnsupportedCallbackException(cb, "handle: Unrecognized SASL client callback")
       }
     }

@@ -8,10 +8,6 @@ title: Spark SQL Programming Guide
 {:toc}
 
 # Overview
-
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
-
 Spark SQL allows relational queries expressed in SQL, HiveQL, or Scala to be executed using
 Spark.  At the core of this component is a new type of RDD,
 [SchemaRDD](api/sql/core/index.html#org.apache.spark.sql.SchemaRDD).  SchemaRDDs are composed
@@ -22,27 +18,11 @@ file, or by running HiveQL against data stored in [Apache Hive](http://hive.apac
 
 **All of the examples on this page use sample data included in the Spark distribution and can be run in the spark-shell.**
 
-</div>
-
-<div data-lang="java"  markdown="1">
-Spark SQL allows relational queries expressed in SQL, HiveQL, or Scala to be executed using
-Spark.  At the core of this component is a new type of RDD,
-[JavaSchemaRDD](api/sql/core/index.html#org.apache.spark.sql.api.java.JavaSchemaRDD).  JavaSchemaRDDs are composed
-[Row](api/sql/catalyst/index.html#org.apache.spark.sql.api.java.Row) objects along with
-a schema that describes the data types of each column in the row.  A JavaSchemaRDD is similar to a table
-in a traditional relational database.  A JavaSchemaRDD can be created from an existing RDD, parquet
-file, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
-</div>
-</div>
-
 ***************************************************************************************************
 
 # Getting Started
 
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
-
-The entry point into all relational functionality in Spark is the
+The entry point into all relational functionallity in Spark is the
 [SQLContext](api/sql/core/index.html#org.apache.spark.sql.SQLContext) class, or one of its
 decendents.  To create a basic SQLContext, all you need is a SparkContext.
 
@@ -54,30 +34,8 @@ val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 import sqlContext._
 {% endhighlight %}
 
-</div>
-
-<div data-lang="java"  markdown="1">
-
-The entry point into all relational functionality in Spark is the
-[JavaSQLContext](api/sql/core/index.html#org.apache.spark.sql.api.java.JavaSQLContext) class, or one
-of its decendents.  To create a basic JavaSQLContext, all you need is a JavaSparkContext.
-
-{% highlight java %}
-JavaSparkContext ctx = ...; // An existing JavaSparkContext.
-JavaSQLContext sqlCtx = new org.apache.spark.sql.api.java.JavaSQLContext(ctx);
-{% endhighlight %}
-
-</div>
-
-</div>
-
 ## Running SQL on RDDs
-
-<div class="codetabs">
-
-<div data-lang="scala"  markdown="1">
-
-One type of table that is supported by Spark SQL is an RDD of Scala case classes.  The case class
+One type of table that is supported by Spark SQL is an RDD of Scala case classetees.  The case class
 defines the schema of the table.  The names of the arguments to the case class are read using
 reflection and become the names of the columns. Case classes can also be nested or contain complex
 types such as Sequences or Arrays. This RDD can be implicitly converted to a SchemaRDD and then be
@@ -102,83 +60,7 @@ val teenagers = sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
 
-</div>
-
-<div data-lang="java"  markdown="1">
-
-One type of table that is supported by Spark SQL is an RDD of [JavaBeans](http://stackoverflow.com/questions/3295496/what-is-a-javabean-exactly).  The BeanInfo
-defines the schema of the table. Currently, Spark SQL does not support JavaBeans that contain
-nested or contain complex types such as Lists or Arrays.  You can create a JavaBean by creating a
-class that implements Serializable and has getters and setters for all of its fields.
-
-{% highlight java %}
-
-public static class Person implements Serializable {
-  private String name;
-  private int age;
-
-  String getName() {
-    return name;
-  }
-
-  void setName(String name) {
-    this.name = name;
-  }
-
-  int getAge() {
-    return age;
-  }
-
-  void setAge(int age) {
-    this.age = age;
-  }
-}
-
-{% endhighlight %}
-
-
-A schema can be applied to an existing RDD by calling `applySchema` and providing the Class object
-for the JavaBean.
-
-{% highlight java %}
-JavaSQLContext ctx = new org.apache.spark.sql.api.java.JavaSQLContext(sc)
-
-// Load a text file and convert each line to a JavaBean.
-JavaRDD<Person> people = ctx.textFile("examples/src/main/resources/people.txt").map(
-  new Function<String, Person>() {
-    public Person call(String line) throws Exception {
-      String[] parts = line.split(",");
-
-      Person person = new Person();
-      person.setName(parts[0]);
-      person.setAge(Integer.parseInt(parts[1].trim()));
-
-      return person;
-    }
-  });
-
-// Apply a schema to an RDD of JavaBeans and register it as a table.
-JavaSchemaRDD schemaPeople = sqlCtx.applySchema(people, Person.class);
-schemaPeople.registerAsTable("people");
-
-// SQL can be run over RDDs that have been registered as tables.
-JavaSchemaRDD teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
-
-// The results of SQL queries are SchemaRDDs and support all the normal RDD operations.
-// The columns of a row in the result can be accessed by ordinal.
-List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
-  public String call(Row row) {
-    return "Name: " + row.getString(0);
-  }
-}).collect();
-
-{% endhighlight %}
-
-</div>
-
-</div>
-
-**Note that Spark SQL currently uses a very basic SQL parser.**
+**Note that Spark SQL currently uses a very basic SQL parser, and the keywords are case sensitive.**
 Users that want a more complete dialect of SQL should look at the HiveQL support provided by
 `HiveContext`.
 
@@ -188,21 +70,17 @@ Parquet is a columnar format that is supported by many other data processing sys
 provides support for both reading and writing parquet files that automatically preserves the schema
 of the original data.  Using the data from the above example:
 
-<div class="codetabs">
-
-<div data-lang="scala"  markdown="1">
-
 {% highlight scala %}
 val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 import sqlContext._
 
-val people: RDD[Person] = ... // An RDD of case class objects, from the previous example.
+val people: RDD[Person] // An RDD of case class objects, from the previous example.
 
 // The RDD is implicitly converted to a SchemaRDD, allowing it to be stored using parquet.
 people.saveAsParquetFile("people.parquet")
 
 // Read in the parquet file created above.  Parquet files are self-describing so the schema is preserved.
-// The result of loading a parquet file is also a JavaSchemaRDD.
+// The result of loading a parquet file is also a SchemaRDD.
 val parquetFile = sqlContext.parquetFile("people.parquet")
 
 //Parquet files can also be registered as tables and then used in SQL statements.
@@ -211,35 +89,7 @@ val teenagers = sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19"
 teenagers.collect().foreach(println)
 {% endhighlight %}
 
-</div>
-
-<div data-lang="java"  markdown="1">
-
-{% highlight java %}
-
-JavaSchemaRDD schemaPeople = ... // The JavaSchemaRDD from the previous example.
-
-// JavaSchemaRDDs can be saved as parquet files, maintaining the schema information.
-schemaPeople.saveAsParquetFile("people.parquet");
-
-// Read in the parquet file created above.  Parquet files are self-describing so the schema is preserved.
-// The result of loading a parquet file is also a JavaSchemaRDD.
-JavaSchemaRDD parquetFile = sqlCtx.parquetFile("people.parquet");
-
-//Parquet files can also be registered as tables and then used in SQL statements.
-parquetFile.registerAsTable("parquetFile");
-JavaSchemaRDD teenagers = sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
-
-
-{% endhighlight %}
-
-</div>
-
-</div>
-
 ## Writing Language-Integrated Relational Queries
-
-**Language-Integrated queries are currently only supported in Scala.**
 
 Spark SQL also supports a domain specific language for writing queries.  Once again,
 using the data from the above examples:
@@ -247,7 +97,7 @@ using the data from the above examples:
 {% highlight scala %}
 val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 import sqlContext._
-val people: RDD[Person] = ... // An RDD of case class objects, from the first example.
+val people: RDD[Person] // An RDD of case class objects, from the first example.
 
 // The following is the same as 'SELECT name FROM people WHERE age >= 10 AND age <= 19'
 val teenagers = people.where('age >= 10).where('age <= 19).select('name)
@@ -264,16 +114,13 @@ evaluated by the SQL execution engine.  A full list of the functions supported c
 
 Spark SQL also supports reading and writing data stored in [Apache Hive](http://hive.apache.org/).
 However, since Hive has a large number of dependencies, it is not included in the default Spark assembly.
-In order to use Hive you must first run '`SPARK_HIVE=true sbt/sbt assembly/assembly`' (or use `-Phive` for maven).
-This command builds a new assembly jar that includes Hive. Note that this Hive assembly jar must also be present
+In order to use Hive you must first run '`sbt/sbt hive/assembly`'.  This command builds a new assembly
+jar that includes Hive.  When this jar is present, Spark will use the Hive
+assembly instead of the normal Spark assembly.  Note that this Hive assembly jar must also be present
 on all of the worker nodes, as they will need access to the Hive serialization and deserialization libraries
 (SerDes) in order to acccess data stored in Hive.
 
 Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
-
-<div class="codetabs">
-
-<div data-lang="scala"  markdown="1">
 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
 adds support for finding tables in in the MetaStore and writing queries using HiveQL. Users who do
@@ -288,34 +135,9 @@ val hiveContext = new org.apache.spark.sql.hive.HiveContext(sc)
 // Importing the SQL context gives access to all the public SQL functions and implicit conversions.
 import hiveContext._
 
-hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 // Queries are expressed in HiveQL
-hql("FROM src SELECT key, value").collect().foreach(println)
+sql("SELECT key, value FROM src").collect().foreach(println)
 {% endhighlight %}
-
-</div>
-
-<div data-lang="java"  markdown="1">
-
-When working with Hive one must construct a `JavaHiveContext`, which inherits from `JavaSQLContext`, and
-adds support for finding tables in in the MetaStore and writing queries using HiveQL. In addition to
-the `sql` method a `JavaHiveContext` also provides an `hql` methods, which allows queries to be
-expressed in HiveQL.
-
-{% highlight java %}
-JavaSparkContext ctx = ...; // An existing JavaSparkContext.
-JavaHiveContext hiveCtx = new org.apache.spark.sql.hive.api.java.HiveContext(ctx);
-
-hiveCtx.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)");
-hiveCtx.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src");
-
-// Queries are expressed in HiveQL.
-Row[] results = hiveCtx.hql("FROM src SELECT key, value").collect();
-
-{% endhighlight %}
-
-</div>
-
-</div>

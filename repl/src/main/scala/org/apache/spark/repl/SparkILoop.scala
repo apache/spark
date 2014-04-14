@@ -963,7 +963,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
       case Some(m) => m
       case None => {
         val prop = System.getenv("MASTER")
-        if (prop != null) prop else "local[*]"
+        if (prop != null) prop else "local"
       }
     }
     master

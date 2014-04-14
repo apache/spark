@@ -17,9 +17,6 @@
 
 package org.apache.spark.partial
 
-import org.apache.spark.annotation.Experimental
-
-@Experimental
 class PartialResult[R](initialVal: R, isFinal: Boolean) {
   private var finalValue: Option[R] = if (isFinal) Some(initialVal) else None
   private var failure: Option[Exception] = None
@@ -44,7 +41,7 @@ class PartialResult[R](initialVal: R, isFinal: Boolean) {
     }
   }
 
-  /**
+  /** 
    * Set a handler to be called when this PartialResult completes. Only one completion handler
    * is supported per PartialResult.
    */
@@ -60,7 +57,7 @@ class PartialResult[R](initialVal: R, isFinal: Boolean) {
     return this
   }
 
-  /**
+  /** 
    * Set a handler to be called if this PartialResult's job fails. Only one failure handler
    * is supported per PartialResult.
    */

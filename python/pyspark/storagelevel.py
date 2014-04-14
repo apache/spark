@@ -25,25 +25,23 @@ class StorageLevel:
     Also contains static constants for some commonly used storage levels, such as MEMORY_ONLY.
     """
 
-    def __init__(self, useDisk, useMemory, useOffHeap, deserialized, replication = 1):
+    def __init__(self, useDisk, useMemory, deserialized, replication = 1):
         self.useDisk = useDisk
         self.useMemory = useMemory
-        self.useOffHeap = useOffHeap
         self.deserialized = deserialized
         self.replication = replication
 
     def __repr__(self):
-        return "StorageLevel(%s, %s, %s, %s, %s)" % (
-            self.useDisk, self.useMemory, self.useOffHeap, self.deserialized, self.replication)
+        return "StorageLevel(%s, %s, %s, %s)" % (
+            self.useDisk, self.useMemory, self.deserialized, self.replication)
 
-StorageLevel.DISK_ONLY = StorageLevel(True, False, False, False)
-StorageLevel.DISK_ONLY_2 = StorageLevel(True, False, False, False, 2)
-StorageLevel.MEMORY_ONLY = StorageLevel(False, True, False, True)
-StorageLevel.MEMORY_ONLY_2 = StorageLevel(False, True, False, True, 2)
-StorageLevel.MEMORY_ONLY_SER = StorageLevel(False, True, False, False)
-StorageLevel.MEMORY_ONLY_SER_2 = StorageLevel(False, True, False, False, 2)
-StorageLevel.MEMORY_AND_DISK = StorageLevel(True, True, False, True)
-StorageLevel.MEMORY_AND_DISK_2 = StorageLevel(True, True, False, True, 2)
-StorageLevel.MEMORY_AND_DISK_SER = StorageLevel(True, True, False, False)
-StorageLevel.MEMORY_AND_DISK_SER_2 = StorageLevel(True, True, False, False, 2)
-StorageLevel.OFF_HEAP = StorageLevel(False, False, True, False, 1)
+StorageLevel.DISK_ONLY = StorageLevel(True, False, False)
+StorageLevel.DISK_ONLY_2 = StorageLevel(True, False, False, 2)
+StorageLevel.MEMORY_ONLY = StorageLevel(False, True, True)
+StorageLevel.MEMORY_ONLY_2 = StorageLevel(False, True, True, 2)
+StorageLevel.MEMORY_ONLY_SER = StorageLevel(False, True, False)
+StorageLevel.MEMORY_ONLY_SER_2 = StorageLevel(False, True, False, 2)
+StorageLevel.MEMORY_AND_DISK = StorageLevel(True, True, True)
+StorageLevel.MEMORY_AND_DISK_2 = StorageLevel(True, True, True, 2)
+StorageLevel.MEMORY_AND_DISK_SER = StorageLevel(True, True, False)
+StorageLevel.MEMORY_AND_DISK_SER_2 = StorageLevel(True, True, False, 2)

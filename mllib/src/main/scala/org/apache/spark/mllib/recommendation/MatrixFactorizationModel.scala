@@ -17,13 +17,12 @@
 
 package org.apache.spark.mllib.recommendation
 
-import org.jblas._
-
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.api.python.PythonMLLibAPI
+
+import org.jblas._
+import org.apache.spark.api.java.JavaRDD
 
 
 /**
@@ -69,7 +68,6 @@ class MatrixFactorizationModel(
   }
 
   /**
-   * :: DeveloperApi ::
    * Predict the rating of many users for many products.
    * This is a Java stub for python predictAll()
    *

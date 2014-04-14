@@ -22,25 +22,27 @@ import java.util.regex.Pattern
 import org.apache.spark.sql.catalyst.types.DataType
 import org.apache.spark.sql.catalyst.types.StringType
 import org.apache.spark.sql.catalyst.types.BooleanType
+import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.errors.`package`.TreeNodeException
 
 
 trait StringRegexExpression {
   self: BinaryExpression =>
 
   type EvaluatedType = Any
-
+  
   def escape(v: String): String
   def matches(regex: Pattern, str: String): Boolean
-
+  
   def nullable: Boolean = true
   def dataType: DataType = BooleanType
-
-  // try cache the pattern for Literal
+  
+  // try cache the pattern for Literal 
   private lazy val cache: Pattern = right match {
     case x @ Literal(value: String, StringType) => compile(value)
     case _ => null
   }
-
+  
   protected def compile(str: String): Pattern = if(str == null) {
     null
   } else {
@@ -49,13 +51,13 @@ trait StringRegexExpression {
   }
 
   protected def pattern(str: String) = if(cache == null) compile(str) else cache
-
-  override def eval(input: Row): Any = {
-    val l = left.eval(input)
-    if (l == null) {
+  
+  override def apply(input: Row): Any = {
+    val l = left.apply(input)
+    if(l == null) {
       null
     } else {
-      val r = right.eval(input)
+      val r = right.apply(input)
       if(r == null) {
         null
       } else {
@@ -73,11 +75,11 @@ trait StringRegexExpression {
 /**
  * Simple RegEx pattern matching function
  */
-case class Like(left: Expression, right: Expression)
+case class Like(left: Expression, right: Expression) 
   extends BinaryExpression with StringRegexExpression {
-
+  
   def symbol = "LIKE"
-
+    
   // replace the _ with .{1} exactly match 1 time of any character
   // replace the % with .*, match 0 or more times with any character
   override def escape(v: String) = {
@@ -98,19 +100,19 @@ case class Like(left: Expression, right: Expression)
           sb.append(Pattern.quote(Character.toString(n)));
         }
       }
-
+      
       i += 1
     }
-
+    
     sb.toString()
   }
-
+  
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 }
 
-case class RLike(left: Expression, right: Expression)
+case class RLike(left: Expression, right: Expression) 
   extends BinaryExpression with StringRegexExpression {
-
+  
   def symbol = "RLIKE"
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)

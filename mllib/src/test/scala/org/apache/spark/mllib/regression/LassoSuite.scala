@@ -19,7 +19,6 @@ package org.apache.spark.mllib.regression
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LinearDataGenerator, LocalSparkContext}
 
 class LassoSuite extends FunSuite with LocalSparkContext {
@@ -34,33 +33,29 @@ class LassoSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Lasso local random SGD") {
-    val nPoints = 1000
+    val nPoints = 10000
 
     val A = 2.0
     val B = -1.5
     val C = 1.0e-2
 
-    val testData = LinearDataGenerator.generateLinearInput(A, Array[Double](B, C), nPoints, 42)
-      .map { case LabeledPoint(label, features) =>
-      LabeledPoint(label, Vectors.dense(1.0 +: features.toArray))
-    }
-    val testRDD = sc.parallelize(testData, 2).cache()
+    val testData = LinearDataGenerator.generateLinearInput(A, Array[Double](B,C), nPoints, 42)
+
+    val testRDD = sc.parallelize(testData, 2)
+    testRDD.cache()
 
     val ls = new LassoWithSGD()
-    ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(40)
+    ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
 
     val model = ls.run(testRDD)
+
     val weight0 = model.weights(0)
     val weight1 = model.weights(1)
-    val weight2 = model.weights(2)
-    assert(weight0 >= 1.9 && weight0 <= 2.1, weight0 + " not in [1.9, 2.1]")
-    assert(weight1 >= -1.60 && weight1 <= -1.40, weight1 + " not in [-1.6, -1.4]")
-    assert(weight2 >= -1.0e-3 && weight2 <= 1.0e-3, weight2 + " not in [-0.001, 0.001]")
+    assert(model.intercept >= 1.9 && model.intercept <= 2.1, model.intercept + " not in [1.9, 2.1]")
+    assert(weight0 >= -1.60 && weight0 <= -1.40, weight0 + " not in [-1.6, -1.4]")
+    assert(weight1 >= -1.0e-3 && weight1 <= 1.0e-3, weight1 + " not in [-0.001, 0.001]")
 
     val validationData = LinearDataGenerator.generateLinearInput(A, Array[Double](B,C), nPoints, 17)
-      .map { case LabeledPoint(label, features) =>
-      LabeledPoint(label, Vectors.dense(1.0 +: features.toArray))
-    }
     val validationRDD  = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
@@ -71,39 +66,33 @@ class LassoSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Lasso local random SGD with initial weights") {
-    val nPoints = 1000
+    val nPoints = 10000
 
     val A = 2.0
     val B = -1.5
     val C = 1.0e-2
 
-    val testData = LinearDataGenerator.generateLinearInput(A, Array[Double](B, C), nPoints, 42)
-      .map { case LabeledPoint(label, features) =>
-      LabeledPoint(label, Vectors.dense(1.0 +: features.toArray))
-    }
+    val testData = LinearDataGenerator.generateLinearInput(A, Array[Double](B,C), nPoints, 42)
 
-    val initialA = -1.0
     val initialB = -1.0
     val initialC = -1.0
-    val initialWeights = Vectors.dense(initialA, initialB, initialC)
+    val initialWeights = Array(initialB,initialC)
 
-    val testRDD = sc.parallelize(testData, 2).cache()
+    val testRDD = sc.parallelize(testData, 2)
+    testRDD.cache()
 
     val ls = new LassoWithSGD()
-    ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(40)
+    ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(20)
 
     val model = ls.run(testRDD, initialWeights)
+
     val weight0 = model.weights(0)
     val weight1 = model.weights(1)
-    val weight2 = model.weights(2)
-    assert(weight0 >= 1.9 && weight0 <= 2.1, weight0 + " not in [1.9, 2.1]")
-    assert(weight1 >= -1.60 && weight1 <= -1.40, weight1 + " not in [-1.6, -1.4]")
-    assert(weight2 >= -1.0e-3 && weight2 <= 1.0e-3, weight2 + " not in [-0.001, 0.001]")
+    assert(model.intercept >= 1.9 && model.intercept <= 2.1, model.intercept + " not in [1.9, 2.1]")
+    assert(weight0 >= -1.60 && weight0 <= -1.40, weight0 + " not in [-1.6, -1.4]")
+    assert(weight1 >= -1.0e-3 && weight1 <= 1.0e-3, weight1 + " not in [-0.001, 0.001]")
 
     val validationData = LinearDataGenerator.generateLinearInput(A, Array[Double](B,C), nPoints, 17)
-      .map { case LabeledPoint(label, features) =>
-      LabeledPoint(label, Vectors.dense(1.0 +: features.toArray))
-    }
     val validationRDD  = sc.parallelize(validationData,2)
 
     // Test prediction on RDD.

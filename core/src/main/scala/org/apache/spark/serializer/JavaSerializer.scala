@@ -21,7 +21,6 @@ import java.io._
 import java.nio.ByteBuffer
 
 import org.apache.spark.SparkConf
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.ByteBufferInputStream
 
 private[spark] class JavaSerializationStream(out: OutputStream, counterReset: Int)
@@ -95,14 +94,8 @@ private[spark] class JavaSerializerInstance(counterReset: Int) extends Serialize
 }
 
 /**
- * :: DeveloperApi ::
  * A Spark serializer that uses Java's built-in serialization.
- *
- * Note that this serializer is not guaranteed to be wire-compatible across different versions of
- * Spark. It is intended to be used to serialize/de-serialize data within a single
- * Spark application.
  */
-@DeveloperApi
 class JavaSerializer(conf: SparkConf) extends Serializer with Externalizable {
   private var counterReset = conf.getInt("spark.serializer.objectStreamReset", 10000)
 

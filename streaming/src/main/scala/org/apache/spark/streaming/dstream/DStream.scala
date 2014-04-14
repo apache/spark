@@ -341,11 +341,9 @@ abstract class DStream[T: ClassTag] (
    */
   private[streaming] def clearMetadata(time: Time) {
     val oldRDDs = generatedRDDs.filter(_._1 <= (time - rememberDuration))
-    logDebug("Clearing references to old RDDs: [" +
-      oldRDDs.map(x => s"${x._1} -> ${x._2.id}").mkString(", ") + "]")
     generatedRDDs --= oldRDDs.keys
     if (ssc.conf.getBoolean("spark.streaming.unpersist", false)) {
-      logDebug("Unpersisting old RDDs: " + oldRDDs.values.map(_.id).mkString(", "))
+      logDebug("Unpersisting old RDDs: " + oldRDDs.keys.mkString(", "))
       oldRDDs.values.foreach(_.unpersist(false))
     }
     logDebug("Cleared " + oldRDDs.size + " RDDs that were older than " +

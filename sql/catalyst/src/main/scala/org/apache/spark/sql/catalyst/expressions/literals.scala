@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Timestamp
-
 import org.apache.spark.sql.catalyst.types._
 
 object Literal {
@@ -31,9 +29,6 @@ object Literal {
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(s, StringType)
     case b: Boolean => Literal(b, BooleanType)
-    case d: BigDecimal => Literal(d, DecimalType)
-    case t: Timestamp => Literal(t, TimestampType)
-    case a: Array[Byte] => Literal(a, BinaryType)
     case null => Literal(null, NullType)
   }
 }
@@ -57,7 +52,7 @@ case class Literal(value: Any, dataType: DataType) extends LeafExpression {
   override def toString = if (value != null) value.toString else "null"
 
   type EvaluatedType = Any
-  override def eval(input: Row):Any = value
+  override def apply(input: Row):Any = value
 }
 
 // TODO: Specialize
@@ -69,8 +64,8 @@ case class MutableLiteral(var value: Any, nullable: Boolean = true) extends Leaf
   def references = Set.empty
 
   def update(expression: Expression, input: Row) = {
-    value = expression.eval(input)
+    value = expression.apply(input)
   }
 
-  override def eval(input: Row) = value
+  override def apply(input: Row) = value
 }

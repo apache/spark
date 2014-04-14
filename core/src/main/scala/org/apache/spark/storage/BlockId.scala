@@ -34,7 +34,7 @@ private[spark] sealed abstract class BlockId {
   def asRDDId = if (isRDD) Some(asInstanceOf[RDDBlockId]) else None
   def isRDD = isInstanceOf[RDDBlockId]
   def isShuffle = isInstanceOf[ShuffleBlockId]
-  def isBroadcast = isInstanceOf[BroadcastBlockId]
+  def isBroadcast = isInstanceOf[BroadcastBlockId] || isInstanceOf[BroadcastHelperBlockId]
 
   override def toString = name
   override def hashCode = name.hashCode
@@ -48,13 +48,18 @@ private[spark] case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockI
   def name = "rdd_" + rddId + "_" + splitIndex
 }
 
-private[spark] case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int)
-  extends BlockId {
+private[spark]
+case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
   def name = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
 }
 
-private[spark] case class BroadcastBlockId(broadcastId: Long, field: String = "") extends BlockId {
-  def name = "broadcast_" + broadcastId + (if (field == "") "" else "_" + field)
+private[spark] case class BroadcastBlockId(broadcastId: Long) extends BlockId {
+  def name = "broadcast_" + broadcastId
+}
+
+private[spark]
+case class BroadcastHelperBlockId(broadcastId: BroadcastBlockId, hType: String) extends BlockId {
+  def name = broadcastId.name + "_" + hType
 }
 
 private[spark] case class TaskResultBlockId(taskId: Long) extends BlockId {
@@ -78,7 +83,8 @@ private[spark] case class TestBlockId(id: String) extends BlockId {
 private[spark] object BlockId {
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
-  val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
+  val BROADCAST = "broadcast_([0-9]+)".r
+  val BROADCAST_HELPER = "broadcast_([0-9]+)_([A-Za-z0-9]+)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r
   val TEST = "test_(.*)".r
@@ -89,8 +95,10 @@ private[spark] object BlockId {
       RDDBlockId(rddId.toInt, splitIndex.toInt)
     case SHUFFLE(shuffleId, mapId, reduceId) =>
       ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
-    case BROADCAST(broadcastId, field) =>
-      BroadcastBlockId(broadcastId.toLong, field.stripPrefix("_"))
+    case BROADCAST(broadcastId) =>
+      BroadcastBlockId(broadcastId.toLong)
+    case BROADCAST_HELPER(broadcastId, hType) =>
+      BroadcastHelperBlockId(BroadcastBlockId(broadcastId.toLong), hType)
     case TASKRESULT(taskId) =>
       TaskResultBlockId(taskId.toLong)
     case STREAM(streamId, uniqueId) =>

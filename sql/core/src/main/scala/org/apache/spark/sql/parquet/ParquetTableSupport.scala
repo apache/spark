@@ -35,8 +35,7 @@ import org.apache.spark.sql.catalyst.types._
  *
  *@param root The root group converter for the record.
  */
-private[parquet] class RowRecordMaterializer(root: CatalystGroupConverter)
-  extends RecordMaterializer[Row] {
+class RowRecordMaterializer(root: CatalystGroupConverter) extends RecordMaterializer[Row] {
 
   def this(parquetSchema: MessageType) =
     this(new CatalystGroupConverter(ParquetTypesConverter.convertToAttributes(parquetSchema)))
@@ -49,14 +48,14 @@ private[parquet] class RowRecordMaterializer(root: CatalystGroupConverter)
 /**
  * A `parquet.hadoop.api.ReadSupport` for Row objects.
  */
-private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
+class RowReadSupport extends ReadSupport[Row] with Logging {
 
   override def prepareForRead(
       conf: Configuration,
       stringMap: java.util.Map[String, String],
       fileSchema: MessageType,
       readContext: ReadContext): RecordMaterializer[Row] = {
-    log.debug(s"preparing for read with file schema $fileSchema")
+    log.debug(s"preparing for read with schema ${fileSchema.toString}")
     new RowRecordMaterializer(readContext.getRequestedSchema)
   }
 
@@ -68,20 +67,20 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
       configuration.get(RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA, fileSchema.toString)
     val requested_schema =
       MessageTypeParser.parseMessageType(requested_schema_string)
-    log.debug(s"read support initialized for requested schema $requested_schema")
-    ParquetRelation.enableLogForwarding()
+
+    log.debug(s"read support initialized for original schema ${requested_schema.toString}")
     new ReadContext(requested_schema, keyValueMetaData)
   }
 }
 
-private[parquet] object RowReadSupport {
+object RowReadSupport {
   val PARQUET_ROW_REQUESTED_SCHEMA = "org.apache.spark.sql.parquet.row.requested_schema"
 }
 
 /**
  * A `parquet.hadoop.api.WriteSupport` for Row ojects.
  */
-private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
+class RowWriteSupport extends WriteSupport[Row] with Logging {
   def setSchema(schema: MessageType, configuration: Configuration) {
     // for testing
     this.schema = schema
@@ -105,8 +104,6 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   override def init(configuration: Configuration): WriteSupport.WriteContext = {
     schema = if (schema == null) getSchema(configuration) else schema
     attributes = ParquetTypesConverter.convertToAttributes(schema)
-    log.debug(s"write support initialized for requested schema $schema")
-    ParquetRelation.enableLogForwarding()
     new WriteSupport.WriteContext(
       schema,
       new java.util.HashMap[java.lang.String, java.lang.String]())
@@ -114,16 +111,10 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
 
   override def prepareForWrite(recordConsumer: RecordConsumer): Unit = {
     writer = recordConsumer
-    log.debug(s"preparing for write with schema $schema")
   }
 
   // TODO: add groups (nested fields)
   override def write(record: Row): Unit = {
-    if (attributes.size > record.size) {
-      throw new IndexOutOfBoundsException(
-        s"Trying to write more fields than contained in row (${attributes.size}>${record.size})")
-    }
-
     var index = 0
     writer.startMessage()
     while(index < attributes.size) {
@@ -139,7 +130,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   }
 }
 
-private[parquet] object RowWriteSupport {
+object RowWriteSupport {
   val PARQUET_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.schema"
 }
 
@@ -148,7 +139,7 @@ private[parquet] object RowWriteSupport {
  *
  * @param schema The corresponding Catalyst schema in the form of a list of attributes.
  */
-private[parquet] class CatalystGroupConverter(
+class CatalystGroupConverter(
     schema: Seq[Attribute],
     protected[parquet] val current: ParquetRelation.RowType) extends GroupConverter {
 
@@ -186,12 +177,13 @@ private[parquet] class CatalystGroupConverter(
  * @param parent The parent group converter.
  * @param fieldIndex The index inside the record.
  */
-private[parquet] class CatalystPrimitiveConverter(
+class CatalystPrimitiveConverter(
     parent: CatalystGroupConverter,
     fieldIndex: Int) extends PrimitiveConverter {
   // TODO: consider refactoring these together with ParquetTypesConverter
   override def addBinary(value: Binary): Unit =
-    parent.getCurrentRecord.update(fieldIndex, value.getBytes)
+    // TODO: fix this once a setBinary will become available in MutableRow
+    parent.getCurrentRecord.setByte(fieldIndex, value.getBytes.apply(0))
 
   override def addBoolean(value: Boolean): Unit =
     parent.getCurrentRecord.setBoolean(fieldIndex, value)
@@ -216,9 +208,10 @@ private[parquet] class CatalystPrimitiveConverter(
  * @param parent The parent group converter.
  * @param fieldIndex The index inside the record.
  */
-private[parquet] class CatalystPrimitiveStringConverter(
+class CatalystPrimitiveStringConverter(
     parent: CatalystGroupConverter,
     fieldIndex: Int) extends CatalystPrimitiveConverter(parent, fieldIndex) {
   override def addBinary(value: Binary): Unit =
     parent.getCurrentRecord.setString(fieldIndex, value.toStringUsingUTF8)
 }
+

@@ -56,6 +56,6 @@ object BroadcastTest {
       println("Iteration %d took %.0f milliseconds".format(i, (System.nanoTime - startTime) / 1E6))
     }
 
-    sc.stop()
+    System.exit(0)
   }
 }

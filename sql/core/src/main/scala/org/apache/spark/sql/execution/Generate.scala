@@ -36,10 +36,10 @@ case class Generate(
     child: SparkPlan)
   extends UnaryNode {
 
-  override def output =
+  def output =
     if (join) child.output ++ generator.output else generator.output
 
-  override def execute() = {
+  def execute() = {
     if (join) {
       child.execute().mapPartitions { iter =>
         val nullValues = Seq.fill(generator.output.size)(Literal(null))
@@ -52,7 +52,7 @@ case class Generate(
         val joinedRow = new JoinedRow
 
         iter.flatMap {row =>
-          val outputRows = generator.eval(row)
+          val outputRows = generator(row)
           if (outer && outputRows.isEmpty) {
             outerProjection(row) :: Nil
           } else {
@@ -61,7 +61,7 @@ case class Generate(
         }
       }
     } else {
-      child.execute().mapPartitions(iter => iter.flatMap(row => generator.eval(row)))
+      child.execute().mapPartitions(iter => iter.flatMap(generator))
     }
   }
 }

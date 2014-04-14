@@ -96,6 +96,6 @@ public final class JavaTC {
     } while (nextCount != oldCount);
 
     System.out.println("TC has " + tc.count() + " edges.");
-    sc.stop();
+    System.exit(0);
   }
 }

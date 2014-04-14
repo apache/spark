@@ -61,7 +61,7 @@ The command to launch the Spark application on the cluster is as follows:
     SPARK_JAR=<SPARK_ASSEMBLY_JAR_FILE> ./bin/spark-class org.apache.spark.deploy.yarn.Client \
       --jar <YOUR_APP_JAR_FILE> \
       --class <APP_MAIN_CLASS> \
-      --arg <APP_MAIN_ARGUMENT> \
+      --args <APP_MAIN_ARGUMENTS> \
       --num-executors <NUMBER_OF_EXECUTOR_PROCESSES> \
       --driver-memory <MEMORY_FOR_ApplicationMaster> \
       --executor-memory <MEMORY_PER_EXECUTOR> \
@@ -72,7 +72,7 @@ The command to launch the Spark application on the cluster is as follows:
       --files <files_for_distributed_cache> \
       --archives <archives_for_distributed_cache>
 
-To pass multiple arguments the "arg" option can be specified multiple times. For example:
+For example:
 
     # Build the Spark assembly JAR and the Spark examples JAR
     $ SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
@@ -85,8 +85,7 @@ To pass multiple arguments the "arg" option can be specified multiple times. For
         ./bin/spark-class org.apache.spark.deploy.yarn.Client \
           --jar examples/target/scala-{{site.SCALA_BINARY_VERSION}}/spark-examples-assembly-{{site.SPARK_VERSION}}.jar \
           --class org.apache.spark.examples.SparkPi \
-          --arg yarn-cluster \
-          --arg 5 \
+          --args yarn-cluster \
           --num-executors 3 \
           --driver-memory 4g \
           --executor-memory 2g \

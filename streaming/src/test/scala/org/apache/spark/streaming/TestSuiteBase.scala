@@ -277,7 +277,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
       assert(output.size === numExpectedOutput, "Unexpected number of outputs generated")
 
-      Thread.sleep(100) // Give some time for the forgetting old RDDs to complete
+      Thread.sleep(500) // Give some time for the forgetting old RDDs to complete
     } catch {
       case e: Exception => {e.printStackTrace(); throw e}
     } finally {

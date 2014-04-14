@@ -18,14 +18,13 @@
 package org.apache.spark.ui
 
 import java.net.{InetSocketAddress, URL}
-import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 import scala.xml.Node
 
-import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.server.{DispatcherType, Server}
 import org.eclipse.jetty.server.handler._
 import org.eclipse.jetty.servlet._
 import org.eclipse.jetty.util.thread.QueuedThreadPool
@@ -104,12 +103,10 @@ private[spark] object JettyUtils extends Logging {
   def createRedirectHandler(
       srcPath: String,
       destPath: String,
-      beforeRedirect: HttpServletRequest => Unit = x => (),
       basePath: String = ""): ServletContextHandler = {
     val prefixedDestPath = attachPrefix(basePath, destPath)
     val servlet = new HttpServlet {
       override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
-        beforeRedirect(request)
         // Make sure we don't end up with "//" in the middle
         val newUrl = new URL(new URL(request.getRequestURL.toString), prefixedDestPath).toString
         response.sendRedirect(newUrl)
@@ -138,7 +135,7 @@ private[spark] object JettyUtils extends Logging {
   private def addFilters(handlers: Seq[ServletContextHandler], conf: SparkConf) {
     val filters: Array[String] = conf.get("spark.ui.filters", "").split(',').map(_.trim())
     filters.foreach {
-      case filter : String =>
+      case filter : String => 
         if (!filter.isEmpty) {
           logInfo("Adding filter: " + filter)
           val holder : FilterHolder = new FilterHolder()
@@ -153,7 +150,7 @@ private[spark] object JettyUtils extends Logging {
                 if (parts.length == 2) holder.setInitParameter(parts(0), parts(1))
              }
           }
-          val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.ERROR,
+          val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.ERROR, 
             DispatcherType.FORWARD, DispatcherType.INCLUDE, DispatcherType.REQUEST)
           handlers.foreach { case(handler) => handler.addFilter(holder, "/*", enumDispatcher) }
         }

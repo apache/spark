@@ -509,16 +509,8 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * Stop the execution of the streams.
    * @param stopSparkContext Stop the associated SparkContext or not
    */
-  def stop(stopSparkContext: Boolean) = ssc.stop(stopSparkContext)
-
-  /**
-   * Stop the execution of the streams.
-   * @param stopSparkContext Stop the associated SparkContext or not
-   * @param stopGracefully Stop gracefully by waiting for the processing of all
-   *                       received data to be completed
-   */
-  def stop(stopSparkContext: Boolean, stopGracefully: Boolean) = {
-    ssc.stop(stopSparkContext, stopGracefully)
+  def stop(stopSparkContext: Boolean): Unit = {
+    ssc.stop(stopSparkContext)
   }
 }
 

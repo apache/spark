@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Timestamp
-
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.types._
@@ -29,7 +27,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 class ExpressionEvaluationSuite extends FunSuite {
 
   test("literals") {
-    assert((Literal(1) + Literal(1)).eval(null) === 2)
+    assert((Literal(1) + Literal(1)).apply(null) === 2)
   }
 
   /**
@@ -62,7 +60,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     notTrueTable.foreach {
       case (v, answer) =>
         val expr = Not(Literal(v, BooleanType))
-        val result = expr.eval(null)
+        val result = expr.apply(null)
         if (result != answer)
           fail(s"$expr should not evaluate to $result, expected: $answer")    }
   }
@@ -100,15 +98,12 @@ class ExpressionEvaluationSuite extends FunSuite {
     (null,  false, null) ::
     (null,  null,  null) :: Nil)
 
-  def booleanLogicTest(
-      name: String,
-      op: (Expression, Expression) => Expression,
-      truthTable: Seq[(Any, Any, Any)]) {
+  def booleanLogicTest(name: String, op: (Expression, Expression) => Expression,  truthTable: Seq[(Any, Any, Any)]) {
     test(s"3VL $name") {
       truthTable.foreach {
         case (l,r,answer) =>
           val expr = op(Literal(l, BooleanType), Literal(r, BooleanType))
-          val result = expr.eval(null)
+          val result = expr.apply(null)
           if (result != answer)
             fail(s"$expr should not evaluate to $result, expected: $answer")
       }
@@ -116,7 +111,7 @@ class ExpressionEvaluationSuite extends FunSuite {
   }
 
   def evaluate(expression: Expression, inputRow: Row = EmptyRow): Any = {
-    expression.eval(inputRow)
+    expression.apply(inputRow)
   }
 
   def checkEvaluation(expression: Expression, expected: Any, inputRow: Row = EmptyRow): Unit = {
@@ -144,7 +139,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation("abc"  like "b%", false)
     checkEvaluation("abc"  like "bc%", false)
   }
-
+  
   test("LIKE Non-literal Regular Expression") {
     val regEx = 'a.string.at(0)
     checkEvaluation("abcd" like regEx, null, new GenericRow(Array[Any](null)))
@@ -164,7 +159,7 @@ class ExpressionEvaluationSuite extends FunSuite {
   test("RLIKE literal Regular Expression") {
     checkEvaluation("abdef" rlike "abdef", true)
     checkEvaluation("abbbbc" rlike "a.*c", true)
-
+    
     checkEvaluation("fofo" rlike "^fo", true)
     checkEvaluation("fo\no" rlike "^fo\no$", true)
     checkEvaluation("Bn" rlike "^Ba*n", true)
@@ -195,78 +190,6 @@ class ExpressionEvaluationSuite extends FunSuite {
     intercept[java.util.regex.PatternSyntaxException] {
       evaluate("abbbbc" rlike regEx, new GenericRow(Array[Any]("**")))
     }
-  }
-
-  test("data type casting") {
-
-    val sts = "1970-01-01 00:00:01.0"
-    val ts = Timestamp.valueOf(sts)
-
-    checkEvaluation("abdef" cast StringType, "abdef")
-    checkEvaluation("abdef" cast DecimalType, null)
-    checkEvaluation("abdef" cast TimestampType, null)
-    checkEvaluation("12.65" cast DecimalType, BigDecimal(12.65))
-
-    checkEvaluation(Literal(1) cast LongType, 1)
-    checkEvaluation(Cast(Literal(1) cast TimestampType, LongType), 1)
-    checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
-
-    checkEvaluation(Cast(Literal(sts) cast TimestampType, StringType), sts)
-    checkEvaluation(Cast(Literal(ts) cast StringType, TimestampType), ts)
-
-    checkEvaluation(Cast("abdef" cast BinaryType, StringType), "abdef")
-
-    checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast ByteType, ShortType), IntegerType), FloatType), DoubleType), LongType), 5)
-    checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast ByteType, TimestampType), DecimalType), LongType), StringType), ShortType), 5)
-    checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast TimestampType, ByteType), DecimalType), LongType), StringType), ShortType), null)
-    checkEvaluation(Cast(Cast(Cast(Cast(
-      Cast("5" cast DecimalType, ByteType), TimestampType), LongType), StringType), ShortType), 5)
-    checkEvaluation(Literal(true) cast IntegerType, 1)
-    checkEvaluation(Literal(false) cast IntegerType, 0)
-    checkEvaluation(Cast(Literal(1) cast BooleanType, IntegerType), 1)
-    checkEvaluation(Cast(Literal(0) cast BooleanType, IntegerType), 0)
-    checkEvaluation("23" cast DoubleType, 23)
-    checkEvaluation("23" cast IntegerType, 23)
-    checkEvaluation("23" cast FloatType, 23)
-    checkEvaluation("23" cast DecimalType, 23)
-    checkEvaluation("23" cast ByteType, 23)
-    checkEvaluation("23" cast ShortType, 23)
-    checkEvaluation("2012-12-11" cast DoubleType, null)
-    checkEvaluation(Literal(123) cast IntegerType, 123)
-
-    intercept[Exception] {evaluate(Literal(1) cast BinaryType, null)}
-  }
-
-  test("timestamp") {
-    val ts1 = new Timestamp(12)
-    val ts2 = new Timestamp(123)
-    checkEvaluation(Literal("ab") < Literal("abc"), true)
-    checkEvaluation(Literal(ts1) < Literal(ts2), true)
-  }
-
-  test("timestamp casting") {
-    val millis = 15 * 1000 + 2
-    val ts = new Timestamp(millis)
-    val ts1 = new Timestamp(15 * 1000)  // a timestamp without the milliseconds part
-    checkEvaluation(Cast(ts, ShortType), 15)
-    checkEvaluation(Cast(ts, IntegerType), 15)
-    checkEvaluation(Cast(ts, LongType), 15)
-    checkEvaluation(Cast(ts, FloatType), 15.002f)
-    checkEvaluation(Cast(ts, DoubleType), 15.002)
-    checkEvaluation(Cast(Cast(ts, ShortType), TimestampType), ts1)
-    checkEvaluation(Cast(Cast(ts, IntegerType), TimestampType), ts1)
-    checkEvaluation(Cast(Cast(ts, LongType), TimestampType), ts1)
-    checkEvaluation(Cast(Cast(millis.toFloat / 1000, TimestampType), FloatType),
-      millis.toFloat / 1000)
-    checkEvaluation(Cast(Cast(millis.toDouble / 1000, TimestampType), DoubleType),
-      millis.toDouble / 1000)
-    checkEvaluation(Cast(Literal(BigDecimal(1)) cast TimestampType, DecimalType), 1)
-
-    // A test for higher precision than millis
-    checkEvaluation(Cast(Cast(0.00000001, TimestampType), DoubleType), 0.00000001)
   }
 }
 

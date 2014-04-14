@@ -20,6 +20,7 @@ package org.apache.spark.mllib.classification
 import scala.util.Random
 import scala.collection.JavaConversions._
 
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import org.jblas.DoubleMatrix
@@ -27,7 +28,6 @@ import org.jblas.DoubleMatrix
 import org.apache.spark.SparkException
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.LocalSparkContext
-import org.apache.spark.mllib.linalg.Vectors
 
 object SVMSuite {
 
@@ -54,7 +54,7 @@ object SVMSuite {
         intercept + 0.01 * rnd.nextGaussian()
       if (yD < 0) 0.0 else 1.0
     }
-    y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
+    y.zip(x).map(p => LabeledPoint(p._1, p._2))
   }
 
 }
@@ -110,7 +110,7 @@ class SVMSuite extends FunSuite with LocalSparkContext {
 
     val initialB = -1.0
     val initialC = -1.0
-    val initialWeights = Vectors.dense(initialB, initialC)
+    val initialWeights = Array(initialB,initialC)
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
@@ -150,10 +150,10 @@ class SVMSuite extends FunSuite with LocalSparkContext {
     }
 
     intercept[SparkException] {
-      SVMWithSGD.train(testRDDInvalid, 100)
+      val model = SVMWithSGD.train(testRDDInvalid, 100)
     }
 
     // Turning off data validation should not throw an exception
-    new SVMWithSGD().setValidateData(false).run(testRDDInvalid)
+    val noValidationModel = new SVMWithSGD().setValidateData(false).run(testRDDInvalid)
   }
 }

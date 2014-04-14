@@ -54,23 +54,15 @@ trait Vector extends Serializable {
    * Converts the instance to a breeze vector.
    */
   private[mllib] def toBreeze: BV[Double]
-
-  /**
-   * Gets the value of the ith element.
-   * @param i index
-   */
-  private[mllib] def apply(i: Int): Double = toBreeze(i)
 }
 
 /**
  * Factory methods for [[org.apache.spark.mllib.linalg.Vector]].
- * We don't use the name `Vector` because Scala imports
- * [[scala.collection.immutable.Vector]] by default.
  */
 object Vectors {
 
   /**
-   * Creates a dense vector from its values.
+   * Creates a dense vector.
    */
   @varargs
   def dense(firstValue: Double, otherValues: Double*): Vector =
@@ -153,28 +145,25 @@ class DenseVector(val values: Array[Double]) extends Vector {
   override def toArray: Array[Double] = values
 
   private[mllib] override def toBreeze: BV[Double] = new BDV[Double](values)
-
-  override def apply(i: Int) = values(i)
 }
 
 /**
  * A sparse vector represented by an index array and an value array.
  *
- * @param size size of the vector.
+ * @param n size of the vector.
  * @param indices index array, assume to be strictly increasing.
  * @param values value array, must have the same length as the index array.
  */
-class SparseVector(
-    override val size: Int,
-    val indices: Array[Int],
-    val values: Array[Double]) extends Vector {
+class SparseVector(val n: Int, val indices: Array[Int], val values: Array[Double]) extends Vector {
+
+  override def size: Int = n
 
   override def toString: String = {
-    "(" + size + "," + indices.zip(values).mkString("[", "," ,"]") + ")"
+    "(" + n + "," + indices.zip(values).mkString("[", "," ,"]") + ")"
   }
 
   override def toArray: Array[Double] = {
-    val data = new Array[Double](size)
+    val data = new Array[Double](n)
     var i = 0
     val nnz = indices.length
     while (i < nnz) {
@@ -184,5 +173,5 @@ class SparseVector(
     data
   }
 
-  private[mllib] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
+  private[mllib] override def toBreeze: BV[Double] = new BSV[Double](indices, values, n)
 }

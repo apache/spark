@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.classification;
 
+
 import java.io.Serializable;
 import java.util.List;
 
@@ -27,6 +28,7 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+
 import org.apache.spark.mllib.regression.LabeledPoint;
 
 public class JavaSVMSuite implements Serializable {
@@ -92,4 +94,5 @@ public class JavaSVMSuite implements Serializable {
     int numAccurate = validatePrediction(validationData, model);
     Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
   }
+
 }

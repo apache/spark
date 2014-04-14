@@ -29,7 +29,6 @@ import akka.actor._
 import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import akka.serialization.SerializationExtension
-import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState}
@@ -38,7 +37,7 @@ import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
+import org.apache.spark.scheduler.ReplayListenerBus
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -46,8 +45,7 @@ private[spark] class Master(
     host: String,
     port: Int,
     webUiPort: Int,
-    val securityMgr: SecurityManager)
-  extends Actor with Logging {
+    val securityMgr: SecurityManager) extends Actor with Logging {
 
   import context.dispatcher   // to use Akka's scheduler.schedule()
 
@@ -73,7 +71,6 @@ private[spark] class Master(
   var nextAppNumber = 0
 
   val appIdToUI = new HashMap[String, SparkUI]
-  val fileSystemsUsed = new HashSet[FileSystem]
 
   val drivers = new HashSet[DriverInfo]
   val completedDrivers = new ArrayBuffer[DriverInfo]
@@ -152,7 +149,6 @@ private[spark] class Master(
 
   override def postStop() {
     webUi.stop()
-    fileSystemsUsed.foreach(_.close())
     masterMetricsSystem.stop()
     applicationMetricsSystem.stop()
     persistenceEngine.close()
@@ -635,7 +631,11 @@ private[spark] class Master(
       waitingApps -= app
 
       // If application events are logged, use them to rebuild the UI
-      if (!rebuildSparkUI(app)) {
+      startPersistedSparkUI(app).map { ui =>
+        app.desc.appUiUrl = ui.basePath
+        appIdToUI(app.id) = ui
+        webUi.attachUI(ui)
+      }.getOrElse {
         // Avoid broken links if the UI is not reconstructed
         app.desc.appUiUrl = ""
       }
@@ -655,34 +655,30 @@ private[spark] class Master(
   }
 
   /**
-   * Rebuild a new SparkUI from the given application's event logs.
-   * Return whether this is successful.
+   * Start a new SparkUI rendered from persisted storage. If this is unsuccessful for any reason,
+   * return None. Otherwise return the reconstructed UI.
    */
-  def rebuildSparkUI(app: ApplicationInfo): Boolean = {
+  def startPersistedSparkUI(app: ApplicationInfo): Option[SparkUI] = {
     val appName = app.desc.name
-    val eventLogDir = app.desc.eventLogDir.getOrElse { return false }
-    val fileSystem = Utils.getHadoopFileSystem(eventLogDir)
-    val eventLogInfo = EventLoggingListener.parseLoggingInfo(eventLogDir, fileSystem)
-    val eventLogPaths = eventLogInfo.logPaths
-    val compressionCodec = eventLogInfo.compressionCodec
-    if (!eventLogPaths.isEmpty) {
-      try {
-        val replayBus = new ReplayListenerBus(eventLogPaths, fileSystem, compressionCodec)
-        val ui = new SparkUI(replayBus, appName + " (completed)", "/history/" + app.id)
-        ui.start()
-        replayBus.replay()
-        app.desc.appUiUrl = ui.basePath
-        appIdToUI(app.id) = ui
-        webUi.attachUI(ui)
-        return true
-      } catch {
-        case t: Throwable =>
-          logError("Exception in replaying log for application %s (%s)".format(appName, app.id), t)
-      }
-    } else {
-      logWarning("Application %s (%s) has no valid logs: %s".format(appName, app.id, eventLogDir))
+    val eventLogInfo = app.desc.eventLogInfo.getOrElse { return None }
+    val eventLogDir = eventLogInfo.logDir
+    val eventCompressionCodec = eventLogInfo.compressionCodec
+    val appConf = new SparkConf
+    eventCompressionCodec.foreach { codec =>
+      appConf.set("spark.eventLog.compress", "true")
+      appConf.set("spark.io.compression.codec", codec)
     }
-    false
+    val replayerBus = new ReplayListenerBus(appConf)
+    val ui = new SparkUI(
+      appConf,
+      replayerBus,
+      "%s (finished)".format(appName),
+      "/history/%s".format(app.id))
+
+    // Do not call ui.bind() to avoid creating a new server for each application
+    ui.start()
+    val success = replayerBus.replay(eventLogDir)
+    if (success) Some(ui) else None
   }
 
   /** Generate a new app ID given a app's submission date */

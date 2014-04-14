@@ -136,7 +136,7 @@ class PruningSuite extends HiveComparisonTest {
       expectedScannedColumns: Seq[String],
       expectedPartValues: Seq[Seq[String]]) = {
     test(s"$testCaseName - pruning test") {
-      val plan = new TestHive.HiveQLQueryExecution(sql).executedPlan
+      val plan = new TestHive.SqlQueryExecution(sql).executedPlan
       val actualOutputColumns = plan.output.map(_.name)
       val (actualScannedColumns, actualPartValues) = plan.collect {
         case p @ HiveTableScan(columns, relation, _) =>

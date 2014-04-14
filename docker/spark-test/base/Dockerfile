@@ -25,7 +25,7 @@ RUN apt-get update
 # install a few other useful packages plus Open Jdk 7
 RUN apt-get install -y less openjdk-7-jre-headless net-tools vim-tiny sudo openssh-server
 
-ENV SCALA_VERSION 2.10.4
+ENV SCALA_VERSION 2.10.3
 ENV CDH_VERSION cdh4
 ENV SCALA_HOME /opt/scala-$SCALA_VERSION
 ENV SPARK_HOME /opt/spark

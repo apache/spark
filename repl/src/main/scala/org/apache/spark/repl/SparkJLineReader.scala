@@ -7,10 +7,8 @@
 
 package org.apache.spark.repl
 
-import scala.reflect.io.{Path, File}
 import scala.tools.nsc._
 import scala.tools.nsc.interpreter._
-import scala.tools.nsc.interpreter.session.JLineHistory.JLineFileHistory
 
 import scala.tools.jline.console.ConsoleReader
 import scala.tools.jline.console.completer._
@@ -27,7 +25,7 @@ class SparkJLineReader(_completion: => Completion) extends InteractiveReader {
   val consoleReader = new JLineConsoleReader()
 
   lazy val completion = _completion
-  lazy val history: JLineHistory = new SparkJLineHistory
+  lazy val history: JLineHistory = JLineHistory()
 
   private def term = consoleReader.getTerminal()
   def reset() = term.reset()
@@ -79,12 +77,4 @@ class SparkJLineReader(_completion: => Completion) extends InteractiveReader {
   // def eraseLine() = while (consoleReader.delete()) { }
   def readOneLine(prompt: String) = consoleReader readLine prompt
   def readOneKey(prompt: String)  = consoleReader readOneKey prompt
-}
-
-/** Changes the default history file to not collide with the scala repl's. */
-class SparkJLineHistory extends JLineFileHistory {
-  import Properties.userHome
-
-  def defaultFileName = ".spark_history"
-  override protected lazy val historyFile = File(Path(userHome) / defaultFileName)
 }

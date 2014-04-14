@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConversions
 import scala.collection.mutable.Set
 
-private[spark] class TimeStampedHashSet[A] extends Set[A] {
+class TimeStampedHashSet[A] extends Set[A] {
   val internalMap = new ConcurrentHashMap[A, Long]()
 
   def contains(key: A): Boolean = {

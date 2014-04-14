@@ -56,9 +56,6 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
    * Construct a new edge partition by applying the function f to all
    * edges in this partition.
    *
-   * Be careful not to keep references to the objects passed to `f`.
-   * To improve GC performance the same object is re-used for each call.
-   *
    * @param f a function from an edge to a new attribute
    * @tparam ED2 the type of the new attribute
    * @return a new edge partition with the result of the function `f`
@@ -87,12 +84,12 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
    * order of the edges returned by `EdgePartition.iterator` and
    * should return attributes equal to the number of edges.
    *
-   * @param iter an iterator for the new attribute values
+   * @param f a function from an edge to a new attribute
    * @tparam ED2 the type of the new attribute
-   * @return a new edge partition with the attribute values replaced
+   * @return a new edge partition with the result of the function `f`
+   *         applied to each edge
    */
   def map[ED2: ClassTag](iter: Iterator[ED2]): EdgePartition[ED2] = {
-    // Faster than iter.toArray, because the expected size is known.
     val newData = new Array[ED2](data.size)
     var i = 0
     while (iter.hasNext) {
@@ -191,9 +188,6 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
   /**
    * Get an iterator over the edges in this partition.
    *
-   * Be careful not to keep references to the objects from this iterator.
-   * To improve GC performance the same object is re-used in `next()`.
-   *
    * @return an iterator over edges in the partition
    */
   def iterator = new Iterator[Edge[ED]] {
@@ -222,9 +216,6 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
   /**
    * Get an iterator over the cluster of edges in this partition with source vertex id `srcId`. The
    * cluster must start at position `index`.
-   *
-   * Be careful not to keep references to the objects from this iterator. To improve GC performance
-   * the same object is re-used in `next()`.
    */
   private def clusterIterator(srcId: VertexId, index: Int) = new Iterator[Edge[ED]] {
     private[this] val edge = new Edge[ED]

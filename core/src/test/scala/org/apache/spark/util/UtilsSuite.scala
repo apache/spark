@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import scala.util.Random
 
-import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream}
+import java.io.{ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream}
 import java.nio.{ByteBuffer, ByteOrder}
 
 import com.google.common.base.Charsets
@@ -153,19 +153,6 @@ class UtilsSuite extends FunSuite {
     assert(Utils.getIteratorSize(empty.toIterator) === 0L)
     val iterator = Iterator.range(0, 5)
     assert(Utils.getIteratorSize(iterator) === 5L)
-  }
-
-  test("findOldFiles") {
-    // create some temporary directories and files
-    val parent: File = Utils.createTempDir()
-    val child1: File = Utils.createTempDir(parent.getCanonicalPath) // The parent directory has two child directories
-    val child2: File = Utils.createTempDir(parent.getCanonicalPath)
-    // set the last modified time of child1 to 10 secs old
-    child1.setLastModified(System.currentTimeMillis() - (1000 * 10))
-
-    val result = Utils.findOldFiles(parent, 5) // find files older than 5 secs
-    assert(result.size.equals(1))
-    assert(result(0).getCanonicalPath.equals(child1.getCanonicalPath))
   }
 }
 

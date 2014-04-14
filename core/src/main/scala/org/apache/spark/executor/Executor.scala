@@ -291,19 +291,15 @@ private[spark] class Executor(
    * Create a ClassLoader for use in tasks, adding any JARs specified by the user or any classes
    * created by the interpreter to the search path
    */
-  private def createClassLoader(): MutableURLClassLoader = {
-    val loader = this.getClass.getClassLoader
+  private def createClassLoader(): ExecutorURLClassLoader = {
+    val loader = Thread.currentThread().getContextClassLoader
 
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.
     val urls = currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }.toArray
-    val userClassPathFirst = conf.getBoolean("spark.files.userClassPathFirst", false)
-    userClassPathFirst match {
-      case true => new ChildExecutorURLClassLoader(urls, loader)
-      case false => new ExecutorURLClassLoader(urls, loader)
-    }
+    new ExecutorURLClassLoader(urls, loader)
   }
 
   /**
@@ -314,14 +310,11 @@ private[spark] class Executor(
     val classUri = conf.get("spark.repl.class.uri", null)
     if (classUri != null) {
       logInfo("Using REPL class URI: " + classUri)
-      val userClassPathFirst: java.lang.Boolean =
-        conf.getBoolean("spark.files.userClassPathFirst", false)
       try {
         val klass = Class.forName("org.apache.spark.repl.ExecutorClassLoader")
           .asInstanceOf[Class[_ <: ClassLoader]]
-        val constructor = klass.getConstructor(classOf[String], classOf[ClassLoader],
-          classOf[Boolean])
-        constructor.newInstance(classUri, parent, userClassPathFirst)
+        val constructor = klass.getConstructor(classOf[String], classOf[ClassLoader])
+        constructor.newInstance(classUri, parent)
       } catch {
         case _: ClassNotFoundException =>
           logError("Could not find org.apache.spark.repl.ExecutorClassLoader on classpath!")

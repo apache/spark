@@ -36,7 +36,7 @@ import org.apache.spark.io.CompressionCodec
  * @param compress Whether to compress output
  * @param overwrite Whether to overwrite existing files
  */
-private[spark] class FileLogger(
+class FileLogger(
     logDir: String,
     conf: SparkConf = new SparkConf,
     outputBufferSize: Int = 8 * 1024, // 8 KB
@@ -49,7 +49,7 @@ private[spark] class FileLogger(
   }
 
   private val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
-  var fileIndex = 0
+  private var fileIndex = 0
 
   // Only used if compression is enabled
   private lazy val compressionCodec = CompressionCodec.createCodec(conf)
@@ -57,9 +57,10 @@ private[spark] class FileLogger(
   // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
 
-  private var writer: Option[PrintWriter] = None
-
-  createLogDir()
+  private var writer: Option[PrintWriter] = {
+    createLogDir()
+    Some(createWriter())
+  }
 
   /**
    * Create a logging directory with the given path.
@@ -83,8 +84,8 @@ private[spark] class FileLogger(
   /**
    * Create a new writer for the file identified by the given path.
    */
-  private def createWriter(fileName: String): PrintWriter = {
-    val logPath = logDir + "/" + fileName
+  private def createWriter(): PrintWriter = {
+    val logPath = logDir + "/" + fileIndex
     val uri = new URI(logPath)
 
     /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
@@ -146,17 +147,13 @@ private[spark] class FileLogger(
   }
 
   /**
-   * Start a writer for a new file, closing the existing one if it exists.
-   * @param fileName Name of the new file, defaulting to the file index if not provided.
+   * Start a writer for a new file if one does not already exit.
    */
-  def newFile(fileName: String = "") {
-    fileIndex += 1
-    writer.foreach(_.close())
-    val name = fileName match {
-      case "" => fileIndex.toString
-      case _ => fileName
+  def start() {
+    writer.getOrElse {
+      fileIndex += 1
+      writer = Some(createWriter())
     }
-    writer = Some(createWriter(name))
   }
 
   /**

@@ -39,4 +39,3 @@ work
 .*\.q
 golden
 test.out/*
-.*iml

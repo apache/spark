@@ -63,10 +63,7 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
           userClass = value
           args = tail
 
-        case ("--args" | "--arg") :: value :: tail =>
-          if (args(0) == "--args") {
-            println("--args is deprecated. Use --arg instead.")
-          }
+        case ("--args") :: value :: tail =>
           userArgsBuffer += value
           args = tail
 
@@ -149,8 +146,8 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
       "Options:\n" +
       "  --jar JAR_PATH             Path to your application's JAR file (required in yarn-cluster mode)\n" +
       "  --class CLASS_NAME         Name of your application's main class (required)\n" +
-      "  --arg ARGS                 Argument to be passed to your application's main class.\n" +
-      "                             Multiple invocations are possible, each will be passed in order.\n" +
+      "  --args ARGS                Arguments to be passed to your application's main class.\n" +
+      "                             Mutliple invocations are possible, each will be passed in order.\n" +
       "  --num-executors NUM        Number of executors to start (Default: 2)\n" +
       "  --executor-cores NUM       Number of cores for the executors (Default: 1).\n" +
       "  --driver-memory MEM        Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)\n" +

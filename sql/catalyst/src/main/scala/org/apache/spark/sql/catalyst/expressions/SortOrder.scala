@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-
 abstract sealed class SortDirection
 case object Ascending extends SortDirection
 case object Descending extends SortDirection
@@ -28,12 +26,7 @@ case object Descending extends SortDirection
  * transformations over expression will descend into its child.
  */
 case class SortOrder(child: Expression, direction: SortDirection) extends UnaryExpression {
-  override def dataType = child.dataType
-  override def nullable = child.nullable
-
-  // SortOrder itself is never evaluated.
-  override def eval(input: Row = null): EvaluatedType =
-    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
-
+  def dataType = child.dataType
+  def nullable = child.nullable
   override def toString = s"$child ${if (direction == Ascending) "ASC" else "DESC"}"
 }

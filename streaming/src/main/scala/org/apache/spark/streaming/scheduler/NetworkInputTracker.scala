@@ -17,14 +17,20 @@
 
 package org.apache.spark.streaming.scheduler
 
-import scala.collection.mutable.{HashMap, Queue, SynchronizedMap}
+import org.apache.spark.streaming.dstream.{NetworkInputDStream, NetworkReceiver}
+import org.apache.spark.streaming.dstream.{StopReceiver, ReportBlock, ReportError}
+import org.apache.spark.{SparkException, Logging, SparkEnv}
+import org.apache.spark.SparkContext._
+
+import scala.collection.mutable.HashMap
+import scala.collection.mutable.Queue
+import scala.concurrent.duration._
 
 import akka.actor._
-import org.apache.spark.{Logging, SparkEnv, SparkException}
-import org.apache.spark.SparkContext._
+import akka.pattern.ask
+import akka.dispatch._
 import org.apache.spark.storage.BlockId
-import org.apache.spark.streaming.{StreamingContext, Time}
-import org.apache.spark.streaming.dstream.{NetworkReceiver, StopReceiver}
+import org.apache.spark.streaming.{Time, StreamingContext}
 import org.apache.spark.util.AkkaUtils
 
 private[streaming] sealed trait NetworkInputTrackerMessage
@@ -46,8 +52,8 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
   val networkInputStreams = ssc.graph.getNetworkInputStreams()
   val networkInputStreamMap = Map(networkInputStreams.map(x => (x.id, x)): _*)
   val receiverExecutor = new ReceiverExecutor()
-  val receiverInfo = new HashMap[Int, ActorRef] with SynchronizedMap[Int, ActorRef]
-  val receivedBlockIds = new HashMap[Int, Queue[BlockId]] with SynchronizedMap[Int, Queue[BlockId]]
+  val receiverInfo = new HashMap[Int, ActorRef]
+  val receivedBlockIds = new HashMap[Int, Queue[BlockId]]
   val timeout = AkkaUtils.askTimeout(ssc.conf)
 
 
@@ -57,7 +63,7 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
   var currentTime: Time = null
 
   /** Start the actor and receiver execution thread. */
-  def start() = synchronized {
+  def start() {
     if (actor != null) {
       throw new SparkException("NetworkInputTracker already started")
     }
@@ -71,99 +77,72 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
   }
 
   /** Stop the receiver execution thread. */
-  def stop() = synchronized {
+  def stop() {
     if (!networkInputStreams.isEmpty && actor != null) {
-      // First, stop the receivers
-      receiverExecutor.stop()
-
-      // Finally, stop the actor
+      receiverExecutor.interrupt()
+      receiverExecutor.stopReceivers()
       ssc.env.actorSystem.stop(actor)
-      actor = null
       logInfo("NetworkInputTracker stopped")
     }
   }
 
-  /** Register a receiver */
-  def registerReceiver(streamId: Int, receiverActor: ActorRef, sender: ActorRef) {
-    if (!networkInputStreamMap.contains(streamId)) {
-      throw new Exception("Register received for unexpected id " + streamId)
+  /** Return all the blocks received from a receiver. */
+  def getBlockIds(receiverId: Int, time: Time): Array[BlockId] = synchronized {
+    val queue =  receivedBlockIds.synchronized {
+      receivedBlockIds.getOrElse(receiverId, new Queue[BlockId]())
     }
-    receiverInfo += ((streamId, receiverActor))
-    logInfo("Registered receiver for network stream " + streamId + " from " + sender.path.address)
-  }
-
-  /** Deregister a receiver */
-  def deregisterReceiver(streamId: Int, message: String) {
-    receiverInfo -= streamId
-    logError("Deregistered receiver for network stream " + streamId + " with message:\n" + message)
-  }
-
-  /** Get all the received blocks for the given stream. */
-  def getBlocks(streamId: Int, time: Time): Array[BlockId] = {
-    val queue = receivedBlockIds.getOrElseUpdate(streamId, new Queue[BlockId]())
-    val result = queue.dequeueAll(x => true).toArray
-    logInfo("Stream " + streamId + " received " + result.size + " blocks")
-    result
-  }
-
-  /** Add new blocks for the given stream */
-  def addBlocks(streamId: Int, blockIds: Seq[BlockId], metadata: Any) = {
-    val queue = receivedBlockIds.getOrElseUpdate(streamId, new Queue[BlockId])
-    queue ++= blockIds
-    networkInputStreamMap(streamId).addMetadata(metadata)
-    logDebug("Stream " + streamId + " received new blocks: " + blockIds.mkString("[", ", ", "]"))
-  }
-
-  /** Check if any blocks are left to be processed */
-  def hasMoreReceivedBlockIds: Boolean = {
-    !receivedBlockIds.forall(_._2.isEmpty)
+    val result = queue.synchronized {
+      queue.dequeueAll(x => true)
+    }
+    logInfo("Stream " + receiverId + " received " + result.size + " blocks")
+    result.toArray
   }
 
   /** Actor to receive messages from the receivers. */
   private class NetworkInputTrackerActor extends Actor {
     def receive = {
-      case RegisterReceiver(streamId, receiverActor) =>
-        registerReceiver(streamId, receiverActor, sender)
+      case RegisterReceiver(streamId, receiverActor) => {
+        if (!networkInputStreamMap.contains(streamId)) {
+          throw new Exception("Register received for unexpected id " + streamId)
+        }
+        receiverInfo += ((streamId, receiverActor))
+        logInfo("Registered receiver for network stream " + streamId + " from "
+          + sender.path.address)
         sender ! true
-      case AddBlocks(streamId, blockIds, metadata) =>
-        addBlocks(streamId, blockIds, metadata)
-      case DeregisterReceiver(streamId, message) =>
-        deregisterReceiver(streamId, message)
-        sender ! true
+      }
+      case AddBlocks(streamId, blockIds, metadata) => {
+        val tmp = receivedBlockIds.synchronized {
+          if (!receivedBlockIds.contains(streamId)) {
+            receivedBlockIds += ((streamId, new Queue[BlockId]))
+          }
+          receivedBlockIds(streamId)
+        }
+        tmp.synchronized {
+          tmp ++= blockIds
+        }
+        networkInputStreamMap(streamId).addMetadata(metadata)
+      }
+      case DeregisterReceiver(streamId, msg) => {
+        receiverInfo -= streamId
+        logError("De-registered receiver for network stream " + streamId
+          + " with message " + msg)
+        // TODO: Do something about the corresponding NetworkInputDStream
+      }
     }
   }
 
   /** This thread class runs all the receivers on the cluster.  */
-  class ReceiverExecutor {
-    @transient val env = ssc.env
-    @transient val thread  = new Thread() {
-      override def run() {
-        try {
-          SparkEnv.set(env)
-          startReceivers()
-        } catch {
-          case ie: InterruptedException => logInfo("ReceiverExecutor interrupted")
-        }
-      }
-    }
+  class ReceiverExecutor extends Thread {
+    val env = ssc.env
 
-    def start() {
-      thread.start()
-    }
-
-    def stop() {
-      // Send the stop signal to all the receivers
-      stopReceivers()
-
-      // Wait for the Spark job that runs the receivers to be over
-      // That is, for the receivers to quit gracefully.
-      thread.join(10000)
-
-      // Check if all the receivers have been deregistered or not
-      if (!receiverInfo.isEmpty) {
-        logWarning("All of the receivers have not deregistered, " + receiverInfo)
-      } else {
-        logInfo("All of the receivers have deregistered successfully")
+    override def run() {
+      try {
+        SparkEnv.set(env)
+        startReceivers()
+      } catch {
+        case ie: InterruptedException => logInfo("ReceiverExecutor interrupted")
+      } finally {
+        stopReceivers()
       }
     }
 
@@ -171,7 +150,7 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
      * Get the receivers from the NetworkInputDStreams, distributes them to the
      * worker nodes as a parallel collection, and runs them.
      */
-    private def startReceivers() {
+    def startReceivers() {
       val receivers = networkInputStreams.map(nis => {
         val rcvr = nis.getReceiver()
         rcvr.setStreamId(nis.id)
@@ -207,16 +186,13 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
       }
 
       // Distribute the receivers and start them
-      logInfo("Starting " + receivers.length + " receivers")
       ssc.sparkContext.runJob(tempRDD, startReceiver)
-      logInfo("All of the receivers have been terminated")
     }
 
     /** Stops the receivers. */
-    private def stopReceivers() {
+    def stopReceivers() {
       // Signal the receivers to stop
       receiverInfo.values.foreach(_ ! StopReceiver)
-      logInfo("Sent stop signal to all " + receiverInfo.size + " receivers")
     }
   }
 }

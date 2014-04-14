@@ -32,13 +32,7 @@ class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
     kryo.setRegistrationRequired(false)
     kryo.register(classOf[MutablePair[_, _]])
     kryo.register(classOf[Array[Any]])
-    // This is kinda hacky...
     kryo.register(classOf[scala.collection.immutable.Map$Map1], new MapSerializer)
-    kryo.register(classOf[scala.collection.immutable.Map$Map2], new MapSerializer)
-    kryo.register(classOf[scala.collection.immutable.Map$Map3], new MapSerializer)
-    kryo.register(classOf[scala.collection.immutable.Map$Map4], new MapSerializer)
-    kryo.register(classOf[scala.collection.immutable.Map[_,_]], new MapSerializer)
-    kryo.register(classOf[scala.collection.Map[_,_]], new MapSerializer)
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericRow])
     kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericMutableRow])
     kryo.register(classOf[scala.collection.mutable.ArrayBuffer[_]])

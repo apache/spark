@@ -32,6 +32,6 @@ object HdfsTest {
       val end = System.currentTimeMillis()
       println("Iteration " + iter + " took " + (end-start) + " ms")
     }
-    sc.stop()
+    System.exit(0)
   }
 }

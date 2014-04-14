@@ -17,8 +17,8 @@
 # limitations under the License.
 #
 
-echo -e "q\n" | sbt/sbt clean scalastyle > scalastyle.txt
-ERRORS=$(cat scalastyle.txt | grep -e "\<error\>")
+sbt/sbt clean scalastyle > scalastyle.txt
+ERRORS=$(cat scalastyle.txt | grep -e "error file")
 if test ! -z "$ERRORS"; then
     echo -e "Scalastyle checks failed at following occurrences:\n$ERRORS"
     exit 1

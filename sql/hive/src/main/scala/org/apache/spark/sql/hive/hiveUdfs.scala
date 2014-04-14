@@ -190,8 +190,8 @@ case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUd
   }
 
   // TODO: Finish input output types.
-  override def eval(input: Row): Any = {
-    val evaluatedChildren = children.map(_.eval(input))
+  override def apply(input: Row): Any = {
+    val evaluatedChildren = children.map(_.apply(input))
     // Wrap the function arguments in the expected types.
     val args = evaluatedChildren.zip(wrappers).map {
       case (arg, wrapper) => wrapper(arg)
@@ -216,12 +216,12 @@ case class HiveGenericUdf(
 
   val dataType: DataType = inspectorToDataType(returnInspector)
 
-  override def eval(input: Row): Any = {
+  override def apply(input: Row): Any = {
     returnInspector // Make sure initialized.
     val args = children.map { v =>
       new DeferredObject {
         override def prepare(i: Int) = {}
-        override def get(): AnyRef = wrap(v.eval(input))
+        override def get(): AnyRef = wrap(v.apply(input))
       }
     }.toArray
     unwrap(function.evaluate(args))
@@ -337,16 +337,13 @@ case class HiveGenericUdaf(
 
   type UDFType = AbstractGenericUDAFResolver
 
-  @transient
   protected lazy val resolver: AbstractGenericUDAFResolver = createFunction(name)
 
-  @transient
   protected lazy val objectInspector  = {
     resolver.getEvaluator(children.map(_.dataType.toTypeInfo).toArray)
       .init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors.toArray)
   }
 
-  @transient
   protected lazy val inspectors = children.map(_.dataType).map(toInspector)
 
   def dataType: DataType = inspectorToDataType(objectInspector)
@@ -406,7 +403,7 @@ case class HiveGenericUdtf(
     }
   }
 
-  override def eval(input: Row): TraversableOnce[Row] = {
+  override def apply(input: Row): TraversableOnce[Row] = {
     outputInspectors // Make sure initialized.
 
     val inputProjection = new Projection(children)
@@ -460,7 +457,7 @@ case class HiveUdafFunction(
   private val buffer =
     function.getNewAggregationBuffer.asInstanceOf[GenericUDAFEvaluator.AbstractAggregationBuffer]
 
-  override def eval(input: Row): Any = unwrapData(function.evaluate(buffer), returnInspector)
+  override def apply(input: Row): Any = unwrapData(function.evaluate(buffer), returnInspector)
 
   @transient
   val inputProjection = new Projection(exprs)

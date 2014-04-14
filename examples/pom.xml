@@ -110,7 +110,7 @@
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase</artifactId>
-      <version>${hbase.version}</version>
+      <version>0.94.6</version>
       <exclusions>
         <exclusion>
           <groupId>asm</groupId>

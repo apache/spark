@@ -73,11 +73,10 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       register(blockManagerId, maxMemSize, slaveActor)
       sender ! true
 
-    case UpdateBlockInfo(
-      blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize) =>
+    case UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
       // TODO: Ideally we want to handle all the message replies in receive instead of in the
       // individual private methods.
-      updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize)
+      updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size)
 
     case GetLocations(blockId) =>
       sender ! getLocations(blockId)
@@ -94,20 +93,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     case GetStorageStatus =>
       sender ! storageStatus
 
-    case GetBlockStatus(blockId, askSlaves) =>
-      sender ! blockStatus(blockId, askSlaves)
-
-    case GetMatchingBlockIds(filter, askSlaves) =>
-      sender ! getMatchingBlockIds(filter, askSlaves)
-
     case RemoveRdd(rddId) =>
       sender ! removeRdd(rddId)
-
-    case RemoveShuffle(shuffleId) =>
-      sender ! removeShuffle(shuffleId)
-
-    case RemoveBroadcast(broadcastId, removeFromDriver) =>
-      sender ! removeBroadcast(broadcastId, removeFromDriver)
 
     case RemoveBlock(blockId) =>
       removeBlockFromWorkers(blockId)
@@ -152,41 +139,9 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     // The dispatcher is used as an implicit argument into the Future sequence construction.
     import context.dispatcher
     val removeMsg = RemoveRdd(rddId)
-    Future.sequence(
-      blockManagerInfo.values.map { bm =>
-        bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Int]
-      }.toSeq
-    )
-  }
-
-  private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
-    // Nothing to do in the BlockManagerMasterActor data structures
-    import context.dispatcher
-    val removeMsg = RemoveShuffle(shuffleId)
-    Future.sequence(
-      blockManagerInfo.values.map { bm =>
-        bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Boolean]
-      }.toSeq
-    )
-  }
-
-  /**
-   * Delegate RemoveBroadcast messages to each BlockManager because the master may not notified
-   * of all broadcast blocks. If removeFromDriver is false, broadcast blocks are only removed
-   * from the executors, but not from the driver.
-   */
-  private def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean): Future[Seq[Int]] = {
-    // TODO: Consolidate usages of <driver>
-    import context.dispatcher
-    val removeMsg = RemoveBroadcast(broadcastId, removeFromDriver)
-    val requiredBlockManagers = blockManagerInfo.values.filter { info =>
-      removeFromDriver || info.blockManagerId.executorId != "<driver>"
-    }
-    Future.sequence(
-      requiredBlockManagers.map { bm =>
-        bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Int]
-      }.toSeq
-    )
+    Future.sequence(blockManagerInfo.values.map { bm =>
+      bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Int]
+    }.toSeq)
   }
 
   private def removeBlockManager(blockManagerId: BlockManagerId) {
@@ -269,61 +224,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     }.toArray
   }
 
-  /**
-   * Return the block's status for all block managers, if any. NOTE: This is a
-   * potentially expensive operation and should only be used for testing.
-   *
-   * If askSlaves is true, the master queries each block manager for the most updated block
-   * statuses. This is useful when the master is not informed of the given block by all block
-   * managers.
-   */
-  private def blockStatus(
-      blockId: BlockId,
-      askSlaves: Boolean): Map[BlockManagerId, Future[Option[BlockStatus]]] = {
-    import context.dispatcher
-    val getBlockStatus = GetBlockStatus(blockId)
-    /*
-     * Rather than blocking on the block status query, master actor should simply return
-     * Futures to avoid potential deadlocks. This can arise if there exists a block manager
-     * that is also waiting for this master actor's response to a previous message.
-     */
-    blockManagerInfo.values.map { info =>
-      val blockStatusFuture =
-        if (askSlaves) {
-          info.slaveActor.ask(getBlockStatus)(akkaTimeout).mapTo[Option[BlockStatus]]
-        } else {
-          Future { info.getStatus(blockId) }
-        }
-      (info.blockManagerId, blockStatusFuture)
-    }.toMap
-  }
-
-  /**
-   * Return the ids of blocks present in all the block managers that match the given filter.
-   * NOTE: This is a potentially expensive operation and should only be used for testing.
-   *
-   * If askSlaves is true, the master queries each block manager for the most updated block
-   * statuses. This is useful when the master is not informed of the given block by all block
-   * managers.
-   */
-  private def getMatchingBlockIds(
-      filter: BlockId => Boolean,
-      askSlaves: Boolean): Future[Seq[BlockId]] = {
-    import context.dispatcher
-    val getMatchingBlockIds = GetMatchingBlockIds(filter)
-    Future.sequence(
-      blockManagerInfo.values.map { info =>
-        val future =
-          if (askSlaves) {
-            info.slaveActor.ask(getMatchingBlockIds)(akkaTimeout).mapTo[Seq[BlockId]]
-          } else {
-            Future { info.blocks.keys.filter(filter).toSeq }
-          }
-        future
-      }
-    ).map(_.flatten.toSeq)
-  }
-
   private def register(id: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
@@ -346,8 +246,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       blockId: BlockId,
       storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long,
-      tachyonSize: Long) {
+      diskSize: Long) {
 
     if (!blockManagerInfo.contains(blockManagerId)) {
       if (blockManagerId.executorId == "<driver>" && !isLocal) {
@@ -366,8 +265,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       return
     }
 
-    blockManagerInfo(blockManagerId).updateBlockInfo(
-      blockId, storageLevel, memSize, diskSize, tachyonSize)
+    blockManagerInfo(blockManagerId).updateBlockInfo(blockId, storageLevel, memSize, diskSize)
 
     var locations: mutable.HashSet[BlockManagerId] = null
     if (blockLocations.containsKey(blockId)) {
@@ -411,11 +309,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   }
 }
 
-private[spark] case class BlockStatus(
-    storageLevel: StorageLevel,
-    memSize: Long,
-    diskSize: Long,
-    tachyonSize: Long)
+
+private[spark] case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long)
 
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,
@@ -433,8 +328,6 @@ private[spark] class BlockManagerInfo(
   logInfo("Registering block manager %s with %s RAM".format(
     blockManagerId.hostPort, Utils.bytesToString(maxMem)))
 
-  def getStatus(blockId: BlockId) = Option(_blocks.get(blockId))
-
   def updateLastSeenMs() {
     _lastSeenMs = System.currentTimeMillis()
   }
@@ -443,8 +336,7 @@ private[spark] class BlockManagerInfo(
       blockId: BlockId,
       storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long,
-      tachyonSize: Long) {
+      diskSize: Long) {
 
     updateLastSeenMs()
 
@@ -458,28 +350,22 @@ private[spark] class BlockManagerInfo(
     }
 
     if (storageLevel.isValid) {
-      /* isValid means it is either stored in-memory, on-disk or on-Tachyon.
+      /* isValid means it is either stored in-memory or on-disk.
        * But the memSize here indicates the data size in or dropped from memory,
-       * tachyonSize here indicates the data size in or dropped from Tachyon,
        * and the diskSize here indicates the data size in or dropped to disk.
        * They can be both larger than 0, when a block is dropped from memory to disk.
        * Therefore, a safe way to set BlockStatus is to set its info in accurate modes. */
       if (storageLevel.useMemory) {
-        _blocks.put(blockId, BlockStatus(storageLevel, memSize, 0, 0))
+        _blocks.put(blockId, BlockStatus(storageLevel, memSize, 0))
         _remainingMem -= memSize
         logInfo("Added %s in memory on %s (size: %s, free: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
           Utils.bytesToString(_remainingMem)))
       }
       if (storageLevel.useDisk) {
-        _blocks.put(blockId, BlockStatus(storageLevel, 0, diskSize, 0))
+        _blocks.put(blockId, BlockStatus(storageLevel, 0, diskSize))
         logInfo("Added %s on disk on %s (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
-      }
-      if (storageLevel.useOffHeap) {
-        _blocks.put(blockId, BlockStatus(storageLevel, 0, 0, tachyonSize))
-        logInfo("Added %s on tachyon on %s (size: %s)".format(
-          blockId, blockManagerId.hostPort, Utils.bytesToString(tachyonSize)))
       }
     } else if (_blocks.containsKey(blockId)) {
       // If isValid is not true, drop the block.
@@ -494,10 +380,6 @@ private[spark] class BlockManagerInfo(
       if (blockStatus.storageLevel.useDisk) {
         logInfo("Removed %s on %s on disk (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.diskSize)))
-      }
-      if (blockStatus.storageLevel.useOffHeap) {
-        logInfo("Removed %s on %s on tachyon (size: %s)".format(
-          blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.tachyonSize)))
       }
     }
   }

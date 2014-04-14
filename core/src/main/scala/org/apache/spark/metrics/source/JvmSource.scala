@@ -20,7 +20,7 @@ package org.apache.spark.metrics.source
 import com.codahale.metrics.MetricRegistry
 import com.codahale.metrics.jvm.{GarbageCollectorMetricSet, MemoryUsageGaugeSet}
 
-private[spark] class JvmSource extends Source {
+class JvmSource extends Source {
   val sourceName = "jvm"
   val metricRegistry = new MetricRegistry()
 

@@ -33,10 +33,6 @@ import org.apache.spark.storage.{GetBlock, GotBlock, PutBlock}
 
 /**
  * A Spark serializer that uses the [[https://code.google.com/p/kryo/ Kryo serialization library]].
- *
- * Note that this serializer is not guaranteed to be wire-compatible across different versions of
- * Spark. It is intended to be used to serialize/de-serialize data within a single
- * Spark application.
  */
 class KryoSerializer(conf: SparkConf)
   extends org.apache.spark.serializer.Serializer

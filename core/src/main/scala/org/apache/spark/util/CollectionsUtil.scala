@@ -22,7 +22,7 @@ import java.util
 import scala.Array
 import scala.reflect._
 
-private[spark] object CollectionsUtils {
+object CollectionsUtils {
   def makeBinarySearch[K <% Ordered[K] : ClassTag] : (Array[K], K) => Int = {
     classTag[K] match {
       case ClassTag.Float =>

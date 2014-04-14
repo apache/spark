@@ -83,19 +83,19 @@ private[spark] class HttpServer(resourceBase: File, securityManager: SecurityMan
     }
   }
 
-  /**
+  /** 
    * Setup Jetty to the HashLoginService using a single user with our
    * shared secret. Configure it to use DIGEST-MD5 authentication so that the password
    * isn't passed in plaintext.
    */
   private def setupSecurityHandler(securityMgr: SecurityManager): ConstraintSecurityHandler = {
     val constraint = new Constraint()
-    // use DIGEST-MD5 as the authentication mechanism
+    // use DIGEST-MD5 as the authentication mechanism 
     constraint.setName(Constraint.__DIGEST_AUTH)
     constraint.setRoles(Array("user"))
     constraint.setAuthenticate(true)
     constraint.setDataConstraint(Constraint.DC_NONE)
-
+ 
     val cm = new ConstraintMapping()
     cm.setConstraint(constraint)
     cm.setPathSpec("/*")

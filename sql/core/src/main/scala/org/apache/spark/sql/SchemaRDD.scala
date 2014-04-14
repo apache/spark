@@ -17,17 +17,17 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{Dependency, OneToOneDependency, Partition, TaskContext}
-import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.types.BooleanType
+import org.apache.spark.{Dependency, OneToOneDependency, Partition, TaskContext}
 
 /**
- * :: AlphaComponent ::
+ * <span class="badge" style="float: right; background-color: darkblue;">ALPHA COMPONENT</span>
+ *
  * An RDD of [[Row]] objects that has an associated schema. In addition to standard RDD functions,
  * SchemaRDDs can be used in relational queries, as shown in the examples below.
  *
@@ -90,13 +90,25 @@ import org.apache.spark.sql.catalyst.types.BooleanType
  *  @groupprio schema -1
  *  @groupname Ungrouped Base RDD Functions
  */
-@AlphaComponent
 class SchemaRDD(
     @transient val sqlContext: SQLContext,
-    @transient protected[spark] val logicalPlan: LogicalPlan)
-  extends RDD[Row](sqlContext.sparkContext, Nil) with SchemaRDDLike {
+    @transient val logicalPlan: LogicalPlan)
+    extends RDD[Row](sqlContext.sparkContext, Nil) {
 
-  def baseSchemaRDD = this
+  /**
+   * A lazily computed query execution workflow.  All other RDD operations are passed
+   * through to the RDD that is produced by this workflow.
+   *
+   * We want this to be lazy because invoking the whole query optimization pipeline can be
+   * expensive.
+   */
+  @transient
+  protected[spark] lazy val queryExecution = sqlContext.executePlan(logicalPlan)
+
+  override def toString =
+    s"""${super.toString}
+       |== Query Plan ==
+       |${queryExecution.executedPlan}""".stripMargin.trim
 
   // =========================================================================================
   // RDD functions: Copy the interal row representation so we present immutable data to users.
@@ -149,17 +161,17 @@ class SchemaRDD(
    *
    * @param otherPlan the [[SchemaRDD]] that should be joined with this one.
    * @param joinType One of `Inner`, `LeftOuter`, `RightOuter`, or `FullOuter`. Defaults to `Inner.`
-   * @param on       An optional condition for the join operation.  This is equivilent to the `ON`
-   *                 clause in standard SQL.  In the case of `Inner` joins, specifying a
-   *                 `condition` is equivilent to adding `where` clauses after the `join`.
+   * @param condition An optional condition for the join operation.  This is equivilent to the `ON`
+   *                  clause in standard SQL.  In the case of `Inner` joins, specifying a
+   *                  `condition` is equivilent to adding `where` clauses after the `join`.
    *
    * @group Query
    */
   def join(
       otherPlan: SchemaRDD,
       joinType: JoinType = Inner,
-      on: Option[Expression] = None): SchemaRDD =
-    new SchemaRDD(sqlContext, Join(logicalPlan, otherPlan.logicalPlan, joinType, on))
+      condition: Option[Expression] = None): SchemaRDD =
+    new SchemaRDD(sqlContext, Join(logicalPlan, otherPlan.logicalPlan, joinType, condition))
 
   /**
    * Sorts the results by the given expressions.
@@ -196,14 +208,14 @@ class SchemaRDD(
    * with the same name, for example, when peforming self-joins.
    *
    * {{{
-   *   val x = schemaRDD.where('a === 1).as('x)
-   *   val y = schemaRDD.where('a === 2).as('y)
+   *   val x = schemaRDD.where('a === 1).subquery('x)
+   *   val y = schemaRDD.where('a === 2).subquery('y)
    *   x.join(y).where("x.a".attr === "y.a".attr),
    * }}}
    *
    * @group Query
    */
-  def as(alias: Symbol) =
+  def subquery(alias: Symbol) =
     new SchemaRDD(sqlContext, Subquery(alias.name, logicalPlan))
 
   /**
@@ -229,7 +241,8 @@ class SchemaRDD(
       Filter(ScalaUdf(udf, BooleanType, Seq(UnresolvedAttribute(arg1.name))), logicalPlan))
 
   /**
-   * :: Experimental ::
+   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+   *
    * Filters tuples using a function over a `Dynamic` version of a given Row.  DynamicRows use
    * scala's Dynamic trait to emulate an ORM of in a dynamically typed language.  Since the type of
    * the column is not known at compile time, all attributes are converted to strings before
@@ -241,19 +254,18 @@ class SchemaRDD(
    *
    * @group Query
    */
-  @Experimental
   def where(dynamicUdf: (DynamicRow) => Boolean) =
     new SchemaRDD(
       sqlContext,
       Filter(ScalaUdf(dynamicUdf, BooleanType, Seq(WrapDynamic(logicalPlan.output))), logicalPlan))
 
   /**
-   * :: Experimental ::
+   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+   *
    * Returns a sampled version of the underlying dataset.
    *
    * @group Query
    */
-  @Experimental
   def sample(
       fraction: Double,
       withReplacement: Boolean = true,
@@ -261,7 +273,8 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Sample(fraction, withReplacement, seed, logicalPlan))
 
   /**
-   * :: Experimental ::
+   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+   *
    * Applies the given Generator, or table generating function, to this relation.
    *
    * @param generator A table generating function.  The API for such functions is likely to change
@@ -277,7 +290,6 @@ class SchemaRDD(
    *
    * @group Query
    */
-  @Experimental
   def generate(
       generator: Generator,
       join: Boolean = false,
@@ -286,7 +298,8 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Generate(generator, join, outer, None, logicalPlan))
 
   /**
-   * :: Experimental ::
+   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
+   *
    * Adds the rows from this RDD to the specified table.  Note in a standard [[SQLContext]] there is
    * no notion of persistent tables, and thus queries that contain this operator will fail to
    * optimize.  When working with an extension of a SQLContext that has a persistent catalog, such
@@ -294,11 +307,30 @@ class SchemaRDD(
    *
    * @group schema
    */
-  @Experimental
   def insertInto(tableName: String, overwrite: Boolean = false) =
     new SchemaRDD(
       sqlContext,
       InsertIntoTable(UnresolvedRelation(None, tableName), Map.empty, logicalPlan, overwrite))
+
+  /**
+   * Saves the contents of this `SchemaRDD` as a parquet file, preserving the schema.  Files that
+   * are written out using this method can be read back in as a SchemaRDD using the ``function
+   *
+   * @group schema
+   */
+  def saveAsParquetFile(path: String): Unit = {
+    sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
+  }
+
+  /**
+   * Registers this RDD as a temporary table using the given name.  The lifetime of this temporary
+   * table is tied to the [[SQLContext]] that was used to create this SchemaRDD.
+   *
+   * @group schema
+   */
+  def registerAsTable(tableName: String): Unit = {
+    sqlContext.registerRDDAsTable(this, tableName)
+  }
 
   /**
    * Returns this RDD as a SchemaRDD.
@@ -306,6 +338,5 @@ class SchemaRDD(
    */
   def toSchemaRDD = this
 
-  /** FOR INTERNAL USE ONLY */
   def analyze = sqlContext.analyzer(logicalPlan)
 }

@@ -28,7 +28,7 @@ object GroupByTest {
         "Usage: GroupByTest <master> [numMappers] [numKVPairs] [KeySize] [numReducers]")
       System.exit(1)
     }
-
+    
     var numMappers = if (args.length > 1) args(1).toInt else 2
     var numKVPairs = if (args.length > 2) args(2).toInt else 1000
     var valSize = if (args.length > 3) args(3).toInt else 1000
@@ -52,6 +52,7 @@ object GroupByTest {
 
     println(pairs1.groupByKey(numReducers).count)
 
-    sc.stop()
+    System.exit(0)
   }
 }
+

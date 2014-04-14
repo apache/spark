@@ -47,7 +47,7 @@ object ReceiverSupervisorStrategy {
  * the API for pushing received data into Spark Streaming for being processed.
  *
  * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
- *
+ * 
  * @example {{{
  *  class MyActor extends Actor with Receiver{
  *      def receive {
@@ -174,10 +174,10 @@ private[streaming] class ActorReceiver[T: ClassTag](
     blocksGenerator.start()
     supervisor
     logInfo("Supervision tree for receivers initialized at:" + supervisor.path)
-
   }
 
   protected def onStop() = {
     supervisor ! PoisonPill
   }
+
 }

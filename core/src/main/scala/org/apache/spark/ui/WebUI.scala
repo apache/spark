@@ -20,25 +20,6 @@ package org.apache.spark.ui
 import java.text.SimpleDateFormat
 import java.util.Date
 
-private[spark] abstract class WebUI(name: String) {
-  protected var serverInfo: Option[ServerInfo] = None
-
-  /**
-   * Bind to the HTTP server behind this web interface.
-   * Overridden implementation should set serverInfo.
-   */
-  def bind() { }
-
-  /** Return the actual port to which this server is bound. Only valid after bind(). */
-  def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
-
-  /** Stop the server behind this web interface. Only valid after bind(). */
-  def stop() {
-    assert(serverInfo.isDefined, "Attempted to stop %s before binding to a server!".format(name))
-    serverInfo.get.server.stop()
-  }
-}
-
 /**
  * Utilities used throughout the web UI.
  */
@@ -64,6 +45,6 @@ private[spark] object WebUI {
       return "%.0f min".format(minutes)
     }
     val hours = minutes / 60
-    "%.1f h".format(hours)
+    return "%.1f h".format(hours)
   }
 }

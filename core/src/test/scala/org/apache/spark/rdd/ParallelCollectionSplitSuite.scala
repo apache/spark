@@ -34,14 +34,14 @@ class ParallelCollectionSplitSuite extends FunSuite with Checkers {
     assert(slices(1).mkString(",") === "2")
     assert(slices(2).mkString(",") === "3")
   }
-
+  
   test("one slice") {
     val data = Array(1, 2, 3)
     val slices = ParallelCollectionRDD.slice(data, 1)
     assert(slices.size === 1)
     assert(slices(0).mkString(",") === "1,2,3")
   }
-
+  
   test("equal slices") {
     val data = Array(1, 2, 3, 4, 5, 6, 7, 8, 9)
     val slices = ParallelCollectionRDD.slice(data, 3)
@@ -50,7 +50,7 @@ class ParallelCollectionSplitSuite extends FunSuite with Checkers {
     assert(slices(1).mkString(",") === "4,5,6")
     assert(slices(2).mkString(",") === "7,8,9")
   }
-
+  
   test("non-equal slices") {
     val data = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     val slices = ParallelCollectionRDD.slice(data, 3)
@@ -77,14 +77,14 @@ class ParallelCollectionSplitSuite extends FunSuite with Checkers {
     assert(slices(1).mkString(",") === (33 to 66).mkString(","))
     assert(slices(2).mkString(",") === (67 to 100).mkString(","))
   }
-
+  
   test("empty data") {
     val data = new Array[Int](0)
     val slices = ParallelCollectionRDD.slice(data, 5)
     assert(slices.size === 5)
     for (slice <- slices) assert(slice.size === 0)
   }
-
+ 
   test("zero slices") {
     val data = Array(1, 2, 3)
     intercept[IllegalArgumentException] { ParallelCollectionRDD.slice(data, 0) }
@@ -94,7 +94,7 @@ class ParallelCollectionSplitSuite extends FunSuite with Checkers {
     val data = Array(1, 2, 3)
     intercept[IllegalArgumentException] { ParallelCollectionRDD.slice(data, -5) }
   }
-
+  
   test("exclusive ranges sliced into ranges") {
     val data = 1 until 100
     val slices = ParallelCollectionRDD.slice(data, 3)
@@ -102,7 +102,7 @@ class ParallelCollectionSplitSuite extends FunSuite with Checkers {
     assert(slices.map(_.size).reduceLeft(_+_) === 99)
     assert(slices.forall(_.isInstanceOf[Range]))
   }
-
+  
   test("inclusive ranges sliced into ranges") {
     val data = 1 to 100
     val slices = ParallelCollectionRDD.slice(data, 3)
@@ -124,7 +124,7 @@ class ParallelCollectionSplitSuite extends FunSuite with Checkers {
       assert(range.step  === 1, "slice " + i + " step")
     }
   }
-
+  
   test("random array tests") {
     val gen = for {
       d <- arbitrary[List[Int]]
@@ -141,7 +141,7 @@ class ParallelCollectionSplitSuite extends FunSuite with Checkers {
     }
     check(prop)
   }
-
+  
   test("random exclusive range tests") {
     val gen = for {
       a <- Gen.choose(-100, 100)
@@ -177,7 +177,7 @@ class ParallelCollectionSplitSuite extends FunSuite with Checkers {
     }
     check(prop)
   }
-
+  
   test("exclusive ranges of longs") {
     val data = 1L until 100L
     val slices = ParallelCollectionRDD.slice(data, 3)
@@ -185,7 +185,7 @@ class ParallelCollectionSplitSuite extends FunSuite with Checkers {
     assert(slices.map(_.size).reduceLeft(_+_) === 99)
     assert(slices.forall(_.isInstanceOf[NumericRange[_]]))
   }
-
+  
   test("inclusive ranges of longs") {
     val data = 1L to 100L
     val slices = ParallelCollectionRDD.slice(data, 3)
@@ -193,7 +193,7 @@ class ParallelCollectionSplitSuite extends FunSuite with Checkers {
     assert(slices.map(_.size).reduceLeft(_+_) === 100)
     assert(slices.forall(_.isInstanceOf[NumericRange[_]]))
   }
-
+  
   test("exclusive ranges of doubles") {
     val data = 1.0 until 100.0 by 1.0
     val slices = ParallelCollectionRDD.slice(data, 3)
@@ -201,7 +201,7 @@ class ParallelCollectionSplitSuite extends FunSuite with Checkers {
     assert(slices.map(_.size).reduceLeft(_+_) === 99)
     assert(slices.forall(_.isInstanceOf[NumericRange[_]]))
   }
-
+  
   test("inclusive ranges of doubles") {
     val data = 1.0 to 100.0 by 1.0
     val slices = ParallelCollectionRDD.slice(data, 3)
