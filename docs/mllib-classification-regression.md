@@ -264,7 +264,7 @@ The *node impurity* is a measure of the homogeneity of the labels at the node. T
       <td>Entropy</td><td>Classification</td><td>$\sum_{i=1}^{M} -f_ilog(f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $M$ is the number of unique labels.</td>
     </tr>
     <tr>
-      <td>Variance</td><td>Classification</td><td>$\frac{1}{n} \sum_{i=1}^{N} (x_i - \mu)^2$</td><td>$y_i$ is label for an instance, $N$ is the #instances and $\mu$ is the mean $\frac{1}{N} \sum_{i=1}^n x_i$.</td>
+      <td>Variance</td><td>Classification</td><td>$\frac{1}{n} \sum_{i=1}^{N} (x_i - \mu)^2$</td><td>$y_i$ is label for an instance, $N$ is the number of instances and $\mu$ is the mean given by $\frac{1}{N} \sum_{i=1}^n x_i$.</td>
     </tr>
   </tbody>
 </table>
@@ -296,7 +296,7 @@ The recursive tree construction is stopped at a node when one of the two conditi
 
 ### Practical Limitations
 
-The tree implementation stores an Array[Double] of *O(#features \* #splits \* 2^maxDepth)* in memory for aggregating histograms over partitions. The current implementation might not scale to very deep trees since the memory requirement grows exponentially with tree depth. 
+The tree implementation stores an Array[Double] of size *O(#features \* #splits \* 2^maxDepth)* in memory for aggregating histograms over partitions. The current implementation might not scale to very deep trees since the memory requirement grows exponentially with tree depth. 
 
 Please drop us a line if you encounter any issues. We are planning to solve this problem in the near future and real-world examples will be great.
 
@@ -435,6 +435,8 @@ Similarly you can use RidgeRegressionWithSGD and LassoWithSGD and compare traini
 
 #### Classification
 
+The example below demonstrates how to load a CSV file, parse it as an RDD of LabeledPoint and then perform classification using a decision tree using Gini index as an impurity measure and a maximum tree depth of 5. The training error is calculated to measure the algorithm accuracy.
+
 {% highlight scala %}
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.tree.DecisionTree
@@ -464,6 +466,9 @@ println("Training Error = " + trainErr)
 {% endhighlight %}
 
 #### Regression
+
+The example below demonstrates how to load a CSV file, parse it as an RDD of LabeledPoint and then perform regression using a decision tree using variance as an impurity measure and a maximum tree depth of 5. The Mean Squared Error is computed at the end to evaluate
+[goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
 
 {% highlight scala %}
 import org.apache.spark.SparkContext
@@ -505,7 +510,9 @@ calling `.rdd()` on your `JavaRDD` object.
 
 Following examples can be tested in the PySpark shell.
 
-## Binary Classification
+## Linear Methods
+
+### Binary Classification
 The following example shows how to load a sample dataset, build Logistic Regression model,
 and make predictions with the resulting model to compute the training error.
 
@@ -527,7 +534,7 @@ trainErr = labelsAndPreds.filter(lambda (v, p): v != p).count() / float(parsedDa
 print("Training Error = " + str(trainErr))
 {% endhighlight %}
 
-## Linear Regression
+### Linear Regression
 The following example demonstrate how to load training data, parse it as an RDD of LabeledPoint.
 The example then uses LinearRegressionWithSGD to build a simple linear model to predict label 
 values. We compute the Mean Squared Error at the end to evaluate
