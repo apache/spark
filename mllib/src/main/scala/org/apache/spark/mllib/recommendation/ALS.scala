@@ -32,6 +32,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.KryoRegistrator
 import org.apache.spark.SparkContext._
+import org.apache.spark.util.Utils
 
 /**
  * Out-link information for a user or product block. This includes the original user/product IDs
@@ -168,7 +169,20 @@ class ALS private (
       this.numBlocks
     }
 
-    this.partitioner = new HashPartitioner(numBlocks)
+    // Hash an integer to propagate random bits at all positions, similar to java.util.HashTable
+    def hash(x: Int): Int = {
+      val r = x ^ (x >>> 20) ^ (x >>> 12)
+      r ^ (r >>> 7) ^ (r >>> 4)
+    }
+
+    this.partitioner = new Partitioner {
+      def numPartitions = numBlocks
+
+      def getPartition(x: Any): Int = x match {
+        case null => 0
+        case _ => Utils.nonNegativeMod(hash(x.hashCode), numPartitions)
+      }
+    }
 
     val ratingsByUserBlock = ratings.map{ rating => (partitioner.getPartition(rating.user), rating) }
     val ratingsByProductBlock = ratings.map{ rating =>
@@ -183,11 +197,6 @@ class ALS private (
     val seedGen = new Random(seed)
     val seed1 = seedGen.nextInt()
     val seed2 = seedGen.nextInt()
-    // Hash an integer to propagate random bits at all positions, similar to java.util.HashTable
-    def hash(x: Int): Int = {
-      val r = x ^ (x >>> 20) ^ (x >>> 12)
-      r ^ (r >>> 7) ^ (r >>> 4)
-    }
     var users = userOutLinks.mapPartitionsWithIndex { (index, itr) =>
       val rand = new Random(hash(seed1 ^ index))
       itr.map { case (x, y) =>
