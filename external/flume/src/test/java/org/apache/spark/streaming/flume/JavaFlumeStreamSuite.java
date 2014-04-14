@@ -30,5 +30,7 @@ public class JavaFlumeStreamSuite extends LocalJavaStreamingContext {
     JavaDStream<SparkFlumeEvent> test1 = FlumeUtils.createStream(ssc, "localhost", 12345);
     JavaDStream<SparkFlumeEvent> test2 = FlumeUtils.createStream(ssc, "localhost", 12345,
       StorageLevel.MEMORY_AND_DISK_SER_2());
+    JavaDStream<SparkFlumeEvent> test3 = FlumeUtils.createStream(ssc, "localhost", 12345,
+    	      StorageLevel.MEMORY_AND_DISK_SER_2(), true);
   }
 }

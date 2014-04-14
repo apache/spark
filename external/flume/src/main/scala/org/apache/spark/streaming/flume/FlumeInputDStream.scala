@@ -20,31 +20,44 @@ package org.apache.spark.streaming.flume
 import java.net.InetSocketAddress
 import java.io.{ObjectInput, ObjectOutput, Externalizable}
 import java.nio.ByteBuffer
-
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
-
 import org.apache.flume.source.avro.AvroSourceProtocol
 import org.apache.flume.source.avro.AvroFlumeEvent
 import org.apache.flume.source.avro.Status
 import org.apache.avro.ipc.specific.SpecificResponder
 import org.apache.avro.ipc.NettyServer
-
 import org.apache.spark.util.Utils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
+import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
+import org.jboss.netty.channel.ChannelPipelineFactory
+import java.util.concurrent.Executors
+import org.jboss.netty.channel.Channels
+import org.jboss.netty.handler.codec.compression.ZlibDecoder
+import org.jboss.netty.handler.codec.compression.ZlibEncoder
+import org.jboss.netty.channel.ChannelPipeline
+import org.jboss.netty.channel.ChannelFactory
+import org.jboss.netty.handler.execution.ExecutionHandler
 
 private[streaming]
 class FlumeInputDStream[T: ClassTag](
   @transient ssc_ : StreamingContext,
   host: String,
   port: Int,
-  storageLevel: StorageLevel
+  storageLevel: StorageLevel,
+  enableCompression: Boolean
 ) extends NetworkInputDStream[SparkFlumeEvent](ssc_) {
 
+  def this(
+  @transient ssc_ : StreamingContext,
+  host: String,
+  port: Int,
+  storageLevel: StorageLevel) = this(ssc_, host, port, storageLevel, false); 
+  
   override def getReceiver(): NetworkReceiver[SparkFlumeEvent] = {
-    new FlumeReceiver(host, port, storageLevel)
+    new FlumeReceiver(host, port, storageLevel, enableCompression)
   }
 }
 
@@ -132,7 +145,8 @@ private[streaming]
 class FlumeReceiver(
     host: String,
     port: Int,
-    storageLevel: StorageLevel
+    storageLevel: StorageLevel,
+    enableCompression: Boolean
   ) extends NetworkReceiver[SparkFlumeEvent] {
 
   lazy val blockGenerator = new BlockGenerator(storageLevel)
@@ -140,7 +154,25 @@ class FlumeReceiver(
   protected override def onStart() {
     val responder = new SpecificResponder(
       classOf[AvroSourceProtocol], new FlumeEventServer(this))
-    val server = new NettyServer(responder, new InetSocketAddress(host, port))
+    
+    var server : NettyServer = null;
+    
+    if (enableCompression) {
+      val channelFactory : ChannelFactory = new NioServerSocketChannelFactory
+        (Executors.newCachedThreadPool(), Executors.newCachedThreadPool());
+      val channelPipelieFactory : ChannelPipelineFactory = new CompressionChannelPipelineFactory()
+      val executionHandler : ExecutionHandler = null
+      
+      server = new NettyServer(
+        responder, 
+        new InetSocketAddress(host, port),
+        channelFactory, 
+        channelPipelieFactory, 
+        executionHandler)
+    } else {
+      server = new NettyServer(responder, new InetSocketAddress(host, port))
+    }
+     
     blockGenerator.start()
     server.start()
     logInfo("Flume receiver started")
@@ -152,4 +184,16 @@ class FlumeReceiver(
   }
 
   override def getLocationPreference = Some(host)
+}
+
+private[streaming]
+class CompressionChannelPipelineFactory() extends ChannelPipelineFactory {
+  
+  def getPipeline() = {
+      val pipeline = Channels.pipeline()
+      val encoder = new ZlibEncoder(6)
+      pipeline.addFirst("deflater", encoder)
+      pipeline.addFirst("inflater", new ZlibDecoder())
+      pipeline
+  }
 }

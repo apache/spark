@@ -29,6 +29,7 @@ object FlumeUtils {
    * @param hostname Hostname of the slave machine to which the flume data will be sent
    * @param port     Port of the slave machine to which the flume data will be sent
    * @param storageLevel  Storage level to use for storing the received objects
+   * @param enableCompression  Should Netty Server decode input stream from client  
    */
   def createStream (
       ssc: StreamingContext,
@@ -36,7 +37,30 @@ object FlumeUtils {
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[SparkFlumeEvent] = {
-    val inputStream = new FlumeInputDStream[SparkFlumeEvent](ssc, hostname, port, storageLevel)
+    createStream(ssc, hostname, port, storageLevel, false);
+  }
+  
+  /**
+   * Create a input stream from a Flume source.
+   * @param ssc      StreamingContext object
+   * @param hostname Hostname of the slave machine to which the flume data will be sent
+   * @param port     Port of the slave machine to which the flume data will be sent
+   * @param storageLevel  Storage level to use for storing the received objects
+   * @param enableCompression  Should Netty Server decode input stream from client  
+   */
+  def createStream (
+      ssc: StreamingContext,
+      hostname: String,
+      port: Int,
+      storageLevel: StorageLevel,
+      enableCompression: Boolean
+    ): DStream[SparkFlumeEvent] = {
+    val inputStream = new FlumeInputDStream[SparkFlumeEvent](
+      ssc, 
+      hostname, 
+      port, 
+      storageLevel, 
+      enableCompression)
     inputStream
   }
 
@@ -66,6 +90,28 @@ object FlumeUtils {
       port: Int,
       storageLevel: StorageLevel
     ): JavaDStream[SparkFlumeEvent] = {
-    createStream(jssc.ssc, hostname, port, storageLevel)
+    createStream(jssc.ssc, hostname, port, storageLevel, false)
+  }
+  
+  /**
+   * Creates a input stream from a Flume source.
+   * @param hostname Hostname of the slave machine to which the flume data will be sent
+   * @param port     Port of the slave machine to which the flume data will be sent
+   * @param storageLevel  Storage level to use for storing the received objects
+   * @param enableCompression  Should Netty Server decode input stream from client 
+   */
+  def createStream(
+      jssc: JavaStreamingContext,
+      hostname: String,
+      port: Int,
+      storageLevel: StorageLevel,
+      enableCompression: Boolean
+    ): JavaDStream[SparkFlumeEvent] = {
+    createStream(
+      jssc.ssc, 
+      hostname, 
+      port, 
+      storageLevel, 
+      enableCompression)
   }
 }
