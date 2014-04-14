@@ -73,10 +73,10 @@ class SparkContext(config: SparkConf) extends Logging {
    * be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
    * from a list of input files or InputFormats for the application.
    */
-    @DeveloperApi
-    def this(config: SparkConf, preferredNodeLocationData: Map[String, Set[SplitInfo]]) = {
-      this(config)
-      this.preferredNodeLocationData = preferredNodeLocationData
+  @DeveloperApi
+  def this(config: SparkConf, preferredNodeLocationData: Map[String, Set[SplitInfo]]) = {
+    this(config)
+    this.preferredNodeLocationData = preferredNodeLocationData
   }
 
   /**
@@ -212,22 +212,15 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // Initialize the Spark UI, registering all associated listeners
   private[spark] val ui = new SparkUI(this)
-  ui.bind()
 
   // Optionally log Spark events
   private[spark] val eventLogger: Option[EventLoggingListener] = {
     if (conf.getBoolean("spark.eventLog.enabled", false)) {
       val logger = new EventLoggingListener(appName, conf)
-      logger.start()
       listenerBus.addListener(logger)
       Some(logger)
     } else None
   }
-
-  // At this point, all relevant SparkListeners have been registered, so begin releasing events
-  listenerBus.start()
-
-  val startTime = System.currentTimeMillis()
 
   // Add each JAR given through the constructor
   if (jars != null) {
@@ -273,10 +266,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // Create and start the scheduler
   private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
-  taskScheduler.start()
 
   @volatile private[spark] var dagScheduler = new DAGScheduler(this)
-  dagScheduler.start()
 
   private[spark] val cleaner: Option[ContextCleaner] = {
     if (conf.getBoolean("spark.cleaner.referenceTracking", true)) {
@@ -285,10 +276,6 @@ class SparkContext(config: SparkConf) extends Logging {
       None
     }
   }
-  cleaner.foreach(_.start())
-
-  postEnvironmentUpdate()
-  postApplicationStart()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration: Configuration = {
@@ -389,8 +376,6 @@ class SparkContext(config: SparkConf) extends Logging {
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, null)
   }
 
-  // Post init
-  taskScheduler.postStartHook()
 
   private val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler, this)
   private val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager, this)
@@ -400,7 +385,23 @@ class SparkContext(config: SparkConf) extends Logging {
     SparkEnv.get.metricsSystem.registerSource(blockManagerSource)
   }
 
-  initDriverMetrics()
+  val startTime = System.currentTimeMillis()
+
+  def start() {
+    ui.bind()
+    // At this point, all relevant SparkListeners have been registered, so begin releasing events
+    listenerBus.start()
+    taskScheduler.start()
+    dagScheduler.start()
+    eventLogger.foreach(_.start())
+    cleaner.foreach(_.start())
+    postEnvironmentUpdate()
+    postApplicationStart()
+    initDriverMetrics()
+    // Post init
+    taskScheduler.postStartHook()
+  }
+  start()
 
   // Methods for creating RDDs
 
