@@ -98,9 +98,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.default.parallelism</td>
   <td>
     <ul>
-      <li>Mesos fine grained mode: 8
-      <li>Local mode: core number of the local machine
-      <li>Others: total core number of all executor nodes or 2, whichever is larger
+      <li>Mesos fine grained mode: 8</li>
+      <li>Local mode: core number of the local machine</li>
+      <li>Others: total core number of all executor nodes or 2, whichever is larger</li>
     </ul>
   </td>
   <td>
