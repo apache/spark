@@ -366,7 +366,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         finishReq.setAppAttemptId(appAttemptId)
         finishReq.setFinishApplicationStatus(status)
         finishReq.setDiagnostics(diagnostics)
-        finishReq.setTrackingUrl(sparkConf.get("spark.historyserver.address", ""))
+        finishReq.setTrackingUrl(sparkConf.get("spark.yarn.historyServer.address", ""))
         resourceManager.finishApplicationMaster(finishReq)
       }
     }

@@ -627,13 +627,6 @@ Apart from these, the following properties are also available, and may be useful
     Number of cores to allocate for each task.
   </td>
 </tr>
-<tr>
-  <td>spark.historyserver.address</td>
-  <td>localhost:18080</td>
-  <td>
-    The URL of the Spark history server. The history server is optional. 
-  </td>
-</tr>
 </table>
 
 ## Viewing Spark Properties
