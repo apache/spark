@@ -65,7 +65,9 @@ private[sql] trait CompressibleColumnBuilder[T <: NativeType]
 
   abstract override def appendFrom(row: Row, ordinal: Int) {
     super.appendFrom(row, ordinal)
-    gatherCompressibilityStats(row, ordinal)
+    if (!row.isNullAt(ordinal)) {
+      gatherCompressibilityStats(row, ordinal)
+    }
   }
 
   abstract override def build() = {

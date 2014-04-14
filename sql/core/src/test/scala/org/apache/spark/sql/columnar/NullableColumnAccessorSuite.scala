@@ -68,12 +68,16 @@ class NullableColumnAccessorSuite extends FunSuite {
       val row = new GenericMutableRow(1)
 
       (0 until 4).foreach { _ =>
+        assert(accessor.hasNext)
         accessor.extractTo(row, 0)
         assert(row(0) === randomRow(0))
 
+        assert(accessor.hasNext)
         accessor.extractTo(row, 0)
         assert(row.isNullAt(0))
       }
+
+      assert(!accessor.hasNext)
     }
   }
 }
