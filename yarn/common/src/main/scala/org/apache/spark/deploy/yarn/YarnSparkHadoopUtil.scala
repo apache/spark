@@ -28,7 +28,6 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.util.Shell
 import org.apache.hadoop.util.StringInterner
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.api.ApplicationConstants
@@ -103,7 +102,7 @@ object YarnSparkHadoopUtil {
       classPathSeparator: String) = {
     if (envString != null && envString.length() > 0) {
       var childEnvs = envString.split(",")
-      var p = Pattern.compile(Shell.getEnvironmentVariableRegex())
+      var p = Pattern.compile(getEnvironmentVariableRegex())
       for (cEnv <- childEnvs) {
         var parts = cEnv.split("=") // split on '='
         var m = p.matcher(parts(1))
@@ -127,6 +126,15 @@ object YarnSparkHadoopUtil {
         m.appendTail(sb)
         addToEnvironment(env, parts(0), sb.toString(), classPathSeparator)
       }
+    }
+  }
+
+  private def getEnvironmentVariableRegex() : String = {
+    val osName = System.getProperty("os.name")
+    if (osName startsWith "Windows") {
+      "%([A-Za-z_][A-Za-z0-9_]*?)%"
+    } else {
+      "\\$([A-Za-z_][A-Za-z0-9_]*)"
     }
   }
 
