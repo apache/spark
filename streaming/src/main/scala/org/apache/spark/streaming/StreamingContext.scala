@@ -17,30 +17,28 @@
 
 package org.apache.spark.streaming
 
-import scala.collection.mutable.Queue
-import scala.collection.Map
-import scala.reflect.ClassTag
-
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicInteger
 
-import akka.actor.Props
-import akka.actor.SupervisorStrategy
-import org.apache.hadoop.io.LongWritable
-import org.apache.hadoop.io.Text
+import scala.collection.Map
+import scala.collection.mutable.Queue
+import scala.reflect.ClassTag
+
+import akka.actor.{Props, SupervisorStrategy}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.MetadataCleaner
 import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.receiver.NetworkReceiver
 import org.apache.spark.streaming.receivers._
 import org.apache.spark.streaming.scheduler._
-import org.apache.hadoop.conf.Configuration
-import org.apache.spark.streaming.receiver.NetworkReceiver
+import org.apache.spark.streaming.ui.StreamingTab
+import org.apache.spark.util.MetadataCleaner
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -158,6 +156,17 @@ class StreamingContext private[streaming] (
   private[streaming] val scheduler = new JobScheduler(this)
 
   private[streaming] val waiter = new ContextWaiter
+
+  private[streaming] val uiTab = new StreamingTab(this)
+
+  /** Enumeration to identify current state of the StreamingContext */
+  private[streaming] object StreamingContextState extends Enumeration {
+    type CheckpointState = Value
+    val Initialized, Started, Stopped = Value
+  }
+
+  import StreamingContextState._
+  private[streaming] var state = Initialized
 
   /**
    * Return the associated Spark context
@@ -406,9 +415,18 @@ class StreamingContext private[streaming] (
   /**
    * Start the execution of the streams.
    */
-  def start() = synchronized {
+  def start(): Unit = synchronized {
+    // Throw exception if the context has already been started once
+    // or if a stopped context is being started again
+    if (state == Started) {
+      throw new SparkException("StreamingContext has already been started")
+    }
+    if (state == Stopped) {
+      throw new SparkException("StreamingContext has already been stopped")
+    }
     validate()
     scheduler.start()
+    state = Started
   }
 
   /**
@@ -429,14 +447,38 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Stop the execution of the streams.
+   * Stop the execution of the streams immediately (does not wait for all received data
+   * to be processed).
    * @param stopSparkContext Stop the associated SparkContext or not
+   *
    */
   def stop(stopSparkContext: Boolean = true): Unit = synchronized {
-    scheduler.stop()
+    stop(stopSparkContext, false)
+  }
+
+  /**
+   * Stop the execution of the streams, with option of ensuring all received data
+   * has been processed.
+   * @param stopSparkContext Stop the associated SparkContext or not
+   * @param stopGracefully Stop gracefully by waiting for the processing of all
+   *                       received data to be completed
+   */
+  def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = synchronized {
+    // Warn (but not fail) if context is stopped twice,
+    // or context is stopped before starting
+    if (state == Initialized) {
+      logWarning("StreamingContext has not been started yet")
+      return
+    }
+    if (state == Stopped) {
+      logWarning("StreamingContext has already been stopped")
+      return
+    } // no need to throw an exception as its okay to stop twice
+    scheduler.stop(stopGracefully)
     logInfo("StreamingContext stopped successfully")
     waiter.notifyStop()
     if (stopSparkContext) sc.stop()
+    state = Stopped
   }
 }
 

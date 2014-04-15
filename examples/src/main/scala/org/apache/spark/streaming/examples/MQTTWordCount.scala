@@ -26,7 +26,7 @@ import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.mqtt._
 
 /**
- * A simple Mqtt publisher for demonstration purposes, repeatedly publishes 
+ * A simple Mqtt publisher for demonstration purposes, repeatedly publishes
  * Space separated String Message "hello mqtt demo for spark streaming"
  */
 object MQTTPublisher {

@@ -51,6 +51,6 @@ object MultiBroadcastTest {
     // Collect the small RDD so we can print the observed sizes locally.
     observedSizes.collect().foreach(i => println(i))
 
-    System.exit(0)
+    sc.stop()
   }
 }

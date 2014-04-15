@@ -48,14 +48,16 @@ private[streaming] class BlockGenerator(
 
   private case class Block(id: StreamBlockId, buffer: ArrayBuffer[Any])
 
+  private val clock = new SystemClock()
   private val blockInterval = conf.getLong("spark.streaming.blockInterval", 200)
   private val blockIntervalTimer =
-    new RecurringTimer(new SystemClock(), blockInterval, updateCurrentBuffer)
+    new RecurringTimer(clock, blockInterval, updateCurrentBuffer,
+      "BlockGenerator")
   private val blocksForPushing = new ArrayBlockingQueue[Block](10)
   private val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } }
 
-  private var currentBuffer = new ArrayBuffer[Any]
-  private var stopped = false
+  @volatile private var currentBuffer = new ArrayBuffer[Any]
+  @volatile private var stopped = false
 
   /** Start block generating and pushing threads. */
   def start() {
@@ -66,21 +68,15 @@ private[streaming] class BlockGenerator(
 
   /** Stop all threads. */
   def stop() {
-    // Stop generating blocks
-    blockIntervalTimer.stop()
-
-    // Mark as stopped
-    synchronized { stopped = true }
-
-    // Wait for all blocks to be pushed
-    logDebug("Waiting for block pushing thread to terminate")
+    blockIntervalTimer.stop(false)
+    stopped = true
     blockPushingThread.join()
     logInfo("Stopped BlockGenerator")
   }
 
   /**
    * Push a single data item into the buffer. All received data items
-   * will be periodically coallesced into blocks and pushed into BlockManager.
+   * will be periodically pushed into BlockManager.
    */
   def += (data: Any): Unit = synchronized {
     currentBuffer += data
@@ -108,9 +104,8 @@ private[streaming] class BlockGenerator(
   /** Keep pushing blocks to the BlockManager. */
   private def keepPushingBlocks() {
     logInfo("Started block pushing thread")
-
     try {
-      while(!isStopped) {
+      while(!stopped) {
         Option(blocksForPushing.poll(100, TimeUnit.MILLISECONDS)) match {
           case Some(block) => pushBlock(block)
           case None =>
@@ -142,6 +137,4 @@ private[streaming] class BlockGenerator(
     listener.onPushBlock(block.id, block.buffer)
     logInfo("Pushed block " + block.id)
   }
-
-  private def isStopped = synchronized { stopped }
 }

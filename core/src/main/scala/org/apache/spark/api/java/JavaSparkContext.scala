@@ -89,7 +89,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    */
   def this(master: String, appName: String, sparkHome: String, jars: Array[String],
       environment: JMap[String, String]) =
-    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment))
+    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment, Map()))
 
   private[spark] val env = sc.env
 
@@ -153,6 +153,46 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
    */
   def textFile(path: String, minSplits: Int): JavaRDD[String] = sc.textFile(path, minSplits)
+
+  /**
+   * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI. Each file is read as a single record and returned in a
+   * key-value pair, where the key is the path of each file, the value is the content of each file.
+   *
+   * <p> For example, if you have the following files:
+   * {{{
+   *   hdfs://a-hdfs-path/part-00000
+   *   hdfs://a-hdfs-path/part-00001
+   *   ...
+   *   hdfs://a-hdfs-path/part-nnnnn
+   * }}}
+   *
+   * Do `JavaPairRDD<String, String> rdd = sparkContext.wholeTextFiles("hdfs://a-hdfs-path")`,
+   *
+   * <p> then `rdd` contains
+   * {{{
+   *   (a-hdfs-path/part-00000, its content)
+   *   (a-hdfs-path/part-00001, its content)
+   *   ...
+   *   (a-hdfs-path/part-nnnnn, its content)
+   * }}}
+   *
+   * @note Small files are preferred, large file is also allowable, but may cause bad performance.
+   *
+   * @param minSplits A suggestion value of the minimal splitting number for input data.
+   */
+  def wholeTextFiles(path: String, minSplits: Int): JavaPairRDD[String, String] =
+    new JavaPairRDD(sc.wholeTextFiles(path, minSplits))
+
+  /**
+   * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI. Each file is read as a single record and returned in a
+   * key-value pair, where the key is the path of each file, the value is the content of each file.
+   *
+   * @see `wholeTextFiles(path: String, minSplits: Int)`.
+   */
+  def wholeTextFiles(path: String): JavaPairRDD[String, String] =
+    new JavaPairRDD(sc.wholeTextFiles(path))
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
     *

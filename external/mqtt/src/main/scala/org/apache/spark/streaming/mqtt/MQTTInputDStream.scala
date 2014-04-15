@@ -49,7 +49,7 @@ import org.apache.spark.streaming.receiver.NetworkReceiver
  * @param storageLevel RDD storage level.
  */
 
-private[streaming] 
+private[streaming]
 class MQTTInputDStream(
     @transient ssc_ : StreamingContext,
     brokerUrl: String,
@@ -79,7 +79,7 @@ class MQTTReceiver(
     // Initializing Mqtt Client specifying brokerUrl, clientID and MqttClientPersistance
     val client: MqttClient = new MqttClient(brokerUrl, MqttClient.generateClientId(), peristance)
 
-    // Connect to MqttBroker    
+    // Connect to MqttBroker
     client.connect()
 
     // Subscribe to Mqtt topic
@@ -88,7 +88,7 @@ class MQTTReceiver(
     // Callback automatically triggers as and when new message arrives on specified topic
     val callback: MqttCallback = new MqttCallback() {
 
-      // Handles Mqtt message 
+      // Handles Mqtt message
       override def messageArrived(arg0: String, arg1: MqttMessage) {
         store(new String(arg1.getPayload()))
       }

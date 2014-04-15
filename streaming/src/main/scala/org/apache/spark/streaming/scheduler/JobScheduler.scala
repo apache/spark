@@ -39,7 +39,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
   private val jobSets = new ConcurrentHashMap[Time, JobSet]
   private val numConcurrentJobs = ssc.conf.getInt("spark.streaming.concurrentJobs", 1)
-  private val executor = Executors.newFixedThreadPool(numConcurrentJobs)
+  private val jobExecutor = Executors.newFixedThreadPool(numConcurrentJobs)
   private val jobGenerator = new JobGenerator(this)
   val clock = jobGenerator.clock
   val listenerBus = new StreamingListenerBus()
@@ -50,46 +50,63 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   private var eventActor: ActorRef = null
 
 
-  def start() = synchronized {
-    if (eventActor != null) {
-      throw new SparkException("JobScheduler already started")
-    }
+  def start(): Unit = synchronized {
+    if (eventActor != null) return // scheduler has already been started
 
+    logDebug("Starting JobScheduler")
     eventActor = ssc.env.actorSystem.actorOf(Props(new Actor {
       def receive = {
         case event: JobSchedulerEvent => processEvent(event)
       }
     }), "JobScheduler")
+
     listenerBus.start()
     networkInputTracker = new NetworkInputTracker(ssc)
     networkInputTracker.start()
-    Thread.sleep(1000)
     jobGenerator.start()
-    logInfo("JobScheduler started")
+    logInfo("Started JobScheduler")
   }
 
-  def stop() = synchronized {
-    if (eventActor != null) {
-      jobGenerator.stop()
-      networkInputTracker.stop()
-      executor.shutdown()
-      if (!executor.awaitTermination(2, TimeUnit.SECONDS)) {
-        executor.shutdownNow()
-      }
-      listenerBus.stop()
-      ssc.env.actorSystem.stop(eventActor)
-      logInfo("JobScheduler stopped")
-    }
-  }
+  def stop(processAllReceivedData: Boolean): Unit = synchronized {
+    if (eventActor == null) return // scheduler has already been stopped
+    logDebug("Stopping JobScheduler")
 
-  def runJobs(time: Time, jobs: Seq[Job]) {
-    if (jobs.isEmpty) {
-      logInfo("No jobs added for time " + time)
+    // First, stop receiving
+    networkInputTracker.stop()
+
+    // Second, stop generating jobs. If it has to process all received data,
+    // then this will wait for all the processing through JobScheduler to be over.
+    jobGenerator.stop(processAllReceivedData)
+
+    // Stop the executor for receiving new jobs
+    logDebug("Stopping job executor")
+    jobExecutor.shutdown()
+
+    // Wait for the queued jobs to complete if indicated
+    val terminated = if (processAllReceivedData) {
+      jobExecutor.awaitTermination(1, TimeUnit.HOURS)  // just a very large period of time
     } else {
-      val jobSet = new JobSet(time, jobs)
-      jobSets.put(time, jobSet)
-      jobSet.jobs.foreach(job => executor.execute(new JobHandler(job)))
-      logInfo("Added jobs for time " + time)
+      jobExecutor.awaitTermination(2, TimeUnit.SECONDS)
+    }
+    if (!terminated) {
+      jobExecutor.shutdownNow()
+    }
+    logDebug("Stopped job executor")
+
+    // Stop everything else
+    listenerBus.stop()
+    ssc.env.actorSystem.stop(eventActor)
+    eventActor = null
+    logInfo("Stopped JobScheduler")
+  }
+
+  def submitJobSet(jobSet: JobSet) {
+    if (jobSet.jobs.isEmpty) {
+      logInfo("No jobs added for time " + jobSet.time)
+    } else {
+      jobSets.put(jobSet.time, jobSet)
+      jobSet.jobs.foreach(job => jobExecutor.execute(new JobHandler(job)))
+      logInfo("Added jobs for time " + jobSet.time)
     }
   }
 

@@ -17,13 +17,14 @@
 
 package org.apache.spark.streaming.dstream
 
-import scala.Array
+import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.receiver.NetworkReceiver
+import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 
 /**
  * Abstract class for defining any [[org.apache.spark.streaming.dstream.InputDStream]]
@@ -38,8 +39,10 @@ import org.apache.spark.streaming.receiver.NetworkReceiver
 abstract class NetworkInputDStream[T: ClassTag](@transient ssc_ : StreamingContext)
   extends InputDStream[T](ssc_) {
 
-  // This is an unique identifier that is used to match the network receiver with the
-  // corresponding network input stream.
+  /** Keeps all received blocks information */
+  private lazy val receivedBlockInfo = new HashMap[Time, Array[ReceivedBlockInfo]]
+
+  /** This is an unique identifier for the network input stream. */
   val id = ssc.getNewNetworkStreamId()
 
   /**
@@ -54,20 +57,38 @@ abstract class NetworkInputDStream[T: ClassTag](@transient ssc_ : StreamingConte
 
   def stop() {}
 
+  /** Ask NetworkInputTracker for received data blocks and generates RDDs with them. */
   override def compute(validTime: Time): Option[RDD[T]] = {
     // If this is called for any time before the start time of the context,
     // then this returns an empty RDD. This may happen when recovering from a
     // master failure
     if (validTime >= graph.startTime) {
-      val blockIds = ssc.scheduler.networkInputTracker.getBlockIds(id, validTime)
+      val blockInfo = ssc.scheduler.networkInputTracker.getReceivedBlockInfo(id)
+      receivedBlockInfo(validTime) = blockInfo
+      val blockIds = blockInfo.map(_.blockId.asInstanceOf[BlockId])
       Some(new BlockRDD[T](ssc.sc, blockIds))
     } else {
       Some(new BlockRDD[T](ssc.sc, Array[BlockId]()))
     }
   }
+
+  /** Get information on received blocks. */
+  private[streaming] def getReceivedBlockInfo(time: Time) = {
+    receivedBlockInfo(time)
+  }
+
+  /**
+   * Clear metadata that are older than `rememberDuration` of this DStream.
+   * This is an internal method that should not be called directly. This
+   * implementation overrides the default implementation to clear received
+   * block information.
+   */
+  private[streaming] override def clearMetadata(time: Time) {
+    super.clearMetadata(time)
+    val oldReceivedBlocks = receivedBlockInfo.filter(_._1 <= (time - rememberDuration))
+    receivedBlockInfo --= oldReceivedBlocks.keys
+    logDebug("Cleared " + oldReceivedBlocks.size + " RDDs that were older than " +
+      (time - rememberDuration) + ": " + oldReceivedBlocks.keys.mkString(", "))
+  }
 }
-
-
-
-
 

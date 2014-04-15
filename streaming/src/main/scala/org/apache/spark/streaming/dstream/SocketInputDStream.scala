@@ -65,7 +65,6 @@ class SocketReceiver[T: ClassTag](
   def onStop() {
     if (socket != null) socket.close()
   }
-
 }
 
 private[streaming]

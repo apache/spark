@@ -28,8 +28,13 @@ import akka.pattern.ask
 
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.storage.StreamBlockId
-import org.apache.spark.streaming.scheduler.{AddBlocks, DeregisterReceiver, RegisterReceiver}
-import org.apache.spark.util.AkkaUtils
+import org.apache.spark.streaming.scheduler._
+import org.apache.spark.util.{Utils, AkkaUtils}
+import org.apache.spark.storage.StreamBlockId
+import org.apache.spark.streaming.scheduler.DeregisterReceiver
+import org.apache.spark.streaming.scheduler.AddBlock
+import scala.Some
+import org.apache.spark.streaming.scheduler.RegisterReceiver
 
 /**
  * Concrete implementation of [[org.apache.spark.streaming.receiver.NetworkReceiverExecutor]]
@@ -62,7 +67,9 @@ private[streaming] class NetworkReceiverExecutorImpl(
     Props(new Actor {
       override def preStart() {
         logInfo("Registered receiver " + receiverId)
-        val future = trackerActor.ask(RegisterReceiver(receiverId, self))(askTimeout)
+        val msg = RegisterReceiver(
+          receiverId, receiver.getClass.getSimpleName, Utils.localHostName(), self)
+        val future = trackerActor.ask(msg)(askTimeout)
         Await.result(future, askTimeout)
       }
 
@@ -71,7 +78,7 @@ private[streaming] class NetworkReceiverExecutorImpl(
           logInfo("Received stop signal")
           stop()
       }
-    }), "NetworkReceiver-" + receiverId)
+    }), "NetworkReceiver-" + receiverId + "-" + System.currentTimeMillis())
 
   /** Unique block ids if one wants to add blocks directly */
   private val newBlockId = new AtomicLong(System.currentTimeMillis())
@@ -95,7 +102,7 @@ private[streaming] class NetworkReceiverExecutorImpl(
     blockGenerator += (data)
   }
 
-  /** Push a block of received data into block generator. */
+  /** Push a block of received data as an ArrayBuffer into block generator. */
   def pushArrayBuffer(
       arrayBuffer: ArrayBuffer[_],
       optionalMetadata: Option[Any],
@@ -106,10 +113,10 @@ private[streaming] class NetworkReceiverExecutorImpl(
     blockManager.put(blockId, arrayBuffer.asInstanceOf[ArrayBuffer[Any]],
       storageLevel, tellMaster = true)
     logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
-    reportPushedBlock(blockId, optionalMetadata)
+    reportPushedBlock(blockId, arrayBuffer.size, optionalMetadata)
   }
 
-  /** Push a block of received data into block generator. */
+  /** Push a block of received data as an iterator into block generator. */
   def pushIterator(
       iterator: Iterator[_],
       optionalMetadata: Option[Any],
@@ -119,10 +126,10 @@ private[streaming] class NetworkReceiverExecutorImpl(
     val time = System.currentTimeMillis
     blockManager.put(blockId, iterator, storageLevel, tellMaster = true)
     logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
-    reportPushedBlock(blockId, optionalMetadata)
+    reportPushedBlock(blockId, -1, optionalMetadata)
   }
 
-  /** Push a block (as bytes) into the block generator. */
+  /** Push a block of received data as bytes into the block generator. */
   def pushBytes(
       bytes: ByteBuffer,
       optionalMetadata: Option[Any],
@@ -132,12 +139,12 @@ private[streaming] class NetworkReceiverExecutorImpl(
     val time = System.currentTimeMillis
     blockManager.putBytes(blockId, bytes, storageLevel, tellMaster = true)
     logDebug("Pushed block " + blockId + " in " + (System.currentTimeMillis - time)  + " ms")
-    reportPushedBlock(blockId, optionalMetadata)
+    reportPushedBlock(blockId, -1, optionalMetadata)
   }
 
   /** Report pushed block */
-  def reportPushedBlock(blockId: StreamBlockId, optionalMetadata: Option[Any]) {
-    trackerActor ! AddBlocks(receiverId, Array(blockId), optionalMetadata.orNull)
+  def reportPushedBlock(blockId: StreamBlockId, numRecords: Long, optionalMetadata: Option[Any]) {
+    trackerActor ! AddBlock(ReceivedBlockInfo(receiverId, blockId, numRecords, optionalMetadata.orNull))
     logDebug("Reported block " + blockId)
   }
 

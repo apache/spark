@@ -33,7 +33,7 @@ import org.apache.spark.streaming.receiver.NetworkReceiver
 * @constructor create a new Twitter stream using the supplied Twitter4J authentication credentials.
 * An optional set of string filters can be used to restrict the set of tweets. The Twitter API is
 * such that this may return a sampled subset of all tweets during each interval.
-* 
+*
 * If no Authorization object is provided, initializes OAuth authorization using the system
 * properties twitter4j.oauth.consumerKey, .consumerSecret, .accessToken and .accessTokenSecret.
 */
@@ -44,13 +44,13 @@ class TwitterInputDStream(
     filters: Seq[String],
     storageLevel: StorageLevel
   ) extends NetworkInputDStream[Status](ssc_)  {
-  
+
   private def createOAuthAuthorization(): Authorization = {
     new OAuthAuthorization(new ConfigurationBuilder().build())
   }
 
   private val authorization = twitterAuth.getOrElse(createOAuthAuthorization())
-  
+
   override def getReceiver(): NetworkReceiver[Status] = {
     new TwitterReceiver(authorization, filters, storageLevel)
   }

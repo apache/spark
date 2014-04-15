@@ -64,6 +64,12 @@ private[spark] class Worker(
   val REGISTRATION_TIMEOUT = 20.seconds
   val REGISTRATION_RETRIES = 3
 
+  val CLEANUP_ENABLED = conf.getBoolean("spark.worker.cleanup.enabled", true)
+  // How often worker will clean up old app folders
+  val CLEANUP_INTERVAL_MILLIS = conf.getLong("spark.worker.cleanup.interval", 60 * 30) * 1000
+  // TTL for app folders/data;  after TTL expires it will be cleaned up
+  val APP_DATA_RETENTION_SECS = conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
+
   // Index into masterUrls that we're currently trying to register with.
   var masterIndex = 0
 
@@ -122,8 +128,8 @@ private[spark] class Worker(
       host, port, cores, Utils.megabytesToString(memory)))
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
-    webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+    webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
     webUi.bind()
     registerWithMaster()
 
@@ -179,10 +185,26 @@ private[spark] class Worker(
       registered = true
       changeMaster(masterUrl, masterWebUiUrl)
       context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis, self, SendHeartbeat)
+      if (CLEANUP_ENABLED) {
+        context.system.scheduler.schedule(CLEANUP_INTERVAL_MILLIS millis,
+          CLEANUP_INTERVAL_MILLIS millis, self, WorkDirCleanup)
+      }
 
     case SendHeartbeat =>
       masterLock.synchronized {
         if (connected) { master ! Heartbeat(workerId) }
+      }
+
+    case WorkDirCleanup =>
+      // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker actor
+      val cleanupFuture = concurrent.future {
+        logInfo("Cleaning up oldest application directories in " + workDir + " ...")
+        Utils.findOldFiles(workDir, APP_DATA_RETENTION_SECS)
+          .foreach(Utils.deleteRecursively)
+      }
+      cleanupFuture onFailure {
+        case e: Throwable =>
+          logError("App dir cleanup failed: " + e.getMessage, e)
       }
 
     case MasterChanged(masterUrl, masterWebUiUrl) =>
@@ -331,7 +353,6 @@ private[spark] class Worker(
 }
 
 private[spark] object Worker {
-
   def main(argStrings: Array[String]) {
     val args = new WorkerArguments(argStrings)
     val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,

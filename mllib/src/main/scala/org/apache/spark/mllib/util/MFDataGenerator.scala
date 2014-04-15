@@ -21,35 +21,36 @@ import scala.util.Random
 
 import org.jblas.DoubleMatrix
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 
 /**
-* Generate RDD(s) containing data for Matrix Factorization.
-*
-* This method samples training entries according to the oversampling factor
-* 'trainSampFact', which is a multiplicative factor of the number of
-* degrees of freedom of the matrix: rank*(m+n-rank).
-*
-* It optionally samples entries for a testing matrix using
-* 'testSampFact', the percentage of the number of training entries
-* to use for testing.
-*
-* This method takes the following inputs:
-*   sparkMaster    (String) The master URL.
-*   outputPath     (String) Directory to save output.
-*   m              (Int) Number of rows in data matrix.
-*   n              (Int) Number of columns in data matrix.
-*   rank           (Int) Underlying rank of data matrix.
-*   trainSampFact  (Double) Oversampling factor.
-*   noise          (Boolean) Whether to add gaussian noise to training data.
-*   sigma          (Double) Standard deviation of added gaussian noise.
-*   test           (Boolean) Whether to create testing RDD.
-*   testSampFact   (Double) Percentage of training data to use as test data.
-*/
-
-object MFDataGenerator{
-
+ * :: DeveloperApi ::
+ * Generate RDD(s) containing data for Matrix Factorization.
+ *
+ * This method samples training entries according to the oversampling factor
+ * 'trainSampFact', which is a multiplicative factor of the number of
+ * degrees of freedom of the matrix: rank*(m+n-rank).
+ *
+ * It optionally samples entries for a testing matrix using
+ * 'testSampFact', the percentage of the number of training entries
+ * to use for testing.
+ *
+ * This method takes the following inputs:
+ *   sparkMaster    (String) The master URL.
+ *   outputPath     (String) Directory to save output.
+ *   m              (Int) Number of rows in data matrix.
+ *   n              (Int) Number of columns in data matrix.
+ *   rank           (Int) Underlying rank of data matrix.
+ *   trainSampFact  (Double) Oversampling factor.
+ *   noise          (Boolean) Whether to add gaussian noise to training data.
+ *   sigma          (Double) Standard deviation of added gaussian noise.
+ *   test           (Boolean) Whether to create testing RDD.
+ *   testSampFact   (Double) Percentage of training data to use as test data.
+ */
+@DeveloperApi
+object MFDataGenerator {
   def main(args: Array[String]) {
     if (args.length < 2) {
       println("Usage: MFDataGenerator " +

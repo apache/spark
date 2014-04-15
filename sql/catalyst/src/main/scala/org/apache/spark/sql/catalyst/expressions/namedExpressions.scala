@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.types._
 
 object NamedExpression {
@@ -58,9 +59,9 @@ abstract class Attribute extends NamedExpression {
 
   def withQualifiers(newQualifiers: Seq[String]): Attribute
 
-  def references = Set(this)
   def toAttribute = this
   def newInstance: Attribute
+  override def references = Set(this)
 }
 
 /**
@@ -77,15 +78,15 @@ case class Alias(child: Expression, name: String)
     (val exprId: ExprId = NamedExpression.newExprId, val qualifiers: Seq[String] = Nil)
   extends NamedExpression with trees.UnaryNode[Expression] {
 
-  type EvaluatedType = Any
+  override type EvaluatedType = Any
 
-  override def apply(input: Row) = child.apply(input)
+  override def eval(input: Row) = child.eval(input)
 
-  def dataType = child.dataType
-  def nullable = child.nullable
-  def references = child.references
+  override def dataType = child.dataType
+  override def nullable = child.nullable
+  override def references = child.references
 
-  def toAttribute = {
+  override def toAttribute = {
     if (resolved) {
       AttributeReference(name, child.dataType, child.nullable)(exprId, qualifiers)
     } else {
@@ -127,7 +128,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     h
   }
 
-  def newInstance = AttributeReference(name, dataType, nullable)(qualifiers = qualifiers)
+  override def newInstance = AttributeReference(name, dataType, nullable)(qualifiers = qualifiers)
 
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
@@ -143,13 +144,17 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
   /**
    * Returns a copy of this [[AttributeReference]] with new qualifiers.
    */
-  def withQualifiers(newQualifiers: Seq[String]) = {
+  override def withQualifiers(newQualifiers: Seq[String]) = {
     if (newQualifiers == qualifiers) {
       this
     } else {
       AttributeReference(name, dataType, nullable)(exprId, newQualifiers)
     }
   }
+
+  // Unresolved attributes are transient at compile time and don't get evaluated during execution.
+  override def eval(input: Row = null): EvaluatedType =
+    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
 }

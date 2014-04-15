@@ -48,7 +48,7 @@ class HiveResolutionSuite extends HiveComparisonTest {
   createQueryTest("attr",
     "SELECT key FROM src a ORDER BY key LIMIT 1")
 
-  createQueryTest("alias.*",
+  createQueryTest("alias.star",
     "SELECT a.* FROM src a ORDER BY key LIMIT 1")
 
   test("case insensitivity with scala reflection") {
@@ -56,7 +56,7 @@ class HiveResolutionSuite extends HiveComparisonTest {
     TestHive.sparkContext.parallelize(Data(1, 2, Nested(1,2)) :: Nil)
       .registerAsTable("caseSensitivityTest")
 
-    sql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
+    hql("SELECT a, b, A, B, n.a, n.b, n.A, n.B FROM caseSensitivityTest")
   }
 
   /**
