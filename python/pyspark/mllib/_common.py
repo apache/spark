@@ -128,8 +128,7 @@ def _serialize_dense_vector(v):
     ba[0] = DENSE_VECTOR_MAGIC
     length_bytes = ndarray(shape=[1], buffer=ba, offset=1, dtype=int32)
     length_bytes[0] = length
-    arr_mid = ndarray(shape=[length], buffer=ba, offset=5, dtype=float64)
-    arr_mid[...] = v
+    _copyto(v, buffer=ba, offset=5, shape=[length], dtype=float64)
     return ba
 
 
@@ -141,9 +140,9 @@ def _serialize_sparse_vector(v):
     header = ndarray(shape=[2], buffer=ba, offset=1, dtype=int32)
     header[0] = v.size
     header[1] = nonzeros
-    copyto(ndarray(shape=[nonzeros], buffer=ba, offset=9, dtype=int32), v.indices)
+    _copyto(v.indices, buffer=ba, offset=9, shape=[nonzeros], dtype=int32)
     values_offset = 9 + 4 * nonzeros
-    copyto(ndarray(shape=[nonzeros], buffer=ba, offset=values_offset, dtype=float64), v.values)
+    _copyto(v.values, buffer=ba, offset=values_offset, shape=[nonzeros], dtype=float64)
     return ba
 
 
@@ -215,8 +214,7 @@ def _serialize_double_matrix(m):
         lengths = ndarray(shape=[3], buffer=ba, offset=1, dtype=int32)
         lengths[0] = rows
         lengths[1] = cols
-        arr_mid = ndarray(shape=[rows, cols], buffer=ba, offset=9, dtype=float64, order='C')
-        arr_mid[...] = m
+        _copyto(m, buffer=ba, offset=9, shape=[rows, cols], dtype=float64)
         return ba
     else:
         raise TypeError("_serialize_double_matrix called on a "
@@ -254,6 +252,18 @@ def _serialize_labeled_point(p):
     header_float = ndarray(shape=[1], buffer=header, offset=1, dtype=float64)
     header_float[0] = p.label
     return header + serialized_features
+
+
+def _copyto(array, buffer, offset, shape, dtype):
+    """
+    Copy the contents of a vector to a destination bytearray at the
+    given offset.
+
+    TODO: In the future this could use numpy.copyto on NumPy 1.7+, but
+    we should benchmark that to see whether it provides a benefit.
+    """
+    temp_array = ndarray(shape=shape, buffer=buffer, offset=offset, dtype=dtype, order='C')
+    temp_array[...] = array
 
 
 def _get_unmangled_rdd(data, serializer):
