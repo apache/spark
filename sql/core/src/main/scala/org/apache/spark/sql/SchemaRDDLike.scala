@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical._
 
@@ -31,14 +31,24 @@ trait SchemaRDDLike {
   private[sql] def baseSchemaRDD: SchemaRDD
 
   /**
+   * :: DeveloperApi ::
    * A lazily computed query execution workflow.  All other RDD operations are passed
-   * through to the RDD that is produced by this workflow.
+   * through to the RDD that is produced by this workflow. This workflow is produced lazily because
+   * invoking the whole query optimization pipeline can be expensive.
    *
-   * We want this to be lazy because invoking the whole query optimization pipeline can be
-   * expensive.
+   * The query execution is considered a Developer API as phases may be added or removed in future
+   * releases.  This execution is only exposed to provide an interface for inspecting the various
+   * phases for debugging purposes.  Applications should not depend on particular phases existing
+   * or producing any specific output, even for exactly the same query.
+   *
+   * Additionally, the RDD exposed by this execution is not designed for consumption by end users.
+   * In particular, it does not contain any schema information, and it reuses Row objects
+   * internally.  This object reuse improves performance, but can make programming against the RDD
+   * more difficult.  Instead end users should perform RDD operations on a SchemaRDD directly.
    */
   @transient
-  protected[spark] lazy val queryExecution = sqlContext.executePlan(logicalPlan)
+  @DeveloperApi
+  lazy val queryExecution = sqlContext.executePlan(logicalPlan)
 
   override def toString =
     s"""${super.toString}
@@ -68,7 +78,6 @@ trait SchemaRDDLike {
 
   /**
    * :: Experimental ::
-   *
    * Adds the rows from this RDD to the specified table, optionally overwriting the existing data.
    *
    * @group schema
@@ -80,7 +89,6 @@ trait SchemaRDDLike {
 
   /**
    * :: Experimental ::
-   *
    * Appends the rows from this RDD to the specified table.
    *
    * @group schema
@@ -90,7 +98,6 @@ trait SchemaRDDLike {
 
   /**
    * :: Experimental ::
-   *
    * Creates a table from the the contents of this SchemaRDD.  This will fail if the table already
    * exists.
    *
@@ -99,9 +106,9 @@ trait SchemaRDDLike {
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
    *
-   * @param tableName
+   * @group schema
    */
   @Experimental
-  def createTableAs(tableName: String): Unit =
+  def saveAsTable(tableName: String): Unit =
     sqlContext.executePlan(InsertIntoCreatedTable(None, tableName, logicalPlan)).toRdd
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{Dependency, OneToOneDependency, Partition, TaskContext}
-import org.apache.spark.annotation.{AlphaComponent, Experimental}
+import org.apache.spark.annotation.{AlphaComponent, Experimental, DeveloperApi}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -78,8 +78,6 @@ import org.apache.spark.sql.catalyst.types.BooleanType
  *  // Example of language integrated queries.
  *  rdd.where('key === 1).orderBy('value.asc).select('key).collect()
  * }}}
- *
- *  @todo There is currently no support for creating SchemaRDDs from either Java or Python RDDs.
  *
  *  @groupname Query Language Integrated Queries
  *  @groupdesc Query Functions that create new queries from SchemaRDDs.  The
@@ -286,11 +284,10 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Generate(generator, join, outer, None, logicalPlan))
 
   /**
-   * Returns this RDD as a SchemaRDD.
+   * Returns this RDD as a SchemaRDD.  Intended primarily to force the invocation of the implicit
+   * conversion from an standard RDD to a SchemaRDD.
+   *
    * @group schema
    */
   def toSchemaRDD = this
-
-  /** FOR INTERNAL USE ONLY */
-  def analyze = sqlContext.analyzer(logicalPlan)
 }
