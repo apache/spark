@@ -21,29 +21,12 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.eclipse.jetty.servlet.ServletContextHandler
+import org.apache.spark.ui.{UIUtils, WebUIPage}
 
-import org.apache.spark.scheduler._
-import org.apache.spark.ui._
-import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.ui.Page.Environment
-
-private[ui] class EnvironmentUI(parent: SparkUI) {
+private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") {
+  private val appName = parent.appName
   private val basePath = parent.basePath
-  private var _listener: Option[EnvironmentListener] = None
-
-  private def appName = parent.appName
-
-  lazy val listener = _listener.get
-
-  def start() {
-    _listener = Some(new EnvironmentListener)
-  }
-
-  def getHandlers = Seq[ServletContextHandler](
-    createServletHandler("/environment",
-      (request: HttpServletRequest) => render(request), parent.securityManager, basePath)
-  )
+  private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val runtimeInformationTable = UIUtils.listingTable(
@@ -62,7 +45,7 @@ private[ui] class EnvironmentUI(parent: SparkUI) {
         <h4>Classpath Entries</h4> {classpathEntriesTable}
       </span>
 
-    UIUtils.headerSparkPage(content, basePath, appName, "Environment", Environment)
+    UIUtils.headerSparkPage(content, basePath, appName, "Environment", parent.headerTabs, parent)
   }
 
   private def propertyHeader = Seq("Name", "Value")
@@ -70,24 +53,4 @@ private[ui] class EnvironmentUI(parent: SparkUI) {
   private def jvmRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
   private def propertyRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
   private def classPathRow(data: (String, String)) = <tr><td>{data._1}</td><td>{data._2}</td></tr>
-}
-
-/**
- * A SparkListener that prepares information to be displayed on the EnvironmentUI
- */
-private[ui] class EnvironmentListener extends SparkListener {
-  var jvmInformation = Seq[(String, String)]()
-  var sparkProperties = Seq[(String, String)]()
-  var systemProperties = Seq[(String, String)]()
-  var classpathEntries = Seq[(String, String)]()
-
-  override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) {
-    synchronized {
-      val environmentDetails = environmentUpdate.environmentDetails
-      jvmInformation = environmentDetails("JVM Information")
-      sparkProperties = environmentDetails("Spark Properties")
-      systemProperties = environmentDetails("System Properties")
-      classpathEntries = environmentDetails("Classpath Entries")
-    }
-  }
 }

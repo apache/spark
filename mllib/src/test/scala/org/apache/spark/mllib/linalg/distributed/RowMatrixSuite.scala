@@ -170,4 +170,19 @@ class RowMatrixSuite extends FunSuite with LocalSparkContext {
       ))
     }
   }
+
+  test("compute column summary statistics") {
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val summary = mat.computeColumnSummaryStatistics()
+      // Run twice to make sure no internal states are changed.
+      for (k <- 0 to 1) {
+        assert(summary.mean === Vectors.dense(4.5, 3.0, 4.0), "mean mismatch")
+        assert(summary.variance === Vectors.dense(15.0, 10.0, 10.0), "variance mismatch")
+        assert(summary.count === m, "count mismatch.")
+        assert(summary.numNonzeros === Vectors.dense(3.0, 3.0, 4.0), "nnz mismatch")
+        assert(summary.max === Vectors.dense(9.0, 7.0, 8.0), "max mismatch")
+        assert(summary.min === Vectors.dense(0.0, 0.0, 1.0), "column mismatch.")
+      }
+    }
+  }
 }

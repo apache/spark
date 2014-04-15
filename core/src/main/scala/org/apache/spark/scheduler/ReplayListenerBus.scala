@@ -17,11 +17,10 @@
 
 package org.apache.spark.scheduler
 
-import java.io.InputStream
+import java.io.{BufferedInputStream, InputStream}
 
 import scala.io.Source
 
-import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 import org.apache.hadoop.fs.{Path, FileSystem}
 import org.json4s.jackson.JsonMethods._
 
@@ -32,8 +31,8 @@ import org.apache.spark.util.JsonProtocol
 /**
  * A SparkListenerBus that replays logged events from persisted storage.
  *
- * This class expects files to be appropriately prefixed as specified in EventLoggingListener.
- * There exists a one-to-one mapping between ReplayListenerBus and event logging applications.
+ * This assumes the given paths are valid log files, where each line can be deserialized into
+ * exactly one SparkListenerEvent.
  */
 private[spark] class ReplayListenerBus(
     logPaths: Seq[Path],
@@ -62,7 +61,7 @@ private[spark] class ReplayListenerBus(
       var currentLine = "<not started>"
       try {
         fileStream = Some(fileSystem.open(path))
-        bufferedStream = Some(new FastBufferedInputStream(fileStream.get))
+        bufferedStream = Some(new BufferedInputStream(fileStream.get))
         compressStream = Some(wrapForCompression(bufferedStream.get))
 
         // Parse each line as an event and post the event to all attached listeners

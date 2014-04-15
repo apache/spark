@@ -15,21 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.mllib.evaluation.binary
 
-import java.net.URI
+/**
+ * Trait for a binary confusion matrix.
+ */
+private[evaluation] trait BinaryConfusionMatrix {
+  /** number of true positives */
+  def numTruePositives: Long
 
-import org.scalatest.FunSuite
+  /** number of false positives */
+  def numFalsePositives: Long
 
-class SparkUISuite extends FunSuite with SharedSparkContext {
+  /** number of false negatives */
+  def numFalseNegatives: Long
 
-  test("verify appUIAddress contains the scheme") {
-    val uiAddress = sc.ui.appUIAddress
-    assert(uiAddress.equals("http://" + sc.ui.appUIHostPort))
-  }
+  /** number of true negatives */
+  def numTrueNegatives: Long
 
-  test("verify appUIAddress contains the port") {
-    val splitUIAddress = sc.ui.appUIAddress.split(':')
-    assert(splitUIAddress(2).toInt == sc.ui.boundPort)
-  }
+  /** number of positives */
+  def numPositives: Long = numTruePositives + numFalseNegatives
+
+  /** number of negatives */
+  def numNegatives: Long = numFalsePositives + numTrueNegatives
 }

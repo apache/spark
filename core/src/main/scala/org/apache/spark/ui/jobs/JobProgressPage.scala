@@ -22,25 +22,23 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.{Node, NodeSeq}
 
 import org.apache.spark.scheduler.Schedulable
-import org.apache.spark.ui.Page._
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.ui.{WebUIPage, UIUtils}
 
 /** Page showing list of all ongoing and recently finished stages and pools */
-private[ui] class IndexPage(parent: JobProgressUI) {
+private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") {
+  private val appName = parent.appName
   private val basePath = parent.basePath
   private val live = parent.live
   private val sc = parent.sc
-  private lazy val listener = parent.listener
+  private val listener = parent.listener
   private lazy val isFairScheduler = parent.isFairScheduler
-
-  private def appName = parent.appName
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val activeStages = listener.activeStages.values.toSeq
       val completedStages = listener.completedStages.reverse.toSeq
       val failedStages = listener.failedStages.reverse.toSeq
-      val now = System.currentTimeMillis()
+      val now = System.currentTimeMillis
 
       val activeStagesTable =
         new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent, parent.killEnabled)
@@ -59,7 +57,7 @@ private[ui] class IndexPage(parent: JobProgressUI) {
               // Total duration is not meaningful unless the UI is live
               <li>
                 <strong>Total Duration: </strong>
-                {parent.formatDuration(now - sc.startTime)}
+                {UIUtils.formatDuration(now - sc.startTime)}
               </li>
             }}
             <li>
@@ -94,7 +92,7 @@ private[ui] class IndexPage(parent: JobProgressUI) {
         <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
         failedStagesTable.toNodeSeq
 
-      UIUtils.headerSparkPage(content, basePath, appName, "Spark Stages", Stages)
+      UIUtils.headerSparkPage(content, basePath, appName, "Spark Stages", parent.headerTabs, parent)
     }
   }
 }

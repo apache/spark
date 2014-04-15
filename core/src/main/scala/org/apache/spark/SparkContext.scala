@@ -25,6 +25,7 @@ import java.util.UUID.randomUUID
 import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.language.implicitConversions
 import scala.reflect.{ClassTag, classTag}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -213,7 +214,6 @@ class SparkContext(config: SparkConf) extends Logging {
   // Initialize the Spark UI, registering all associated listeners
   private[spark] val ui = new SparkUI(this)
   ui.bind()
-  ui.start()
 
   // Optionally log Spark events
   private[spark] val eventLogger: Option[EventLoggingListener] = {
@@ -455,14 +455,21 @@ class SparkContext(config: SparkConf) extends Logging {
    *   (a-hdfs-path/part-nnnnn, its content)
    * }}}
    *
-   * @note Small files are preferred, as each file will be loaded fully in memory.
+   * @note Small files are preferred, large file is also allowable, but may cause bad performance.
+   *
+   * @param minSplits A suggestion value of the minimal splitting number for input data.
    */
-  def wholeTextFiles(path: String): RDD[(String, String)] = {
-    newAPIHadoopFile(
-      path,
+  def wholeTextFiles(path: String, minSplits: Int = defaultMinSplits): RDD[(String, String)] = {
+    val job = new NewHadoopJob(hadoopConfiguration)
+    NewFileInputFormat.addInputPath(job, new Path(path))
+    val updateConf = job.getConfiguration
+    new WholeTextFileRDD(
+      this,
       classOf[WholeTextFileInputFormat],
       classOf[String],
-      classOf[String])
+      classOf[String],
+      updateConf,
+      minSplits)
   }
 
   /**
@@ -1192,11 +1199,7 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.post(SparkListenerApplicationStart(appName, startTime, sparkUser))
   }
 
-  /**
-   * Post the application end event to all listeners immediately, rather than adding it
-   * to the event queue for it to be asynchronously processed eventually. Otherwise, a race
-   * condition exists in which the listeners may stop before this event has been propagated.
-   */
+  /** Post the application end event */
   private def postApplicationEnd() {
     listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis))
   }

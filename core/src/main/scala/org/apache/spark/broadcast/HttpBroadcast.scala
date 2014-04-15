@@ -18,10 +18,9 @@
 package org.apache.spark.broadcast
 
 import java.io.{File, FileOutputStream, ObjectInputStream, ObjectOutputStream, OutputStream}
-import java.net.{URI, URL, URLConnection}
+import java.io.{BufferedInputStream, BufferedOutputStream}
+import java.net.{URL, URLConnection, URI}
 import java.util.concurrent.TimeUnit
-
-import it.unimi.dsi.fastutil.io.{FastBufferedInputStream, FastBufferedOutputStream}
 
 import org.apache.spark.{HttpServer, Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.io.CompressionCodec
@@ -164,7 +163,7 @@ private[spark] object HttpBroadcast extends Logging {
       if (compress) {
         compressionCodec.compressedOutputStream(new FileOutputStream(file))
       } else {
-        new FastBufferedOutputStream(new FileOutputStream(file), bufferSize)
+        new BufferedOutputStream(new FileOutputStream(file), bufferSize)
       }
     }
     val ser = SparkEnv.get.serializer.newInstance()
@@ -195,7 +194,7 @@ private[spark] object HttpBroadcast extends Logging {
       if (compress) {
         compressionCodec.compressedInputStream(inputStream)
       } else {
-        new FastBufferedInputStream(inputStream, bufferSize)
+        new BufferedInputStream(inputStream, bufferSize)
       }
     }
     val ser = SparkEnv.get.serializer.newInstance()

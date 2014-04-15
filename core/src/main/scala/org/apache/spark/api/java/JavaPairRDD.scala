@@ -21,6 +21,7 @@ import java.util.{Comparator, List => JList}
 import java.lang.{Iterable => JIterable}
 
 import scala.collection.JavaConversions._
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import com.google.common.base.Optional

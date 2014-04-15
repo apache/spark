@@ -40,3 +40,5 @@ work
 golden
 test.out/*
 .*iml
+service.properties
+db.lck
