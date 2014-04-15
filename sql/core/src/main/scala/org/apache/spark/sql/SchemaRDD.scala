@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import net.razorvine.pickle.Pickler
+
 import org.apache.spark.{Dependency, OneToOneDependency, Partition, TaskContext}
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.rdd.RDD
@@ -25,6 +27,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.types.BooleanType
+import org.apache.spark.api.java.JavaRDD
+import java.util.{Map => JMap}
 
 /**
  * :: AlphaComponent ::
@@ -308,4 +312,23 @@ class SchemaRDD(
 
   /** FOR INTERNAL USE ONLY */
   def analyze = sqlContext.analyzer(logicalPlan)
+
+  private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
+    val fieldNames: Seq[String] = this.queryExecution.analyzed.output.map(_.name)
+    this.mapPartitions { iter =>
+      val pickle = new Pickler
+      iter.map { row =>
+        val map: JMap[String, Any] = new java.util.HashMap
+        // TODO: We place the map in an ArrayList so that the object is pickled to a List[Dict].
+        // Ideally we should be able to pickle an object directly into a Python collection so we
+        // don't have to create an ArrayList every time.
+        val arr: java.util.ArrayList[Any] = new java.util.ArrayList
+        row.zip(fieldNames).foreach { case (obj, name) =>
+          map.put(name, obj)
+        }
+        arr.add(map)
+        pickle.dumps(arr)
+      }
+    }
+  }
 }
