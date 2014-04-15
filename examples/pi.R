@@ -21,11 +21,11 @@ piFunc <- function(elem) {
 
 
 piFuncVec <- function(elems) {
-	message(length(elems))
-	rands1 <- runif(n = length(elems), min = -1, max = 1)
-	rands2 <- runif(n = length(elems), min = -1, max = 1)
-	val <- ifelse((rands1^2 + rands2^2) < 1, 1.0, 0.0)
-	sum(val)
+  message(length(elems))
+  rands1 <- runif(n = length(elems), min = -1, max = 1)
+  rands2 <- runif(n = length(elems), min = -1, max = 1)
+  val <- ifelse((rands1^2 + rands2^2) < 1, 1.0, 0.0)
+  sum(val)
 }
 
 rdd <- parallelize(sc, 1:n, slices)

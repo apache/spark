@@ -14,7 +14,8 @@ D <- 10
 
 readPartition <- function(part){
 	part = strsplit(part, " ", fixed = T)
-	list(matrix(as.numeric(unlist(part)), ncol = length(part[[1]])))}
+	list(matrix(as.numeric(unlist(part)), ncol = length(part[[1]])))
+}
 
 # Read data points and convert each partition to a matrix
 points <- cache(lapplyPartition(textFile(sc, args[[2]]), readPartition))
