@@ -5,9 +5,9 @@ title: Machine Learning Library (MLlib)
 
 MLlib is a Spark implementation of some common machine learning algorithms and utilities,
 including classification, regression, clustering, collaborative
-filtering, dimension reduction, as well as underlying optimization primitives:
+filtering, dimensionality reduction, as well as underlying optimization primitives:
 
-* <a href="mllib-linear-algebra.html">Linear algebera</a>
+* <a href="mllib-linear-algebra.html">Linear algebra</a>
   * vector and matrix
   * distributed matrix
 * Classification and regression
@@ -21,7 +21,7 @@ filtering, dimension reduction, as well as underlying optimization primitives:
   * alternating least squares (ALS)
 * <a href="mllib-clustering.html">Clustering</a>
   * k-means
-* <a href="mllib-dimentionality-reduction.html">Dimentionality reduction</a>
+* <a href="mllib-dimensionality-reduction.html">Dimensionality reduction</a>
   * singular value decomposition (SVD)
   * principal component analysis (PCA)
 * <a href="mllib-optimization.html">Optimization</a>
@@ -29,11 +29,13 @@ filtering, dimension reduction, as well as underlying optimization primitives:
   * limited-memory BFGS (L-BFGS)
 
 ## Dependencies
-MLlib uses the [jblas](https://github.com/mikiobraun/jblas) linear algebra library, which itself
-depends on native Fortran routines. You may need to install the
+
+MLlib uses linear algebra packages [jblas](https://github.com/mikiobraun/jblas) and [netlib-java](https://github.com/fommil/netlib-java) (via [Breeze](http://www.scalanlp.org/)), which depend on native Fortran routines. You need to install the
 [gfortran runtime library](https://github.com/mikiobraun/jblas/wiki/Missing-Libraries)
 if it is not already present on your nodes. MLlib will throw a linking error if it cannot
 detect these libraries automatically.
+Due to license issues, we do not include `netlib-java`'s native libraries in MLlib's dependency set. If no native library is available at runtime, you will see a warning message.
+To use native libraries from `netlib-java`, please include artifact `com.github.fommil.netlib:all:1.1.2` as a dependency of your project or build your own (see [instructions](https://github.com/fommil/netlib-java/blob/master/README.md#machine-optimised-system-libraries)).
 
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
 
