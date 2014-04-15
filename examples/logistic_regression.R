@@ -13,8 +13,8 @@ iterations <- as.integer(args[[3]])
 D <- 10
 
 readPartition <- function(part){
-	part = strsplit(part, " ", fixed = T)
-	list(matrix(as.numeric(unlist(part)), ncol = length(part[[1]])))
+  part = strsplit(part, " ", fixed = T)
+  list(matrix(as.numeric(unlist(part)), ncol = length(part[[1]])))
 }
 
 # Read data points and convert each partition to a matrix
