@@ -27,11 +27,13 @@ import org.apache.spark.{Logging, RangePartitioner}
  * use these functions. They will work with any key type that has a `scala.math.Ordered`
  * implementation.
  */
-class OrderedRDDFunctions[K <% Ordered[K]: ClassTag,
+class OrderedRDDFunctions[K : Ordering : ClassTag,
                           V: ClassTag,
                           P <: Product2[K, V] : ClassTag](
     self: RDD[P])
   extends Logging with Serializable {
+
+  private val ordering = implicitly[Ordering[K]]
 
   /**
    * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
@@ -45,9 +47,9 @@ class OrderedRDDFunctions[K <% Ordered[K]: ClassTag,
     shuffled.mapPartitions(iter => {
       val buf = iter.toArray
       if (ascending) {
-        buf.sortWith((x, y) => x._1 < y._1).iterator
+        buf.sortWith((x, y) => ordering.lt(x._1, y._1)).iterator
       } else {
-        buf.sortWith((x, y) => x._1 > y._1).iterator
+        buf.sortWith((x, y) => ordering.gt(x._1, y._1)).iterator
       }
     }, preservesPartitioning = true)
   }
