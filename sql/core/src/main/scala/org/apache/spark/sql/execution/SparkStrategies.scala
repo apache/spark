@@ -28,42 +28,12 @@ import org.apache.spark.sql.parquet._
 abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SQLContext#SparkPlanner =>
 
-  object HashJoin extends Strategy {
+  object HashJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case FilteredOperation(predicates, logical.Join(left, right, Inner, condition)) =>
-        logger.debug(s"Considering join: ${predicates ++ condition}")
-        // Find equi-join predicates that can be evaluated before the join, and thus can be used
-        // as join keys. Note we can only mix in the conditions with other predicates because the
-        // match above ensures that this is and Inner join.
-        val (joinPredicates, otherPredicates) = (predicates ++ condition).partition {
-          case Equals(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
-                               (canEvaluate(l, right) && canEvaluate(r, left)) => true
-          case _ => false
-        }
-
-        val joinKeys = joinPredicates.map {
-          case Equals(l,r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
-          case Equals(l,r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
-        }
-
-        // Do not consider this strategy if there are no join keys.
-        if (joinKeys.nonEmpty) {
-          val leftKeys = joinKeys.map(_._1)
-          val rightKeys = joinKeys.map(_._2)
-
-          val joinOp = execution.HashJoin(
-            leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
-
-          // Make sure other conditions are met if present.
-          if (otherPredicates.nonEmpty) {
-            execution.Filter(combineConjunctivePredicates(otherPredicates), joinOp) :: Nil
-          } else {
-            joinOp :: Nil
-          }
-        } else {
-          logger.debug(s"Avoiding spark join with no join keys.")
-          Nil
-        }
+      case HashFilteredJoin(Inner, leftKeys, rightKeys, condition, left, right) =>
+        val hashJoin =
+          execution.HashJoin(leftKeys, rightKeys, BuildRight, planLater(left), planLater(right))
+        condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
       case _ => Nil
     }
   }
