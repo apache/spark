@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.trees
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.types.{BooleanType, StringType, TimestampType}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees
+import org.apache.spark.sql.catalyst.types.BooleanType
+
 
 object InterpretedPredicate {
   def apply(expression: Expression): (Row => Boolean) = {
@@ -37,10 +38,17 @@ trait Predicate extends Expression {
 }
 
 trait PredicateHelper {
-  def splitConjunctivePredicates(condition: Expression): Seq[Expression] = condition match {
+  protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = condition match {
     case And(cond1, cond2) => splitConjunctivePredicates(cond1) ++ splitConjunctivePredicates(cond2)
     case other => other :: Nil
   }
+
+  private def combineConjunctivePredicates(predicates: Seq[Expression]) =
+    predicates.reduceLeft(And)
+
+  /** Returns true if `expr` can be evaluated using only the output of `plan`. */
+  protected def canEvaluate(expr: Expression, plan: LogicalPlan): Boolean =
+    expr.references subsetOf plan.outputSet
 }
 
 abstract class BinaryPredicate extends BinaryExpression with Predicate {

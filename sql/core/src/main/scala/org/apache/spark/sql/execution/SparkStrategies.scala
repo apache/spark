@@ -66,13 +66,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
       case _ => Nil
     }
-
-    private def combineConjunctivePredicates(predicates: Seq[Expression]) =
-      predicates.reduceLeft(And)
-
-    /** Returns true if `expr` can be evaluated using only the output of `plan`. */
-    protected def canEvaluate(expr: Expression, plan: LogicalPlan): Boolean =
-      expr.references subsetOf plan.outputSet
   }
 
   object PartialAggregation extends Strategy {
