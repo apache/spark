@@ -112,10 +112,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @tparam A A case class type that describes the desired schema of the parquet file to be
    *           created.
-   * @param path The path where the directory containing partquet metadata should be created.
+   * @param path The path where the directory containing parquet metadata should be created.
    *             Data inserted into this table will also be stored at this location.
    * @param allowExisting When false, an exception will be thrown if this directory already exists.
-   * @param conf A Hadoop configuration object that can be used to specifiy options to the parquet
+   * @param conf A Hadoop configuration object that can be used to specify options to the parquet
    *             output format.
    *
    * @group userf
