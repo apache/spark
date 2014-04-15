@@ -1,9 +1,9 @@
 # Import required matrix and C interface packages
-require(SparkR)
-require(MASS)
-require('Matrix')
-require(Rcpp)
-require(svd)
+library(SparkR)
+library(MASS)
+library('Matrix')
+library(Rcpp)
+library(svd)
 
 # Get the command line arguments
 args <- commandArgs(trailing = TRUE)
@@ -133,9 +133,9 @@ apgBase <- function(mat,maxiter) {
 	tbase <- proc.time() # Timing code
 	
 	# load required packages
-	require('Matrix')
-	require(Rcpp)
-	require(svd)
+	library('Matrix')
+	library(Rcpp)
+	library(svd)
 	
 	# Load and compile the fast C++ code
 	sourceCpp('maskUV.cpp')

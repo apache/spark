@@ -1,4 +1,4 @@
-require(SparkR)
+library(SparkR)
 
 args <- commandArgs(trailing = TRUE)
 
@@ -12,10 +12,9 @@ sc <- sparkR.init(args[[1]], "LogisticRegressionR")
 iterations <- as.integer(args[[3]])
 D <- 10
 
-readPartition <- function(part) {
-  m <- t(sapply(part, function(line) {
-    as.numeric(strsplit(line, " ")[[1]])
-  }))
+readPartition <- function(part){
+  part = strsplit(part, " ", fixed = T)
+  list(matrix(as.numeric(unlist(part)), ncol = length(part[[1]])))
 }
 
 # Read data points and convert each partition to a matrix
@@ -27,6 +26,7 @@ cat("Initial w: ", w, "\n")
 
 # Compute logistic regression gradient for a matrix of data points
 gradient <- function(partition) {
+  partition = partition[[1]]
   Y <- partition[, 1]  # point labels (first column of input file)
   X <- partition[, -1] # point coordinates
 
