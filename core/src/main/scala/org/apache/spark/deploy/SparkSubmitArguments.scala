@@ -55,13 +55,14 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
   if (primaryResource == null) SparkSubmit.printErrorAndExit("Must specify a primary resource")
   if (mainClass == null) SparkSubmit.printErrorAndExit("Must specify a main class with --class")
   if (propertiesFile == null) {
-    val sparkHome = sys.env("SPARK_HOME") // defined via `spark-class`
-    val sep = File.separator
-    val defaultPath = s"${sparkHome}${sep}conf${sep}spark-defaults.properties"
-    val file = new File(defaultPath)
-    if (file.exists()) {
-       propertiesFile = file.getAbsolutePath
-     }
+    sys.env.get("SPARK_HOME").foreach { sparkHome =>
+      val sep = File.separator
+      val defaultPath = s"${sparkHome}${sep}conf${sep}spark-defaults.properties"
+      val file = new File(defaultPath)
+      if (file.exists()) {
+         propertiesFile = file.getAbsolutePath
+       }
+    }
   }
 
   override def toString =  {
