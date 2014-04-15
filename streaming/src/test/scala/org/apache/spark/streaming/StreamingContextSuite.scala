@@ -55,7 +55,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
       sc = null
     }
   }
-/*
+
   test("from no conf constructor") {
     ssc = new StreamingContext(master, appName, batchDuration)
     assert(ssc.sparkContext.conf.get("spark.master") === master)
@@ -174,22 +174,24 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     ssc.start()
     ssc.stop()
   }
-*/
+
   test("stop gracefully") {
     val conf = new SparkConf().setMaster(master).setAppName(appName)
     conf.set("spark.cleaner.ttl", "3600")
     sc = new SparkContext(conf)
     for (i <- 1 to 4) {
-      logInfo("==================================")
-      ssc = new StreamingContext(sc, batchDuration)
+      logInfo("==================================\n\n\n")
+      println("Round " + i)
+      ssc = new StreamingContext(sc, Milliseconds(100))
       var runningCount = 0
+      val startTime = System.currentTimeMillis()
       TestReceiver.counter.set(1)
       val input = ssc.networkStream(new TestReceiver)
       input.count.foreachRDD(rdd => {
         val count = rdd.first()
         runningCount += count.toInt
         logInfo("Count = " + count + ", Running count = " + runningCount)
-
+        println("Count = " + count + ", Running count = " + runningCount)
       })
       ssc.start()
       ssc.awaitTermination(500)
@@ -203,9 +205,10 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
         "Received records = " + TestReceiver.counter.get() + ", " +
           "processed records = " + runningCount
       )
+      println("Time taken = " + (System.currentTimeMillis() - startTime) + " ms")
     }
   }
-/*
+
   test("awaitTermination") {
     ssc = new StreamingContext(master, appName, batchDuration)
     val inputStream = addInputStream(ssc)
@@ -265,7 +268,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     }
     assert(exception.getMessage.contains("transform"), "Expected exception not thrown")
   }
-*/
+
   def addInputStream(s: StreamingContext): DStream[Int] = {
     val input = (1 to 100).map(i => (1 to i))
     val inputStream = new TestInputStream(s, input, 1)
@@ -277,18 +280,25 @@ class TestException(msg: String) extends Exception(msg)
 
 /** Custom receiver for testing whether all data received by a receiver gets processed or not */
 class TestReceiver extends NetworkReceiver[Int](StorageLevel.MEMORY_ONLY) with Logging {
+
+  var receivingThreadOption: Option[Thread] = None
+
   def onStart() {
-    try {
-      while(true) {
-        store(TestReceiver.counter.getAndIncrement)
-        Thread.sleep(0)
+    val thread = new Thread() {
+      override def run() {
+        while (!isStopped) {
+          store(TestReceiver.counter.getAndIncrement)
+        }
+        logInfo("Receiving stopped at count value of " + TestReceiver.counter.get())
       }
-    } finally {
-      logInfo("Receiving stopped at count value of " + TestReceiver.counter.get())
     }
+    receivingThreadOption = Some(thread)
+    thread.start()
   }
 
-  def onStop() { }
+  def onStop() {
+    // no cleanup to be done, the receiving thread should stop on it own
+  }
 }
 
 object TestReceiver {

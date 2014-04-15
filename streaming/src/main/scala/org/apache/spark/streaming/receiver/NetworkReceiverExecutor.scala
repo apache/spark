@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
+import java.util.concurrent.CountDownLatch
 
 /**
  * Abstract class that is responsible for executing a NetworkReceiver in the worker.
@@ -39,10 +40,11 @@ private[streaming] abstract class NetworkReceiverExecutor(
   protected val receiverId = receiver.receiverId
 
   /** Thread that starts the receiver and stays blocked while data is being received. */
-  @volatile protected var receivingThread: Option[Thread] = None
+  @volatile protected var executionThread: Option[Thread] = None
 
   /** Has the receiver been marked for stop. */
-  @volatile private var stopped = false
+  //@volatile private var stopped = false
+  val stopLatch = new CountDownLatch(1)
 
   /** Push a single data item to backend data store. */
   def pushSingle(data: Any)
@@ -77,17 +79,15 @@ private[streaming] abstract class NetworkReceiverExecutor(
    */
   def run() {
     // Remember this thread as the receiving thread
-    receivingThread = Some(Thread.currentThread())
+    executionThread = Some(Thread.currentThread())
 
     try {
       // Call user-defined onStart()
       logInfo("Calling onStart")
       receiver.onStart()
-
       // Wait until interrupt is called on this thread
-      while(true) {
-        Thread.sleep(100)
-      }
+      awaitStop()
+      logInfo("Outside latch")
     } catch {
       case ie: InterruptedException =>
         logInfo("Receiving thread has been interrupted, receiver "  + receiverId + " stopped")
@@ -106,27 +106,17 @@ private[streaming] abstract class NetworkReceiverExecutor(
   }
 
   /**
-   * Stop receiving data.
+   * Mark the executor and the receiver as stopped
    */
   def stop() {
-    // Mark has stopped
-
-    if (receivingThread.isDefined) {
-      // Interrupt the thread
-      receivingThread.get.interrupt()
-
-      // Wait for the receiving thread to finish on its own
-      receivingThread.get.join(conf.getLong("spark.streaming.receiverStopTimeout", 2000))
-
-      // Stop receiving by interrupting the receiving thread
-      receivingThread.get.interrupt()
-      logInfo("Interrupted receiving thread of receiver " + receiverId + " for stopping")
-    }
-
-    stopped = true
-    logInfo("Marked as stop")
+    // Mark for stop
+    stopLatch.countDown()
+    logInfo("Marked for stop " + stopLatch.getCount)
   }
 
-  /** Check if receiver has been marked for stopping. */
-  def isStopped = stopped
+  /** Check if receiver has been marked for stopping */
+  def isStopped() = (stopLatch.getCount == 0L)
+
+  /** Wait the thread until the executor is stopped */
+  def awaitStop() = stopLatch.await()
 }

@@ -51,9 +51,9 @@ private[streaming] class BlockGenerator(
   private val clock = new SystemClock()
   private val blockInterval = conf.getLong("spark.streaming.blockInterval", 200)
   private val blockIntervalTimer =
-    new RecurringTimer(clock, blockInterval, updateCurrentBuffer,
-      "BlockGenerator")
-  private val blocksForPushing = new ArrayBlockingQueue[Block](10)
+    new RecurringTimer(clock, blockInterval, updateCurrentBuffer, "BlockGenerator")
+  private val blockQueueSize = conf.getInt("spark.streaming.blockQueueSize", 10)
+  private val blocksForPushing = new ArrayBlockingQueue[Block](blockQueueSize)
   private val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } }
 
   @volatile private var currentBuffer = new ArrayBuffer[Any]
@@ -68,8 +68,10 @@ private[streaming] class BlockGenerator(
 
   /** Stop all threads. */
   def stop() {
-    blockIntervalTimer.stop(false)
+    logInfo("Stopping BlockGenerator")
+    blockIntervalTimer.stop(interruptTimer = false)
     stopped = true
+    logInfo("Waiting for block pushing thread")
     blockPushingThread.join()
     logInfo("Stopped BlockGenerator")
   }
@@ -90,7 +92,7 @@ private[streaming] class BlockGenerator(
       if (newBlockBuffer.size > 0) {
         val blockId = StreamBlockId(receiverId, time - blockInterval)
         val newBlock = new Block(blockId, newBlockBuffer)
-        blocksForPushing.add(newBlock)
+        blocksForPushing.put(newBlock)  // put is blocking when queue is full
         logDebug("Last element in " + blockId + " is " + newBlockBuffer.last)
       }
     } catch {

@@ -161,9 +161,7 @@ private[streaming] class NetworkReceiverExecutorImpl(
   override def run() {
     // Starting the block generator
     blockGenerator.start()
-
     super.run()
-
     // Stopping BlockGenerator
     blockGenerator.stop()
     reportStop()
