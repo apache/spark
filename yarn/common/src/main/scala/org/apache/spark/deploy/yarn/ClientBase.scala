@@ -20,7 +20,7 @@ package org.apache.spark.deploy.yarn
 import java.net.{InetAddress, URI, UnknownHostException}
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{HashMap, Map}
+import scala.collection.mutable.{HashMap, ListBuffer, Map}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
@@ -35,7 +35,7 @@ import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.{Apps, Records}
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, SparkConf, SparkContext}
 
 /**
  * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN. The
@@ -64,7 +64,6 @@ trait ClientBase extends Logging {
   // TODO(harvey): This could just go in ClientArguments.
   def validateArgs() = {
     Map(
-      (System.getenv("SPARK_JAR") == null) -> "Error: You must set SPARK_JAR environment variable!",
       ((args.userJar == null && args.amClass == classOf[ApplicationMaster].getName) ->
           "Error: You must specify a user jar when running in standalone mode!"),
       (args.userClass == null) -> "Error: You must specify a user class!",
@@ -202,7 +201,7 @@ trait ClientBase extends Logging {
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
 
     Map(
-      ClientBase.SPARK_JAR -> System.getenv("SPARK_JAR"), ClientBase.APP_JAR -> args.userJar,
+      ClientBase.SPARK_JAR -> ClientBase.getSparkJar, ClientBase.APP_JAR -> args.userJar,
       ClientBase.LOG4J_PROP -> System.getenv("SPARK_LOG4J_CONF")
     ).foreach { case(destName, _localPath) =>
       val localPath: String = if (_localPath != null) _localPath.trim() else ""
@@ -306,13 +305,13 @@ trait ClientBase extends Logging {
 
     val amMemory = calculateAMMemory(newApp)
 
-    var JAVA_OPTS = ""
+    var JAVA_OPTS = ListBuffer[String]()
 
     // Add Xmx for AM memory
     JAVA_OPTS += "-Xmx" + amMemory + "m"
 
     val tmpDir = new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
-    JAVA_OPTS += " -Djava.io.tmpdir=" + tmpDir
+    JAVA_OPTS += "-Djava.io.tmpdir=" + tmpDir
 
     // TODO: Remove once cpuset version is pushed out.
     // The context is, default gc for server class machines ends up using all cores to do gc -
@@ -326,24 +325,24 @@ trait ClientBase extends Logging {
     if (useConcurrentAndIncrementalGC) {
       // In our expts, using (default) throughput collector has severe perf ramifications in
       // multi-tenant machines
-      JAVA_OPTS += " -XX:+UseConcMarkSweepGC "
-      JAVA_OPTS += " -XX:+CMSIncrementalMode "
-      JAVA_OPTS += " -XX:+CMSIncrementalPacing "
-      JAVA_OPTS += " -XX:CMSIncrementalDutyCycleMin=0 "
-      JAVA_OPTS += " -XX:CMSIncrementalDutyCycle=10 "
+      JAVA_OPTS += "-XX:+UseConcMarkSweepGC"
+      JAVA_OPTS += "-XX:+CMSIncrementalMode"
+      JAVA_OPTS += "-XX:+CMSIncrementalPacing"
+      JAVA_OPTS += "-XX:CMSIncrementalDutyCycleMin=0"
+      JAVA_OPTS += "-XX:CMSIncrementalDutyCycle=10"
     }
 
     if (args.amClass == classOf[ExecutorLauncher].getName) {
       // If we are being launched in client mode, forward the spark-conf options
       // onto the executor launcher
       for ((k, v) <- sparkConf.getAll) {
-        JAVA_OPTS += s"-D$k=$v"
+        JAVA_OPTS += "-D" + k + "=" + "\\\"" + v + "\\\""
       }
     } else {
       // If we are being launched in standalone mode, capture and forward any spark
       // system properties (e.g. set by spark-class).
       for ((k, v) <- sys.props.filterKeys(_.startsWith("spark"))) {
-        JAVA_OPTS += s"-D$k=$v"
+        JAVA_OPTS += "-D" + k + "=" + "\\\"" + v + "\\\""
       }
       sys.props.get("spark.driver.extraJavaOptions").foreach(opts => JAVA_OPTS += opts)
       sys.props.get("spark.driver.libraryPath").foreach(p => JAVA_OPTS += s"-Djava.library.path=$p")
@@ -354,22 +353,21 @@ trait ClientBase extends Logging {
     }
 
     // Command for the ApplicationMaster
-    val commands = List[String](
-      Environment.JAVA_HOME.$() + "/bin/java" +
-        " -server " +
-        JAVA_OPTS +
-        " " + args.amClass +
-        " --class " + args.userClass +
-        " --jar " + args.userJar +
-        userArgsToString(args) +
-        " --executor-memory " + args.executorMemory +
-        " --executor-cores " + args.executorCores +
-        " --num-executors " + args.numExecutors +
-        " 1> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout" +
-        " 2> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
+    val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
+      JAVA_OPTS ++
+      Seq(args.amClass, "--class", args.userClass, "--jar ", args.userJar,
+        userArgsToString(args),
+        "--executor-memory", args.executorMemory.toString,
+        "--executor-cores", args.executorCores.toString,
+        "--num-executors ", args.numExecutors.toString,
+        "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
+        "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 
-    logInfo("Command for starting the Spark ApplicationMaster: " + commands(0))
-    amContainer.setCommands(commands)
+    logInfo("Command for starting the Spark ApplicationMaster: " + commands)
+
+    // TODO: it would be nicer to just make sure there are no null commands here
+    val printableCommands = commands.map(s => if (s == null) "null" else s).toList
+    amContainer.setCommands(printableCommands)
 
     setupSecurityToken(amContainer)
     amContainer
@@ -380,6 +378,8 @@ object ClientBase {
   val SPARK_JAR: String = "spark.jar"
   val APP_JAR: String = "app.jar"
   val LOG4J_PROP: String = "log4j.properties"
+
+  def getSparkJar = sys.env.get("SPARK_JAR").getOrElse(SparkContext.jarOfClass(this.getClass).head)
 
   // Based on code from org.apache.hadoop.mapreduce.v2.util.MRApps
   def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String]) {
@@ -433,9 +433,9 @@ object ClientBase {
       extraClassPath: Option[String] = None) {
 
     /** Add entry to the classpath. */
-    def addClasspathEntry(entry: String) = pps.addToEnvironment(env, Environment.CLASSPATH.name, entry)
+    def addClasspathEntry(path: String) = Apps.addToEnvironment(env, Environment.CLASSPATH.name, path)
     /** Add entry to the classpath. Interpreted as a path relative to the working directory. */
-    def addPwdClasspathEntry(path: String) = addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + entry)
+    def addPwdClasspathEntry(entry: String) = addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + entry)
 
     extraClassPath.foreach(addClasspathEntry)
 
