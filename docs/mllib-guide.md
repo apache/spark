@@ -37,4 +37,42 @@ detect these libraries automatically.
 
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
 
+---
+
 ## Migration guide
+
+### From 0.9 to 1.0
+
+In MLlib v1.0, we support both dense and sparse input in a unified way, which introduces a few breaking changes.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+We used to represent a feature vector by `Array[Double]`, which is replaced by [`Vector`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector) in v1.0. Algorithms that used to accept `RDD[Array[Double]]` now take `RDD[Vector]`. [`LabeledPoint`](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint) is now a wrapper of `(Double, Vector)` instead of `(Double, Array[Double])`. Converting `Array[Double]` to `Vector` is straightforward:
+
+{% highlight scala %}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
+
+val array: Array[Double] = ... // a double array
+val vector: Vector = Vectors.dense(array) // a dense vector
+{% endhighlight %}
+
+If your data is sparse, please store it in a sparse format instead of dense to take advantage of sparsity in both storage and computation. [`Vectors`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vectors$) provides factory methods to create sparse vectors.
+
+*Note*. Scala imports `scala.collection.immutable.Vector` by default, so you have to import `org.apache.spark.mllib.linalg.Vector` explicitly to use MLlib's `Vector`.
+
+</div>
+
+<div data-lang="java" markdown="1">
+We used to represent a feature vector by `double[]`, which is replaced by [`Vector`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector) in v1.0. Algorithms that used to accept `RDD<double[]>` now take `RDD<Vector>`. [`LabeledPoint`](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint) is now a wrapper of `(double, Vector)` instead of `(double, double[])`. Converting `double[]` to `Vector` is straightforward:
+
+{% highlight java %}
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.Vectors;
+
+double[] array = ... // a double array
+Vector vector = Vectors.dense(array) // a dense vector
+{% endhighlight %}
+
+If your data is sparse, please store it in a sparse format instead of dense to take advantage of sparsity in both storage and computation. [`Vectors`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vectors$) provides factory methods to create sparse vectors.
+</div>
+</div>
