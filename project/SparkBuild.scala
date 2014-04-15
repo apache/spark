@@ -162,7 +162,7 @@ object SparkBuild extends Build {
     organization       := "org.apache.spark",
     version            := SPARK_VERSION,
     scalaVersion       := "2.10.4",
-    scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation",
+    scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation", "-feature",
       "-target:" + SCALAC_JVM_VERSION),
     javacOptions := Seq("-target", JAVAC_JVM_VERSION, "-source", JAVAC_JVM_VERSION),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
