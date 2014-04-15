@@ -21,6 +21,7 @@ import scala.collection.mutable.{ArrayBuffer, BitSet}
 import scala.math.{abs, sqrt}
 import scala.util.Random
 import scala.util.Sorting
+import scala.util.hashing.byteswap32
 
 import com.esotericsoftware.kryo.Kryo
 import org.jblas.{DoubleMatrix, SimpleBlas, Solve}
@@ -97,7 +98,6 @@ class ALS private (
     private var lambda: Double,
     private var implicitPrefs: Boolean,
     private var alpha: Double,
-    private var partitioner: Partitioner = null,
     private var seed: Long = System.nanoTime()
   ) extends Serializable with Logging {
 
@@ -105,7 +105,7 @@ class ALS private (
    * Constructs an ALS instance with default parameters: {numBlocks: -1, rank: 10, iterations: 10,
    * lambda: 0.01, implicitPrefs: false, alpha: 1.0}.
    */
-  def this() = this(-1, 10, 10, 0.01, false, 1.0, null)
+  def this() = this(-1, 10, 10, 0.01, false, 1.0)
 
   /**
    * Set the number of blocks to parallelize the computation into; pass -1 for an auto-configured
@@ -113,6 +113,14 @@ class ALS private (
    */
   def setBlocks(numBlocks: Int): ALS = {
     this.numBlocks = numBlocks
+    this
+  }
+
+  var partitioner: Partitioner = null
+
+  /** Sets the Partitioner that partitions users. */
+  def setPartitioner(p: Partitioner): ALS = {
+    this.partitioner = p
     this
   }
 
@@ -169,24 +177,23 @@ class ALS private (
       this.numBlocks
     }
 
-    // Hash an integer to propagate random bits at all positions, similar to java.util.HashTable
-    def hash(x: Int): Int = {
-      val r = x ^ (x >>> 20) ^ (x >>> 12)
-      r ^ (r >>> 7) ^ (r >>> 4)
-    }
-
-    this.partitioner = new Partitioner {
-      def numPartitions = numBlocks
+    val defaultPartitioner = new Partitioner {
+      val numPartitions = numBlocks
 
       def getPartition(x: Any): Int = x match {
         case null => 0
-        case _ => Utils.nonNegativeMod(hash(x.hashCode), numPartitions)
+        case _ => Utils.nonNegativeMod(byteswap32(x.hashCode), numPartitions)
       }
     }
 
-    val ratingsByUserBlock = ratings.map{ rating => (partitioner.getPartition(rating.user), rating) }
+    if (partitioner == null) partitioner = defaultPartitioner
+
+    val ratingsByUserBlock = ratings.map{ rating =>
+      (partitioner.getPartition(rating.user), rating)
+    }
     val ratingsByProductBlock = ratings.map{ rating =>
-      (partitioner.getPartition(rating.product), Rating(rating.product, rating.user, rating.rating))
+      (partitioner.getPartition(rating.product),
+        Rating(rating.product, rating.user, rating.rating))
     }
 
     val (userInLinks, userOutLinks) = makeLinkRDDs(numBlocks, ratingsByUserBlock)
@@ -198,13 +205,13 @@ class ALS private (
     val seed1 = seedGen.nextInt()
     val seed2 = seedGen.nextInt()
     var users = userOutLinks.mapPartitionsWithIndex { (index, itr) =>
-      val rand = new Random(hash(seed1 ^ index))
+      val rand = new Random(byteswap32(seed1 ^ index))
       itr.map { case (x, y) =>
         (x, y.elementIds.map(_ => randomFactor(rank, rand)))
       }
     }
     var products = productOutLinks.mapPartitionsWithIndex { (index, itr) =>
-      val rand = new Random(hash(seed2 ^ index))
+      val rand = new Random(byteswap32(seed2 ^ index))
       itr.map { case (x, y) =>
         (x, y.elementIds.map(_ => randomFactor(rank, rand)))
       }
@@ -536,6 +543,34 @@ object ALS {
    * in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the
    * product of two lower-rank matrices of a given rank (number of features). To solve for these
    * features, we run a given number of iterations of ALS. This is done using a level of
+   * parallelism given by `blocks`, partitioning the data using the Partitioner `partitioner`.
+   *
+   * @param ratings     RDD of (userID, productID, rating) pairs
+   * @param rank        number of features to use
+   * @param iterations  number of iterations of ALS (recommended: 10-20)
+   * @param lambda      regularization factor (recommended: 0.01)
+   * @param blocks      level of parallelism to split computation into
+   * @param seed        random seed
+   * @param partitioner Partitioner mapping users and products to partitions
+   */
+  def train(
+      ratings: RDD[Rating],
+      rank: Int,
+      iterations: Int,
+      lambda: Double,
+      blocks: Int,
+      seed: Long,
+      partitioner: Partitioner) = {
+    val als = new ALS(blocks, rank, iterations, lambda, false, 1.0, seed)
+    als.setPartitioner(partitioner)
+    als.run(ratings)
+  }
+
+  /**
+   * Train a matrix factorization model given an RDD of ratings given by users to some products,
+   * in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the
+   * product of two lower-rank matrices of a given rank (number of features). To solve for these
+   * features, we run a given number of iterations of ALS. This is done using a level of
    * parallelism given by `blocks`.
    *
    * @param ratings    RDD of (userID, productID, rating) pairs
@@ -553,7 +588,7 @@ object ALS {
       blocks: Int,
       seed: Long
     ): MatrixFactorizationModel = {
-    new ALS(blocks, rank, iterations, lambda, false, 1.0, null, seed).run(ratings)
+    new ALS(blocks, rank, iterations, lambda, false, 1.0, seed).run(ratings)
   }
 
   /**
@@ -576,7 +611,7 @@ object ALS {
       lambda: Double,
       blocks: Int
     ): MatrixFactorizationModel = {
-    new ALS(blocks, rank, iterations, lambda, false, 1.0, null).run(ratings)
+    new ALS(blocks, rank, iterations, lambda, false, 1.0).run(ratings)
   }
 
   /**
@@ -626,6 +661,37 @@ object ALS {
    * @param blocks     level of parallelism to split computation into
    * @param alpha      confidence parameter (only applies when immplicitPrefs = true)
    * @param seed       random seed
+   * @param partitioner Partitioner for partitioning users and products
+   */
+  def trainImplicit(
+      ratings: RDD[Rating],
+      rank: Int,
+      iterations: Int,
+      lambda: Double,
+      blocks: Int,
+      alpha: Double,
+      seed: Long,
+      partitioner: Partitioner
+    ): MatrixFactorizationModel = {
+    new ALS(blocks, rank, iterations, lambda, true, alpha, seed)
+      .setPartitioner(partitioner)
+      .run(ratings)
+  }
+
+  /**
+   * Train a matrix factorization model given an RDD of 'implicit preferences' given by users
+   * to some products, in the form of (userID, productID, preference) pairs. We approximate the
+   * ratings matrix as the product of two lower-rank matrices of a given rank (number of features).
+   * To solve for these features, we run a given number of iterations of ALS. This is done using
+   * a level of parallelism given by `blocks`.
+   *
+   * @param ratings    RDD of (userID, productID, rating) pairs
+   * @param rank       number of features to use
+   * @param iterations number of iterations of ALS (recommended: 10-20)
+   * @param lambda     regularization factor (recommended: 0.01)
+   * @param blocks     level of parallelism to split computation into
+   * @param alpha      confidence parameter (only applies when immplicitPrefs = true)
+   * @param seed       random seed
    */
   def trainImplicit(
       ratings: RDD[Rating],
@@ -636,7 +702,7 @@ object ALS {
       alpha: Double,
       seed: Long
     ): MatrixFactorizationModel = {
-    new ALS(blocks, rank, iterations, lambda, true, alpha, null, seed).run(ratings)
+    new ALS(blocks, rank, iterations, lambda, true, alpha, seed).run(ratings)
   }
 
   /**
@@ -661,7 +727,7 @@ object ALS {
       blocks: Int,
       alpha: Double
     ): MatrixFactorizationModel = {
-    new ALS(blocks, rank, iterations, lambda, true, alpha, null).run(ratings)
+    new ALS(blocks, rank, iterations, lambda, true, alpha).run(ratings)
   }
 
   /**
