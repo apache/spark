@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Spark Overview
+title: Getting Started with Apache Spark 
 ---
 
 Apache Spark is a fast and general-purpose cluster computing system.
