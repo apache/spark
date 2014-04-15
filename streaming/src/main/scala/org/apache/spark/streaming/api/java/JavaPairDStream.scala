@@ -21,6 +21,7 @@ import java.lang.{Long => JLong, Iterable => JIterable}
 import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import com.google.common.base.Optional

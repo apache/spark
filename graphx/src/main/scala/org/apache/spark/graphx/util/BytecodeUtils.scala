@@ -20,6 +20,7 @@ package org.apache.spark.graphx.util
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable.HashSet
+import scala.language.existentials
 
 import org.apache.spark.util.Utils
 

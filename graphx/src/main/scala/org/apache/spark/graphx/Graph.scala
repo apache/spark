@@ -17,6 +17,7 @@
 
 package org.apache.spark.graphx
 
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.apache.spark.graphx.impl._

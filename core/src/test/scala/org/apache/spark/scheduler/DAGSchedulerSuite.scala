@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import scala.Tuple2
 import scala.collection.mutable.{HashSet, HashMap, Map}
+import scala.language.reflectiveCalls
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
 

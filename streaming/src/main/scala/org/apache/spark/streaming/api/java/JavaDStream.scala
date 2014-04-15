@@ -23,6 +23,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.RDD
 
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import org.apache.spark.streaming.dstream.DStream
 

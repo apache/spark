@@ -21,6 +21,7 @@ import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
+import scala.language.implicitConversions
 
 import org.apache.spark.Logging
 

@@ -20,9 +20,10 @@ package org.apache.spark.graphx.impl
 import java.io.{EOFException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 
-import org.apache.spark.SparkConf
 import org.apache.spark.graphx._
 import org.apache.spark.serializer._
+
+import scala.language.existentials
 
 private[graphx]
 class VertexIdMsgSerializer extends Serializer with Serializable {

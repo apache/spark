@@ -23,6 +23,7 @@ import akka.actor.{ PossiblyHarmful, OneForOneStrategy }
 import akka.actor.SupervisorStrategy._
 
 import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}

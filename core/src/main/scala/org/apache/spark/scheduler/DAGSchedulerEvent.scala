@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import java.util.Properties
 
 import scala.collection.mutable.Map
+import scala.language.existentials
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
