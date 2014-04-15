@@ -123,6 +123,7 @@ function set_dm(){
 
 function set_spark_log_conf(){
     SPARK_REPL_OPTS="$SPARK_REPL_OPTS -Dspark.logConf=$1"
+    export SPARK_PRINT_LAUNCH_COMMAND=1
 }
 
 function set_spark_master(){
