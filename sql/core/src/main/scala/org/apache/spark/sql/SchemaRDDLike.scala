@@ -94,7 +94,7 @@ trait SchemaRDDLike {
    * @group schema
    */
   @Experimental
-  def insertInto(tableName: String): Unit = insertInto(tableName, false)
+  def insertInto(tableName: String): Unit = insertInto(tableName, overwrite = false)
 
   /**
    * :: Experimental ::
