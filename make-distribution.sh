@@ -74,6 +74,9 @@ while (( "$#" )); do
     --with-tachyon)
       SPARK_TACHYON=true
       ;;
+    --with-hive)
+      SPARK_HIVE=true
+      ;;
     --tgz)
       MAKE_TGZ=true
       ;;
@@ -100,9 +103,17 @@ else
   echo "Tachyon Disabled"
 fi
 
+if [ "$SPARK_HIVE" == "true" ]; then
+  echo "Hive Enabled"
+else
+  echo "Hive Disabled"
+fi
+
 # Build fat JAR
 export SPARK_HADOOP_VERSION
 export SPARK_YARN
+export SPARK_HIVE
+export SPARK_TACHYON
 cd $FWDIR
 
 "sbt/sbt" "assembly/assembly"
