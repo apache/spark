@@ -332,6 +332,8 @@ trait ClientBase extends Logging {
       JAVA_OPTS += "-XX:CMSIncrementalDutyCycle=10"
     }
 
+    // TODO: it might be nicer to pass these as an internal environment variable rather than
+    // as Java options, due to complications with string parsing of nested quotes.
     if (args.amClass == classOf[ExecutorLauncher].getName) {
       // If we are being launched in client mode, forward the spark-conf options
       // onto the executor launcher
