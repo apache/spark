@@ -17,7 +17,7 @@
 
 import struct
 import numpy
-from numpy import ndarray, float64, int64, int32, ones, array_equal, array, dot, shape, complex, issubdtype
+from numpy import ndarray, float64, int64, int32, array_equal, array
 from pyspark import SparkContext, RDD
 from pyspark.mllib.linalg import SparseVector
 from pyspark.serializers import Serializer
@@ -243,8 +243,6 @@ def _deserialize_double_matrix(ba):
 
 def _serialize_labeled_point(p):
     """Serialize a LabeledPoint with a features vector of any type."""
-    #from pyspark.mllib.regression import LabeledPoint
-    #assert type(p) == LabeledPoint, "Expected a LabeledPoint object"
     from pyspark.mllib.regression import LabeledPoint
     serialized_features = _serialize_double_vector(p.features)
     header = bytearray(9)
@@ -318,9 +316,9 @@ def _get_initial_weights(initial_weights, data):
             if initial_weights.ndim != 1:
                 raise TypeError("At least one data element has "
                         + initial_weights.ndim + " dimensions, which is not 1")
-            initial_weights = numpy.ones([initial_weights.shape[0]])
+            initial_weights = numpy.zeros([initial_weights.shape[0]])
         elif type(initial_weights) == SparseVector:
-            initial_weights = numpy.ones([initial_weights.size])
+            initial_weights = numpy.zeros([initial_weights.size])
     return initial_weights
 
 

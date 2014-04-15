@@ -100,24 +100,4 @@ class VectorsSuite extends FunSuite {
     assert(vec2(6) === 4.0)
     assert(vec2(7) === 0.0)
   }
-
-  test("slicing dense vectors") {
-    val vec = Vectors.dense(1.0, 2.0, 3.0, 4.0)
-    val slice = vec.slice(1, 3)
-    assert(slice === Vectors.dense(2.0, 3.0))
-    assert(slice.isInstanceOf[DenseVector], "slice was not DenseVector")
-  }
-
-  test("slicing sparse vectors") {
-    val vec = Vectors.sparse(7, Array(0, 2, 4, 6), Array(1.0, 2.0, 3.0, 4.0))
-    val slice = vec.slice(1, 5)
-    assert(slice === Vectors.sparse(4, Array(1,3), Array(2.0, 3.0)))
-    assert(slice.isInstanceOf[SparseVector], "slice was not SparseVector")
-    val slice2 = vec.slice(1, 2)
-    assert(slice2 === Vectors.sparse(1, Array(), Array()))
-    assert(slice2.isInstanceOf[SparseVector], "slice was not SparseVector")
-    val slice3 = vec.slice(6, 7)
-    assert(slice3 === Vectors.sparse(1, Array(0), Array(4.0)))
-    assert(slice3.isInstanceOf[SparseVector], "slice was not SparseVector")
-  }
 }

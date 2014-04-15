@@ -60,8 +60,6 @@ trait Vector extends Serializable {
    * @param i index
    */
   private[mllib] def apply(i: Int): Double = toBreeze(i)
-
-  private[mllib] def slice(start: Int, end: Int): Vector
 }
 
 /**
@@ -159,10 +157,6 @@ class DenseVector(val values: Array[Double]) extends Vector {
   private[mllib] override def toBreeze: BV[Double] = new BDV[Double](values)
 
   override def apply(i: Int) = values(i)
-
-  private[mllib] override def slice(start: Int, end: Int): Vector = {
-    new DenseVector(values.slice(start, end))
-  }
 }
 
 /**
@@ -193,39 +187,4 @@ class SparseVector(
   }
 
   private[mllib] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
-
-  override def apply(pos: Int): Double = {
-    // A more efficient apply() than creating a new Breeze vector
-    var i = 0
-    while (i < indices.length) {
-      if (indices(i) == pos) {
-        return values(i)
-      } else if (indices(i) > pos) {
-        return 0.0
-      }
-      i += 1
-    }
-    0.0
-  }
-
-  private[mllib] override def slice(start: Int, end: Int): Vector = {
-    require(start <= end, s"invalid range: ${start} to ${end}")
-    require(start >= 0, s"invalid range: ${start} to ${end}")
-    require(end <= size, s"invalid range: ${start} to ${end}")
-    // Figure out the range of indices that fall within the given bounds
-    var i = 0
-    var indexRangeStart = 0
-    var indexRangeEnd = 0
-    while (i < indices.length && indices(i) < start) {
-      i += 1
-    }
-    indexRangeStart = i
-    while (i < indices.length && indices(i) < end) {
-      i += 1
-    }
-    indexRangeEnd = i
-    val newIndices = indices.slice(indexRangeStart, indexRangeEnd).map(_ - start)
-    val newValues = values.slice(indexRangeStart, indexRangeEnd)
-    new SparseVector(end - start, newIndices, newValues)
-  }
 }

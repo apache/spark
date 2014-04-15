@@ -32,7 +32,7 @@ import org.apache.spark.rdd.RDD
  * :: DeveloperApi ::
  * The Java stubs necessary for the Python mllib bindings.
  *
- * See mllib/python/pyspark._common.py for the mutually agreed upon data format.
+ * See python/pyspark/mllib/_common.py for the mutually agreed upon data format.
  */
 @DeveloperApi
 class PythonMLLibAPI extends Serializable {
