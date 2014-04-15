@@ -678,7 +678,7 @@ private[spark] class BlockManager(
             case ArrayBufferValues(array) =>
               tachyonStore.putValues(blockId, array, level, false)
             case ByteBufferValues(bytes) => {
-              bytes.rewind();
+              bytes.rewind()
               tachyonStore.putBytes(blockId, bytes, level)
             }
           }
