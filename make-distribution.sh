@@ -59,6 +59,7 @@ echo "Version is ${VERSION}"
 SPARK_HADOOP_VERSION=1.0.4
 SPARK_YARN=false
 SPARK_TACHYON=false
+SPARK_HIVE=false
 MAKE_TGZ=false
 
 # Parse arguments
@@ -113,7 +114,6 @@ fi
 export SPARK_HADOOP_VERSION
 export SPARK_YARN
 export SPARK_HIVE
-export SPARK_TACHYON
 cd $FWDIR
 
 "sbt/sbt" "assembly/assembly"
