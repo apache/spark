@@ -261,8 +261,9 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
         testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
       createCmds.foreach(_())
 
-      if (cacheTables)
+      if (cacheTables) {
         cacheTable(name)
+      }
     }
   }
 
