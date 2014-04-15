@@ -239,11 +239,11 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
 
 /** This is a server to test the network input stream */
-class TestServer() extends Logging {
+class TestServer(portToBind: Int = 0) extends Logging {
 
   val queue = new ArrayBlockingQueue[String](100)
 
-  val serverSocket = new ServerSocket(0)
+  val serverSocket = new ServerSocket(portToBind)
 
   val servingThread = new Thread() {
     override def run() {
@@ -282,7 +282,7 @@ class TestServer() extends Logging {
 
   def start() { servingThread.start() }
 
-  def send(msg: String) { queue.add(msg) }
+  def send(msg: String) { queue.put(msg) }
 
   def stop() { servingThread.interrupt() }
 

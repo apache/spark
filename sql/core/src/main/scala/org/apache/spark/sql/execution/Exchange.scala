@@ -61,7 +61,14 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         shuffled.map(_._1)
 
       case SinglePartition =>
-        child.execute().coalesce(1, shuffle = true)
+        val rdd = child.execute().mapPartitions { iter =>
+          val mutablePair = new MutablePair[Null, Row]()
+          iter.map(r => mutablePair.update(null, r))
+        }
+        val partitioner = new HashPartitioner(1)
+        val shuffled = new ShuffledRDD[Null, Row, MutablePair[Null, Row]](rdd, partitioner)
+        shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
+        shuffled.map(_._2)
 
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.

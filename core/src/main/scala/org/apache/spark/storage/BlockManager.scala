@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, InputStream, OutputStream}
+import java.io.{File, InputStream, OutputStream, BufferedOutputStream, ByteArrayOutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -26,7 +26,6 @@ import scala.concurrent.duration._
 import scala.util.Random
 
 import akka.actor.{ActorSystem, Cancellable, Props}
-import it.unimi.dsi.fastutil.io.{FastBufferedOutputStream, FastByteArrayOutputStream}
 import sun.nio.ch.DirectBuffer
 
 import org.apache.spark.{Logging, MapOutputTracker, SecurityManager, SparkConf, SparkEnv, SparkException}
@@ -35,11 +34,11 @@ import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util._
 
-sealed trait Values
+private[spark] sealed trait Values
 
-case class ByteBufferValues(buffer: ByteBuffer) extends Values
-case class IteratorValues(iterator: Iterator[Any]) extends Values
-case class ArrayBufferValues(buffer: ArrayBuffer[Any]) extends Values
+private[spark] case class ByteBufferValues(buffer: ByteBuffer) extends Values
+private[spark] case class IteratorValues(iterator: Iterator[Any]) extends Values
+private[spark] case class ArrayBufferValues(buffer: ArrayBuffer[Any]) extends Values
 
 private[spark] class BlockManager(
     executorId: String,
@@ -388,7 +387,7 @@ private[spark] class BlockManager(
               logDebug("Block " + blockId + " not found in memory")
           }
         }
-        
+
         // Look for the block in Tachyon
         if (level.useOffHeap) {
           logDebug("Getting block " + blockId + " from tachyon")
@@ -992,7 +991,7 @@ private[spark] class BlockManager(
       outputStream: OutputStream,
       values: Iterator[Any],
       serializer: Serializer = defaultSerializer) {
-    val byteStream = new FastBufferedOutputStream(outputStream)
+    val byteStream = new BufferedOutputStream(outputStream)
     val ser = serializer.newInstance()
     ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
   }
@@ -1002,10 +1001,9 @@ private[spark] class BlockManager(
       blockId: BlockId,
       values: Iterator[Any],
       serializer: Serializer = defaultSerializer): ByteBuffer = {
-    val byteStream = new FastByteArrayOutputStream(4096)
+    val byteStream = new ByteArrayOutputStream(4096)
     dataSerializeStream(blockId, byteStream, values, serializer)
-    byteStream.trim()
-    ByteBuffer.wrap(byteStream.array)
+    ByteBuffer.wrap(byteStream.toByteArray)
   }
 
   /**
@@ -1031,7 +1029,7 @@ private[spark] class BlockManager(
     memoryStore.clear()
     diskStore.clear()
     if (tachyonInitialized) {
-      tachyonStore.clear() 
+      tachyonStore.clear()
     }
     metadataCleaner.cancel()
     broadcastCleaner.cancel()

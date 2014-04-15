@@ -21,10 +21,12 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.{Subquery, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -32,14 +34,14 @@ import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
 import org.apache.spark.sql.execution._
 
 /**
- * <span class="badge" style="float: right; background-color: darkblue;">ALPHA COMPONENT</span>
- *
+ * :: AlphaComponent ::
  * The entry point for running relational queries using Spark.  Allows the creation of [[SchemaRDD]]
  * objects and the execution of SQL queries.
  *
  * @groupname userf Spark SQL Functions
  * @groupname Ungrouped Support functions for language integrated queries.
  */
+@AlphaComponent
 class SQLContext(@transient val sparkContext: SparkContext)
   extends Logging
   with dsl.ExpressionConversions
@@ -63,12 +65,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new this.QueryExecution { val logical = plan }
 
   /**
-   * <span class="badge badge-red" style="float: right;">EXPERIMENTAL</span>
-   *
+   * :: Experimental ::
    * Allows catalyst LogicalPlans to be executed as a SchemaRDD.  Note that the LogicalPlan
    * interface is considered internal, and thus not guranteed to be stable.  As a result, using
    * them directly is not reccomended.
    */
+  @Experimental
   implicit def logicalPlanToSparkQuery(plan: LogicalPlan): SchemaRDD = new SchemaRDD(this, plan)
 
   /**
@@ -240,4 +242,30 @@ class SQLContext(@transient val sparkContext: SparkContext)
      */
     def debugExec() = DebugQuery(executedPlan).execute().collect()
   }
+
+  /**
+   * Peek at the first row of the RDD and infer its schema.
+   * TODO: We only support primitive types, add support for nested types.
+   */
+  private[sql] def inferSchema(rdd: RDD[Map[String, _]]): SchemaRDD = {
+    val schema = rdd.first.map { case (fieldName, obj) =>
+      val dataType = obj.getClass match {
+        case c: Class[_] if c == classOf[java.lang.String] => StringType
+        case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
+        case c: Class[_] if c == classOf[java.lang.Long] => LongType
+        case c: Class[_] if c == classOf[java.lang.Double] => DoubleType
+        case c: Class[_] if c == classOf[java.lang.Boolean] => BooleanType
+        case c => throw new Exception(s"Object of type $c cannot be used")
+      }
+      AttributeReference(fieldName, dataType, true)()
+    }.toSeq
+
+    val rowRdd = rdd.mapPartitions { iter =>
+      iter.map { map =>
+        new GenericRow(map.values.toArray.asInstanceOf[Array[Any]]): Row
+      }
+    }
+    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
+  }
+
 }

@@ -15,8 +15,9 @@
 # limitations under the License.
 #
 
-from numpy import ndarray, copyto, float64, int64, int32, ones, array_equal, array, dot, shape
+from numpy import ndarray, float64, int64, int32, ones, array_equal, array, dot, shape, complex, issubdtype
 from pyspark import SparkContext, RDD
+import numpy as np
 
 from pyspark.serializers import Serializer
 import struct
@@ -47,13 +48,22 @@ def _deserialize_byte_array(shape, ba, offset):
     return ar.copy()
 
 def _serialize_double_vector(v):
-    """Serialize a double vector into a mutually understood format."""
+    """Serialize a double vector into a mutually understood format.
+
+    >>> x = array([1,2,3])
+    >>> y = _deserialize_double_vector(_serialize_double_vector(x))
+    >>> array_equal(y, array([1.0, 2.0, 3.0]))
+    True
+    """
     if type(v) != ndarray:
         raise TypeError("_serialize_double_vector called on a %s; "
                 "wanted ndarray" % type(v))
+    """complex is only datatype that can't be converted to float64"""
+    if issubdtype(v.dtype, complex):
+        raise TypeError("_serialize_double_vector called on a %s; "
+                "wanted ndarray" % type(v))
     if v.dtype != float64:
-        raise TypeError("_serialize_double_vector called on an ndarray of %s; "
-                "wanted ndarray of float64" % v.dtype)
+        v = v.astype(float64)
     if v.ndim != 1:
         raise TypeError("_serialize_double_vector called on a %ddarray; "
                 "wanted a 1darray" % v.ndim)
@@ -62,8 +72,8 @@ def _serialize_double_vector(v):
     header = ndarray(shape=[2], buffer=ba, dtype="int64")
     header[0] = 1
     header[1] = length
-    copyto(ndarray(shape=[length], buffer=ba, offset=16,
-            dtype="float64"), v)
+    arr_mid = ndarray(shape=[length], buffer=ba, offset=16, dtype="float64")
+    arr_mid[...] = v
     return ba
 
 def _deserialize_double_vector(ba):
@@ -102,8 +112,9 @@ def _serialize_double_matrix(m):
         header[0] = 2
         header[1] = rows
         header[2] = cols
-        copyto(ndarray(shape=[rows, cols], buffer=ba, offset=24,
-                       dtype="float64", order='C'), m)
+        arr_mid = ndarray(shape=[rows, cols], buffer=ba, offset=24,
+                      dtype="float64", order='C')
+        arr_mid[...] = m
         return ba
     else:
         raise TypeError("_serialize_double_matrix called on a "

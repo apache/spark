@@ -74,8 +74,13 @@ private[ui] class JobProgressListener(conf: SparkConf) extends SparkListener {
     // Remove by stageId, rather than by StageInfo, in case the StageInfo is from storage
     poolToActiveStages(stageIdToPool(stageId)).remove(stageId)
     activeStages.remove(stageId)
-    completedStages += stage
-    trimIfNecessary(completedStages)
+    if (stage.failureReason.isEmpty) {
+      completedStages += stage
+      trimIfNecessary(completedStages)
+    } else {
+      failedStages += stage
+      trimIfNecessary(failedStages)
+    }
   }
 
   /** If stages is too large, remove and garbage collect old stages */
@@ -215,28 +220,12 @@ private[ui] class JobProgressListener(conf: SparkConf) extends SparkListener {
     }
   }
 
-  override def onJobEnd(jobEnd: SparkListenerJobEnd) = synchronized {
-    jobEnd.jobResult match {
-      case JobFailed(_, stageId) =>
-        activeStages.get(stageId).foreach { s =>
-          // Remove by stageId, rather than by StageInfo, in case the StageInfo is from storage
-          activeStages.remove(s.stageId)
-          poolToActiveStages(stageIdToPool(stageId)).remove(s.stageId)
-          failedStages += s
-          trimIfNecessary(failedStages)
-        }
-      case _ =>
-    }
-  }
-
   override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) {
     synchronized {
-      val schedulingModeName =
-        environmentUpdate.environmentDetails("Spark Properties").toMap.get("spark.scheduler.mode")
-      schedulingMode = schedulingModeName match {
-        case Some(name) => Some(SchedulingMode.withName(name))
-        case None => None
-      }
+      schedulingMode = environmentUpdate
+        .environmentDetails("Spark Properties").toMap
+        .get("spark.scheduler.mode")
+        .map(SchedulingMode.withName)
     }
   }
 

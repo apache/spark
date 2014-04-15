@@ -191,6 +191,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.ui.killEnabled</td>
+  <td>true</td>
+  <td>
+    Allows stages and corresponding jobs to be killed from the web ui.
+  </td>
+</tr>
+<tr>
   <td>spark.shuffle.compress</td>
   <td>true</td>
   <td>
@@ -594,6 +601,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Communication timeout to use when fetching files added through SparkContext.addFile() from
     the driver.
+  </td>
+</tr>
+<tr>
+  <td>spark.files.userClassPathFirst</td>
+  <td>false</td>
+  <td>
+    (Experimental) Whether to give user-added jars precedence over Spark's own jars when
+    loading classes in Executors. This feature can be used to mitigate conflicts between
+    Spark's dependencies and user dependencies. It is currently an experimental feature.
   </td>
 </tr>
 <tr>

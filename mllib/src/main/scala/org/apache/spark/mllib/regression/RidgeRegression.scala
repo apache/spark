@@ -52,16 +52,17 @@ class RidgeRegressionModel(
  * See also the documentation for the precise formulation.
  */
 class RidgeRegressionWithSGD private (
-    var stepSize: Double,
-    var numIterations: Int,
-    var regParam: Double,
-    var miniBatchFraction: Double)
-    extends GeneralizedLinearAlgorithm[RidgeRegressionModel] with Serializable {
+    private var stepSize: Double,
+    private var numIterations: Int,
+    private var regParam: Double,
+    private var miniBatchFraction: Double)
+  extends GeneralizedLinearAlgorithm[RidgeRegressionModel] with Serializable {
 
-  val gradient = new LeastSquaresGradient()
-  val updater = new SquaredL2Updater()
+  private val gradient = new LeastSquaresGradient()
+  private val updater = new SquaredL2Updater()
 
-  @transient val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
+  override val optimizer = new GradientDescent(gradient, updater)
+    .setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
@@ -70,7 +71,8 @@ class RidgeRegressionWithSGD private (
   super.setIntercept(false)
 
   /**
-   * Construct a RidgeRegression object with default parameters
+   * Construct a RidgeRegression object with default parameters: {stepSize: 1.0, numIterations: 100,
+   * regParam: 1.0, miniBatchFraction: 1.0}.
    */
   def this() = this(1.0, 100, 1.0, 1.0)
 

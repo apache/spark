@@ -232,7 +232,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
         }
         logDebug("Accepted " + path)
       } catch {
-        case fnfe: java.io.FileNotFoundException => 
+        case fnfe: java.io.FileNotFoundException =>
           logWarning("Error finding new files", fnfe)
           reset()
           return false
