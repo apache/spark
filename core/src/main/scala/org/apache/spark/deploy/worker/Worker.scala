@@ -23,6 +23,7 @@ import java.util.Date
 
 import scala.collection.mutable.HashMap
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import akka.actor._
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}

@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.util
 
+import scala.language.postfixOps
 import scala.util.Random
 
 import org.jblas.DoubleMatrix
