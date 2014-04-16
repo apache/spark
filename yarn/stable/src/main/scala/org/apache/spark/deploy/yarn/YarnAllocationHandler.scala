@@ -276,7 +276,8 @@ private[yarn] class YarnAllocationHandler(
               allocatedRackCount.put(rack, allocatedRackCount.getOrElse(rack, 0) + 1)
             }
           }
-          logInfo("Launching ExecutorRunnable. driverUrl: %s,  executorHostname: %s".format(driverUrl, executorHostname))
+          logInfo("Launching ExecutorRunnable. driverUrl: %s,  executorHostname: %s".format(
+            driverUrl, executorHostname))
           val executorRunnable = new ExecutorRunnable(
             container,
             conf,
@@ -314,8 +315,8 @@ private[yarn] class YarnAllocationHandler(
           // `pendingReleaseContainers`.
           pendingReleaseContainers.remove(containerId)
         } else {
-          // Decrement the number of executors running. The next iteration of the ApplicationMaster's
-          // reporting thread will take care of allocating.
+          // Decrement the number of executors running. The next iteration of
+          // the ApplicationMaster's reporting thread will take care of allocating.
           numExecutorsRunning.decrementAndGet()
           logInfo("Completed container %s (state: %s, exit status: %s)".format(
             containerId,
