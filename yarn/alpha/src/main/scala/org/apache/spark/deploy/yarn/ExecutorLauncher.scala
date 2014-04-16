@@ -37,7 +37,8 @@ import org.apache.spark.scheduler.SplitInfo
 class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sparkConf: SparkConf)
   extends Logging {
 
-  def this(args: ApplicationMasterArguments, sparkConf: SparkConf) = this(args, new Configuration(), sparkConf)
+  def this(args: ApplicationMasterArguments, sparkConf: SparkConf) =
+    this(args, new Configuration(), sparkConf)
 
   def this(args: ApplicationMasterArguments) = this(args, new SparkConf())
 
@@ -63,7 +64,8 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     override def preStart() {
       logInfo("Listen to driver: " + driverUrl)
       driver = context.actorSelection(driverUrl)
-      // Send a hello message thus the connection is actually established, thus we can monitor Lifecycle Events.
+      // Send a hello message thus the connection is actually established, thus we can
+      // monitor Lifecycle Events.
       driver ! "Hello"
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     }
@@ -104,8 +106,9 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     // Allocate all containers
     allocateExecutors()
 
-    // Launch a progress reporter thread, else app will get killed after expiration (def: 10mins) timeout
-    // ensure that progress is sent before YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS elapse.
+    // Launch a progress reporter thread, else app will get killed after expiration
+    // (def: 10mins) timeout ensure that progress is sent before
+    // YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS elapse.
 
     val timeoutInterval = yarnConf.getInt(YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS, 120000)
     // we want to be reasonably responsive without causing too many requests to RM.
@@ -163,8 +166,8 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     val appMasterRequest = Records.newRecord(classOf[RegisterApplicationMasterRequest])
       .asInstanceOf[RegisterApplicationMasterRequest]
     appMasterRequest.setApplicationAttemptId(appAttemptId)
-    // Setting this to master host,port - so that the ApplicationReport at client has some sensible info.
-    // Users can then monitor stderr/stdout on that node if required.
+    // Setting this to master host,port - so that the ApplicationReport at client has
+    // some sensible info. Users can then monitor stderr/stdout on that node if required.
     appMasterRequest.setHost(Utils.localHostName())
     appMasterRequest.setRpcPort(0)
     // What do we provide here ? Might make sense to expose something sensible later ?
@@ -213,7 +216,8 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     // TODO: This is a bit ugly. Can we make it nicer?
     // TODO: Handle container failure
     while ((yarnAllocator.getNumExecutorsRunning < args.numExecutors) && (!driverClosed)) {
-      yarnAllocator.allocateContainers(math.max(args.numExecutors - yarnAllocator.getNumExecutorsRunning, 0))
+      yarnAllocator.allocateContainers(
+        math.max(args.numExecutors - yarnAllocator.getNumExecutorsRunning, 0))
       Thread.sleep(100)
     }
 
@@ -230,7 +234,8 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
         while (!driverClosed) {
           val missingExecutorCount = args.numExecutors - yarnAllocator.getNumExecutorsRunning
           if (missingExecutorCount > 0) {
-            logInfo("Allocating " + missingExecutorCount + " containers to make up for (potentially ?) lost containers")
+            logInfo("Allocating " + missingExecutorCount +
+              " containers to make up for (potentially ?) lost containers")
             yarnAllocator.allocateContainers(missingExecutorCount)
           }
           else sendProgress()
