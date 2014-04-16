@@ -22,12 +22,13 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * alternating least squares (ALS)
 * <a href="mllib-clustering.html">Clustering</a>
   * k-means
-* <a href="mllib-dimensionality-reduction.html">Dimensionality reduction</a>
+* <a href="mllib-linear-algebra.html">Linear algebra and statistics</a>
   * singular value decomposition (SVD)
   * principal component analysis (PCA)
 * <a href="mllib-optimization.html">Optimization</a>
   * gradient descent
   * limited-memory BFGS (L-BFGS)
+* Utilities
 
 ## Dependencies
 
@@ -39,28 +40,6 @@ Due to license issues, we do not include `netlib-java`'s native libraries in MLl
 To use native libraries from `netlib-java`, please include artifact `com.github.fommil.netlib:all:1.1.2` as a dependency of your project or build your own (see [instructions](https://github.com/fommil/netlib-java/blob/master/README.md#machine-optimised-system-libraries)).
 
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
-
-# Data Types
-
-Most MLlib algorithms operate on RDDs containing vectors. In Java and Scala, the
-[Vector](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector) class is used to
-represent vectors. You can create either dense or sparse vectors using the
-[Vectors](api/mllib/index.html#org.apache.spark.mllib.linalg.Vectors$) factory.
-
-In Python, MLlib can take the following vector types:
-
-* [NumPy](http://www.numpy.org) arrays
-* Standard Python lists (e.g. `[1, 2, 3]`)
-* The MLlib [SparseVector](api/pyspark/pyspark.mllib.linalg.SparseVector-class.html) class
-* [SciPy sparse matrices](http://docs.scipy.org/doc/scipy/reference/sparse.html)
-
-For efficiency, we recommend using NumPy arrays over lists, and using the
-[CSC format](http://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csc_matrix.html#scipy.sparse.csc_matrix)
-for SciPy matrices, or MLlib's own SparseVector class.
-
-Several other simple data types are used throughout the library, e.g. the LabeledPoint
-class ([Java/Scala](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint),
-[Python](api/pyspark/pyspark.mllib.regression.LabeledPoint-class.html)) for labeled data.
 
 ---
 
