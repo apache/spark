@@ -356,16 +356,17 @@ error.
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.classification.SVMWithSGD
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data file
 val data = sc.textFile("mllib/data/sample_svm_data.txt")
 val parsedData = data.map { line =>
-  val parts = line.split(' ')
-  LabeledPoint(parts(0).toDouble, parts.tail.map(x => x.toDouble).toArray)
+  val parts = line.split(' ').map(_.toDouble)
+  LabeledPoint(parts(0), Vectors.dense(parts.tail))
 }
 
 // Run training algorithm to build the model
-val numIterations = 20
+val numIterations = 100
 val model = SVMWithSGD.train(parsedData, numIterations)
 
 // Evaluate model on training examples and compute training error
@@ -401,21 +402,22 @@ val modelL1 = svmAlg.run(parsedData)
 The following example demonstrate how to load training data, parse it as an RDD of LabeledPoint.
 The example then uses LinearRegressionWithSGD to build a simple linear model to predict label 
 values. We compute the Mean Squared Error at the end to evaluate
-[goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit)
+[goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
 
 {% highlight scala %}
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
 val data = sc.textFile("mllib/data/ridge-data/lpsa.data")
 val parsedData = data.map { line =>
   val parts = line.split(',')
-  LabeledPoint(parts(0).toDouble, parts(1).split(' ').map(x => x.toDouble).toArray)
+  LabeledPoint(parts(0).toDouble, Vectors.dense(parts(1).split(' ').map(_.toDouble)))
 }
 
 // Building the model
-val numIterations = 20
+val numIterations = 100
 val model = LinearRegressionWithSGD.train(parsedData, numIterations)
 
 // Evaluate model on training examples and compute training error
@@ -423,7 +425,7 @@ val valuesAndPreds = parsedData.map { point =>
   val prediction = model.predict(point.features)
   (point.label, prediction)
 }
-val MSE = valuesAndPreds.map{ case(v, p) => math.pow((v - p), 2)}.reduce(_ + _)/valuesAndPreds.count
+val MSE = valuesAndPreds.map{case(v, p) => math.pow((v - p), 2)}.reduce(_ + _) / valuesAndPreds.count
 println("training Mean Squared Error = " + MSE)
 {% endhighlight %}
 
@@ -518,18 +520,22 @@ and make predictions with the resulting model to compute the training error.
 
 {% highlight python %}
 from pyspark.mllib.classification import LogisticRegressionWithSGD
+from pyspark.mllib.regression import LabeledPoint
 from numpy import array
 
 # Load and parse the data
+def parsePoint(line):
+    values = [float(x) for x in line.split(' ')]
+    return LabeledPoint(values[0], values[1:])
+
 data = sc.textFile("mllib/data/sample_svm_data.txt")
-parsedData = data.map(lambda line: array([float(x) for x in line.split(' ')]))
-model = LogisticRegressionWithSGD.train(parsedData)
+parsedData = data.map(parsePoint)
 
 # Build the model
-labelsAndPreds = parsedData.map(lambda point: (int(point.item(0)),
-        model.predict(point.take(range(1, point.size)))))
+model = LogisticRegressionWithSGD.train(parsedData)
 
 # Evaluating the model on training data
+labelsAndPreds = parsedData.map(lambda p: (p.label, model.predict(p.features)))
 trainErr = labelsAndPreds.filter(lambda (v, p): v != p).count() / float(parsedData.count())
 print("Training Error = " + str(trainErr))
 {% endhighlight %}
@@ -538,22 +544,25 @@ print("Training Error = " + str(trainErr))
 The following example demonstrate how to load training data, parse it as an RDD of LabeledPoint.
 The example then uses LinearRegressionWithSGD to build a simple linear model to predict label 
 values. We compute the Mean Squared Error at the end to evaluate
-[goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit)
+[goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
 
 {% highlight python %}
-from pyspark.mllib.regression import LinearRegressionWithSGD
+from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD
 from numpy import array
 
 # Load and parse the data
+def parsePoint(line):
+    values = [float(x) for x in line.replace(',', ' ').split(' ')]
+    return LabeledPoint(values[0], values[1:])
+
 data = sc.textFile("mllib/data/ridge-data/lpsa.data")
-parsedData = data.map(lambda line: array([float(x) for x in line.replace(',', ' ').split(' ')]))
+parsedData = data.map(parsePoint)
 
 # Build the model
 model = LinearRegressionWithSGD.train(parsedData)
 
 # Evaluate the model on training data
-valuesAndPreds = parsedData.map(lambda point: (point.item(0),
-        model.predict(point.take(range(1, point.size)))))
-MSE = valuesAndPreds.map(lambda (v, p): (v - p)**2).reduce(lambda x, y: x + y)/valuesAndPreds.count()
+valuesAndPreds = parsedData.map(lambda p: (p.label, model.predict(p.features)))
+MSE = valuesAndPreds.map(lambda (v, p): (v - p)**2).reduce(lambda x, y: x + y) / valuesAndPreds.count()
 print("Mean Squared Error = " + str(MSE))
 {% endhighlight %}

@@ -82,4 +82,22 @@ class VectorsSuite extends FunSuite {
       assert(v.## != another.##)
     }
   }
+
+  test("indexing dense vectors") {
+    val vec = Vectors.dense(1.0, 2.0, 3.0, 4.0)
+    assert(vec(0) === 1.0)
+    assert(vec(3) === 4.0)
+  }
+
+  test("indexing sparse vectors") {
+    val vec = Vectors.sparse(7, Array(0, 2, 4, 6), Array(1.0, 2.0, 3.0, 4.0))
+    assert(vec(0) === 1.0)
+    assert(vec(1) === 0.0)
+    assert(vec(2) === 2.0)
+    assert(vec(3) === 0.0)
+    assert(vec(6) === 4.0)
+    val vec2 = Vectors.sparse(8, Array(0, 2, 4, 6), Array(1.0, 2.0, 3.0, 4.0))
+    assert(vec2(6) === 4.0)
+    assert(vec2(7) === 0.0)
+  }
 }
