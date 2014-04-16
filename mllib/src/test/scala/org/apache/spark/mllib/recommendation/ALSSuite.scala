@@ -139,6 +139,36 @@ class ALSSuite extends FunSuite with LocalSparkContext {
     })
   }
 
+  test("negative ids") {
+    val data = ALSSuite.generateRatings(50, 50, 2, 0.7, false, false)
+    val ratings = data._1.toArray
+    val correct = data._2
+    for (i <- 0 until ratings.length) {
+      var u = ratings(i).user
+      var p = ratings(i).product
+      var r = ratings(i).rating
+      u = u - 25
+      p = p - 25
+      ratings(i) = new Rating(u,p,r)
+    }
+    val ratingsRDD = sc.parallelize(ratings)
+
+    val model = ALS.train(ratingsRDD, 5, 15)
+
+    var pairs = new Array[(Int, Int)](0)
+    for (u <- -25 until 25; p <- -25 until 25) {
+      pairs = pairs :+ (u, p)
+    }
+    val ans = model.predict(sc.parallelize(pairs)).collect
+    for (r <- ans) {
+      val u = r.user + 25
+      val p = r.product + 25
+      val v = r.rating
+      val error = v - correct.get(u,p)
+      assert(math.abs(error) < 0.4)
+    }
+  }
+
   /**
    * Test if we can correctly factorize R = U * P where U and P are of known rank.
    *
