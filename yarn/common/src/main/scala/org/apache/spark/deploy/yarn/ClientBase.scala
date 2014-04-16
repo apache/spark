@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.File
 import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 
@@ -280,7 +281,8 @@ trait ClientBase extends Logging {
     distCacheMgr.setDistArchivesEnv(env)
 
     // Allow users to specify some environment variables.
-    Apps.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"))
+    YarnSparkHadoopUtil.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"),
+      File.pathSeparator)
 
     // Add each SPARK_* key to the environment.
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k,v) => env(k) = v }
@@ -382,7 +384,8 @@ object ClientBase {
       YarnConfiguration.YARN_APPLICATION_CLASSPATH)).getOrElse(
         getDefaultYarnApplicationClasspath())
     for (c <- classpathEntries) {
-      Apps.addToEnvironment(env, Environment.CLASSPATH.name, c.trim)
+      YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, c.trim,
+        File.pathSeparator)
     }
 
     val mrClasspathEntries = Option(conf.getStrings(
@@ -390,7 +393,8 @@ object ClientBase {
         getDefaultMRApplicationClasspath())
     if (mrClasspathEntries != null) {
       for (c <- mrClasspathEntries) {
-        Apps.addToEnvironment(env, Environment.CLASSPATH.name, c.trim)
+        YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, c.trim,
+          File.pathSeparator)
       }
     }
   }
@@ -425,28 +429,29 @@ object ClientBase {
   }
 
   def populateClasspath(conf: Configuration, sparkConf: SparkConf, addLog4j: Boolean, env: HashMap[String, String]) {
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$())
+    YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$(),
+      File.pathSeparator)
     // If log4j present, ensure ours overrides all others
     if (addLog4j) {
-      Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
-        Path.SEPARATOR + LOG4J_PROP)
+      YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
+        Path.SEPARATOR + LOG4J_PROP, File.pathSeparator)
     }
     // Normally the users app.jar is last in case conflicts with spark jars
     val userClasspathFirst = sparkConf.get("spark.yarn.user.classpath.first", "false")
       .toBoolean
     if (userClasspathFirst) {
-      Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
-        Path.SEPARATOR + APP_JAR)
+      YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
+        Path.SEPARATOR + APP_JAR, File.pathSeparator)
     }
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
-      Path.SEPARATOR + SPARK_JAR)
+    YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
+      Path.SEPARATOR + SPARK_JAR, File.pathSeparator)
     ClientBase.populateHadoopClasspath(conf, env)
 
     if (!userClasspathFirst) {
-      Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
-        Path.SEPARATOR + APP_JAR)
+      YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
+        Path.SEPARATOR + APP_JAR, File.pathSeparator)
     }
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
-      Path.SEPARATOR + "*")
+    YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() +
+      Path.SEPARATOR + "*", File.pathSeparator)
   }
 }
