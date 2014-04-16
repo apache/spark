@@ -1,4 +1,4 @@
-/*
+*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -41,6 +41,10 @@ object ScalaReflection {
 
   /** Returns a catalyst DataType for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): DataType = tpe match {
+    case t if t <:< typeOf[RecordClass] =>
+      val params = t.member("<init>": TermName).asMethod.paramss
+      StructType(
+        params.head.map(p => StructField(p.name.toString, schemaFor(p.typeSignature), true)))
     case t if t <:< typeOf[Product] =>
       val params = t.member("<init>": TermName).asMethod.paramss
       StructType(
