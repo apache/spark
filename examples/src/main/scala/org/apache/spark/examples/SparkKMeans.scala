@@ -71,7 +71,8 @@ object SparkKMeans {
 
       val pointStats = closest.reduceByKey{case ((x1, y1), (x2, y2)) => (x1 + x2, y1 + y2)}
 
-      val newPoints = pointStats.map {pair => (pair._1, pair._2._1 * (1.0 / pair._2._2))}.collectAsMap()
+      val newPoints = pointStats.map {pair =>
+        (pair._1, pair._2._1 * (1.0 / pair._2._2))}.collectAsMap()
 
       tempDist = 0.0
       for (i <- 0 until K) {
