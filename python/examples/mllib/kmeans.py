@@ -1,5 +1,3 @@
-[epydoc] # Epydoc section marker (required by ConfigParser)
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -17,22 +15,30 @@
 # limitations under the License.
 #
 
-# Information about the project.
-name: PySpark
-url: http://spark-project.org
+"""
+A K-means clustering program using MLlib.
 
-# The list of modules to document.  Modules can be named using
-# dotted names, module filenames, or package directory names.
-# This option may be repeated.
-modules: pyspark
+This example requires NumPy (http://www.numpy.org/).
+"""
 
-# Write html output to the directory "apidocs"
-output: html
-target: docs/
+import sys
 
-private: no
+import numpy as np
+from pyspark import SparkContext
+from pyspark.mllib.clustering import KMeans
 
-exclude: pyspark.cloudpickle pyspark.worker pyspark.join
-         pyspark.java_gateway pyspark.examples pyspark.shell pyspark.tests
-         pyspark.rddsampler pyspark.daemon pyspark.mllib._common
-         pyspark.mllib.tests
+
+def parseVector(line):
+    return np.array([float(x) for x in line.split(' ')])
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 4:
+        print >> sys.stderr, "Usage: kmeans <master> <file> <k>"
+        exit(-1)
+    sc = SparkContext(sys.argv[1], "KMeans")
+    lines = sc.textFile(sys.argv[2])
+    data = lines.map(parseVector)
+    k = int(sys.argv[3])
+    model = KMeans.train(data, k)
+    print "Final centers: " + str(model.clusterCenters)
