@@ -6,7 +6,7 @@ title: MLlib - Collaborative Filtering
 * Table of contents
 {:toc}
 
-# Collaborative Filtering 
+## Collaborative Filtering 
 
 [Collaborative filtering](http://en.wikipedia.org/wiki/Recommender_system#Collaborative_filtering)
 is commonly used for recommender systems.  These techniques aim to fill in the
@@ -25,7 +25,7 @@ following parameters:
 * *implicitPrefs* specifies whether to use the *explicit feedback* ALS variant or one adapted for *implicit feedback* data
 * *alpha* is a parameter applicable to the implicit feedback variant of ALS that governs the *baseline* confidence in preference observations
 
-## Explicit vs Implicit Feedback
+### Explicit vs Implicit Feedback
 
 The standard approach to matrix factorization based collaborative filtering treats 
 the entries in the user-item matrix as *explicit* preferences given by the user to the item.
@@ -40,12 +40,11 @@ to the level of confidence in observed user preferences, rather than explicit ra
 The model then tries to find latent factors that can be used to predict the expected preference of a user
 for an item. 
 
-Available algorithms for collaborative filtering: 
+## Examples
 
-* [ALS](api/mllib/index.html#org.apache.spark.mllib.recommendation.ALS)
+<div class="codetabs">
 
-
-# Usage in Scala
+<div data-lang="scala" markdown="1">
 
 Following code snippets can be executed in `spark-shell`.
 
@@ -88,14 +87,19 @@ other signals), you can use the trainImplicit method to get better results.
 val model = ALS.trainImplicit(ratings, 1, 20, 0.01)
 {% endhighlight %}
 
-# Usage in Java
+</div>
+
+<div data-lang="java" markdown="1">
 
 All of MLlib's methods use Java-friendly types, so you can import and call them there the same
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
 calling `.rdd()` on your `JavaRDD` object.
 
-# Usage in Python
+</div>
+
+<div data-lang="python" markdown="1">
+
 Following examples can be tested in the PySpark shell.
 
 In the following example we load rating data. Each row consists of a user, a product and a rating.
@@ -128,3 +132,10 @@ signals), you can use the trainImplicit method to get better results.
 # Build the recommendation model using Alternating Least Squares based on implicit ratings
 model = ALS.trainImplicit(ratings, 1, 20)
 {% endhighlight %}
+</div>
+
+</div>
+
+## Tutorial
+
+[AMP Camp](http://ampcamp.berkeley.edu/) provides a hands-on tutorial for [personalized movie recommendation with MLlib](http://ampcamp.berkeley.edu/big-data-mini-course/movie-recommendation-with-mllib.html).
