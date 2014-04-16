@@ -17,11 +17,13 @@
 # limitations under the License.
 #
 
-echo -e "q\n" | sbt/sbt clean scalastyle > scalastyle.txt
+echo -e "q\n" | SPARK_HIVE=true sbt/sbt scalastyle > scalastyle.txt
 # Check style with YARN alpha built too
-SPARK_YARN=true sbt/sbt yarn/scalastyle >> scalastyle.txt
+echo -e "q\n" | SPARK_YARN=true sbt/sbt yarn/scalastyle >> scalastyle.txt
 # Check style with YARN built too
-SPARK_HADOOP_VERSION=2.2.0 SPARK_YARN=true sbt/sbt yarn/scalastyle >> scalastyle.txt
+echo -e "q\n" | SPARK_HADOOP_VERSION=2.2.0 SPARK_YARN=true sbt/sbt yarn/scalastyle \
+  >> scalastyle.txt
+
 ERRORS=$(cat scalastyle.txt | grep -e "\<error\>")
 if test ! -z "$ERRORS"; then
     echo -e "Scalastyle checks failed at following occurrences:\n$ERRORS"
