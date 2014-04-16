@@ -268,7 +268,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * 2*n+k, ..., where n is the number of partitions. So there may exist gaps, but this method
    * won't trigger a spark job, which is different from [[org.apache.spark.rdd.RDD#zipWithIndex]].
    */
-  def zipWithUniqueId():JavaPairRDD[T,Long] = JavaPairRDD.fromRDD(rdd.zipWithUniqueId())
+  def zipWithUniqueId[Long](): JavaPairRDD[T, Long] = {
+    JavaPairRDD.fromRDD(rdd.zipWithUniqueId()).asInstanceOf[JavaPairRDD[T, Long]]
+  }
 
   /**
    * Zips this RDD with its element indices. The ordering is first based on the partition index
@@ -277,8 +279,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * This is similar to Scala's zipWithIndex but it uses Long instead of Int as the index type.
    * This method needs to trigger a spark job when this RDD contains more than one partitions.
    */
-  def zipWithIndex():JavaPairRDD[T,Long] = JavaPairRDD.fromRDD(rdd.zipWithIndex())
-
+  def zipWithIndex[Long](): JavaPairRDD[T, Long] = {
+    JavaPairRDD.fromRDD(rdd.zipWithIndex()).asInstanceOf[JavaPairRDD[T, Long]]
+  }
 
   // Actions (launch a job to return a value to the user program)
 

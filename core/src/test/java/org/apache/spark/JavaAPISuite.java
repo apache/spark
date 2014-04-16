@@ -182,13 +182,39 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(2, foreachCalls);
   }
 
-    @Test
-    public void toLocalIterator() {
-        List<Integer> correct = Arrays.asList(1, 2, 3, 4);
-        JavaRDD<Integer> rdd = sc.parallelize(correct);
-        List<Integer> result = Lists.newArrayList(rdd.toLocalIterator());
-        Assert.assertTrue(correct.equals(result));
-    }
+  @Test
+  public void toLocalIterator() {
+    List<Integer> correct = Arrays.asList(1, 2, 3, 4);
+    JavaRDD<Integer> rdd = sc.parallelize(correct);
+    List<Integer> result = Lists.newArrayList(rdd.toLocalIterator());
+    Assert.assertTrue(correct.equals(result));
+  }
+
+  @Test
+  public void zipWithUniqueId() {
+    List<Integer> correct = Arrays.asList(1, 2, 3, 4);
+    JavaPairRDD<Integer, Long> zip = sc.parallelize(correct).zipWithUniqueId();
+    JavaRDD<Long> indexes = zip.map(new Function<Tuple2<Integer, Long>, Long>() {
+      @Override
+      public Long call(Tuple2<Integer, Long> t) throws Exception {
+        return t._2();
+      }
+    });
+    Assert.assertTrue(new HashSet<Long>(indexes.collect()).size() == 4);
+  }
+
+  @Test
+  public void zipWithIndex() {
+    List<Integer> correct = Arrays.asList(1, 2, 3, 4);
+    JavaPairRDD<Integer, Long> zip = sc.parallelize(correct).zipWithIndex();
+    JavaRDD<Long> indexes = zip.map(new Function<Tuple2<Integer, Long>, Long>() {
+      @Override
+      public Long call(Tuple2<Integer, Long> t) throws Exception {
+        return t._2();
+      }
+    });
+    Assert.assertTrue(new HashSet<Long>(indexes.collect()).size() == 4);
+  }
 
   @SuppressWarnings("unchecked")
   @Test
