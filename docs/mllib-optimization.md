@@ -163,4 +163,62 @@ Available algorithms for gradient descent:
 
 * [GradientDescent.runMiniBatchSGD](api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent)
 
+---
+
+
+### Optimization Methods Working on the Primal Formulation
+
+**Stochastic subGradient Descent (SGD).**
+For optimization objectives `$f$` written as a sum, *stochastic subgradient descent (SGD)* can be
+an efficient choice of optimization method, as we describe in the <a
+href="mllib-optimization.html">optimization section</a> in more detail. 
+Because all methods considered here fit into the optimization formulation
+`$\eqref{eq:regPrimal}$`, this is especially natural, because the loss is written as an average
+of the individual losses coming from each datapoint.
+
+Picking one datapoint `$i\in[1..n]$` uniformly at random, we obtain a stochastic subgradient of
+`$\eqref{eq:regPrimal}$`, with respect to `$\wv$` as follows:
+`\[
+f'_{\wv,i} := L'_{\wv,i} + \lambda\, R'_\wv \ ,
+\]`
+where `$L'_{\wv,i} \in \R^d$` is a subgradient of the part of the loss function determined by the
+`$i$`-th datapoint, that is `$L'_{\wv,i} \in \frac{\partial}{\partial \wv}  L(\wv;\x,y)$`.
+Furthermore, `$R'_\wv$` is a subgradient of the regularizer `$R(\wv)$`, i.e. `$R'_\wv \in
+\frac{\partial}{\partial \wv} R(\wv)$`. The term `$R'_\wv$` does not depend on which random
+datapoint is picked.
+
+
+
+
+## Implementation in MLlib
+
+#### Linear Methods
+
+For both classification and regression algorithms with convex loss functions, `MLlib` implements a simple distributed version of
+stochastic subgradient descent (SGD), building on the underlying gradient descent primitive (as
+described in the
+<a href="mllib-optimization.html">optimization section</a>).
+All provided algorithms take as input a regularization parameter (`regParam`) along with various
+parameters associated with stochastic gradient
+descent (`stepSize`, `numIterations`, `miniBatchFraction`).
+For each of them, we support all 3 possible regularizations (none, L1 or L2).
+
+Available algorithms for binary classification:
+
+* [SVMWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.SVMWithSGD)
+* [LogisticRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD)
+
+Available algorithms for linear regression: 
+
+* [LinearRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.LinearRegressionWithSGD)
+* [RidgeRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
+* [LassoWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.LassoWithSGD)
+
+Behind the scenes, all above methods use the SGD implementation from the
+gradient descent primitive in MLlib, see the 
+<a href="mllib-optimization.html">optimization</a> part:
+
+* [GradientDescent](api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent)
+
+
 

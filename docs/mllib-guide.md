@@ -12,10 +12,11 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * labeled point
   * distributed matrix
 * Classification and regression
-  * <a href="mllib-logistic-regression.html">logistic regression</a>
-  * <a href="mllib-svm.html">support vector machine (SVM)</a>
+  * <a href="mllib-linear-methods.html">linear methods</a>
+    * logistic regression
+    * support vector machine (SVM)
+    * linear linear squares, Lasso, and ridge regression
   * <a href="mllib-decision-tree.html">decision tree</a>
-  * <a href="mllib-linear-least-squares.html">linear linear squares, Lasso, and ridge regression</a>
   * <a href="mllib-naive-bayes.html">naive Bayes</a>
 * <a href="mllib-collaborative-filtering.html">Collaborative Filtering</a>
   * alternating least squares (ALS)
