@@ -23,8 +23,9 @@ import org.apache.spark.sql.test._
 /* Implicits */
 import TestSQLContext._
 
+case class TestData(key: Int, value: String)
+
 object TestData {
-  case class TestData(key: Int, value: String)
   val testData: SchemaRDD = TestSQLContext.sparkContext.parallelize(
     (1 to 100).map(i => TestData(i, i.toString)))
   testData.registerAsTable("testData")

@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{Dependency, OneToOneDependency, Partition, TaskContext}
-import org.apache.spark.annotation.{AlphaComponent, Experimental}
+import org.apache.spark.annotation.{AlphaComponent, Experimental, DeveloperApi}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -82,8 +82,6 @@ import java.util.{Map => JMap}
  *  // Example of language integrated queries.
  *  rdd.where('key === 1).orderBy('value.asc).select('key).collect()
  * }}}
- *
- *  @todo There is currently no support for creating SchemaRDDs from either Java or Python RDDs.
  *
  *  @groupname Query Language Integrated Queries
  *  @groupdesc Query Functions that create new queries from SchemaRDDs.  The
@@ -276,8 +274,8 @@ class SchemaRDD(
    *              an `OUTER JOIN` in SQL.  When no output rows are produced by the generator for a
    *              given row, a single row will be output, with `NULL` values for each of the
    *              generated columns.
-   * @param alias an optional alias that can be used as qualif for the attributes that are produced
-   *              by this generate operation.
+   * @param alias an optional alias that can be used as qualifier for the attributes that are
+   *              produced by this generate operation.
    *
    * @group Query
    */
@@ -290,28 +288,12 @@ class SchemaRDD(
     new SchemaRDD(sqlContext, Generate(generator, join, outer, None, logicalPlan))
 
   /**
-   * :: Experimental ::
-   * Adds the rows from this RDD to the specified table.  Note in a standard [[SQLContext]] there is
-   * no notion of persistent tables, and thus queries that contain this operator will fail to
-   * optimize.  When working with an extension of a SQLContext that has a persistent catalog, such
-   * as a `HiveContext`, this operation will result in insertions to the table specified.
+   * Returns this RDD as a SchemaRDD.  Intended primarily to force the invocation of the implicit
+   * conversion from a standard RDD to a SchemaRDD.
    *
    * @group schema
    */
-  @Experimental
-  def insertInto(tableName: String, overwrite: Boolean = false) =
-    new SchemaRDD(
-      sqlContext,
-      InsertIntoTable(UnresolvedRelation(None, tableName), Map.empty, logicalPlan, overwrite))
-
-  /**
-   * Returns this RDD as a SchemaRDD.
-   * @group schema
-   */
   def toSchemaRDD = this
-
-  /** FOR INTERNAL USE ONLY */
-  def analyze = sqlContext.analyzer(logicalPlan)
 
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     val fieldNames: Seq[String] = this.queryExecution.analyzed.output.map(_.name)

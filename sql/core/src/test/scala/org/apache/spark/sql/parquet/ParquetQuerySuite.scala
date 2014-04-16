@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.parquet
 
+import java.io.File
+
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.hadoop.fs.{Path, FileSystem}
@@ -26,21 +28,23 @@ import parquet.hadoop.ParquetFileWriter
 import parquet.schema.MessageTypeParser
 import parquet.hadoop.util.ContextUtil
 
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Row}
 import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.TestData
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.types.{StringType, IntegerType, DataType}
 import org.apache.spark.sql.{parquet, SchemaRDD}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import scala.Tuple2
 
 // Implicits
 import org.apache.spark.sql.test.TestSQLContext._
 
 case class TestRDDEntry(key: Int, value: String)
 
-class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
+class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
+  import TestData._
+  TestData // Load test data tables.
 
   var testRDD: SchemaRDD = null
 
@@ -178,23 +182,6 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
     assert(true)
   }
 
-  test("insert (overwrite) via Scala API (new SchemaRDD)") {
-    val dirname = Utils.createTempDir()
-    val source_rdd = TestSQLContext.sparkContext.parallelize((1 to 100))
-      .map(i => TestRDDEntry(i, s"val_$i"))
-    source_rdd.registerAsTable("source")
-    val dest_rdd = createParquetFile(dirname.toString, ("key", IntegerType), ("value", StringType))
-    dest_rdd.registerAsTable("dest")
-    sql("INSERT OVERWRITE INTO dest SELECT * FROM source").collect()
-    val rdd_copy1 = sql("SELECT * FROM dest").collect()
-    assert(rdd_copy1.size === 100)
-    assert(rdd_copy1(0).apply(0) === 1)
-    assert(rdd_copy1(0).apply(1) === "val_1")
-    sql("INSERT INTO dest SELECT * FROM source").collect()
-    val rdd_copy2 = sql("SELECT * FROM dest").collect()
-    assert(rdd_copy2.size === 200)
-    Utils.deleteRecursively(dirname)
-  }
 
   test("insert (appending) to same table via Scala API") {
     sql("INSERT INTO testsource SELECT * FROM testsource").collect()
@@ -207,20 +194,6 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
     // let's restore the original test data
     Utils.deleteRecursively(ParquetTestData.testDir)
     ParquetTestData.writeFile()
-  }
-
-  /**
-   * Creates an empty SchemaRDD backed by a ParquetRelation.
-   *
-   * TODO: since this is so experimental it is better to have it here and not
-   * in SQLContext. Also note that when creating new AttributeReferences
-   * one needs to take care not to create duplicate Attribute ID's.
-   */
-  private def createParquetFile(path: String, schema: (Tuple2[String, DataType])*): SchemaRDD = {
-    val attributes = schema.map(t => new AttributeReference(t._1, t._2)())
-    new SchemaRDD(
-      TestSQLContext,
-      parquet.ParquetRelation.createEmpty(path, attributes, sparkContext.hadoopConfiguration))
   }
 }
 

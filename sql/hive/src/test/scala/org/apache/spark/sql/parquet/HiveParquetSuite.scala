@@ -89,44 +89,6 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
     compareRDDs(rddOrig, rddCopy, "testsource", ParquetTestData.testSchemaFieldNames)
   }
 
-  test("CREATE TABLE of Parquet table") {
-    createParquetFile(dirname.getAbsolutePath, ("key", IntegerType), ("value", StringType))
-      .registerAsTable("tmp")
-    val rddCopy =
-      hql("INSERT INTO TABLE tmp SELECT * FROM src")
-      .collect()
-      .sortBy[Int](_.apply(0) match {
-        case x: Int => x
-        case _ => 0
-      })
-    val rddOrig = hql("SELECT * FROM src")
-      .collect()
-      .sortBy(_.getInt(0))
-    compareRDDs(rddOrig, rddCopy, "src (Hive)", Seq("key:Int", "value:String"))
-  }
-
-  test("Appending to Parquet table") {
-    createParquetFile(dirname.getAbsolutePath, ("key", IntegerType), ("value", StringType))
-      .registerAsTable("tmpnew")
-    hql("INSERT INTO TABLE tmpnew SELECT * FROM src").collect()
-    hql("INSERT INTO TABLE tmpnew SELECT * FROM src").collect()
-    hql("INSERT INTO TABLE tmpnew SELECT * FROM src").collect()
-    val rddCopies = hql("SELECT * FROM tmpnew").collect()
-    val rddOrig = hql("SELECT * FROM src").collect()
-    assert(rddCopies.size === 3 * rddOrig.size, "number of copied rows via INSERT INTO did not match correct number")
-  }
-
-  test("Appending to and then overwriting Parquet table") {
-    createParquetFile(dirname.getAbsolutePath, ("key", IntegerType), ("value", StringType))
-      .registerAsTable("tmp")
-    hql("INSERT INTO TABLE tmp SELECT * FROM src").collect()
-    hql("INSERT INTO TABLE tmp SELECT * FROM src").collect()
-    hql("INSERT OVERWRITE TABLE tmp SELECT * FROM src").collect()
-    val rddCopies = hql("SELECT * FROM tmp").collect()
-    val rddOrig = hql("SELECT * FROM src").collect()
-    assert(rddCopies.size === rddOrig.size, "INSERT OVERWRITE did not actually overwrite")
-  }
-
   private def compareRDDs(rddOne: Array[Row], rddTwo: Array[Row], tableName: String, fieldNames: Seq[String]) {
     var counter = 0
     (rddOne, rddTwo).zipped.foreach {
@@ -136,19 +98,5 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
       }
     counter = counter + 1
     }
-  }
-
-  /**
-   * Creates an empty SchemaRDD backed by a ParquetRelation.
-   *
-   * TODO: since this is so experimental it is better to have it here and not
-   * in SQLContext. Also note that when creating new AttributeReferences
-   * one needs to take care not to create duplicate Attribute ID's.
-   */
-  private def createParquetFile(path: String, schema: (Tuple2[String, DataType])*): SchemaRDD = {
-    val attributes = schema.map(t => new AttributeReference(t._1, t._2)())
-    new SchemaRDD(
-      TestHive,
-      parquet.ParquetRelation.createEmpty(path, attributes, sparkContext.hadoopConfiguration))
   }
 }

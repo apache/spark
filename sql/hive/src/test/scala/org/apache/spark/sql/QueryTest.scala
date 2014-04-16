@@ -22,6 +22,13 @@ import org.scalatest.FunSuite
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 
+
+/**
+ * *** DUPLICATED FROM sql/core. ***
+ *
+ * It is hard to have maven allow one subproject depend on another subprojects test code.
+ * So, we duplicate this code here.
+ */
 class QueryTest extends FunSuite {
   /**
    * Runs the plan and makes sure the answer matches the expected result.
