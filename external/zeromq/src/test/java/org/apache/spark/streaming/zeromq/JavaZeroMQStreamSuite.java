@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.zeromq;
 
+import org.apache.spark.streaming.api.java.JavaNetworkInputDStream;
 import org.junit.Test;
 import akka.actor.SupervisorStrategy;
 import akka.util.ByteString;
@@ -39,11 +40,11 @@ public class JavaZeroMQStreamSuite extends LocalJavaStreamingContext {
       }
     };
 
-    JavaDStream<String> test1 = ZeroMQUtils.<String>createStream(
+    JavaNetworkInputDStream<String> test1 = ZeroMQUtils.<String>createStream(
       ssc, publishUrl, subscribe, bytesToObjects);
-    JavaDStream<String> test2 = ZeroMQUtils.<String>createStream(
+    JavaNetworkInputDStream<String> test2 = ZeroMQUtils.<String>createStream(
       ssc, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2());
-    JavaDStream<String> test3 = ZeroMQUtils.<String>createStream(
+    JavaNetworkInputDStream<String> test3 = ZeroMQUtils.<String>createStream(
       ssc,publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2(),
       SupervisorStrategy.defaultStrategy());
   }

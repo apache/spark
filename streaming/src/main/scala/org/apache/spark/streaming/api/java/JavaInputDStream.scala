@@ -15,25 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.mqtt
+package org.apache.spark.streaming.api.java
 
-import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.dstream.NetworkInputDStream
+import scala.reflect.ClassTag
 
-class MQTTStreamSuite extends TestSuiteBase {
+import org.apache.spark.streaming.dstream.InputDStream
 
-  test("mqtt input stream") {
-    val ssc = new StreamingContext(master, framework, batchDuration)
-    val brokerUrl = "abc"
-    val topic = "def"
+/**
+ * A Java-friendly interface to [[org.apache.spark.streaming.dstream.InputDStream]].
+ */
+class JavaInputDStream[T](val inputDStream: InputDStream[T])
+  (implicit override val classTag: ClassTag[T]) extends JavaDStream[T](inputDStream) {
+}
 
-    // tests the API, does not actually test data receiving
-    val test1: NetworkInputDStream[String] = MQTTUtils.createStream(ssc, brokerUrl, topic)
-    val test2: NetworkInputDStream[String] =
-      MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_AND_DISK_SER_2)
-
-    // TODO: Actually test receiving data
-    ssc.stop()
+object JavaInputDStream {
+  /**
+   * Convert a scala [[org.apache.spark.streaming.dstream.InputDStream]] to a Java-friendly
+   * [[org.apache.spark.streaming.api.java.JavaInputDStream]].
+   */
+  implicit def fromInputDStream[T: ClassTag](
+      inputDStream: InputDStream[T]): JavaInputDStream[T] = {
+    new JavaInputDStream[T](inputDStream)
   }
 }

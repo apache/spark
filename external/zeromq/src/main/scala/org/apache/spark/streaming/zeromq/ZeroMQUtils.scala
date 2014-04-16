@@ -26,8 +26,8 @@ import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.receivers.ReceiverSupervisorStrategy
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.api.java.{JavaStreamingContext, JavaDStream}
-import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.api.java.{JavaNetworkInputDStream, JavaStreamingContext, JavaDStream}
+import org.apache.spark.streaming.dstream.{NetworkInputDStream, DStream}
 
 object ZeroMQUtils {
   /**
@@ -49,7 +49,7 @@ object ZeroMQUtils {
       bytesToObjects: Seq[ByteString] => Iterator[T],
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
       supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy
-    ): DStream[T] = {
+    ): NetworkInputDStream[T] = {
     ssc.actorStream(Props(new ZeroMQReceiver(publisherUrl, subscribe, bytesToObjects)),
       "ZeroMQReceiver", storageLevel, supervisorStrategy)
   }
@@ -72,7 +72,7 @@ object ZeroMQUtils {
       bytesToObjects: JFunction[Array[Array[Byte]], java.lang.Iterable[T]],
       storageLevel: StorageLevel,
       supervisorStrategy: SupervisorStrategy
-    ): JavaDStream[T] = {
+    ): JavaNetworkInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val fn = (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).toIterator
@@ -96,7 +96,7 @@ object ZeroMQUtils {
       subscribe: Subscribe,
       bytesToObjects: JFunction[Array[Array[Byte]], java.lang.Iterable[T]],
       storageLevel: StorageLevel
-    ): JavaDStream[T] = {
+    ): JavaNetworkInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val fn = (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).toIterator
@@ -119,7 +119,7 @@ object ZeroMQUtils {
       publisherUrl: String,
       subscribe: Subscribe,
       bytesToObjects: JFunction[Array[Array[Byte]], java.lang.Iterable[T]]
-    ): JavaDStream[T] = {
+    ): JavaNetworkInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val fn = (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).toIterator

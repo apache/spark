@@ -215,7 +215,7 @@ class StreamingContext private[streaming] (
    * @param receiver Custom implementation of NetworkReceiver
    */
   def networkStream[T: ClassTag](
-    receiver: NetworkReceiver[T]): DStream[T] = {
+    receiver: NetworkReceiver[T]): NetworkInputDStream[T] = {
     new PluggableInputDStream[T](this, receiver)
   }
 
@@ -236,7 +236,7 @@ class StreamingContext private[streaming] (
       name: String,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
       supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy
-    ): DStream[T] = {
+    ): NetworkInputDStream[T] = {
     networkStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
   }
 
@@ -253,7 +253,7 @@ class StreamingContext private[streaming] (
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): DStream[String] = {
+    ): NetworkInputDStream[String] = {
     socketStream[String](hostname, port, SocketReceiver.bytesToLines, storageLevel)
   }
 
@@ -272,7 +272,7 @@ class StreamingContext private[streaming] (
       port: Int,
       converter: (InputStream) => Iterator[T],
       storageLevel: StorageLevel
-    ): DStream[T] = {
+    ): NetworkInputDStream[T] = {
     new SocketInputDStream[T](this, hostname, port, converter, storageLevel)
   }
 
@@ -291,7 +291,7 @@ class StreamingContext private[streaming] (
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): DStream[T] = {
+    ): NetworkInputDStream[T] = {
     new RawInputDStream[T](this, hostname, port, storageLevel)
   }
 
@@ -309,7 +309,7 @@ class StreamingContext private[streaming] (
     K: ClassTag,
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
-  ] (directory: String): DStream[(K, V)] = {
+  ] (directory: String): InputDStream[(K, V)] = {
     new FileInputDStream[K, V, F](this, directory)
   }
 
@@ -329,7 +329,7 @@ class StreamingContext private[streaming] (
     K: ClassTag,
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
-  ] (directory: String, filter: Path => Boolean, newFilesOnly: Boolean): DStream[(K, V)] = {
+  ] (directory: String, filter: Path => Boolean, newFilesOnly: Boolean): InputDStream[(K, V)] = {
     new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly)
   }
 
@@ -355,7 +355,7 @@ class StreamingContext private[streaming] (
   def queueStream[T: ClassTag](
       queue: Queue[RDD[T]],
       oneAtATime: Boolean = true
-    ): DStream[T] = {
+    ): InputDStream[T] = {
     queueStream(queue, oneAtATime, sc.makeRDD(Seq[T](), 1))
   }
 
@@ -372,7 +372,7 @@ class StreamingContext private[streaming] (
       queue: Queue[RDD[T]],
       oneAtATime: Boolean,
       defaultRDD: RDD[T]
-    ): DStream[T] = {
+    ): InputDStream[T] = {
     new QueueInputDStream(this, queue, oneAtATime, defaultRDD)
   }
 

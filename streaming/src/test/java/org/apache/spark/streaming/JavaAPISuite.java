@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming;
 
+import org.apache.spark.streaming.api.java.*;
 import scala.Tuple2;
 
 import org.junit.Assert;
@@ -36,10 +37,6 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.storage.StorageLevel;
-import org.apache.spark.streaming.api.java.JavaDStream;
-import org.apache.spark.streaming.api.java.JavaDStreamLike;
-import org.apache.spark.streaming.api.java.JavaPairDStream;
-import org.apache.spark.streaming.api.java.JavaStreamingContext;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
@@ -1668,7 +1665,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   // InputStream functionality is deferred to the existing Scala tests.
   @Test
   public void testSocketTextStream() {
-    JavaDStream<String> test = ssc.socketTextStream("localhost", 12345);
+      JavaNetworkInputDStream<String> test = ssc.socketTextStream("localhost", 12345);
   }
 
   @Test
@@ -1701,6 +1698,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   @Test
   public void testRawSocketStream() {
-    JavaDStream<String> test = ssc.rawSocketStream("localhost", 12345);
+    JavaNetworkInputDStream<String> test = ssc.rawSocketStream("localhost", 12345);
   }
 }

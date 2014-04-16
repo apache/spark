@@ -21,14 +21,15 @@ import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
 import org.apache.spark.streaming.api.java.JavaDStream;
 
+import org.apache.spark.streaming.api.java.JavaNetworkInputDStream;
 import org.junit.Test;
 
 public class JavaFlumeStreamSuite extends LocalJavaStreamingContext {
   @Test
   public void testFlumeStream() {
     // tests the API, does not actually test data receiving
-    JavaDStream<SparkFlumeEvent> test1 = FlumeUtils.createStream(ssc, "localhost", 12345);
-    JavaDStream<SparkFlumeEvent> test2 = FlumeUtils.createStream(ssc, "localhost", 12345,
+    JavaNetworkInputDStream<SparkFlumeEvent> test1 = FlumeUtils.createStream(ssc, "localhost", 12345);
+      JavaNetworkInputDStream<SparkFlumeEvent> test2 = FlumeUtils.createStream(ssc, "localhost", 12345,
       StorageLevel.MEMORY_AND_DISK_SER_2());
   }
 }

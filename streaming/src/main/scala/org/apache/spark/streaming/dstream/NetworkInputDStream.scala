@@ -30,7 +30,7 @@ import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
  * Abstract class for defining any [[org.apache.spark.streaming.dstream.InputDStream]]
  * that has to start a receiver on worker nodes to receive external data.
  * Specific implementations of NetworkInputDStream must
- * define the getReceiver() function that gets the receiver object of type
+ * define `the getReceiver()` function that gets the receiver object of type
  * [[org.apache.spark.streaming.receiver.NetworkReceiver]] that will be sent
  * to the workers to receive data.
  * @param ssc_ Streaming context that will execute this input stream

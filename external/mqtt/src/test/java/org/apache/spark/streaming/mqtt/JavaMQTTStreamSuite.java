@@ -19,6 +19,8 @@ package org.apache.spark.streaming.mqtt;
 
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.api.java.JavaDStream;
+import org.apache.spark.streaming.api.java.JavaNetworkInputDStream;
+import org.apache.spark.streaming.api.java.JavaPairNetworkInputDStream;
 import org.junit.Test;
 
 import org.apache.spark.streaming.LocalJavaStreamingContext;
@@ -30,8 +32,8 @@ public class JavaMQTTStreamSuite extends LocalJavaStreamingContext {
     String topic = "def";
 
     // tests the API, does not actually test data receiving
-    JavaDStream<String> test1 = MQTTUtils.createStream(ssc, brokerUrl, topic);
-    JavaDStream<String> test2 = MQTTUtils.createStream(ssc, brokerUrl, topic,
+    JavaNetworkInputDStream<String> test1 = MQTTUtils.createStream(ssc, brokerUrl, topic);
+    JavaNetworkInputDStream<String> test2 = MQTTUtils.createStream(ssc, brokerUrl, topic,
       StorageLevel.MEMORY_AND_DISK_SER_2());
   }
 }

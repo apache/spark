@@ -181,7 +181,6 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
     sc = new SparkContext(conf)
     for (i <- 1 to 4) {
       logInfo("==================================\n\n\n")
-      println("Round " + i)
       ssc = new StreamingContext(sc, Milliseconds(100))
       var runningCount = 0
       val startTime = System.currentTimeMillis()
@@ -191,7 +190,6 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
         val count = rdd.first()
         runningCount += count.toInt
         logInfo("Count = " + count + ", Running count = " + runningCount)
-        println("Count = " + count + ", Running count = " + runningCount)
       })
       ssc.start()
       ssc.awaitTermination(500)
@@ -205,7 +203,6 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
         "Received records = " + TestReceiver.counter.get() + ", " +
           "processed records = " + runningCount
       )
-      println("Time taken = " + (System.currentTimeMillis() - startTime) + " ms")
     }
   }
 

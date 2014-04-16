@@ -155,8 +155,10 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param port          Port to connect to for receiving data
    * @param storageLevel  Storage level to use for storing the received objects
    */
-  def socketTextStream(hostname: String, port: Int, storageLevel: StorageLevel)
-  : JavaDStream[String] = {
+  def socketTextStream(
+      hostname: String, port: Int,
+      storageLevel: StorageLevel
+    ): JavaNetworkInputDStream[String] = {
     ssc.socketTextStream(hostname, port, storageLevel)
   }
 
@@ -167,7 +169,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param hostname      Hostname to connect to for receiving data
    * @param port          Port to connect to for receiving data
    */
-  def socketTextStream(hostname: String, port: Int): JavaDStream[String] = {
+  def socketTextStream(hostname: String, port: Int): JavaNetworkInputDStream[String] = {
     ssc.socketTextStream(hostname, port)
   }
 
@@ -186,7 +188,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
       port: Int,
       converter: JFunction[InputStream, java.lang.Iterable[T]],
       storageLevel: StorageLevel)
-  : JavaDStream[T] = {
+  : JavaNetworkInputDStream[T] = {
     def fn = (x: InputStream) => converter.call(x).toIterator
     implicit val cmt: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
@@ -218,10 +220,11 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   def rawSocketStream[T](
       hostname: String,
       port: Int,
-      storageLevel: StorageLevel): JavaDStream[T] = {
+      storageLevel: StorageLevel): JavaNetworkInputDStream[T] = {
     implicit val cmt: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    JavaDStream.fromDStream(ssc.rawSocketStream(hostname, port, storageLevel))
+    JavaNetworkInputDStream.fromNetworkInputDStream(
+      ssc.rawSocketStream(hostname, port, storageLevel))
   }
 
   /**
@@ -233,10 +236,11 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param port          Port to connect to for receiving data
    * @tparam T            Type of the objects in the received blocks
    */
-  def rawSocketStream[T](hostname: String, port: Int): JavaDStream[T] = {
+  def rawSocketStream[T](hostname: String, port: Int): JavaNetworkInputDStream[T] = {
     implicit val cmt: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    JavaDStream.fromDStream(ssc.rawSocketStream(hostname, port))
+    JavaNetworkInputDStream.fromNetworkInputDStream(
+      ssc.rawSocketStream(hostname, port))
   }
 
   /**
@@ -249,7 +253,8 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @tparam V Value type for reading HDFS file
    * @tparam F Input format for reading HDFS file
    */
-  def fileStream[K, V, F <: NewInputFormat[K, V]](directory: String): JavaPairDStream[K, V] = {
+  def fileStream[K, V, F <: NewInputFormat[K, V]](
+      directory: String): JavaPairInputDStream[K, V] = {
     implicit val cmk: ClassTag[K] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K]]
     implicit val cmv: ClassTag[V] =
@@ -275,7 +280,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
       name: String,
       storageLevel: StorageLevel,
       supervisorStrategy: SupervisorStrategy
-    ): JavaDStream[T] = {
+    ): JavaNetworkInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     ssc.actorStream[T](props, name, storageLevel, supervisorStrategy)
@@ -296,7 +301,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
       props: Props,
       name: String,
       storageLevel: StorageLevel
-  ): JavaDStream[T] = {
+    ): JavaNetworkInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     ssc.actorStream[T](props, name, storageLevel)
@@ -316,7 +321,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   def actorStream[T](
       props: Props,
       name: String
-    ): JavaDStream[T] = {
+    ): JavaNetworkInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     ssc.actorStream[T](props, name)
@@ -347,7 +352,10 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
    * @tparam T         Type of objects in the RDD
    */
-  def queueStream[T](queue: java.util.Queue[JavaRDD[T]], oneAtATime: Boolean): JavaDStream[T] = {
+  def queueStream[T](
+      queue: java.util.Queue[JavaRDD[T]],
+      oneAtATime: Boolean
+    ): JavaInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val sQueue = new scala.collection.mutable.Queue[RDD[T]]
@@ -368,7 +376,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   def queueStream[T](
       queue: java.util.Queue[JavaRDD[T]],
       oneAtATime: Boolean,
-      defaultRDD: JavaRDD[T]): JavaDStream[T] = {
+      defaultRDD: JavaRDD[T]): JavaInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val sQueue = new scala.collection.mutable.Queue[RDD[T]]

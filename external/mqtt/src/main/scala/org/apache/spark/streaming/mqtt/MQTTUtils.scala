@@ -19,9 +19,9 @@ package org.apache.spark.streaming.mqtt
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.api.java.{JavaStreamingContext, JavaDStream}
+import org.apache.spark.streaming.api.java.{JavaNetworkInputDStream, JavaStreamingContext, JavaDStream}
 import scala.reflect.ClassTag
-import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.dstream.{NetworkInputDStream, DStream}
 
 object MQTTUtils {
   /**
@@ -36,7 +36,7 @@ object MQTTUtils {
       brokerUrl: String,
       topic: String,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): DStream[String] = {
+    ): NetworkInputDStream[String] = {
     new MQTTInputDStream(ssc, brokerUrl, topic, storageLevel)
   }
 
@@ -51,7 +51,7 @@ object MQTTUtils {
       jssc: JavaStreamingContext,
       brokerUrl: String,
       topic: String
-    ): JavaDStream[String] = {
+    ): JavaNetworkInputDStream[String] = {
     implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
     createStream(jssc.ssc, brokerUrl, topic)
   }
@@ -68,7 +68,7 @@ object MQTTUtils {
       brokerUrl: String,
       topic: String,
       storageLevel: StorageLevel
-    ): JavaDStream[String] = {
+    ): JavaNetworkInputDStream[String] = {
     implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
     createStream(jssc.ssc, brokerUrl, topic, storageLevel)
   }
