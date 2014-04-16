@@ -17,12 +17,10 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.util.Map
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
 import scala.collection.mutable.HashMap
-import scala.collection.mutable.Map
 
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.JobConf
