@@ -96,7 +96,13 @@ Apart from these, the following properties are also available, and may be useful
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td>spark.default.parallelism</td>
-  <td>8</td>
+  <td>
+    <ul>
+      <li>Mesos fine grained mode: 8</li>
+      <li>Local mode: core number of the local machine</li>
+      <li>Others: total core number of all executor nodes or 2, whichever is larger</li>
+    </ul>
+  </td>
   <td>
     Default number of tasks to use across the cluster for distributed shuffle operations (<code>groupByKey</code>,
     <code>reduceByKey</code>, etc) when not set by user.
