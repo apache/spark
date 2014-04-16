@@ -45,7 +45,7 @@ import org.apache.spark.streaming.scheduler.RegisterReceiver
 private[streaming] class NetworkReceiverExecutorImpl(
     receiver: NetworkReceiver[_],
     env: SparkEnv
-  ) extends NetworkReceiverExecutor(receiver) with Logging {
+  ) extends NetworkReceiverExecutor(receiver, env.conf) with Logging {
 
   private val blockManager = env.blockManager
 
@@ -76,7 +76,7 @@ private[streaming] class NetworkReceiverExecutorImpl(
       override def receive() = {
         case StopReceiver =>
           logInfo("Received stop signal")
-          stop()
+          stop("Stopped by driver")
       }
     }), "NetworkReceiver-" + receiverId + "-" + System.currentTimeMillis())
 
@@ -153,16 +153,13 @@ private[streaming] class NetworkReceiverExecutorImpl(
     exceptions += new Exception(message, throwable)
   }
 
-  /**
-   * Starts the receiver. First is accesses all the lazy members to
-   * materialize them. Then it calls the user-defined onStart() method to start
-   * other threads, etc. required to receive the data.
-   */
-  override def run() {
-    // Starting the block generator
+  override def onReceiverStart() {
     blockGenerator.start()
-    super.run()
-    // Stopping BlockGenerator
+    super.onReceiverStart()
+  }
+
+  override def onReceiverStop() {
+    super.onReceiverStop()
     blockGenerator.stop()
     reportStop()
   }

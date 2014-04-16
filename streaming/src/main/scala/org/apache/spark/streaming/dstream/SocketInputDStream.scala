@@ -24,7 +24,7 @@ import org.apache.spark.util.NextIterator
 import scala.reflect.ClassTag
 
 import java.io._
-import java.net.Socket
+import java.net.{UnknownHostException, Socket}
 import org.apache.spark.Logging
 import org.apache.spark.streaming.receiver.NetworkReceiver
 
@@ -51,19 +51,49 @@ class SocketReceiver[T: ClassTag](
   ) extends NetworkReceiver[T](storageLevel) with Logging {
 
   var socket: Socket = null
+  var receivingThread: Thread = null
 
   def onStart() {
-    logInfo("Connecting to " + host + ":" + port)
-    socket = new Socket(host, port)
-    logInfo("Connected to " + host + ":" + port)
-    val iterator = bytesToObjects(socket.getInputStream())
-    while(!isStopped && iterator.hasNext) {
-      store(iterator.next)
+    receivingThread = new Thread("Socket Receiver") {
+      override def run() {
+        connect()
+        receive()
+      }
     }
+    receivingThread.start()
   }
 
   def onStop() {
-    if (socket != null) socket.close()
+    if (socket != null) {
+      socket.close()
+    }
+    socket = null
+    if (receivingThread != null) {
+      receivingThread.join()
+    }
+  }
+
+  def connect() {
+    try {
+      logInfo("Connecting to " + host + ":" + port)
+      socket = new Socket(host, port)
+    } catch {
+      case e: Exception =>
+        restart("Could not connect to " + host + ":" + port, e)
+    }
+  }
+
+  def receive() {
+    try {
+      logInfo("Connected to " + host + ":" + port)
+      val iterator = bytesToObjects(socket.getInputStream())
+      while(!isStopped && iterator.hasNext) {
+        store(iterator.next)
+      }
+    } catch {
+      case e: Exception =>
+        restart("Error receiving data from socket", e)
+    }
   }
 }
 

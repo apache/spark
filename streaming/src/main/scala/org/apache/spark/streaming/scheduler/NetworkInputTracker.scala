@@ -232,7 +232,8 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
         }
         val receiver = iterator.next()
         val executor = new NetworkReceiverExecutorImpl(receiver, SparkEnv.get)
-        executor.run()
+        executor.start()
+        executor.awaitStop()
       }
       // Run the dummy Spark job to ensure that all slaves have registered.
       // This avoids all the receivers to be scheduled on the same node.

@@ -77,12 +77,11 @@ class TwitterReceiver(
       def onScrubGeo(l: Long, l1: Long) {}
       def onStallWarning(stallWarning: StallWarning) {}
       def onException(e: Exception) {
-        reportError("Error receiving tweets", e)
-        stop()
+        restart("Error receiving tweets", e)
       }
     })
 
-    val query: FilterQuery = new FilterQuery
+    val query = new FilterQuery
     if (filters.size > 0) {
       query.track(filters.toArray)
       twitterStream.filter(query)

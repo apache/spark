@@ -69,15 +69,17 @@ class MQTTReceiver(
     storageLevel: StorageLevel
   ) extends NetworkReceiver[String](storageLevel) {
 
-  def onStop() { }
+  def onStop() {
+
+  }
   
   def onStart() {
 
     // Set up persistence for messages 
-    val peristance: MqttClientPersistence = new MemoryPersistence()
+    val persistence = new MemoryPersistence()
 
     // Initializing Mqtt Client specifying brokerUrl, clientID and MqttClientPersistance
-    val client: MqttClient = new MqttClient(brokerUrl, MqttClient.generateClientId(), peristance)
+    val client = new MqttClient(brokerUrl, MqttClient.generateClientId(), persistence)
 
     // Connect to MqttBroker
     client.connect()
@@ -97,8 +99,7 @@ class MQTTReceiver(
       }
 
       override def connectionLost(arg0: Throwable) {
-        reportError("Connection lost ", arg0)
-        stop()
+        restart("Connection lost ", arg0)
       }
     }
 

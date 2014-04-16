@@ -23,24 +23,28 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts
+import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, NetworkReceiver, NetworkReceiverExecutor}
+import org.apache.spark.streaming.receiver.NetworkReceiverExecutor
 /** Testsuite for testing the network receiver behavior */
 class NetworkReceiverSuite extends FunSuite with Timeouts {
 
   test("network receiver life cycle") {
+
     val receiver = new FakeReceiver
     val executor = new FakeReceiverExecutor(receiver)
+
+    assert(executor.isAllEmpty)
 
     // Thread that runs the executor
     val executingThread = new Thread() {
       override def run() {
-        println("Running receiver")
-        executor.run()
-        println("Finished receiver")
+        executor.start()
+        executor.awaitStop()
       }
     }
 
@@ -54,11 +58,15 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
       }
     }
 
-    // Verify that onStart was called, and onStop wasn't called
-    assert(receiver.started)
+    // Verify that receiver was started
+    assert(receiver.onStartCalled)
+    assert(executor.isReceiverStarted)
+    assert(receiver.isStarted)
+    assert(!receiver.isStopped())
     assert(receiver.otherThread.isAlive)
-    assert(!receiver.stopped)
-    assert(executor.isAllEmpty)
+    eventually(timeout(100 millis), interval(10 millis)) {
+      assert(receiver.receiving)
+    }
 
     // Verify whether the data stored by the receiver was sent to the executor
     val byteBuffer = ByteBuffer.allocate(100)
@@ -83,15 +91,28 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
     assert(executor.errors.size === 1)
     assert(executor.errors.head.eq(exception))
 
-    // Verify that stopping actually stops the thread
-    failAfter(100 millis) {
-      receiver.stop()
-      executingThread.join()
-      assert(!receiver.otherThread.isAlive)
+    // Verify restarting actually stops and starts the receiver
+    receiver.restart("restarting", null, 100)
+    assert(receiver.isStopped)
+    assert(receiver.onStopCalled)
+    eventually(timeout(1000 millis), interval(100 millis)) {
+      assert(receiver.onStartCalled)
+      assert(executor.isReceiverStarted)
+      assert(receiver.isStarted)
+      assert(!receiver.isStopped)
+      assert(receiver.receiving)
     }
 
-    // Verify that onStop was called
-    assert(receiver.stopped)
+    // Verify that stopping actually stops the thread
+    failAfter(100 millis) {
+      receiver.stop("test")
+      assert(receiver.isStopped)
+      assert(!receiver.otherThread.isAlive)
+
+      // The thread that started the executor should complete
+      // as stop() stops everything
+      executingThread.join()
+    }
   }
 
   test("block generator") {
@@ -125,23 +146,34 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
  * An implementation of NetworkReceiver that is used for testing a receiver's life cycle.
  */
 class FakeReceiver extends NetworkReceiver[Int](StorageLevel.MEMORY_ONLY) {
-  var started = false
-  var stopped = false
-  val otherThread = new Thread() {
-    override def run() {
-      while(!stopped) {
-        Thread.sleep(10)
-      }
-    }
-  }
+  var otherThread: Thread = null
+  var receiving = false
+  var onStartCalled = false
+  var onStopCalled = false
 
   def onStart() {
+    otherThread = new Thread() {
+      override def run() {
+        receiving = true
+        while(!isStopped()) {
+          Thread.sleep(10)
+        }
+      }
+    }
+    onStartCalled = true
     otherThread.start()
-    started = true
+
   }
+
   def onStop() {
-    stopped = true
+    onStopCalled = true
     otherThread.join()
+  }
+
+  def reset() {
+    receiving = false
+    onStartCalled = false
+    onStopCalled = false
   }
 }
 
@@ -150,7 +182,8 @@ class FakeReceiver extends NetworkReceiver[Int](StorageLevel.MEMORY_ONLY) {
  * Instead of storing the data in the BlockManager, it stores all the data in a local buffer
  * that can used for verifying that the data has been forwarded correctly.
  */
-class FakeReceiverExecutor(receiver: FakeReceiver) extends NetworkReceiverExecutor(receiver) {
+class FakeReceiverExecutor(receiver: FakeReceiver)
+  extends NetworkReceiverExecutor(receiver, new SparkConf()) {
   val singles = new ArrayBuffer[Any]
   val byteBuffers = new ArrayBuffer[ByteBuffer]
   val iterators = new ArrayBuffer[Iterator[_]]

@@ -33,10 +33,14 @@ import org.apache.spark.storage.StorageLevel
  * class MyReceiver(storageLevel) extends NetworkReceiver[String](storageLevel) {
  *   def onStart() {
  *     // Setup stuff (start threads, open sockets, etc.) to start receiving data.
- *     // Call store(...) to store received data into Spark's memory.
- *     // Optionally, wait for other threads to complete or watch for exceptions.
- *     // Call reportError(...) if there is an error that you cannot ignore and need
- *     // the receiver to be terminated.
+ *     // Must start new thread to receive data, as onStart() must be non-blocking.
+ *
+ *     // Call store(...) in those threads to store received data into Spark's memory.
+ *
+ *     // Call stop(...), restart() or reportError(...) on any thread based on how
+ *     // different errors should be handled.
+ *
+ *     // See corresponding method documentation for more details.
  *   }
  *
  *   def onStop() {
@@ -47,17 +51,24 @@ import org.apache.spark.storage.StorageLevel
 abstract class NetworkReceiver[T](val storageLevel: StorageLevel) extends Serializable {
 
   /**
-   * This method is called by the system when the receiver is started to start receiving data.
-   * All threads and resources set up in this method must be cleaned up in onStop().
-   * If there are exceptions on other threads such that the receiver must be terminated,
-   * then you must call reportError(exception). However, the thread that called onStart() must
-   * never catch and ignore InterruptedException (it can catch and rethrow).
+   * This method is called by the system when the receiver is started. This function
+   * must initialize all resources (threads, buffers, etc.) necessary for receiving data.
+   * This function must be non-blocking, so receiving the data must occur on a different
+   * thread. Received data can be stored with Spark by calling `store(data)`.
+   *
+   * If there are errors in threads started here, then following options can be done
+   * (i) `reportError(...)` can be called to report the error to the driver.
+   * The receiving of data will continue uninterrupted.
+   * (ii) `stop(...)` can be called to stop receiving data. This will call `onStop()` to
+   * clear up all resources allocated (threads, buffers, etc.) during `onStart()`.
+   * (iii) `restart(...)` can be called to restart the receiver. This will call `onStop()`
+   * immediately, and then `onStart()` after a delay.
    */
   def onStart()
 
   /**
-   * This method is called by the system when the receiver is stopped to stop receiving data.
-   * All threads and resources setup in onStart() must be cleaned up in this method.
+   * This method is called by the system when the receiver is stopped. All resources
+   * (threads, buffers, etc.) setup in `onStart()` must be cleaned up in this method.
    */
   def onStop()
 
@@ -95,6 +106,7 @@ abstract class NetworkReceiver[T](val storageLevel: StorageLevel) extends Serial
   def store(dataIterator: Iterator[T], metadata: Any) {
     executor.pushIterator(dataIterator, Some(metadata), None)
   }
+
   /** Store the bytes of received data into Spark's memory. */
   def store(bytes: ByteBuffer) {
     executor.pushBytes(bytes, None, None)
@@ -107,23 +119,69 @@ abstract class NetworkReceiver[T](val storageLevel: StorageLevel) extends Serial
   def store(bytes: ByteBuffer, metadata: Any = null) {
     executor.pushBytes(bytes, Some(metadata), None)
   }
+
   /** Report exceptions in receiving data. */
   def reportError(message: String, throwable: Throwable) {
     executor.reportError(message, throwable)
   }
 
-  /** Stop the receiver. */
-  def stop() {
-    executor.stop()
+  /**
+   * Restart the receiver. This will call `onStop()` immediately and return.
+   * Asynchronously, after a delay, `onStart()` will be called.
+   * The `message` will be reported to the driver.
+   * The delay is defined by the Spark configuration
+   * `spark.streaming.receiverRestartDelay`.
+   */
+  def restart(message: String) {
+    executor.restartReceiver(message)
+  }
+
+  /**
+   * Restart the receiver. This will call `onStop()` immediately and return.
+   * Asynchronously, after a delay, `onStart()` will be called.
+   * The `message` and `exception` will be reported to the driver.
+   * The delay is defined by the Spark configuration
+   * `spark.streaming.receiverRestartDelay`.
+   */
+  def restart(message: String, exception: Throwable) {
+    executor.restartReceiver(message, exception)
+  }
+
+  /**
+   * Restart the receiver. This will call `onStop()` immediately and return.
+   * Asynchronously, after the given delay, `onStart()` will be called.
+   */
+  def restart(message: String, throwable: Throwable, millisecond: Int) {
+    executor.restartReceiver(message, throwable, millisecond)
+  }
+
+  /** Stop the receiver completely. */
+  def stop(message: String) {
+    executor.stop(message)
+  }
+
+  /** Stop the receiver completely due to an exception */
+  def stop(message: String, exception: Throwable) {
+    executor.stop(message, exception)
+  }
+
+  def isStarted(): Boolean = {
+    executor.isReceiverStarted()
   }
 
   /** Check if receiver has been marked for stopping. */
   def isStopped(): Boolean = {
-    executor.isStopped
+    !executor.isReceiverStarted()
   }
 
   /** Get unique identifier of this receiver. */
   def receiverId = id
+
+  /*
+   * =================
+   * Private methods
+   * =================
+   */
 
   /** Identifier of the stream this receiver is associated with. */
   private var id: Int = -1
