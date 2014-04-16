@@ -38,9 +38,12 @@ trait Predicate extends Expression {
 }
 
 trait PredicateHelper {
-  protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = condition match {
-    case And(cond1, cond2) => splitConjunctivePredicates(cond1) ++ splitConjunctivePredicates(cond2)
-    case other => other :: Nil
+  protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
+    condition match {
+      case And(cond1, cond2) =>
+        splitConjunctivePredicates(cond1) ++ splitConjunctivePredicates(cond2)
+      case other => other :: Nil
+    }
   }
 
   private def combineConjunctivePredicates(predicates: Seq[Expression]) =
