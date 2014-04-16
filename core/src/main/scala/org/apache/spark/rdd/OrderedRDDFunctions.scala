@@ -24,8 +24,22 @@ import org.apache.spark.{Logging, RangePartitioner}
 /**
  * Extra functions available on RDDs of (key, value) pairs where the key is sortable through
  * an implicit conversion. Import `org.apache.spark.SparkContext._` at the top of your program to
- * use these functions. They will work with any key type that has a `scala.math.Ordered`
- * implementation.
+ * use these functions. They will work with any key type `K` that has an implicit `Ordering[K]` in
+ * scope.  Ordering objects already exist for all of the standard primitive types.  Users can also
+ * define their own orderings for custom types, or to override the default ordering.  The implicit
+ * ordering that is in the closest scope will be used.
+ *
+ * {{{
+ *   import org.apache.spark.SparkContext._
+ *
+ *   val rdd: RDD[(String, Int)] = ...
+ *   implicit val caseInsensitiveOrdering = new Ordering[String] {
+ *     override def compare(a: String, b: String) = a.toLowerCase.compare(b.toLowerCase)
+ *   }
+ *
+ *   // Sort by key, using the above case insensitive ordering.
+ *   rdd.sortByKey
+ * }}}
  */
 class OrderedRDDFunctions[K : Ordering : ClassTag,
                           V: ClassTag,
