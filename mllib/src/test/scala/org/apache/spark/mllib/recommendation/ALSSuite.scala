@@ -145,9 +145,9 @@ class ALSSuite extends FunSuite with LocalSparkContext {
     val correct = data._2
     val model = ALS.train(ratings, 5, 15)
 
-    val pairs = ratings.map { case Rating(u,p,r) => (u,p) }
-    val ans = model.predict(pairs).collect
-    for (r <- ans) {
+    val pairs = Array.tabulate(50, 50)((u,p) => (u-25,p-25)).flatten
+    val ans = model.predict(sc.parallelize(pairs)).collect
+    ans.foreach { r =>
       val u = r.user + 25
       val p = r.product + 25
       val v = r.rating
