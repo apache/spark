@@ -20,6 +20,7 @@ package org.apache.spark.tools
 import java.lang.reflect.Method
 
 import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 
 import org.apache.spark._
 import org.apache.spark.api.java._

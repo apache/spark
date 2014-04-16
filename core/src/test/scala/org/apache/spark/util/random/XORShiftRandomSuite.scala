@@ -22,6 +22,8 @@ import org.scalatest.matchers.ShouldMatchers
 
 import org.apache.spark.util.Utils.times
 
+import scala.language.reflectiveCalls
+
 class XORShiftRandomSuite extends FunSuite with ShouldMatchers {
 
   def fixture = new {
