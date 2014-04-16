@@ -151,7 +151,7 @@ class ALSSuite extends FunSuite with LocalSparkContext {
       val u = r.user + 25
       val p = r.product + 25
       val v = r.rating
-      val error = v - correct.get(u,p)
+      val error = v - correct.get(u, p)
       assert(math.abs(error) < 0.4)
     }
   }
