@@ -20,17 +20,26 @@ package org.apache.spark.sql
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{AlphaComponent, Experimental}
+import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
+
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.{RecordClass, dsl}
+import org.apache.spark.sql.catalyst.{ScalaReflection, dsl}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.{Subquery, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+
 import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
+
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.SparkStrategies
+
+import org.apache.spark.sql.parquet.ParquetRelation
 
 /**
  * :: AlphaComponent ::
@@ -64,12 +73,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
     new this.QueryExecution { val logical = plan }
 
   /**
-   * :: Experimental ::
+   * :: DeveloperApi ::
    * Allows catalyst LogicalPlans to be executed as a SchemaRDD.  Note that the LogicalPlan
-   * interface is considered internal, and thus not guranteed to be stable.  As a result, using
-   * them directly is not reccomended.
+   * interface is considered internal, and thus not guaranteed to be stable.  As a result, using
+   * them directly is not recommended.
    */
-  @Experimental
+  @DeveloperApi
   implicit def logicalPlanToSparkQuery(plan: LogicalPlan): SchemaRDD = new SchemaRDD(this, plan)
 
   /**
@@ -82,6 +91,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   implicit def createSchemaRDD1[A <: RecordClass: TypeTag](rdd: RDD[A]) =
     new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromRecordClassRdd(rdd)))
+
   /**
    * Loads a Parquet file, returning the result as a [[SchemaRDD]].
    *
@@ -90,6 +100,39 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def parquetFile(path: String): SchemaRDD =
     new SchemaRDD(this, parquet.ParquetRelation(path))
 
+  /**
+   * :: Experimental ::
+   * Creates an empty parquet file with the schema of class `A`, which can be registered as a table.
+   * This registered table can be used as the target of future `insertInto` operations.
+   *
+   * {{{
+   *   val sqlContext = new SQLContext(...)
+   *   import sqlContext._
+   *
+   *   case class Person(name: String, age: Int)
+   *   createParquetFile[Person]("path/to/file.parquet").registerAsTable("people")
+   *   sql("INSERT INTO people SELECT 'michael', 29")
+   * }}}
+   *
+   * @tparam A A case class type that describes the desired schema of the parquet file to be
+   *           created.
+   * @param path The path where the directory containing parquet metadata should be created.
+   *             Data inserted into this table will also be stored at this location.
+   * @param allowExisting When false, an exception will be thrown if this directory already exists.
+   * @param conf A Hadoop configuration object that can be used to specify options to the parquet
+   *             output format.
+   *
+   * @group userf
+   */
+  @Experimental
+  def createParquetFile[A <: Product : TypeTag](
+      path: String,
+      allowExisting: Boolean = true,
+      conf: Configuration = new Configuration()): SchemaRDD = {
+    new SchemaRDD(
+      this,
+      ParquetRelation.createEmpty(path, ScalaReflection.attributesFor[A], allowExisting, conf))
+  }
 
   /**
    * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
@@ -209,9 +252,11 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * :: DeveloperApi ::
    * The primary workflow for executing relational queries using Spark.  Designed to allow easy
    * access to the intermediate phases of query execution for developers.
    */
+  @DeveloperApi
   protected abstract class QueryExecution {
     def logical: LogicalPlan
 
@@ -232,7 +277,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
     override def toString: String =
       s"""== Logical Plan ==
          |${stringOrError(analyzed)}
-         |== Optimized Logical Plan
+         |== Optimized Logical Plan ==
          |${stringOrError(optimizedPlan)}
          |== Physical Plan ==
          |${stringOrError(executedPlan)}
@@ -243,4 +288,30 @@ class SQLContext(@transient val sparkContext: SparkContext)
      */
     def debugExec() = DebugQuery(executedPlan).execute().collect()
   }
+
+  /**
+   * Peek at the first row of the RDD and infer its schema.
+   * TODO: We only support primitive types, add support for nested types.
+   */
+  private[sql] def inferSchema(rdd: RDD[Map[String, _]]): SchemaRDD = {
+    val schema = rdd.first.map { case (fieldName, obj) =>
+      val dataType = obj.getClass match {
+        case c: Class[_] if c == classOf[java.lang.String] => StringType
+        case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
+        case c: Class[_] if c == classOf[java.lang.Long] => LongType
+        case c: Class[_] if c == classOf[java.lang.Double] => DoubleType
+        case c: Class[_] if c == classOf[java.lang.Boolean] => BooleanType
+        case c => throw new Exception(s"Object of type $c cannot be used")
+      }
+      AttributeReference(fieldName, dataType, true)()
+    }.toSeq
+
+    val rowRdd = rdd.mapPartitions { iter =>
+      iter.map { map =>
+        new GenericRow(map.values.toArray.asInstanceOf[Array[Any]]): Row
+      }
+    }
+    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd(schema, rowRdd)))
+  }
+
 }
