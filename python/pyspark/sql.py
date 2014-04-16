@@ -106,9 +106,12 @@ class SQLContext:
         """
         Loads a Parquet file, returning the result as a L{SchemaRDD}.
 
+        >>> import tempfile, shutil
+        >>> parquetFile = tempfile.mkdtemp()
+        >>> shutil.rmtree(parquetFile)
         >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> srdd.saveAsParquetFile("/tmp/tmp.parquet")
-        >>> srdd2 = sqlCtx.parquetFile("/tmp/tmp.parquet")
+        >>> srdd.saveAsParquetFile(parquetFile)
+        >>> srdd2 = sqlCtx.parquetFile(parquetFile)
         >>> srdd.collect() == srdd2.collect()
         True
         """
@@ -278,9 +281,12 @@ class SchemaRDD(RDD):
         that are written out using this method can be read back in as a SchemaRDD using the
         L{SQLContext.parquetFile} method.
 
+        >>> import tempfile, shutil
+        >>> parquetFile = tempfile.mkdtemp()
+        >>> shutil.rmtree(parquetFile)
         >>> srdd = sqlCtx.inferSchema(rdd)
-        >>> srdd.saveAsParquetFile("/tmp/test.parquet")
-        >>> srdd2 = sqlCtx.parquetFile("/tmp/test.parquet")
+        >>> srdd.saveAsParquetFile(parquetFile)
+        >>> srdd2 = sqlCtx.parquetFile(parquetFile)
         >>> srdd2.collect() == srdd.collect()
         True
         """
