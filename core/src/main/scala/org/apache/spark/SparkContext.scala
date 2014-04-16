@@ -388,7 +388,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   val startTime = System.currentTimeMillis()
 
-  def start() {
+  private def start() {
     ui.bind()
     // At this point, all relevant SparkListeners have been registered, so begin releasing events
     listenerBus.start()
