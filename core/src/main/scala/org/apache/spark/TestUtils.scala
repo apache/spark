@@ -100,9 +100,14 @@ private[spark] object TestUtils {
 
     val fileName = className + ".class"
     val result = new File(fileName)
-    if (!result.exists()) throw new Exception("Compiled file not found: " + fileName)
+    assert(result.exists(), "Compiled file not found: " + result.getAbsolutePath())
     val out = new File(destDir, fileName)
-    result.renameTo(out)
+
+    // renameTo cannot handle in and out files in different filesystems
+    // use google's Files.move instead
+    Files.move(result, out)
+
+    assert(out.exists(), "Destination file not moved: " + out.getAbsolutePath())
     out
   }
 }
