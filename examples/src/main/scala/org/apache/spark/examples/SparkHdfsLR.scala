@@ -18,12 +18,15 @@
 package org.apache.spark.examples
 
 import java.util.Random
+
 import scala.math.exp
+
+import breeze.linalg.{Vector, DenseVector}
+
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.InputFormatInfo
 
-import breeze.linalg.{Vector, DenseVector}
 
 /**
  * Logistic regression based classification.

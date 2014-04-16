@@ -18,6 +18,7 @@
 package org.apache.spark.examples
 
 import java.util.Random
+
 import breeze.linalg.{Vector, DenseVector}
 
 /**

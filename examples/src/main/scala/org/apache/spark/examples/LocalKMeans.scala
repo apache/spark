@@ -18,12 +18,13 @@
 package org.apache.spark.examples
 
 import java.util.Random
-import org.apache.spark.SparkContext._
+
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 
-import breeze.linalg.{Vector, DenseVector}
-import breeze.linalg.squaredDistance
+import breeze.linalg.{Vector, DenseVector, squaredDistance}
+
+import org.apache.spark.SparkContext._
 
 /**
  * K-means clustering.

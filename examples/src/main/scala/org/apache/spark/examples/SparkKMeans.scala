@@ -18,11 +18,11 @@
 package org.apache.spark.examples
 
 import java.util.Random
+
+import breeze.linalg.{Vector, DenseVector, squaredDistance}
+
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
-
-import breeze.linalg.{Vector, DenseVector}
-import breeze.linalg.squaredDistance
 
 /**
  * K-means clustering.
