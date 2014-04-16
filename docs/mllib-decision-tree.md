@@ -3,7 +3,7 @@ layout: global
 title: MLlib - Decision Tree
 ---
 
-Decision trees and their ensembles are popular methods for the machine learning tasks of classification and regression. Decision trees are widely used since they are easy to interpret, handle categorical variables, extend to the multi-class classification setting, do not require feature scaling and are able to capture non-linearities and feature interactions. Tree ensemble algorithms such as decision forest and boosting are among the top performers for classification and regression tasks.
+Decision trees and their ensembles are popular methods for the machine learning tasks of classification and regression. Decision trees are widely used since they are easy to interpret, handle categorical variables, extend to the multiclass classification setting, do not require feature scaling and are able to capture nonlinearities and feature interactions. Tree ensemble algorithms such as decision forest and boosting are among the top performers for classification and regression tasks.
 
 ## Basic Algorithm
 
@@ -11,7 +11,7 @@ The decision tree is a greedy algorithm that performs a recursive binary partiti
 
 ### Node Impurity and Information Gain
 
-The *node impurity* is a measure of the homogeneity of the labels at the node. The current implementation provides two impurity measures for classification (Gini index and entropy) and one impurity measure for regression (variance).
+The *node impurity* is a measure of the homogeneity of the labels at the node. The current implementation provides two impurity measures for classification (Gini impurity and entropy) and one impurity measure for regression (variance).
 
 <table class="table">
   <thead>
@@ -19,13 +19,13 @@ The *node impurity* is a measure of the homogeneity of the labels at the node. T
   </thead>
   <tbody>
     <tr>
-      <td>Gini index</td><td>Classification</td><td>$\sum_{i=1}^{M} f_i(1-f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $M$ is the number of unique labels.</td>
+      <td>Gini impurity</td><td>Classification</td><td>$\sum_{i=1}^{M} f_i(1-f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $M$ is the number of unique labels.</td>
     </tr>
     <tr>
       <td>Entropy</td><td>Classification</td><td>$\sum_{i=1}^{M} -f_ilog(f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $M$ is the number of unique labels.</td>
     </tr>
     <tr>
-      <td>Variance</td><td>Classification</td><td>$\frac{1}{n} \sum_{i=1}^{N} (x_i - \mu)^2$</td><td>$y_i$ is label for an instance, $N$ is the number of instances and $\mu$ is the mean given by $\frac{1}{N} \sum_{i=1}^n x_i$.</td>
+      <td>Variance</td><td>Regression</td><td>$\frac{1}{n} \sum_{i=1}^{N} (x_i - \mu)^2$</td><td>$y_i$ is label for an instance, $N$ is the number of instances and $\mu$ is the mean given by $\frac{1}{N} \sum_{i=1}^n x_i$.</td>
     </tr>
   </tbody>
 </table>
@@ -57,16 +57,20 @@ The recursive tree construction is stopped at a node when one of the two conditi
 
 ### Practical Limitations
 
-The tree implementation stores an Array[Double] of size *O(#features \* #splits \* 2^maxDepth)* in memory for aggregating histograms over partitions. The current implementation might not scale to very deep trees since the memory requirement grows exponentially with tree depth. 
-
-Please drop us a line if you encounter any issues. We are planning to solve this problem in the near future and real-world examples will be great.
+1. The tree implementation stores an Array[Double] of size *O(#features \* #splits \* 2^maxDepth)* in memory for aggregating histograms over partitions. The current implementation might not scale to very deep trees since the memory requirement grows exponentially with tree depth. 
+2. The implemented algorithm reads both sparse and dense data. However, it is not optimized for sparse input.
+3. Python is not supported in this release.
+ 
+We are planning to solve these problems in the near future. Please drop us a line if you encounter any issues.
 
 ## Examples
 
 ### Classification
 
-The example below demonstrates how to load a CSV file, parse it as an RDD of LabeledPoint and then perform classification using a decision tree using Gini index as an impurity measure and a maximum tree depth of 5. The training error is calculated to measure the algorithm accuracy.
+The example below demonstrates how to load a CSV file, parse it as an RDD of `LabeledPoint` and then perform classification using a decision tree using Gini impurity as an impurity measure and a maximum tree depth of 5. The training error is calculated to measure the algorithm accuracy.
 
+<div class="codetabs">
+<div data-lang="scala">
 {% highlight scala %}
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.tree.DecisionTree
@@ -94,12 +98,16 @@ val labelAndPreds = parsedData.map { point =>
 val trainErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / parsedData.count
 println("Training Error = " + trainErr)
 {% endhighlight %}
+</div>
+</div>
 
 ### Regression
 
-The example below demonstrates how to load a CSV file, parse it as an RDD of LabeledPoint and then perform regression using a decision tree using variance as an impurity measure and a maximum tree depth of 5. The Mean Squared Error is computed at the end to evaluate
+The example below demonstrates how to load a CSV file, parse it as an RDD of `LabeledPoint` and then perform regression using a decision tree using variance as an impurity measure and a maximum tree depth of 5. The Mean Squared Error (MSE) is computed at the end to evaluate
 [goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
 
+<div class="codetabs">
+<div data-lang="scala">
 {% highlight scala %}
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.tree.DecisionTree
@@ -127,3 +135,5 @@ val valuesAndPreds = parsedData.map { point =>
 val MSE = valuesAndPreds.map{ case(v, p) => math.pow((v - p), 2)}.reduce(_ + _)/valuesAndPreds.count
 println("training Mean Squared Error = " + MSE)
 {% endhighlight %}
+</div>
+</div>
