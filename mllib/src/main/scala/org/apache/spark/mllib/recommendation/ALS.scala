@@ -116,7 +116,7 @@ class ALS private (
     this
   }
 
-  var partitioner: Partitioner = null
+  private var partitioner: Partitioner = null
 
   /** Sets the Partitioner that partitions users. */
   def setPartitioner(p: Partitioner): ALS = {
