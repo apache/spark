@@ -16,8 +16,13 @@
 #
 
 """
-This example requires numpy (http://www.numpy.org/)
+The K-means algorithm written from scratch against PySpark. In practice,
+one may prefer to use the KMeans algorithm in MLlib, as shown in
+python/examples/mllib/kmeans.py.
+
+This example requires NumPy (http://www.numpy.org/).
 """
+
 import sys
 
 import numpy as np
@@ -49,9 +54,7 @@ if __name__ == "__main__":
     K = int(sys.argv[3])
     convergeDist = float(sys.argv[4])
 
-    # TODO: change this after we port takeSample()
-    #kPoints = data.takeSample(False, K, 34)
-    kPoints = data.take(K)
+    kPoints = data.takeSample(False, K, 1)
     tempDist = 1.0
 
     while tempDist > convergeDist:
