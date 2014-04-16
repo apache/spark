@@ -144,7 +144,8 @@ private[streaming] class NetworkReceiverExecutorImpl(
 
   /** Report pushed block */
   def reportPushedBlock(blockId: StreamBlockId, numRecords: Long, optionalMetadata: Option[Any]) {
-    trackerActor ! AddBlock(ReceivedBlockInfo(receiverId, blockId, numRecords, optionalMetadata.orNull))
+    val blockInfo = ReceivedBlockInfo(receiverId, blockId, numRecords, optionalMetadata.orNull)
+    trackerActor ! AddBlock(blockInfo)
     logDebug("Reported block " + blockId)
   }
 
