@@ -40,14 +40,24 @@ fi
 # Figure out the JAR file that our examples were packaged into. This includes a bit of a hack
 # to avoid the -sources and -doc packages that are built by publish-local.
 EXAMPLES_DIR="$FWDIR"/examples
-SPARK_EXAMPLES_JAR=""
-if [ -e "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar ]; then
-  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar`
-fi
 if [[ -z $SPARK_EXAMPLES_JAR ]]; then
-  echo "Failed to find Spark examples assembly in $FWDIR/examples/target" >&2
-  echo "You need to build Spark with sbt/sbt assembly before running this program" >&2
-  exit 1
+  jars_pat="$EXAMPLES_DIR/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar"
+  SPARK_EXAMPLES_JAR=( $jars_pat )
+  num_jars=${#SPARK_EXAMPLES_JAR[@]}
+
+  if (( $num_jars == 0 )); then
+    echo "Failed to find Spark examples assembly matching $jars_pat" >&2
+    echo "You need to build Spark with sbt/sbt assembly before running this program" >&2
+    exit 1
+  fi
+
+  if (( $num_jars > 1 )); then
+    echo -e "Found multiple jars matching $jars_pat" >&2
+    echo "Please remove all but one, or set SPARK_EXAMPLES_JAR explicitly." >&2
+    exit 1
+  fi
+
+  export SPARK_EXAMPLES_JAR=$SPARK_EXAMPLES_JAR[0]
 fi
 
 
