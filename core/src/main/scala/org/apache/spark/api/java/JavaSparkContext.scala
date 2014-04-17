@@ -109,8 +109,16 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
   def defaultParallelism: java.lang.Integer = sc.defaultParallelism
 
-  /** Default min number of partitions for Hadoop RDDs when not given by user */
+  /**
+   * Default min number of partitions for Hadoop RDDs when not given by user.
+   * @deprecated As of Spark 1.0.0, defaultMinSplits is deprecated, use
+   *            {@link #defaultMinPartitions()} instead
+   */
+  @Deprecated
   def defaultMinSplits: java.lang.Integer = sc.defaultMinSplits
+
+  /** Default min number of partitions for Hadoop RDDs when not given by user */
+  def defaultMinPartitions: java.lang.Integer = sc.defaultMinPartitions
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {

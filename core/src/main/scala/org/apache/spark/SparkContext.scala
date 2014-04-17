@@ -427,7 +427,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
    */
-  def textFile(path: String, minPartitions: Int = defaultMinSplits): RDD[String] = {
+  def textFile(path: String, minPartitions: Int = defaultMinPartitions): RDD[String] = {
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
       minPartitions).map(pair => pair._2.toString)
   }
@@ -459,7 +459,8 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
-  def wholeTextFiles(path: String, minPartitions: Int = defaultMinSplits): RDD[(String, String)] = {
+  def wholeTextFiles(path: String, minPartitions: Int = defaultMinPartitions):
+  RDD[(String, String)] = {
     val job = new NewHadoopJob(hadoopConfiguration)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updateConf = job.getConfiguration
@@ -493,7 +494,7 @@ class SparkContext(config: SparkConf) extends Logging {
       inputFormatClass: Class[_ <: InputFormat[K, V]],
       keyClass: Class[K],
       valueClass: Class[V],
-      minPartitions: Int = defaultMinSplits
+      minPartitions: Int = defaultMinPartitions
       ): RDD[(K, V)] = {
     // Add necessary security credentials to the JobConf before broadcasting it.
     SparkHadoopUtil.get.addCredentials(conf)
@@ -512,7 +513,7 @@ class SparkContext(config: SparkConf) extends Logging {
       inputFormatClass: Class[_ <: InputFormat[K, V]],
       keyClass: Class[K],
       valueClass: Class[V],
-      minPartitions: Int = defaultMinSplits
+      minPartitions: Int = defaultMinPartitions
       ): RDD[(K, V)] = {
     // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
     val confBroadcast = broadcast(new SerializableWritable(hadoopConfiguration))
@@ -565,7 +566,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]](path: String)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] =
-    hadoopFile[K, V, F](path, defaultMinSplits)
+    hadoopFile[K, V, F](path, defaultMinPartitions)
 
   /** Get an RDD for a Hadoop file with an arbitrary new API InputFormat. */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]]
@@ -641,7 +642,7 @@ class SparkContext(config: SparkConf) extends Logging {
     * */
   def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]
       ): RDD[(K, V)] =
-    sequenceFile(path, keyClass, valueClass, defaultMinSplits)
+    sequenceFile(path, keyClass, valueClass, defaultMinPartitions)
 
   /**
    * Version of sequenceFile() for types implicitly convertible to Writables through a
@@ -665,7 +666,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * a `map` function.
    */
    def sequenceFile[K, V]
-       (path: String, minPartitions: Int = defaultMinSplits)
+       (path: String, minPartitions: Int = defaultMinPartitions)
        (implicit km: ClassTag[K], vm: ClassTag[V],
         kcf: () => WritableConverter[K], vcf: () => WritableConverter[V])
       : RDD[(K, V)] = {
@@ -688,7 +689,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def objectFile[T: ClassTag](
       path: String,
-      minPartitions: Int = defaultMinSplits
+      minPartitions: Int = defaultMinPartitions
       ): RDD[T] = {
     sequenceFile(path, classOf[NullWritable], classOf[BytesWritable], minPartitions)
       .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes))
@@ -1183,7 +1184,11 @@ class SparkContext(config: SparkConf) extends Logging {
   def defaultParallelism: Int = taskScheduler.defaultParallelism
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
+  @deprecated("use defaultMinPartitions", "1.0.0")
   def defaultMinSplits: Int = math.min(defaultParallelism, 2)
+
+  /** Default min number of partitions for Hadoop RDDs when not given by user */
+  def defaultMinPartitions: Int = math.min(defaultParallelism, 2)
 
   private val nextShuffleId = new AtomicInteger(0)
 
