@@ -13,13 +13,19 @@ For distributed matrices, we provide very preliminary linear algebra operations 
 
 ## Multivariate summary statistics
 
-We provide column summary statistics for `RowMatrix` (see [data types](mllib-data-types.html) for its definition). If the number of columns is not large, say, smaller than 5000, you can also compute the covariance matrix as a local matrix, which requires $\mathcal{O}(n^2)$ storage where $n$ is the number of columns. The total CPU time is $\mathcal{O}(m n^2)$, where $m$ is the number of rows, which could be faster if the rows are sparse.
+We provide column summary statistics for `RowMatrix` (see [data types](mllib-data-types.html) for
+its definition). If the number of columns is not large, say, smaller than 5000, you can also compute
+the covariance matrix as a local matrix, which requires $\mathcal{O}(n^2)$ storage where $n$ is the
+number of columns. The total CPU time is $\mathcal{O}(m n^2)$, where $m$ is the number of rows,
+which could be faster if the rows are sparse.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-`RowMatrix#computeColumnSummaryStatistics` returns an instance of [`MultivariateStatisticalSummary`](api/mllib/index.html#org.apache.spark.mllib.stat.MultivariateStatisticalSummary),
-which contains the column-wise max, min, mean, variance, and number of nonzeros,
-as well as the total count.
+
+`RowMatrix#computeColumnSummaryStatistics` returns an instance of
+[`MultivariateStatisticalSummary`](api/mllib/index.html#org.apache.spark.mllib.stat.MultivariateStatisticalSummary),
+which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
+total count.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.Matrix
@@ -56,9 +62,9 @@ where
   whose diagonals are called singular values,
 * $V$ is an orthonormal matrix, whose columns are called right singular vectors.
  
-For large matrices, usually we don't need the complete factorization but only the top singular values and its associated singular vectors.
-This can save storage, and more importantly, 
-de-noise and recover the low-rank structure of the matrix.
+For large matrices, usually we don't need the complete factorization but only the top singular
+values and its associated singular vectors.  This can save storage, and more importantly, de-noise
+and recover the low-rank structure of the matrix.
 
 If we keep the top $k$ singular values, then the dimensions of the return will be:
 
@@ -66,7 +72,8 @@ If we keep the top $k$ singular values, then the dimensions of the return will b
 * `$\Sigma$`: `$k \times k$`,
 * `$V$`: `$n \times k$`.
  
-In this release, we provide SVD computation to row-oriented matrices that have only a few columns, say, less than $1000$, but many rows, which we call *tall-and-skinny*.
+In this release, we provide SVD computation to row-oriented matrices that have only a few columns,
+say, less than $1000$, but many rows, which we call *tall-and-skinny*.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -86,14 +93,18 @@ The only difference that the `U` matrix becomes an `IndexedRowMatrix`.
 
 ## Principal component analysis (PCA)
 
-[Principal component analysis (PCA)](http://en.wikipedia.org/wiki/Principal_component_analysis)
-is a statistical method to find a rotation such that the first coordinate has the largest variance possible, and each succeeding coordinate in turn has the largest variance possible. The columns of the rotation matrix are called principal components. PCA is used widely in dimensionality reduction.
+[Principal component analysis (PCA)](http://en.wikipedia.org/wiki/Principal_component_analysis) is a
+statistical method to find a rotation such that the first coordinate has the largest variance
+possible, and each succeeding coordinate in turn has the largest variance possible. The columns of
+the rotation matrix are called principal components. PCA is used widely in dimensionality reduction.
 
 In this release, we implement PCA for tall-and-skinny matrices stored in row-oriented format.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-The following code demonstrates how to compute principal components on a tall-and-skinny `RowMatrix` and use them to project the vectors into a low-dimensional space.
+
+The following code demonstrates how to compute principal components on a tall-and-skinny `RowMatrix`
+and use them to project the vectors into a low-dimensional space.
 
 {% highlight scala %}
 val mat: RowMatrix = ...

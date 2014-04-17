@@ -35,13 +35,17 @@ The APIs may be changed in the future releases, and we will provide migration gu
 
 ## Dependencies
 
-MLlib uses linear algebra packages [Breeze](http://www.scalanlp.org/), which depends on [netlib-java](https://github.com/fommil/netlib-java), and [jblas](https://github.com/mikiobraun/jblas).
-`jblas` depend on native Fortran routines. You need to install the
-[gfortran runtime library](https://github.com/mikiobraun/jblas/wiki/Missing-Libraries)
-if it is not already present on your nodes. MLlib will throw a linking error if it cannot
-detect these libraries automatically.
-Due to license issues, we do not include `netlib-java`'s native libraries in MLlib's dependency set. If no native library is available at runtime, you will see a warning message.
-To use native libraries from `netlib-java`, please include artifact `com.github.fommil.netlib:all:1.1.2` as a dependency of your project or build your own (see [instructions](https://github.com/fommil/netlib-java/blob/master/README.md#machine-optimised-system-libraries)).
+MLlib uses linear algebra packages [Breeze](http://www.scalanlp.org/), which depends on
+[netlib-java](https://github.com/fommil/netlib-java), and
+[jblas](https://github.com/mikiobraun/jblas).  `jblas` depend on native Fortran routines. You need
+to install the
+[gfortran runtime library](https://github.com/mikiobraun/jblas/wiki/Missing-Libraries) if it is not
+already present on your nodes. MLlib will throw a linking error if it cannot detect these libraries
+automatically.  Due to license issues, we do not include `netlib-java`'s native libraries in MLlib's
+dependency set. If no native library is available at runtime, you will see a warning message.  To
+use native libraries from `netlib-java`, please include artifact
+`com.github.fommil.netlib:all:1.1.2` as a dependency of your project or build your own (see
+[instructions](https://github.com/fommil/netlib-java/blob/master/README.md#machine-optimised-system-libraries)).
 
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
 
@@ -51,12 +55,19 @@ To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 
 
 ### From 0.9 to 1.0
 
-In MLlib v1.0, we support both dense and sparse input in a unified way, which introduces a few breaking changes. 
-If your data is sparse, please store it in a sparse format instead of dense to take advantage of sparsity in both storage and computation.
+In MLlib v1.0, we support both dense and sparse input in a unified way, which introduces a few
+breaking changes.  If your data is sparse, please store it in a sparse format instead of dense to
+take advantage of sparsity in both storage and computation.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-We used to represent a feature vector by `Array[Double]`, which is replaced by [`Vector`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector) in v1.0. Algorithms that used to accept `RDD[Array[Double]]` now take `RDD[Vector]`. [`LabeledPoint`](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint) is now a wrapper of `(Double, Vector)` instead of `(Double, Array[Double])`. Converting `Array[Double]` to `Vector` is straightforward:
+
+We used to represent a feature vector by `Array[Double]`, which is replaced by
+[`Vector`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector) in v1.0. Algorithms that used
+to accept `RDD[Array[Double]]` now take
+`RDD[Vector]`. [`LabeledPoint`](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint)
+is now a wrapper of `(Double, Vector)` instead of `(Double, Array[Double])`. Converting
+`Array[Double]` to `Vector` is straightforward:
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -72,7 +83,13 @@ val vector: Vector = Vectors.dense(array) // a dense vector
 </div>
 
 <div data-lang="java" markdown="1">
-We used to represent a feature vector by `double[]`, which is replaced by [`Vector`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector) in v1.0. Algorithms that used to accept `RDD<double[]>` now take `RDD<Vector>`. [`LabeledPoint`](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint) is now a wrapper of `(double, Vector)` instead of `(double, double[])`. Converting `double[]` to `Vector` is straightforward:
+
+We used to represent a feature vector by `double[]`, which is replaced by
+[`Vector`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector) in v1.0. Algorithms that used
+to accept `RDD<double[]>` now take
+`RDD<Vector>`. [`LabeledPoint`](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint)
+is now a wrapper of `(double, Vector)` instead of `(double, double[])`. Converting `double[]` to
+`Vector` is straightforward:
 
 {% highlight java %}
 import org.apache.spark.mllib.linalg.Vector;
@@ -82,12 +99,17 @@ double[] array = ... // a double array
 Vector vector = Vectors.dense(array) // a dense vector
 {% endhighlight %}
 
-[`Vectors`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vectors$) provides factory methods to create sparse vectors.
+[`Vectors`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vectors$) provides factory methods to
+create sparse vectors.
+
 </div>
 
 <div data-lang="python" markdown="1">
-We used to represent a labeled feature vector in a NumPy array, where the first entry corresponds to the label and the rest are features.
-This representation is replaced by class [`LabeledPoint`](api/pyspark/pyspark.mllib.regression.LabeledPoint-class.html), which takes both dense and sparse feature vectors.
+
+We used to represent a labeled feature vector in a NumPy array, where the first entry corresponds to
+the label and the rest are features.  This representation is replaced by class
+[`LabeledPoint`](api/pyspark/pyspark.mllib.regression.LabeledPoint-class.html), which takes both
+dense and sparse feature vectors.
 
 {% highlight python %}
 from pyspark.mllib.linalg import SparseVector

@@ -25,6 +25,7 @@ title: MLlib - Linear Methods
 \]`
 
 ## Mathematical formulation
+
 Many standard *machine learning* methods can be formulated as a convex optimization problem, i.e.
 the task of finding a minimizer of a convex function `$f$` that depends on a variable vector
 `$\wv$` (called `weights` in the code), which has `$d$` entries. 
@@ -50,7 +51,8 @@ between the two goals of small loss and small model complexity.
 
 ### Loss functions
 
-The following table summarizes the loss functions and their gradients or sub-gradients for the methods MLlib supports:
+The following table summarizes the loss functions and their gradients or sub-gradients for the
+methods MLlib supports:
 
 <table class="table">
   <thead>
@@ -101,23 +103,27 @@ Here `$\mathrm{sign}(\wv)$` is the vector consisting of the signs (`$\pm1$`) of 
 of `$\wv$`.
 
 L2-regularized problems are generally easier to solve than L1-regularized due to smoothness.
-However, L1 regularization can help promote sparsity in weights, leading to simpler models, which is also used for feature selection.
-It is not recommended to train models without any regularization, especially when the number of training examples is small.
+However, L1 regularization can help promote sparsity in weights, leading to simpler models, which is
+also used for feature selection.  It is not recommended to train models without any regularization,
+especially when the number of training examples is small.
 
 ## Binary classification
 
-[Binary classification](http://en.wikipedia.org/wiki/Binary_classification) is to divide items into two categories: positive and negative. 
-MLlib supports two linear methods for binary classification: linear support vector machine (SVM) and logistic regression.
-The training data set is represented by an RDD of [LabeledPoint](mllib-data-types.html) in MLlib.
-Note that, in the mathematical formulation, a training label $y$ is either $+1$ (positive) or $-1$ (negative), which is convenient for the formulation.
-*However*, the negative label is represented by $0$ in MLlib instead of $-1$, to be consistent with multiclass labeling.
+[Binary classification](http://en.wikipedia.org/wiki/Binary_classification) is to divide items into
+two categories: positive and negative.  MLlib supports two linear methods for binary classification:
+linear support vector machine (SVM) and logistic regression.  The training data set is represented
+by an RDD of [LabeledPoint](mllib-data-types.html) in MLlib.  Note that, in the mathematical
+formulation, a training label $y$ is either $+1$ (positive) or $-1$ (negative), which is convenient
+for the formulation.  *However*, the negative label is represented by $0$ in MLlib instead of $-1$,
+to be consistent with multiclass labeling.
 
 ### Linear support vector machine (SVM)
 
 The [linear SVM](http://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM)
 has become a standard choice for large-scale classification tasks.
 The name "linear SVM" is actually ambiguous.
-By "linear SVM", we mean specifically the linear method with the loss function in formulation `$\eqref{eq:regPrimal}$` given by the hinge loss
+By "linear SVM", we mean specifically the linear method with the loss function in formulation
+`$\eqref{eq:regPrimal}$` given by the hinge loss
 `\[
 L(\wv;\x,y) := \max \{0, 1-y \wv^T \x \}.
 \]`
@@ -132,14 +138,15 @@ The threshold should be determined via model evaluation.
 
 ### Logistic regression
 
-[Logistic regression](http://en.wikipedia.org/wiki/Logistic_regression) is widely used 
-to predict a binary response.
-It is a linear method with the loss function in formulation `$\eqref{eq:regPrimal}$` given by the logistic loss
+[Logistic regression](http://en.wikipedia.org/wiki/Logistic_regression) is widely used to predict a
+binary response.  It is a linear method with the loss function in formulation
+`$\eqref{eq:regPrimal}$` given by the logistic loss
 `\[
 L(\wv;\x,y) :=  \log(1+\exp( -y \wv^T \x)).
 \]`
 
-Logistic regression algorithm outputs a logistic regression model, which makes predictions by applying the logistic function 
+Logistic regression algorithm outputs a logistic regression model, which makes predictions by
+applying the logistic function
 `\[
 \mathrm{logit}(z) = \frac{1}{1 + e^{-z}}
 \]`
@@ -150,9 +157,13 @@ The threshold should be determined via model evaluation.
 
 ### Evaluation metrics
 
-MLlib supports common evaluation metrics for binary classification (not available in Python).
-This includes precision, recall, [F-measure](http://en.wikipedia.org/wiki/F1_score), [receiver operating characteristic (ROC)](http://en.wikipedia.org/wiki/Receiver_operating_characteristic), precision-recall curve, and [area under the curves (AUC)](http://en.wikipedia.org/wiki/Receiver_operating_characteristic#Area_under_the_curve).
-Among the metrics, area under ROC is commonly used to compare models and precision/recall/F-measure can help determine the threshold to use.
+MLlib supports common evaluation metrics for binary classification (not available in Python).  This
+includes precision, recall, [F-measure](http://en.wikipedia.org/wiki/F1_score),
+[receiver operating characteristic (ROC)](http://en.wikipedia.org/wiki/Receiver_operating_characteristic),
+precision-recall curve, and
+[area under the curves (AUC)](http://en.wikipedia.org/wiki/Receiver_operating_characteristic#Area_under_the_curve).
+Among the metrics, area under ROC is commonly used to compare models and precision/recall/F-measure
+can help determine the threshold to use.
 
 ### Examples
 
@@ -218,7 +229,9 @@ svmAlg.optimizer.setNumIterations(200)
 val modelL1 = svmAlg.run(parsedData)
 {% endhighlight %}
 
-Similarly, you can use replace `SVMWithSGD` by [`LogisticRegressionWithSGD`](api/mllib/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD).
+Similarly, you can use replace `SVMWithSGD` by
+[`LogisticRegressionWithSGD`](api/mllib/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD).
+
 </div>
 
 <div data-lang="java" markdown="1">
@@ -258,17 +271,20 @@ print("Training Error = " + str(trainErr))
 
 ## Linear least squares, Lasso, and ridge regression
 
-Linear least squares is a family of linear methods with the loss function in formulation `$\eqref{eq:regPrimal}$` given by the squared loss
+Linear least squares is a family of linear methods with the loss function in formulation
+`$\eqref{eq:regPrimal}$` given by the squared loss
 
 `\[
 L(\wv;\x,y) :=  \frac{1}{2} (\wv^T \x - y)^2.
 \]`
 
-Depending on the regularization type, we call the method [*ordinary least squares*](http://en.wikipedia.org/wiki/Ordinary_least_squares) 
-or simply [*linear least squares*](http://en.wikipedia.org/wiki/Linear_least_squares_(mathematics)) if there is no regularization,
-[*ridge regression*](http://en.wikipedia.org/wiki/Ridge_regression) if L2 regularization is used, 
-and [*Lasso*](http://en.wikipedia.org/wiki/Lasso_(statistics)) if L1 regularization is used.
-This average loss $\frac{1}{n} \sum_{i=1}^n (\wv^T x_i - y_i)^2$ is also known as the [mean squared error](http://en.wikipedia.org/wiki/Mean_squared_error).
+Depending on the regularization type, we call the method
+[*ordinary least squares*](http://en.wikipedia.org/wiki/Ordinary_least_squares) or simply
+[*linear least squares*](http://en.wikipedia.org/wiki/Linear_least_squares_(mathematics)) if there
+is no regularization, [*ridge regression*](http://en.wikipedia.org/wiki/Ridge_regression) if L2
+regularization is used, and [*Lasso*](http://en.wikipedia.org/wiki/Lasso_(statistics)) if L1
+regularization is used.  This average loss $\frac{1}{n} \sum_{i=1}^n (\wv^T x_i - y_i)^2$ is also
+known as the [mean squared error](http://en.wikipedia.org/wiki/Mean_squared_error).
 
 Note that the squared loss is sensitive to outliers. 
 Regularization or a robust alternative (e.g., $\ell_1$ regression) is usually necessary in practice.
@@ -308,8 +324,10 @@ val MSE = valuesAndPreds.map{case(v, p) => math.pow((v - p), 2)}.reduce(_ + _) /
 println("training Mean Squared Error = " + MSE)
 {% endhighlight %}
 
-Similarly you can use [`RidgeRegressionWithSGD`](api/mllib/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD) 
+Similarly you can use
+[`RidgeRegressionWithSGD`](api/mllib/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
 and [`LassoWithSGD`](api/mllib/index.html#org.apache.spark.mllib.regression.LassoWithSGD).
+
 </div>
 
 <div data-lang="java" markdown="1">
@@ -350,13 +368,12 @@ print("Mean Squared Error = " + str(MSE))
 
 ## Implementation (developer)
 
-Behind the scene, MLlib implements a simple distributed version of stochastic gradient descent (SGD), building on the underlying gradient descent primitive (as
-described in the
-<a href="mllib-optimization.html">optimization</a> section).
-All provided algorithms take as input a regularization parameter (`regParam`) along with various
-parameters associated with stochastic gradient
-descent (`stepSize`, `numIterations`, `miniBatchFraction`).
-For each of them, we support all three possible regularizations (none, L1 or L2).
+Behind the scene, MLlib implements a simple distributed version of stochastic gradient descent
+(SGD), building on the underlying gradient descent primitive (as described in the <a
+href="mllib-optimization.html">optimization</a> section).  All provided algorithms take as input a
+regularization parameter (`regParam`) along with various parameters associated with stochastic
+gradient descent (`stepSize`, `numIterations`, `miniBatchFraction`).  For each of them, we support
+all three possible regularizations (none, L1 or L2).
 
 Algorithms are all implemented in Scala:
 
@@ -366,4 +383,5 @@ Algorithms are all implemented in Scala:
 * [RidgeRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
 * [LassoWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.LassoWithSGD)
 
-Python calls the Scala implementation via [PythonMLLibAPI](api/mllib/index.html#org.apache.spark.mllib.api.python.PythonMLLibAPI).
+Python calls the Scala implementation via
+[PythonMLLibAPI](api/mllib/index.html#org.apache.spark.mllib.api.python.PythonMLLibAPI).

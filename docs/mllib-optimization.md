@@ -28,6 +28,7 @@ title: MLlib - Optimization
 ## Mathematical description
 
 ### Gradient descent
+
 The simplest method to solve optimization problems of the form `$\min_{\wv \in\R^d} \; f(\wv)$`
 is [gradient descent](http://en.wikipedia.org/wiki/Gradient_descent).
 Such first-order optimization methods (including gradient descent and stochastic variants

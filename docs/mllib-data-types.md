@@ -15,19 +15,22 @@ A training example used in supervised learning is called "labeled point" in MLli
 
 ## Local vector
 
-A local vector has integer-typed and 0-based indices and double-typed values, 
-stored on a single machine.
-MLlib supports two types of local vectors: dense and sparse.
-A dense vector is backed by a double array representing its entry values, 
-while a sparse vector is backed by two parallel arrays: indices and values.
-For example, a vector $(1.0, 0.0, 3.0)$ can be represented in dense format as `[1.0, 0.0, 3.0]` or in sparse format as `(3, [0, 2], [1.0, 3.0])`, where `3` is the size of the vector.
-
+A local vector has integer-typed and 0-based indices and double-typed values, stored on a single
+machine.  MLlib supports two types of local vectors: dense and sparse.  A dense vector is backed by
+a double array representing its entry values, while a sparse vector is backed by two parallel
+arrays: indices and values.  For example, a vector $(1.0, 0.0, 3.0)$ can be represented in dense
+format as `[1.0, 0.0, 3.0]` or in sparse format as `(3, [0, 2], [1.0, 3.0])`, where `3` is the size
+of the vector.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-The base class of local vectors is [`Vector`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector),
-and we provide two implementations: [`DenseVector`](api/mllib/index.html#org.apache.spark.mllib.linalg.DenseVector) and [`SparseVector`](api/mllib/index.html#org.apache.spark.mllib.linalg.SparseVector). 
-We recommend using the factory methods implemented in [`Vectors`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector) to create local vectors.
+
+The base class of local vectors is
+[`Vector`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector), and we provide two
+implementations: [`DenseVector`](api/mllib/index.html#org.apache.spark.mllib.linalg.DenseVector) and
+[`SparseVector`](api/mllib/index.html#org.apache.spark.mllib.linalg.SparseVector).  We recommend
+using the factory methods implemented in
+[`Vectors`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector) to create local vectors.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -40,13 +43,21 @@ val sv1: Vector = Vectors.sparse(3, Array(0, 2), Array(1.0, 3.0))
 val sv2: Vector = Vectors.sparse(3, Seq((0, 1.0), (2, 3.0)))
 {% endhighlight %}
 
-*Note*. Scala imports `scala.collection.immutable.Vector` by default, so you have to import `org.apache.spark.mllib.linalg.Vector` explicitly to use MLlib's `Vector`.
+***Note***
+
+Scala imports `scala.collection.immutable.Vector` by default, so you have to import
+`org.apache.spark.mllib.linalg.Vector` explicitly to use MLlib's `Vector`.
+
 </div>
 
 <div data-lang="java" markdown="1">
-The base class of local vectors is [`Vector`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector),
-and we provide two implementations: [`DenseVector`](api/mllib/index.html#org.apache.spark.mllib.linalg.DenseVector) and [`SparseVector`](api/mllib/index.html#org.apache.spark.mllib.linalg.SparseVector). 
-We recommend using the factory methods implemented in [`Vectors`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector) to create local vectors.
+
+The base class of local vectors is
+[`Vector`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector), and we provide two
+implementations: [`DenseVector`](api/mllib/index.html#org.apache.spark.mllib.linalg.DenseVector) and
+[`SparseVector`](api/mllib/index.html#org.apache.spark.mllib.linalg.SparseVector).  We recommend
+using the factory methods implemented in
+[`Vectors`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vector) to create local vectors.
 
 {% highlight java %}
 import org.apache.spark.mllib.linalg.Vector;
@@ -68,9 +79,12 @@ MLlib recognizes the following types as dense vectors:
 and the following as sparse vectors:
 
 * MLlib's [`SparseVector`](api/pyspark/pyspark.mllib.linalg.SparseVector-class.html).
-* SciPy's [`csc_matrix`](http://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csc_matrix.html#scipy.sparse.csc_matrix) with a single column
+* SciPy's
+  [`csc_matrix`](http://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csc_matrix.html#scipy.sparse.csc_matrix)
+  with a single column
 
-We recommend using NumPy arrays over lists for efficiency, and using the factory methods implemented in [`Vectors`](api/pyspark/pyspark.mllib.linalg.Vectors-class.html) to create sparse vectors.
+We recommend using NumPy arrays over lists for efficiency, and using the factory methods implemented
+in [`Vectors`](api/pyspark/pyspark.mllib.linalg.Vectors-class.html) to create sparse vectors.
 
 {% highlight python %}
 import numpy as np
@@ -88,7 +102,6 @@ sv2 = sps.csc_matrix((np.array([1.0, 3.0]), np.array([0, 2]), np.array([0, 2])),
 {% endhighlight %}
 
 </div>
-
 </div>
 
 ## Labeled point
@@ -100,8 +113,11 @@ For binary classification, label should be either $0$ (negative) or $1$ (positiv
 For multiclass classification, labels should be class indices staring from zero: $0, 1, 2, \ldots$.
 
 <div class="codetabs">
+
 <div data-lang="scala" markdown="1">
-A labeled point is represented by the case class [`LabeledPoint`](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint).
+
+A labeled point is represented by the case class
+[`LabeledPoint`](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint).
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.Vectors
@@ -116,7 +132,9 @@ val neg = LabeledPoint(0.0, Vectors.sparse(3, Array(0, 2), Array(1.0, 3.0)))
 </div>
 
 <div data-lang="java" markdown="1">
-A labeled point is represented by [`LabeledPoint`](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint).
+
+A labeled point is represented by
+[`LabeledPoint`](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint).
 
 {% highlight java %}
 import org.apache.spark.mllib.linalg.Vectors;
@@ -131,7 +149,9 @@ LabeledPoint neg = new LabeledPoint(1.0, Vectors.sparse(3, new int[] {0, 2}, new
 </div>
 
 <div data-lang="python" markdown="1">
-A labeled point is represented by [`LabeledPoint`](api/pyspark/pyspark.mllib.regression.LabeledPoint-class.html).
+
+A labeled point is represented by
+[`LabeledPoint`](api/pyspark/pyspark.mllib.regression.LabeledPoint-class.html).
 
 {% highlight python %}
 from pyspark.mllib.linalg import SparseVector
@@ -148,11 +168,11 @@ neg = LabeledPoint(0.0, SparseVector(3, [0, 2], [1.0, 3.0]))
 
 ***Sparse data***
 
-It is very common in practice to have sparse training data. 
-MLlib supports reading training examples stored in `LIBSVM` format,
-which is the default format used by [`LIBSVM`](http://www.csie.ntu.edu.tw/~cjlin/libsvm/) and [`LIBLINEAR`](http://www.csie.ntu.edu.tw/~cjlin/liblinear/).
-It is a text format. 
-Each line represents a labeled sparse feature vector using the following format:
+It is very common in practice to have sparse training data.  MLlib supports reading training
+examples stored in `LIBSVM` format, which is the default format used by
+[`LIBSVM`](http://www.csie.ntu.edu.tw/~cjlin/libsvm/) and
+[`LIBLINEAR`](http://www.csie.ntu.edu.tw/~cjlin/liblinear/).  It is a text format.  Each line
+represents a labeled sparse feature vector using the following format:
 
 ~~~
 label index1:value1 index2:value2 ...
@@ -163,6 +183,7 @@ After loading, the feature indices are converted to zero-based.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+
 [`MLUtils.loadLibSVMData`](api/mllib/index.html#org.apache.spark.mllib.util.MLUtils$) reads training
 examples stored in LIBSVM format.
 
@@ -187,11 +208,9 @@ RDD[LabeledPoint] training = MLUtils.loadLibSVMData(sc, "hdfs://...")
 
 ## Local matrix
 
-A local matrix has integer-typed row and column indices and double-typed values, stored on a single machine.
-MLlib supports dense matrix, whose entry values are stored in a single double array in column major.
-For example, the following matrix
-`\[
-\begin{pmatrix}
+A local matrix has integer-typed row and column indices and double-typed values, stored on a single
+machine.  MLlib supports dense matrix, whose entry values are stored in a single double array in
+column major.  For example, the following matrix `\[ \begin{pmatrix}
 1.0 & 2.0 \\
 3.0 & 4.0 \\
 5.0 & 6.0
@@ -202,10 +221,13 @@ We are going to add sparse matrix in the next release.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-The base class of local matrices is [`Matrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.Matrix),
-and we provide one implementation: [`DenseMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.DenseMatrix).
-Sparse matrix will be added in the next release.
-We recommend using the factory methods implemented in [`Matrices`](api/mllib/index.html#org.apache.spark.mllib.linalg.Matrices) to create local matrices.
+
+The base class of local matrices is
+[`Matrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.Matrix), and we provide one
+implementation: [`DenseMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.DenseMatrix).
+Sparse matrix will be added in the next release.  We recommend using the factory methods implemented
+in [`Matrices`](api/mllib/index.html#org.apache.spark.mllib.linalg.Matrices) to create local
+matrices.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.{Matrix, Matrices}
@@ -216,10 +238,13 @@ val dm: Matrix = Matrices.dense(3, 2, Array(1.0, 3.0, 5.0, 2.0, 4.0, 6.0))
 </div>
 
 <div data-lang="java" markdown="1">
-The base class of local matrices is [`Matrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.Matrix),
-and we provide one implementation: [`DenseMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.DenseMatrix).
-Sparse matrix will be added in the next release.
-We recommend using the factory methods implemented in [`Matrices`](api/mllib/index.html#org.apache.spark.mllib.linalg.Matrices) to create local matrices.
+
+The base class of local matrices is
+[`Matrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.Matrix), and we provide one
+implementation: [`DenseMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.DenseMatrix).
+Sparse matrix will be added in the next release.  We recommend using the factory methods implemented
+in [`Matrices`](api/mllib/index.html#org.apache.spark.mllib.linalg.Matrices) to create local
+matrices.
 
 {% highlight java %}
 import org.apache.spark.mllib.linalg.Matrix;
@@ -234,24 +259,29 @@ Matrix dm = Matrices.dense(3, 2, new double[] {1.0, 3.0, 5.0, 2.0, 4.0, 6.0});
 
 ## Distributed matrix
 
-A distributed matrix has long-typed row and column indices and double-typed values, stored distributively in one or more RDDs.
-It is very important to choose the right format to store large and distributed matrices.
-Converting a distributed matrix to a different format may require a global shuffle, which is quite expensive.
-We implemented three types of distributed matrices in this release and will add more types in the future.
+A distributed matrix has long-typed row and column indices and double-typed values, stored
+distributively in one or more RDDs.  It is very important to choose the right format to store large
+and distributed matrices.  Converting a distributed matrix to a different format may require a
+global shuffle, which is quite expensive.  We implemented three types of distributed matrices in
+this release and will add more types in the future.
 
-*Note*. The underlying RDDs of a distributed matrix must be deterministic, because we cache the matrix size.
+***Note***
+
+The underlying RDDs of a distributed matrix must be deterministic, because we cache the matrix size.
 It is always error-prone to have non-deterministic RDDs.
 
 ### RowMatrix
 
-A `RowMatrix` is a row-oriented distributed matrix without meaningful row indices, backed by an RDD of its rows, where each row is a local vector.
-This is similar to `data matrix` in the context of multivariate statistics.
-Since each row is represented by a local vector, the number of columns is limited by the integer range but it should be much smaller in practice.
+A `RowMatrix` is a row-oriented distributed matrix without meaningful row indices, backed by an RDD
+of its rows, where each row is a local vector.  This is similar to `data matrix` in the context of
+multivariate statistics.  Since each row is represented by a local vector, the number of columns is
+limited by the integer range but it should be much smaller in practice.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-A [`RowMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.RowMatrix) can be created from an `RDD[Vector]` instance.
-Then we can compute its column summary statistics.
+
+A [`RowMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.RowMatrix) can be
+created from an `RDD[Vector]` instance.  Then we can compute its column summary statistics.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.Vector
@@ -274,8 +304,9 @@ println(summary.numNonzers)
 </div>
 
 <div data-lang="java" markdown="1">
-A [`RowMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.RowMatrix) can be created from a `JavaRDD<Vector>` instance.
-Then we can compute its column summary statistics.
+
+A [`RowMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.RowMatrix) can be
+created from a `JavaRDD<Vector>` instance.  Then we can compute its column summary statistics.
 
 {% highlight java %}
 import org.apache.spark.mllib.linalg.Vector;
@@ -303,14 +334,18 @@ See [Linear Algebra](mllib-linear-algebra.html).
 
 ### IndexedRowMatrix
 
-An `IndexedRowMatrix` is similar to a `RowMatrix` but with meaningful row indices.
-It is backed by an RDD of indexed rows, which each row is represented by its index (long-typed) and a local vector.
+An `IndexedRowMatrix` is similar to a `RowMatrix` but with meaningful row indices.  It is backed by
+an RDD of indexed rows, which each row is represented by its index (long-typed) and a local vector.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-An [`IndexedRowMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix) can be created from an `RDD[IndexedRow]` instance, 
-where [`IndexedRow`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.IndexedRow) is a wrapper over `(Long, Vector)`.
-An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping its row indices.
+
+An
+[`IndexedRowMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix)
+can be created from an `RDD[IndexedRow]` instance, where
+[`IndexedRow`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.IndexedRow) is a
+wrapper over `(Long, Vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping
+its row indices.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.distributed.{IndexedRow, IndexedRowMatrix, RowMatrix}
@@ -329,9 +364,13 @@ val rowMat: RowMatrix = mat.toRowMatrix()
 </div>
 
 <div data-lang="java" markdown="1">
-An [`IndexedRowMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix) can be created from an `JavaRDD<IndexedRow>` instance, 
-where [`IndexedRow`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.IndexedRow) is a wrapper over `(long, Vector)`.
-An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping its row indices.
+
+An
+[`IndexedRowMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix)
+can be created from an `JavaRDD<IndexedRow>` instance, where
+[`IndexedRow`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.IndexedRow) is a
+wrapper over `(long, Vector)`.  An `IndexedRowMatrix` can be converted to a `RowMatrix` by dropping
+its row indices.
 
 {% highlight java %}
 import org.apache.spark.mllib.linalg.distributed.IndexedRow;
@@ -353,16 +392,21 @@ RowMatrix rowMat = mat.toRowMatrix();
 
 ### CoordinateMatrix
 
-A `CoordinateMatrix` is a distributed matrix backed by an RDD of its entries.
-Each entry is a tuple of `(i: Long, j: Long, value: Double)`, where `i` is the row index, `j` is the column index, and `value` is the entry value.
-A `CoordinateMatrix` should be used only in the case when both dimensions of the matrix are huge and the matrix is very sparse.
+A `CoordinateMatrix` is a distributed matrix backed by an RDD of its entries.  Each entry is a tuple
+of `(i: Long, j: Long, value: Double)`, where `i` is the row index, `j` is the column index, and
+`value` is the entry value.  A `CoordinateMatrix` should be used only in the case when both
+dimensions of the matrix are huge and the matrix is very sparse.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-A [`CoordinateMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.CoordinateMatrix) can be created from an `RDD[MatrixEntry]` instance, 
-where [`MatrixEntry`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.MatrixEntry) is a wrapper over `(Long, Long, Double)`.
-A `CoordinateMatrix` can be converted to a `IndexedRowMatrix` with sparse rows by calling `toIndexedRowMatrix`.
-In this release, we do not provide other computation for `CoordinateMatrix`.
+
+A
+[`CoordinateMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.CoordinateMatrix)
+can be created from an `RDD[MatrixEntry]` instance, where
+[`MatrixEntry`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.MatrixEntry) is a
+wrapper over `(Long, Long, Double)`.  A `CoordinateMatrix` can be converted to a `IndexedRowMatrix`
+with sparse rows by calling `toIndexedRowMatrix`.  In this release, we do not provide other
+computation for `CoordinateMatrix`.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
@@ -381,9 +425,13 @@ val indexedRowMatrix = mat.toIndexedRowMatrix()
 </div>
 
 <div data-lang="java" markdown="1">
-A [`CoordinateMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.CoordinateMatrix) can be created from a `JavaRDD<MatrixEntry>` instance, 
-where [`MatrixEntry`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.MatrixEntry) is a wrapper over `(long, long, double)`.
-A `CoordinateMatrix` can be converted to a `IndexedRowMatrix` with sparse rows by calling `toIndexedRowMatrix`.
+
+A
+[`CoordinateMatrix`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.CoordinateMatrix)
+can be created from a `JavaRDD<MatrixEntry>` instance, where
+[`MatrixEntry`](api/mllib/index.html#org.apache.spark.mllib.linalg.distributed.MatrixEntry) is a
+wrapper over `(long, long, double)`.  A `CoordinateMatrix` can be converted to a `IndexedRowMatrix`
+with sparse rows by calling `toIndexedRowMatrix`.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix;
