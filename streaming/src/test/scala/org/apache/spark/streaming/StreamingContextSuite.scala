@@ -283,6 +283,7 @@ class TestReceiver extends NetworkReceiver[Int](StorageLevel.MEMORY_ONLY) with L
   def onStart() {
     val thread = new Thread() {
       override def run() {
+        logInfo("Receiving started")
         while (!isStopped) {
           store(TestReceiver.counter.getAndIncrement)
         }

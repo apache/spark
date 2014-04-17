@@ -37,7 +37,6 @@ class KafkaStreamSuite extends TestSuiteBase {
     val test3: NetworkInputDStream[(String, String)] =
       KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
       ssc, kafkaParams, topics, StorageLevel.MEMORY_AND_DISK_SER_2)
-    assert(test1.isInstanceOf)
 
     // TODO: Actually test receiving data
     ssc.stop()

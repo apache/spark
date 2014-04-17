@@ -90,9 +90,9 @@ private[ui] class StreamingPage(parent: StreamingTab)
         val receiverInfo = listener.receiverInfo(receiverId)
         val receiverName = receiverInfo.map(_.toString).getOrElse(s"Receiver-$receiverId")
         val receiverLocation = receiverInfo.map(_.location).getOrElse(emptyCell)
-        val receiverLastBatchRecords = formatDurationVerbose(lastBatchReceivedRecord(receiverId))
+        val receiverLastBatchRecords = formatNumber(lastBatchReceivedRecord(receiverId))
         val receivedRecordStats = receivedRecordDistributions(receiverId).map { d =>
-          d.getQuantiles().map(r => formatDurationVerbose(r.toLong))
+          d.getQuantiles().map(r => formatNumber(r.toLong))
         }.getOrElse {
           Seq(emptyCell, emptyCell, emptyCell, emptyCell, emptyCell)
         }

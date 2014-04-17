@@ -174,7 +174,7 @@ private[streaming] abstract class NetworkReceiverExecutor(
   }
 
   /** Check if receiver has been marked for stopping */
-  def isReceiverStarted() = {
+  def isReceiverStarted() = synchronized {
     logDebug("state = " + receiverState)
     receiverState == Started
   }

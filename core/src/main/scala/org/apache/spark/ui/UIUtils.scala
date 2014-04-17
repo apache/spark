@@ -121,7 +121,11 @@ private[spark] object UIUtils extends Logging {
         (records, "")
       }
     }
-    "%.1f%s".formatLocal(Locale.US, value, unit)
+    if (unit.isEmpty) {
+      "%d".formatLocal(Locale.US, value)
+    } else {
+      "%.1f%s".formatLocal(Locale.US, value, unit)
+    }
   }
 
   // Yarn has to go through a proxy so the base uri is provided and has to be on all links
