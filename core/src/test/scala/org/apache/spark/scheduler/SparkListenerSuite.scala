@@ -77,14 +77,21 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
   test("bus.stop() waits for the event queue to completely drain") {
     @volatile var drained = false
 
-    // Tells the listener to stop blocking
-    val listenerWait = new Semaphore(1)
+    // When Listener has started
+    val listenerStarted = new Semaphore(0)
 
-    // When stop has returned
-    val stopReturned = new Semaphore(1)
+    // Tells the listener to stop blocking
+    val listenerWait = new Semaphore(0)
+
+    // When stopper has started
+    val stopperStarted = new Semaphore(0)
+
+    // When stopper has returned
+    val stopperReturned = new Semaphore(0)
 
     class BlockingListener extends SparkListener {
       override def onJobEnd(jobEnd: SparkListenerJobEnd) = {
+        listenerStarted.release()
         listenerWait.acquire()
         drained = true
       }
@@ -97,23 +104,26 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     bus.start()
     bus.post(SparkListenerJobEnd(0, JobSucceeded))
 
-    // the queue should not drain immediately
+    listenerStarted.acquire()
+    // Listener should be blocked after start
     assert(!drained)
 
     new Thread("ListenerBusStopper") {
       override def run() {
+        stopperStarted.release()
         // stop() will block until notify() is called below
         bus.stop()
-        stopReturned.release(1)
+        stopperReturned.release()
       }
     }.start()
 
-    while (!bus.stopCalled) {
-      Thread.sleep(10)
-    }
+    stopperStarted.acquire()
+    // Listener should remain blocked after stopper started
+    assert(!drained)
 
+    // unblock Listener to let queue drain
     listenerWait.release()
-    stopReturned.acquire()
+    stopperReturned.acquire()
     assert(drained)
   }
 
