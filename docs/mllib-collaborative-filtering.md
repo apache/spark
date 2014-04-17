@@ -48,7 +48,8 @@ user for an item.
 
 <div data-lang="scala" markdown="1">
 In the following example we load rating data. Each row consists of a user, a product and a rating.
-We use the default ALS.train() method which assumes ratings are explicit. We evaluate the
+We use the default [ALS.train()](api/mllib/index.html#org.apache.spark.mllib.recommendation.ALS$) 
+method which assumes ratings are explicit. We evaluate the
 recommendation model by measuring the Mean Squared Error of rating prediction.
 
 {% highlight scala %}
@@ -62,8 +63,9 @@ val ratings = data.map(_.split(',') match {
 })
 
 // Build the recommendation model using ALS
+val rank = 10
 val numIterations = 20
-val model = ALS.train(ratings, 1, 20, 0.01)
+val model = ALS.train(ratings, rank, numIterations, 0.01)
 
 // Evaluate the model on rating data
 val usersProducts = ratings.map{ case Rating(user, product, rate)  => (user, product)}
@@ -83,7 +85,7 @@ If the rating matrix is derived from other source of information (i.e., it is in
 other signals), you can use the trainImplicit method to get better results.
 
 {% highlight scala %}
-val model = ALS.trainImplicit(ratings, 1, 20, 0.01)
+val model = ALS.trainImplicit(ratings, rank, numIterations, 0.01)
 {% endhighlight %}
 </div>
 
@@ -108,7 +110,9 @@ data = sc.textFile("mllib/data/als/test.data")
 ratings = data.map(lambda line: array([float(x) for x in line.split(',')]))
 
 # Build the recommendation model using Alternating Least Squares
-model = ALS.train(ratings, 1, 20)
+rank = 10
+numIterations = 20
+model = ALS.train(ratings, rank, numIterations)
 
 # Evaluate the model on training data
 testdata = ratings.map(lambda p: (int(p[0]), int(p[1])))
@@ -123,7 +127,7 @@ signals), you can use the trainImplicit method to get better results.
 
 {% highlight python %}
 # Build the recommendation model using Alternating Least Squares based on implicit ratings
-model = ALS.trainImplicit(ratings, 1, 20)
+model = ALS.trainImplicit(ratings, rank, numIterations)
 {% endhighlight %}
 </div>
 
