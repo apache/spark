@@ -91,7 +91,7 @@ else
   if [ `command -v java` ]; then
     RUNNER="java"
   else
-    echo "JAVA_HOME is not set" >&2
+    echo "JAVA_HOME is not set and no 'java' executable could be found." >&2
     exit 1
   fi
 fi
