@@ -32,7 +32,8 @@ import org.objectweb.asm.Opcodes._
  * A ClassLoader that reads classes from a Hadoop FileSystem or HTTP URI,
  * used to load classes defined by the interpreter when the REPL is used
  */
-class ExecutorClassLoader(classUri: String, parent: ClassLoader) extends ClassLoader(parent) {
+class ExecutorClassLoader(classUri: String, parent: ClassLoader)
+extends ClassLoader(parent) {
   val uri = new URI(classUri)
   val directory = uri.getPath
 
