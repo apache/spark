@@ -172,6 +172,16 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("reverse with join elimination") {
+    withSpark { sc =>
+      val vertices: RDD[(VertexId, Int)] = sc.parallelize(Array((1L, 1), (2L, 2)))
+      val edges: RDD[Edge[Int]] = sc.parallelize(Array(Edge(1L, 2L, 0)))
+      val graph = Graph(vertices, edges).reverse
+      val result = graph.mapReduceTriplets[Int](et => Iterator((et.dstId, et.srcAttr)), _ + _)
+      assert(result.collect.toSet === Set((1L, 2)))
+    }
+  }
+
   test("subgraph") {
     withSpark { sc =>
       // Create a star graph of 10 veritces.
