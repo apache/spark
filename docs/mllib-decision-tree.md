@@ -3,13 +3,16 @@ layout: global
 title: MLlib - Decision Tree
 ---
 
+* Table of contents
+{:toc}
+
 Decision trees and their ensembles are popular methods for the machine learning tasks of classification and regression. Decision trees are widely used since they are easy to interpret, handle categorical variables, extend to the multiclass classification setting, do not require feature scaling and are able to capture nonlinearities and feature interactions. Tree ensemble algorithms such as decision forest and boosting are among the top performers for classification and regression tasks.
 
-## Basic Algorithm
+## Basic algorithm
 
-The decision tree is a greedy algorithm that performs a recursive binary partitioning of the feature space by choosing a single element from the *best split set* where each element of the set maximimizes the information gain at a tree node. In other words, the split chosen at each tree node is chosen from the set `$\underset{s}{\operatorname{argmax}} IG(D,s)$` where `$IG(D,s)$` is the information gain when a split `$s$` is applied to a dataset `$D$`.
+The decision tree is a greedy algorithm that performs a recursive binary partitioning of the feature space by choosing a single element from the *best split set* where each element of the set maximizes the information gain at a tree node. In other words, the split chosen at each tree node is chosen from the set `$\underset{s}{\operatorname{argmax}} IG(D,s)$` where `$IG(D,s)$` is the information gain when a split `$s$` is applied to a dataset `$D$`.
 
-### Node Impurity and Information Gain
+### Node impurity and information gain
 
 The *node impurity* is a measure of the homogeneity of the labels at the node. The current implementation provides two impurity measures for classification (Gini impurity and entropy) and one impurity measure for regression (variance).
 
@@ -34,9 +37,9 @@ The *information gain* is the difference in the parent node impurity and the wei
 
 `$IG(D,s) = Impurity(D) - \frac{N_{left}}{N} Impurity(D_{left}) - \frac{N_{right}}{N} Impurity(D_{right})$`
 
-### Split Candidates
+### Split candidates
 
-**Continuous Features**
+**Continuous features**
 
 For small datasets in single machine implementations, the split candidates for each continuous feature are typically the unique values for the feature. Some implementations sort the feature values and then use the ordered unique values as split candidates for faster tree calculations.
 
@@ -44,18 +47,18 @@ Finding ordered unique feature values is computationally intensive for large dis
 
 Note that the number of bins cannot be greater than the number of instances `$N$` (a rare scenario since the default `maxBins` value is 100). The tree algorithm automatically reduces the number of bins if the condition is not satisfied.
 
-**Categorical Features**
+**Categorical features**
 
 For `$M$` categorical features, one could come up with `$2^M-1$` split candidates. However, for binary classification, the number of split candidates can be reduced to `$M-1$` by ordering the categorical feature values by the proportion of labels falling in one of the two classes (see Section 9.2.4 in [Elements of Statistical Machine Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for details). For example, for a binary classification problem with one categorical feature with three categories A, B and C with corresponding proportion of label 1 as 0.2, 0.6 and 0.4, the categorical features are orded as A followed by C followed B or A, B, C. The two split candidates are A \| C, B and A , B \| C where \| denotes the split.
 
-### Stopping Rule
+### Stopping rule
 
 The recursive tree construction is stopped at a node when one of the two conditions is met:
 
-1. The node depth is equal to the `maxDepth` training paramemter
+1. The node depth is equal to the `maxDepth` training parammeter
 2. No split candidate leads to an information gain at the node.
 
-### Practical Limitations
+### Practical limitations
 
 1. The tree implementation stores an Array[Double] of size *O(#features \* #splits \* 2^maxDepth)* in memory for aggregating histograms over partitions. The current implementation might not scale to very deep trees since the memory requirement grows exponentially with tree depth. 
 2. The implemented algorithm reads both sparse and dense data. However, it is not optimized for sparse input.

@@ -6,7 +6,7 @@ title: MLlib - Collaborative Filtering
 * Table of contents
 {:toc}
 
-## Collaborative Filtering 
+## Collaborative filtering 
 
 [Collaborative filtering](http://en.wikipedia.org/wiki/Recommender_system#Collaborative_filtering)
 is commonly used for recommender systems.  These techniques aim to fill in the
@@ -14,7 +14,7 @@ missing entries of a user-item association matrix.  MLlib currently supports
 model-based collaborative filtering, in which users and products are described
 by a small set of latent factors that can be used to predict missing entries.
 In particular, we implement the [alternating least squares
-(ALS)](http://www2.research.att.com/~volinsky/papers/ieeecomputer.pdf)
+(ALS)](http://dl.acm.org/citation.cfm?id=1608614)
 algorithm to learn these latent factors. The implementation in MLlib has the
 following parameters:
 
@@ -25,7 +25,7 @@ following parameters:
 * *implicitPrefs* specifies whether to use the *explicit feedback* ALS variant or one adapted for *implicit feedback* data
 * *alpha* is a parameter applicable to the implicit feedback variant of ALS that governs the *baseline* confidence in preference observations
 
-### Explicit vs Implicit Feedback
+### Explicit vs. implicit feedback
 
 The standard approach to matrix factorization based collaborative filtering treats 
 the entries in the user-item matrix as *explicit* preferences given by the user to the item.
@@ -33,7 +33,7 @@ the entries in the user-item matrix as *explicit* preferences given by the user 
 It is common in many real-world use cases to only have access to *implicit feedback* 
 (e.g. views, clicks, purchases, likes, shares etc.). The approach used in MLlib to deal with 
 such data is taken from 
-[Collaborative Filtering for Implicit Feedback Datasets](http://www2.research.att.com/~yifanhu/PUB/cf.pdf).
+[Collaborative Filtering for Implicit Feedback Datasets](http://dx.doi.org/10.1109/ICDM.2008.22).
 Essentially instead of trying to model the matrix of ratings directly, this approach treats the data as 
 a combination of binary preferences and *confidence values*. The ratings are then related 
 to the level of confidence in observed user preferences, rather than explicit ratings given to items. 

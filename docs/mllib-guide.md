@@ -13,8 +13,8 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * distributed matrix
 * Classification and regression
   * <a href="mllib-linear-methods.html">linear methods</a>
+    * linear support vector machine (SVM)
     * logistic regression
-    * support vector machine (SVM)
     * linear linear squares, Lasso, and ridge regression
   * <a href="mllib-decision-tree.html">decision tree</a>
   * <a href="mllib-naive-bayes.html">naive Bayes</a>

@@ -24,7 +24,7 @@ title: MLlib - Linear Methods
 \newcommand{\zero}{\mathbf{0}}
 \]`
 
-## Mathematical Formulation
+## Mathematical formulation
 Many standard *machine learning* methods can be formulated as a convex optimization problem, i.e.
 the task of finding a minimizer of a convex function `$f$` that depends on a variable vector
 `$\wv$` (called `weights` in the code), which has `$d$` entries. 
@@ -104,7 +104,7 @@ L2-regularized problems are generally easier to solve than L1-regularized due to
 However, L1 regularization can help promote sparsity in weights, leading to simpler models, which is also used for feature selection.
 It is not recommended to train models without any regularization, especially when the number of training examples is small.
 
-## Binary Classification
+## Binary classification
 
 [Binary classification](http://en.wikipedia.org/wiki/Binary_classification) is to divide items into two categories: positive and negative. 
 MLlib supports two linear methods for binary classification: linear support vector machine (SVM) and logistic regression.
@@ -112,7 +112,7 @@ The training data set is represented by an RDD of [LabeledPoint](mllib-data-type
 Note that, in the mathematical formulation, a training label $y$ is either $+1$ (positive) or $-1$ (negative), which is convenient for the formulation.
 *However*, the negative label is represented by $0$ in MLlib instead of $-1$, to be consistent with multiclass labeling.
 
-### Linear Support Vector Machine (SVM)
+### Linear support vector machine (SVM)
 
 The [linear SVM](http://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM)
 has become a standard choice for large-scale classification tasks.
@@ -130,7 +130,7 @@ By the default, if $\wv^T \x \geq 0$, the outcome is positive, or negative other
 However, quite often in practice, the default threshold $0$ is not a good choice.
 The threshold should be determined via model evaluation.
 
-### Logistic Regression
+### Logistic regression
 
 [Logistic regression](http://en.wikipedia.org/wiki/Logistic_regression) is widely used 
 to predict a binary response.
@@ -148,7 +148,7 @@ By default, if $\mathrm{logit}(\wv^T x) > 0.5$, the outcome is positive, or nega
 For the same reason mentioned above, quite often in practice, this default threshold is not a good choice.
 The threshold should be determined via model evaluation.
 
-### Evaluation Metrics
+### Evaluation metrics
 
 MLlib supports common evaluation metrics for binary classification (not available in Python).
 This includes precision, recall, [F-measure](http://en.wikipedia.org/wiki/F1_score), [receiver operating characteristic (ROC)](http://en.wikipedia.org/wiki/Receiver_operating_characteristic), precision-recall curve, and [area under the curves (AUC)](http://en.wikipedia.org/wiki/Receiver_operating_characteristic#Area_under_the_curve).
@@ -256,7 +256,7 @@ print("Training Error = " + str(trainErr))
 </div>
 </div>
 
-## Linear Least Squares, Lasso, and Ridge Regression
+## Linear least squares, Lasso, and ridge regression
 
 Linear least squares is a family of linear methods with the loss function in formulation `$\eqref{eq:regPrimal}$` given by the squared loss
 
