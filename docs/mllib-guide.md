@@ -29,6 +29,9 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * stochastic gradient descent
   * limited-memory BFGS (L-BFGS)
 
+MLlib is currently a beta component under active development.
+The APIs may be changed in the future releases, and we will provide migration guide between releases.
+
 ## Dependencies
 
 MLlib uses linear algebra packages [Breeze](http://www.scalanlp.org/), which depends on [netlib-java](https://github.com/fommil/netlib-java), and [jblas](https://github.com/mikiobraun/jblas).
