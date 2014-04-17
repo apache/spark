@@ -89,9 +89,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) =
     new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd)))
 
-  implicit def createSchemaRDD1[A <: RecordClass: TypeTag](rdd: RDD[A]) =
-    new SchemaRDD(this, SparkLogicalPlan(ExistingRdd.fromRecordClassRdd(rdd)))
-
   /**
    * Loads a Parquet file, returning the result as a [[SchemaRDD]].
    *
