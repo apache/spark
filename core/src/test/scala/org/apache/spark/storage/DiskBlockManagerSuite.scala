@@ -33,7 +33,7 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach {
   rootDir0.deleteOnExit()
   val rootDir1 = Files.createTempDir()
   rootDir1.deleteOnExit()
-  val rootDirs = rootDir0.getName + "," + rootDir1.getName
+  val rootDirs = rootDir0.getAbsolutePath + "," + rootDir1.getAbsolutePath
   println("Created root dirs: " + rootDirs)
 
   // This suite focuses primarily on consolidation features,
