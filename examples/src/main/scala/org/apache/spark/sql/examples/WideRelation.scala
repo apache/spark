@@ -17,18 +17,16 @@
 
 package org.apache.spark.sql.examples
 
-import org.apache.spark.sql.catalyst.RecordClass
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SQLContext
 
-object WideRecordRelation {
+object WideRelation {
   def main(args: Array[String]) {
-    val sc = new SparkContext("local", "WideRecordRelation")
+    println("org.apache.spark.sql.examples.WideRelation master")
+    val sc = new SparkContext("local", "WideRelation", "F:\\code\\spark-master", SparkContext.jarOfClass(this.getClass))
     val sqlContext = new SQLContext(sc)
-
     // Importing the SQL context gives access to all the SQL functions and implicit conversions.
     import sqlContext._
-
     val rdd = sc.parallelize((1 to 100).map(i => makeRecord(i, s"val_$i")))
     // Any RDD containing case classes can be registered as a table.  The schema of the table is
     // automatically inferred using scala reflection.
@@ -41,29 +39,6 @@ object WideRecordRelation {
     // Aggregation queries are also supported.
     val count = sql("SELECT COUNT(*) FROM widetable").collect().head.getInt(0)
     println(s"COUNT(*): $count")
-
-    // The results of SQL queries are themselves RDDs and support all normal RDD functions.  The
-    // items in the RDD are of type Row, which allows you to access each column by ordinal.
-    val rddFromSql = sql("SELECT r1, r2 FROM widetable WHERE r1 < 10")
-
-    println("Result of RDD.map:")
-    rddFromSql.map(row => s"r1: ${row(0)}, r2: ${row(1)}").collect.foreach(println)
-
-    // Queries can also be written using a LINQ-like Scala DSL.
-    rdd.where('r1 === 1).orderBy('r2.asc).select('r1).collect().foreach(println)
-
-    // Write out an RDD as a parquet file.
-    rdd.saveAsParquetFile("pair.parquet")
-
-    // Read in parquet file.  Parquet files are self-describing so the schmema is preserved.
-    val parquetFile = sqlContext.parquetFile("pair.parquet")
-
-    // Queries can be run using the DSL on parequet files just like the original RDD.
-    parquetFile.where('r1 === 1).select('r2 as 'a).collect().foreach(println)
-
-    // These files can also be registered as tables.
-    parquetFile.registerAsTable("parquetFile")
-    sql("SELECT * FROM parquetFile").collect().foreach(println)
   }
   def makeRecord(i: Int, s: String): WideRecord = {
     new WideRecord(
@@ -94,6 +69,7 @@ object WideRecordRelation {
       s)
   }
 }
+
 class WideRecord (
     r1: Int,
     r2: String,
@@ -119,17 +95,13 @@ class WideRecord (
     r22: String,
     r23: String,
     r24: String,
-    r25: String)
-  extends RecordClass {
-
-  def recordIterator: Iterator[Any] = new scala.collection.Iterator[Any] {
-    private var c: Int = 0
-    private val cmax = 25
-    def hasNext = c < cmax
-    def next() = { val result = element(c); c += 1; result }
+    r25: String) extends Product with Serializable{
+  override def productArity : scala.Int = {
+    25
   }
+  override def canEqual(that : scala.Any) : scala.Boolean = that.isInstanceOf[WideRecord]
 
-  def element(n: Int): Any = {
+  override def productElement(n : scala.Int) : scala.Any = {
     n match {
       case 0 => this.r1
       case 1 => this.r2
@@ -159,3 +131,4 @@ class WideRecord (
     }
   }
 }
+
