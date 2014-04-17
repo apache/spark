@@ -146,8 +146,44 @@ neg = LabeledPoint(0.0, SparseVector(3, [0, 2], [1.0, 3.0]))
 </div>
 </div>
 
-It is very common in practice to see sparse training data. 
-MLlib supports reading 
+***Sparse data***
+
+It is very common in practice to have sparse training data. 
+MLlib supports reading training examples stored in `LIBSVM` format,
+which is the default format used by [`LIBSVM`](http://www.csie.ntu.edu.tw/~cjlin/libsvm/) and [`LIBLINEAR`](http://www.csie.ntu.edu.tw/~cjlin/liblinear/).
+It is a text format. 
+Each line represents a labeled sparse feature vector using the following format:
+
+~~~
+label index1:value1 index2:value2 ...
+~~~
+
+where the indices are one-based and in ascending order. 
+After loading, the feature indices are converted to zero-based.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+[`MLUtils.loadLibSVMData`](api/mllib/index.html#org.apache.spark.mllib.util.MLUtils$) reads training
+examples stored in LIBSVM format.
+
+{% highlight scala %}
+import org.apache.spark.mllib.util.MLUtils
+
+val training: RDD[LabeledPoint] = MLUtils.loadLibSVMData(sc, "hdfs://...")
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+[`MLUtils.loadLibSVMData`](api/mllib/index.html#org.apache.spark.mllib.util.MLUtils$) reads training
+examples stored in LIBSVM format.
+
+{% highlight java %}
+import org.apache.spark.mllib.util.MLUtils;
+
+RDD[LabeledPoint] training = MLUtils.loadLibSVMData(sc, "hdfs://...")
+{% endhighlight %}
+</div>
+</div>
 
 ## Local matrix
 
