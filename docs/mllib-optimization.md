@@ -1,6 +1,6 @@
 ---
 layout: global
-title: MLlib - Optimization
+title: <a href="mllib-guide.html">MLlib</a> - Optimization
 ---
 
 * Table of contents

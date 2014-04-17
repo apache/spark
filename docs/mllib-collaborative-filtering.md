@@ -1,6 +1,6 @@
 ---
 layout: global
-title: MLlib - Collaborative Filtering 
+title: <a href="mllib-guide.html">MLlib</a> - Collaborative Filtering 
 ---
 
 * Table of contents

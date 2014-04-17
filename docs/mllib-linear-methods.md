@@ -1,6 +1,6 @@
 ---
 layout: global
-title: MLlib - Linear Methods
+title: <a href="mllib-guide.html">MLlib</a> - Linear Methods
 ---
 
 * Table of contents

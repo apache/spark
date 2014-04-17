@@ -1,6 +1,6 @@
 ---
 layout: global
-title: MLlib - Naive Bayes
+title: <a href="mllib-guide.html">MLlib</a> - Naive Bayes
 ---
 
 Naive Bayes is a simple multiclass classification algorithm with the assumption of independence

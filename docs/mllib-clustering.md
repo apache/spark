@@ -1,6 +1,6 @@
 ---
 layout: global
-title: MLlib - Clustering
+title: <a href="mllib-guide.html">MLlib</a> - Clustering
 ---
 
 * Table of contents

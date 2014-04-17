@@ -1,6 +1,6 @@
 ---
 layout: global
-title: MLlib - Basics
+title: <a href="mllib-guide.html">MLlib</a> - Basics
 ---
 
 * Table of contents
