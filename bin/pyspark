@@ -40,6 +40,23 @@ fi
 
 # Figure out which Python executable to use
 if [ -z "$PYSPARK_PYTHON" ] ; then
+  exit_if_not_python_version(){
+      _DefaultPythonVersion=`python --version | sed -s 's/[A-Za-z]*\ \([0-9]\)\..*/\1/'`
+      _RequirePythonVersion=$1
+
+      if [[ "$_RequirePythonVersion" != "$_DefaultPythonVersion" ]]; then
+          echo "Error: Default Python on this machine is Python${_DefaultPythonVersion}, PySpark requires Python2."
+          _RequirePython=`which python${_RequirePythonVersion} 2>/dev/null`
+          if [[ "$_RequirePython" == "" ]]; then
+              echo "You don't have Python2 installed; install it first. Then run 'PYSPARK_PYTHON=<path-to-python2> $0'"
+          else
+              echo "Run 'PYSPARK_PYTHON=${_RequirePython} $0'"
+          fi
+          exit 1
+      fi
+  }
+
+  exit_if_not_python_version 2
   PYSPARK_PYTHON="python"
 fi
 export PYSPARK_PYTHON
