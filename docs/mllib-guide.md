@@ -7,24 +7,23 @@ MLlib is a Spark implementation of some common machine learning algorithms and u
 including classification, regression, clustering, collaborative
 filtering, dimensionality reduction, as well as underlying optimization primitives:
 
-* <a href="mllib-basics.html">Basics</a>
+* [Basics](mllib-basics.html)
   * data types 
   * summary statistics
 * Classification and regression
-  * <a href="mllib-linear-methods.html">linear methods</a>
-    * linear support vector machine (SVM)
-    * logistic regression
-    * linear least squares, Lasso, and ridge regression
-  * <a href="mllib-decision-tree.html">decision tree</a>
-  * <a href="mllib-naive-bayes.html">naive Bayes</a>
-* <a href="mllib-collaborative-filtering.html">Collaborative filtering</a>
+  * [linear support vector machine (SVM)](mllib-linear-methods.html#linear-support-vector-machine-svm)
+  * [logistic regression](http://localhost:4000/mllib-linear-methods.html#logistic-regression)
+  * [linear least squares, Lasso, and ridge regression](http://localhost:4000/mllib-linear-methods.html#linear-least-squares-lasso-and-ridge-regression)
+  * [decision tree](mllib-decision-tree.html)
+  * [naive Bayes](mllib-naive-bayes.html)
+* [Collaborative filtering](mllib-collaborative-filtering.html)
   * alternating least squares (ALS)
-* <a href="mllib-clustering.html">Clustering</a>
+* [Clustering](mllib-clustering.html)
   * k-means
-* <a href="mllib-dimensionality-reduction.html">Dimensionality reduction</a>
+* [Dimensionality reduction](mllib-dimensionality-reduction.html)
   * singular value decomposition (SVD)
   * principal component analysis (PCA)
-* <a href="mllib-optimization.html">Optimization</a>
+* [Optimization](mllib-optimization.html)
   * stochastic gradient descent
   * limited-memory BFGS (L-BFGS)
 
