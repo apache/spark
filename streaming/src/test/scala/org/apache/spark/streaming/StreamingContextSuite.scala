@@ -28,6 +28,8 @@ import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
+import scala.language.postfixOps
+
 class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts with Logging {
 
   val master = "local[2]"
@@ -160,7 +162,6 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
       ssc.start() // start after stop should throw exception
     }
   }
-
 
   test("stop only streaming context") {
     ssc = new StreamingContext(master, appName, batchDuration)

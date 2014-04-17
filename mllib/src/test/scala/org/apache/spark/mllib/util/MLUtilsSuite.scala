@@ -19,6 +19,9 @@ package org.apache.spark.mllib.util
 
 import java.io.File
 
+import scala.math
+import scala.util.Random
+
 import org.scalatest.FunSuite
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, norm => breezeNorm,
@@ -27,7 +30,6 @@ import com.google.common.base.Charsets
 import com.google.common.io.Files
 
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
 
 class MLUtilsSuite extends FunSuite with LocalSparkContext {
@@ -56,18 +58,6 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("compute stats") {
-    val data = Seq.fill(3)(Seq(
-      LabeledPoint(1.0, Vectors.dense(1.0, 2.0, 3.0)),
-      LabeledPoint(0.0, Vectors.dense(3.0, 4.0, 5.0))
-    )).flatten
-    val rdd = sc.parallelize(data, 2)
-    val (meanLabel, mean, std) = MLUtils.computeStats(rdd, 3, 6)
-    assert(meanLabel === 0.5)
-    assert(mean === Vectors.dense(2.0, 3.0, 4.0))
-    assert(std === Vectors.dense(1.0, 1.0, 1.0))
-  }
-
   test("loadLibSVMData") {
     val lines =
       """
@@ -80,7 +70,7 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     Files.write(lines, file, Charsets.US_ASCII)
     val path = tempDir.toURI.toString
 
-    val pointsWithNumFeatures = MLUtils.loadLibSVMData(sc, path, 6).collect()
+    val pointsWithNumFeatures = MLUtils.loadLibSVMData(sc, path, BinaryLabelParser, 6).collect()
     val pointsWithoutNumFeatures = MLUtils.loadLibSVMData(sc, path).collect()
 
     for (points <- Seq(pointsWithNumFeatures, pointsWithoutNumFeatures)) {
@@ -93,7 +83,7 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
       assert(points(2).features === Vectors.sparse(6, Seq((1, 4.0), (3, 5.0), (5, 6.0))))
     }
 
-    val multiclassPoints = MLUtils.loadLibSVMData(sc, path, MLUtils.multiclassLabelParser).collect()
+    val multiclassPoints = MLUtils.loadLibSVMData(sc, path, MulticlassLabelParser).collect()
     assert(multiclassPoints.length === 3)
     assert(multiclassPoints(0).label === 1.0)
     assert(multiclassPoints(1).label === -1.0)
@@ -106,4 +96,40 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
       case t: Throwable =>
     }
   }
+
+  test("kFold") {
+    val data = sc.parallelize(1 to 100, 2)
+    val collectedData = data.collect().sorted
+    val twoFoldedRdd = MLUtils.kFold(data, 2, 1)
+    assert(twoFoldedRdd(0)._1.collect().sorted === twoFoldedRdd(1)._2.collect().sorted)
+    assert(twoFoldedRdd(0)._2.collect().sorted === twoFoldedRdd(1)._1.collect().sorted)
+    for (folds <- 2 to 10) {
+      for (seed <- 1 to 5) {
+        val foldedRdds = MLUtils.kFold(data, folds, seed)
+        assert(foldedRdds.size === folds)
+        foldedRdds.map { case (training, validation) =>
+          val result = validation.union(training).collect().sorted
+          val validationSize = validation.collect().size.toFloat
+          assert(validationSize > 0, "empty validation data")
+          val p = 1 / folds.toFloat
+          // Within 3 standard deviations of the mean
+          val range = 3 * math.sqrt(100 * p * (1 - p))
+          val expected = 100 * p
+          val lowerBound = expected - range
+          val upperBound = expected + range
+          assert(validationSize > lowerBound,
+            s"Validation data ($validationSize) smaller than expected ($lowerBound)" )
+          assert(validationSize < upperBound,
+            s"Validation data ($validationSize) larger than expected ($upperBound)" )
+          assert(training.collect().size > 0, "empty training data")
+          assert(result ===  collectedData,
+            "Each training+validation set combined should contain all of the data.")
+        }
+        // K fold cross validation should only have each element in the validation set exactly once
+        assert(foldedRdds.map(_._2).reduce((x,y) => x.union(y)).collect().sorted ===
+          data.collect().sorted)
+      }
+    }
+  }
+
 }

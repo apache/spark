@@ -17,7 +17,10 @@
 
 package org.apache.spark.mllib.tree.model
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
+ * :: DeveloperApi ::
  * Information gain statistics for each split
  * @param gain information gain value
  * @param impurity current node impurity
@@ -25,6 +28,7 @@ package org.apache.spark.mllib.tree.model
  * @param rightImpurity right node impurity
  * @param predict predicted value
  */
+@DeveloperApi
 class InformationGainStats(
     val gain: Double,
     val impurity: Double,

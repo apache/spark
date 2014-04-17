@@ -19,6 +19,7 @@ package org.apache.spark.mllib.classification
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vector
@@ -27,11 +28,15 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 
 /**
+ * :: Experimental ::
  * Model for Naive Bayes Classifiers.
  *
- * @param pi Log of class priors, whose dimension is C.
- * @param theta Log of class conditional probabilities, whose dimension is CxD.
+ * @param labels list of labels
+ * @param pi log of class priors, whose dimension is C, number of labels
+ * @param theta log of class conditional probabilities, whose dimension is C-by-D,
+ *              where D is number of features
  */
+@Experimental
 class NaiveBayesModel(
     val labels: Array[Double],
     val pi: Array[Double],
@@ -40,14 +45,17 @@ class NaiveBayesModel(
   private val brzPi = new BDV[Double](pi)
   private val brzTheta = new BDM[Double](theta.length, theta(0).length)
 
-  var i = 0
-  while (i < theta.length) {
-    var j = 0
-    while (j < theta(i).length) {
-      brzTheta(i, j) = theta(i)(j)
-      j += 1
+  {
+    // Need to put an extra pair of braces to prevent Scala treating `i` as a member.
+    var i = 0
+    while (i < theta.length) {
+      var j = 0
+      while (j < theta(i).length) {
+        brzTheta(i, j) = theta(i)(j)
+        j += 1
+      }
+      i += 1
     }
-    i += 1
   }
 
   override def predict(testData: RDD[Vector]): RDD[Double] = testData.map(predict)
@@ -65,7 +73,7 @@ class NaiveBayesModel(
  * document classification.  By making every vector a 0-1 vector, it can also be used as
  * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]).
  */
-class NaiveBayes private (var lambda: Double) extends Serializable with Logging {
+class NaiveBayes private (private var lambda: Double) extends Serializable with Logging {
 
   def this() = this(1.0)
 

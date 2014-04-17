@@ -62,6 +62,10 @@ private[spark] object JsonProtocol {
         blockManagerRemovedToJson(blockManagerRemoved)
       case unpersistRDD: SparkListenerUnpersistRDD =>
         unpersistRDDToJson(unpersistRDD)
+      case applicationStart: SparkListenerApplicationStart =>
+        applicationStartToJson(applicationStart)
+      case applicationEnd: SparkListenerApplicationEnd =>
+        applicationEndToJson(applicationEnd)
 
       // Not used, but keeps compiler happy
       case SparkListenerShutdown => JNothing
@@ -84,30 +88,27 @@ private[spark] object JsonProtocol {
 
   def taskStartToJson(taskStart: SparkListenerTaskStart): JValue = {
     val taskInfo = taskStart.taskInfo
-    val taskInfoJson = if (taskInfo != null) taskInfoToJson(taskInfo) else JNothing
     ("Event" -> Utils.getFormattedClassName(taskStart)) ~
     ("Stage ID" -> taskStart.stageId) ~
-    ("Task Info" -> taskInfoJson)
+    ("Task Info" -> taskInfoToJson(taskInfo))
   }
 
   def taskGettingResultToJson(taskGettingResult: SparkListenerTaskGettingResult): JValue = {
     val taskInfo = taskGettingResult.taskInfo
-    val taskInfoJson = if (taskInfo != null) taskInfoToJson(taskInfo) else JNothing
     ("Event" -> Utils.getFormattedClassName(taskGettingResult)) ~
-    ("Task Info" -> taskInfoJson)
+    ("Task Info" -> taskInfoToJson(taskInfo))
   }
 
   def taskEndToJson(taskEnd: SparkListenerTaskEnd): JValue = {
     val taskEndReason = taskEndReasonToJson(taskEnd.reason)
     val taskInfo = taskEnd.taskInfo
-    val taskInfoJson = if (taskInfo != null) taskInfoToJson(taskInfo) else JNothing
     val taskMetrics = taskEnd.taskMetrics
     val taskMetricsJson = if (taskMetrics != null) taskMetricsToJson(taskMetrics) else JNothing
     ("Event" -> Utils.getFormattedClassName(taskEnd)) ~
     ("Stage ID" -> taskEnd.stageId) ~
     ("Task Type" -> taskEnd.taskType) ~
     ("Task End Reason" -> taskEndReason) ~
-    ("Task Info" -> taskInfoJson) ~
+    ("Task Info" -> taskInfoToJson(taskInfo)) ~
     ("Task Metrics" -> taskMetricsJson)
   }
 
@@ -155,6 +156,18 @@ private[spark] object JsonProtocol {
   def unpersistRDDToJson(unpersistRDD: SparkListenerUnpersistRDD): JValue = {
     ("Event" -> Utils.getFormattedClassName(unpersistRDD)) ~
     ("RDD ID" -> unpersistRDD.rddId)
+  }
+
+  def applicationStartToJson(applicationStart: SparkListenerApplicationStart): JValue = {
+    ("Event" -> Utils.getFormattedClassName(applicationStart)) ~
+    ("App Name" -> applicationStart.appName) ~
+    ("Timestamp" -> applicationStart.time) ~
+    ("User" -> applicationStart.sparkUser)
+  }
+
+  def applicationEndToJson(applicationEnd: SparkListenerApplicationEnd): JValue = {
+    ("Event" -> Utils.getFormattedClassName(applicationEnd)) ~
+    ("Timestamp" -> applicationEnd.time)
   }
 
 
@@ -346,6 +359,8 @@ private[spark] object JsonProtocol {
     val blockManagerAdded = Utils.getFormattedClassName(SparkListenerBlockManagerAdded)
     val blockManagerRemoved = Utils.getFormattedClassName(SparkListenerBlockManagerRemoved)
     val unpersistRDD = Utils.getFormattedClassName(SparkListenerUnpersistRDD)
+    val applicationStart = Utils.getFormattedClassName(SparkListenerApplicationStart)
+    val applicationEnd = Utils.getFormattedClassName(SparkListenerApplicationEnd)
 
     (json \ "Event").extract[String] match {
       case `stageSubmitted` => stageSubmittedFromJson(json)
@@ -359,6 +374,8 @@ private[spark] object JsonProtocol {
       case `blockManagerAdded` => blockManagerAddedFromJson(json)
       case `blockManagerRemoved` => blockManagerRemovedFromJson(json)
       case `unpersistRDD` => unpersistRDDFromJson(json)
+      case `applicationStart` => applicationStartFromJson(json)
+      case `applicationEnd` => applicationEndFromJson(json)
     }
   }
 
@@ -430,6 +447,17 @@ private[spark] object JsonProtocol {
     SparkListenerUnpersistRDD((json \ "RDD ID").extract[Int])
   }
 
+  def applicationStartFromJson(json: JValue): SparkListenerApplicationStart = {
+    val appName = (json \ "App Name").extract[String]
+    val time = (json \ "Timestamp").extract[Long]
+    val sparkUser = (json \ "User").extract[String]
+    SparkListenerApplicationStart(appName, time, sparkUser)
+  }
+
+  def applicationEndFromJson(json: JValue): SparkListenerApplicationEnd = {
+    SparkListenerApplicationEnd((json \ "Timestamp").extract[Long])
+  }
+
 
   /** --------------------------------------------------------------------- *
    * JSON deserialization methods for classes SparkListenerEvents depend on |
@@ -474,6 +502,9 @@ private[spark] object JsonProtocol {
   }
 
   def taskMetricsFromJson(json: JValue): TaskMetrics = {
+    if (json == JNothing) {
+      return TaskMetrics.empty
+    }
     val metrics = new TaskMetrics
     metrics.hostname = (json \ "Host Name").extract[String]
     metrics.executorDeserializeTime = (json \ "Executor Deserialize Time").extract[Long]
@@ -580,7 +611,7 @@ private[spark] object JsonProtocol {
     val rddInfo = new RDDInfo(rddId, name, numPartitions, storageLevel)
     rddInfo.numCachedPartitions = numCachedPartitions
     rddInfo.memSize = memSize
-    rddInfo.tachyonSize = tachyonSize 
+    rddInfo.tachyonSize = tachyonSize
     rddInfo.diskSize = diskSize
     rddInfo
   }

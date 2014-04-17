@@ -23,6 +23,7 @@ import akka.actor.{ PossiblyHarmful, OneForOneStrategy }
 import akka.actor.SupervisorStrategy._
 
 import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
@@ -47,7 +48,7 @@ object ReceiverSupervisorStrategy {
  * the API for pushing received data into Spark Streaming for being processed.
  *
  * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
- * 
+ *
  * @example {{{
  *  class MyActor extends Actor with Receiver{
  *      def receive {

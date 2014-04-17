@@ -34,10 +34,10 @@ object SparkTachyonPi {
     }
     val spark = new SparkContext(args(0), "SparkTachyonPi",
       System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
-    
+
     val slices = if (args.length > 1) args(1).toInt else 2
     val n = 100000 * slices
-    
+
     val rdd = spark.parallelize(1 to n, slices)
     rdd.persist(StorageLevel.OFF_HEAP)
     val count = rdd.map { i =>
@@ -46,7 +46,7 @@ object SparkTachyonPi {
       if (x * x + y * y < 1) 1 else 0
     }.reduce(_ + _)
     println("Pi is roughly " + 4.0 * count / n)
-    
+
     spark.stop()
   }
 }

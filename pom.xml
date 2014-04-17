@@ -112,7 +112,7 @@
 
     <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
-    <mesos.version>0.17.0</mesos.version>
+    <mesos.version>0.13.0</mesos.version>
     <akka.group>org.spark-project.akka</akka.group>
     <akka.version>2.2.3-shaded-protobuf</akka.version>
     <slf4j.version>1.7.5</slf4j.version>
@@ -262,7 +262,7 @@
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
         <artifactId>stream</artifactId>
-        <version>2.4.0</version>
+        <version>2.5.1</version>
       </dependency>
       <!-- In theory we need not directly depend on protobuf since Spark does not directly
            use it. However, when building with Hadoop/YARN 2.2 Maven doesn't correctly bump
@@ -347,11 +347,6 @@
             <artifactId>netty</artifactId>
           </exclusion>
         </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>it.unimi.dsi</groupId>
-        <artifactId>fastutil</artifactId>
-        <version>6.4.4</version>
       </dependency>
       <dependency>
         <groupId>colt</groupId>
@@ -653,6 +648,7 @@
             <args>
               <arg>-unchecked</arg>
               <arg>-deprecation</arg>
+              <arg>-feature</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xms1024m</jvmArg>
@@ -848,7 +844,7 @@
       </modules>
 
     </profile>
-
+    
    <!-- Build without Hadoop dependencies that are included in some runtime environments. -->
     <profile>
       <id>hadoop-provided</id>
@@ -893,6 +889,6 @@
         </dependency>
       </dependencies>
     </profile>
-
+    
   </profiles>
 </project>

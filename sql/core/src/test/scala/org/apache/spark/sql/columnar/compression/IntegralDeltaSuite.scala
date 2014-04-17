@@ -22,6 +22,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.types.IntegralType
 import org.apache.spark.sql.columnar._
+import org.apache.spark.sql.columnar.ColumnarTestUtils._
 
 class IntegralDeltaSuite extends FunSuite {
   testIntegralDelta(new IntColumnStats,  INT,  IntDelta)
@@ -63,7 +64,7 @@ class IntegralDeltaSuite extends FunSuite {
       } else {
         val oneBoolean = columnType.defaultSize
         1 + oneBoolean + deltas.map {
-          d => if (math.abs(d) < Byte.MaxValue) 1 else 1 + oneBoolean
+          d => if (math.abs(d) <= Byte.MaxValue) 1 else 1 + oneBoolean
         }.sum
       })
 
@@ -78,7 +79,7 @@ class IntegralDeltaSuite extends FunSuite {
         expectResult(input.head, "The first value is wrong")(columnType.extract(buffer))
 
         (input.tail, deltas).zipped.foreach { (value, delta) =>
-          if (delta < Byte.MaxValue) {
+          if (math.abs(delta) <= Byte.MaxValue) {
             expectResult(delta, "Wrong delta")(buffer.get())
           } else {
             expectResult(Byte.MinValue, "Expecting escaping mark here")(buffer.get())
@@ -105,10 +106,16 @@ class IntegralDeltaSuite extends FunSuite {
 
     test(s"$scheme: simple case") {
       val input = columnType match {
-        case INT  => Seq(1: Int,  2: Int,  130: Int)
-        case LONG => Seq(1: Long, 2: Long, 130: Long)
+        case INT  => Seq(2: Int,  1: Int,  2: Int,  130: Int)
+        case LONG => Seq(2: Long, 1: Long, 2: Long, 130: Long)
       }
 
+      skeleton(input.map(_.asInstanceOf[I#JvmType]))
+    }
+
+    test(s"$scheme: long random series") {
+      // Have to workaround with `Any` since no `ClassTag[I#JvmType]` available here.
+      val input = Array.fill[Any](10000)(makeRandomValue(columnType))
       skeleton(input.map(_.asInstanceOf[I#JvmType]))
     }
   }

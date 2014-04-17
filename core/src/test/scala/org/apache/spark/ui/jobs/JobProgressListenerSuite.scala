@@ -20,7 +20,7 @@ package org.apache.spark.ui.jobs
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, Success}
+import org.apache.spark.{LocalSparkContext, SparkConf, Success}
 import org.apache.spark.executor.{ShuffleReadMetrics, TaskMetrics}
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
