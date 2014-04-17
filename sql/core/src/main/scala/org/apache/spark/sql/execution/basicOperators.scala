@@ -146,16 +146,10 @@ object ExistingRdd {
       if (iterator.isEmpty) {
         Iterator.empty
       } else {
-        val first = iterator.next()
-        val mutableRow = new GenericMutableRow(first.productArity)
+        val bufferedIterator = iterator.buffered
+        val mutableRow = new GenericMutableRow(bufferedIterator.head.productArity)
 
-        var i = 0
-        while (i < mutableRow.length) {
-          mutableRow(i) = first.productElement(i)
-          i += 1
-        }
-
-        Iterator.single(mutableRow) ++ iterator.map { r =>
+        bufferedIterator.map { r =>
           var i = 0
           while (i < mutableRow.length) {
             mutableRow(i) = r.productElement(i)
