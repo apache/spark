@@ -23,7 +23,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 
 import util.ManualClock
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.{SparkException, SparkConf}
 import org.apache.spark.streaming.dstream.{WindowedDStream, DStream}
 import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
 import scala.reflect.ClassTag
@@ -400,7 +400,7 @@ class BasicOperationsSuite extends TestSuiteBase {
     val ssc = new StreamingContext(conf, Seconds(1))
     val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
     val stream = new TestInputStream[Int](ssc, input, 2)
-    val thrown = intercept[Exception] {
+    val thrown = intercept[SparkException] {
       stream.slice(new Time(0), new Time(1000))
     }
     assert(thrown.getMessage.contains("has not been initialized"))
