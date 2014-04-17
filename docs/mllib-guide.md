@@ -23,6 +23,7 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
 * <a href="mllib-clustering.html">Clustering</a>
   * k-means
 * <a href="mllib-linear-algebra.html">Linear algebra and statistics</a>
+  * multivariate summary statistics 
   * singular value decomposition (SVD)
   * principal component analysis (PCA)
 * <a href="mllib-optimization.html">Optimization</a>
