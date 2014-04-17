@@ -100,7 +100,6 @@ For binary classification, label should be either $0$ (negative) or $1$ (positiv
 For multiclass classification, labels should be class indices staring from zero: $0, 1, 2, \ldots$.
 
 <div class="codetabs">
-
 <div data-lang="scala" markdown="1">
 A labeled point is represented by the case class [`LabeledPoint`](api/mllib/index.html#org.apache.spark.mllib.regression.LabeledPoint).
 
@@ -145,8 +144,10 @@ pos = LabeledPoint(1.0, [1.0, 0.0, 3.0])
 neg = LabeledPoint(0.0, SparseVector(3, [0, 2], [1.0, 3.0]))
 {% endhighlight %}
 </div>
-
 </div>
+
+It is very common in practice to see sparse training data. 
+MLlib supports reading 
 
 ## Local matrix
 

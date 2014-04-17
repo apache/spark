@@ -28,11 +28,11 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
 * <a href="mllib-optimization.html">Optimization</a>
   * stochastic gradient descent
   * limited-memory BFGS (L-BFGS)
-* Utilities
 
 ## Dependencies
 
-MLlib uses linear algebra packages [jblas](https://github.com/mikiobraun/jblas) and [netlib-java](https://github.com/fommil/netlib-java) (via [Breeze](http://www.scalanlp.org/)), which depend on native Fortran routines. You need to install the
+MLlib uses linear algebra packages [Breeze](http://www.scalanlp.org/), which depends on [netlib-java](https://github.com/fommil/netlib-java), and [jblas](https://github.com/mikiobraun/jblas).
+`jblas` depend on native Fortran routines. You need to install the
 [gfortran runtime library](https://github.com/mikiobraun/jblas/wiki/Missing-Libraries)
 if it is not already present on your nodes. MLlib will throw a linking error if it cannot
 detect these libraries automatically.
@@ -47,7 +47,8 @@ To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 
 
 ### From 0.9 to 1.0
 
-In MLlib v1.0, we support both dense and sparse input in a unified way, which introduces a few breaking changes.
+In MLlib v1.0, we support both dense and sparse input in a unified way, which introduces a few breaking changes. 
+If your data is sparse, please store it in a sparse format instead of dense to take advantage of sparsity in both storage and computation.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -60,7 +61,7 @@ val array: Array[Double] = ... // a double array
 val vector: Vector = Vectors.dense(array) // a dense vector
 {% endhighlight %}
 
-If your data is sparse, please store it in a sparse format instead of dense to take advantage of sparsity in both storage and computation. [`Vectors`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vectors$) provides factory methods to create sparse vectors.
+[`Vectors`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vectors$) provides factory methods to create sparse vectors.
 
 *Note*. Scala imports `scala.collection.immutable.Vector` by default, so you have to import `org.apache.spark.mllib.linalg.Vector` explicitly to use MLlib's `Vector`.
 
@@ -77,6 +78,22 @@ double[] array = ... // a double array
 Vector vector = Vectors.dense(array) // a dense vector
 {% endhighlight %}
 
-If your data is sparse, please store it in a sparse format instead of dense to take advantage of sparsity in both storage and computation. [`Vectors`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vectors$) provides factory methods to create sparse vectors.
+[`Vectors`](api/mllib/index.html#org.apache.spark.mllib.linalg.Vectors$) provides factory methods to create sparse vectors.
+</div>
+
+<div data-lang="python" markdown="1">
+We used to represent a labeled feature vector in a NumPy array, where the first entry corresponds to the label and the rest are features.
+This representation is replaced by class [`LabeledPoint`](api/pyspark/pyspark.mllib.regression.LabeledPoint-class.html), which takes both dense and sparse feature vectors.
+
+{% highlight python %}
+from pyspark.mllib.linalg import SparseVector
+from pyspark.mllib.regression import LabeledPoint
+
+# Create a labeled point with a positive label and a dense feature vector.
+pos = LabeledPoint(1.0, [1.0, 0.0, 3.0])
+
+# Create a labeled point with a negative label and a sparse feature vector.
+neg = LabeledPoint(0.0, SparseVector(3, [0, 2], [1.0, 3.0]))
+{% endhighlight %}
 </div>
 </div>
