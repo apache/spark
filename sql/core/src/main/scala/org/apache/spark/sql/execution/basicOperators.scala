@@ -21,7 +21,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{HashPartitioner, SparkConf, SparkContext}
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
-import org.apache.spark.sql.catalyst.{RecordClass, ScalaReflection}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{OrderedDistribution, UnspecifiedDistribution}
@@ -147,16 +147,8 @@ object ExistingRdd {
     data.map(r => new GenericRow(r.productIterator.map(convertToCatalyst).toArray): Row)
   }
 
-  def recordToRowRdd[A <: RecordClass](data: RDD[A]): RDD[Row] = {
-    data.map(r => new GenericRow(r.recordIterator.map(convertToCatalyst).toArray): Row)
-  }
-
   def fromProductRdd[A <: Product : TypeTag](productRdd: RDD[A]) = {
     ExistingRdd(ScalaReflection.attributesFor[A], productToRowRdd(productRdd))
-  }
-
-  def fromRecordClassRdd[A <: RecordClass: TypeTag](RecordRdd: RDD[A]) = {
-    ExistingRdd(ScalaReflection.attributesFor[A], recordToRowRdd(RecordRdd))
   }
 }
 
