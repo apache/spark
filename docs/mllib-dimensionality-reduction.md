@@ -10,6 +10,7 @@ title: MLlib - Dimensionality Reduction
 of reducing the number of variables under consideration.
 It is used to extract latent features from raw and noisy features,
 or compress data while maintaining the structure.
+In this release, we provide preliminary support for dimensionality reduction on tall-and-skinny matrices.
 
 ## Singular value decomposition (SVD)
 
@@ -70,6 +71,7 @@ In this release, we implement PCA for tall-and-skinny matrices stored in row-ori
 
 The following code demonstrates how to compute principal components on a tall-and-skinny `RowMatrix`
 and use them to project the vectors into a low-dimensional space.
+The number of columns should be small, e.g, less than 1000.
 
 {% highlight scala %}
 val mat: RowMatrix = ...

@@ -319,8 +319,8 @@ long n = mat.numCols();
 
 ### Multivariate summary statistics
 
-We provide column summary statistics for `RowMatrix` (see [data types](mllib-data-types.html) for
-its definition). If the number of columns is not large, say, smaller than 5000, you can also compute
+We provide column summary statistics for `RowMatrix`. 
+If the number of columns is not large, say, smaller than 3000, you can also compute
 the covariance matrix as a local matrix, which requires $\mathcal{O}(n^2)$ storage where $n$ is the
 number of columns. The total CPU time is $\mathcal{O}(m n^2)$, where $m$ is the number of rows,
 which could be faster if the rows are sparse.
