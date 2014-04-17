@@ -17,19 +17,21 @@
 
 package org.apache.spark.examples
 
-import org.apache.hadoop.mapreduce.Job
+import java.nio.ByteBuffer
+import java.util.SortedMap
+
+import scala.collection.JavaConversions._
+
+import org.apache.cassandra.db.IColumn
 import org.apache.cassandra.hadoop.ColumnFamilyOutputFormat
 import org.apache.cassandra.hadoop.ConfigHelper
 import org.apache.cassandra.hadoop.ColumnFamilyInputFormat
 import org.apache.cassandra.thrift._
+import org.apache.cassandra.utils.ByteBufferUtil
+import org.apache.hadoop.mapreduce.Job
+
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
-import java.nio.ByteBuffer
-import java.util.SortedMap
-import org.apache.cassandra.db.IColumn
-import org.apache.cassandra.utils.ByteBufferUtil
-import scala.collection.JavaConversions._
-
 
 /*
  * This example demonstrates using Spark with Cassandra with the New Hadoop API and Cassandra
