@@ -18,7 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io.{PrintStream, File}
-import java.net.URL
+import java.net.{URI, URL}
 
 import org.apache.spark.executor.ExecutorURLClassLoader
 
@@ -216,7 +216,7 @@ object SparkSubmit {
   }
 
   private def addJarToClasspath(localJar: String, loader: ExecutorURLClassLoader) {
-    val localJarFile = new File(localJar)
+    val localJarFile = new File(new URI(localJar).getPath())
     if (!localJarFile.exists()) {
       printWarning(s"Jar $localJar does not exist, skipping.")
     }

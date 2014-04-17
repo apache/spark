@@ -54,7 +54,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
   }
 
-  override def getCurrentUserCredentials(): Credentials = { 
+  override def getCurrentUserCredentials(): Credentials = {
     UserGroupInformation.getCurrentUser().getCredentials()
   }
 
@@ -76,10 +76,6 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 }
 
 object YarnSparkHadoopUtil {
-  def getLoggingArgsForContainerCommandLine(): String = {
-    "-Dlog4j.configuration=log4j-spark-container.properties"
-  }
-
   def addToEnvironment(
       env: HashMap[String, String],
       variable: String,
