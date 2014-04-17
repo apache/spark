@@ -7,10 +7,9 @@ MLlib is a Spark implementation of some common machine learning algorithms and u
 including classification, regression, clustering, collaborative
 filtering, dimensionality reduction, as well as underlying optimization primitives:
 
-* <a href="mllib-data-types.html">Data types</a>
-  * local vector and matrix
-  * labeled point
-  * distributed matrix
+* <a href="mllib-basics.html">Basics</a>
+  * data types 
+  * summary statistics
 * Classification and regression
   * <a href="mllib-linear-methods.html">linear methods</a>
     * linear support vector machine (SVM)
@@ -22,8 +21,7 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * alternating least squares (ALS)
 * <a href="mllib-clustering.html">Clustering</a>
   * k-means
-* <a href="mllib-linear-algebra.html">Linear algebra and statistics</a>
-  * multivariate summary statistics 
+* <a href="mllib-dimensionality-reduction.html">Dimensionality reduction</a>
   * singular value decomposition (SVD)
   * principal component analysis (PCA)
 * <a href="mllib-optimization.html">Optimization</a>

@@ -1,6 +1,6 @@
 ---
 layout: global
-title: MLlib - Data Types
+title: MLlib - Basics
 ---
 
 * Table of contents
