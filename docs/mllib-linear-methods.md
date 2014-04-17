@@ -33,14 +33,16 @@ Formally, we can write this as the optimization problem `$\min_{\wv \in\R^d} \; 
 the objective function is of the form
 `\begin{equation}
     f(\wv) := 
-    \frac1n \sum_{i=1}^n L(\wv;\x,y) +
-    \lambda\, R(\wv)
+    \frac1n \sum_{i=1}^n L(\wv;\x_i,y_i) +
+    \lambda\, R(\wv_i)
     \label{eq:regPrimal}
     \ .
 \end{equation}`
-Here the vectors `$\x\in\R^d$` are the training data examples, for `$1\le i\le n$`, and
-`$y\in\R$` are their corresponding labels, which we want to predict. 
+Here the vectors `$\x_i\in\R^d$` are the training data examples, for `$1\le i\le n$`, and
+`$y_i\in\R$` are their corresponding labels, which we want to predict. 
 We call the method *linear* if $L(\wv; \x, y)$ can be expressed as a function of $\wv^T x$ and $y$.
+Several MLlib's classification and regression algorithms fall into this category,
+and are discussed here.
 
 The objective function `$f$` has two parts:
 the loss that measures the error of the model on the training data, 
