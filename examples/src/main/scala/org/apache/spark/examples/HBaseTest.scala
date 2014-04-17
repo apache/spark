@@ -26,7 +26,7 @@ import org.apache.hadoop.hbase.mapreduce.TableInputFormat
 object HBaseTest {
   def main(args: Array[String]) {
     val sc = new SparkContext(args(0), "HBaseTest",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
 
     val conf = HBaseConfiguration.create()
 
