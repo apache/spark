@@ -1,50 +1,15 @@
 ---
 layout: global
-title: MLlib - Linear Algebra and Statistics
+title: MLlib - Dimensionality Reduction
 ---
 
 * Table of contents
 {:toc}
 
-Linear algebra is a fundamental building block for machine learning algorithms.
-For local vectors and matrices, the underlying linear algebra support is provided by
-[Breeze](http://www.scalanlp.org/) and [jblas](http://jblas.org/). 
-For distributed matrices, we provide very preliminary linear algebra operations and statistics.
-
-## Multivariate summary statistics
-
-We provide column summary statistics for `RowMatrix` (see [data types](mllib-data-types.html) for
-its definition). If the number of columns is not large, say, smaller than 5000, you can also compute
-the covariance matrix as a local matrix, which requires $\mathcal{O}(n^2)$ storage where $n$ is the
-number of columns. The total CPU time is $\mathcal{O}(m n^2)$, where $m$ is the number of rows,
-which could be faster if the rows are sparse.
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-`RowMatrix#computeColumnSummaryStatistics` returns an instance of
-[`MultivariateStatisticalSummary`](api/mllib/index.html#org.apache.spark.mllib.stat.MultivariateStatisticalSummary),
-which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
-total count.
-
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.Matrix
-import org.apache.spark.mllib.linalg.distributed.RowMatrix
-import org.apache.spark.mllib.stat.MultivariateStatisticalSummary
-
-val mat: RowMatrix = ... // a RowMatrix
-
-// Compute column summary statistics.
-val summary: MultivariateStatisticalSummary = mat.computeColumnSummaryStatistics()
-println(summary.mean) // a dense vector containing the mean value for each column
-println(summary.variance) // column-wise variance
-println(summary.numNonzers) // number of nonzeros in each column
-
-// Compute the covariance matrix.
-val Cov: Matrix = mat.computeCovariance()
-{% endhighlight %}
-</div>
-</div>
+[Dimensionality reduction](http://en.wikipedia.org/wiki/Dimensionality_reduction) is the process 
+of reducing the number of variables under consideration.
+It is used to extract latent features from raw and noisy features,
+or compress data while maintaining the structure.
 
 ## Singular value decomposition (SVD)
 

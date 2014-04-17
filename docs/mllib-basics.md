@@ -294,12 +294,6 @@ val mat: RowMatrix = new RowMatrix(rows)
 // Get its size.
 val m = mat.numRows()
 val n = mat.numCols()
-
-// Compute column summary statistics.
-val summary: MultivariateStatisticalSummary = mat.computeColumnSummaryStatistics()
-println(summary.mean)
-println(summary.variance)
-println(summary.numNonzers)
 {% endhighlight %}
 </div>
 
@@ -319,18 +313,44 @@ RowMatrix mat = new RowMatrix(rows.rdd());
 // Get its size.
 long m = mat.numRows();
 long n = mat.numCols();
-
-// Compute column summary statistics.
-MultivariateStatisticalSummary summary = mat.computeColumnSummaryStatistics();
-System.out.println(summary.mean());
-System.out.println(summary.variance());
-System.out.println(summary.numNonzers());
 {% endhighlight %}
 </div>
 </div>
 
-We provide several linear algebra algorithms for tall-and-skinny `RowMatrix`.
-See [Linear Algebra](mllib-linear-algebra.html).
+### Multivariate summary statistics
+
+We provide column summary statistics for `RowMatrix` (see [data types](mllib-data-types.html) for
+its definition). If the number of columns is not large, say, smaller than 5000, you can also compute
+the covariance matrix as a local matrix, which requires $\mathcal{O}(n^2)$ storage where $n$ is the
+number of columns. The total CPU time is $\mathcal{O}(m n^2)$, where $m$ is the number of rows,
+which could be faster if the rows are sparse.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+`RowMatrix#computeColumnSummaryStatistics` returns an instance of
+[`MultivariateStatisticalSummary`](api/mllib/index.html#org.apache.spark.mllib.stat.MultivariateStatisticalSummary),
+which contains the column-wise max, min, mean, variance, and number of nonzeros, as well as the
+total count.
+
+{% highlight scala %}
+import org.apache.spark.mllib.linalg.Matrix
+import org.apache.spark.mllib.linalg.distributed.RowMatrix
+import org.apache.spark.mllib.stat.MultivariateStatisticalSummary
+
+val mat: RowMatrix = ... // a RowMatrix
+
+// Compute column summary statistics.
+val summary: MultivariateStatisticalSummary = mat.computeColumnSummaryStatistics()
+println(summary.mean) // a dense vector containing the mean value for each column
+println(summary.variance) // column-wise variance
+println(summary.numNonzers) // number of nonzeros in each column
+
+// Compute the covariance matrix.
+val Cov: Matrix = mat.computeCovariance()
+{% endhighlight %}
+</div>
+</div>
 
 ### IndexedRowMatrix
 
