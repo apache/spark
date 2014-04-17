@@ -317,7 +317,7 @@ long n = mat.numCols();
 </div>
 </div>
 
-### Multivariate summary statistics
+#### Multivariate summary statistics
 
 We provide column summary statistics for `RowMatrix`. 
 If the number of columns is not large, say, smaller than 3000, you can also compute
