@@ -15,10 +15,10 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * <a href="mllib-linear-methods.html">linear methods</a>
     * linear support vector machine (SVM)
     * logistic regression
-    * linear linear squares, Lasso, and ridge regression
+    * linear least squares, Lasso, and ridge regression
   * <a href="mllib-decision-tree.html">decision tree</a>
   * <a href="mllib-naive-bayes.html">naive Bayes</a>
-* <a href="mllib-collaborative-filtering.html">Collaborative Filtering</a>
+* <a href="mllib-collaborative-filtering.html">Collaborative filtering</a>
   * alternating least squares (ALS)
 * <a href="mllib-clustering.html">Clustering</a>
   * k-means
