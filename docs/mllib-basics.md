@@ -190,7 +190,7 @@ examples stored in LIBSVM format.
 {% highlight scala %}
 import org.apache.spark.mllib.util.MLUtils
 
-val training: RDD[LabeledPoint] = MLUtils.loadLibSVMData(sc, "hdfs://...")
+val training: RDD[LabeledPoint] = MLUtils.loadLibSVMData(sc, "mllib/data/sample_libsvm_data.txt")
 {% endhighlight %}
 </div>
 
@@ -201,7 +201,7 @@ examples stored in LIBSVM format.
 {% highlight java %}
 import org.apache.spark.mllib.util.MLUtils;
 
-RDD[LabeledPoint] training = MLUtils.loadLibSVMData(sc, "hdfs://...")
+RDD[LabeledPoint] training = MLUtils.loadLibSVMData(sc, "mllib/data/sample_libsvm_data.txt")
 {% endhighlight %}
 </div>
 </div>
