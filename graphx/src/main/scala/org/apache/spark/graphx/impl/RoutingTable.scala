@@ -69,9 +69,9 @@ class RoutingTable(edges: EdgeRDD[_], vertices: VertexRDD[_]) {
       vSet.iterator.map { vid => (vid, pid) }
     }
 
-    val numPartitions = vertices.partitions.size
+    val numEdgePartitions = edges.partitions.size
     vid2pid.partitionBy(vertices.partitioner.get).mapPartitions { iter =>
-      val pid2vid = Array.fill(numPartitions)(new PrimitiveVector[VertexId])
+      val pid2vid = Array.fill(numEdgePartitions)(new PrimitiveVector[VertexId])
       for ((vid, pid) <- iter) {
         pid2vid(pid) += vid
       }
