@@ -133,9 +133,12 @@ class JsonProtocolSuite extends FunSuite {
 
   def assertValidDataInJson(validateJson: JValue, expectedJson: JValue) {
     val Diff(c, a, d) = validateJson diff expectedJson
-    assert(c === JNothing, "Json changed")
-    assert(a === JNothing, "Json added")
-    assert(d === JNothing, "Json deleted")
+    val validatePretty = JsonMethods.pretty(validateJson)
+    val expectedPretty = JsonMethods.pretty(expectedJson)
+    val errorMessage = s"Expected:\n$expectedPretty\nFound:\n$validatePretty"
+    assert(c === JNothing, s"$errorMessage\nChanged:\n${JsonMethods.pretty(c)}")
+    assert(a === JNothing, s"$errorMessage\nAdded:\n${JsonMethods.pretty(a)}")
+    assert(d === JNothing, s"$errorMessage\nDelected:\n${JsonMethods.pretty(d)}")
   }
 }
 
@@ -165,7 +168,7 @@ object JsonConstants {
     """
       |{"name":"name","cores":4,"memoryperslave":1234,
       |"user":"%s","sparkhome":"sparkHome",
-      |"command":"Command(mainClass,List(arg1, arg2),Map())"}
+      |"command":"Command(mainClass,List(arg1, arg2),Map(),List(),List(),None)"}
     """.format(System.getProperty("user.name", "<unknown>")).stripMargin
 
   val executorRunnerJsonStr =
