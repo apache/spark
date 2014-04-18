@@ -20,12 +20,13 @@ function one_glob() {
 }
 
 function need_one_glob() {
-  one_glob "$1"
-  local files=$_RET
+  local pat="$1"
   local errtext="$2"
+  one_glob "$pat"
+  local files=$_RET
 
   if (( ${#files[@]} == 0 )); then
-    echo "No files found matching $1" >&2
+    echo "No files found matching $pat" >&2
     echo $errtext >&2
     exit 1
   fi
