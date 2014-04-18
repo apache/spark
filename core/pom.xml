@@ -158,10 +158,6 @@
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>it.unimi.dsi</groupId>
-      <artifactId>fastutil</artifactId>
-    </dependency>
-    <dependency>
       <groupId>colt</groupId>
       <artifactId>colt</artifactId>
     </dependency>
@@ -269,6 +265,11 @@
       <groupId>com.novocode</groupId>
       <artifactId>junit-interface</artifactId>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.spark-project</groupId>
+      <artifactId>pyrolite</artifactId>
+      <version>2.0</version>
     </dependency>
   </dependencies>
   <build>

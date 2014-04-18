@@ -162,7 +162,7 @@ object SparkBuild extends Build {
     organization       := "org.apache.spark",
     version            := SPARK_VERSION,
     scalaVersion       := "2.10.4",
-    scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation",
+    scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation", "-feature",
       "-target:" + SCALAC_JVM_VERSION),
     javacOptions := Seq("-target", JAVAC_JVM_VERSION, "-source", JAVAC_JVM_VERSION),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
@@ -258,18 +258,16 @@ object SparkBuild extends Build {
     */
 
     libraryDependencies ++= Seq(
-      "io.netty"          % "netty-all"      % "4.0.17.Final",
-      "org.eclipse.jetty" % "jetty-server"   % jettyVersion,
-      "org.eclipse.jetty" % "jetty-util"     % jettyVersion,
-      "org.eclipse.jetty" % "jetty-plus"     % jettyVersion,
-      "org.eclipse.jetty" % "jetty-security" % jettyVersion,
-      /** Workaround for SPARK-959. Dependency used by org.eclipse.jetty. Fixed in ivy 2.3.0. */
-      "org.eclipse.jetty.orbit" % "javax.servlet" % "3.0.0.v201112011016" artifacts Artifact("javax.servlet", "jar", "jar"),
-      "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
-      "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
-      "com.novocode"      % "junit-interface" % "0.10"   % "test",
-      "org.easymock"      % "easymock"        % "3.1"    % "test",
-      "org.mockito"       % "mockito-all"     % "1.8.5"  % "test"
+        "io.netty"          % "netty-all"      % "4.0.17.Final",
+        "org.eclipse.jetty" % "jetty-server"   % jettyVersion,
+        "org.eclipse.jetty" % "jetty-util"     % jettyVersion,
+        "org.eclipse.jetty" % "jetty-plus"     % jettyVersion,
+        "org.eclipse.jetty" % "jetty-security" % jettyVersion,
+        "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
+        "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
+        "com.novocode"      % "junit-interface" % "0.10"   % "test",
+        "org.easymock"      % "easymock"        % "3.1"    % "test",
+        "org.mockito"       % "mockito-all"     % "1.8.5"  % "test"
     ),
 
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
@@ -309,7 +307,7 @@ object SparkBuild extends Build {
 
 
   def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark",
-                            version: String = "0.9.0-incubating", crossVersion: String = "2.10"): Option[sbt.ModuleID] = {
+      version: String = "0.9.0-incubating", crossVersion: String = "2.10"): Option[sbt.ModuleID] = {
     val fullId = if (crossVersion.isEmpty) id else id + "_" + crossVersion
     Some(organization % fullId % version) // the artifact to compare binary compatibility with
   }
@@ -317,38 +315,37 @@ object SparkBuild extends Build {
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
     libraryDependencies ++= Seq(
-      "com.google.guava"           % "guava"            % "14.0.1",
-      "com.google.code.findbugs"   % "jsr305"           % "1.3.9",
-      "log4j"                      % "log4j"            % "1.2.17",
-      "org.slf4j"                  % "slf4j-api"        % slf4jVersion,
-      "org.slf4j"                  % "slf4j-log4j12"    % slf4jVersion,
-      "org.slf4j"                  % "jul-to-slf4j"     % slf4jVersion,
-      "org.slf4j"                  % "jcl-over-slf4j"   % slf4jVersion,
-      "commons-daemon"             % "commons-daemon"   % "1.0.10", // workaround for bug HADOOP-9407
-      "com.ning"                   % "compress-lzf"     % "1.0.0",
-      "org.xerial.snappy"          % "snappy-java"      % "1.0.5",
-      "org.spark-project.akka"    %% "akka-remote"      % akkaVersion excludeAll(excludeNetty),
-      "org.spark-project.akka"    %% "akka-slf4j"       % akkaVersion excludeAll(excludeNetty),
-      "org.spark-project.akka"    %% "akka-testkit"     % akkaVersion % "test",
-      "org.json4s"                %% "json4s-jackson"   % "3.2.6" excludeAll(excludeScalap),
-      "it.unimi.dsi"               % "fastutil"         % "6.4.4",
-      "colt"                       % "colt"             % "1.2.0",
-      "org.apache.mesos"           % "mesos"            % "0.17.0",
-      "commons-net"                % "commons-net"      % "2.2",
-      "net.java.dev.jets3t"        % "jets3t"           % "0.7.1" excludeAll(excludeCommonsLogging),
-      "org.apache.derby"           % "derby"            % "10.4.2.0"                     % "test",
-      "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeNetty, excludeAsm, excludeCommonsLogging, excludeSLF4J, excludeOldAsm),
-      "org.apache.curator"         % "curator-recipes"  % "2.4.0" excludeAll(excludeNetty),
-      "com.codahale.metrics"       % "metrics-core"     % codahaleMetricsVersion,
-      "com.codahale.metrics"       % "metrics-jvm"      % codahaleMetricsVersion,
-      "com.codahale.metrics"       % "metrics-json"     % codahaleMetricsVersion,
-      "com.codahale.metrics"       % "metrics-graphite" % codahaleMetricsVersion,
-      "com.twitter"               %% "chill"            % chillVersion excludeAll(excludeAsm),
-      "com.twitter"                % "chill-java"       % chillVersion excludeAll(excludeAsm),
-      "org.tachyonproject"         % "tachyon"          % "0.4.1-thrift" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
-      "com.clearspring.analytics"  % "stream"           % "2.5.1",
-      "org.msgpack"               %% "msgpack-scala"    % "0.6.8"
-    ),
+        "com.google.guava"           % "guava"            % "14.0.1",
+        "com.google.code.findbugs"   % "jsr305"           % "1.3.9",
+        "log4j"                      % "log4j"            % "1.2.17",
+        "org.slf4j"                  % "slf4j-api"        % slf4jVersion,
+        "org.slf4j"                  % "slf4j-log4j12"    % slf4jVersion,
+        "org.slf4j"                  % "jul-to-slf4j"     % slf4jVersion,
+        "org.slf4j"                  % "jcl-over-slf4j"   % slf4jVersion,
+        "commons-daemon"             % "commons-daemon"   % "1.0.10", // workaround for bug HADOOP-9407
+        "com.ning"                   % "compress-lzf"     % "1.0.0",
+        "org.xerial.snappy"          % "snappy-java"      % "1.0.5",
+        "org.spark-project.akka"    %% "akka-remote"      % akkaVersion excludeAll(excludeNetty),
+        "org.spark-project.akka"    %% "akka-slf4j"       % akkaVersion excludeAll(excludeNetty),
+        "org.spark-project.akka"    %% "akka-testkit"     % akkaVersion % "test",
+        "org.json4s"                %% "json4s-jackson"   % "3.2.6" excludeAll(excludeScalap),
+        "colt"                       % "colt"             % "1.2.0",
+        "org.apache.mesos"           % "mesos"            % "0.13.0",
+        "commons-net"                % "commons-net"      % "2.2",
+        "net.java.dev.jets3t"        % "jets3t"           % "0.7.1" excludeAll(excludeCommonsLogging),
+        "org.apache.derby"           % "derby"            % "10.4.2.0"                     % "test",
+        "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeNetty, excludeAsm, excludeCommonsLogging, excludeSLF4J, excludeOldAsm),
+        "org.apache.curator"         % "curator-recipes"  % "2.4.0" excludeAll(excludeNetty),
+        "com.codahale.metrics"       % "metrics-core"     % codahaleMetricsVersion,
+        "com.codahale.metrics"       % "metrics-jvm"      % codahaleMetricsVersion,
+        "com.codahale.metrics"       % "metrics-json"     % codahaleMetricsVersion,
+        "com.codahale.metrics"       % "metrics-graphite" % codahaleMetricsVersion,
+        "com.twitter"               %% "chill"            % chillVersion excludeAll(excludeAsm),
+        "com.twitter"                % "chill-java"       % chillVersion excludeAll(excludeAsm),
+        "org.tachyonproject"         % "tachyon"          % "0.4.1-thrift" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
+        "com.clearspring.analytics"  % "stream"           % "2.5.1",
+        "org.spark-project"          % "pyrolite"         % "2.0"
+      ),
     libraryDependencies ++= maybeAvro
   )
 

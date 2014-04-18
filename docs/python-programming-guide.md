@@ -100,8 +100,8 @@ $ MASTER=local[4] ./bin/pyspark
 
 ## IPython
 
-It is also possible to launch PySpark in [IPython](http://ipython.org), the 
-enhanced Python interpreter. PySpark works with IPython 1.0.0 and later. To 
+It is also possible to launch PySpark in [IPython](http://ipython.org), the
+enhanced Python interpreter. PySpark works with IPython 1.0.0 and later. To
 use IPython, set the `IPYTHON` variable to `1` when running `bin/pyspark`:
 
 {% highlight bash %}
@@ -153,7 +153,7 @@ Many of the methods also contain [doctests](http://docs.python.org/2/library/doc
 # Libraries
 
 [MLlib](mllib-guide.html) is also available in PySpark. To use it, you'll need
-[NumPy](http://www.numpy.org) version 1.7 or newer. The [MLlib guide](mllib-guide.html) contains
+[NumPy](http://www.numpy.org) version 1.4 or newer. The [MLlib guide](mllib-guide.html) contains
 some example applications.
 
 # Where to Go from Here

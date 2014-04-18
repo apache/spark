@@ -78,3 +78,12 @@ table.sortable thead {
   background-repeat: repeat-x;
   filter: progid:dximagetransform.microsoft.gradient(startColorstr='#FFA4EDFF', endColorstr='#FF94DDFF', GradientType=0);
 }
+
+span.kill-link {
+  margin-right: 2px;
+  color: gray;
+}
+
+span.kill-link a {
+  color: gray;
+}

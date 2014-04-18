@@ -17,6 +17,7 @@
 
 package org.apache.spark.util
 
+import scala.language.implicitConversions
 import scala.util.Random
 
 import org.apache.spark.util.random.XORShiftRandom
@@ -136,7 +137,7 @@ object Vector {
   def ones(length: Int) = Vector(length, _ => 1)
 
   /**
-   * Creates this [[org.apache.spark.util.Vector]] of given length containing random numbers 
+   * Creates this [[org.apache.spark.util.Vector]] of given length containing random numbers
    * between 0.0 and 1.0. Optional scala.util.Random number generator can be provided.
    */
   def random(length: Int, random: Random = new XORShiftRandom()) =

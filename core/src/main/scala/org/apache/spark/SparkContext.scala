@@ -25,6 +25,7 @@ import java.util.UUID.randomUUID
 import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.language.implicitConversions
 import scala.reflect.{ClassTag, classTag}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -213,20 +214,16 @@ class SparkContext(config: SparkConf) extends Logging {
   // Initialize the Spark UI, registering all associated listeners
   private[spark] val ui = new SparkUI(this)
   ui.bind()
-  ui.start()
 
   // Optionally log Spark events
   private[spark] val eventLogger: Option[EventLoggingListener] = {
     if (conf.getBoolean("spark.eventLog.enabled", false)) {
       val logger = new EventLoggingListener(appName, conf)
+      logger.start()
       listenerBus.addListener(logger)
       Some(logger)
     } else None
   }
-
-  // Information needed to replay logged events, if any
-  private[spark] val eventLoggingInfo: Option[EventLoggingInfo] =
-    eventLogger.map { logger => Some(logger.info) }.getOrElse(None)
 
   // At this point, all relevant SparkListeners have been registered, so begin releasing events
   listenerBus.start()
@@ -292,6 +289,7 @@ class SparkContext(config: SparkConf) extends Logging {
   cleaner.foreach(_.start())
 
   postEnvironmentUpdate()
+  postApplicationStart()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration: Configuration = {
@@ -457,14 +455,21 @@ class SparkContext(config: SparkConf) extends Logging {
    *   (a-hdfs-path/part-nnnnn, its content)
    * }}}
    *
-   * @note Small files are preferred, as each file will be loaded fully in memory.
+   * @note Small files are preferred, large file is also allowable, but may cause bad performance.
+   *
+   * @param minSplits A suggestion value of the minimal splitting number for input data.
    */
-  def wholeTextFiles(path: String): RDD[(String, String)] = {
-    newAPIHadoopFile(
-      path,
+  def wholeTextFiles(path: String, minSplits: Int = defaultMinSplits): RDD[(String, String)] = {
+    val job = new NewHadoopJob(hadoopConfiguration)
+    NewFileInputFormat.addInputPath(job, new Path(path))
+    val updateConf = job.getConfiguration
+    new WholeTextFileRDD(
+      this,
       classOf[WholeTextFileInputFormat],
       classOf[String],
-      classOf[String])
+      classOf[String],
+      updateConf,
+      minSplits)
   }
 
   /**
@@ -777,6 +782,9 @@ class SparkContext(config: SparkConf) extends Logging {
     listenerBus.addListener(listener)
   }
 
+  /** The version of Spark on which this application is running. */
+  def version = SparkContext.SPARK_VERSION
+
   /**
    * Return a map from the slave to the max memory available for caching and the remaining
    * memory available for caching.
@@ -930,6 +938,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** Shut down the SparkContext. */
   def stop() {
+    postApplicationEnd()
     ui.stop()
     // Do this only if not stopped already - best case effort.
     // prevent NPE if stopped more than once.
@@ -1002,9 +1011,7 @@ class SparkContext(config: SparkConf) extends Logging {
       require(p >= 0 && p < rdd.partitions.size, s"Invalid partition requested: $p")
     }
     val callSite = getCallSite
-    // There's no need to check this function for serializability,
-    // since it will be run right away.
-    val cleanedFunc = clean(func, false)
+    val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
@@ -1137,18 +1144,24 @@ class SparkContext(config: SparkConf) extends Logging {
   def cancelAllJobs() {
     dagScheduler.cancelAllJobs()
   }
-  
+
+  /** Cancel a given job if it's scheduled or running */
+  private[spark] def cancelJob(jobId: Int) {
+    dagScheduler.cancelJob(jobId)
+  }
+
+  /** Cancel a given stage and all jobs associated with it */
+  private[spark] def cancelStage(stageId: Int) {
+    dagScheduler.cancelStage(stageId)
+  }
+
   /**
    * Clean a closure to make it ready to serialized and send to tasks
    * (removes unreferenced variables in $outer's, updates REPL variables)
-   *
-   * @param f closure to be cleaned and optionally serialized
-   * @param captureNow whether or not to serialize this closure and capture any free 
-   * variables immediately; defaults to true.  If this is set and f is not serializable, 
-   * it will raise an exception.
    */
-  private[spark] def clean[F <: AnyRef : ClassTag](f: F, captureNow: Boolean = true): F = {
-    ClosureCleaner.clean(f, captureNow)
+  private[spark] def clean[F <: AnyRef](f: F): F = {
+    ClosureCleaner.clean(f)
+    f
   }
 
   /**
@@ -1181,6 +1194,16 @@ class SparkContext(config: SparkConf) extends Logging {
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
 
+  /** Post the application start event */
+  private def postApplicationStart() {
+    listenerBus.post(SparkListenerApplicationStart(appName, startTime, sparkUser))
+  }
+
+  /** Post the application end event */
+  private def postApplicationEnd() {
+    listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis))
+  }
+
   /** Post the environment update event once the task scheduler is ready */
   private def postEnvironmentUpdate() {
     if (taskScheduler != null) {
@@ -1205,6 +1228,8 @@ class SparkContext(config: SparkConf) extends Logging {
  * various Spark features.
  */
 object SparkContext extends Logging {
+
+  private[spark] val SPARK_VERSION = "1.0.0"
 
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
 

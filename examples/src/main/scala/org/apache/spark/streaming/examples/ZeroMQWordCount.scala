@@ -27,6 +27,8 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.zeromq._
 
+import scala.language.implicitConversions
+
 /**
  * A simple publisher for demonstration purposes, repeatedly publishes random Messages
  * every one second.

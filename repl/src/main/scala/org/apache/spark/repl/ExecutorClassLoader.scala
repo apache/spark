@@ -35,7 +35,7 @@ import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
  * A ClassLoader that reads classes from a Hadoop FileSystem or HTTP URI,
  * used to load classes defined by the interpreter when the REPL is used.
  * Allows the user to specify if user class path should be first
- */ 
+ */
 class ExecutorClassLoader(classUri: String, parent: ClassLoader,
     userClassPathFirst: Boolean) extends ClassLoader {
   val uri = new URI(classUri)
@@ -94,7 +94,7 @@ class ExecutorClassLoader(classUri: String, parent: ClassLoader,
       case e: Exception => None
     }
   }
-  
+
   def readAndTransformClass(name: String, in: InputStream): Array[Byte] = {
     if (name.startsWith("line") && name.endsWith("$iw$")) {
       // Class seems to be an interpreter "wrapper" object storing a val or var.

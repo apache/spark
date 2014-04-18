@@ -158,7 +158,7 @@ private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boo
   }
 
   def receiveBroadcast(): Boolean = {
-    // Receive meta-info about the size of broadcast data, 
+    // Receive meta-info about the size of broadcast data,
     // the number of chunks it is divided into, etc.
     val metaId = BroadcastBlockId(id, "meta")
     var attemptId = 10
