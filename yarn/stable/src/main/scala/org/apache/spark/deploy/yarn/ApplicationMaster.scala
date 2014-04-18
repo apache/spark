@@ -137,7 +137,8 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
       System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
 
     val params = "PROXY_HOST=" + parts(0) + "," + "PROXY_URI_BASE=" + uriBase
-    System.setProperty("spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.params", params)
+    System.setProperty(
+      "spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.params", params)
   }
 
   /** Get the Yarn approved local directories. */
@@ -346,8 +347,8 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
       logInfo("finishApplicationMaster with " + status)
       if (registered) {
-        // Set tracking URL to empty since we don't have a history server.
-        amClient.unregisterApplicationMaster(status, "" /* appMessage */ , "" /* appTrackingUrl */)
+        val trackingUrl = sparkConf.get("spark.yarn.historyServer.address", "")
+        amClient.unregisterApplicationMaster(status, diagnostics, trackingUrl)
       }
     }
   }
