@@ -45,8 +45,8 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
           parent, parent.killEnabled)
       val completedStagesTable =
         new StageTableBase(completedStages.sortBy(_.submissionTime).reverse, parent)
-      val failedStagesTable = new FailedStageTable(failedStages.sortBy(_.submissionTime).reverse,
-        parent)
+      val failedStagesTable =
+        new FailedStageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
 
       // For now, pool information is only accessible in live UIs
       val pools = if (live) sc.getAllPools else Seq[Schedulable]()

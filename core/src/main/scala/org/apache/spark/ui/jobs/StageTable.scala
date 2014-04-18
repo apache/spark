@@ -56,9 +56,7 @@ private[ui] class StageTableBase(
   /** Special table that merges two header cells. */
   protected def stageTable[T](makeRow: T => Seq[Node], rows: Seq[T]): Seq[Node] = {
     <table class="table table-bordered table-striped table-condensed sortable">
-      <thead>
-        {columns}
-      </thead>
+      <thead>{columns}</thead>
       <tbody>
         {rows.map(r => makeRow(r))}
       </tbody>
