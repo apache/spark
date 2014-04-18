@@ -1060,7 +1060,7 @@ private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGSchedule
       dagScheduler.clearCacheLocs()
       logInfo("Got job %s (%s) with %d output partitions (allowLocal=%s)".
         format(job.jobId, callSite, partitions.length, allowLocal))
-      logInfo("Final stage: %s (%s)".format(finalStage, finalStage.name))
+      logInfo("Final stage: " + finalStage + "(" + finalStage.name + ")")
       logInfo("Parents of final stage: " + finalStage.parents)
       logInfo("Missing parents: " + dagScheduler.getMissingParentStages(finalStage))
       if (allowLocal && finalStage.parents.size == 0 && partitions.length == 1) {
