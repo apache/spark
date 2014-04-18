@@ -568,4 +568,19 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val ids = ranked.map(_._1).distinct().collect()
     assert(ids.length === n)
   }
+
+  test("allReduce") {
+    val numPartitions = 2048
+    val rdd = sc.parallelize(0 until numPartitions * 1000, numPartitions)
+    var start = System.nanoTime()
+    val sum = rdd.reduce(_ + _)
+    println((System.nanoTime() - start) / 1e9)
+    start = System.nanoTime()
+    val allReduced = rdd.allReduce(_ + _)
+    allReduced.count()
+    println((System.nanoTime() - start) / 1e9)
+    assert(allReduced.partitions.size === numPartitions)
+    assert(allReduced.collect().toSeq === Iterator.fill(numPartitions)(sum).toSeq)
+    fail("")
+  }
 }

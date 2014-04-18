@@ -765,6 +765,19 @@ abstract class RDD[T: ClassTag](
     jobResult.getOrElse(throw new UnsupportedOperationException("empty collection"))
   }
 
+  def allReduce(f: (T, T) => T): RDD[T] = {
+    var butterfly = this.mapPartitions( (iter) =>
+      Iterator(iter.reduce(f)),
+      preservesPartitioning = true
+    ).cache()
+    var offset = this.partitions.size / 2
+    while (offset > 0) {
+      butterfly = new ButterflyReducedRDD[T](butterfly, offset, f).cache()
+      offset /= 2
+    }
+    butterfly
+  }
+
   /**
    * Aggregate the elements of each partition, and then the results for all the partitions, using a
    * given associative function and a neutral "zero value". The function op(t1, t2) is allowed to
