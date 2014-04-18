@@ -149,16 +149,13 @@ private[ui] class StageTableBase(
   }
 
   /** Render an HTML row that represents a stage */
-  private def renderStageRow(s: StageInfo): Seq[Node] = {
-    <tr>
-      {stageRow(s)}
-    </tr>
-  }
+  private def renderStageRow(s: StageInfo): Seq[Node] = <tr>{stageRow(s)}</tr>
 }
 
-private[ui] class FailedStageTable(stages: Seq[StageInfo],
-                                   parent: JobProgressTab,
-                                   killEnabled: Boolean = false)
+private[ui] class FailedStageTable(
+    stages: Seq[StageInfo],
+    parent: JobProgressTab,
+    killEnabled: Boolean = false)
   extends StageTableBase(stages, parent, killEnabled) {
 
   override protected lazy val columns = {
@@ -175,9 +172,7 @@ private[ui] class FailedStageTable(stages: Seq[StageInfo],
 
   override protected def stageRow(s: StageInfo): Seq[Node] = {
     val basicColumns = super.stageRow(s)
-    val failedReason = {
-      <td valign="middle">{s.failureReason.get}</td>
-    }
+    val failedReason = <td valign="middle">{s.failureReason.get}</td>
     basicColumns ++ failedReason
   }
 }
