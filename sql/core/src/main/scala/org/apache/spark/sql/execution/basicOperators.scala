@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.util.MutablePair
 
-
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
   override def output = projectList.map(_.toAttribute)
 
@@ -143,8 +142,24 @@ object ExistingRdd {
   }
 
   def productToRowRdd[A <: Product](data: RDD[A]): RDD[Row] = {
-    // TODO: Reuse the row, don't use map on the product iterator.  Maybe code gen?
-    data.map(r => new GenericRow(r.productIterator.map(convertToCatalyst).toArray): Row)
+    data.mapPartitions { iterator =>
+      if (iterator.isEmpty) {
+        Iterator.empty
+      } else {
+        val bufferedIterator = iterator.buffered
+        val mutableRow = new GenericMutableRow(bufferedIterator.head.productArity)
+
+        bufferedIterator.map { r =>
+          var i = 0
+          while (i < mutableRow.length) {
+            mutableRow(i) = r.productElement(i)
+            i += 1
+          }
+
+          mutableRow
+        }
+      }
+    }
   }
 
   def fromProductRdd[A <: Product : TypeTag](productRdd: RDD[A]) = {
