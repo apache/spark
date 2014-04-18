@@ -10,20 +10,35 @@ guide, on the project webpage at <http://spark.apache.org/documentation.html>.
 This README file only contains basic setup instructions.
 
 
-## Building
+## Building Spark
 
-Spark requires Scala 2.10. The project is built using Simple Build Tool (SBT),
-which can be obtained [here](http://www.scala-sbt.org). If SBT is installed we
-will use the system version of sbt otherwise we will attempt to download it
-automatically. To build Spark and its example programs, run:
+Spark requires Scala 2.10. The project is built using Simple Build Tool (SBT).
+If SBT is installed, Spark will use the system version of sbt; otherwise Spark
+will download it automatically. To build Spark and its example programs, run:
 
     ./sbt/sbt assembly
 
-Once you've built Spark, the easiest way to start using it is the shell:
+## Interactive Scala Shell
+
+The easiest way to start using Spark is through the Scala shell:
 
     ./bin/spark-shell
 
-Or, for the Python API, the Python shell (`./bin/pyspark`).
+Try the following command, which should return 1000:
+
+    scala> sc.parallelize(1 to 1000).count()
+
+## Interactive Python Shell
+
+Alternatively, if you prefer Python, you can use the Python shell:
+
+    ./bin/pyspark
+    
+And run the following command, which should also return 1000:
+
+    >>> sc.parallelize(range(1000)).count()
+
+## Example Programs
 
 Spark also comes with several sample programs in the `examples` directory.
 To run one of them, use `./bin/run-example <class> <params>`. For example:
@@ -38,13 +53,13 @@ All of the Spark samples take a `<master>` parameter that is the cluster URL
 to connect to. This can be a mesos:// or spark:// URL, or "local" to run
 locally with one thread, or "local[N]" to run locally with N threads.
 
-## Running tests
+## Running Tests
 
-Testing first requires [Building](#building) Spark. Once Spark is built, tests
+Testing first requires [building Spark](#building-spark). Once Spark is built, tests
 can be run using:
 
-`./sbt/sbt test`
- 
+    ./sbt/sbt test
+
 ## A Note About Hadoop Versions
 
 Spark uses the Hadoop core library to talk to HDFS and other Hadoop-supported
