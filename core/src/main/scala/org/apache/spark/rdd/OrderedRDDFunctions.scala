@@ -38,7 +38,7 @@ import org.apache.spark.{Logging, RangePartitioner}
  *   }
  *
  *   // Sort by key, using the above case insensitive ordering.
- *   rdd.sortByKey
+ *   rdd.sortByKey()
  * }}}
  */
 class OrderedRDDFunctions[K : Ordering : ClassTag,
