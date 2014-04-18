@@ -57,7 +57,7 @@ object MLUtils {
    * @param labelParser parser for labels, default: 1.0 if label > 0.5 or 0.0 otherwise
    * @param numFeatures number of features, which will be determined from the input data if a
    *                    negative value is given. The default value is -1.
-   * @param minSplits min number of partitions, default: sc.defaultMinSplits
+   * @param minPartitions min number of partitions, default: sc.defaultMinPartitions
    * @return labeled data stored as an RDD[LabeledPoint]
    */
   def loadLibSVMData(
@@ -65,8 +65,8 @@ object MLUtils {
       path: String,
       labelParser: LabelParser,
       numFeatures: Int,
-      minSplits: Int): RDD[LabeledPoint] = {
-    val parsed = sc.textFile(path, minSplits)
+      minPartitions: Int): RDD[LabeledPoint] = {
+    val parsed = sc.textFile(path, minPartitions)
       .map(_.trim)
       .filter(!_.isEmpty)
       .map(_.split(' '))
@@ -101,7 +101,7 @@ object MLUtils {
    * with number of features determined automatically and the default number of partitions.
    */
   def loadLibSVMData(sc: SparkContext, path: String): RDD[LabeledPoint] =
-    loadLibSVMData(sc, path, BinaryLabelParser, -1, sc.defaultMinSplits)
+    loadLibSVMData(sc, path, BinaryLabelParser, -1, sc.defaultMinPartitions)
 
   /**
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint],
@@ -112,7 +112,7 @@ object MLUtils {
       sc: SparkContext,
       path: String,
       labelParser: LabelParser): RDD[LabeledPoint] =
-    loadLibSVMData(sc, path, labelParser, -1, sc.defaultMinSplits)
+    loadLibSVMData(sc, path, labelParser, -1, sc.defaultMinPartitions)
 
   /**
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint],
@@ -124,7 +124,7 @@ object MLUtils {
       path: String,
       labelParser: LabelParser,
       numFeatures: Int): RDD[LabeledPoint] =
-    loadLibSVMData(sc, path, labelParser, numFeatures, sc.defaultMinSplits)
+    loadLibSVMData(sc, path, labelParser, numFeatures, sc.defaultMinPartitions)
 
   /**
    * :: Experimental ::
