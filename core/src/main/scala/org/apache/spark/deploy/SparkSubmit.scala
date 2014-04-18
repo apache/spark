@@ -116,6 +116,9 @@ object SparkSubmit {
       val file = new File(filename)
       getDefaultProperties(file).foreach { case (k, v) =>
         if (k.startsWith("spark")) {
+          if (k == "spark.master")
+            throw new Exception("Setting spark.master in spark-defaults.properties is not " +
+              "supported. Use MASTER environment variable or --master.")
           sysProps(k) = v
           if (appArgs.verbose) printStream.println(s"Adding default property: $k=$v")
         }
@@ -165,10 +168,11 @@ object SparkSubmit {
       new OptionAssigner(appArgs.files, YARN, true, clOption = "--files"),
       new OptionAssigner(appArgs.archives, YARN, false, sysProp = "spark.yarn.dist.archives"),
       new OptionAssigner(appArgs.archives, YARN, true, clOption = "--archives"),
-      new OptionAssigner(appArgs.jars, YARN, true, clOption = "--addJars")
+      new OptionAssigner(appArgs.jars, YARN, true, clOption = "--addJars"),
+      new OptionAssigner(appArgs.jars, STANDALONE | YARN | MESOS, true, sysProp = "spark.jars")
     )
 
-    // more jars
+    // For client mode make any added jars immediately visible on the classpath
     if (appArgs.jars != null && !deployOnCluster) {
       for (jar <- appArgs.jars.split(",")) {
         childClasspath += jar
@@ -186,6 +190,14 @@ object SparkSubmit {
       }
     }
 
+    // For standalone mode, add the application jar automatically so the user doesn't have to
+    // call sc.addJar. TODO: Standalone mode in the cluster
+    if (clusterManager == STANDALONE) {
+      val existingJars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq())
+      sysProps.put("spark.jars", (existingJars ++ Seq(appArgs.primaryResource)).mkString(","))
+      println("SPARK JARS" + sysProps.get("spark.jars"))
+    }
+
     if (deployOnCluster && clusterManager == STANDALONE) {
       if (appArgs.supervise) {
         childArgs += "--supervise"
@@ -196,7 +208,7 @@ object SparkSubmit {
       childArgs += (appArgs.master, appArgs.primaryResource, appArgs.mainClass)
     }
 
-    // args
+    // Arguments to be passed to user program
     if (appArgs.childArgs != null) {
       if (!deployOnCluster || clusterManager == STANDALONE) {
         childArgs ++= appArgs.childArgs
