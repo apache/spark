@@ -52,7 +52,7 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: HiveCon
   // Choose the minimum number of splits. If mapred.map.tasks is set, then use that unless
   // it is smaller than what Spark suggests.
   private val _minSplitsPerRDD = math.max(
-    sc.hiveconf.getInt("mapred.map.tasks", 1), sc.sparkContext.defaultMinSplits)
+    sc.hiveconf.getInt("mapred.map.tasks", 1), sc.sparkContext.defaultMinPartitions)
 
   // TODO: set aws s3 credentials.
 
