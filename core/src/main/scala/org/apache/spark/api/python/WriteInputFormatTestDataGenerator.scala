@@ -5,6 +5,13 @@ import org.apache.hadoop.io._
 import scala.Array
 import java.io.{DataOutput, DataInput}
 
+/**
+ * A class to test MsgPack serialization on the Scala side, that will be deserialized
+ * in Python
+ * @param str
+ * @param int
+ * @param double
+ */
 case class TestWritable(var str: String, var int: Int, var double: Double) extends Writable {
   def this() = this("", 0, 0.0)
 
@@ -21,23 +28,38 @@ case class TestWritable(var str: String, var int: Int, var double: Double) exten
   }
 }
 
+/**
+ * Main method to generate SequenceFile test data and write to the python 'test_support' directory.
+ * Be sure to set the SPARK_HOME environment variable appropriately
+ */
 object WriteInputFormatTestDataGenerator extends App {
   import SparkContext._
 
   val sc = new SparkContext("local[2]", "test")
 
   val sparkHome = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.home")).get
-  val textPath = s"$sparkHome/python/test_support/data/sftext/"
-  val intPath = s"$sparkHome/python/test_support/data/sfint/"
-  val doublePath = s"$sparkHome/python/test_support/data/sfdouble/"
-  val arrPath = s"$sparkHome/python/test_support/data/sfarray/"
-  val classPath = s"$sparkHome/python/test_support/data/sfclass/"
+  val basePath = s"$sparkHome/python/test_support/data/"
+  val textPath = s"$basePath/sftext/"
+  val intPath = s"$basePath/sfint/"
+  val doublePath = s"$basePath/sfdouble/"
+  val arrPath = s"$basePath/sfarray/"
+  val mapPath = s"$basePath/sfmap/"
+  val classPath = s"$basePath/sfclass/"
+  val bytesPath = s"$basePath/sfbytes/"
+  val boolPath = s"$basePath/sfbool"
+  val nullPath = s"$basePath/sfnull"
 
-  val intKeys = Seq((1.0, "aa"), (2.0, "bb"), (2.0, "aa"), (3.0, "cc"), (2.0, "bb"), (1.0, "aa"))
+  // Create test data for IntWritable, DoubleWritable, Text, BytesWritable, BooleanWritable and NullWritable
+  val intKeys = Seq((1, "aa"), (2, "bb"), (2, "aa"), (3, "cc"), (2, "bb"), (1, "aa"))
   sc.parallelize(intKeys).saveAsSequenceFile(intPath)
   sc.parallelize(intKeys.map{ case (k, v) => (k.toDouble, v) }).saveAsSequenceFile(doublePath)
   sc.parallelize(intKeys.map{ case (k, v) => (k.toString, v) }).saveAsSequenceFile(textPath)
+  sc.parallelize(intKeys.map{ case (k, v) => (k, v.getBytes) }).saveAsSequenceFile(bytesPath)
+  val bools = Seq((1, true), (2, true), (2, false), (3, true), (2, false), (1, false))
+  sc.parallelize(bools).saveAsSequenceFile(boolPath)
+  sc.parallelize(intKeys).map{ case (k, v) => (new IntWritable(k), NullWritable.get()) }.saveAsSequenceFile(nullPath)
 
+  // Create test data for ArrayWritable
   val data = Seq(
     (1, Array(1.0, 2.0, 3.0)),
     (2, Array(3.0, 4.0, 5.0)),
@@ -49,6 +71,24 @@ object WriteInputFormatTestDataGenerator extends App {
     }
     .saveAsNewAPIHadoopFile[org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat[IntWritable, ArrayWritable]](arrPath)
 
+  // Create test data for MapWritable, with keys DoubleWritable and values Text
+  val mapData = Seq(
+    (1, Map(2.0 -> "aa")),
+    (2, Map(3.0 -> "bb")),
+    (2, Map(1.0 -> "cc")),
+    (3, Map(2.0 -> "dd")),
+    (2, Map(1.0 -> "aa")),
+    (1, Map(3.0 -> "bb"))
+  )
+  sc.parallelize(mapData, numSlices = 2).map{ case (i, m) =>
+    val mw = new MapWritable()
+    val k = m.keys.head
+    val v = m.values.head
+    mw.put(new DoubleWritable(k), new Text(v))
+    (new IntWritable(i), mw)
+  }.saveAsSequenceFile(mapPath)
+
+  // Create test data for arbitrary custom writable TestWritable
   val testClass = Seq(
     ("1", TestWritable("test1", 123, 54.0)),
     ("2", TestWritable("test2", 456, 8762.3)),
