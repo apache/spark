@@ -31,6 +31,7 @@ FWDIR="$(cd `dirname $0`/..; pwd)"
 export SPARK_HOME="$FWDIR"
 
 . $FWDIR/bin/load-spark-env.sh
+. $FWDIR/bin/sh-funcs.sh
 
 if [ -z "$1" ]; then
   echo "Usage: run-example <example-class> [<args>]" >&2
@@ -42,22 +43,9 @@ fi
 EXAMPLES_DIR="$FWDIR"/examples
 if [[ -z $SPARK_EXAMPLES_JAR ]]; then
   jars_pat="$EXAMPLES_DIR/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar"
-  SPARK_EXAMPLES_JAR=( $jars_pat )
-  num_jars=${#SPARK_EXAMPLES_JAR[@]}
-
-  if (( $num_jars == 0 )); then
-    echo "Failed to find Spark examples assembly matching $jars_pat" >&2
-    echo "You need to build Spark with sbt/sbt assembly before running this program" >&2
-    exit 1
-  fi
-
-  if (( $num_jars > 1 )); then
-    echo -e "Found multiple jars matching $jars_pat" >&2
-    echo "Please remove all but one, or set SPARK_EXAMPLES_JAR explicitly." >&2
-    exit 1
-  fi
-
-  export SPARK_EXAMPLES_JAR=$SPARK_EXAMPLES_JAR[0]
+  errmsg="You need to build Spark with sbt/sbt assembly before running this program"
+  need_one_glob "$jars_pat" "$errmsg"
+  export SPARK_EXAMPLES_JAR=$_RET
 fi
 
 
