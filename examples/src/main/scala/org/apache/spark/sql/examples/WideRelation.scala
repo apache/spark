@@ -95,7 +95,8 @@ class WideRecord (
     r22: String,
     r23: String,
     r24: String,
-    r25: String) extends Product with Serializable{
+    r25: String) extends Product with Serializable {
+  
   override def productArity : scala.Int = {
     25
   }
