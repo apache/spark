@@ -662,7 +662,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     Extra classpath entries to append to the classpath of executors. This exists primarily
-    for backwards-compatiblity with older versions of Spark. Users typically should not need
+    for backwards-compatibility with older versions of Spark. Users typically should not need
     to set this option.
   </td>
 </tr>

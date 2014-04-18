@@ -305,7 +305,7 @@ trait ClientBase extends Logging {
 
     val amMemory = calculateAMMemory(newApp)
 
-    var JAVA_OPTS = ListBuffer[String]()
+    val JAVA_OPTS = ListBuffer[String]()
 
     // Add Xmx for AM memory
     JAVA_OPTS += "-Xmx" + amMemory + "m"

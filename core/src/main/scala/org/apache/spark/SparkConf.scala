@@ -225,7 +225,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     // Validate spark.executor.extraJavaOptions
     settings.get(executorOptsKey).map { javaOpts =>
       if (javaOpts.contains("-Dspark")) {
-        val msg = s"$executorOptsKey is not allowed to set Spark options. Was '$javaOpts'"
+        val msg = s"$executorOptsKey is not allowed to set Spark options (was '$javaOpts)'. " +
+          "Set them directly on a SparkConf or in a properties file when using ./bin/spark-submit."
         throw new Exception(msg)
       }
       if (javaOpts.contains("-Xmx") || javaOpts.contains("-Xms")) {
@@ -245,7 +246,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
           |Please instead use:
           | - ./spark-submit with conf/spark-defaults.conf to set properties for an application
           | - ./spark-submit with --driver-java-options to set -X options for a driver
-          | - spark.executor.executor.extraJavaOptions to set -X options for executors
+          | - spark.executor.extraJavaOptions to set -X options for executors
           | - SPARK_DAEMON_OPTS to set java options for standalone daemons (i.e. master, worker)
         """.stripMargin
       logError(error)
@@ -268,7 +269,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
           |
           |Please instead use:
           | - ./spark-submit with --driver-class-path to augment the driver classpath
-          | - spark.executor.executor.extraClassPath to augment the executor classpath
+          | - spark.executor.extraClassPath to augment the executor classpath
         """.stripMargin
       logError(error)
 

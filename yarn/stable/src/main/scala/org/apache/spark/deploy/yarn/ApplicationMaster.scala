@@ -43,7 +43,7 @@ import org.apache.spark.util.Utils
 
 
 /**
- * An application master that runs the users driver program and allocates executors.
+ * An application master that runs the user's driver program and allocates executors.
  */
 class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
                         sparkConf: SparkConf) extends Logging {

@@ -17,17 +17,15 @@
 
 package org.apache.spark.deploy
 
-import java.io.{IOException, FileInputStream, PrintStream, File}
+import java.io.{File, FileInputStream, IOException, PrintStream}
 import java.net.URL
 import java.util.Properties
 
-import org.apache.spark.executor.ExecutorURLClassLoader
-
 import scala.collection.JavaConversions._
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.Map
+import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+
 import org.apache.spark.SparkException
+import org.apache.spark.executor.ExecutorURLClassLoader
 
 /**
  * Scala code behind the spark-submit script.  The script handles setting up the classpath with
@@ -114,7 +112,7 @@ object SparkSubmit {
 
     // Load system properties by default from the file, if present
     if (appArgs.verbose) printStream.println(s"Using properties file: ${appArgs.propertiesFile}")
-    Option(appArgs.propertiesFile).map { filename =>
+    Option(appArgs.propertiesFile).foreach { filename =>
       val file = new File(filename)
       getDefaultProperties(file).foreach { case (k, v) =>
         if (k.startsWith("spark")) {
@@ -142,14 +140,12 @@ object SparkSubmit {
 
     val options = List[OptionAssigner](
       new OptionAssigner(appArgs.master, ALL_CLUSTER_MGRS, false, sysProp = "spark.master"),
-
       new OptionAssigner(appArgs.driverExtraClassPath, STANDALONE | YARN, true,
         sysProp = "spark.driver.extraClassPath"),
       new OptionAssigner(appArgs.driverExtraJavaOptions, STANDALONE | YARN, true,
-        sysProp = "spark.driver.extraJavaOpts"),
+        sysProp = "spark.driver.extraJavaOptions"),
       new OptionAssigner(appArgs.driverExtraLibraryPath, STANDALONE | YARN, true,
         sysProp = "spark.driver.extraLibraryPath"),
-
       new OptionAssigner(appArgs.driverMemory, YARN, true, clOption = "--driver-memory"),
       new OptionAssigner(appArgs.name, YARN, true, clOption = "--name"),
       new OptionAssigner(appArgs.queue, YARN, true, clOption = "--queue"),
