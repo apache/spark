@@ -26,8 +26,8 @@ import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
 import akka.actor._
-import akka.actor.SupervisorStrategy.Stop
 import akka.actor.OneForOneStrategy
+import akka.actor.SupervisorStrategy.Stop
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
@@ -112,8 +112,6 @@ class DAGScheduler(
   // TODO: Garbage collect information about failure epochs when we know there are no more
   //       stray messages to detect.
   private val failedEpoch = new HashMap[String, Long]
-
-  taskScheduler.setDAGScheduler(this)
 
   private val dagSchedulerActorSupervisor =
     env.actorSystem.actorOf(Props(new DAGSchedulerActorSupervisor(this)))
@@ -826,8 +824,7 @@ class DAGScheduler(
    * Optionally the epoch during which the failure was caught can be passed to avoid allowing
    * stray fetch failures from possibly retriggering the detection of a node as lost.
    */
-  private[scheduler] def handleExecutorLost(execId: String,
-                                                                maybeEpoch: Option[Long] = None) {
+  private[scheduler] def handleExecutorLost(execId: String, maybeEpoch: Option[Long] = None) {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
       failedEpoch(execId) = currentEpoch
@@ -1028,7 +1025,7 @@ private[scheduler] class DAGSchedulerActorSupervisor(dagScheduler: DAGScheduler)
 
   def receive = {
     case p: Props => sender ! context.actorOf(p)
-    case _ =>
+    case _ => logWarning("recevied unknown message in DAGSchedulerActorSupervisor")
   }
 
   dagScheduler.eventProcessActor = context.actorOf(
@@ -1061,9 +1058,9 @@ private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGSchedule
       }
       val job = new ActiveJob(jobId, finalStage, func, partitions, callSite, listener, properties)
       dagScheduler.clearCacheLocs()
-      logInfo("Got job " + job.jobId + " (" + callSite + ") with " + partitions.length +
-        " output partitions (allowLocal=" + allowLocal + ")")
-      logInfo("Final stage: " + finalStage + " (" + finalStage.name + ")")
+      logInfo("Got job %s (%s) with %d output partitions (allowLocal=%s)".
+        format(job.jobId, callSite, partitions.length, allowLocal))
+      logInfo("Final stage: %s (%s)".format(finalStage, finalStage.name))
       logInfo("Parents of final stage: " + finalStage.parents)
       logInfo("Missing parents: " + dagScheduler.getMissingParentStages(finalStage))
       if (allowLocal && finalStage.parents.size == 0 && partitions.length == 1) {

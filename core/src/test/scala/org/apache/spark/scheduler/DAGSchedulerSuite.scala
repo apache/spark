@@ -20,10 +20,9 @@ package org.apache.spark.scheduler
 import scala.Tuple2
 import scala.collection.mutable.{HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
-import scala.collection.mutable.{HashMap, Map, HashSet}
 
 import akka.actor._
-import akka.testkit.{TestKit, ImplicitSender, TestActorRef}
+import akka.testkit.{ImplicitSender, TestKit, TestActorRef}
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.matchers.MustMatchers
 
@@ -39,9 +38,8 @@ class BuggyDAGEventProcessActor extends Actor {
   }
 }
 
-class DAGSchedulerSuite
-  extends TestKit(ActorSystem("DAGSchedulerSuite")) with FunSuite with MustMatchers
-  with ImplicitSender with BeforeAndAfter with LocalSparkContext {
+class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with FunSuite
+  with MustMatchers with ImplicitSender with BeforeAndAfter with LocalSparkContext {
 
   val conf = new SparkConf
   /** Set of TaskSets the DAGScheduler has requested executed. */
