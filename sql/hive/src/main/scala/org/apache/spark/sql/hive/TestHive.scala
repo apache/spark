@@ -99,7 +99,12 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
 
-  val inRepoTests = new File("src/test/resources/")
+  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql/hive")) {
+    new File("src/test/resources/")
+  } else {
+    new File("sql/hive/src/test/resources")
+  }
+
   def getHiveFile(path: String): File = {
     val stripped = path.replaceAll("""\.\.\/""", "")
     hiveDevHome
@@ -261,8 +266,9 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
         testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
       createCmds.foreach(_())
 
-      if (cacheTables)
+      if (cacheTables) {
         cacheTable(name)
+      }
     }
   }
 

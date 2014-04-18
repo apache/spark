@@ -158,7 +158,7 @@ private[spark] class WholeTextFileRDD(
     keyClass: Class[String],
     valueClass: Class[String],
     @transient conf: Configuration,
-    minSplits: Int)
+    minPartitions: Int)
   extends NewHadoopRDD[String, String](sc, inputFormatClass, keyClass, valueClass, conf) {
 
   override def getPartitions: Array[Partition] = {
@@ -169,7 +169,7 @@ private[spark] class WholeTextFileRDD(
       case _ =>
     }
     val jobContext = newJobContext(conf, jobId)
-    inputFormat.setMaxSplitSize(jobContext, minSplits)
+    inputFormat.setMaxSplitSize(jobContext, minPartitions)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[Partition](rawSplits.size)
     for (i <- 0 until rawSplits.size) {

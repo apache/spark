@@ -17,10 +17,11 @@
 
 package org.apache.spark.examples
 
-import org.apache.spark._
-import SparkContext._
 import scala.util.Random
 import scala.collection.mutable
+
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
 
 /**
  * Transitive closure on a graph.

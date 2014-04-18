@@ -17,9 +17,10 @@
 
 package org.apache.spark.examples
 
+import java.util.Random
+
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
-import java.util.Random
 
 object SimpleSkewedGroupByTest {
   def main(args: Array[String]) {
