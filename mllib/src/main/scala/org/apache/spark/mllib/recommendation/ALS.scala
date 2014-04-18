@@ -304,9 +304,11 @@ class ALS private (
 
   /**
    * Wrap a double array in a DoubleMatrix without creating garbage.
+   * This is a temporary fix for jblas 1.2.3; it should be safe to move back to the
+   * DoubleMatrix(double[]) constructor come jblas 1.2.4.
    */
   private def wrapDoubleArray(v: Array[Double]): DoubleMatrix = {
-    new DoubleMatrix(v.length, 1, v:_*)
+    new DoubleMatrix(v.length, 1, v: _*)
   }
 
   /**
