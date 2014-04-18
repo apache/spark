@@ -122,10 +122,10 @@ fi
 # TODO: this also needs to become an assembly!
 TOOLS_DIR="$FWDIR"/tools
 one_glob "$TOOLS_DIR/target/spark-tools*[0-9Tg].jar"
-SPARK_TOOLS_JAR=$_RET
-if [ -z $SPARK_TOOLS_JAR ]; then
+SPARK_TOOLS_JAR="$_RET"
+if [[ -z $SPARK_TOOLS_JAR ]]; then
   one_glob "$TOOLS_DIR/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar"
-  SPARK_TOOLS_JAR=$_RET
+  SPARK_TOOLS_JAR="$_RET"
 fi
 export SPARK_TOOLS_JAR
 
