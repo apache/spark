@@ -17,11 +17,16 @@
 
 package org.apache.spark.mllib.util
 
+import scala.reflect.ClassTag
+
 import breeze.linalg.{Vector => BV, SparseVector => BSV, squaredDistance => breezeSquaredDistance}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.PartitionwiseSampledRDD
+import org.apache.spark.SparkContext._
+import org.apache.spark.util.random.BernoulliSampler
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
 
@@ -155,6 +160,22 @@ object MLUtils {
   def saveLabeledData(data: RDD[LabeledPoint], dir: String) {
     val dataStr = data.map(x => x.label + "," + x.features.toArray.mkString(" "))
     dataStr.saveAsTextFile(dir)
+  }
+
+  /**
+   * Return a k element array of pairs of RDDs with the first element of each pair
+   * containing the training data, a complement of the validation data and the second
+   * element, the validation data, containing a unique 1/kth of the data. Where k=numFolds.
+   */
+  def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Int): Array[(RDD[T], RDD[T])] = {
+    val numFoldsF = numFolds.toFloat
+    (1 to numFolds).map { fold =>
+      val sampler = new BernoulliSampler[T]((fold - 1) / numFoldsF, fold / numFoldsF,
+        complement = false)
+      val validation = new PartitionwiseSampledRDD(rdd, sampler, seed)
+      val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), seed)
+      (training, validation)
+    }.toArray
   }
 
   /**

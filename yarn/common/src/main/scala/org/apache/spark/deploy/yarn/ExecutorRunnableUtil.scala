@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.File
 import java.net.URI
 
 import scala.collection.JavaConversions._
@@ -43,7 +44,7 @@ trait ExecutorRunnableUtil extends Logging {
       hostname: String,
       executorMemory: Int,
       executorCores: Int,
-      userSpecifiedLogFile: Boolean) = {
+      localResources: HashMap[String, LocalResource]) = {
     // Extra options for the JVM
     var JAVA_OPTS = ""
     // Set the JVM memory
@@ -57,10 +58,7 @@ trait ExecutorRunnableUtil extends Logging {
 
     JAVA_OPTS += " -Djava.io.tmpdir=" +
       new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR) + " "
-
-    if (!userSpecifiedLogFile) {
-      JAVA_OPTS += " " + YarnSparkHadoopUtil.getLoggingArgsForContainerCommandLine()
-    }
+    JAVA_OPTS += ClientBase.getLog4jConfiguration(localResources)
 
     // Commenting it out for now - so that people can refer to the properties if required. Remove
     // it once cpuset version is pushed out.
@@ -113,7 +111,7 @@ trait ExecutorRunnableUtil extends Logging {
       rtype: LocalResourceType,
       localResources: HashMap[String, LocalResource],
       timestamp: String,
-      size: String, 
+      size: String,
       vis: String) = {
     val uri = new URI(file)
     val amJarRsrc = Records.newRecord(classOf[LocalResource]).asInstanceOf[LocalResource]
@@ -146,7 +144,7 @@ trait ExecutorRunnableUtil extends Logging {
       val distArchives = System.getenv("SPARK_YARN_CACHE_ARCHIVES").split(',')
       val visibilities = System.getenv("SPARK_YARN_CACHE_ARCHIVES_VISIBILITIES").split(',')
       for( i <- 0 to distArchives.length - 1) {
-        setupDistributedCache(distArchives(i), LocalResourceType.ARCHIVE, localResources, 
+        setupDistributedCache(distArchives(i), LocalResourceType.ARCHIVE, localResources,
           timeStamps(i), fileSizes(i), visibilities(i))
       }
     }
@@ -159,11 +157,15 @@ trait ExecutorRunnableUtil extends Logging {
     val env = new HashMap[String, String]()
 
     val extraCp = sparkConf.getOption("spark.executor.extraClassPath")
-    ClientBase.populateClasspath(yarnConf, sparkConf,
-      System.getenv("SPARK_YARN_LOG4J_PATH") != null, env, extraCp)
+    val log4jConf = System.getenv(ClientBase.LOG4J_CONF_ENV_KEY)
+    ClientBase.populateClasspath(yarnConf, sparkConf, log4jConf, env, extraCp)
+    if (log4jConf != null) {
+      env(ClientBase.LOG4J_CONF_ENV_KEY) = log4jConf
+    }
 
     // Allow users to specify some environment variables
-    Apps.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"))
+    YarnSparkHadoopUtil.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"),
+      File.pathSeparator)
 
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k,v) => env(k) = v }
     env

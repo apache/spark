@@ -229,8 +229,8 @@ private[yarn] class YarnAllocationHandler(
         val executorHostname = container.getNodeId.getHost
         val containerId = container.getId
 
-        assert(
-          container.getResource.getMemory >= (executorMemory + YarnAllocationHandler.MEMORY_OVERHEAD))
+        assert( container.getResource.getMemory >=
+          (executorMemory + YarnAllocationHandler.MEMORY_OVERHEAD))
 
         if (numExecutorsRunningNow > maxExecutors) {
           logInfo("""Ignoring container %s at host %s, since we already have the required number of
@@ -397,9 +397,10 @@ private[yarn] class YarnAllocationHandler(
 
       // default.
     if (numExecutors <= 0 || preferredHostToCount.isEmpty) {
-      logDebug("numExecutors: " + numExecutors + ", host preferences: " + preferredHostToCount.isEmpty)
-      resourceRequests = List(
-        createResourceRequest(AllocationType.ANY, null, numExecutors, YarnAllocationHandler.PRIORITY))
+      logDebug("numExecutors: " + numExecutors + ", host preferences: " +
+        preferredHostToCount.isEmpty)
+      resourceRequests = List(createResourceRequest(
+        AllocationType.ANY, null, numExecutors, YarnAllocationHandler.PRIORITY))
     }
     else {
       // request for all hosts in preferred nodes and for numExecutors - 

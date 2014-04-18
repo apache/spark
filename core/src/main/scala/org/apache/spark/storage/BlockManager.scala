@@ -658,10 +658,9 @@ private[spark] class BlockManager(
               memoryStore.putValues(blockId, iterator, level, true)
             case ArrayBufferValues(array) =>
               memoryStore.putValues(blockId, array, level, true)
-            case ByteBufferValues(bytes) => {
+            case ByteBufferValues(bytes) =>
               bytes.rewind()
               memoryStore.putBytes(blockId, bytes, level)
-            }
           }
           size = res.size
           res.data match {
@@ -677,10 +676,9 @@ private[spark] class BlockManager(
               tachyonStore.putValues(blockId, iterator, level, false)
             case ArrayBufferValues(array) =>
               tachyonStore.putValues(blockId, array, level, false)
-            case ByteBufferValues(bytes) => {
-              bytes.rewind();
+            case ByteBufferValues(bytes) => 
+              bytes.rewind()
               tachyonStore.putBytes(blockId, bytes, level)
-            }
           }
           size = res.size
           res.data match {
@@ -697,10 +695,9 @@ private[spark] class BlockManager(
               diskStore.putValues(blockId, iterator, level, askForBytes)
             case ArrayBufferValues(array) =>
               diskStore.putValues(blockId, array, level, askForBytes)
-            case ByteBufferValues(bytes) => {
+            case ByteBufferValues(bytes) => 
               bytes.rewind()
               diskStore.putBytes(blockId, bytes, level)
-            }
           }
           size = res.size
           res.data match {
