@@ -43,7 +43,7 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
     val executingThread = new Thread() {
       override def run() {
         executor.start()
-        executor.awaitStop()
+        executor.awaitTermination()
       }
     }
 

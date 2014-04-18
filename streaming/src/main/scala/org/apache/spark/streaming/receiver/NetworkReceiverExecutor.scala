@@ -36,7 +36,6 @@ private[streaming] abstract class NetworkReceiverExecutor(
     conf: SparkConf
   ) extends Logging {
 
-
   /** Enumeration to identify current state of the StreamingContext */
   object NetworkReceiverState extends Enumeration {
     type CheckpointState = Value
@@ -48,41 +47,38 @@ private[streaming] abstract class NetworkReceiverExecutor(
   receiver.attachExecutor(this)
 
   /** Receiver id */
-  protected val receiverId = receiver.receiverId
-
-  /** Message associated with the stopping of the receiver */
-  protected var stopMessage = ""
-
-  /** Exception associated with the stopping of the receiver */
-  protected var stopException: Throwable = null
+  protected val streamId = receiver.streamId
 
   /** Has the receiver been marked for stop. */
   private val stopLatch = new CountDownLatch(1)
 
-  /** Time between a receiver is stopped */
-  private val restartDelay = conf.getInt("spark.streaming.receiverRestartDelay", 2000)
+  /** Time between a receiver is stopped and started again */
+  private val defaultRestartDelay = conf.getInt("spark.streaming.receiverRestartDelay", 2000)
+
+  /** Exception associated with the stopping of the receiver */
+  @volatile protected var stoppingError: Throwable = null
 
   /** State of the receiver */
-  private[streaming] var receiverState = Initialized
+  @volatile private[streaming] var receiverState = Initialized
 
   /** Push a single data item to backend data store. */
   def pushSingle(data: Any)
 
-  /** Push a byte buffer to backend data store. */
+  /** Store the bytes of received data as a data block into Spark's memory. */
   def pushBytes(
       bytes: ByteBuffer,
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
     )
 
-  /** Push an iterator of objects as a block to backend data store. */
+  /** Store a iterator of received data as a data block into Spark's memory. */
   def pushIterator(
       iterator: Iterator[_],
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
     )
 
-  /** Push an ArrayBuffer of object as a block to back data store. */
+  /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
   def pushArrayBuffer(
       arrayBuffer: ArrayBuffer[_],
       optionalMetadata: Option[Any],
@@ -97,57 +93,46 @@ private[streaming] abstract class NetworkReceiverExecutor(
     startReceiver()
   }
 
-  /**
-   * Mark the executor and the receiver for stopping
-   */
-  def stop(message: String, exception: Throwable = null) {
-    stopMessage = message
-    stopException = exception
-    stopReceiver()
+  /** Mark the executor and the receiver for stopping */
+  def stop(message: String, error: Option[Throwable]) {
+    stoppingError = error.orNull
+    stopReceiver(message, error)
     stopLatch.countDown()
-    if (exception != null) {
-      logError("Stopped executor: " + message, exception)
-    } else {
-      logWarning("Stopped executor: " + message)
-    }
   }
 
   /** Start receiver */
   def startReceiver(): Unit = synchronized {
     try {
       logInfo("Starting receiver")
-      stopMessage = ""
-      stopException = null
       onReceiverStart()
       receiverState = Started
     } catch {
       case t: Throwable =>
-        stop("Error starting receiver " + receiverId, t)
+        stop("Error starting receiver " + streamId, Some(t))
     }
   }
 
   /** Stop receiver */
-  def stopReceiver(): Unit = synchronized {
+  def stopReceiver(message: String, error: Option[Throwable]): Unit = synchronized {
     try {
       receiverState = Stopped
-      onReceiverStop()
+      onReceiverStop(message, error)
     } catch {
       case t: Throwable =>
-        stop("Error stopping receiver " + receiverId, t)
+        stop("Error stopping receiver " + streamId, Some(t))
     }
   }
 
   /** Restart receiver with delay */
-  def restartReceiver(message: String, throwable: Throwable = null) {
-    val defaultRestartDelay = conf.getInt("spark.streaming.receiverRestartDelay", 2000)
-    restartReceiver(message, throwable, defaultRestartDelay)
+  def restartReceiver(message: String, error: Option[Throwable] = None) {
+    restartReceiver(message, error, defaultRestartDelay)
   }
 
   /** Restart receiver with delay */
-  def restartReceiver(message: String, exception: Throwable, delay: Int) {
-    logWarning("Restarting receiver with delay " + delay + " ms: " + message, exception)
-    reportError(message, exception)
-    stopReceiver()
+  def restartReceiver(message: String, error: Option[Throwable], delay: Int) {
+    logWarning("Restarting receiver with delay " + delay + " ms: " + message,
+      error.getOrElse(null))
+    stopReceiver("Restarting receiver with delay " + delay + "ms: " + message, error)
     future {
       logDebug("Sleeping for " + delay)
       Thread.sleep(delay)
@@ -166,7 +151,7 @@ private[streaming] abstract class NetworkReceiverExecutor(
   }
 
   /** Called when the receiver needs to be stopped */
-  protected def onReceiverStop(): Unit = synchronized {
+  protected def onReceiverStop(message: String, error: Option[Throwable]): Unit = synchronized {
     // Call user-defined onStop()
     logInfo("Calling receiver onStop")
     receiver.onStop()
@@ -174,17 +159,22 @@ private[streaming] abstract class NetworkReceiverExecutor(
   }
 
   /** Check if receiver has been marked for stopping */
-  def isReceiverStarted() = synchronized {
+  def isReceiverStarted() = {
     logDebug("state = " + receiverState)
     receiverState == Started
   }
 
   /** Wait the thread until the executor is stopped */
-  def awaitStop() {
+  def awaitTermination() {
     stopLatch.await()
     logInfo("Waiting for executor stop is over")
-    if (stopException != null) {
-      throw new Exception(stopMessage, stopException)
+    if (stoppingError != null) {
+      logError("Stopped executor with error: " + stoppingError)
+    } else {
+      logWarning("Stopped executor without error")
+    }
+    if (stoppingError != null) {
+      throw stoppingError
     }
   }
 }

@@ -20,6 +20,7 @@ package org.apache.spark.streaming.receiver
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConversions._
 
 import org.apache.spark.storage.StorageLevel
 
@@ -30,23 +31,25 @@ import org.apache.spark.storage.StorageLevel
  * and onStop() should define the cleanup steps necessary to stop receiving data. A custom
  * receiver would look something like this.
  *
- * class MyReceiver(storageLevel) extends NetworkReceiver[String](storageLevel) {
- *   def onStart() {
- *     // Setup stuff (start threads, open sockets, etc.) to start receiving data.
- *     // Must start new thread to receive data, as onStart() must be non-blocking.
+ * @example {{{
+ *  class MyReceiver(storageLevel: StorageLevel) extends NetworkReceiver[String](storageLevel) {
+ *    def onStart() {
+ *      // Setup stuff (start threads, open sockets, etc.) to start receiving data.
+ *      // Must start new thread to receive data, as onStart() must be non-blocking.
  *
- *     // Call store(...) in those threads to store received data into Spark's memory.
+ *      // Call store(...) in those threads to store received data into Spark's memory.
  *
- *     // Call stop(...), restart() or reportError(...) on any thread based on how
- *     // different errors should be handled.
+ *      // Call stop(...), restart() or reportError(...) on any thread based on how
+ *      // different errors should be handled.
  *
- *     // See corresponding method documentation for more details.
- *   }
+ *      // See corresponding method documentation for more details
+ *    }
  *
- *   def onStop() {
- *     // Cleanup stuff (stop threads, close sockets, etc.) to stop receiving data.
- *   }
- * }
+ *    def onStop() {
+ *      // Cleanup stuff (stop threads, close sockets, etc.) to stop receiving data.
+ *    }
+ *  }
+ * }}}
  */
 abstract class NetworkReceiver[T](val storageLevel: StorageLevel) extends Serializable {
 
@@ -80,26 +83,41 @@ abstract class NetworkReceiver[T](val storageLevel: StorageLevel) extends Serial
     executor.pushSingle(dataItem)
   }
 
-  /** Store a sequence of received data into Spark's memory. */
+  /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
   def store(dataBuffer: ArrayBuffer[T]) {
     executor.pushArrayBuffer(dataBuffer, None, None)
   }
 
   /**
-   * Store a sequence of received data into Spark's memory.
+   * Store an ArrayBuffer of received data as a data block into Spark's memory.
    * The metadata will be associated with this block of data
    * for being used in the corresponding InputDStream.
    */
   def store(dataBuffer: ArrayBuffer[T], metadata: Any) {
     executor.pushArrayBuffer(dataBuffer, Some(metadata), None)
   }
-  /** Store a sequence of received data into Spark's memory. */
+
+  /** Store a iterator of received data as a data block into Spark's memory. */
   def store(dataIterator: Iterator[T]) {
     executor.pushIterator(dataIterator, None, None)
   }
 
   /**
-   * Store a sequence of received data into Spark's memory.
+   * Store a iterator of received data as a data block into Spark's memory.
+   * The metadata will be associated with this block of data
+   * for being used in the corresponding InputDStream.
+   */
+  def store(dataIterator: java.util.Iterator[T], metadata: Any) {
+    executor.pushIterator(dataIterator, Some(metadata), None)
+  }
+
+  /** Store a iterator of received data as a data block into Spark's memory. */
+  def store(dataIterator: java.util.Iterator[T]) {
+    executor.pushIterator(dataIterator, None, None)
+  }
+
+  /**
+   * Store a iterator of received data as a data block into Spark's memory.
    * The metadata will be associated with this block of data
    * for being used in the corresponding InputDStream.
    */
@@ -107,16 +125,16 @@ abstract class NetworkReceiver[T](val storageLevel: StorageLevel) extends Serial
     executor.pushIterator(dataIterator, Some(metadata), None)
   }
 
-  /** Store the bytes of received data into Spark's memory. */
+  /** Store the bytes of received data as a data block into Spark's memory. */
   def store(bytes: ByteBuffer) {
     executor.pushBytes(bytes, None, None)
   }
 
-  /** Store the bytes of received data into Spark's memory.
+  /** Store the bytes of received data as a data block into Spark's memory.
    * The metadata will be associated with this block of data
    * for being used in the corresponding InputDStream.
    */
-  def store(bytes: ByteBuffer, metadata: Any = null) {
+  def store(bytes: ByteBuffer, metadata: Any) {
     executor.pushBytes(bytes, Some(metadata), None)
   }
 
@@ -143,26 +161,26 @@ abstract class NetworkReceiver[T](val storageLevel: StorageLevel) extends Serial
    * The delay is defined by the Spark configuration
    * `spark.streaming.receiverRestartDelay`.
    */
-  def restart(message: String, exception: Throwable) {
-    executor.restartReceiver(message, exception)
+  def restart(message: String, error: Throwable) {
+    executor.restartReceiver(message, Some(error))
   }
 
   /**
    * Restart the receiver. This will call `onStop()` immediately and return.
    * Asynchronously, after the given delay, `onStart()` will be called.
    */
-  def restart(message: String, throwable: Throwable, millisecond: Int) {
-    executor.restartReceiver(message, throwable, millisecond)
+  def restart(message: String, error: Throwable, millisecond: Int) {
+    executor.restartReceiver(message, Some(error), millisecond)
   }
 
   /** Stop the receiver completely. */
   def stop(message: String) {
-    executor.stop(message)
+    executor.stop(message, None)
   }
 
   /** Stop the receiver completely due to an exception */
-  def stop(message: String, exception: Throwable) {
-    executor.stop(message, exception)
+  def stop(message: String, error: Throwable) {
+    executor.stop(message, Some(error))
   }
 
   def isStarted(): Boolean = {
@@ -175,7 +193,7 @@ abstract class NetworkReceiver[T](val storageLevel: StorageLevel) extends Serial
   }
 
   /** Get unique identifier of this receiver. */
-  def receiverId = id
+  def streamId = id
 
   /*
    * =================

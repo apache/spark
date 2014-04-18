@@ -183,7 +183,6 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
       logInfo("==================================\n\n\n")
       ssc = new StreamingContext(sc, Milliseconds(100))
       var runningCount = 0
-      val startTime = System.currentTimeMillis()
       TestReceiver.counter.set(1)
       val input = ssc.networkStream(new TestReceiver)
       input.count.foreachRDD(rdd => {

@@ -53,7 +53,8 @@ private[streaming] case class RegisterReceiver(
   ) extends NetworkInputTrackerMessage
 private[streaming] case class AddBlock(receivedBlockInfo: ReceivedBlockInfo)
   extends NetworkInputTrackerMessage
-private[streaming] case class DeregisterReceiver(streamId: Int, msg: String)
+private[streaming] case class ReportError(streamId: Int, message: String, error: String)
+private[streaming] case class DeregisterReceiver(streamId: Int, msg: String, error: String)
   extends NetworkInputTrackerMessage
 
 /**
@@ -131,13 +132,19 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
     ssc.scheduler.listenerBus.post(StreamingListenerReceiverStarted(
       ReceiverInfo(streamId, typ, host)
     ))
-    logInfo("Registered receiver for network stream " + streamId + " from " + sender.path.address)
+    logInfo("Registered receiver for stream " + streamId + " from " + sender.path.address)
   }
 
   /** Deregister a receiver */
-  def deregisterReceiver(streamId: Int, message: String) {
+  def deregisterReceiver(streamId: Int, message: String, error: String) {
     receiverInfo -= streamId
-    logError("Deregistered receiver for network stream " + streamId + " with message:\n" + message)
+    ssc.scheduler.listenerBus.post(StreamingListenerReceiverStopped(streamId))
+    val messageWithError = if (error != null && !error.isEmpty) {
+      s"$message - $error"
+    } else {
+      s"$message"
+    }
+    logError(s"Deregistered receiver for stream $streamId: $messageWithError")
   }
 
   /** Add new blocks for the given stream */
@@ -145,6 +152,17 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
     getReceivedBlockInfoQueue(receivedBlockInfo.streamId) += receivedBlockInfo
     logDebug("Stream " + receivedBlockInfo.streamId + " received new blocks: " +
       receivedBlockInfo.blockId)
+  }
+
+  /** Report error sent by a receiver */
+  def reportError(streamId: Int, message: String, error: String) {
+    ssc.scheduler.listenerBus.post(StreamingListenerReceiverError(streamId, message, error))
+    val messageWithError = if (error != null && !error.isEmpty) {
+      s"$message - $error"
+    } else {
+      s"$message"
+    }
+    logWarning(s"Error reported by receiver for stream $streamId: $messageWithError")
   }
 
   /** Check if any blocks are left to be processed */
@@ -160,8 +178,10 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
         sender ! true
       case AddBlock(receivedBlockInfo) =>
         addBlocks(receivedBlockInfo)
-      case DeregisterReceiver(streamId, message) =>
-        deregisterReceiver(streamId, message)
+      case ReportError(streamId, message, error) =>
+        reportError(streamId, message, error)
+      case DeregisterReceiver(streamId, message, error) =>
+        deregisterReceiver(streamId, message, error)
         sender ! true
     }
   }
@@ -233,7 +253,7 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
         val receiver = iterator.next()
         val executor = new NetworkReceiverExecutorImpl(receiver, SparkEnv.get)
         executor.start()
-        executor.awaitStop()
+        executor.awaitTermination()
       }
       // Run the dummy Spark job to ensure that all slaves have registered.
       // This avoids all the receivers to be scheduled on the same node.

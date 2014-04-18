@@ -28,6 +28,10 @@ case class StreamingListenerBatchCompleted(batchInfo: BatchInfo) extends Streami
 case class StreamingListenerBatchStarted(batchInfo: BatchInfo) extends StreamingListenerEvent
 case class StreamingListenerReceiverStarted(receiverInfo: ReceiverInfo)
   extends StreamingListenerEvent
+case class StreamingListenerReceiverStopped(streamId: Int)
+  extends StreamingListenerEvent
+case class StreamingListenerReceiverError(streamId: Int, message: String, error: String)
+  extends StreamingListenerEvent
 
 /** An event used in the listener to shutdown the listener daemon thread. */
 private[scheduler] case object StreamingListenerShutdown extends StreamingListenerEvent
@@ -40,6 +44,12 @@ trait StreamingListener {
 
   /** Called when a receiver has been started */
   def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) { }
+
+  /** Called when a receiver has been stopped */
+  def onReceiverStopped(receiverStopped: StreamingListenerReceiverStarted) { }
+
+  /** Called when a receiver has reported an error */
+  def onReceiverError(receiverError: StreamingListenerReceiverError) { }
 
   /** Called when a batch of jobs has been submitted for processing. */
   def onBatchSubmitted(batchSubmitted: StreamingListenerBatchSubmitted) { }

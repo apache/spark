@@ -120,7 +120,7 @@ private[streaming] class ActorReceiver[T: ClassTag](
   ) extends NetworkReceiver[T](storageLevel) with Logging {
 
   protected lazy val supervisor = SparkEnv.get.actorSystem.actorOf(Props(new Supervisor),
-    "Supervisor" + receiverId)
+    "Supervisor" + streamId)
 
   class Supervisor extends Actor {
 

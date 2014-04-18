@@ -35,6 +35,7 @@ import org.apache.spark.streaming.scheduler.DeregisterReceiver
 import org.apache.spark.streaming.scheduler.AddBlock
 import scala.Some
 import org.apache.spark.streaming.scheduler.RegisterReceiver
+import com.google.common.base.Throwables
 
 /**
  * Concrete implementation of [[org.apache.spark.streaming.receiver.NetworkReceiverExecutor]]
@@ -66,9 +67,9 @@ private[streaming] class NetworkReceiverExecutorImpl(
   private val actor = env.actorSystem.actorOf(
     Props(new Actor {
       override def preStart() {
-        logInfo("Registered receiver " + receiverId)
+        logInfo("Registered receiver " + streamId)
         val msg = RegisterReceiver(
-          receiverId, receiver.getClass.getSimpleName, Utils.localHostName(), self)
+          streamId, receiver.getClass.getSimpleName, Utils.localHostName(), self)
         val future = trackerActor.ask(msg)(askTimeout)
         Await.result(future, askTimeout)
       }
@@ -76,9 +77,9 @@ private[streaming] class NetworkReceiverExecutorImpl(
       override def receive() = {
         case StopReceiver =>
           logInfo("Received stop signal")
-          stop("Stopped by driver")
+          stop("Stopped by driver", None)
       }
-    }), "NetworkReceiver-" + receiverId + "-" + System.currentTimeMillis())
+    }), "NetworkReceiver-" + streamId + "-" + System.currentTimeMillis())
 
   /** Unique block ids if one wants to add blocks directly */
   private val newBlockId = new AtomicLong(System.currentTimeMillis())
@@ -92,17 +93,14 @@ private[streaming] class NetworkReceiverExecutorImpl(
     def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]) {
       pushArrayBuffer(arrayBuffer, None, Some(blockId))
     }
-  }, receiverId, env.conf)
-
-  /** Exceptions that occurs while receiving data */
-  val exceptions = new ArrayBuffer[Exception] with SynchronizedBuffer[Exception]
+  }, streamId, env.conf)
 
   /** Push a single record of received data into block generator. */
   def pushSingle(data: Any) {
     blockGenerator += (data)
   }
 
-  /** Push a block of received data as an ArrayBuffer into block generator. */
+  /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
   def pushArrayBuffer(
       arrayBuffer: ArrayBuffer[_],
       optionalMetadata: Option[Any],
@@ -116,7 +114,7 @@ private[streaming] class NetworkReceiverExecutorImpl(
     reportPushedBlock(blockId, arrayBuffer.size, optionalMetadata)
   }
 
-  /** Push a block of received data as an iterator into block generator. */
+  /** Store a iterator of received data as a data block into Spark's memory. */
   def pushIterator(
       iterator: Iterator[_],
       optionalMetadata: Option[Any],
@@ -129,7 +127,7 @@ private[streaming] class NetworkReceiverExecutorImpl(
     reportPushedBlock(blockId, -1, optionalMetadata)
   }
 
-  /** Push a block of received data as bytes into the block generator. */
+  /** Store the bytes of received data as a data block into Spark's memory. */
   def pushBytes(
       bytes: ByteBuffer,
       optionalMetadata: Option[Any],
@@ -144,14 +142,16 @@ private[streaming] class NetworkReceiverExecutorImpl(
 
   /** Report pushed block */
   def reportPushedBlock(blockId: StreamBlockId, numRecords: Long, optionalMetadata: Option[Any]) {
-    val blockInfo = ReceivedBlockInfo(receiverId, blockId, numRecords, optionalMetadata.orNull)
+    val blockInfo = ReceivedBlockInfo(streamId, blockId, numRecords, optionalMetadata.orNull)
     trackerActor ! AddBlock(blockInfo)
     logDebug("Reported block " + blockId)
   }
 
-  /** Add exceptions to a list */
-  def reportError(message: String, throwable: Throwable) {
-    exceptions += new Exception(message, throwable)
+  /** Report error to the network input tracker */
+  def reportError(message: String, error: Throwable) {
+    val errorString = Option(error).map(Throwables.getStackTraceAsString).getOrElse("")
+    trackerActor ! ReportError(streamId, message, errorString)
+    logWarning("Reported error " + message + " - " + error)
   }
 
   override def onReceiverStart() {
@@ -159,33 +159,22 @@ private[streaming] class NetworkReceiverExecutorImpl(
     super.onReceiverStart()
   }
 
-  override def onReceiverStop() {
-    super.onReceiverStop()
+  override def onReceiverStop(message: String, error: Option[Throwable]) {
+    super.onReceiverStop(message, error)
     blockGenerator.stop()
-    reportStop()
+    logInfo("Deregistering receiver " + streamId)
+    val errorString = error.map(Throwables.getStackTraceAsString).getOrElse("")
+    val future = trackerActor.ask(
+      DeregisterReceiver(streamId, message, errorString))(askTimeout)
+    Await.result(future, askTimeout)
+    logInfo("Stopped receiver " + streamId)
   }
 
-  /** Report to the NetworkInputTracker that the receiver has stopped */
-  private def reportStop() {
-    val message = if (exceptions.isEmpty) {
-      null
-    } else if (exceptions.size == 1) {
-      val e = exceptions.head
-      "Exception in receiver " + receiverId + ": " + e.getMessage + "\n" + e.getStackTraceString
-    } else {
-      "Multiple exceptions in receiver " + receiverId + "(" + exceptions.size + "):\n"
-      exceptions.zipWithIndex.map {
-        case (e, i) => "Exception " + i + ": " + e.getMessage + "\n" + e.getStackTraceString
-      }.mkString("\n")
-    }
-    logInfo("Deregistering receiver " + receiverId)
-    val future = trackerActor.ask(DeregisterReceiver(receiverId, message))(askTimeout)
-    Await.result(future, askTimeout)
-    logInfo("Deregistered receiver " + receiverId)
+  override def stop(message: String, error: Option[Throwable]) {
+    super.stop(message, error)
     env.actorSystem.stop(actor)
-    logInfo("Stopped receiver " + receiverId)
   }
 
   /** Generate new block ID */
-  private def nextBlockId = StreamBlockId(receiverId, newBlockId.getAndIncrement)
+  private def nextBlockId = StreamBlockId(streamId, newBlockId.getAndIncrement)
 }

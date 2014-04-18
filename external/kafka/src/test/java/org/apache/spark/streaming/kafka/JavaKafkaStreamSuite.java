@@ -35,7 +35,7 @@ public class JavaKafkaStreamSuite extends LocalJavaStreamingContext {
     // tests the API, does not actually test data receiving
     JavaPairNetworkInputDStream<String, String> test1 =
             KafkaUtils.createStream(ssc, "localhost:12345", "group", topics);
-      JavaPairNetworkInputDStream<String, String> test2 = KafkaUtils.createStream(ssc, "localhost:12345", "group", topics,
+    JavaPairNetworkInputDStream<String, String> test2 = KafkaUtils.createStream(ssc, "localhost:12345", "group", topics,
       StorageLevel.MEMORY_AND_DISK_SER_2());
 
     HashMap<String, String> kafkaParams = Maps.newHashMap();

@@ -29,7 +29,7 @@ public class JavaFlumeStreamSuite extends LocalJavaStreamingContext {
   public void testFlumeStream() {
     // tests the API, does not actually test data receiving
     JavaNetworkInputDStream<SparkFlumeEvent> test1 = FlumeUtils.createStream(ssc, "localhost", 12345);
-      JavaNetworkInputDStream<SparkFlumeEvent> test2 = FlumeUtils.createStream(ssc, "localhost", 12345,
+    JavaNetworkInputDStream<SparkFlumeEvent> test2 = FlumeUtils.createStream(ssc, "localhost", 12345,
       StorageLevel.MEMORY_AND_DISK_SER_2());
   }
 }
