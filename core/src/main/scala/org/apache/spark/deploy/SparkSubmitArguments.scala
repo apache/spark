@@ -145,7 +145,7 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
       driverExtraClassPath = value
       parseOpts(tail)
 
-    case ("--driver-java-opts") :: value :: tail =>
+    case ("--driver-java-options") :: value :: tail =>
       driverExtraJavaOptions = value
       parseOpts(tail)
 
@@ -217,8 +217,11 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
         |  --jars JARS                 A comma-separated list of local jars to include on the
         |                              driver classpath and that SparkContext.addJar will work
         |                              with. Doesn't work on standalone with 'cluster' deploy mode.
+        |  --properties-file FILE      Path to a file from which to load extra properties. If not
+        |                              specified, this will look for conf/spark-defaults.properties.
+        |
         |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: 512M).
-        |  --driver-java-opts          Extra Java options to pass to the driver
+        |  --driver-java-options       Extra Java options to pass to the driver
         |  --driver-library-path       Extra library path entries to pass to the driver
         |  --driver-class-path         Extra class path entries to pass to the driver
         |
