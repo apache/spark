@@ -114,7 +114,7 @@ if [ ! -f "$FWDIR/RELEASE" ]; then
   jars_pat="$FWDIR/assembly/target/scala-$SCALA_VERSION/spark-assembly*hadoop*.jar"
   errmsg="You need to build Spark with 'sbt/sbt assembly' before running this program."
   need_one_glob "$jars_pat" "$errmsg"
-  jarfile=$_RET
+  jarfile=$_RET  # We don't seem to actually use this value anywhere
 fi
 
 
