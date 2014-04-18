@@ -309,6 +309,17 @@ class UTF8Deserializer(Serializer):
                 return
 
 
+class MsgpackSerializer(FramedSerializer):
+    """
+    Deserializes streams written by Scala/Java MsgPack
+    """
+    def loads(self, obj):
+        return msgpack.loads(obj, use_list=0)
+
+    def dumps(self, obj):
+        return msgpack.dumps(obj)
+
+
 def read_long(stream):
     length = stream.read(8)
     if length == "":
