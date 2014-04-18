@@ -12,9 +12,7 @@ This README file only contains basic setup instructions.
 
 ## Building Spark
 
-Spark requires Scala 2.10. The project is built using Simple Build Tool (SBT).
-If SBT is installed, Spark will use the system version of sbt; otherwise Spark
-will download it automatically. To build Spark and its example programs, run:
+Spark is built on Scala 2.10. To build Spark and its example programs, run:
 
     ./sbt/sbt assembly
 
