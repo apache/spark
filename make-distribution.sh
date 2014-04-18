@@ -28,6 +28,7 @@
 #      --tgz: Additionally creates spark-$VERSION-bin.tar.gz
 #      --hadoop VERSION: Builds against specified version of Hadoop.
 #      --with-yarn: Enables support for Hadoop YARN.
+#      --with-hive: Enables support for Hive.
 #
 # Recommended deploy/testing procedure (standalone mode):
 # 1) Rsync / deploy the dist/ dir to one host
