@@ -139,110 +139,111 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
     assert(blockGeneratorListener.arrayBuffers.size > 0)
     assert(recordedData.toSet === generatedData.toSet)
   }
-}
 
-/**
- * An implementation of NetworkReceiver that is used for testing a receiver's life cycle.
- */
-class FakeReceiver extends NetworkReceiver[Int](StorageLevel.MEMORY_ONLY) {
-  var otherThread: Thread = null
-  var receiving = false
-  var onStartCalled = false
-  var onStopCalled = false
+  /**
+   * An implementation of NetworkReceiver that is used for testing a receiver's life cycle.
+   */
+  class FakeReceiver extends NetworkReceiver[Int](StorageLevel.MEMORY_ONLY) {
+    var otherThread: Thread = null
+    var receiving = false
+    var onStartCalled = false
+    var onStopCalled = false
 
-  def onStart() {
-    otherThread = new Thread() {
-      override def run() {
-        receiving = true
-        while(!isStopped()) {
-          Thread.sleep(10)
+    def onStart() {
+      otherThread = new Thread() {
+        override def run() {
+          receiving = true
+          while(!isStopped()) {
+            Thread.sleep(10)
+          }
         }
       }
+      onStartCalled = true
+      otherThread.start()
+
     }
-    onStartCalled = true
-    otherThread.start()
 
+    def onStop() {
+      onStopCalled = true
+      otherThread.join()
+    }
+
+    def reset() {
+      receiving = false
+      onStartCalled = false
+      onStopCalled = false
+    }
   }
 
-  def onStop() {
-    onStopCalled = true
-    otherThread.join()
+  /**
+   * An implementation of NetworkReceiverExecutor used for testing a NetworkReceiver.
+   * Instead of storing the data in the BlockManager, it stores all the data in a local buffer
+   * that can used for verifying that the data has been forwarded correctly.
+   */
+  class FakeReceiverExecutor(receiver: FakeReceiver)
+    extends NetworkReceiverExecutor(receiver, new SparkConf()) {
+    val singles = new ArrayBuffer[Any]
+    val byteBuffers = new ArrayBuffer[ByteBuffer]
+    val iterators = new ArrayBuffer[Iterator[_]]
+    val arrayBuffers = new ArrayBuffer[ArrayBuffer[_]]
+    val errors = new ArrayBuffer[Throwable]
+
+    /** Check if all data structures are clean */
+    def isAllEmpty = {
+      singles.isEmpty && byteBuffers.isEmpty && iterators.isEmpty &&
+        arrayBuffers.isEmpty && errors.isEmpty
+    }
+
+    def pushSingle(data: Any) {
+      singles += data
+    }
+
+    def pushBytes(
+        bytes: ByteBuffer,
+        optionalMetadata: Option[Any],
+        optionalBlockId: Option[StreamBlockId]
+      ) {
+      byteBuffers += bytes
+    }
+
+    def pushIterator(
+        iterator: Iterator[_],
+        optionalMetadata: Option[Any],
+        optionalBlockId: Option[StreamBlockId]
+      ) {
+      iterators += iterator
+    }
+
+    def pushArrayBuffer(
+        arrayBuffer: ArrayBuffer[_],
+        optionalMetadata: Option[Any],
+        optionalBlockId: Option[StreamBlockId]
+      ) {
+      arrayBuffers +=  arrayBuffer
+    }
+
+    def reportError(message: String, throwable: Throwable) {
+      errors += throwable
+    }
   }
 
-  def reset() {
-    receiving = false
-    onStartCalled = false
-    onStopCalled = false
-  }
-}
+  /**
+   * An implementation of BlockGeneratorListener that is used to test the BlockGenerator.
+   */
+  class FakeBlockGeneratorListener(pushDelay: Long = 0) extends BlockGeneratorListener {
+    // buffer of data received as ArrayBuffers
+    val arrayBuffers = new ArrayBuffer[ArrayBuffer[Int]]
+    val errors = new ArrayBuffer[Throwable]
 
-/**
- * An implementation of NetworkReceiverExecutor used for testing a NetworkReceiver.
- * Instead of storing the data in the BlockManager, it stores all the data in a local buffer
- * that can used for verifying that the data has been forwarded correctly.
- */
-class FakeReceiverExecutor(receiver: FakeReceiver)
-  extends NetworkReceiverExecutor(receiver, new SparkConf()) {
-  val singles = new ArrayBuffer[Any]
-  val byteBuffers = new ArrayBuffer[ByteBuffer]
-  val iterators = new ArrayBuffer[Iterator[_]]
-  val arrayBuffers = new ArrayBuffer[ArrayBuffer[_]]
-  val errors = new ArrayBuffer[Throwable]
+    def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]) {
+      val bufferOfInts = arrayBuffer.map(_.asInstanceOf[Int])
+      arrayBuffers += bufferOfInts
+      Thread.sleep(0)
+    }
 
-  /** Check if all data structures are clean */
-  def isAllEmpty = {
-    singles.isEmpty && byteBuffers.isEmpty && iterators.isEmpty &&
-      arrayBuffers.isEmpty && errors.isEmpty
-  }
-
-  def pushSingle(data: Any) {
-    singles += data
-  }
-
-  def pushBytes(
-      bytes: ByteBuffer,
-      optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]
-    ) {
-    byteBuffers += bytes
-  }
-
-  def pushIterator(
-      iterator: Iterator[_],
-      optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]
-    ) {
-    iterators += iterator
-  }
-
-  def pushArrayBuffer(
-      arrayBuffer: ArrayBuffer[_],
-      optionalMetadata: Option[Any],
-      optionalBlockId: Option[StreamBlockId]
-    ) {
-    arrayBuffers +=  arrayBuffer
-  }
-
-  def reportError(message: String, throwable: Throwable) {
-    errors += throwable
-  }
-}
-
-/**
- * An implementation of BlockGeneratorListener that is used to test the BlockGenerator.
- */
-class FakeBlockGeneratorListener(pushDelay: Long = 0) extends BlockGeneratorListener {
-  // buffer of data received as ArrayBuffers
-  val arrayBuffers = new ArrayBuffer[ArrayBuffer[Int]]
-  val errors = new ArrayBuffer[Throwable]
-
-  def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]) {
-    val bufferOfInts = arrayBuffer.map(_.asInstanceOf[Int])
-    arrayBuffers += bufferOfInts
-    Thread.sleep(0)
-  }
-
-  def onError(message: String, throwable: Throwable) {
-    errors += throwable
+    def onError(message: String, throwable: Throwable) {
+      errors += throwable
+    }
   }
 }
+

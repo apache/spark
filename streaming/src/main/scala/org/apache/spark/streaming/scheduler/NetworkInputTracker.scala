@@ -138,7 +138,7 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
   /** Deregister a receiver */
   def deregisterReceiver(streamId: Int, message: String, error: String) {
     receiverInfo -= streamId
-    ssc.scheduler.listenerBus.post(StreamingListenerReceiverStopped(streamId))
+    ssc.scheduler.listenerBus.post(StreamingListenerReceiverStopped(streamId, message, error))
     val messageWithError = if (error != null && !error.isEmpty) {
       s"$message - $error"
     } else {
