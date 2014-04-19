@@ -21,6 +21,7 @@ import java.util.{Comparator, List => JList}
 import java.lang.{Iterable => JIterable}
 
 import scala.collection.JavaConversions._
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import com.google.common.base.Optional
@@ -625,10 +626,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * order of the keys).
    */
   def sortByKey(comp: Comparator[K], ascending: Boolean): JavaPairRDD[K, V] = {
-    class KeyOrdering(val a: K) extends Ordered[K] {
-      override def compare(b: K) = comp.compare(a, b)
-    }
-    implicit def toOrdered(x: K): Ordered[K] = new KeyOrdering(x)
+    implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
     fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).sortByKey(ascending))
   }
 
@@ -639,10 +637,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * order of the keys).
    */
   def sortByKey(comp: Comparator[K], ascending: Boolean, numPartitions: Int): JavaPairRDD[K, V] = {
-    class KeyOrdering(val a: K) extends Ordered[K] {
-      override def compare(b: K) = comp.compare(a, b)
-    }
-    implicit def toOrdered(x: K): Ordered[K] = new KeyOrdering(x)
+    implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
     fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).sortByKey(ascending, numPartitions))
   }
 

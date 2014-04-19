@@ -50,9 +50,6 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
     }
   }
 
-  // Exposed for testing
-  @volatile private[spark] var stopCalled = false
-
   /**
    * Start sending events to attached listeners.
    *
@@ -97,7 +94,6 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
   }
 
   def stop() {
-    stopCalled = true
     if (!started) {
       throw new IllegalStateException("Attempted to stop a listener bus that has not yet started!")
     }

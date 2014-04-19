@@ -22,6 +22,7 @@ import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.annotation.tailrec
+import scala.language.implicitConversions
 import scala.util.{Failure, Success, Try}
 import scala.xml.Node
 
@@ -33,6 +34,7 @@ import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.util.Utils
 
 /**
  * Utilities for launching a web server using Jetty's HTTP Server class
@@ -124,7 +126,7 @@ private[spark] object JettyUtils extends Logging {
     contextHandler.setInitParameter("org.eclipse.jetty.servlet.Default.gzip", "false")
     val staticHandler = new DefaultServlet
     val holder = new ServletHolder(staticHandler)
-    Option(getClass.getClassLoader.getResource(resourceBase)) match {
+    Option(Utils.getSparkClassLoader.getResource(resourceBase)) match {
       case Some(res) =>
         holder.setInitParameter("resourceBase", res.toString)
       case None =>
