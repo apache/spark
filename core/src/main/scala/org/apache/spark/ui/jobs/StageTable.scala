@@ -171,6 +171,6 @@ private[ui] class FailedStageTable(
   override protected def stageRow(s: StageInfo): Seq[Node] = {
     val basicColumns = super.stageRow(s)
     val failureReason = <td valign="middle">{s.failureReason.getOrElse("")}</td>
-    basicColumns ++ failedReason
+    basicColumns ++ failureReason
   }
 }
