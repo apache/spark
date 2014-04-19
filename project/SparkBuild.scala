@@ -189,7 +189,7 @@ object SparkBuild extends Build {
       "org.apache.spark.network",
       "org.apache.spark.deploy",
       "org.apache.spark.util.collection"
-    ).mkString(":")),
+      ).mkString(":")),
 
     // Only allow one test at a time, even across projects, since they run in the same JVM
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
@@ -218,33 +218,33 @@ object SparkBuild extends Build {
         <artifactId>apache</artifactId>
         <version>13</version>
       </parent>
-        <url>http://spark.apache.org/</url>
-        <licenses>
-          <license>
-            <name>Apache 2.0 License</name>
-            <url>http://www.apache.org/licenses/LICENSE-2.0.html</url>
-            <distribution>repo</distribution>
-          </license>
-        </licenses>
-        <scm>
-          <connection>scm:git:git@github.com:apache/spark.git</connection>
-          <url>scm:git:git@github.com:apache/spark.git</url>
-        </scm>
-        <developers>
-          <developer>
-            <id>matei</id>
-            <name>Matei Zaharia</name>
-            <email>matei.zaharia@gmail.com</email>
-            <url>http://www.cs.berkeley.edu/~matei</url>
-            <organization>Apache Software Foundation</organization>
-            <organizationUrl>http://spark.apache.org</organizationUrl>
-          </developer>
-        </developers>
-        <issueManagement>
-          <system>JIRA</system>
-          <url>https://spark-project.atlassian.net/browse/SPARK</url>
-        </issueManagement>
-      ),
+      <url>http://spark.apache.org/</url>
+      <licenses>
+        <license>
+          <name>Apache 2.0 License</name>
+          <url>http://www.apache.org/licenses/LICENSE-2.0.html</url>
+          <distribution>repo</distribution>
+        </license>
+      </licenses>
+      <scm>
+        <connection>scm:git:git@github.com:apache/spark.git</connection>
+        <url>scm:git:git@github.com:apache/spark.git</url>
+      </scm>
+      <developers>
+        <developer>
+          <id>matei</id>
+          <name>Matei Zaharia</name>
+          <email>matei.zaharia@gmail.com</email>
+          <url>http://www.cs.berkeley.edu/~matei</url>
+          <organization>Apache Software Foundation</organization>
+          <organizationUrl>http://spark.apache.org</organizationUrl>
+        </developer>
+      </developers>
+      <issueManagement>
+        <system>JIRA</system>
+        <url>https://spark-project.atlassian.net/browse/SPARK</url>
+      </issueManagement>
+    ),
 
     /*
     publishTo <<= version { (v: String) =>
@@ -304,7 +304,7 @@ object SparkBuild extends Build {
   val excludeHadoop = ExclusionRule(organization = "org.apache.hadoop")
   val excludeCurator = ExclusionRule(organization = "org.apache.curator")
   val excludePowermock = ExclusionRule(organization = "org.powermock")
-
+  val excludeFastutil = ExclusionRule(organization = "it.unimi.dsi")
 
   def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark",
       version: String = "0.9.0-incubating", crossVersion: String = "2.10"): Option[sbt.ModuleID] = {
@@ -343,6 +343,8 @@ object SparkBuild extends Build {
         "com.twitter"               %% "chill"            % chillVersion excludeAll(excludeAsm),
         "com.twitter"                % "chill-java"       % chillVersion excludeAll(excludeAsm),
         "org.tachyonproject"         % "tachyon"          % "0.4.1-thrift" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
+        "com.clearspring.analytics"  % "stream"           % "2.5.1" excludeAll(excludeFastutil),
+        "org.spark-project"          % "pyrolite"         % "2.0"
         "com.clearspring.analytics"  % "stream"           % "2.5.1",
         "org.spark-project"          % "pyrolite"         % "2.0",
         "org.msgpack"               %% "msgpack-scala"    % "0.6.8"
@@ -356,9 +358,9 @@ object SparkBuild extends Build {
 
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
-    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v ),
-    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "jline"          % v ),
-    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-reflect"  % v )
+   libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v ),
+   libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "jline"          % v ),
+   libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-reflect"  % v )
   )
 
   def examplesSettings = sharedSettings ++ Seq(
@@ -466,13 +468,13 @@ object SparkBuild extends Build {
   def yarnCommonSettings = sharedSettings ++ Seq(
     unmanagedSourceDirectories in Compile <++= baseDirectory { base =>
       Seq(
-        base / "../common/src/main/scala"
+         base / "../common/src/main/scala"
       )
     },
 
     unmanagedSourceDirectories in Test <++= baseDirectory { base =>
       Seq(
-        base / "../common/src/test/scala"
+         base / "../common/src/test/scala"
       )
     }
 
