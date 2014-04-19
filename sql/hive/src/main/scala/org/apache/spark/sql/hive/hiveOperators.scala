@@ -31,8 +31,6 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveVarcharOb
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
 
-import org.apache.spark._
-import org.apache.spark.rdd.ParallelCollectionRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{BooleanType, DataType}
@@ -258,7 +256,6 @@ case class InsertIntoHiveTable(
 
   private def newSerializer(tableDesc: TableDesc): Serializer = {
     val serializer = tableDesc.getDeserializerClass.newInstance().asInstanceOf[Serializer]
-
     serializer.initialize(null, tableDesc.getProperties)
     serializer
   }
