@@ -307,8 +307,8 @@ class SchemaRDD(RDD):
 
     def insertInto(self, tableName, overwrite = False):
         """
-        Inserts the contents of this SchemaRDD into the specified table, optionally overwriting any
-        existing data.
+        Inserts the contents of this SchemaRDD into the specified table,
+        optionally overwriting any existing data.
         """
         self._jschema_rdd.insertInto(tableName, overwrite)
 
