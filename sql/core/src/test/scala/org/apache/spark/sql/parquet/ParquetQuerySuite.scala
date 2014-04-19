@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.parquet
 
+import java.io.File
+
 import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
 
 import org.apache.avro.{SchemaBuilder, Schema}
@@ -31,18 +33,13 @@ import parquet.hadoop.util.ContextUtil
 import parquet.schema.MessageTypeParser
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.util.getTempFilePath
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.IntegerType
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.TestData
 import org.apache.spark.sql.SchemaRDD
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types.IntegerType
-import org.apache.spark.util.Utils
-import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.catalyst.types.{StringType, IntegerType, DataType}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.util.Utils
 
 // Implicits
@@ -557,6 +554,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     // has no effect in this test case
     implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
     val tmpdir = Utils.createTempDir()
+    Utils.deleteRecursively(tmpdir)
     val result = TestSQLContext
       .parquetFile(ParquetTestData.testNestedDir1.toString)
       .toSchemaRDD
@@ -581,6 +579,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       .parquetFile(ParquetTestData.testNestedDir4.toString)
       .toSchemaRDD
     val tmpdir = Utils.createTempDir()
+    Utils.deleteRecursively(tmpdir)
     data.saveAsParquetFile(tmpdir.toString)
     TestSQLContext
       .parquetFile(tmpdir.toString)
@@ -743,19 +742,5 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(mapResult1(2) === 0.3f)
     assert(mapResult2(0) === 1.1f)
     assert(mapResult2(2) === 1.3f)
-  }
-
-  /**
-   * Creates an empty SchemaRDD backed by a ParquetRelation.
-   *
-   * TODO: since this is so experimental it is better to have it here and not
-   * in SQLContext. Also note that when creating new AttributeReferences
-   * one needs to take care not to create duplicate Attribute ID's.
-   */
-  private def createParquetFile(path: String, schema: (Tuple2[String, DataType])*): SchemaRDD = {
-    val attributes = schema.map(t => new AttributeReference(t._1, t._2)())
-    new SchemaRDD(
-      TestSQLContext,
-      ParquetRelation.createEmpty(path, attributes, sparkContext.hadoopConfiguration))
   }
 }
