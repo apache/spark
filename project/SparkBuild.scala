@@ -23,6 +23,8 @@ import AssemblyKeys._
 import scala.util.Properties
 import org.scalastyle.sbt.ScalastylePlugin.{Settings => ScalaStyleSettings}
 import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
+import sbtunidoc.Plugin._
+import UnidocKeys._
 
 import scala.collection.JavaConversions._
 
@@ -349,8 +351,9 @@ object SparkBuild extends Build {
     libraryDependencies ++= maybeAvro
   )
 
-  def rootSettings = sharedSettings ++ Seq(
-    publish := {}
+  def rootSettings = sharedSettings ++ unidocSettings ++ Seq(
+    publish := {},
+    unidocProjectFilter in (ScalaUnidoc, unidoc) := inAnyProject -- inProjects(repl, examples, yarn, yarnAlpha)
   )
 
   def replSettings = sharedSettings ++ Seq(
