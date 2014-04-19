@@ -32,6 +32,8 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.KryoRegistrator
 import org.apache.spark.SparkContext._
+import org.apache.spark.util.Utils
+import org.apache.spark.mllib.optimization.NNLSbyPCG
 
 /**
  * Out-link information for a user or product block. This includes the original user/product IDs
@@ -153,6 +155,18 @@ class ALS private (
   /** Sets a random seed to have deterministic results. */
   def setSeed(seed: Long): ALS = {
     this.seed = seed
+    this
+  }
+
+  /** If true, do alternating nonnegative least squares. */
+  private var nonnegative = false
+
+  /**
+   * Set whether the least-squares problems solved at each iteration should have
+   * nonnegativity constraints.
+   */
+  def setNonnegative(b: Boolean): ALS = {
+    this.nonnegative = b
     this
   }
 
@@ -498,10 +512,128 @@ class ALS private (
       (0 until rank).foreach(i => fullXtX.data(i*rank + i) += lambda)
       // Solve the resulting matrix, which is symmetric and positive-definite
       if (implicitPrefs) {
-        Solve.solvePositive(fullXtX.addi(YtY.get.value), userXy(index)).data
+        solveLeastSquares(fullXtX.addi(YtY.get.value), userXy(index))
       } else {
-        Solve.solvePositive(fullXtX, userXy(index)).data
+        solveLeastSquares(fullXtX, userXy(index))
       }
+    }
+  }
+
+  /**
+   * Solve a least squares problem, possibly with nonnegativity constraints, by a modified
+   * projected gradient method.  That is, find x minimising ||Ax - b||_2 given A^T A and A^T b.
+   */
+  def solveLSbyPCG(ata: DoubleMatrix, atb: DoubleMatrix, nonnegative: Boolean): Array[Double] = {
+    val n = atb.rows
+    val scratch = new DoubleMatrix(n, 1)
+
+    // find the optimal unconstrained step
+    def steplen(dir: DoubleMatrix, resid: DoubleMatrix): Double = {
+      val top = SimpleBlas.dot(dir, resid)
+      SimpleBlas.gemv(1.0, ata, dir, 0.0, scratch)
+      top / SimpleBlas.dot(scratch, dir)
+    }
+
+    // stopping condition
+    def stop(step: Double, ndir: Double, nx: Double): Boolean = {
+        ((step != step)
+      || (step < 1e-6)
+      || (ndir < 1e-12 * nx))
+    }
+
+    val grad = new DoubleMatrix(n, 1)
+    val x = new DoubleMatrix(n, 1)
+    val dir = new DoubleMatrix(n, 1)
+    val lastdir = new DoubleMatrix(n, 1)
+    val resid = new DoubleMatrix(n, 1)
+    var lastnorm = 0.0
+    var iterno = 0
+    var lastwall = 0
+    var i = 0
+    while (iterno < 40000) {
+      // find the residual
+      SimpleBlas.gemv(1.0, ata, x, 0.0, resid)
+      SimpleBlas.axpy(-1.0, atb, resid)
+      SimpleBlas.copy(resid, grad)
+
+      // project the gradient
+      if (nonnegative) {
+        i = 0
+        while (i < n) {
+          if (grad.data(i) > 0.0 && x.data(i) == 0.0)
+            grad.data(i) = 0.0
+          i = i + 1
+        }
+      }
+      val ngrad = SimpleBlas.dot(grad, grad)
+
+      SimpleBlas.copy(grad, dir)
+
+      // use a CG direction under certain conditions
+      var step = steplen(grad, resid)
+      var ndir = 0.0
+      val nx = SimpleBlas.dot(x, x)
+      if (iterno > lastwall + 1) {
+        val alpha = ngrad / lastnorm
+        SimpleBlas.axpy(alpha, lastdir, dir)
+        val dstep = steplen(dir, resid)
+        ndir = SimpleBlas.dot(dir, dir)
+        if (stop(dstep, ndir, nx)) {
+          // reject the CG step if it could lead to premature termination
+          SimpleBlas.copy(grad, dir)
+          ndir = SimpleBlas.dot(dir, dir)
+        } else {
+          step = dstep
+        }
+      } else {
+        ndir = SimpleBlas.dot(dir, dir)
+      }
+
+      // terminate?
+      if (stop(step, ndir, nx)) {
+        return x.data
+      }
+
+      // don't run through the walls
+      if (nonnegative) {
+        i = 0
+        while (i < n) {
+          if (step * dir.data(i) > x.data(i))
+            step = Math.min(step, x.data(i) / dir.data(i))
+          i = i + 1
+        }
+      }
+
+      // take the step
+      i = 0
+      while (i < n) {
+        if (nonnegative) {
+          if (step * dir.data(i) > x.data(i) * (1 - 1e-14)) {
+            x.data(i) = 0
+            lastwall = iterno
+          } else x.data(i) -= step * dir.data(i)
+        } else {
+          x.data(i) -= step * dir.data(i)
+        }
+        i = i + 1
+      }
+
+      iterno = iterno + 1
+      SimpleBlas.copy(dir, lastdir)
+      lastnorm = ngrad
+    }
+    x.data
+  }
+
+  /**
+   * Given A^T A and A^T b, find the x minimising ||Ax - b||_2, possibly subject
+   * to nonnegativity constraints if `nonnegative` is true.
+   */
+  def solveLeastSquares(ata: DoubleMatrix, atb: DoubleMatrix): Array[Double] = {
+    if (!nonnegative) {
+      Solve.solvePositive(ata, atb).data
+    } else {
+      NNLSbyPCG.solve(ata, atb, true)
     }
   }
 
@@ -531,6 +663,34 @@ class ALS private (
  * Top-level methods for calling Alternating Least Squares (ALS) matrix factorization.
  */
 object ALS {
+
+  /**
+   * Train a matrix factorization model given an RDD of ratings given by users to some products,
+   * in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the
+   * product of two lower-rank matrices of a given rank (number of features). To solve for these
+   * features, we run a given number of iterations of ALS. This is done using a level of
+   * parallelism given by `blocks`, partitioning the data using the Partitioner `partitioner`.
+   *
+   * @param ratings     RDD of (userID, productID, rating) pairs
+   * @param rank        number of features to use
+   * @param iterations  number of iterations of ALS (recommended: 10-20)
+   * @param lambda      regularization factor (recommended: 0.01)
+   * @param blocks      level of parallelism to split computation into
+   * @param seed        random seed
+   * @param nonnegative Whether to impose nonnegativity constraints
+   */
+  def train(
+      ratings: RDD[Rating],
+      rank: Int,
+      iterations: Int,
+      lambda: Double,
+      blocks: Int,
+      seed: Long,
+      nonnegative: Boolean) = {
+    val als = new ALS(blocks, rank, iterations, lambda, false, 1.0, seed)
+    if (nonnegative) als.setNonnegative(true)
+    als.run(ratings)
+  }
 
   /**
    * Train a matrix factorization model given an RDD of ratings given by users to some products,
@@ -611,6 +771,37 @@ object ALS {
   def train(ratings: RDD[Rating], rank: Int, iterations: Int)
     : MatrixFactorizationModel = {
     train(ratings, rank, iterations, 0.01, -1)
+  }
+
+  /**
+   * Train a matrix factorization model given an RDD of 'implicit preferences' given by users
+   * to some products, in the form of (userID, productID, preference) pairs. We approximate the
+   * ratings matrix as the product of two lower-rank matrices of a given rank (number of features).
+   * To solve for these features, we run a given number of iterations of ALS. This is done using
+   * a level of parallelism given by `blocks`.
+   *
+   * @param ratings    RDD of (userID, productID, rating) pairs
+   * @param rank       number of features to use
+   * @param iterations number of iterations of ALS (recommended: 10-20)
+   * @param lambda     regularization factor (recommended: 0.01)
+   * @param blocks     level of parallelism to split computation into
+   * @param alpha      confidence parameter (only applies when immplicitPrefs = true)
+   * @param seed       random seed
+   * @param nonnegative Whether to impose nonnegativity upon the user and product factors
+   */
+  def trainImplicit(
+      ratings: RDD[Rating],
+      rank: Int,
+      iterations: Int,
+      lambda: Double,
+      blocks: Int,
+      alpha: Double,
+      seed: Long,
+      nonnegative: Boolean
+    ): MatrixFactorizationModel = {
+    new ALS(blocks, rank, iterations, lambda, true, alpha, seed)
+      .setNonnegative(nonnegative)
+      .run(ratings)
   }
 
   /**
