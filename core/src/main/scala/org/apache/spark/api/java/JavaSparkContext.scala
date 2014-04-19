@@ -114,7 +114,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * @deprecated As of Spark 1.0.0, defaultMinSplits is deprecated, use
    *            {@link #defaultMinPartitions()} instead
    */
-  @Deprecated
+  @deprecated("use defaultMinPartitions", "1.0.0")
   def defaultMinSplits: java.lang.Integer = sc.defaultMinSplits
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
