@@ -17,16 +17,17 @@
 
 package org.apache.spark.sql.parquet
 
-import scala.collection.mutable.{Buffer, ArrayBuffer}
+import scala.collection.mutable.{Buffer, ArrayBuffer, HashMap}
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.runtimeMirror
 
 import parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Converter}
 import parquet.schema.MessageType
 
-import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Row, Attribute}
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
-import scala.collection.mutable
+import org.apache.spark.util.Utils
 
 private[parquet] object CatalystConverter {
   // The type internally used for fields
@@ -46,6 +47,11 @@ private[parquet] object CatalystConverter {
       parent: CatalystConverter): Converter = {
     val fieldType: DataType = field.dataType
     fieldType match {
+      // For native JVM types we use a converter with native arrays
+      case ArrayType(elementType: NativeType) => {
+        new CatalystNativeArrayConverter(elementType, fieldIndex, parent)
+      }
+      // This is for other types of arrays, including those with nested fields
       case ArrayType(elementType: DataType) => {
         new CatalystArrayConverter(elementType, fieldIndex, parent)
       }
@@ -322,8 +328,17 @@ object CatalystArrayConverter {
   val INITIAL_ARRAY_SIZE = 20
 }
 
-// this is for single-element groups of primitive or complex types
-// Note: AvroParquet only uses arrays for primitive types (?)
+/**
+ * A `parquet.io.api.GroupConverter` that converts a single-element groups that
+ * match the characteristics of an array (see
+ * [[org.apache.spark.sql.parquet.ParquetTypesConverter]]) into an
+ * [[org.apache.spark.sql.catalyst.types.ArrayType]].
+ *
+ * @param elementType The type of the array elements
+ * @param index The position of this (array) field inside its parent converter
+ * @param parent The parent converter
+ * @param buffer A data buffer
+ */
 private[parquet] class CatalystArrayConverter(
     val elementType: DataType,
     val index: Int,
@@ -353,7 +368,8 @@ private[parquet] class CatalystArrayConverter(
   // arrays have only one (repeated) field, which is its elements
   override val size = 1
 
-  override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit ={
+  override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit = {
+    // fieldIndex is ignored (assumed to be zero but not checked)
     buffer += value
   }
 
@@ -378,6 +394,115 @@ private[parquet] class CatalystArrayConverter(
 
   // Should be only called in root group converter!
   override def getCurrentRecord: Row = throw new UnsupportedOperationException
+}
+
+private[parquet] class CatalystNativeArrayConverter[T <: NativeType](
+    val elementType: NativeType,
+    val index: Int,
+    protected[parquet] val parent: CatalystConverter,
+    protected[parquet] var capacity: Int = CatalystArrayConverter.INITIAL_ARRAY_SIZE)
+  extends GroupConverter with CatalystConverter {
+
+  // similar comment as in [[Decoder]]: this should probably be in NativeType
+  private val classTag = {
+    val mirror = runtimeMirror(Utils.getSparkClassLoader)
+    ClassTag[T#JvmType](mirror.runtimeClass(elementType.tag.tpe))
+  }
+
+  private var buffer: Array[T#JvmType] = classTag.newArray(capacity)
+
+  private var elements: Int = 0
+
+  protected[parquet] val converter: Converter = CatalystConverter.createConverter(
+    new CatalystConverter.FieldType(
+      CatalystConverter.ARRAY_ELEMENTS_SCHEMA_NAME,
+      elementType,
+      false),
+    fieldIndex=0,
+    parent=this)
+
+  override def getConverter(fieldIndex: Int): Converter = converter
+
+  // arrays have only one (repeated) field, which is its elements
+  override val size = 1
+
+  override protected[parquet] def updateField(fieldIndex: Int, value: Any): Unit =
+    throw new UnsupportedOperationException
+
+  // Overriden here to avoid auto-boxing for primitive types
+  override protected[parquet] def updateBoolean(fieldIndex: Int, value: Boolean): Unit = {
+    checkGrowBuffer()
+    buffer(elements) = value.asInstanceOf[T#JvmType]
+    elements += 1
+  }
+
+  override protected[parquet] def updateInt(fieldIndex: Int, value: Int): Unit = {
+    checkGrowBuffer()
+    buffer(elements) = value.asInstanceOf[T#JvmType]
+    elements += 1
+  }
+
+  override protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit = {
+    checkGrowBuffer()
+    buffer(elements) = value.asInstanceOf[T#JvmType]
+    elements += 1
+  }
+
+  override protected[parquet] def updateDouble(fieldIndex: Int, value: Double): Unit = {
+    checkGrowBuffer()
+    buffer(elements) = value.asInstanceOf[T#JvmType]
+    elements += 1
+  }
+
+  override protected[parquet] def updateFloat(fieldIndex: Int, value: Float): Unit = {
+    checkGrowBuffer()
+    buffer(elements) = value.asInstanceOf[T#JvmType]
+    elements += 1
+  }
+
+  override protected[parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit = {
+    checkGrowBuffer()
+    buffer(elements) = value.getBytes.asInstanceOf[T#JvmType]
+    elements += 1
+  }
+
+  override protected[parquet] def updateString(fieldIndex: Int, value: Binary): Unit = {
+    checkGrowBuffer()
+    buffer(elements) = value.toStringUsingUTF8.asInstanceOf[T#JvmType]
+    elements += 1
+  }
+
+  override protected[parquet] def clearBuffer(): Unit = {
+    elements = 0
+  }
+
+  override def start(): Unit = {}
+
+  override def end(): Unit = {
+    assert(parent != null)
+    parent.updateField(
+      index,
+      new GenericRow {
+        // TODO: it would be much nicer to use a view here but GenericRow requires an Array
+        // TODO: we should avoid using GenericRow as a wrapper but [[GetField]] current
+        // requires that
+        override val values = buffer.slice(0, elements).map(_.asInstanceOf[Any])
+      })
+    clearBuffer()
+  }
+
+  // Should be only called in root group converter!
+  override def getCurrentRecord: Row = throw new UnsupportedOperationException
+
+  private def checkGrowBuffer(): Unit = {
+    if (elements >= capacity) {
+      val newCapacity = 2 * capacity
+      val tmp: Array[T#JvmType] = classTag.newArray(newCapacity)
+      Array.copy(buffer, 0, tmp, 0, capacity)
+      buffer = tmp
+      capacity = newCapacity
+    }
+  }
 }
 
 // this is for multi-element groups of primitive or complex types
@@ -407,7 +532,7 @@ private[parquet] class CatalystMapConverter(
     override protected[parquet] val parent: CatalystConverter)
   extends GroupConverter with CatalystConverter {
 
-  private val map = new mutable.HashMap[Any, Any]()
+  private val map = new HashMap[Any, Any]()
 
   private val keyValueConverter = new GroupConverter with CatalystConverter {
     private var currentKey: Any = null
