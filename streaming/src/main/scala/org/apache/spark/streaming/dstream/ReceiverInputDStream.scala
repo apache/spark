@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.receiver.NetworkReceiver
+import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 
 /**
@@ -31,39 +31,39 @@ import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
  * that has to start a receiver on worker nodes to receive external data.
  * Specific implementations of NetworkInputDStream must
  * define `the getReceiver()` function that gets the receiver object of type
- * [[org.apache.spark.streaming.receiver.NetworkReceiver]] that will be sent
+ * [[org.apache.spark.streaming.receiver.Receiver]] that will be sent
  * to the workers to receive data.
  * @param ssc_ Streaming context that will execute this input stream
  * @tparam T Class type of the object of this stream
  */
-abstract class NetworkInputDStream[T: ClassTag](@transient ssc_ : StreamingContext)
+abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingContext)
   extends InputDStream[T](ssc_) {
 
   /** Keeps all received blocks information */
   private lazy val receivedBlockInfo = new HashMap[Time, Array[ReceivedBlockInfo]]
 
   /** This is an unique identifier for the network input stream. */
-  val id = ssc.getNewNetworkStreamId()
+  val id = ssc.getNewReceiverStreamId()
 
   /**
    * Gets the receiver object that will be sent to the worker nodes
    * to receive data. This method needs to defined by any specific implementation
    * of a NetworkInputDStream.
    */
-  def getReceiver(): NetworkReceiver[T]
+  def getReceiver(): Receiver[T]
 
-  // Nothing to start or stop as both taken care of by the NetworkInputTracker.
+  // Nothing to start or stop as both taken care of by the ReceiverInputTracker.
   def start() {}
 
   def stop() {}
 
-  /** Ask NetworkInputTracker for received data blocks and generates RDDs with them. */
+  /** Ask ReceiverInputTracker for received data blocks and generates RDDs with them. */
   override def compute(validTime: Time): Option[RDD[T]] = {
     // If this is called for any time before the start time of the context,
     // then this returns an empty RDD. This may happen when recovering from a
     // master failure
     if (validTime >= graph.startTime) {
-      val blockInfo = ssc.scheduler.networkInputTracker.getReceivedBlockInfo(id)
+      val blockInfo = ssc.scheduler.receiverTracker.getReceivedBlockInfo(id)
       receivedBlockInfo(validTime) = blockInfo
       val blockIds = blockInfo.map(_.blockId.asInstanceOf[BlockId])
       Some(new BlockRDD[T](ssc.sc, blockIds))

@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
-import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, NetworkReceiver, NetworkReceiverExecutor}
+import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, Receiver, ReceiverSupervisor}
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.concurrent.Eventually._
@@ -35,7 +35,7 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
   test("network receiver life cycle") {
 
     val receiver = new FakeReceiver
-    val executor = new FakeReceiverExecutor(receiver)
+    val executor = new FakeReceiverSupervisor(receiver)
 
     assert(executor.isAllEmpty)
 
@@ -143,7 +143,7 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
   /**
    * An implementation of NetworkReceiver that is used for testing a receiver's life cycle.
    */
-  class FakeReceiver extends NetworkReceiver[Int](StorageLevel.MEMORY_ONLY) {
+  class FakeReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
     var otherThread: Thread = null
     var receiving = false
     var onStartCalled = false
@@ -180,8 +180,8 @@ class NetworkReceiverSuite extends FunSuite with Timeouts {
    * Instead of storing the data in the BlockManager, it stores all the data in a local buffer
    * that can used for verifying that the data has been forwarded correctly.
    */
-  class FakeReceiverExecutor(receiver: FakeReceiver)
-    extends NetworkReceiverExecutor(receiver, new SparkConf()) {
+  class FakeReceiverSupervisor(receiver: FakeReceiver)
+    extends ReceiverSupervisor(receiver, new SparkConf()) {
     val singles = new ArrayBuffer[Any]
     val byteBuffers = new ArrayBuffer[ByteBuffer]
     val iterators = new ArrayBuffer[Iterator[_]]

@@ -31,7 +31,7 @@ import org.apache.flume.source.avro.{AvroFlumeEvent, AvroSourceProtocol}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{TestOutputStream, StreamingContext, TestSuiteBase}
 import org.apache.spark.streaming.util.ManualClock
-import org.apache.spark.streaming.api.java.JavaNetworkInputDStream
+import org.apache.spark.streaming.api.java.JavaReceiverInputDStream
 
 class FlumeStreamSuite extends TestSuiteBase {
 
@@ -40,11 +40,11 @@ class FlumeStreamSuite extends TestSuiteBase {
   test("flume input stream") {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
-    val flumeStream: JavaNetworkInputDStream[SparkFlumeEvent] =
+    val flumeStream: JavaReceiverInputDStream[SparkFlumeEvent] =
       FlumeUtils.createStream(ssc, "localhost", testPort, StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
       with SynchronizedBuffer[Seq[SparkFlumeEvent]]
-    val outputStream = new TestOutputStream(flumeStream.networkInputDStream, outputBuffer)
+    val outputStream = new TestOutputStream(flumeStream.receiverInputDStream, outputBuffer)
     outputStream.register()
     ssc.start()
 

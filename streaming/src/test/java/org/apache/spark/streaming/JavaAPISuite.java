@@ -1665,7 +1665,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   // InputStream functionality is deferred to the existing Scala tests.
   @Test
   public void testSocketTextStream() {
-      JavaNetworkInputDStream<String> test = ssc.socketTextStream("localhost", 12345);
+      JavaReceiverInputDStream<String> test = ssc.socketTextStream("localhost", 12345);
   }
 
   @Test
@@ -1698,6 +1698,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   @Test
   public void testRawSocketStream() {
-    JavaNetworkInputDStream<String> test = ssc.rawSocketStream("localhost", 12345);
+    JavaReceiverInputDStream<String> test = ssc.rawSocketStream("localhost", 12345);
   }
 }

@@ -26,7 +26,7 @@ import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.Logging
-import org.apache.spark.streaming.receiver.NetworkReceiver
+import org.apache.spark.streaming.receiver.Receiver
 
 /* A stream of Twitter statuses, potentially filtered by one or more keywords.
 *
@@ -43,7 +43,7 @@ class TwitterInputDStream(
     twitterAuth: Option[Authorization],
     filters: Seq[String],
     storageLevel: StorageLevel
-  ) extends NetworkInputDStream[Status](ssc_)  {
+  ) extends ReceiverInputDStream[Status](ssc_)  {
 
   private def createOAuthAuthorization(): Authorization = {
     new OAuthAuthorization(new ConfigurationBuilder().build())
@@ -51,7 +51,7 @@ class TwitterInputDStream(
 
   private val authorization = twitterAuth.getOrElse(createOAuthAuthorization())
 
-  override def getReceiver(): NetworkReceiver[Status] = {
+  override def getReceiver(): Receiver[Status] = {
     new TwitterReceiver(authorization, filters, storageLevel)
   }
 }
@@ -61,7 +61,7 @@ class TwitterReceiver(
     twitterAuth: Authorization,
     filters: Seq[String],
     storageLevel: StorageLevel
-  ) extends NetworkReceiver[Status](storageLevel) with Logging {
+  ) extends Receiver[Status](storageLevel) with Logging {
 
   var twitterStream: TwitterStream = _
 

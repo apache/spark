@@ -35,7 +35,7 @@ private[streaming] trait BlockGeneratorListener {
 
 /**
  * Generates batches of objects received by a
- * [[org.apache.spark.streaming.receiver.NetworkReceiver]] and puts them into appropriately
+ * [[org.apache.spark.streaming.receiver.Receiver]] and puts them into appropriately
  * named blocks at regular intervals. This class starts two threads,
  * one to periodically start a new batch and prepare the previous batch of as a block,
  * the other to push the blocks into the block manager.

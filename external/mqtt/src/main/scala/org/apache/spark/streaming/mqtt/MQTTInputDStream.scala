@@ -39,7 +39,7 @@ import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
-import org.apache.spark.streaming.receiver.NetworkReceiver
+import org.apache.spark.streaming.receiver.Receiver
 
 /**
  * Input stream that subscribe messages from a Mqtt Broker.
@@ -55,9 +55,9 @@ class MQTTInputDStream(
     brokerUrl: String,
     topic: String,
     storageLevel: StorageLevel
-  ) extends NetworkInputDStream[String](ssc_) with Logging {
+  ) extends ReceiverInputDStream[String](ssc_) with Logging {
   
-  def getReceiver(): NetworkReceiver[String] = {
+  def getReceiver(): Receiver[String] = {
     new MQTTReceiver(brokerUrl, topic, storageLevel)
   }
 }
@@ -67,7 +67,7 @@ class MQTTReceiver(
     brokerUrl: String,
     topic: String,
     storageLevel: StorageLevel
-  ) extends NetworkReceiver[String](storageLevel) {
+  ) extends Receiver[String](storageLevel) {
 
   def onStop() {
 

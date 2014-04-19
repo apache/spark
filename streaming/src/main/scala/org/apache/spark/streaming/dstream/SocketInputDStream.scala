@@ -26,7 +26,7 @@ import scala.reflect.ClassTag
 import java.io._
 import java.net.{UnknownHostException, Socket}
 import org.apache.spark.Logging
-import org.apache.spark.streaming.receiver.NetworkReceiver
+import org.apache.spark.streaming.receiver.Receiver
 
 private[streaming]
 class SocketInputDStream[T: ClassTag](
@@ -35,9 +35,9 @@ class SocketInputDStream[T: ClassTag](
     port: Int,
     bytesToObjects: InputStream => Iterator[T],
     storageLevel: StorageLevel
-  ) extends NetworkInputDStream[T](ssc_) {
+  ) extends ReceiverInputDStream[T](ssc_) {
 
-  def getReceiver(): NetworkReceiver[T] = {
+  def getReceiver(): Receiver[T] = {
     new SocketReceiver(host, port, bytesToObjects, storageLevel)
   }
 }
@@ -48,7 +48,7 @@ class SocketReceiver[T: ClassTag](
     port: Int,
     bytesToObjects: InputStream => Iterator[T],
     storageLevel: StorageLevel
-  ) extends NetworkReceiver[T](storageLevel) with Logging {
+  ) extends Receiver[T](storageLevel) with Logging {
 
   var socket: Socket = null
   var receivingThread: Thread = null

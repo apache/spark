@@ -33,7 +33,7 @@ import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
-import org.apache.spark.streaming.receiver.NetworkReceiver
+import org.apache.spark.streaming.receiver.Receiver
 
 /**
  * Input stream that pulls messages from a Kafka Broker.
@@ -54,11 +54,11 @@ class KafkaInputDStream[
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
     storageLevel: StorageLevel
-  ) extends NetworkInputDStream[(K, V)](ssc_) with Logging {
+  ) extends ReceiverInputDStream[(K, V)](ssc_) with Logging {
 
-  def getReceiver(): NetworkReceiver[(K, V)] = {
+  def getReceiver(): Receiver[(K, V)] = {
     new KafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel)
-        .asInstanceOf[NetworkReceiver[(K, V)]]
+        .asInstanceOf[Receiver[(K, V)]]
   }
 }
 
@@ -71,7 +71,7 @@ class KafkaReceiver[
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
     storageLevel: StorageLevel
-  ) extends NetworkReceiver[Any](storageLevel) with Logging {
+  ) extends Receiver[Any](storageLevel) with Logging {
 
   // Connection to Kafka
   var consumerConnector : ConsumerConnector = null

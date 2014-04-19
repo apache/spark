@@ -23,7 +23,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.streaming.receiver.NetworkReceiver
+import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler._
 
 import org.scalatest.matchers.ShouldMatchers
@@ -124,7 +124,7 @@ class ReceiverInfoCollector extends StreamingListener {
   }
 }
 
-class StreamingListenerSuiteReceiver extends NetworkReceiver[Any](StorageLevel.MEMORY_ONLY) with Logging {
+class StreamingListenerSuiteReceiver extends Receiver[Any](StorageLevel.MEMORY_ONLY) with Logging {
   def onStart() {
     Future {
       logInfo("Started receiver and sleeping")

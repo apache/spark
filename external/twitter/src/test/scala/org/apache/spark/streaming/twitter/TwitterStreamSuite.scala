@@ -20,7 +20,7 @@ package org.apache.spark.streaming.twitter
 import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
 import org.apache.spark.storage.StorageLevel
 import twitter4j.auth.{NullAuthorization, Authorization}
-import org.apache.spark.streaming.dstream.NetworkInputDStream
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import twitter4j.Status
 
 class TwitterStreamSuite extends TestSuiteBase {
@@ -31,16 +31,16 @@ class TwitterStreamSuite extends TestSuiteBase {
     val authorization: Authorization = NullAuthorization.getInstance()
 
     // tests the API, does not actually test data receiving
-    val test1: NetworkInputDStream[Status] = TwitterUtils.createStream(ssc, None)
-    val test2: NetworkInputDStream[Status] =
+    val test1: ReceiverInputDStream[Status] = TwitterUtils.createStream(ssc, None)
+    val test2: ReceiverInputDStream[Status] =
       TwitterUtils.createStream(ssc, None, filters)
-    val test3: NetworkInputDStream[Status] =
+    val test3: ReceiverInputDStream[Status] =
       TwitterUtils.createStream(ssc, None, filters, StorageLevel.MEMORY_AND_DISK_SER_2)
-    val test4: NetworkInputDStream[Status] =
+    val test4: ReceiverInputDStream[Status] =
       TwitterUtils.createStream(ssc, Some(authorization))
-    val test5: NetworkInputDStream[Status] =
+    val test5: ReceiverInputDStream[Status] =
       TwitterUtils.createStream(ssc, Some(authorization), filters)
-    val test6: NetworkInputDStream[Status] = TwitterUtils.createStream(
+    val test6: ReceiverInputDStream[Status] = TwitterUtils.createStream(
       ssc, Some(authorization), filters, StorageLevel.MEMORY_AND_DISK_SER_2)
 
     // Note that actually testing the data receiving is hard as authentication keys are

@@ -38,32 +38,32 @@ import org.apache.spark.streaming.scheduler.RegisterReceiver
 import com.google.common.base.Throwables
 
 /**
- * Concrete implementation of [[org.apache.spark.streaming.receiver.NetworkReceiverExecutor]]
+ * Concrete implementation of [[org.apache.spark.streaming.receiver.ReceiverSupervisor]]
  * which provides all the necessary functionality for handling the data received by
  * the receiver. Specifically, it creates a [[org.apache.spark.streaming.receiver.BlockGenerator]]
  * object that is used to divide the received data stream into blocks of data.
  */
-private[streaming] class NetworkReceiverExecutorImpl(
-    receiver: NetworkReceiver[_],
+private[streaming] class ReceiverSupervisorImpl(
+    receiver: Receiver[_],
     env: SparkEnv
-  ) extends NetworkReceiverExecutor(receiver, env.conf) with Logging {
+  ) extends ReceiverSupervisor(receiver, env.conf) with Logging {
 
   private val blockManager = env.blockManager
 
   private val storageLevel = receiver.storageLevel
 
-  /** Remote Akka actor for the NetworkInputTracker */
+  /** Remote Akka actor for the ReceiverTracker */
   private val trackerActor = {
     val ip = env.conf.get("spark.driver.host", "localhost")
     val port = env.conf.getInt("spark.driver.port", 7077)
-    val url = "akka.tcp://spark@%s:%s/user/NetworkInputTracker".format(ip, port)
+    val url = "akka.tcp://spark@%s:%s/user/ReceiverTracker".format(ip, port)
     env.actorSystem.actorSelection(url)
   }
 
   /** Timeout for Akka actor messages */
   private val askTimeout = AkkaUtils.askTimeout(env.conf)
 
-  /** Akka actor for receiving messages from the NetworkInputTracker in the driver */
+  /** Akka actor for receiving messages from the ReceiverTracker in the driver */
   private val actor = env.actorSystem.actorOf(
     Props(new Actor {
       override def preStart() {
@@ -79,7 +79,7 @@ private[streaming] class NetworkReceiverExecutorImpl(
           logInfo("Received stop signal")
           stop("Stopped by driver", None)
       }
-    }), "NetworkReceiver-" + streamId + "-" + System.currentTimeMillis())
+    }), "Receiver-" + streamId + "-" + System.currentTimeMillis())
 
   /** Unique block ids if one wants to add blocks directly */
   private val newBlockId = new AtomicLong(System.currentTimeMillis())
@@ -147,7 +147,7 @@ private[streaming] class NetworkReceiverExecutorImpl(
     logDebug("Reported block " + blockId)
   }
 
-  /** Report error to the network input tracker */
+  /** Report error to the receiver tracker */
   def reportError(message: String, error: Throwable) {
     val errorString = Option(error).map(Throwables.getStackTraceAsString).getOrElse("")
     trackerActor ! ReportError(streamId, message, errorString)

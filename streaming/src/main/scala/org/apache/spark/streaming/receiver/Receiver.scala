@@ -51,7 +51,7 @@ import org.apache.spark.storage.StorageLevel
  *  }
  * }}}
  */
-abstract class NetworkReceiver[T](val storageLevel: StorageLevel) extends Serializable {
+abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable {
 
   /**
    * This method is called by the system when the receiver is started. This function
@@ -78,7 +78,11 @@ abstract class NetworkReceiver[T](val storageLevel: StorageLevel) extends Serial
   /** Override this to specify a preferred location (hostname). */
   def preferredLocation : Option[String] = None
 
-  /** Store a single item of received data to Spark's memory. */
+  /**
+   * Store a single item of received data to Spark's memory.
+   * These single items will be aggregated together into data blocks before
+   * being pushed into Spark's memory.
+   */
   def store(dataItem: T) {
     executor.pushSingle(dataItem)
   }
@@ -97,13 +101,13 @@ abstract class NetworkReceiver[T](val storageLevel: StorageLevel) extends Serial
     executor.pushArrayBuffer(dataBuffer, Some(metadata), None)
   }
 
-  /** Store a iterator of received data as a data block into Spark's memory. */
+  /** Store an iterator of received data as a data block into Spark's memory. */
   def store(dataIterator: Iterator[T]) {
     executor.pushIterator(dataIterator, None, None)
   }
 
   /**
-   * Store a iterator of received data as a data block into Spark's memory.
+   * Store an iterator of received data as a data block into Spark's memory.
    * The metadata will be associated with this block of data
    * for being used in the corresponding InputDStream.
    */
@@ -111,13 +115,13 @@ abstract class NetworkReceiver[T](val storageLevel: StorageLevel) extends Serial
     executor.pushIterator(dataIterator, Some(metadata), None)
   }
 
-  /** Store a iterator of received data as a data block into Spark's memory. */
+  /** Store an iterator of received data as a data block into Spark's memory. */
   def store(dataIterator: java.util.Iterator[T]) {
     executor.pushIterator(dataIterator, None, None)
   }
 
   /**
-   * Store a iterator of received data as a data block into Spark's memory.
+   * Store an iterator of received data as a data block into Spark's memory.
    * The metadata will be associated with this block of data
    * for being used in the corresponding InputDStream.
    */
@@ -125,12 +129,17 @@ abstract class NetworkReceiver[T](val storageLevel: StorageLevel) extends Serial
     executor.pushIterator(dataIterator, Some(metadata), None)
   }
 
-  /** Store the bytes of received data as a data block into Spark's memory. */
+  /**
+   * Store the bytes of received data as a data block into Spark's memory. Note
+   * that the data in the ByteBuffer must be serialized using the same serializer
+   * that Spark is configured to use.
+   */
   def store(bytes: ByteBuffer) {
     executor.pushBytes(bytes, None, None)
   }
 
-  /** Store the bytes of received data as a data block into Spark's memory.
+  /**
+   * Store the bytes of received data as a data block into Spark's memory.
    * The metadata will be associated with this block of data
    * for being used in the corresponding InputDStream.
    */
@@ -205,7 +214,7 @@ abstract class NetworkReceiver[T](val storageLevel: StorageLevel) extends Serial
   private var id: Int = -1
 
   /** Handler object that runs the receiver. This is instantiated lazily in the worker. */
-  private[streaming] var executor_ : NetworkReceiverExecutor = null
+  private[streaming] var executor_ : ReceiverSupervisor = null
 
   /** Set the ID of the DStream that this receiver is associated with. */
   private[streaming] def setReceiverId(id_ : Int) {
@@ -213,7 +222,7 @@ abstract class NetworkReceiver[T](val storageLevel: StorageLevel) extends Serial
   }
 
   /** Attach Network Receiver executor to this receiver. */
-  private[streaming] def attachExecutor(exec: NetworkReceiverExecutor) {
+  private[streaming] def attachExecutor(exec: ReceiverSupervisor) {
     assert(executor_ == null)
     executor_ = exec
   }

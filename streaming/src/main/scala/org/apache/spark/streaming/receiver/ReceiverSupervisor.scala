@@ -28,20 +28,20 @@ import scala.concurrent._
 import ExecutionContext.Implicits.global
 
 /**
- * Abstract class that is responsible for executing a NetworkReceiver in the worker.
+ * Abstract class that is responsible for supervising a Receiver in the worker.
  * It provides all the necessary interfaces for handling the data received by the receiver.
  */
-private[streaming] abstract class NetworkReceiverExecutor(
-    receiver: NetworkReceiver[_],
+private[streaming] abstract class ReceiverSupervisor(
+    receiver: Receiver[_],
     conf: SparkConf
   ) extends Logging {
 
   /** Enumeration to identify current state of the StreamingContext */
-  object NetworkReceiverState extends Enumeration {
+  object ReceiverState extends Enumeration {
     type CheckpointState = Value
     val Initialized, Started, Stopped = Value
   }
-  import NetworkReceiverState._
+  import ReceiverState._
 
   // Attach the executor to the receiver
   receiver.attachExecutor(this)

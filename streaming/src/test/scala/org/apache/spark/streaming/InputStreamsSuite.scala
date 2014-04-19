@@ -36,10 +36,9 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.receivers.Receiver
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.util.Utils
-import org.apache.spark.streaming.receiver.NetworkReceiver
+import org.apache.spark.streaming.receiver.{ActorHelper, Receiver}
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
@@ -207,7 +206,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     // set up the network stream using the test receiver
     val ssc = new StreamingContext(conf, batchDuration)
-    val networkStream = ssc.networkStream[Int](testReceiver)
+    val networkStream = ssc.receiverStream[Int](testReceiver)
     val countStream = networkStream.count
     val outputBuffer = new ArrayBuffer[Seq[Long]] with SynchronizedBuffer[Seq[Long]]
     val outputStream = new TestOutputStream(countStream, outputBuffer)
@@ -301,7 +300,7 @@ object TestServer {
 }
 
 /** This is an actor for testing actor input stream */
-class TestActor(port: Int) extends Actor with Receiver {
+class TestActor(port: Int) extends Actor with ActorHelper {
 
   def bytesToString(byteString: ByteString) = byteString.utf8String
 
@@ -309,13 +308,13 @@ class TestActor(port: Int) extends Actor with Receiver {
 
   def receive = {
     case IO.Read(socket, bytes) =>
-      pushBlock(bytesToString(bytes))
+      store(bytesToString(bytes))
   }
 }
 
 /** This is a receiver to test multiple threads inserting data using block generator */
 class MultiThreadTestReceiver(numThreads: Int, numRecordsPerThread: Int)
-  extends NetworkReceiver[Int](StorageLevel.MEMORY_ONLY_SER) with Logging {
+  extends Receiver[Int](StorageLevel.MEMORY_ONLY_SER) with Logging {
   lazy val executorPool = Executors.newFixedThreadPool(numThreads)
   lazy val finishCount = new AtomicInteger(0)
 

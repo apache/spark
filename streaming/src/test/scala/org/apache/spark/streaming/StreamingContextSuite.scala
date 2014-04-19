@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.streaming.receiver.NetworkReceiver
+import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.{MetadataCleaner, Utils}
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.concurrent.Timeouts
@@ -275,7 +275,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts w
 class TestException(msg: String) extends Exception(msg)
 
 /** Custom receiver for testing whether all data received by a receiver gets processed or not */
-class TestReceiver extends NetworkReceiver[Int](StorageLevel.MEMORY_ONLY) with Logging {
+class TestReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging {
 
   var receivingThreadOption: Option[Thread] = None
 

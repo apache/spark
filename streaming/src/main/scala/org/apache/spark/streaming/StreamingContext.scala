@@ -34,8 +34,7 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream._
-import org.apache.spark.streaming.receiver.NetworkReceiver
-import org.apache.spark.streaming.receivers._
+import org.apache.spark.streaming.receiver.{ActorSupervisorStrategy, ActorReceiver, Receiver}
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.ui.StreamingTab
 import org.apache.spark.util.MetadataCleaner
@@ -138,7 +137,7 @@ class StreamingContext private[streaming] (
     }
   }
 
-  private val nextNetworkInputStreamId = new AtomicInteger(0)
+  private val nextReceiverInputStreamId = new AtomicInteger(0)
 
   private[streaming] var checkpointDir: String = {
     if (isCheckpointPresent) {
@@ -207,15 +206,26 @@ class StreamingContext private[streaming] (
     if (isCheckpointPresent) cp_ else null
   }
 
-  private[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
+  private[streaming] def getNewReceiverStreamId() = nextReceiverInputStreamId.getAndIncrement()
 
   /**
-   * Create an input stream with any arbitrary user implemented network receiver.
+   * Create an input stream with any arbitrary user implemented receiver.
    * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
-   * @param receiver Custom implementation of NetworkReceiver
+   * @param receiver Custom implementation of Receiver
    */
+  @deprecated("Use receiverStream", "1.0.0")
   def networkStream[T: ClassTag](
-    receiver: NetworkReceiver[T]): NetworkInputDStream[T] = {
+    receiver: Receiver[T]): ReceiverInputDStream[T] = {
+    receiverStream(receiver)
+  }
+
+  /**
+   * Create an input stream with any arbitrary user implemented receiver.
+   * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
+   * @param receiver Custom implementation of Receiver
+   */
+  def receiverStream[T: ClassTag](
+    receiver: Receiver[T]): ReceiverInputDStream[T] = {
     new PluggableInputDStream[T](this, receiver)
   }
 
@@ -235,9 +245,9 @@ class StreamingContext private[streaming] (
       props: Props,
       name: String,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
-      supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy
-    ): NetworkInputDStream[T] = {
-    networkStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
+      supervisorStrategy: SupervisorStrategy = ActorSupervisorStrategy.defaultStrategy
+    ): ReceiverInputDStream[T] = {
+    receiverStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
   }
 
   /**
@@ -253,7 +263,7 @@ class StreamingContext private[streaming] (
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): NetworkInputDStream[String] = {
+    ): ReceiverInputDStream[String] = {
     socketStream[String](hostname, port, SocketReceiver.bytesToLines, storageLevel)
   }
 
@@ -272,7 +282,7 @@ class StreamingContext private[streaming] (
       port: Int,
       converter: (InputStream) => Iterator[T],
       storageLevel: StorageLevel
-    ): NetworkInputDStream[T] = {
+    ): ReceiverInputDStream[T] = {
     new SocketInputDStream[T](this, hostname, port, converter, storageLevel)
   }
 
@@ -291,7 +301,7 @@ class StreamingContext private[streaming] (
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): NetworkInputDStream[T] = {
+    ): ReceiverInputDStream[T] = {
     new RawInputDStream[T](this, hostname, port, storageLevel)
   }
 

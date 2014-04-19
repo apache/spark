@@ -112,7 +112,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       // Wait until all the received blocks in the network input tracker has
       // been consumed by network input DStreams, and jobs have been generated with them
       logInfo("Waiting for all received blocks to be consumed for job generation")
-      while(!hasTimedOut && jobScheduler.networkInputTracker.hasMoreReceivedBlockIds) {
+      while(!hasTimedOut && jobScheduler.receiverTracker.hasMoreReceivedBlockIds) {
         Thread.sleep(pollTime)
       }
       logInfo("Waited for all received blocks to be consumed for job generation")
@@ -220,7 +220,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     SparkEnv.set(ssc.env)
     Try(graph.generateJobs(time)) match {
       case Success(jobs) =>
-        val receivedBlockInfo = graph.getNetworkInputStreams.map { stream =>
+        val receivedBlockInfo = graph.getReceiverInputStreams.map { stream =>
           val streamId = stream.id
           val receivedBlockInfo = stream.getReceivedBlockInfo(time)
           (streamId, receivedBlockInfo)

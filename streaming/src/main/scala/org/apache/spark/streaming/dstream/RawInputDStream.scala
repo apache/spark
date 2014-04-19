@@ -28,7 +28,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.{ReadableByteChannel, SocketChannel}
 import java.io.EOFException
 import java.util.concurrent.ArrayBlockingQueue
-import org.apache.spark.streaming.receiver.NetworkReceiver
+import org.apache.spark.streaming.receiver.Receiver
 
 
 /**
@@ -43,16 +43,16 @@ class RawInputDStream[T: ClassTag](
     host: String,
     port: Int,
     storageLevel: StorageLevel
-  ) extends NetworkInputDStream[T](ssc_ ) with Logging {
+  ) extends ReceiverInputDStream[T](ssc_ ) with Logging {
 
-  def getReceiver(): NetworkReceiver[T] = {
-    new RawNetworkReceiver(host, port, storageLevel).asInstanceOf[NetworkReceiver[T]]
+  def getReceiver(): Receiver[T] = {
+    new RawNetworkReceiver(host, port, storageLevel).asInstanceOf[Receiver[T]]
   }
 }
 
 private[streaming]
 class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
-  extends NetworkReceiver[Any](storageLevel) with Logging {
+  extends Receiver[Any](storageLevel) with Logging {
 
   var blockPushingThread: Thread = null
 
