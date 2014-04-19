@@ -693,11 +693,15 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       val committer = format.getOutputCommitter(hadoopContext)
       committer.setupTask(hadoopContext)
       val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K,V]]
-      while (iter.hasNext) {
-        val (k, v) = iter.next()
-        writer.write(k, v)
+      try {
+        while (iter.hasNext) {
+          val (k, v) = iter.next()
+          writer.write(k, v)
+        }
       }
-      writer.close(hadoopContext)
+      finally {
+        writer.close(hadoopContext)
+      }
       committer.commitTask(hadoopContext)
       return 1
     }
@@ -750,15 +754,17 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
 
       writer.setup(context.stageId, context.partitionId, attemptNumber)
       writer.open()
-
-      var count = 0
-      while(iter.hasNext) {
-        val record = iter.next()
-        count += 1
-        writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
+      try {
+        var count = 0
+        while(iter.hasNext) {
+          val record = iter.next()
+          count += 1
+          writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
+        }
       }
-
-      writer.close()
+      finally {
+        writer.close()
+      }
       writer.commit()
     }
 
