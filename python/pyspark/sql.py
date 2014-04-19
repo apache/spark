@@ -305,6 +305,19 @@ class SchemaRDD(RDD):
         """
         self._jschema_rdd.registerAsTable(name)
 
+    def insertInto(self, tableName, overwrite = False):
+        """
+        Inserts the contents of this SchemaRDD into the specified table,
+        optionally overwriting any existing data.
+        """
+        self._jschema_rdd.insertInto(tableName, overwrite)
+
+    def saveAsTable(self, tableName):
+        """
+        Creates a new table with the contents of this SchemaRDD.
+        """
+        self._jschema_rdd.saveAsTable(tableName)
+
     def _toPython(self):
         # We have to import the Row class explicitly, so that the reference Pickler has is
         # pyspark.sql.Row instead of __main__.Row
