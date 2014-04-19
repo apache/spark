@@ -165,12 +165,12 @@ private[ui] class FailedStageTable(
     <th>Tasks: Succeeded/Total</th>
     <th>Shuffle Read</th>
     <th>Shuffle Write</th>
-    <th>Failed Reason</th>
+    <th>Failure Reason</th>
   }
 
   override protected def stageRow(s: StageInfo): Seq[Node] = {
     val basicColumns = super.stageRow(s)
-    val failedReason = <td valign="middle">{s.failureReason.getOrElse("")}</td>
+    val failureReason = <td valign="middle">{s.failureReason.getOrElse("")}</td>
     basicColumns ++ failedReason
   }
 }
