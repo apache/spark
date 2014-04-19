@@ -103,6 +103,8 @@ def parse_args():
       help="When destroying a cluster, delete the security groups that were created")
   parser.add_option("--use-existing-master", action="store_true", default=False,
       help="Launch fresh slaves, but use an existing stopped master if possible")
+  parser.add_option("--ips-allowed", default="0.0.0.0/0",
+      help="IP addresses allowed to access the machine")
 
   (opts, args) = parser.parse_args()
   if len(args) != 2:
@@ -230,24 +232,24 @@ def launch_cluster(conn, opts, cluster_name):
   if master_group.rules == []: # Group was just now created
     master_group.authorize(src_group=master_group)
     master_group.authorize(src_group=slave_group)
-    master_group.authorize('tcp', 22, 22, '0.0.0.0/0')
-    master_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
-    master_group.authorize('tcp', 19999, 19999, '0.0.0.0/0')
-    master_group.authorize('tcp', 50030, 50030, '0.0.0.0/0')
-    master_group.authorize('tcp', 50070, 50070, '0.0.0.0/0')
-    master_group.authorize('tcp', 60070, 60070, '0.0.0.0/0')
-    master_group.authorize('tcp', 4040, 4045, '0.0.0.0/0')
+    master_group.authorize('tcp', 22, 22, opts.ips_allowed)
+    master_group.authorize('tcp', 8080, 8081, opts.ips_allowed)
+    master_group.authorize('tcp', 19999, 19999, opts.ips_allowed)
+    master_group.authorize('tcp', 50030, 50030, opts.ips_allowed)
+    master_group.authorize('tcp', 50070, 50070, opts.ips_allowed)
+    master_group.authorize('tcp', 60070, 60070, opts.ips_allowed)
+    master_group.authorize('tcp', 4040, 4045, opts.ips_allowed)
     if opts.ganglia:
-      master_group.authorize('tcp', 5080, 5080, '0.0.0.0/0')
+      master_group.authorize('tcp', 5080, 5080, opts.ips_allowed)
   if slave_group.rules == []: # Group was just now created
     slave_group.authorize(src_group=master_group)
     slave_group.authorize(src_group=slave_group)
-    slave_group.authorize('tcp', 22, 22, '0.0.0.0/0')
-    slave_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
-    slave_group.authorize('tcp', 50060, 50060, '0.0.0.0/0')
-    slave_group.authorize('tcp', 50075, 50075, '0.0.0.0/0')
-    slave_group.authorize('tcp', 60060, 60060, '0.0.0.0/0')
-    slave_group.authorize('tcp', 60075, 60075, '0.0.0.0/0')
+    slave_group.authorize('tcp', 22, 22, opts.ips_allowed)
+    slave_group.authorize('tcp', 8080, 8081, opts.ips_allowed)
+    slave_group.authorize('tcp', 50060, 50060, opts.ips_allowed)
+    slave_group.authorize('tcp', 50075, 50075, opts.ips_allowed)
+    slave_group.authorize('tcp', 60060, 60060, opts.ips_allowed)
+    slave_group.authorize('tcp', 60075, 60075, opts.ips_allowed)
 
   # Check if instances are already running in our groups
   existing_masters, existing_slaves = get_existing_cluster(conn, opts, cluster_name,
