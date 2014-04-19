@@ -118,7 +118,7 @@ class ALS private (
 
   private var partitioner: Partitioner = null
 
-  /** Sets the Partitioner that partitions users. */
+  /** Sets the Partitioner that partitions users and products. */
   def setPartitioner(p: Partitioner): ALS = {
     this.partitioner = p
     this
@@ -180,9 +180,8 @@ class ALS private (
     val defaultPartitioner = new Partitioner {
       val numPartitions = numBlocks
 
-      def getPartition(x: Any): Int = x match {
-        case null => 0
-        case _ => Utils.nonNegativeMod(byteswap32(x.hashCode), numPartitions)
+      def getPartition(x: Any): Int = {
+        Utils.nonNegativeMod(byteswap32(x.asInstanceOf[Int]), numPartitions)
       }
     }
 
