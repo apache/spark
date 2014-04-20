@@ -39,14 +39,18 @@ object NNLSbyPCG {
     def steplen(dir: DoubleMatrix, resid: DoubleMatrix): Double = {
       val top = SimpleBlas.dot(dir, resid)
       SimpleBlas.gemv(1.0, ata, dir, 0.0, scratch)
-      top / SimpleBlas.dot(scratch, dir)
+      // Push the denominator upward very slightly to avoid infinities and silliness
+      top / (SimpleBlas.dot(scratch, dir) + 1e-20)
     }
 
     // stopping condition
     def stop(step: Double, ndir: Double, nx: Double): Boolean = {
-        ((step != step)
-      || (step < 1e-6)
-      || (ndir < 1e-12 * nx))
+        ((step != step) // NaN
+      || (step < 1e-6) // too small or negative
+      || (step > 1e40) // too small; almost certainly numerical problems
+      || (ndir < 1e-12 * nx) // gradient relatively too small
+      || (ndir < 1e-32) // gradient absolutely too small; numerical issues may lurk
+      )
     }
 
     val grad = new DoubleMatrix(n, 1)
@@ -134,5 +138,4 @@ object NNLSbyPCG {
     }
     x.data
   }
-
 }
