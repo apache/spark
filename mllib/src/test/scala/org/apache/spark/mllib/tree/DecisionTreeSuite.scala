@@ -254,7 +254,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
       categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, strategy)
     val bestSplits = DecisionTree.findBestSplits(rdd, new Array(7), strategy, 0,
-      Array[List[Filter]](), splits, bins)
+      Array[List[Filter]](), splits, bins, 10)
 
     val split = bestSplits(0)._1
     assert(split.categories.length === 1)
@@ -281,7 +281,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
       categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
     val (splits, bins) = DecisionTree.findSplitsBins(rdd,strategy)
     val bestSplits = DecisionTree.findBestSplits(rdd, new Array(7), strategy, 0,
-      Array[List[Filter]](), splits, bins)
+      Array[List[Filter]](), splits, bins, 10)
 
     val split = bestSplits(0)._1
     assert(split.categories.length === 1)
@@ -310,7 +310,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bins(0).length === 100)
 
     val bestSplits = DecisionTree.findBestSplits(rdd, new Array(7), strategy, 0,
-      Array[List[Filter]](), splits, bins)
+      Array[List[Filter]](), splits, bins, 10)
     assert(bestSplits.length === 1)
     assert(bestSplits(0)._1.feature === 0)
     assert(bestSplits(0)._1.threshold === 10)
@@ -333,7 +333,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bins(0).length === 100)
 
     val bestSplits = DecisionTree.findBestSplits(rdd, Array(0.0), strategy, 0,
-      Array[List[Filter]](), splits, bins)
+      Array[List[Filter]](), splits, bins, 10)
     assert(bestSplits.length === 1)
     assert(bestSplits(0)._1.feature === 0)
     assert(bestSplits(0)._1.threshold === 10)
@@ -357,7 +357,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bins(0).length === 100)
 
     val bestSplits = DecisionTree.findBestSplits(rdd, Array(0.0), strategy, 0,
-      Array[List[Filter]](), splits, bins)
+      Array[List[Filter]](), splits, bins, 10)
     assert(bestSplits.length === 1)
     assert(bestSplits(0)._1.feature === 0)
     assert(bestSplits(0)._1.threshold === 10)
@@ -381,7 +381,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bins(0).length === 100)
 
     val bestSplits = DecisionTree.findBestSplits(rdd, Array(0.0), strategy, 0,
-      Array[List[Filter]](), splits, bins)
+      Array[List[Filter]](), splits, bins, 10)
     assert(bestSplits.length === 1)
     assert(bestSplits(0)._1.feature === 0)
     assert(bestSplits(0)._1.threshold === 10)
