@@ -22,7 +22,8 @@ import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::
- * Object used to solve nonnegative least squares problems using a modified projected gradient method.
+ * Object used to solve nonnegative least squares problems using a modified
+ * projected gradient method.
  */
 @DeveloperApi
 object NNLSbyPCG {
@@ -67,8 +68,9 @@ object NNLSbyPCG {
       if (nonnegative) {
         i = 0
         while (i < n) {
-          if (grad.data(i) > 0.0 && x.data(i) == 0.0)
+          if (grad.data(i) > 0.0 && x.data(i) == 0.0) {
             grad.data(i) = 0.0
+          }
           i = i + 1
         }
       }
@@ -105,8 +107,9 @@ object NNLSbyPCG {
       if (nonnegative) {
         i = 0
         while (i < n) {
-          if (step * dir.data(i) > x.data(i))
+          if (step * dir.data(i) > x.data(i)) {
             step = Math.min(step, x.data(i) / dir.data(i))
+          }
           i = i + 1
         }
       }
