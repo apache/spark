@@ -38,16 +38,14 @@ private[ui] class StageTableBase(
 
   protected def columns: Seq[Node] = {
     // create dummy element to wrap the columns
-    <dummy>
-      <th>Stage Id</th>
-      {if (isFairScheduler) {<th>Pool Name</th>} else {}}
-      <th>Description</th>
-      <th>Submitted</th>
-      <th>Duration</th>
-      <th>Tasks: Succeeded/Total</th>
-      <th>Shuffle Read</th>
-      <th>Shuffle Write</th>
-    </dummy>.child
+    <th>Stage Id</th> ++
+    {if (isFairScheduler) {<th>Pool Name</th>} else Seq.empty} ++
+    <th>Description</th>
+    <th>Submitted</th>
+    <th>Duration</th>
+    <th>Tasks: Succeeded/Total</th>
+    <th>Shuffle Read</th>
+    <th>Shuffle Write</th>
   }
 
   def toNodeSeq: Seq[Node] = {
@@ -128,26 +126,25 @@ private[ui] class StageTableBase(
       case 0 => ""
       case b => Utils.bytesToString(b)
     }
-    // create dummy element to wrap the columns
-    <dummy>
-      <td>{s.stageId}</td>
-      {if (isFairScheduler) {
-        <td>
-          <a href={"%s/stages/pool?poolname=%s"
-            .format(UIUtils.prependBaseUri(basePath), poolName.get)}>
-            {poolName.get}
-          </a>
-        </td>
-      }}
-      <td>{makeDescription(s)}</td>
-      <td valign="middle">{submissionTime}</td>
-      <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
-      <td class="progress-cell">
-        {makeProgressBar(startedTasks, completedTasks, failedTasks, totalTasks)}
+    <td>{s.stageId}</td> ++
+    {if (isFairScheduler) {
+      <td>
+        <a href={"%s/stages/pool?poolname=%s"
+          .format(UIUtils.prependBaseUri(basePath), poolName.get)}>
+          {poolName.get}
+        </a>
       </td>
-      <td sorttable_customekey={shuffleReadSortable.toString}>{shuffleRead}</td>
-      <td sorttable_customekey={shuffleWriteSortable.toString}>{shuffleWrite}</td>
-    </dummy>.child
+    } else {
+      Seq.empty
+    }} ++
+    <td>{makeDescription(s)}</td>
+    <td valign="middle">{submissionTime}</td>
+    <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
+    <td class="progress-cell">
+      {makeProgressBar(startedTasks, completedTasks, failedTasks, totalTasks)}
+    </td>
+    <td sorttable_customekey={shuffleReadSortable.toString}>{shuffleRead}</td>
+    <td sorttable_customekey={shuffleWriteSortable.toString}>{shuffleWrite}</td>
   }
 
   /** Render an HTML row that represents a stage */
