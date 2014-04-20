@@ -17,7 +17,7 @@ title: GraphX Programming Guide
 # Overview
 
 GraphX is the new (alpha) Spark API for graphs and graph-parallel computation. At a high-level,
-GraphX extends the Spark [RDD](api/core/index.html#org.apache.spark.rdd.RDD) by introducing the
+GraphX extends the Spark [RDD](api/scala/index.html#org.apache.spark.rdd.RDD) by introducing the
 [Resilient Distributed Property Graph](#property_graph): a directed multigraph with properties
 attached to each vertex and edge.  To support graph computation, GraphX exposes a set of fundamental
 operators (e.g., [subgraph](#structural_operators), [joinVertices](#join_operators), and
@@ -82,7 +82,7 @@ Prior to the release of GraphX, graph computation in Spark was expressed using B
 implementation of Pregel.  GraphX improves upon Bagel by exposing a richer property graph API, a
 more streamlined version of the Pregel abstraction, and system optimizations to improve performance
 and reduce memory overhead.  While we plan to eventually deprecate Bagel, we will continue to
-support the [Bagel API](api/bagel/index.html#org.apache.spark.bagel.package) and
+support the [Bagel API](api/scala/index.html#org.apache.spark.bagel.package) and
 [Bagel programming guide](bagel-programming-guide.html). However, we encourage Bagel users to
 explore the new GraphX API and comment on issues that may complicate the transition from Bagel.
 
@@ -103,7 +103,7 @@ getting started with Spark refer to the [Spark Quick Start Guide](quick-start.ht
 # The Property Graph
 <a name="property_graph"></a>
 
-The [property graph](api/graphx/index.html#org.apache.spark.graphx.Graph) is a directed multigraph
+The [property graph](api/scala/index.html#org.apache.spark.graphx.Graph) is a directed multigraph
 with user defined objects attached to each vertex and edge.  A directed multigraph is a directed
 graph with potentially multiple parallel edges sharing the same source and destination vertex.  The
 ability to support parallel edges simplifies modeling scenarios where there can be multiple
@@ -179,7 +179,7 @@ val userGraph: Graph[(String, String), String]
 There are numerous ways to construct a property graph from raw files, RDDs, and even synthetic
 generators and these are discussed in more detail in the section on
 [graph builders](#graph_builders).  Probably the most general method is to use the
-[Graph object](api/graphx/index.html#org.apache.spark.graphx.Graph$).  For example the following
+[Graph object](api/scala/index.html#org.apache.spark.graphx.Graph$).  For example the following
 code constructs a graph from a collection of RDDs:
 
 {% highlight scala %}
@@ -203,7 +203,7 @@ In the above example we make use of the [`Edge`][Edge] case class. Edges have a 
 `dstId` corresponding to the source and destination vertex identifiers. In addition, the `Edge`
 class has an `attr` member which stores the edge property.
 
-[Edge]: api/graphx/index.html#org.apache.spark.graphx.Edge
+[Edge]: api/scala/index.html#org.apache.spark.graphx.Edge
 
 We can deconstruct a graph into the respective vertex and edge views by using the `graph.vertices`
 and `graph.edges` members respectively.
@@ -229,7 +229,7 @@ The triplet view logically joins the vertex and edge properties yielding an
 `RDD[EdgeTriplet[VD, ED]]` containing instances of the [`EdgeTriplet`][EdgeTriplet] class. This
 *join* can be expressed in the following SQL expression:
 
-[EdgeTriplet]: api/graphx/index.html#org.apache.spark.graphx.EdgeTriplet
+[EdgeTriplet]: api/scala/index.html#org.apache.spark.graphx.EdgeTriplet
 
 {% highlight sql %}
 SELECT src.id, dst.id, src.attr, e.attr, dst.attr
@@ -270,8 +270,8 @@ core operators are defined in [`GraphOps`][GraphOps].  However, thanks to Scala 
 operators in `GraphOps` are automatically available as members of `Graph`.  For example, we can
 compute the in-degree of each vertex (defined in `GraphOps`) by the following:
 
-[Graph]: api/graphx/index.html#org.apache.spark.graphx.Graph
-[GraphOps]: api/graphx/index.html#org.apache.spark.graphx.GraphOps
+[Graph]: api/scala/index.html#org.apache.spark.graphx.Graph
+[GraphOps]: api/scala/index.html#org.apache.spark.graphx.GraphOps
 
 {% highlight scala %}
 val graph: Graph[(String, String), String]
@@ -382,7 +382,7 @@ val newGraph = Graph(newVertices, graph.edges)
 val newGraph = graph.mapVertices((id, attr) => mapUdf(id, attr))
 {% endhighlight %}
 
-[Graph.mapVertices]: api/graphx/index.html#org.apache.spark.graphx.Graph@mapVertices[VD2]((VertexId,VD)⇒VD2)(ClassTag[VD2]):Graph[VD2,ED]
+[Graph.mapVertices]: api/scala/index.html#org.apache.spark.graphx.Graph@mapVertices[VD2]((VertexId,VD)⇒VD2)(ClassTag[VD2]):Graph[VD2,ED]
 
 These operators are often used to initialize the graph for a particular computation or project away
 unnecessary properties.  For example, given a graph with the out-degrees as the vertex properties
@@ -419,7 +419,7 @@ This can be useful when, for example, trying to compute the inverse PageRank.  B
 operation does not modify vertex or edge properties or change the number of edges, it can be
 implemented efficiently without data-movement or duplication.
 
-[Graph.reverse]: api/graphx/index.html#org.apache.spark.graphx.Graph@reverse:Graph[VD,ED]
+[Graph.reverse]: api/scala/index.html#org.apache.spark.graphx.Graph@reverse:Graph[VD,ED]
 
 The [`subgraph`][Graph.subgraph] operator takes vertex and edge predicates and returns the graph
 containing only the vertices that satisfy the vertex predicate (evaluate to true) and edges that
@@ -427,7 +427,7 @@ satisfy the edge predicate *and connect vertices that satisfy the vertex predica
 operator can be used in number of situations to restrict the graph to the vertices and edges of
 interest or eliminate broken links. For example in the following code we remove broken links:
 
-[Graph.subgraph]: api/graphx/index.html#org.apache.spark.graphx.Graph@subgraph((EdgeTriplet[VD,ED])⇒Boolean,(VertexId,VD)⇒Boolean):Graph[VD,ED]
+[Graph.subgraph]: api/scala/index.html#org.apache.spark.graphx.Graph@subgraph((EdgeTriplet[VD,ED])⇒Boolean,(VertexId,VD)⇒Boolean):Graph[VD,ED]
 
 {% highlight scala %}
 // Create an RDD for the vertices
@@ -467,7 +467,7 @@ vertices and edges that are also found in the input graph.  This can be used in 
 example, we might run connected components using the graph with missing vertices and then restrict
 the answer to the valid subgraph.
 
-[Graph.mask]: api/graphx/index.html#org.apache.spark.graphx.Graph@mask[VD2,ED2](Graph[VD2,ED2])(ClassTag[VD2],ClassTag[ED2]):Graph[VD,ED]
+[Graph.mask]: api/scala/index.html#org.apache.spark.graphx.Graph@mask[VD2,ED2](Graph[VD2,ED2])(ClassTag[VD2],ClassTag[ED2]):Graph[VD,ED]
 
 {% highlight scala %}
 // Run Connected Components
@@ -482,7 +482,7 @@ The [`groupEdges`][Graph.groupEdges] operator merges parallel edges (i.e., dupli
 pairs of vertices) in the multigraph.  In many numerical applications, parallel edges can be *added*
 (their weights combined) into a single edge thereby reducing the size of the graph.
 
-[Graph.groupEdges]: api/graphx/index.html#org.apache.spark.graphx.Graph@groupEdges((ED,ED)⇒ED):Graph[VD,ED]
+[Graph.groupEdges]: api/scala/index.html#org.apache.spark.graphx.Graph@groupEdges((ED,ED)⇒ED):Graph[VD,ED]
 
 ## Join Operators
 <a name="join_operators"></a>
@@ -506,7 +506,7 @@ returns a new graph with the vertex properties obtained by applying the user def
 to the result of the joined vertices.  Vertices without a matching value in the RDD retain their
 original value.
 
-[GraphOps.joinVertices]: api/graphx/index.html#org.apache.spark.graphx.GraphOps@joinVertices[U](RDD[(VertexId,U)])((VertexId,VD,U)⇒VD)(ClassTag[U]):Graph[VD,ED]
+[GraphOps.joinVertices]: api/scala/index.html#org.apache.spark.graphx.GraphOps@joinVertices[U](RDD[(VertexId,U)])((VertexId,VD,U)⇒VD)(ClassTag[U]):Graph[VD,ED]
 
 > Note that if the RDD contains more than one value for a given vertex only one will be used.   It
 > is therefore recommended that the input RDD be first made unique using the following which will
@@ -525,7 +525,7 @@ property type.  Because not all vertices may have a matching value in the input 
 function takes an `Option` type.  For example, we can setup a graph for PageRank by initializing
 vertex properties with their `outDegree`.
 
-[Graph.outerJoinVertices]: api/graphx/index.html#org.apache.spark.graphx.Graph@outerJoinVertices[U,VD2](RDD[(VertexId,U)])((VertexId,VD,Option[U])⇒VD2)(ClassTag[U],ClassTag[VD2]):Graph[VD2,ED]
+[Graph.outerJoinVertices]: api/scala/index.html#org.apache.spark.graphx.Graph@outerJoinVertices[U,VD2](RDD[(VertexId,U)])((VertexId,VD,Option[U])⇒VD2)(ClassTag[U],ClassTag[VD2]):Graph[VD2,ED]
 
 
 {% highlight scala %}
@@ -559,7 +559,7 @@ PageRank Value, shortest path to the source, and smallest reachable vertex id).
 ### Map Reduce Triplets (mapReduceTriplets)
 <a name="mrTriplets"></a>
 
-[Graph.mapReduceTriplets]: api/graphx/index.html#org.apache.spark.graphx.Graph@mapReduceTriplets[A](mapFunc:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;Iterator[(org.apache.spark.graphx.VertexId,A)],reduceFunc:(A,A)=&gt;A,activeSetOpt:Option[(org.apache.spark.graphx.VertexRDD[_],org.apache.spark.graphx.EdgeDirection)])(implicitevidence$10:scala.reflect.ClassTag[A]):org.apache.spark.graphx.VertexRDD[A]
+[Graph.mapReduceTriplets]: api/scala/index.html#org.apache.spark.graphx.Graph@mapReduceTriplets[A](mapFunc:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;Iterator[(org.apache.spark.graphx.VertexId,A)],reduceFunc:(A,A)=&gt;A,activeSetOpt:Option[(org.apache.spark.graphx.VertexRDD[_],org.apache.spark.graphx.EdgeDirection)])(implicitevidence$10:scala.reflect.ClassTag[A]):org.apache.spark.graphx.VertexRDD[A]
 
 The core (heavily optimized) aggregation primitive in GraphX is the
 [`mapReduceTriplets`][Graph.mapReduceTriplets] operator:
@@ -665,8 +665,8 @@ attributes at each vertex. This can be easily accomplished using the
 [`collectNeighborIds`][GraphOps.collectNeighborIds] and the
 [`collectNeighbors`][GraphOps.collectNeighbors] operators.
 
-[GraphOps.collectNeighborIds]: api/graphx/index.html#org.apache.spark.graphx.GraphOps@collectNeighborIds(EdgeDirection):VertexRDD[Array[VertexId]]
-[GraphOps.collectNeighbors]: api/graphx/index.html#org.apache.spark.graphx.GraphOps@collectNeighbors(EdgeDirection):VertexRDD[Array[(VertexId,VD)]]
+[GraphOps.collectNeighborIds]: api/scala/index.html#org.apache.spark.graphx.GraphOps@collectNeighborIds(EdgeDirection):VertexRDD[Array[VertexId]]
+[GraphOps.collectNeighbors]: api/scala/index.html#org.apache.spark.graphx.GraphOps@collectNeighbors(EdgeDirection):VertexRDD[Array[(VertexId,VD)]]
 
 
 {% highlight scala %}
@@ -685,7 +685,7 @@ class GraphOps[VD, ED] {
 In Spark, RDDs are not persisted in memory by default. To avoid recomputation, they must be explicitly cached when using them multiple times (see the [Spark Programming Guide][RDD Persistence]). Graphs in GraphX behave the same way. **When using a graph multiple times, make sure to call [`Graph.cache()`][Graph.cache] on it first.**
 
 [RDD Persistence]: scala-programming-guide.html#rdd-persistence
-[Graph.cache]: api/graphx/index.html#org.apache.spark.graphx.Graph@cache():Graph[VD,ED]
+[Graph.cache]: api/scala/index.html#org.apache.spark.graphx.Graph@cache():Graph[VD,ED]
 
 In iterative computations, *uncaching* may also be necessary for best performance. By default, cached RDDs and graphs will remain in memory until memory pressure forces them to be evicted in LRU order. For iterative computation, intermediate results from previous iterations will fill up the cache. Though they will eventually be evicted, the unnecessary data stored in memory will slow down garbage collection. It would be more efficient to uncache intermediate results as soon as they are no longer necessary. This involves materializing (caching and forcing) a graph or RDD every iteration, uncaching all other datasets, and only using the materialized dataset in future iterations. However, because graphs are composed of multiple RDDs, it can be difficult to unpersist them correctly. **For iterative computation we recommend using the Pregel API, which correctly unpersists intermediate results.**
 
@@ -716,7 +716,7 @@ messages remaining.
 The following is the type signature of the [Pregel operator][GraphOps.pregel] as well as a *sketch*
 of its implementation (note calls to graph.cache have been removed):
 
-[GraphOps.pregel]: api/graphx/index.html#org.apache.spark.graphx.GraphOps@pregel[A](A,Int,EdgeDirection)((VertexId,VD,A)⇒VD,(EdgeTriplet[VD,ED])⇒Iterator[(VertexId,A)],(A,A)⇒A)(ClassTag[A]):Graph[VD,ED]
+[GraphOps.pregel]: api/scala/index.html#org.apache.spark.graphx.GraphOps@pregel[A](A,Int,EdgeDirection)((VertexId,VD,A)⇒VD,(EdgeTriplet[VD,ED])⇒Iterator[(VertexId,A)],(A,A)⇒A)(ClassTag[A]):Graph[VD,ED]
 
 {% highlight scala %}
 class GraphOps[VD, ED] {
@@ -840,12 +840,12 @@ object Graph {
 
 [`Graph.fromEdgeTuples`][Graph.fromEdgeTuples] allows creating a graph from only an RDD of edge tuples, assigning the edges the value 1, and automatically creating any vertices mentioned by edges and assigning them the default value. It also supports deduplicating the edges; to deduplicate, pass `Some` of a [`PartitionStrategy`][PartitionStrategy] as the `uniqueEdges` parameter (for example, `uniqueEdges = Some(PartitionStrategy.RandomVertexCut)`). A partition strategy is necessary to colocate identical edges on the same partition so they can be deduplicated.
 
-[PartitionStrategy]: api/graphx/index.html#org.apache.spark.graphx.PartitionStrategy$
+[PartitionStrategy]: api/scala/index.html#org.apache.spark.graphx.PartitionStrategy$
 
-[GraphLoader.edgeListFile]: api/graphx/index.html#org.apache.spark.graphx.GraphLoader$@edgeListFile(SparkContext,String,Boolean,Int):Graph[Int,Int]
-[Graph.apply]: api/graphx/index.html#org.apache.spark.graphx.Graph$@apply[VD,ED](RDD[(VertexId,VD)],RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]
-[Graph.fromEdgeTuples]: api/graphx/index.html#org.apache.spark.graphx.Graph$@fromEdgeTuples[VD](RDD[(VertexId,VertexId)],VD,Option[PartitionStrategy])(ClassTag[VD]):Graph[VD,Int]
-[Graph.fromEdges]: api/graphx/index.html#org.apache.spark.graphx.Graph$@fromEdges[VD,ED](RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]
+[GraphLoader.edgeListFile]: api/scala/index.html#org.apache.spark.graphx.GraphLoader$@edgeListFile(SparkContext,String,Boolean,Int):Graph[Int,Int]
+[Graph.apply]: api/scala/index.html#org.apache.spark.graphx.Graph$@apply[VD,ED](RDD[(VertexId,VD)],RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]
+[Graph.fromEdgeTuples]: api/scala/index.html#org.apache.spark.graphx.Graph$@fromEdgeTuples[VD](RDD[(VertexId,VertexId)],VD,Option[PartitionStrategy])(ClassTag[VD]):Graph[VD,Int]
+[Graph.fromEdges]: api/scala/index.html#org.apache.spark.graphx.Graph$@fromEdges[VD,ED](RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]
 
 # Vertex and Edge RDDs
 <a name="vertex_and_edge_rdds"></a>
@@ -913,7 +913,7 @@ of the various partitioning strategies defined in [`PartitionStrategy`][Partitio
 each partition, edge attributes and adjacency structure, are stored separately enabling maximum
 reuse when changing attribute values.
 
-[PartitionStrategy]: api/graphx/index.html#org.apache.spark.graphx.PartitionStrategy
+[PartitionStrategy]: api/scala/index.html#org.apache.spark.graphx.PartitionStrategy
 
 The three additional functions exposed by the `EdgeRDD` are:
 {% highlight scala %}
@@ -952,7 +952,7 @@ the [`Graph.partitionBy`][Graph.partitionBy] operator.  The default partitioning
 the initial partitioning of the edges as provided on graph construction.  However, users can easily
 switch to 2D-partitioning or other heuristics included in GraphX.
 
-[Graph.partitionBy]: api/graphx/index.html#org.apache.spark.graphx.Graph$@partitionBy(partitionStrategy:org.apache.spark.graphx.PartitionStrategy):org.apache.spark.graphx.Graph[VD,ED]
+[Graph.partitionBy]: api/scala/index.html#org.apache.spark.graphx.Graph$@partitionBy(partitionStrategy:org.apache.spark.graphx.PartitionStrategy):org.apache.spark.graphx.Graph[VD,ED]
 
 <p style="text-align: center;">
   <img src="img/vertex_routing_edge_tables.png"
@@ -983,7 +983,7 @@ GraphX comes with static and dynamic implementations of PageRank as methods on t
 
 GraphX also includes an example social network dataset that we can run PageRank on. A set of users is given in `graphx/data/users.txt`, and a set of relationships between users is given in `graphx/data/followers.txt`. We compute the PageRank of each user as follows:
 
-[PageRank]: api/graphx/index.html#org.apache.spark.graphx.lib.PageRank$
+[PageRank]: api/scala/index.html#org.apache.spark.graphx.lib.PageRank$
 
 {% highlight scala %}
 // Load the edges as a graph
@@ -1006,7 +1006,7 @@ println(ranksByUsername.collect().mkString("\n"))
 
 The connected components algorithm labels each connected component of the graph with the ID of its lowest-numbered vertex. For example, in a social network, connected components can approximate clusters. GraphX contains an implementation of the algorithm in the [`ConnectedComponents` object][ConnectedComponents], and we compute the connected components of the example social network dataset from the [PageRank section](#pagerank) as follows:
 
-[ConnectedComponents]: api/graphx/index.html#org.apache.spark.graphx.lib.ConnectedComponents$
+[ConnectedComponents]: api/scala/index.html#org.apache.spark.graphx.lib.ConnectedComponents$
 
 {% highlight scala %}
 // Load the graph as in the PageRank example
@@ -1029,8 +1029,8 @@ println(ccByUsername.collect().mkString("\n"))
 
 A vertex is part of a triangle when it has two adjacent vertices with an edge between them. GraphX implements a triangle counting algorithm in the [`TriangleCount` object][TriangleCount] that determines the number of triangles passing through each vertex, providing a measure of clustering. We compute the triangle count of the social network dataset from the [PageRank section](#pagerank). *Note that `TriangleCount` requires the edges to be in canonical orientation (`srcId < dstId`) and the graph to be partitioned using [`Graph.partitionBy`][Graph.partitionBy].*
 
-[TriangleCount]: api/graphx/index.html#org.apache.spark.graphx.lib.TriangleCount$
-[Graph.partitionBy]: api/graphx/index.html#org.apache.spark.graphx.Graph@partitionBy(PartitionStrategy):Graph[VD,ED]
+[TriangleCount]: api/scala/index.html#org.apache.spark.graphx.lib.TriangleCount$
+[Graph.partitionBy]: api/scala/index.html#org.apache.spark.graphx.Graph@partitionBy(PartitionStrategy):Graph[VD,ED]
 
 {% highlight scala %}
 // Load the edges in canonical order and partition the graph for triangle count

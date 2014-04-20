@@ -310,7 +310,7 @@ or its `addPyFile` method to add `.py`, `.zip` or `.egg` files to be distributed
 ### Setting Configuration Options
 Spark includes several [configuration options](configuration.html#spark-properties)
 that influence the behavior of your application.
-These should be set by building a [SparkConf](api/core/index.html#org.apache.spark.SparkConf)
+These should be set by building a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf)
 object and passing it to the SparkContext constructor.
 For example, in Java and Scala, you can do:
 

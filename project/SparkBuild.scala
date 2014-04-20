@@ -33,6 +33,7 @@ import scala.collection.JavaConversions._
 
 object SparkBuild extends Build {
   val SPARK_VERSION = "1.0.0-SNAPSHOT"
+  val SPARK_VERSION_SHORT = SPARK_VERSION.replaceAll("-SNAPSHOT", "")
 
   // Hadoop version to build against. For example, "1.0.4" for Apache releases, or
   // "2.0.0-mr1-cdh4.2.0" for Cloudera Hadoop. Note that these variables can be set
@@ -186,12 +187,16 @@ object SparkBuild extends Build {
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
     // Remove certain packages from Scaladoc
-    scalacOptions in (Compile,doc) := Seq("-groups", "-skip-packages", Seq(
-      "akka",
-      "org.apache.spark.network",
-      "org.apache.spark.deploy",
-      "org.apache.spark.util.collection"
-      ).mkString(":")),
+    scalacOptions in (Compile, doc) := Seq(
+      "-groups",
+      "-skip-packages", Seq(
+        "akka",
+        "org.apache.spark.network",
+        "org.apache.spark.deploy",
+        "org.apache.spark.util.collection"
+      ).mkString(":"),
+      "-doc-title", "Spark " + SPARK_VERSION_SHORT + " ScalaDoc"
+    ),
 
     // Only allow one test at a time, even across projects, since they run in the same JVM
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
@@ -285,7 +290,7 @@ object SparkBuild extends Build {
     publishMavenStyle in MavenCompile := true,
     publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
     publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
-  ) ++ net.virtualvoid.sbt.graph.Plugin.graphSettings ++ ScalaStyleSettings
+  ) ++ net.virtualvoid.sbt.graph.Plugin.graphSettings ++ ScalaStyleSettings ++ genjavadocSettings
 
   val akkaVersion = "2.2.3-shaded-protobuf"
   val chillVersion = "0.3.1"
@@ -351,16 +356,19 @@ object SparkBuild extends Build {
     libraryDependencies ++= maybeAvro
   )
 
-  def rootSettings = sharedSettings ++ unidocSettings ++ Seq(
+  def rootSettings = sharedSettings ++ scalaJavaUnidocSettings ++ Seq(
     publish := {},
-    unidocProjectFilter in (ScalaUnidoc, unidoc) := inAnyProject -- inProjects(repl, examples, yarn, yarnAlpha)
+    unidocProjectFilter in (ScalaUnidoc, unidoc) := inAnyProject -- inProjects(repl, examples, yarn, yarnAlpha),
+    unidocProjectFilter in (JavaUnidoc, unidoc) :=
+      inAnyProject -- inProjects(repl, examples, bagel, graphx, yarn, yarnAlpha),
+    javacOptions in doc := Seq("-windowtitle", "Spark " + SPARK_VERSION_SHORT + " JavaDoc")
   )
 
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
-   libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v ),
-   libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "jline"          % v ),
-   libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-reflect"  % v )
+    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v),
+    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "jline"          % v),
+    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-reflect"  % v)
   )
 
   def examplesSettings = sharedSettings ++ Seq(
