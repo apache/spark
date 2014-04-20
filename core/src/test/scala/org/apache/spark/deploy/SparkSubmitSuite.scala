@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{OutputStream, PrintStream}
+import java.io.{File, OutputStream, PrintStream}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -25,6 +25,9 @@ import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
 
 import org.apache.spark.deploy.SparkSubmit._
+import org.scalatest.prop.Tables.Table
+import org.scalatest.prop.TableDrivenPropertyChecks._
+import org.apache.spark.util.Utils
 
 
 class SparkSubmitSuite extends FunSuite with ShouldMatchers {
@@ -69,6 +72,13 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
 
   test("prints usage with only --help") {
     testPrematureExit(Array("--help"), "Usage: spark-submit") should be (true)
+  }
+
+  test("prints error with unrecognized option") {
+    testPrematureExit(Array("my.jar --blarg"), "Unrecognized option '--blarg'") should be (true)
+    testPrematureExit(Array("my.jar -bleg"), "Unrecognized option: '-bleg'") should be (true)
+    testPrematureExit(Array("my.jar --master=abc"),
+      "Unrecognized option: '--master=abc'. Perhaps you want '--master abc'?") should be (true)
   }
 
   test("handles multiple binary definitions") {
@@ -175,4 +185,14 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     sysProps("spark.executor.memory") should be ("5g")
     sysProps("spark.cores.max") should be ("5")
   }
+
+  def runSparkSubmit(args: Seq[String]): String = {
+    val sparkHome = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.home")).get
+    Utils.executeAndGetOutput(
+      Seq("./bin/spark-submit") ++ args,
+      new File(sparkHome),
+      Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
+  }
+
+
 }

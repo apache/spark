@@ -17,14 +17,11 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, FileInputStream, IOException, PrintStream}
+import java.io.{File, PrintStream}
 import java.net.{URI, URL}
-import java.util.Properties
 
-import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
-import org.apache.spark.SparkException
 import org.apache.spark.executor.ExecutorURLClassLoader
 
 /**
@@ -110,23 +107,6 @@ object SparkSubmit {
     val sysProps = new HashMap[String, String]()
     var childMainClass = ""
 
-    // Load system properties by default from the file, if present
-    if (appArgs.verbose) printStream.println(s"Using properties file: ${appArgs.propertiesFile}")
-    Option(appArgs.propertiesFile).foreach { filename =>
-      val file = new File(filename)
-      getDefaultProperties(file).foreach { case (k, v) =>
-        if (k.startsWith("spark")) {
-          if (k == "spark.master")
-            throw new Exception("Setting spark.master in spark-defaults.properties is not " +
-              "supported. Use MASTER environment variable or --master.")
-          sysProps(k) = v
-          if (appArgs.verbose) printStream.println(s"Adding default property: $k=$v")
-        }
-        else {
-          printWarning(s"Ignoring non-spark config property: $k=$v")
-        }
-      }
-    }
 
     if (clusterManager == MESOS && deployOnCluster) {
       printErrorAndExit("Mesos does not support running the driver on the cluster")
@@ -166,10 +146,11 @@ object SparkSubmit {
         sysProp = "spark.cores.max"),
       new OptionAssigner(appArgs.files, YARN, false, sysProp = "spark.yarn.dist.files"),
       new OptionAssigner(appArgs.files, YARN, true, clOption = "--files"),
+      new OptionAssigner(appArgs.files, STANDALONE | MESOS, true, sysProp = "spark.files"),
       new OptionAssigner(appArgs.archives, YARN, false, sysProp = "spark.yarn.dist.archives"),
       new OptionAssigner(appArgs.archives, YARN, true, clOption = "--archives"),
       new OptionAssigner(appArgs.jars, YARN, true, clOption = "--addJars"),
-      new OptionAssigner(appArgs.jars, STANDALONE | YARN | MESOS, true, sysProp = "spark.jars")
+      new OptionAssigner(appArgs.jars, STANDALONE | MESOS, false, sysProp = "spark.jars")
     )
 
     // For client mode make any added jars immediately visible on the classpath
@@ -219,6 +200,10 @@ object SparkSubmit {
       }
     }
 
+    for ((k, v) <- appArgs.getDefaultSparkProperties) {
+      if (!sysProps.contains(k)) sysProps(k) = v
+    }
+
     (childArgs, childClasspath, sysProps, childMainClass)
   }
 
@@ -259,22 +244,12 @@ object SparkSubmit {
     val url = localJarFile.getAbsoluteFile.toURI.toURL
     loader.addURL(url)
   }
-
-  private def getDefaultProperties(file: File): Seq[(String, String)] = {
-    require(file.exists(), s"Default properties file ${file.getName} does not exist")
-    val inputStream = new FileInputStream(file)
-    val properties = new Properties()
-    try {
-      properties.load(inputStream)
-    } catch {
-      case e: IOException =>
-        val message = s"Failed when loading Spark properties file ${file.getName}"
-        throw new SparkException(message, e)
-    }
-    properties.stringPropertyNames().toSeq.map(k => (k, properties(k)))
-  }
 }
 
+/**
+ * Provides an indirection layer for passing arguments as system properties or flags to
+ * the user's driver program or to downstream launcher tools.
+ */
 private[spark] class OptionAssigner(val value: String,
   val clusterManager: Int,
   val deployOnCluster: Boolean,

@@ -99,23 +99,29 @@ scala> linesWithSpark.count()
 res9: Long = 15
 {% endhighlight %}
 
-It may seem silly to use Spark to explore and cache a 30-line text file. The interesting part is that these same functions can be used on very large data sets, even when they are striped across tens or hundreds of nodes. You can also do this interactively by connecting `bin/spark-shell` to a cluster, as described in the [programming guide](scala-programming-guide.html#initializing-spark).
+It may seem silly to use Spark to explore and cache a 30-line text file. The interesting part is
+that these same functions can be used on very large data sets, even when they are striped across
+tens or hundreds of nodes. You can also do this interactively by connecting `bin/spark-shell` to
+a cluster, as described in the [programming guide](scala-programming-guide.html#initializing-spark).
 
 # A Standalone App in Scala
-Now say we wanted to write a standalone application using the Spark API. We will walk through a simple application in both Scala (with SBT), Java (with Maven), and Python. If you are using other build systems, consider using the Spark assembly JAR described in the developer guide.
+Now say we wanted to write a standalone application using the Spark API. We will walk through a
+simple application in both Scala (with SBT), Java (with Maven), and Python.
 
-We'll create a very simple Spark application in Scala. So simple, in fact, that it's named `SimpleApp.scala`:
+We'll create a very simple Spark application in Scala. So simple, in fact, that it's
+named `SimpleApp.scala`:
 
 {% highlight scala %}
 /*** SimpleApp.scala ***/
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
+import org.apache.spark.SparkConf
 
 object SimpleApp {
   def main(args: Array[String]) {
-    val logFile = "$YOUR_SPARK_HOME/README.md" // Should be some file on your system
-    val sc = new SparkContext("local", "Simple App", "YOUR_SPARK_HOME",
-      List("target/scala-{{site.SCALA_BINARY_VERSION}}/simple-project_{{site.SCALA_BINARY_VERSION}}-1.0.jar"))
+    val logFile = "YOUR_SPARK_HOME/README.md" // Should be some file on your system
+    val conf = new SparkConf().setAppName("Simple Application")
+    val sc = new SparkContext(conf)
     val logData = sc.textFile(logFile, 2).cache()
     val numAs = logData.filter(line => line.contains("a")).count()
     val numBs = logData.filter(line => line.contains("b")).count()
@@ -124,9 +130,17 @@ object SimpleApp {
 }
 {% endhighlight %}
 
-This program just counts the number of lines containing 'a' and the number containing 'b' in the Spark README. Note that you'll need to replace $YOUR_SPARK_HOME with the location where Spark is installed. Unlike the earlier examples with the Spark shell, which initializes its own SparkContext, we initialize a SparkContext as part of the program. We pass the SparkContext constructor four arguments, the type of scheduler we want to use (in this case, a local scheduler), a name for the application, the directory where Spark is installed, and a name for the jar file containing the application's code. The final two arguments are needed in a distributed setting, where Spark is running across several nodes, so we include them for completeness. Spark will automatically ship the jar files you list to slave nodes.
+This program just counts the number of lines containing 'a' and the number containing 'b' in the
+Spark README. Note that you'll need to replace YOUR_SPARK_HOME with the location where Spark is
+installed. Unlike the earlier examples with the Spark shell, which initializes its own SparkContext,
+we initialize a SparkContext as part of the program.
 
-This file depends on the Spark API, so we'll also include an sbt configuration file, `simple.sbt` which explains that Spark is a dependency. This file also adds a repository that Spark depends on:
+We pass the SparkContext constructor a SparkConf object which contains information about our
+application. We also call sc.addJar to make sure that when our application is launched in cluster
+mode, the jar file containing it will be shipped automatically to worker nodes.
+
+This file depends on the Spark API, so we'll also include an sbt configuration file, `simple.sbt`
+which explains that Spark is a dependency. This file also adds a repository that Spark depends on:
 
 {% highlight scala %}
 name := "Simple Project"
@@ -140,15 +154,19 @@ libraryDependencies += "org.apache.spark" %% "spark-core" % "{{site.SPARK_VERSIO
 resolvers += "Akka Repository" at "http://repo.akka.io/releases/"
 {% endhighlight %}
 
-If you also wish to read data from Hadoop's HDFS, you will also need to add a dependency on `hadoop-client` for your version of HDFS:
+If you also wish to read data from Hadoop's HDFS, you will also need to add a dependency on
+`hadoop-client` for your version of HDFS:
 
 {% highlight scala %}
 libraryDependencies += "org.apache.hadoop" % "hadoop-client" % "<your-hdfs-version>"
 {% endhighlight %}
 
-Finally, for sbt to work correctly, we'll need to layout `SimpleApp.scala` and `simple.sbt` according to the typical directory structure. Once that is in place, we can create a JAR package containing the application's code, then use `sbt/sbt run` to execute our program.
+Finally, for sbt to work correctly, we'll need to layout `SimpleApp.scala` and `simple.sbt`
+according to the typical directory structure. Once that is in place, we can create a JAR package
+containing the application's code, then use the `spark-submit` script to run our program.
 
 {% highlight bash %}
+# Your directory layout should look like this
 $ find .
 .
 ./simple.sbt
@@ -157,14 +175,22 @@ $ find .
 ./src/main/scala
 ./src/main/scala/SimpleApp.scala
 
-$ sbt/sbt package
-$ sbt/sbt run
+# Package a jar containing your application
+$ sbt package
+...
+[info] Packaging {..}/{..}/target/scala-2.10/simple-project_2.10-1.0.jar
+
+# Use spark-submit to run your application
+$ YOUR_SPARK_HOME/bin/spark-submit target/scala-2.10/simple-project_2.10-1.0.jar \
+  --class "SimpleApp" \
+  --master local[4]
 ...
 Lines with a: 46, Lines with b: 23
 {% endhighlight %}
 
 # A Standalone App in Java
-Now say we wanted to write a standalone application using the Java API. We will walk through doing this with Maven. If you are using other build systems, consider using the Spark assembly JAR described in the developer guide.
+Now say we wanted to write a standalone application using the Java API. This example will use
+maven to compile an application jar, but any similar build system will work.
 
 We'll create a very simple Spark application, `SimpleApp.java`:
 

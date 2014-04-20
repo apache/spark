@@ -171,11 +171,11 @@ class SparkContext(config: SparkConf) extends Logging {
   conf.setIfMissing("spark.driver.host", Utils.localHostName())
   conf.setIfMissing("spark.driver.port", "0")
 
-  val jars: Seq[String] = if (conf.contains("spark.jars")) {
-    conf.get("spark.jars").split(",").filter(_.size != 0)
-  } else {
-    null
-  }
+  val jars: Seq[String] =
+    conf.getOption("spark.jars").map(_.split(",")).map(_.filter(_.size != 0)).toSeq.flatten
+
+  val files: Seq[String] =
+    conf.getOption("spark.files").map(_.split(",")).map(_.filter(_.size != 0)).toSeq.flatten
 
   val master = conf.get("spark.master")
   val appName = conf.get("spark.app.name")
@@ -234,6 +234,10 @@ class SparkContext(config: SparkConf) extends Logging {
   // Add each JAR given through the constructor
   if (jars != null) {
     jars.foreach(addJar)
+  }
+
+  if (files != null) {
+    files.foreach(addFile)
   }
 
   private def warnSparkMem(value: String): String = {
