@@ -52,16 +52,15 @@ class LassoModel(
  * See also the documentation for the precise formulation.
  */
 class LassoWithSGD private (
-    private var stepSize: Double,
-    private var numIterations: Int,
-    private var regParam: Double,
-    private var miniBatchFraction: Double)
+    var stepSize: Double,
+    var numIterations: Int,
+    var regParam: Double,
+    var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[LassoModel] with Serializable {
 
-  private val gradient = new LeastSquaresGradient()
-  private val updater = new L1Updater()
-  override val optimizer = new GradientDescent(gradient, updater)
-    .setStepSize(stepSize)
+  val gradient = new LeastSquaresGradient()
+  val updater = new L1Updater()
+  @transient val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
     .setNumIterations(numIterations)
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
@@ -70,10 +69,52 @@ class LassoWithSGD private (
   super.setIntercept(false)
 
   /**
-   * Construct a Lasso object with default parameters: {stepSize: 1.0, numIterations: 100,
-   * regParam: 1.0, miniBatchFraction: 1.0}.
+   * Construct a Lasso object with default parameters
    */
   def this() = this(1.0, 100, 1.0, 1.0)
+
+  override def setIntercept(addIntercept: Boolean): this.type = {
+    // TODO: Support adding intercept.
+    if (addIntercept) throw new UnsupportedOperationException("Adding intercept is not supported.")
+    this
+  }
+
+  override protected def createModel(weights: Vector, intercept: Double) = {
+    new LassoModel(weights, intercept)
+  }
+}
+
+/**
+ * Train a regression model with L1-regularization and L2-regularization using
+ * Alternating Direction Method of Multiplier (ADMM).
+ * This solves the l1-regularized least squares regression formulation
+ *          f(weights) = 1/2 ||A weights-y||^2  + l1RegParam ||weights||_1 + l2RegParam/2 ||weights||_2^2
+ * Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
+ * its corresponding right hand side label y.
+ * See also the documentation for the precise formulation.
+ */
+class LassoWithADMM private (
+    var numPartitions: Int,
+    var numIterations: Int,
+    var l1RegParam: Double,
+    var l2RegParam: Double,
+    var penalty: Double)
+  extends GeneralizedLinearAlgorithm[LassoModel] with Serializable {
+
+
+  @transient val optimizer = new ADMMLasso().setNumPartitions(numPartitions)
+    .setNumIterations(numIterations)
+    .setL1RegParam(l1RegParam)
+    .setL2RegParam(l2RegParam)
+    .setPenalty(penalty)
+
+  // We don't want to penalize the intercept, so set this to false.
+  super.setIntercept(false)
+
+  /**
+   * Construct a LassoWithADMM object with default parameters
+   */
+  def this() = this(5, 50, 1.0, .0, 10.0)
 
   override def setIntercept(addIntercept: Boolean): this.type = {
     // TODO: Support adding intercept.
@@ -182,6 +223,73 @@ object LassoWithSGD {
     val sc = new SparkContext(args(0), "Lasso")
     val data = MLUtils.loadLabeledData(sc, args(1))
     val model = LassoWithSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
+
+    println("Weights: " + model.weights)
+    println("Intercept: " + model.intercept)
+
+    sc.stop()
+  }
+}
+
+object LassoWithADMM {
+  /**
+   * Train a Lasso model given an RDD of (label, features) pairs using ADMM. We run a fixed number
+   * of outer ADMM iterations. The weights are initialized using the initial weights provided.
+   *
+   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y
+   * @param numPartitions Number of data blocks to partition the data into
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @param l1RegParam l1-regularization parameter
+   * @param l2RegParam l2-regularization parameter
+   * @param penalty ADMM penalty of the constraint
+   * @param initialWeights set of weights to be used. Array should be equal in size to
+   *        the number of features in the data.
+   */
+  def train(
+             input: RDD[LabeledPoint],
+             numPartitions: Int,
+             numIterations: Int,
+             l1RegParam: Double,
+             l2RegParam: Double,
+             penalty: Double,
+             initialWeights: Vector): LassoModel = {
+    new LassoWithADMM(numPartitions, numIterations, l1RegParam, l2RegParam, penalty)
+      .run(input, initialWeights)
+  }
+
+  /**
+   * Train a Lasso model given an RDD of (label, features) pairs using ADMM. We run a fixed number
+   * of outer ADMM iterations. The weights are initialized using default value.
+   *
+   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y
+   * @param numPartitions Number of data blocks to partition the data into
+   * @param numIterations Number of iterations of gradient descent to run.
+   * @param l1RegParam l1-regularization parameter
+   * @param l2RegParam l2-regularization parameter
+   * @param penalty ADMM penalty of the constraint
+   */
+  def train(
+             input: RDD[LabeledPoint],
+             numPartitions: Int,
+             numIterations: Int,
+             l1RegParam: Double,
+             l2RegParam: Double,
+             penalty: Double): LassoModel = {
+    new LassoWithADMM(numPartitions, numIterations, l1RegParam, l2RegParam, penalty).run(input)
+  }
+
+  def main(args: Array[String]) {
+    if (args.length != 5) {
+      println("Usage: Lasso <master> <input_dir> <numPartitions> <niters> <l1-regularizaztion> " +
+        "<l2-regularizaztion> <penalty>")
+      System.exit(1)
+    }
+    val sc = new SparkContext(args(0), "Lasso")
+    val data = MLUtils.loadLabeledData(sc, args(1))
+    val model = LassoWithADMM.train(data, args(2).toInt, args(3).toInt, args(4).toDouble,
+      args(5).toDouble, args(6).toDouble)
 
     println("Weights: " + model.weights)
     println("Intercept: " + model.intercept)
