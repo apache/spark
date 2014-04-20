@@ -18,16 +18,13 @@
 package org.apache.spark.sql.parquet
 
 import scala.collection.mutable.{Buffer, ArrayBuffer, HashMap}
-import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.runtimeMirror
 
 import parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Converter}
 import parquet.schema.MessageType
 
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Row, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{NativeRow, GenericRow, Row, Attribute}
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
-import org.apache.spark.util.Utils
 
 private[parquet] object CatalystConverter {
   // The type internally used for fields
@@ -83,7 +80,7 @@ private[parquet] object CatalystConverter {
     val attributes = ParquetTypesConverter.convertToAttributes(parquetSchema)
     // For non-nested types we use the optimized Row converter
     if (attributes.forall(a => ParquetTypesConverter.isPrimitiveType(a.dataType))) {
-      new MutableRowGroupConverter(attributes)
+      new PrimitiveRowGroupConverter(attributes)
     } else {
       new CatalystGroupConverter(attributes)
     }
@@ -170,6 +167,9 @@ private[parquet] class CatalystGroupConverter(
   def getCurrentRecord: Row = {
     assert(isRootConverter, "getCurrentRecord should only be called in root group converter!")
     // TODO: use iterators if possible
+    // Note: this will ever only be called in the root converter when the record has been
+    // fully processed. Therefore it will be difficult to use mutable rows instead, since
+    // any non-root converter never would be sure when it would be safe to re-use the buffer.
     new GenericRow(current.toArray)
   }
 
@@ -180,14 +180,9 @@ private[parquet] class CatalystGroupConverter(
     current.update(fieldIndex, value)
   }
 
-  override protected[parquet] def clearBuffer(): Unit = {
-    // TODO: reuse buffer?
-    buffer = new ArrayBuffer[Row](CatalystArrayConverter.INITIAL_ARRAY_SIZE)
-  }
+  override protected[parquet] def clearBuffer(): Unit = buffer.clear()
 
   override def start(): Unit = {
-    // TODO: reuse buffer?
-    // Allocate new array in the root converter (others will be called clearBuffer() on)
     current = ArrayBuffer.fill(schema.length)(null)
     converters.foreach {
       converter => if (!converter.isPrimitive) {
@@ -196,12 +191,10 @@ private[parquet] class CatalystGroupConverter(
     }
   }
 
-  // TODO: think about reusing the buffer
   override def end(): Unit = {
     if (!isRootConverter) {
       assert(current!=null) // there should be no empty groups
       buffer.append(new GenericRow(current.toArray))
-      // TODO: use iterators if possible, avoid Row wrapping
       parent.updateField(index, new GenericRow(buffer.toArray.asInstanceOf[Array[Any]]))
     }
   }
@@ -212,7 +205,7 @@ private[parquet] class CatalystGroupConverter(
  * to a [[org.apache.spark.sql.catalyst.expressions.Row]] object. Note that his
  * converter is optimized for rows of primitive types (non-nested records).
  */
-private[parquet] class MutableRowGroupConverter(
+private[parquet] class PrimitiveRowGroupConverter(
     protected[parquet] val schema: Seq[FieldType],
     protected[parquet] var current: ParquetRelation.RowType)
   extends GroupConverter with CatalystConverter {
@@ -334,7 +327,7 @@ object CatalystArrayConverter {
  * [[org.apache.spark.sql.parquet.ParquetTypesConverter]]) into an
  * [[org.apache.spark.sql.catalyst.types.ArrayType]].
  *
- * @param elementType The type of the array elements
+ * @param elementType The type of the array elements (complex or primitive)
  * @param index The position of this (array) field inside its parent converter
  * @param parent The parent converter
  * @param buffer A data buffer
@@ -345,8 +338,6 @@ private[parquet] class CatalystArrayConverter(
     protected[parquet] val parent: CatalystConverter,
     protected[parquet] var buffer: Buffer[Any])
   extends GroupConverter with CatalystConverter {
-  // TODO: In the future consider using native arrays instead of buffer for
-  // primitive types for performance reasons
 
   def this(elementType: DataType, index: Int, parent: CatalystConverter) =
     this(
@@ -374,8 +365,7 @@ private[parquet] class CatalystArrayConverter(
   }
 
   override protected[parquet] def clearBuffer(): Unit = {
-    // TODO: reuse buffer?
-    buffer = new ArrayBuffer[Any](CatalystArrayConverter.INITIAL_ARRAY_SIZE)
+    buffer.clear()
   }
 
   override def start(): Unit = {
@@ -384,10 +374,8 @@ private[parquet] class CatalystArrayConverter(
     }
   }
 
-  // TODO: think about reusing the buffer
   override def end(): Unit = {
     assert(parent != null)
-    // TODO: use iterators if possible, avoid Row wrapping
     parent.updateField(index, new GenericRow(buffer.toArray))
     clearBuffer()
   }
@@ -396,20 +384,27 @@ private[parquet] class CatalystArrayConverter(
   override def getCurrentRecord: Row = throw new UnsupportedOperationException
 }
 
-private[parquet] class CatalystNativeArrayConverter[T <: NativeType](
+/**
+ * A `parquet.io.api.GroupConverter` that converts a single-element groups that
+ * match the characteristics of an array (see
+ * [[org.apache.spark.sql.parquet.ParquetTypesConverter]]) into an
+ * [[org.apache.spark.sql.catalyst.types.ArrayType]].
+ *
+ * @param elementType The type of the array elements (native)
+ * @param index The position of this (array) field inside its parent converter
+ * @param parent The parent converter
+ * @param capacity The (initial) capacity of the buffer
+ */
+private[parquet] class CatalystNativeArrayConverter(
     val elementType: NativeType,
     val index: Int,
     protected[parquet] val parent: CatalystConverter,
     protected[parquet] var capacity: Int = CatalystArrayConverter.INITIAL_ARRAY_SIZE)
   extends GroupConverter with CatalystConverter {
 
-  // similar comment as in [[Decoder]]: this should probably be in NativeType
-  private val classTag = {
-    val mirror = runtimeMirror(Utils.getSparkClassLoader)
-    ClassTag[T#JvmType](mirror.runtimeClass(elementType.tag.tpe))
-  }
+  type nativeType = elementType.JvmType
 
-  private var buffer: Array[T#JvmType] = classTag.newArray(capacity)
+  private var buffer: Array[nativeType] = elementType.classTag.newArray(capacity)
 
   private var elements: Int = 0
 
@@ -432,43 +427,43 @@ private[parquet] class CatalystNativeArrayConverter[T <: NativeType](
   // Overriden here to avoid auto-boxing for primitive types
   override protected[parquet] def updateBoolean(fieldIndex: Int, value: Boolean): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[T#JvmType]
+    buffer(elements) = value.asInstanceOf[nativeType]
     elements += 1
   }
 
   override protected[parquet] def updateInt(fieldIndex: Int, value: Int): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[T#JvmType]
+    buffer(elements) = value.asInstanceOf[nativeType]
     elements += 1
   }
 
   override protected[parquet] def updateLong(fieldIndex: Int, value: Long): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[T#JvmType]
+    buffer(elements) = value.asInstanceOf[nativeType]
     elements += 1
   }
 
   override protected[parquet] def updateDouble(fieldIndex: Int, value: Double): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[T#JvmType]
+    buffer(elements) = value.asInstanceOf[nativeType]
     elements += 1
   }
 
   override protected[parquet] def updateFloat(fieldIndex: Int, value: Float): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.asInstanceOf[T#JvmType]
+    buffer(elements) = value.asInstanceOf[nativeType]
     elements += 1
   }
 
   override protected[parquet] def updateBinary(fieldIndex: Int, value: Binary): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.getBytes.asInstanceOf[T#JvmType]
+    buffer(elements) = value.getBytes.asInstanceOf[nativeType]
     elements += 1
   }
 
   override protected[parquet] def updateString(fieldIndex: Int, value: Binary): Unit = {
     checkGrowBuffer()
-    buffer(elements) = value.toStringUsingUTF8.asInstanceOf[T#JvmType]
+    buffer(elements) = value.toStringUsingUTF8.asInstanceOf[nativeType]
     elements += 1
   }
 
@@ -482,12 +477,7 @@ private[parquet] class CatalystNativeArrayConverter[T <: NativeType](
     assert(parent != null)
     parent.updateField(
       index,
-      new GenericRow {
-        // TODO: it would be much nicer to use a view here but GenericRow requires an Array
-        // TODO: we should avoid using GenericRow as a wrapper but [[GetField]] current
-        // requires that
-        override val values = buffer.slice(0, elements).map(_.asInstanceOf[Any])
-      })
+      new NativeRow[nativeType](buffer.slice(0, elements)))
     clearBuffer()
   }
 
@@ -497,7 +487,7 @@ private[parquet] class CatalystNativeArrayConverter[T <: NativeType](
   private def checkGrowBuffer(): Unit = {
     if (elements >= capacity) {
       val newCapacity = 2 * capacity
-      val tmp: Array[T#JvmType] = classTag.newArray(newCapacity)
+      val tmp: Array[nativeType] = elementType.classTag.newArray(newCapacity)
       Array.copy(buffer, 0, tmp, 0, capacity)
       buffer = tmp
       capacity = newCapacity
