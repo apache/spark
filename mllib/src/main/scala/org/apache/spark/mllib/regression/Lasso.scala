@@ -88,7 +88,7 @@ class LassoWithSGD private (
  * Train a regression model with L1-regularization and L2-regularization using
  * Alternating Direction Method of Multiplier (ADMM).
  * This solves the l1-regularized least squares regression formulation
- *          f(weights) = 1/2 ||A weights-y||^2  + l1RegParam ||weights||_1 + l2RegParam/2 ||weights||_2^2
+ *    f(weights) = 1/2 ||A weights-y||^2  + l1RegParam ||weights||_1 + l2RegParam/2 ||weights||_2^2
  * Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
