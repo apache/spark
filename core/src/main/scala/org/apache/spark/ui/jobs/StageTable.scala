@@ -36,15 +36,18 @@ private[ui] class StageTableBase(
   private val listener = parent.listener
   protected def isFairScheduler = parent.isFairScheduler
 
-  protected def columns: Seq[Any] = {
-    {<th>Stage Id</th>} ++
-    Seq{if (isFairScheduler) {<th>Pool Name</th>} else {}} ++
-    {<th>Description</th>
-    <th>Submitted</th>
-    <th>Duration</th>
-    <th>Tasks: Succeeded/Total</th>
-    <th>Shuffle Read</th>
-    <th>Shuffle Write</th>}
+  protected def columns: Seq[Node] = {
+    // create dummy element to wrap the columns
+    <dummy>
+      <th>Stage Id</th>
+      {if (isFairScheduler) {<th>Pool Name</th>} else {}}
+      <th>Description</th>
+      <th>Submitted</th>
+      <th>Duration</th>
+      <th>Tasks: Succeeded/Total</th>
+      <th>Shuffle Read</th>
+      <th>Shuffle Write</th>
+    </dummy>.child
   }
 
   def toNodeSeq: Seq[Node] = {
@@ -96,7 +99,7 @@ private[ui] class StageTableBase(
       .getOrElse(<div> {killLink}{nameLink}</div>)
   }
 
-  protected def stageRow(s: StageInfo): Seq[Any] = {
+  protected def stageRow(s: StageInfo): Seq[Node] = {
     val poolName = listener.stageIdToPool.get(s.stageId)
     val submissionTime = s.submissionTime match {
       case Some(t) => UIUtils.formatDate(new Date(t))
@@ -125,23 +128,26 @@ private[ui] class StageTableBase(
       case 0 => ""
       case b => Utils.bytesToString(b)
     }
-    {<td>{s.stageId}</td>} ++
-    Seq{if (isFairScheduler) {
-      <td>
-        <a href={"%s/stages/pool?poolname=%s"
-          .format(UIUtils.prependBaseUri(basePath), poolName.get)}>
-          {poolName.get}
-        </a>
+    // create dummy element to wrap the columns
+    <dummy>
+      <td>{s.stageId}</td>
+      {if (isFairScheduler) {
+        <td>
+          <a href={"%s/stages/pool?poolname=%s"
+            .format(UIUtils.prependBaseUri(basePath), poolName.get)}>
+            {poolName.get}
+          </a>
+        </td>
+      }}
+      <td>{makeDescription(s)}</td>
+      <td valign="middle">{submissionTime}</td>
+      <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
+      <td class="progress-cell">
+        {makeProgressBar(startedTasks, completedTasks, failedTasks, totalTasks)}
       </td>
-    }} ++
-    {<td>{makeDescription(s)}</td>
-    <td valign="middle">{submissionTime}</td>
-    <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
-    <td class="progress-cell">
-      {makeProgressBar(startedTasks, completedTasks, failedTasks, totalTasks)}
-    </td>
-    <td sorttable_customekey={shuffleReadSortable.toString}>{shuffleRead}</td>
-    <td sorttable_customekey={shuffleWriteSortable.toString}>{shuffleWrite}</td>}
+      <td sorttable_customekey={shuffleReadSortable.toString}>{shuffleRead}</td>
+      <td sorttable_customekey={shuffleWriteSortable.toString}>{shuffleWrite}</td>
+    </dummy>.child
   }
 
   /** Render an HTML row that represents a stage */
@@ -154,9 +160,9 @@ private[ui] class FailedStageTable(
     killEnabled: Boolean = false)
   extends StageTableBase(stages, parent, killEnabled) {
 
-  override protected def columns: Seq[Any] = super.columns ++ <th>Failure Reason</th>
+  override protected def columns: Seq[Node] = super.columns ++ <th>Failure Reason</th>
 
-  override protected def stageRow(s: StageInfo): Seq[Any] = {
+  override protected def stageRow(s: StageInfo): Seq[Node] = {
     val basicColumns = super.stageRow(s)
     val failureReason = <td valign="middle">{s.failureReason.getOrElse("")}</td>
     basicColumns ++ failureReason
