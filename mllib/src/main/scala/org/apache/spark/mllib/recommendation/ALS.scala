@@ -504,6 +504,8 @@ class ALS private (
       }
     }
 
+    val ws = NNLSbyPCG.createWorkspace(rank)
+
     // Solve the least-squares problem for each user and return the new feature vectors
     Array.range(0, numUsers).map { index =>
       // Compute the full XtX matrix from the lower-triangular part we got above
@@ -512,9 +514,9 @@ class ALS private (
       (0 until rank).foreach(i => fullXtX.data(i*rank + i) += lambda)
       // Solve the resulting matrix, which is symmetric and positive-definite
       if (implicitPrefs) {
-        solveLeastSquares(fullXtX.addi(YtY.get.value), userXy(index))
+        solveLeastSquares(fullXtX.addi(YtY.get.value), userXy(index), ws)
       } else {
-        solveLeastSquares(fullXtX, userXy(index))
+        solveLeastSquares(fullXtX, userXy(index), ws)
       }
     }
   }
@@ -523,11 +525,12 @@ class ALS private (
    * Given A^T A and A^T b, find the x minimising ||Ax - b||_2, possibly subject
    * to nonnegativity constraints if `nonnegative` is true.
    */
-  def solveLeastSquares(ata: DoubleMatrix, atb: DoubleMatrix): Array[Double] = {
+  def solveLeastSquares(ata: DoubleMatrix, atb: DoubleMatrix,
+      ws: NNLSbyPCG.Workspace): Array[Double] = {
     if (!nonnegative) {
       Solve.solvePositive(ata, atb).data
     } else {
-      NNLSbyPCG.solve(ata, atb, true)
+      NNLSbyPCG.solve(ata, atb, true, ws)
     }
   }
 

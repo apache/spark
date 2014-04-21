@@ -21,6 +21,7 @@ import org.jblas.{DoubleMatrix, SimpleBlas}
 
 import org.apache.spark.annotation.DeveloperApi
 
+
 /**
  * :: DeveloperApi ::
  * Object used to solve nonnegative least squares problems using a modified
@@ -28,6 +29,32 @@ import org.apache.spark.annotation.DeveloperApi
  */
 @DeveloperApi
 private[mllib] object NNLSbyPCG {
+  class Workspace(val n: Int) {
+    val scratch = new DoubleMatrix(n, 1)
+    val grad = new DoubleMatrix(n, 1)
+    val x = new DoubleMatrix(n, 1)
+    val dir = new DoubleMatrix(n, 1)
+    val lastDir = new DoubleMatrix(n, 1)
+    val res = new DoubleMatrix(n, 1)
+
+    def wipe() {
+      var i: Int = 0
+      while (i < n) {
+        scratch.data(i) = 0.0
+        grad.data(i) = 0.0
+        x.data(i) = 0.0
+        dir.data(i) = 0.0
+        lastDir.data(i) = 0.0
+        res.data(i) = 0.0
+        i = i + 1
+      }
+    }
+  }
+
+  def createWorkspace(n: Int): Workspace = {
+    new Workspace(n)
+  }
+
   /**
    * Solve a least squares problem, possibly with nonnegativity constraints, by a modified
    * projected gradient method.  That is, find x minimising ||Ax - b||_2 given A^T A and A^T b.
@@ -42,9 +69,12 @@ private[mllib] object NNLSbyPCG {
    * direction, however, while this method only uses a conjugate gradient direction if the last
    * iteration did not cause a previously-inactive constraint to become active.
    */
-  def solve(ata: DoubleMatrix, atb: DoubleMatrix, nonnegative: Boolean): Array[Double] = {
+  def solve(ata: DoubleMatrix, atb: DoubleMatrix, nonnegative: Boolean,
+      ws: Workspace): Array[Double] = {
+    ws.wipe()
+
     val n = atb.rows
-    val scratch = new DoubleMatrix(n, 1)
+    val scratch = ws.scratch
 
     // find the optimal unconstrained step
     def steplen(dir: DoubleMatrix, res: DoubleMatrix): Double = {
@@ -64,11 +94,11 @@ private[mllib] object NNLSbyPCG {
       )
     }
 
-    val grad = new DoubleMatrix(n, 1)
-    val x = new DoubleMatrix(n, 1)
-    val dir = new DoubleMatrix(n, 1)
-    val lastDir = new DoubleMatrix(n, 1)
-    val res = new DoubleMatrix(n, 1)
+    val grad = ws.grad
+    val x = ws.x
+    val dir = ws.dir
+    val lastDir = ws.lastDir
+    val res = ws.res
     var lastNorm = 0.0
     var iterno = 0
     var lastWall = 0 // Last iteration when we hit a bound constraint.
@@ -115,7 +145,7 @@ private[mllib] object NNLSbyPCG {
 
       // terminate?
       if (stop(step, ndir, nx)) {
-        return x.data
+        return x.data.clone
       }
 
       // don't run through the walls
@@ -147,6 +177,6 @@ private[mllib] object NNLSbyPCG {
       SimpleBlas.copy(dir, lastDir)
       lastNorm = ngrad
     }
-    x.data
+    x.data.clone
   }
 }
