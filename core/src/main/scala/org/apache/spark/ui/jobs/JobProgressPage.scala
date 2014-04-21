@@ -41,10 +41,12 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
       val now = System.currentTimeMillis
 
       val activeStagesTable =
-        new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent, parent.killEnabled)
+        new StageTableBase(activeStages.sortBy(_.submissionTime).reverse,
+          parent, parent.killEnabled)
       val completedStagesTable =
-        new StageTable(completedStages.sortBy(_.submissionTime).reverse, parent)
-      val failedStagesTable = new StageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
+        new StageTableBase(completedStages.sortBy(_.submissionTime).reverse, parent)
+      val failedStagesTable =
+        new FailedStageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
 
       // For now, pool information is only accessible in live UIs
       val pools = if (live) sc.getAllPools else Seq[Schedulable]()
