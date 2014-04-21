@@ -35,7 +35,7 @@ USER_NAME=pwendell
 
 set -e
 
-GIT_TAG=v$RELEASE_VERSION
+GIT_TAG=v$RELEASE_VERSION-$RC_NAME
 
 # Artifact publishing
 
