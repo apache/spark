@@ -17,11 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.spark.NarrowDependency
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.RDDInfo
 
 /**
@@ -54,28 +50,8 @@ private[spark] object StageInfo {
    * sequence of narrow dependencies should also be associated with this Stage.
    */
   def fromStage(stage: Stage): StageInfo = {
-    val ancestorRddInfos = getNarrowAncestors(stage.rdd).map(RDDInfo.fromRdd)
+    val ancestorRddInfos = stage.rdd.getNarrowAncestors().map(RDDInfo.fromRdd)
     val rddInfos = ancestorRddInfos ++ Seq(RDDInfo.fromRdd(stage.rdd))
     new StageInfo(stage.id, stage.name, stage.numTasks, rddInfos)
-  }
-
-  /**
-   * Return the ancestors of the given RDD that are related to it only through a sequence of
-   * narrow dependencies. This traverses the given RDD's dependency tree using DFS.
-   */
-  private def getNarrowAncestors(
-      rdd: RDD[_],
-      ancestors: ArrayBuffer[RDD[_]] = ArrayBuffer.empty): Seq[RDD[_]] = {
-    val narrowParents = getNarrowDependencies(rdd).map(_.rdd)
-    narrowParents.foreach { parent =>
-      ancestors += parent
-      getNarrowAncestors(parent, ancestors)
-    }
-    ancestors
-  }
-
-  /** Return the narrow dependencies of the given RDD. */
-  private def getNarrowDependencies(rdd: RDD[_]): Seq[NarrowDependency[_]] = {
-    rdd.dependencies.collect { case d: NarrowDependency[_] => d }
   }
 }

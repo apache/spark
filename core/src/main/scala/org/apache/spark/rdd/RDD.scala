@@ -236,6 +236,21 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Return the ancestors of the given RDD that are related to it only through a sequence of
+   * narrow dependencies. This traverses the given RDD's dependency tree using DFS.
+   */
+  private[spark] def getNarrowAncestors(
+      ancestors: ArrayBuffer[RDD[_]] = ArrayBuffer.empty): Seq[RDD[_]] = {
+    val narrowDependencies = dependencies.collect { case d: NarrowDependency[_] => d }
+    val narrowParents = narrowDependencies.map(_.rdd)
+    narrowParents.foreach { parent =>
+      ancestors += parent
+      parent.getNarrowAncestors(ancestors)
+    }
+    ancestors
+  }
+
+  /**
    * Compute an RDD partition or read it from a checkpoint if the RDD is checkpointing.
    */
   private[spark] def computeOrReadCheckpoint(split: Partition, context: TaskContext): Iterator[T] =
