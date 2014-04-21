@@ -364,10 +364,24 @@ object SparkBuild extends Build {
 
   def rootSettings = sharedSettings ++ scalaJavaUnidocSettings ++ Seq(
     publish := {},
+
     unidocProjectFilter in (ScalaUnidoc, unidoc) :=
       inAnyProject -- inProjects(repl, examples, tools, yarn, yarnAlpha),
     unidocProjectFilter in (JavaUnidoc, unidoc) :=
       inAnyProject -- inProjects(repl, examples, bagel, graphx, catalyst, tools, yarn, yarnAlpha),
+
+    // Skip class names containing $ and some internal packages in Javadocs
+    unidocAllSources in (JavaUnidoc, unidoc) := {
+      (unidocAllSources in (JavaUnidoc, unidoc)).value
+        .map(_.filterNot(_.getName.contains("$")))
+        .map(_.filterNot(_.getCanonicalPath.contains("akka")))
+        .map(_.filterNot(_.getCanonicalPath.contains("deploy")))
+        .map(_.filterNot(_.getCanonicalPath.contains("network")))
+        .map(_.filterNot(_.getCanonicalPath.contains("executor")))
+        .map(_.filterNot(_.getCanonicalPath.contains("collection")))
+    },
+
+    // Javadoc options: create a window title, and group key packages on index page
     javacOptions in doc := Seq(
       "-windowtitle", "Spark " + SPARK_VERSION_SHORT + " JavaDoc",
       "-public",
