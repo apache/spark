@@ -136,12 +136,14 @@ class ALSSuite extends FunSuite with LocalSparkContext {
 
   test("negative ids") {
     val data = ALSSuite.generateRatings(50, 50, 2, 0.7, false, false)
-    val ratings = sc.parallelize(data._1.map { case Rating(u,p,r) => Rating(u-25,p-25,r) })
+    val ratings = sc.parallelize(data._1.map { case Rating(u, p, r) =>
+      Rating(u - 25, p - 25, r)
+    })
     val correct = data._2
     val model = ALS.train(ratings, 5, 15)
 
-    val pairs = Array.tabulate(50, 50)((u,p) => (u-25,p-25)).flatten
-    val ans = model.predict(sc.parallelize(pairs)).collect
+    val pairs = Array.tabulate(50, 50)((u, p) => (u - 25, p - 25)).flatten
+    val ans = model.predict(sc.parallelize(pairs)).collect()
     ans.foreach { r =>
       val u = r.user + 25
       val p = r.product + 25
