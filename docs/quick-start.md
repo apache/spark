@@ -104,9 +104,12 @@ that these same functions can be used on very large data sets, even when they ar
 tens or hundreds of nodes. You can also do this interactively by connecting `bin/spark-shell` to
 a cluster, as described in the [programming guide](scala-programming-guide.html#initializing-spark).
 
-# A Standalone App in Scala
+# A Standalone Application
 Now say we wanted to write a standalone application using the Spark API. We will walk through a
 simple application in both Scala (with SBT), Java (with Maven), and Python.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
 
 We'll create a very simple Spark application in Scala. So simple, in fact, that it's
 named `SimpleApp.scala`:
@@ -154,14 +157,7 @@ libraryDependencies += "org.apache.spark" %% "spark-core" % "{{site.SPARK_VERSIO
 resolvers += "Akka Repository" at "http://repo.akka.io/releases/"
 {% endhighlight %}
 
-If you also wish to read data from Hadoop's HDFS, you will also need to add a dependency on
-`hadoop-client` for your version of HDFS:
-
-{% highlight scala %}
-libraryDependencies += "org.apache.hadoop" % "hadoop-client" % "<your-hdfs-version>"
-{% endhighlight %}
-
-Finally, for sbt to work correctly, we'll need to layout `SimpleApp.scala` and `simple.sbt`
+For sbt to work correctly, we'll need to layout `SimpleApp.scala` and `simple.sbt`
 according to the typical directory structure. Once that is in place, we can create a JAR package
 containing the application's code, then use the `spark-submit` script to run our program.
 
@@ -188,22 +184,23 @@ $ YOUR_SPARK_HOME/bin/spark-submit target/scala-2.10/simple-project_2.10-1.0.jar
 Lines with a: 46, Lines with b: 23
 {% endhighlight %}
 
-# A Standalone App in Java
-Now say we wanted to write a standalone application using the Java API. This example will use
-maven to compile an application jar, but any similar build system will work.
+</div>
+<div data-lang="java" markdown="1">
+This example will use Maven to compile an application jar, but any similar build system will work.
 
 We'll create a very simple Spark application, `SimpleApp.java`:
 
 {% highlight java %}
 /*** SimpleApp.java ***/
 import org.apache.spark.api.java.*;
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.Function;
 
 public class SimpleApp {
   public static void main(String[] args) {
-    String logFile = "$YOUR_SPARK_HOME/README.md"; // Should be some file on your system
-    JavaSparkContext sc = new JavaSparkContext("local", "Simple App",
-      "$YOUR_SPARK_HOME", new String[]{"target/simple-project-1.0.jar"});
+    String logFile = "YOUR_SPARK_HOME/README.md"; // Should be some file on your system
+    SparkConf conf = new SparkConf().setAppName("Simple Application");
+    JavaSparkContext sc = new JavaSparkContext(conf);
     JavaRDD<String> logData = sc.textFile(logFile).cache();
 
     long numAs = logData.filter(new Function<String, Boolean>() {
@@ -219,9 +216,16 @@ public class SimpleApp {
 }
 {% endhighlight %}
 
-This program just counts the number of lines containing 'a' and the number containing 'b' in a text file. Note that you'll need to replace $YOUR_SPARK_HOME with the location where Spark is installed. As with the Scala example, we initialize a SparkContext, though we use the special `JavaSparkContext` class to get a Java-friendly one. We also create RDDs (represented by `JavaRDD`) and run transformations on them. Finally, we pass functions to Spark by creating classes that extend `spark.api.java.function.Function`. The [Java programming guide](java-programming-guide.html) describes these differences in more detail.
+This program just counts the number of lines containing 'a' and the number containing 'b' in a text
+file. Note that you'll need to replace YOUR_SPARK_HOME with the location where Spark is installed.
+As with the Scala example, we initialize a SparkContext, though we use the special
+`JavaSparkContext` class to get a Java-friendly one. We also create RDDs (represented by
+`JavaRDD`) and run transformations on them. Finally, we pass functions to Spark by creating classes
+that extend `spark.api.java.function.Function`. The
+[Java programming guide](java-programming-guide.html) describes these differences in more detail.
 
-To build the program, we also write a Maven `pom.xml` file that lists Spark as a dependency. Note that Spark artifacts are tagged with a Scala version.
+To build the program, we also write a Maven `pom.xml` file that lists Spark as a dependency.
+Note that Spark artifacts are tagged with a Scala version.
 
 {% highlight xml %}
 <project>
@@ -247,16 +251,6 @@ To build the program, we also write a Maven `pom.xml` file that lists Spark as a
 </project>
 {% endhighlight %}
 
-If you also wish to read data from Hadoop's HDFS, you will also need to add a dependency on `hadoop-client` for your version of HDFS:
-
-{% highlight xml %}
-<dependency>
-  <groupId>org.apache.hadoop</groupId>
-  <artifactId>hadoop-client</artifactId>
-  <version>...</version>
-</dependency>
-{% endhighlight %}
-
 We lay out these files according to the canonical Maven directory structure:
 {% highlight bash %}
 $ find .
@@ -267,16 +261,25 @@ $ find .
 ./src/main/java/SimpleApp.java
 {% endhighlight %}
 
-Now, we can execute the application using Maven:
+Now, we can package the application using Maven and execute it with `./bin/spark-submit`.
 
 {% highlight bash %}
+# Package a jar containing your application
 $ mvn package
-$ mvn exec:java -Dexec.mainClass="SimpleApp"
+...
+[INFO] Building jar: {..}/{..}/target/simple-project-1.0.jar
+
+# Use spark-submit to run your application
+$ YOUR_SPARK_HOME/bin/spark-submit target/simple-project-1.0.jar \
+  --class "SimpleApp" \
+  --master local[4]
 ...
 Lines with a: 46, Lines with b: 23
 {% endhighlight %}
 
-# A Standalone App in Python
+</div>
+<div data-lang="python" markdown="1">
+
 Now we will show how to write a standalone application using the Python API (PySpark).
 
 As an example, we'll create a simple Spark application, `SimpleApp.py`:
@@ -285,7 +288,7 @@ As an example, we'll create a simple Spark application, `SimpleApp.py`:
 """SimpleApp.py"""
 from pyspark import SparkContext
 
-logFile = "$YOUR_SPARK_HOME/README.md"  # Should be some file on your system
+logFile = "YOUR_SPARK_HOME/README.md"  # Should be some file on your system
 sc = SparkContext("local", "Simple App")
 logData = sc.textFile(logFile).cache()
 
@@ -296,11 +299,15 @@ print "Lines with a: %i, lines with b: %i" % (numAs, numBs)
 {% endhighlight %}
 
 
-This program just counts the number of lines containing 'a' and the number containing 'b' in a text file.
-Note that you'll need to replace $YOUR_SPARK_HOME with the location where Spark is installed. 
+This program just counts the number of lines containing 'a' and the number containing 'b' in a
+text file.
+Note that you'll need to replace YOUR_SPARK_HOME with the location where Spark is installed.
 As with the Scala and Java examples, we use a SparkContext to create RDDs.
-We can pass Python functions to Spark, which are automatically serialized along with any variables that they reference.
-For applications that use custom classes or third-party libraries, we can add those code dependencies to SparkContext to ensure that they will be available on remote machines; this is described in more detail in the [Python programming guide](python-programming-guide.html).
+We can pass Python functions to Spark, which are automatically serialized along with any variables
+that they reference.
+For applications that use custom classes or third-party libraries, we can add those code
+dependencies to SparkContext to ensure that they will be available on remote machines; this is
+described in more detail in the [Python programming guide](python-programming-guide.html).
 `SimpleApp` is simple enough that we do not need to specify any code dependencies.
 
 We can run this application using the `bin/pyspark` script:
@@ -312,57 +319,12 @@ $ ./bin/pyspark SimpleApp.py
 Lines with a: 46, Lines with b: 23
 {% endhighlight python %}
 
-# Running on a Cluster
+</div>
+</div>
 
-There are a few additional considerations when running applicaitons on a 
-[Spark](spark-standalone.html), [YARN](running-on-yarn.html), or 
-[Mesos](running-on-mesos.html) cluster.
+# Where to go from here
+Congratulations on running your first Spark application!
 
-### Including Your Dependencies
-If your code depends on other projects, you will need to ensure they are also
-present on the slave nodes. A popular approach is to create an
-assembly jar (or "uber" jar) containing your code and its dependencies. Both
-[sbt](https://github.com/sbt/sbt-assembly) and 
-[Maven](http://maven.apache.org/plugins/maven-assembly-plugin/) 
-have assembly plugins. When creating assembly jars, list Spark 
-itself as a `provided` dependency; it need not be bundled since it is 
-already present on the slaves. Once you have an assembled jar, 
-add it to the SparkContext as shown here. It is also possible to add
-your dependent jars one-by-one using the `addJar` method of `SparkContext`.
-
-For Python, you can use the `pyFiles` argument of SparkContext
-or its `addPyFile` method to add `.py`, `.zip` or `.egg` files to be distributed.
-
-### Setting Configuration Options
-Spark includes several [configuration options](configuration.html#spark-properties)
-that influence the behavior of your application.
-These should be set by building a [SparkConf](api/core/index.html#org.apache.spark.SparkConf)
-object and passing it to the SparkContext constructor.
-For example, in Java and Scala, you can do:
-
-{% highlight scala %}
-import org.apache.spark.{SparkConf, SparkContext}
-val conf = new SparkConf()
-             .setMaster("local")
-             .setAppName("My application")
-             .set("spark.executor.memory", "1g")
-val sc = new SparkContext(conf)
-{% endhighlight %}
-
-Or in Python:
-
-{% highlight scala %}
-from pyspark import SparkConf, SparkContext
-conf = SparkConf()
-conf.setMaster("local")
-conf.setAppName("My application")
-conf.set("spark.executor.memory", "1g"))
-sc = SparkContext(conf = conf)
-{% endhighlight %}
-
-### Accessing Hadoop Filesystems
-
-The examples here access a local file. To read data from a distributed
-filesystem, such as HDFS, include 
-[Hadoop version information](index.html#a-note-about-hadoop-versions)
-in your build file. By default, Spark builds against HDFS 1.0.4.
+* For an in-depth overview of the API see "Programming Guides" menu section.
+* For running applications on a cluster head to the [deployment overview](cluster-overview.html).
+* For configuration options available to Spark applications see the [configuration page](configuration.html).
