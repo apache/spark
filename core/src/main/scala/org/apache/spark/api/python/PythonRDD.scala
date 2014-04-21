@@ -211,7 +211,7 @@ private object SpecialLengths {
   val TIMING_DATA = -3
 }
 
-private[spark] object PythonRDD {
+private[spark] object PythonRDD extends Logging {
   val UTF8 = Charset.forName("UTF-8")
 
   def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
@@ -273,20 +273,21 @@ private[spark] object PythonRDD {
   }
 
   /** Create and RDD from a path using [[org.apache.hadoop.mapred.SequenceFileInputFormat]] */
-  def sequenceFile[K, V](sc: JavaSparkContext,
-                         path: String,
-                         keyClass: String,
-                         valueClass: String,
-                         keyWrapper: String,
-                         valueWrapper: String,
-                         minSplits: Int) = {
+  def sequenceFile[K, V](
+      sc: JavaSparkContext,
+      path: String,
+      keyClass: String,
+      valueClass: String,
+      keyWrapper: String,
+      valueWrapper: String,
+      minSplits: Int) = {
     implicit val kcm = ClassTag(Class.forName(keyClass)).asInstanceOf[ClassTag[K]]
     implicit val vcm = ClassTag(Class.forName(valueClass)).asInstanceOf[ClassTag[V]]
     val kc = kcm.runtimeClass.asInstanceOf[Class[K]]
     val vc = vcm.runtimeClass.asInstanceOf[Class[V]]
     val rdd = sc.sc.sequenceFile[K, V](path, kc, vc, minSplits)
-    val converted = SerDeUtil.convertRDD[K, V](rdd)
-    JavaRDD.fromRDD(SerDeUtil.serMsgPack[K, V](converted))
+    val converted = PythonHadoopUtil.convertRDD[K, V](rdd)
+    JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
 
   /**
@@ -308,8 +309,8 @@ private[spark] object PythonRDD {
     val rdd =
       newAPIHadoopRDDFromClassNames[K, V, F](sc,
         Some(path), inputFormatClazz, keyClazz, valueClazz, mergedConf)
-    val converted = SerDeUtil.convertRDD[K, V](rdd)
-    JavaRDD.fromRDD(SerDeUtil.serMsgPack[K, V](converted))
+    val converted = PythonHadoopUtil.convertRDD[K, V](rdd)
+    JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
 
   /**
@@ -329,8 +330,8 @@ private[spark] object PythonRDD {
     val rdd =
       newAPIHadoopRDDFromClassNames[K, V, F](sc,
         None, inputFormatClazz, keyClazz, valueClazz, conf)
-    val converted = SerDeUtil.convertRDD[K, V](rdd)
-    JavaRDD.fromRDD(SerDeUtil.serMsgPack[K, V](converted))
+    val converted = PythonHadoopUtil.convertRDD[K, V](rdd)
+    JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
 
   private def newAPIHadoopRDDFromClassNames[K, V, F <: NewInputFormat[K, V]](
@@ -373,8 +374,8 @@ private[spark] object PythonRDD {
     val rdd =
       hadoopRDDFromClassNames[K, V, F](sc,
         Some(path), inputFormatClazz, keyClazz, valueClazz, mergedConf)
-    val converted = SerDeUtil.convertRDD[K, V](rdd)
-    JavaRDD.fromRDD(SerDeUtil.serMsgPack[K, V](converted))
+    val converted = PythonHadoopUtil.convertRDD[K, V](rdd)
+    JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
 
   /**
@@ -394,8 +395,8 @@ private[spark] object PythonRDD {
     val rdd =
       hadoopRDDFromClassNames[K, V, F](sc,
         None, inputFormatClazz, keyClazz, valueClazz, conf)
-    val converted = SerDeUtil.convertRDD[K, V](rdd)
-    JavaRDD.fromRDD(SerDeUtil.serMsgPack[K, V](converted))
+    val converted = PythonHadoopUtil.convertRDD[K, V](rdd)
+    JavaRDD.fromRDD(SerDeUtil.rddToPython(converted))
   }
 
   private def hadoopRDDFromClassNames[K, V, F <: InputFormat[K, V]](
