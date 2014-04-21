@@ -340,7 +340,7 @@ object SparkBuild extends Build {
         "com.codahale.metrics"       % "metrics-jvm"      % codahaleMetricsVersion,
         "com.codahale.metrics"       % "metrics-json"     % codahaleMetricsVersion,
         "com.codahale.metrics"       % "metrics-graphite" % codahaleMetricsVersion,
-        "com.codahale.metrics"       % "metrics-ganglia" % codahaleMetricsVersion,
+        "com.codahale.metrics"       % "metrics-ganglia"  % codahaleMetricsVersion,
         "com.twitter"               %% "chill"            % chillVersion excludeAll(excludeAsm),
         "com.twitter"                % "chill-java"       % chillVersion excludeAll(excludeAsm),
         "org.tachyonproject"         % "tachyon"          % "0.4.1-thrift" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
