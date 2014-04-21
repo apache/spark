@@ -44,7 +44,7 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   }
 }
 
-case class Sample(fraction: Double, withReplacement: Boolean, seed: Int, child: SparkPlan)
+case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child: SparkPlan)
     extends UnaryNode {
 
   override def output = child.output
