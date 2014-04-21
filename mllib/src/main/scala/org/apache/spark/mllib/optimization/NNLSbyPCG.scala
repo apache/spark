@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.optimization
 
 import org.jblas.{DoubleMatrix, SimpleBlas}
+
 import org.apache.spark.annotation.DeveloperApi
 
 /**
@@ -26,7 +27,7 @@ import org.apache.spark.annotation.DeveloperApi
  * projected gradient method.
  */
 @DeveloperApi
-object NNLSbyPCG {
+private[mllib] object NNLSbyPCG {
   /**
    * Solve a least squares problem, possibly with nonnegativity constraints, by a modified
    * projected gradient method.  That is, find x minimising ||Ax - b||_2 given A^T A and A^T b.
@@ -46,8 +47,8 @@ object NNLSbyPCG {
     val scratch = new DoubleMatrix(n, 1)
 
     // find the optimal unconstrained step
-    def steplen(dir: DoubleMatrix, resid: DoubleMatrix): Double = {
-      val top = SimpleBlas.dot(dir, resid)
+    def steplen(dir: DoubleMatrix, res: DoubleMatrix): Double = {
+      val top = SimpleBlas.dot(dir, res)
       SimpleBlas.gemv(1.0, ata, dir, 0.0, scratch)
       // Push the denominator upward very slightly to avoid infinities and silliness
       top / (SimpleBlas.dot(scratch, dir) + 1e-20)
@@ -66,17 +67,17 @@ object NNLSbyPCG {
     val grad = new DoubleMatrix(n, 1)
     val x = new DoubleMatrix(n, 1)
     val dir = new DoubleMatrix(n, 1)
-    val lastdir = new DoubleMatrix(n, 1)
-    val resid = new DoubleMatrix(n, 1)
-    var lastnorm = 0.0
+    val lastDir = new DoubleMatrix(n, 1)
+    val res = new DoubleMatrix(n, 1)
+    var lastNorm = 0.0
     var iterno = 0
-    var lastwall = 0
+    var lastWall = 0 // Last iteration when we hit a bound constraint.
     var i = 0
     while (iterno < 40000) {
       // find the residual
-      SimpleBlas.gemv(1.0, ata, x, 0.0, resid)
-      SimpleBlas.axpy(-1.0, atb, resid)
-      SimpleBlas.copy(resid, grad)
+      SimpleBlas.gemv(1.0, ata, x, 0.0, res)
+      SimpleBlas.axpy(-1.0, atb, res)
+      SimpleBlas.copy(res, grad)
 
       // project the gradient
       if (nonnegative) {
@@ -93,13 +94,13 @@ object NNLSbyPCG {
       SimpleBlas.copy(grad, dir)
 
       // use a CG direction under certain conditions
-      var step = steplen(grad, resid)
+      var step = steplen(grad, res)
       var ndir = 0.0
       val nx = SimpleBlas.dot(x, x)
-      if (iterno > lastwall + 1) {
-        val alpha = ngrad / lastnorm
-        SimpleBlas.axpy(alpha, lastdir, dir)
-        val dstep = steplen(dir, resid)
+      if (iterno > lastWall + 1) {
+        val alpha = ngrad / lastNorm
+        SimpleBlas.axpy(alpha, lastDir, dir)
+        val dstep = steplen(dir, res)
         ndir = SimpleBlas.dot(dir, dir)
         if (stop(dstep, ndir, nx)) {
           // reject the CG step if it could lead to premature termination
@@ -134,7 +135,7 @@ object NNLSbyPCG {
         if (nonnegative) {
           if (step * dir.data(i) > x.data(i) * (1 - 1e-14)) {
             x.data(i) = 0
-            lastwall = iterno
+            lastWall = iterno
           } else x.data(i) -= step * dir.data(i)
         } else {
           x.data(i) -= step * dir.data(i)
@@ -143,8 +144,8 @@ object NNLSbyPCG {
       }
 
       iterno = iterno + 1
-      SimpleBlas.copy(dir, lastdir)
-      lastnorm = ngrad
+      SimpleBlas.copy(dir, lastDir)
+      lastNorm = ngrad
     }
     x.data
   }
