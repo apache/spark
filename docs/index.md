@@ -83,10 +83,9 @@ Note that on Windows, you need to set the environment variables on separate line
 
 **API Docs:**
 
-* [Spark for Java/Scala (Scaladoc)](api/scala/index.html#org.apache.spark.package)
-* [Spark for Java/Scala (Javadoc)](api/java/index.html)
-* [Spark for Python (Epydoc)](api/python/index.html)
-
+* [Spark Scala API (Scaladoc)](api/scala/index.html#org.apache.spark.package)
+* [Spark Java API (Javadoc)](api/java/index.html)
+* [Spark Python API (Epydoc)](api/python/index.html)
 
 **Deployment guides:**
 
