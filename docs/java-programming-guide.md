@@ -10,9 +10,9 @@ easy to follow even if you don't know Scala.
 This guide will show how to use the Spark features described there in Java.
 
 The Spark Java API is defined in the
-[`org.apache.spark.api.java`](api/core/index.html#org.apache.spark.api.java.package) package, and includes
-a [`JavaSparkContext`](api/core/index.html#org.apache.spark.api.java.JavaSparkContext) for
-initializing Spark and [`JavaRDD`](api/core/index.html#org.apache.spark.api.java.JavaRDD) classes,
+[`org.apache.spark.api.java`](api/scala/index.html#org.apache.spark.api.java.package) package, and includes
+a [`JavaSparkContext`](api/scala/index.html#org.apache.spark.api.java.JavaSparkContext) for
+initializing Spark and [`JavaRDD`](api/scala/index.html#org.apache.spark.api.java.JavaRDD) classes,
 which support the same methods as their Scala counterparts but take Java functions and return
 Java data and collection types. The main differences have to do with passing functions to RDD
 operations (e.g. map) and handling RDDs of different types, as discussed next.
@@ -23,19 +23,19 @@ There are a few key differences between the Java and Scala APIs:
 
 * Java does not support anonymous or first-class functions, so functions are passed
   using anonymous classes that implement the
-  [`org.apache.spark.api.java.function.Function`](api/core/index.html#org.apache.spark.api.java.function.Function),
-  [`Function2`](api/core/index.html#org.apache.spark.api.java.function.Function2), etc.
+  [`org.apache.spark.api.java.function.Function`](api/scala/index.html#org.apache.spark.api.java.function.Function),
+  [`Function2`](api/scala/index.html#org.apache.spark.api.java.function.Function2), etc.
   interfaces.
 * To maintain type safety, the Java API defines specialized Function and RDD
   classes for key-value pairs and doubles. For example, 
-  [`JavaPairRDD`](api/core/index.html#org.apache.spark.api.java.JavaPairRDD)
+  [`JavaPairRDD`](api/scala/index.html#org.apache.spark.api.java.JavaPairRDD)
   stores key-value pairs.
 * Some methods are defined on the basis of the passed anonymous function's 
   (a.k.a lambda expression) return type, 
   for example mapToPair(...) or flatMapToPair returns
-  [`JavaPairRDD`](api/core/index.html#org.apache.spark.api.java.JavaPairRDD),
+  [`JavaPairRDD`](api/scala/index.html#org.apache.spark.api.java.JavaPairRDD),
   similarly mapToDouble and flatMapToDouble returns
-  [`JavaDoubleRDD`](api/core/index.html#org.apache.spark.api.java.JavaDoubleRDD).
+  [`JavaDoubleRDD`](api/scala/index.html#org.apache.spark.api.java.JavaDoubleRDD).
 * RDD methods like `collect()` and `countByKey()` return Java collections types,
   such as `java.util.List` and `java.util.Map`.
 * Key-value pairs, which are simply written as `(key, value)` in Scala, are represented
@@ -50,8 +50,8 @@ In the Scala API, these methods are automatically added using Scala's
 [implicit conversions](http://www.scala-lang.org/node/130) mechanism.
 
 In the Java API, the extra methods are defined in the
-[`JavaPairRDD`](api/core/index.html#org.apache.spark.api.java.JavaPairRDD)
-and [`JavaDoubleRDD`](api/core/index.html#org.apache.spark.api.java.JavaDoubleRDD)
+[`JavaPairRDD`](api/scala/index.html#org.apache.spark.api.java.JavaPairRDD)
+and [`JavaDoubleRDD`](api/scala/index.html#org.apache.spark.api.java.JavaDoubleRDD)
 classes.  RDD methods like `map` are overloaded by specialized `PairFunction`
 and `DoubleFunction` classes, allowing them to return RDDs of the appropriate
 types.  Common methods like `filter` and `sample` are implemented by
@@ -81,7 +81,7 @@ interface has a single abstract method, `call()`, that must be implemented.
 ## Storage Levels
 
 RDD [storage level](scala-programming-guide.html#rdd-persistence) constants, such as `MEMORY_AND_DISK`, are
-declared in the [org.apache.spark.api.java.StorageLevels](api/core/index.html#org.apache.spark.api.java.StorageLevels) class. To
+declared in the [org.apache.spark.api.java.StorageLevels](api/scala/index.html#org.apache.spark.api.java.StorageLevels) class. To
 define your own storage level, you can use StorageLevels.create(...). 
 
 # Other Features
@@ -103,9 +103,9 @@ the following changes:
 * Certain transformation functions now have multiple versions depending
   on the return type. In Spark core, the map functions (map, flatMap,
   mapPartitons) have type-specific versions, e.g. 
-  [`mapToPair`](api/core/index.html#org.apache.spark.api.java.JavaRDD@mapToPair[K2,V2](f:org.apache.spark.api.java.function.PairFunction[T,K2,V2]):org.apache.spark.api.java.JavaPairRDD[K2,V2])
-  and [`mapToDouble`](api/core/index.html#org.apache.spark.api.java.JavaRDD@mapToDouble[R](f:org.apache.spark.api.java.function.DoubleFunction[T]):org.apache.spark.api.java.JavaDoubleRDD).
-  Spark Streaming also uses the same approach, e.g. [`transformToPair`](api/streaming/index.html#org.apache.spark.streaming.api.java.JavaDStream@transformToPair[K2,V2](transformFunc:org.apache.spark.api.java.function.Function[R,org.apache.spark.api.java.JavaPairRDD[K2,V2]]):org.apache.spark.streaming.api.java.JavaPairDStream[K2,V2]).
+  [`mapToPair`](api/scala/index.html#org.apache.spark.api.java.JavaRDD@mapToPair[K2,V2](f:org.apache.spark.api.java.function.PairFunction[T,K2,V2]):org.apache.spark.api.java.JavaPairRDD[K2,V2])
+  and [`mapToDouble`](api/scala/index.html#org.apache.spark.api.java.JavaRDD@mapToDouble[R](f:org.apache.spark.api.java.function.DoubleFunction[T]):org.apache.spark.api.java.JavaDoubleRDD).
+  Spark Streaming also uses the same approach, e.g. [`transformToPair`](api/scala/index.html#org.apache.spark.streaming.api.java.JavaDStream@transformToPair[K2,V2](transformFunc:org.apache.spark.api.java.function.Function[R,org.apache.spark.api.java.JavaPairRDD[K2,V2]]):org.apache.spark.streaming.api.java.JavaPairDStream[K2,V2]).
 
 # Example
 
@@ -208,7 +208,7 @@ just a matter of style.
 # Javadoc
 
 We currently provide documentation for the Java API as Scaladoc, in the
-[`org.apache.spark.api.java` package](api/core/index.html#org.apache.spark.api.java.package), because
+[`org.apache.spark.api.java` package](api/scala/index.html#org.apache.spark.api.java.package), because
 some of the classes are implemented in Scala. It is important to note that the types and function
 definitions show Scala syntax (for example, `def reduce(func: Function2[T, T]): T` instead of
 `T reduce(Function2<T, T> func)`). In addition, the Scala `trait` modifier is used for Java

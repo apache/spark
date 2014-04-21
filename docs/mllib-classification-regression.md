@@ -316,26 +316,26 @@ For each of them, we support all 3 possible regularizations (none, L1 or L2).
 
 Available algorithms for binary classification:
 
-* [SVMWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.SVMWithSGD)
-* [LogisticRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD)
+* [SVMWithSGD](api/scala/index.html#org.apache.spark.mllib.classification.SVMWithSGD)
+* [LogisticRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD)
 
 Available algorithms for linear regression: 
 
-* [LinearRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.LinearRegressionWithSGD)
-* [RidgeRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
-* [LassoWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.LassoWithSGD)
+* [LinearRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.LinearRegressionWithSGD)
+* [RidgeRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
+* [LassoWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.LassoWithSGD)
 
 Behind the scenes, all above methods use the SGD implementation from the
 gradient descent primitive in MLlib, see the 
 <a href="mllib-optimization.html">optimization</a> part:
 
-* [GradientDescent](api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent)
+* [GradientDescent](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent)
 
 #### Tree-based Methods
 
 The decision tree algorithm supports binary classification and regression:
 
-* [DecisionTee](api/mllib/index.html#org.apache.spark.mllib.tree.DecisionTree)
+* [DecisionTee](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree)
 
 
 # Usage in Scala
