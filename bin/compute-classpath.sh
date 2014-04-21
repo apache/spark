@@ -28,7 +28,11 @@ FWDIR="$(cd `dirname $0`/..; pwd)"
 . $FWDIR/bin/load-spark-env.sh
 
 # Build up classpath
-CLASSPATH="$SPARK_CLASSPATH:$FWDIR/conf"
+if [ "$SPARK_CONF_DIRX" != "X" ]; then
+  CLASSPATH="$SPARK_CLASSPATH:$SPARK_CONF_DIR"
+else
+  CLASSPATH="$SPARK_CLASSPATH:$FWDIR/conf"
+fi
 
 ASSEMBLY_DIR="$FWDIR/assembly/target/scala-$SCALA_VERSION"
 
