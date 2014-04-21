@@ -25,8 +25,13 @@ while (($#)); do
     DEPLOY_MODE=$2
   elif [ $1 = "--driver-memory" ]; then
     DRIVER_MEMORY=$2
+  elif [ $1 = "--driver-library-path" ]; then
+    export _SPARK_LIBRARY_PATH=$2
+  elif [ $1 = "--driver-class-path" ]; then
+    export SPARK_CLASSPATH="$SPARK_CLASSPATH:$2"
+  elif [ $1 = "--driver-java-options" ]; then
+    export SPARK_JAVA_OPTS="$SPARK_JAVA_OPTS $2"
   fi
-
   shift
 done
 
