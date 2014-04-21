@@ -356,12 +356,34 @@ object SparkBuild extends Build {
     libraryDependencies ++= maybeAvro
   )
 
+  // Create a colon-separate package list adding "org.apache.spark" in front of all of them,
+  // for easier specification of JavaDoc package groups
+  def packageList(names: String*): String = {
+    names.map(s => "org.apache.spark." + s).mkString(":")
+  }
+
   def rootSettings = sharedSettings ++ scalaJavaUnidocSettings ++ Seq(
     publish := {},
-    unidocProjectFilter in (ScalaUnidoc, unidoc) := inAnyProject -- inProjects(repl, examples, yarn, yarnAlpha),
+    unidocProjectFilter in (ScalaUnidoc, unidoc) :=
+      inAnyProject -- inProjects(repl, examples, tools, yarn, yarnAlpha),
     unidocProjectFilter in (JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(repl, examples, bagel, graphx, yarn, yarnAlpha),
-    javacOptions in doc := Seq("-windowtitle", "Spark " + SPARK_VERSION_SHORT + " JavaDoc")
+      inAnyProject -- inProjects(repl, examples, bagel, graphx, catalyst, tools, yarn, yarnAlpha),
+    javacOptions in doc := Seq(
+      "-windowtitle", "Spark " + SPARK_VERSION_SHORT + " JavaDoc",
+      "-public",
+      "-group", "Core Java API", packageList("api.java", "api.java.function"),
+      "-group", "Spark Streaming", packageList(
+        "streaming.api.java", "streaming.flume", "streaming.kafka",
+        "steaming.mqtt", "streaming.twitter", "streaming.zeromq"
+      ),
+      "-group", "MLlib", packageList(
+        "mllib.classification", "mllib.clustering", "mllib.evaluation.binary", "mllib.linalg",
+        "mllib.linalg.distributed", "mllib.optimization", "mllib.rdd", "mllib.recommendation",
+        "mllib.regression", "mllib.stat", "mllib.tree", "mllib.tree.configuration",
+        "mllib.tree.impurity", "mllib.tree.model", "mllib.util"
+      ),
+      "-group", "Spark SQL", packageList("sql.api.java", "sql.hive.api.java")
+    )
   )
 
   def replSettings = sharedSettings ++ Seq(
