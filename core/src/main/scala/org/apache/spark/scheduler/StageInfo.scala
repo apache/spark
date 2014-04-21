@@ -17,7 +17,11 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.NarrowDependency
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.RDDInfo
 
 /**
@@ -25,7 +29,7 @@ import org.apache.spark.storage.RDDInfo
  * Stores information about a stage to pass from the scheduler to SparkListeners.
  */
 @DeveloperApi
-class StageInfo(val stageId: Int, val name: String, val numTasks: Int, val rddInfo: RDDInfo) {
+class StageInfo(val stageId: Int, val name: String, val numTasks: Int, val rddInfos: Seq[RDDInfo]) {
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
   /** Time when all tasks in the stage completed or when the stage was cancelled. */
@@ -41,12 +45,37 @@ class StageInfo(val stageId: Int, val name: String, val numTasks: Int, val rddIn
   }
 }
 
-private[spark]
-object StageInfo {
+private[spark] object StageInfo {
+  /**
+   * Construct a StageInfo from a Stage.
+   *
+   * Each Stage is associated with one or many RDDs, with the boundary of a Stage marked by
+   * shuffle dependencies. Therefore, all ancestor RDDs related to this Stage's RDD through a
+   * sequence of narrow dependencies should also be associated with this Stage.
+   */
   def fromStage(stage: Stage): StageInfo = {
-    val rdd = stage.rdd
-    val rddName = Option(rdd.name).getOrElse(rdd.id.toString)
-    val rddInfo = new RDDInfo(rdd.id, rddName, rdd.partitions.size, rdd.getStorageLevel)
-    new StageInfo(stage.id, stage.name, stage.numTasks, rddInfo)
+    val ancestorRddInfos = getNarrowAncestors(stage.rdd).map(RDDInfo.fromRdd)
+    val rddInfos = ancestorRddInfos ++ Seq(RDDInfo.fromRdd(stage.rdd))
+    new StageInfo(stage.id, stage.name, stage.numTasks, rddInfos)
+  }
+
+  /**
+   * Return the ancestors of the given RDD that are related to it only through a sequence of
+   * narrow dependencies. This traverses the given RDD's dependency tree using DFS.
+   */
+  private def getNarrowAncestors(
+      rdd: RDD[_],
+      ancestors: ArrayBuffer[RDD[_]] = ArrayBuffer.empty): Seq[RDD[_]] = {
+    val narrowParents = getNarrowDependencies(rdd).map(_.rdd)
+    narrowParents.foreach { parent =>
+      ancestors += parent
+      getNarrowAncestors(parent, ancestors)
+    }
+    ancestors
+  }
+
+  /** Return the narrow dependencies of the given RDD. */
+  private def getNarrowDependencies(rdd: RDD[_]): Seq[NarrowDependency[_]] = {
+    rdd.dependencies.collect { case d: NarrowDependency[_] => d }
   }
 }

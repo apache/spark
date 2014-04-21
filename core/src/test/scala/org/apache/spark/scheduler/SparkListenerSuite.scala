@@ -133,18 +133,56 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     val rdd1 = sc.parallelize(1 to 100, 4)
     val rdd2 = rdd1.map(_.toString)
     rdd2.setName("Target RDD")
-    rdd2.count
+    rdd2.count()
 
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
 
     listener.stageInfos.size should be {1}
     val (stageInfo, taskInfoMetrics) = listener.stageInfos.head
-    stageInfo.rddInfo.name should be {"Target RDD"}
+    stageInfo.rddInfos.size should be {2}
+    stageInfo.rddInfos.head.numPartitions should be {4}
+    stageInfo.rddInfos.last.numPartitions should be {4}
+    stageInfo.rddInfos.last.name should be {"Target RDD"}
     stageInfo.numTasks should be {4}
-    stageInfo.rddInfo.numPartitions should be {4}
     stageInfo.submissionTime should be ('defined)
     stageInfo.completionTime should be ('defined)
     taskInfoMetrics.length should be {4}
+  }
+
+  test("basic creation of StageInfo with shuffle") {
+    val listener = new SaveStageAndTaskInfo
+    sc.addSparkListener(listener)
+    val rdd1 = sc.parallelize(1 to 100, 4)
+    val rdd2 = rdd1.filter(_ % 2 == 0).map(i => (i, i))
+    val rdd3 = rdd2.reduceByKey(_ + _)
+    rdd1.setName("Un")
+    rdd2.setName("Deux")
+    rdd3.setName("Trois")
+
+    rdd1.count()
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    listener.stageInfos.size should be {1}
+    val stageInfo1 = listener.stageInfos.keys.find(_.stageId == 0).get
+    stageInfo1.rddInfos.size should be {1} // ParallelCollectionRDD
+    stageInfo1.rddInfos.last.name should be {"Un"}
+    stageInfo1.rddInfos.last.numPartitions should be {4}
+    listener.stageInfos.clear()
+
+    rdd2.count()
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    listener.stageInfos.size should be {1}
+    val stageInfo2 = listener.stageInfos.keys.find(_.stageId == 1).get
+    stageInfo2.rddInfos.size should be {3} // ParallelCollectionRDD, FilteredRDD, MappedRDD
+    stageInfo2.rddInfos.last.name should be {"Deux"}
+    stageInfo2.rddInfos.last.numPartitions should be {4}
+    listener.stageInfos.clear()
+
+    rdd3.count()
+    listener.stageInfos.size should be {2} // Shuffle map stage + result stage
+    val stageInfo3 = listener.stageInfos.keys.find(_.stageId == 2).get
+    stageInfo3.rddInfos.size should be {2} // ShuffledRDD, MapPartitionsRDD
+    stageInfo3.rddInfos.last.name should be {"Trois"}
+    stageInfo3.rddInfos.last.numPartitions should be {4}
   }
 
   test("StageInfo with fewer tasks than partitions") {
@@ -159,7 +197,8 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     listener.stageInfos.size should be {1}
     val (stageInfo, _) = listener.stageInfos.head
     stageInfo.numTasks should be {2}
-    stageInfo.rddInfo.numPartitions should be {4}
+    stageInfo.rddInfos.size should be {2}
+    stageInfo.rddInfos.head.numPartitions should be {4}
   }
 
   test("local metrics") {
@@ -167,7 +206,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     sc.addSparkListener(listener)
     sc.addSparkListener(new StatsReportListener)
     // just to make sure some of the tasks take a noticeable amount of time
-    val w = {i:Int =>
+    val w = { i: Int =>
       if (i == 0)
         Thread.sleep(100)
       i
@@ -199,7 +238,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
       checkNonZeroAvg(
         taskInfoMetrics.map(_._2.executorDeserializeTime),
         stageInfo + " executorDeserializeTime")
-      if (stageInfo.rddInfo.name == d4.name) {
+      if (stageInfo.rddInfos.last.name == d4.name) {
         checkNonZeroAvg(
           taskInfoMetrics.map(_._2.shuffleReadMetrics.get.fetchWaitTime),
           stageInfo + " fetchWaitTime")
@@ -207,11 +246,11 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
 
       taskInfoMetrics.foreach { case (taskInfo, taskMetrics) =>
         taskMetrics.resultSize should be > (0l)
-        if (stageInfo.rddInfo.name == d2.name || stageInfo.rddInfo.name == d3.name) {
+        if (stageInfo.rddInfos.last.name == d2.name || stageInfo.rddInfos.last.name == d3.name) {
           taskMetrics.shuffleWriteMetrics should be ('defined)
           taskMetrics.shuffleWriteMetrics.get.shuffleBytesWritten should be > (0l)
         }
-        if (stageInfo.rddInfo.name == d4.name) {
+        if (stageInfo.rddInfos.last.name == d4.name) {
           taskMetrics.shuffleReadMetrics should be ('defined)
           val sm = taskMetrics.shuffleReadMetrics.get
           sm.totalBlocksFetched should be > (0)
