@@ -19,7 +19,7 @@ import sys
 import random
 
 class RDDSampler(object):
-    def __init__(self, withReplacement, fraction, seed):
+    def __init__(self, withReplacement, fraction, seed=None):
         try:
             import numpy
             self._use_numpy = True

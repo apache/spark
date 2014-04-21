@@ -168,7 +168,7 @@ case class LowerCaseSchema(child: LogicalPlan) extends UnaryNode {
   def references = Set.empty
 }
 
-case class Sample(fraction: Double, withReplacement: Boolean, seed: Int, child: LogicalPlan)
+case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child: LogicalPlan)
     extends UnaryNode {
 
   def output = child.output
