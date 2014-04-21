@@ -27,14 +27,15 @@ import scala.util.Failure
 
 /**
  * Utilities for serialization / deserialization between Python and Java, using MsgPack.
- * Also contains utilities for converting [[org.apache.hadoop.io.Writable]] -> Scala objects and primitives
+ * Also contains utilities for converting [[org.apache.hadoop.io.Writable]] ->
+ * Scala objects and primitives
  */
 private[python] object SerDeUtil extends Logging {
 
   /**
-   * Checks whether a Scala object needs to be registered with MsgPack. String, primitives and the standard collections
-   * don't need to be registered as MsgPack takes care of serializing them and registering them throws scary looking
-   * errors (but still works).
+   * Checks whether a Scala object needs to be registered with MsgPack. String, primitives
+   * and the standard collections don't need to be registered as MsgPack takes care of serializing
+   * them and registering them throws scary looking errors (but still works).
    */
   def needsToBeRegistered[T](t: T) = {
     t match {
@@ -101,8 +102,8 @@ private[python] object SerDeUtil extends Logging {
   }
 
   /**
-   * Converts an RDD of key-value pairs, where key and/or value could be instances of [[org.apache.hadoop.io.Writable]],
-   * into an RDD[(K, V)]
+   * Converts an RDD of key-value pairs, where key and/or value could be instances of
+   * [[org.apache.hadoop.io.Writable]], into an RDD[(K, V)]
    */
   def convertRDD[K, V](rdd: RDD[(K, V)]) = {
     rdd.map{
@@ -113,7 +114,9 @@ private[python] object SerDeUtil extends Logging {
     }
   }
 
-  /** Converts a [[org.apache.hadoop.io.Writable]] to the underlying primitive, String or object representation */
+  /** Converts a [[org.apache.hadoop.io.Writable]] to the underlying primitive, String or
+    * object representation
+    */
   def convert(writable: Writable): Any = {
     import collection.JavaConversions._
     writable match {
@@ -132,3 +135,4 @@ private[python] object SerDeUtil extends Logging {
   }
 
 }
+

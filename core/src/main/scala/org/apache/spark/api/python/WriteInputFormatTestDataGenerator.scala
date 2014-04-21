@@ -21,6 +21,7 @@ import org.apache.spark.SparkContext
 import org.apache.hadoop.io._
 import scala.Array
 import java.io.{DataOutput, DataInput}
+import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
 
 /**
  * A class to test MsgPack serialization on the Scala side, that will be deserialized
@@ -66,7 +67,10 @@ object WriteInputFormatTestDataGenerator extends App {
   val boolPath = s"$basePath/sfbool"
   val nullPath = s"$basePath/sfnull"
 
-  // Create test data for IntWritable, DoubleWritable, Text, BytesWritable, BooleanWritable and NullWritable
+  /*
+   * Create test data for IntWritable, DoubleWritable, Text, BytesWritable,
+   * BooleanWritable and NullWritable
+   */
   val intKeys = Seq((1, "aa"), (2, "bb"), (2, "aa"), (3, "cc"), (2, "bb"), (1, "aa"))
   sc.parallelize(intKeys).saveAsSequenceFile(intPath)
   sc.parallelize(intKeys.map{ case (k, v) => (k.toDouble, v) }).saveAsSequenceFile(doublePath)
@@ -74,7 +78,9 @@ object WriteInputFormatTestDataGenerator extends App {
   sc.parallelize(intKeys.map{ case (k, v) => (k, v.getBytes) }).saveAsSequenceFile(bytesPath)
   val bools = Seq((1, true), (2, true), (2, false), (3, true), (2, false), (1, false))
   sc.parallelize(bools).saveAsSequenceFile(boolPath)
-  sc.parallelize(intKeys).map{ case (k, v) => (new IntWritable(k), NullWritable.get()) }.saveAsSequenceFile(nullPath)
+  sc.parallelize(intKeys).map{ case (k, v) =>
+    (new IntWritable(k), NullWritable.get())
+  }.saveAsSequenceFile(nullPath)
 
   // Create test data for ArrayWritable
   val data = Seq(
@@ -86,7 +92,7 @@ object WriteInputFormatTestDataGenerator extends App {
     .map{ case (k, v) =>
       (new IntWritable(k), new ArrayWritable(classOf[DoubleWritable], v.map(new DoubleWritable(_))))
     }
-    .saveAsNewAPIHadoopFile[org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat[IntWritable, ArrayWritable]](arrPath)
+    .saveAsNewAPIHadoopFile[SequenceFileOutputFormat[IntWritable, ArrayWritable]](arrPath)
 
   // Create test data for MapWritable, with keys DoubleWritable and values Text
   val mapData = Seq(
@@ -116,6 +122,6 @@ object WriteInputFormatTestDataGenerator extends App {
   val rdd = sc.parallelize(testClass, numSlices = 2).map{ case (k, v) => (new Text(k), v) }
   rdd.saveAsNewAPIHadoopFile(classPath,
                              classOf[Text], classOf[TestWritable],
-                             classOf[org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat[Text, TestWritable]])
+                             classOf[SequenceFileOutputFormat[Text, TestWritable]])
 
 }
