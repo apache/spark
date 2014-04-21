@@ -145,11 +145,13 @@ object SparkSubmit {
         sysProp = "spark.cores.max"),
       new OptionAssigner(appArgs.files, YARN, false, sysProp = "spark.yarn.dist.files"),
       new OptionAssigner(appArgs.files, YARN, true, clOption = "--files"),
-      new OptionAssigner(appArgs.files, STANDALONE | MESOS, true, sysProp = "spark.files"),
       new OptionAssigner(appArgs.archives, YARN, false, sysProp = "spark.yarn.dist.archives"),
       new OptionAssigner(appArgs.archives, YARN, true, clOption = "--archives"),
       new OptionAssigner(appArgs.jars, YARN, true, clOption = "--addJars"),
-      new OptionAssigner(appArgs.jars, STANDALONE | MESOS, false, sysProp = "spark.jars")
+      new OptionAssigner(appArgs.files, LOCAL | STANDALONE | MESOS, true, sysProp = "spark.files"),
+      new OptionAssigner(appArgs.jars, LOCAL | STANDALONE | MESOS, false, sysProp = "spark.jars"),
+      new OptionAssigner(appArgs.name, LOCAL | STANDALONE | MESOS, false,
+        sysProp = "spark.app.name")
     )
 
     // For client mode make any added jars immediately visible on the classpath

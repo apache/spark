@@ -245,7 +245,7 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
         val suggestion: Option[String] = value match {
           case v if v.startsWith("--") && v.contains("=") =>
             val parts = v.split("=")
-            Some(s"Perhaps you meant '${parts(0)} ${parts(1)}'?")
+            Some(s"Perhaps you want '${parts(0)} ${parts(1)}'?")
           case _ =>
             None
         }
