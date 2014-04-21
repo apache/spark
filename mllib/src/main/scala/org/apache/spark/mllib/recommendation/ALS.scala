@@ -118,8 +118,6 @@ class ALS private (
     this
   }
 
-  private var partitioner: Partitioner = null
-
   /** Set the rank of the feature matrices computed (number of features). Default: 10. */
   def setRank(rank: Int): ALS = {
     this.rank = rank
@@ -173,7 +171,7 @@ class ALS private (
       this.numBlocks
     }
 
-    partitioner = new Partitioner {
+    val partitioner = new Partitioner {
       val numPartitions = numBlocks
 
       def getPartition(x: Any): Int = {
@@ -189,8 +187,9 @@ class ALS private (
         Rating(rating.product, rating.user, rating.rating))
     }
 
-    val (userInLinks, userOutLinks) = makeLinkRDDs(numBlocks, ratingsByUserBlock)
-    val (productInLinks, productOutLinks) = makeLinkRDDs(numBlocks, ratingsByProductBlock)
+    val (userInLinks, userOutLinks) = makeLinkRDDs(numBlocks, ratingsByUserBlock, partitioner)
+    val (productInLinks, productOutLinks) =
+        makeLinkRDDs(numBlocks, ratingsByProductBlock, partitioner)
 
     // Initialize user and product factors randomly, but use a deterministic seed for each
     // partition so that fault recovery works
@@ -335,7 +334,8 @@ class ALS private (
    * Make the out-links table for a block of the users (or products) dataset given the list of
    * (user, product, rating) values for the users in that block (or the opposite for products).
    */
-  private def makeOutLinkBlock(numBlocks: Int, ratings: Array[Rating]): OutLinkBlock = {
+  private def makeOutLinkBlock(numBlocks: Int, ratings: Array[Rating],
+      partitioner: Partitioner): OutLinkBlock = {
     val userIds = ratings.map(_.user).distinct.sorted
     val numUsers = userIds.length
     val userIdToPos = userIds.zipWithIndex.toMap
@@ -350,7 +350,8 @@ class ALS private (
    * Make the in-links table for a block of the users (or products) dataset given a list of
    * (user, product, rating) values for the users in that block (or the opposite for products).
    */
-  private def makeInLinkBlock(numBlocks: Int, ratings: Array[Rating]): InLinkBlock = {
+  private def makeInLinkBlock(numBlocks: Int, ratings: Array[Rating],
+      partitioner: Partitioner): InLinkBlock = {
     val userIds = ratings.map(_.user).distinct.sorted
     val numUsers = userIds.length
     val userIdToPos = userIds.zipWithIndex.toMap
@@ -382,14 +383,14 @@ class ALS private (
    * the users (or (blockId, (p, u, r)) for the products). We create these simultaneously to avoid
    * having to shuffle the (blockId, (u, p, r)) RDD twice, or to cache it.
    */
-  private def makeLinkRDDs(numBlocks: Int, ratings: RDD[(Int, Rating)])
+  private def makeLinkRDDs(numBlocks: Int, ratings: RDD[(Int, Rating)], partitioner: Partitioner)
     : (RDD[(Int, InLinkBlock)], RDD[(Int, OutLinkBlock)]) =
   {
     val grouped = ratings.partitionBy(new HashPartitioner(numBlocks))
     val links = grouped.mapPartitionsWithIndex((blockId, elements) => {
       val ratings = elements.map{_._2}.toArray
-      val inLinkBlock = makeInLinkBlock(numBlocks, ratings)
-      val outLinkBlock = makeOutLinkBlock(numBlocks, ratings)
+      val inLinkBlock = makeInLinkBlock(numBlocks, ratings, partitioner)
+      val outLinkBlock = makeOutLinkBlock(numBlocks, ratings, partitioner)
       Iterator.single((blockId, (inLinkBlock, outLinkBlock)))
     }, true)
     val inLinks = links.mapValues(_._1)
