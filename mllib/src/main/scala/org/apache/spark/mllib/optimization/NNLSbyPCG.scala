@@ -30,6 +30,16 @@ object NNLSbyPCG {
   /**
    * Solve a least squares problem, possibly with nonnegativity constraints, by a modified
    * projected gradient method.  That is, find x minimising ||Ax - b||_2 given A^T A and A^T b.
+   *
+   * We solve the problem
+   *   min_x      1/2 x^T ata x^T - x^T atb
+   *   subject to x >= 0 (if nonnegative == true)
+   *
+   * The method used is similar to one described by Polyak (B. T. Polyak, The conjugate gradient
+   * method in extremal problems, Zh. Vychisl. Mat. Mat. Fiz. 9(4)(1969), pp. 94-112) for bound-
+   * constrained nonlinear programming.  Polyak unconditionally uses a conjugate gradient
+   * direction, however, while this method only uses a conjugate gradient direction if the last
+   * iteration did not cause a previously-inactive constraint to become active.
    */
   def solve(ata: DoubleMatrix, atb: DoubleMatrix, nonnegative: Boolean): Array[Double] = {
     val n = atb.rows
