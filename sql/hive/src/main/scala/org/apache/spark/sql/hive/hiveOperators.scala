@@ -95,13 +95,12 @@ case class HiveTableScan(
     var i = 0
     val len = relation.attributes.length
     while(i < len) {
-        for(a <- attributes) { 
-          if(a.name == relation.attributes(i).name) {
-	    names.add(i)
-            
-	  }
-	}
-	i += 1 
+      for(a <- attributes) { 
+        if(a.name == relation.attributes(i).name) {
+	   names.add(i)
+        }
+      }
+      i += 1 
     } 
     names
   }  
@@ -135,9 +134,7 @@ case class HiveTableScan(
       }
       i+=1
     }
-
     newList
-
   }
 
   private def castFromString(value: String, dataType: DataType) = {
@@ -166,36 +163,36 @@ case class HiveTableScan(
       case None => partitions
       case Some(shouldKeep) => partitions.filter { part =>
         val castedValues = mutable.ArrayBuffer[Any]()
-	var i = 0
+        var i = 0
         var len = relation.partitionKeys.length	
         val iter: Iterator[String] = part.getValues.iterator
-	while (i < len) {
-	  castedValues += castFromString(iter.next,relation.partitionKeys(i).dataType)
+        while (i < len) {
+          castedValues += castFromString(iter.next,relation.partitionKeys(i).dataType)
           i += 1
-	}
+        }
 
         // Only partitioned values are needed here, since the predicate has already been bound to
         // partition key attribute references.
         //val row = new GenericRow(castedValues.toArray)
         i = 0
         len = castedValues.length
-	while (i < len) {
-          /** castedValues represents columns in the row */
-	  castedValues(i) match {
-	    case n: String if n.toLowerCase == "null" => row.setNullAt(i)
-	    case n: Boolean => row.setBoolean(i,n)
+ 	while (i < len) {
+        /** castedValues represents columns in the row */
+          castedValues(i) match {
+            case n: String if n.toLowerCase == "null" => row.setNullAt(i)
+            case n: Boolean => row.setBoolean(i,n)
             case n: Byte => row.setByte(i,n) 	
             case n: Double => row.setDouble(i,n) 
             case n: Float => row.setFloat(i,n) 
             case n: Int => row.setInt(i,n) 
-            case n: Long => row.setLong(i,n) 
-	    case n: String  => row.setString(i,n)
-	    case n: Short  => row.setShort(i,n)  
-	    case other => row.update(i,other)
-	  }
-	  i += 1
-	}
-	shouldKeep.eval(row).asInstanceOf[Boolean]
+            case n: Long => row.setLong(i,n)
+            case n: String  => row.setString(i,n)
+            case n: Short  => row.setShort(i,n)
+            case other => row.update(i,other)
+          }
+          i += 1
+        }
+        shouldKeep.eval(row).asInstanceOf[Boolean]
       }
     }
   }
@@ -224,17 +221,17 @@ case class HiveTableScan(
         while ( i < len ) {
           values(i) match {
             case n: String if n.toLowerCase == "null" => mutableRow.setNullAt(i)
-	    case varchar: org.apache.hadoop.hive.common.`type`.HiveVarchar => mutableRow.update(i,varchar.getValue)
+            case varchar: org.apache.hadoop.hive.common.`type`.HiveVarchar => mutableRow.update(i,varchar.getValue)
             case decimal: org.apache.hadoop.hive.common.`type`.HiveDecimal =>
               mutableRow.update(i,BigDecimal(decimal.bigDecimalValue))
-	    case other => mutableRow.update(i,other)
-	  }
+            case other => mutableRow.update(i,other)
+          }
           i += 1
         }
         rddBuffer +=  mutableRow
       }
       rddBuffer
-    } )
+    })
     /** finalRdd ... equivelant to Rdd generated from inputRdd.map(...) */	
     val finalRdd = inputRdd.context.makeRDD(res(0)) 
     finalRdd 
