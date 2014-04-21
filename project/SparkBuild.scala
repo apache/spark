@@ -334,7 +334,7 @@ object SparkBuild extends Build {
         "colt"                       % "colt"             % "1.2.0",
         "org.apache.mesos"           % "mesos"            % "0.13.0",
         "commons-net"                % "commons-net"      % "2.2",
-        "net.java.dev.jets3t"        % "jets3t"           % "0.7.1" excludeAll(excludeCommonsLogging),
+        "net.java.dev.jets3t"        % "jets3t"           % "0.9.0" excludeAll(excludeCommonsLogging),
         "org.apache.derby"           % "derby"            % "10.4.2.0"                     % "test",
         "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeNetty, excludeAsm, excludeCommonsLogging, excludeSLF4J, excludeOldAsm),
         "org.apache.curator"         % "curator-recipes"  % "2.4.0" excludeAll(excludeNetty),
