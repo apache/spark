@@ -38,7 +38,7 @@ class PlannerSuite extends FunSuite {
   }
 
   test("count is partially aggregated") {
-    val query = testData.groupBy('value)(Count('key)).analyze.logicalPlan
+    val query = testData.groupBy('value)(Count('key)).queryExecution.analyzed
     val planned = PartialAggregation(query).head
     val aggregations = planned.collect { case a: Aggregate => a }
 
@@ -46,14 +46,14 @@ class PlannerSuite extends FunSuite {
   }
 
   test("count distinct is not partially aggregated") {
-    val query = testData.groupBy('value)(CountDistinct('key :: Nil)).analyze.logicalPlan
-    val planned = PartialAggregation(query.logicalPlan)
+    val query = testData.groupBy('value)(CountDistinct('key :: Nil)).queryExecution.analyzed
+    val planned = PartialAggregation(query)
     assert(planned.isEmpty)
   }
 
   test("mixed aggregates are not partially aggregated") {
     val query =
-      testData.groupBy('value)(Count('value), CountDistinct('key :: Nil)).analyze.logicalPlan
+      testData.groupBy('value)(Count('value), CountDistinct('key :: Nil)).queryExecution.analyzed
     val planned = PartialAggregation(query)
     assert(planned.isEmpty)
   }

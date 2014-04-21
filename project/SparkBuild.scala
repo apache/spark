@@ -162,7 +162,7 @@ object SparkBuild extends Build {
     organization       := "org.apache.spark",
     version            := SPARK_VERSION,
     scalaVersion       := "2.10.4",
-    scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation",
+    scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation", "-feature",
       "-target:" + SCALAC_JVM_VERSION),
     javacOptions := Seq("-target", JAVAC_JVM_VERSION, "-source", JAVAC_JVM_VERSION),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
@@ -263,8 +263,6 @@ object SparkBuild extends Build {
         "org.eclipse.jetty" % "jetty-util"     % jettyVersion,
         "org.eclipse.jetty" % "jetty-plus"     % jettyVersion,
         "org.eclipse.jetty" % "jetty-security" % jettyVersion,
-        /** Workaround for SPARK-959. Dependency used by org.eclipse.jetty. Fixed in ivy 2.3.0. */
-        "org.eclipse.jetty.orbit" % "javax.servlet" % "3.0.0.v201112011016" artifacts Artifact("javax.servlet", "jar", "jar"),
         "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
         "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
         "com.novocode"      % "junit-interface" % "0.10"   % "test",
@@ -306,7 +304,7 @@ object SparkBuild extends Build {
   val excludeHadoop = ExclusionRule(organization = "org.apache.hadoop")
   val excludeCurator = ExclusionRule(organization = "org.apache.curator")
   val excludePowermock = ExclusionRule(organization = "org.powermock")
-
+  val excludeFastutil = ExclusionRule(organization = "it.unimi.dsi")
 
   def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark",
       version: String = "0.9.0-incubating", crossVersion: String = "2.10"): Option[sbt.ModuleID] = {
@@ -345,7 +343,8 @@ object SparkBuild extends Build {
         "com.twitter"               %% "chill"            % chillVersion excludeAll(excludeAsm),
         "com.twitter"                % "chill-java"       % chillVersion excludeAll(excludeAsm),
         "org.tachyonproject"         % "tachyon"          % "0.4.1-thrift" excludeAll(excludeHadoop, excludeCurator, excludeEclipseJetty, excludePowermock),
-        "com.clearspring.analytics"  % "stream"           % "2.5.1"
+        "com.clearspring.analytics"  % "stream"           % "2.5.1" excludeAll(excludeFastutil),
+        "org.spark-project"          % "pyrolite"         % "2.0"
       ),
     libraryDependencies ++= maybeAvro
   )

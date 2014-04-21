@@ -18,10 +18,11 @@
 package org.apache.spark.sql.columnar
 
 import org.apache.spark.sql.{QueryTest, TestData}
+import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.execution.SparkLogicalPlan
 import org.apache.spark.sql.test.TestSQLContext
 
-class ColumnarQuerySuite extends QueryTest {
+class InMemoryColumnarQuerySuite extends QueryTest {
   import TestData._
   import TestSQLContext._
 
@@ -30,6 +31,15 @@ class ColumnarQuerySuite extends QueryTest {
     val scan = SparkLogicalPlan(InMemoryColumnarTableScan(plan.output, plan))
 
     checkAnswer(scan, testData.collect().toSeq)
+  }
+
+  test("projection") {
+    val plan = TestSQLContext.executePlan(testData.select('value, 'key).logicalPlan).executedPlan
+    val scan = SparkLogicalPlan(InMemoryColumnarTableScan(plan.output, plan))
+
+    checkAnswer(scan, testData.collect().map {
+      case Row(key: Int, value: String) => value -> key
+    }.toSeq)
   }
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
