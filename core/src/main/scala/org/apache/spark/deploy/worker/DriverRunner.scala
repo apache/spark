@@ -20,7 +20,7 @@ package org.apache.spark.deploy.worker
 import java.io._
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.Map
+import scala.collection.Map
 
 import akka.actor.ActorRef
 import com.google.common.base.Charsets
@@ -74,13 +74,17 @@ private[spark] class DriverRunner(
 
           // Make sure user application jar is on the classpath
           // TODO: If we add ability to submit multiple jars they should also be added here
-          val env = Map(driverDesc.command.environment.toSeq: _*)
-          env("SPARK_CLASSPATH") = env.getOrElse("SPARK_CLASSPATH", "") + s":$localJarFilename"
-          val newCommand = Command(driverDesc.command.mainClass,
-            driverDesc.command.arguments.map(substituteVariables), env)
+          val classPath = driverDesc.command.classPathEntries ++ Seq(s"$localJarFilename")
+          val newCommand = Command(
+            driverDesc.command.mainClass,
+            driverDesc.command.arguments.map(substituteVariables),
+            driverDesc.command.environment,
+            classPath,
+            driverDesc.command.libraryPathEntries,
+            driverDesc.command.extraJavaOptions)
           val command = CommandUtils.buildCommandSeq(newCommand, driverDesc.mem,
             sparkHome.getAbsolutePath)
-          launchDriver(command, env, driverDir, driverDesc.supervise)
+          launchDriver(command, driverDesc.command.environment, driverDir, driverDesc.supervise)
         }
         catch {
           case e: Exception => finalException = Some(e)

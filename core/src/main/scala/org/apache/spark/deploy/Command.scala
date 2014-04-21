@@ -22,5 +22,8 @@ import scala.collection.Map
 private[spark] case class Command(
     mainClass: String,
     arguments: Seq[String],
-    environment: Map[String, String]) {
+    environment: Map[String, String],
+    classPathEntries: Seq[String],
+    libraryPathEntries: Seq[String],
+    extraJavaOptions: Option[String] = None) {
 }

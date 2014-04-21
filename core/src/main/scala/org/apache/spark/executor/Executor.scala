@@ -64,9 +64,10 @@ private[spark] class Executor(
   // to what Yarn on this system said was available. This will be used later when SparkEnv
   // created.
   if (java.lang.Boolean.valueOf(
-      System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE"))))
-  {
+      System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))) {
     conf.set("spark.local.dir", getYarnLocalDirs())
+  } else if (sys.env.contains("SPARK_LOCAL_DIRS")) {
+    conf.set("spark.local.dir", sys.env("SPARK_LOCAL_DIRS"))
   }
 
   if (!isLocal) {

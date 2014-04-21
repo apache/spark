@@ -34,9 +34,7 @@ import org.apache.spark.{Logging, SparkConf}
 
 
 /**
- * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN. The
- * Client submits an application to the global ResourceManager to launch Spark's ApplicationMaster,
- * which will launch a Spark master process and negotiate resources throughout its duration.
+ * Version of [[org.apache.spark.deploy.yarn.ClientBase]] tailored to YARN's stable API.
  */
 class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: SparkConf)
   extends YarnClientImpl with ClientBase with Logging {

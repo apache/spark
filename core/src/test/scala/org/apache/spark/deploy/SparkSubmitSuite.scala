@@ -17,15 +17,15 @@
 
 package org.apache.spark.deploy
 
-import java.io.{OutputStream, PrintStream}
+import java.io.{File, OutputStream, PrintStream}
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException, TestUtils}
+import org.apache.spark.deploy.SparkSubmit._
+import org.apache.spark.util.Utils
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
-
-import org.apache.spark.deploy.SparkSubmit._
-
 
 class SparkSubmitSuite extends FunSuite with ShouldMatchers {
 
@@ -42,7 +42,7 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
   }
 
   /** Returns true if the script exits and the given search string is printed. */
-  def testPrematureExit(input: Array[String], searchString: String): Boolean = {
+  def testPrematureExit(input: Array[String], searchString: String) = {
     val printStream = new BufferPrintStream()
     SparkSubmit.printStream = printStream
 
@@ -60,28 +60,38 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     }
     thread.start()
     thread.join()
-    printStream.lineBuffer.find(s => s.contains(searchString)).size > 0
+    val joined = printStream.lineBuffer.mkString("\n")
+    if (!joined.contains(searchString)) {
+      fail(s"Search string '$searchString' not found in $joined")
+    }
   }
 
   test("prints usage on empty input") {
-    testPrematureExit(Array[String](), "Usage: spark-submit") should be (true)
+    testPrematureExit(Array[String](), "Usage: spark-submit")
   }
 
   test("prints usage with only --help") {
-    testPrematureExit(Array("--help"), "Usage: spark-submit") should be (true)
+    testPrematureExit(Array("--help"), "Usage: spark-submit")
+  }
+
+  test("prints error with unrecognized option") {
+    testPrematureExit(Array("--blarg"), "Unrecognized option '--blarg'")
+    testPrematureExit(Array("-bleg"), "Unrecognized option '-bleg'")
+    testPrematureExit(Array("--master=abc"),
+      "Unrecognized option '--master=abc'. Perhaps you want '--master abc'?")
   }
 
   test("handles multiple binary definitions") {
     val adjacentJars = Array("foo.jar", "bar.jar")
-    testPrematureExit(adjacentJars, "error: Found two conflicting resources") should be (true)
+    testPrematureExit(adjacentJars, "error: Found two conflicting resources")
 
     val nonAdjacentJars =
       Array("foo.jar", "--master", "123", "--class", "abc", "bar.jar")
-    testPrematureExit(nonAdjacentJars, "error: Found two conflicting resources") should be (true)
+    testPrematureExit(nonAdjacentJars, "error: Found two conflicting resources")
   }
 
   test("handle binary specified but not class") {
-    testPrematureExit(Array("foo.jar"), "must specify a main class")
+    testPrematureExit(Array("foo.jar"), "Must specify a main class")
   }
 
   test("handles YARN cluster mode") {
@@ -140,12 +150,11 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     val appArgs = new SparkSubmitArguments(clArgs)
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     val childArgsStr = childArgs.mkString(" ")
-    print("child args: " + childArgsStr)
     childArgsStr.startsWith("--memory 4g --cores 5 --supervise") should be (true)
     childArgsStr should include ("launch spark://h:p thejar.jar org.SomeClass arg1 arg2")
     mainClass should be ("org.apache.spark.deploy.Client")
     classpath should have length (0)
-    sysProps should have size (0)
+    sysProps should have size (1) // contains --jar entry
   }
 
   test("handles standalone client mode") {
@@ -174,5 +183,81 @@ class SparkSubmitSuite extends FunSuite with ShouldMatchers {
     classpath should contain ("thejar.jar")
     sysProps("spark.executor.memory") should be ("5g")
     sysProps("spark.cores.max") should be ("5")
+  }
+
+  test("launch simple application with spark-submit") {
+    runSparkSubmit(
+      Seq("unUsed.jar",
+        "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--master", "local"))
+  }
+
+  test("spark submit includes jars passed in through --jar") {
+    val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
+    val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
+    val jarsString = Seq(jar1, jar2).map(j => j.toString).mkString(",")
+    runSparkSubmit(
+      Seq("unUsed.jar",
+        "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--master", "local-cluster[2,1,512]",
+        "--jars", jarsString))
+  }
+
+  // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
+  def runSparkSubmit(args: Seq[String]): String = {
+    val sparkHome = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.home")).get
+    Utils.executeAndGetOutput(
+      Seq("./bin/spark-submit") ++ args,
+      new File(sparkHome),
+      Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
+  }
+}
+
+object JarCreationTest {
+  def main(args: Array[String]) {
+    val conf = new SparkConf()
+    val sc = new SparkContext(conf)
+    val result = sc.makeRDD(1 to 100, 10).mapPartitions{ x =>
+      var foundClasses = false
+      try {
+        Class.forName("SparkSubmitClassA", true, Thread.currentThread().getContextClassLoader)
+        Class.forName("SparkSubmitClassA", true, Thread.currentThread().getContextClassLoader)
+        foundClasses = true
+      } catch {
+        case _: Throwable => // catch all
+      }
+      Seq(foundClasses).iterator
+    }.collect()
+    if (result.contains(false)) {
+      throw new Exception("Could not load user defined classes inside of executors")
+    }
+  }
+}
+
+object SimpleApplicationTest {
+  def main(args: Array[String]) {
+    val conf = new SparkConf()
+    val sc = new SparkContext(conf)
+
+    val configs = Seq("spark.master", "spark.app.name")
+    for (config <- configs) {
+      val masterValue = conf.get(config)
+      val executorValues = sc
+        .makeRDD(1 to 100, 10)
+        .map(x => SparkEnv.get.conf.get(config))
+        .collect()
+        .distinct
+      if (executorValues.size != 1) {
+        throw new SparkException(s"Inconsistent values for $config: $executorValues")
+      }
+      val executorValue = executorValues(0)
+      if (executorValue != masterValue) {
+        throw new SparkException(
+          s"Master had $config=$masterValue but executor had $config=$executorValue")
+      }
+    }
+
   }
 }

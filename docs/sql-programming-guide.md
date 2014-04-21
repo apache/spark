@@ -69,7 +69,7 @@ import sqlContext._
 
 </div>
 
-<div data-lang="java"  markdown="1">
+<div data-lang="java" markdown="1">
 
 The entry point into all relational functionality in Spark is the
 [JavaSQLContext](api/sql/core/index.html#org.apache.spark.sql.api.java.JavaSQLContext) class, or one

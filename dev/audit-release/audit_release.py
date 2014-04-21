@@ -114,6 +114,7 @@ os.chdir("blank_sbt_build")
 os.environ["SPARK_VERSION"] = RELEASE_VERSION
 os.environ["SCALA_VERSION"] = SCALA_VERSION
 os.environ["SPARK_RELEASE_REPOSITORY"] = RELEASE_REPOSITORY
+os.environ["SPARK_AUDIT_MASTER"] = "local"
 for module in modules:
   os.environ["SPARK_MODULE"] = module
   ret = run_cmd("sbt clean update", exit_on_failure=False)

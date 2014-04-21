@@ -34,6 +34,12 @@ import org.apache.spark.util.{Utils, AkkaUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.SplitInfo
 
+/**
+ * An application master that allocates executors on behalf of a driver that is running outside
+ * the cluster.
+ *
+ * This is used only in yarn-client mode.
+ */
 class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sparkConf: SparkConf)
   extends Logging {
 

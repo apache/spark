@@ -19,26 +19,18 @@ package org.apache.spark.deploy.yarn
 
 import java.io.File
 import java.net.URI
-import java.nio.ByteBuffer
-import java.security.PrivilegedExceptionAction
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.HashMap
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.DataOutputBuffer
-import org.apache.hadoop.net.NetUtils
-import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.api.protocolrecords._
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.{Apps, ConverterUtils, Records}
 
-import org.apache.spark.{SparkConf, Logging}
-import org.apache.hadoop.yarn.conf.YarnConfiguration
-
+import org.apache.spark.{Logging, SparkConf}
 
 trait ExecutorRunnableUtil extends Logging {
 
@@ -58,8 +50,10 @@ trait ExecutorRunnableUtil extends Logging {
     // Set the JVM memory
     val executorMemoryString = executorMemory + "m"
     JAVA_OPTS += "-Xms" + executorMemoryString + " -Xmx" + executorMemoryString + " "
-    if (env.isDefinedAt("SPARK_JAVA_OPTS")) {
-      JAVA_OPTS += env("SPARK_JAVA_OPTS") + " "
+
+    // Set extra Java options for the executor, if defined
+    sys.props.get("spark.executor.extraJavaOptions").foreach { opts =>
+      JAVA_OPTS += opts
     }
 
     JAVA_OPTS += " -Djava.io.tmpdir=" +
@@ -162,8 +156,9 @@ trait ExecutorRunnableUtil extends Logging {
   def prepareEnvironment: HashMap[String, String] = {
     val env = new HashMap[String, String]()
 
+    val extraCp = sparkConf.getOption("spark.executor.extraClassPath")
     val log4jConf = System.getenv(ClientBase.LOG4J_CONF_ENV_KEY)
-    ClientBase.populateClasspath(null, yarnConf, sparkConf, log4jConf, env)
+    ClientBase.populateClasspath(yarnConf, sparkConf, log4jConf, env, extraCp)
     if (log4jConf != null) {
       env(ClientBase.LOG4J_CONF_ENV_KEY) = log4jConf
     }
