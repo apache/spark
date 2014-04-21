@@ -97,7 +97,7 @@ case class HiveTableScan(
     while(i < len) {
       for(a <- attributes) { 
         if(a.name == relation.attributes(i).name) {
-	   names.add(i)
+          names.add(i)
         }
       }
       i += 1 
@@ -111,7 +111,9 @@ case class HiveTableScan(
   @transient
   protected lazy val attributeFunctions: Seq[(Any, Array[String]) => Any] = {
     val len = attributes.length 
-    /** newList ArrayBuffer + while loop created to simulate functionality of attributes.map(...) .... performance reason */    
+    /** newList ArrayBuffer + while loop created to simulate functionality of
+     *  attributes.map(...) .... performance reason.    
+     */
     val newList = mutable.ArrayBuffer[(Any, Array[String]) => Any]()
     var i = 0
     while (i < len) {
@@ -122,7 +124,8 @@ case class HiveTableScan(
                        val value = partitionKeys(ordinal)
                        val dataType = relation.partitionKeys(ordinal).dataType
                        castFromString(value, dataType)
-                     })
+                     }
+                   )
       } else {
         val ref = objectInspector.getAllStructFieldRefs
           .find(_.getFieldName == a.name)
@@ -130,7 +133,8 @@ case class HiveTableScan(
           newList += ( (row: Any, _: Array[String]) => {
                          val data = objectInspector.getStructFieldData(row, ref)
                          unwrapData(data, ref.getFieldObjectInspector)
-                       })
+                       }
+                     )
       }
       i+=1
     }
@@ -155,8 +159,9 @@ case class HiveTableScan(
    * @return Partitions that are involved in the query plan.
    */
   private[hive] def prunePartitions(partitions: Seq[HivePartition]) = {
-    
-    /** mutable row implementation to avoid creating row instance at each iteration inside the while loop. */
+    /** mutable row implementation to avoid creating row instance at
+     *  each iteration inside the while loop.
+     */
     val row = new GenericMutableRow(attributes.length)
 	
     boundPruningPred match {
@@ -171,8 +176,8 @@ case class HiveTableScan(
           i += 1
         }
 
-        // Only partitioned values are needed here, since the predicate has already been bound to
-        // partition key attribute references.
+        //Only partitioned values are needed here, since the predicate has already been bound to
+        //partition key attribute references.
         //val row = new GenericRow(castedValues.toArray)
         i = 0
         len = castedValues.length
@@ -206,7 +211,9 @@ case class HiveTableScan(
     var i = 0
     
     var res = inputRdd.context.runJob(inputRdd,(iter: Iterator[_]) => {
-      /** rddBuffer keeps track of all the transformed rows ... needed later to create finalRdd */ 
+      /** rddBuffer keeps track of all the transformed rows.
+       *  needed later to create finalRdd 
+       */ 
       val rddBuffer = mutable.ArrayBuffer[Row]()
       while (iter.hasNext) {
         val row = iter.next()
