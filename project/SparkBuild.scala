@@ -191,6 +191,7 @@ object SparkBuild extends Build {
       "-groups",
       "-skip-packages", Seq(
         "akka",
+        "org.apache.spark.api.python",
         "org.apache.spark.network",
         "org.apache.spark.deploy",
         "org.apache.spark.util.collection"
@@ -378,6 +379,7 @@ object SparkBuild extends Build {
         .map(_.filterNot(_.getCanonicalPath.contains("deploy")))
         .map(_.filterNot(_.getCanonicalPath.contains("network")))
         .map(_.filterNot(_.getCanonicalPath.contains("executor")))
+        .map(_.filterNot(_.getCanonicalPath.contains("python")))
         .map(_.filterNot(_.getCanonicalPath.contains("collection")))
     },
 
