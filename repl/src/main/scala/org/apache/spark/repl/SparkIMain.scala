@@ -90,19 +90,19 @@ import org.apache.spark.util.Utils
     val conf = new SparkConf()
 
     val SPARK_DEBUG_REPL: Boolean = (System.getenv("SPARK_DEBUG_REPL") == "1")
-      /** Local directory to save .class files too */
-      val outputDir = {
-        val tmp = System.getProperty("java.io.tmpdir")
-        val rootDir = conf.get("spark.repl.classdir",  tmp)
-        Utils.createTempDir(rootDir)
-      }
-      if (SPARK_DEBUG_REPL) {
-        echo("Output directory: " + outputDir)
-      }
+    /** Local directory to save .class files too */
+    lazy val outputDir = {
+      val tmp = System.getProperty("java.io.tmpdir")
+      val rootDir = conf.get("spark.repl.classdir",  tmp)
+      Utils.createTempDir(rootDir)
+    }
+    if (SPARK_DEBUG_REPL) {
+      echo("Output directory: " + outputDir)
+    }
 
     val virtualDirectory                              = new PlainFile(outputDir) // "directory" for classfiles
-    val classServer                                   = new HttpServer(outputDir,
-      new SecurityManager(conf)) /** Jetty server that will serve our classes to worker nodes */
+    /** Jetty server that will serve our classes to worker nodes */
+    val classServer                                   = new HttpServer(outputDir, new SecurityManager(conf))
     private var currentSettings: Settings             = initialSettings
     var printResults                                  = true      // whether to print result lines
     var totalSilence                                  = false     // whether to print anything
@@ -112,12 +112,12 @@ import org.apache.spark.util.Utils
     private var _executionWrapper                     = ""        // code to be wrapped around all lines
 
 
-        // Start the classServer and store its URI in a spark system property
+    // Start the classServer and store its URI in a spark system property
     // (which will be passed to executors so that they can connect to it)
-      classServer.start()
-      if (SPARK_DEBUG_REPL) {
-        echo("Class server started, URI = " + classServer.uri)
-      }
+    classServer.start()
+    if (SPARK_DEBUG_REPL) {
+      echo("Class server started, URI = " + classServer.uri)
+    }
 
     /** We're going to go to some trouble to initialize the compiler asynchronously.
      *  It's critical that nothing call into it until it's been initialized or we will
@@ -138,7 +138,7 @@ import org.apache.spark.util.Utils
       if (isInitializeComplete) global.classPath.asURLs
       else new PathResolver(settings).result.asURLs  // the compiler's classpath
       )
-      def settings = currentSettings
+    def settings = currentSettings
     def mostRecentLine = prevRequestList match {
       case Nil      => ""
       case req :: _ => req.originalLine
@@ -725,6 +725,17 @@ import org.apache.spark.util.Utils
     classServer.stop()
   }
 
+  /**
+   * Captures the session names (which are set by system properties) once, instead of for each line.
+   */
+  object FixedSessionNames {
+    val lineName    = sessionNames.line
+    val readName    = sessionNames.read
+    val evalName    = sessionNames.eval
+    val printName   = sessionNames.print
+    val resultName  = sessionNames.result
+  }
+
   /** Here is where we:
    *
    *  1) Read some source code, and put it in the "read" object.
@@ -740,11 +751,11 @@ import org.apache.spark.util.Utils
     private var evalCaught: Option[Throwable] = None
     private var conditionalWarnings: List[ConditionalWarning] = Nil
 
-    val packageName = sessionNames.line + lineId
-    val readName    = sessionNames.read
-    val evalName    = sessionNames.eval
-    val printName   = sessionNames.print
-    val resultName  = sessionNames.result
+    val packageName = FixedSessionNames.lineName + lineId
+    val readName    = FixedSessionNames.readName
+    val evalName    = FixedSessionNames.evalName
+    val printName   = FixedSessionNames.printName
+    val resultName  = FixedSessionNames.resultName
 
     def bindError(t: Throwable) = {
       if (!bindExceptions) // avoid looping if already binding

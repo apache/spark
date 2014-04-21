@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.scheduler
 
 import scala.collection.mutable.{HashMap, SynchronizedMap, SynchronizedQueue}
+import scala.language.existentials
 
 import akka.actor._
 import org.apache.spark.{Logging, SparkEnv, SparkException}

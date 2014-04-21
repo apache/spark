@@ -99,7 +99,9 @@ object GenerateMIMAIgnore {
     // Heuristic to remove JVM classes that do not correspond to user-facing classes in Scala
     name.contains("anon") ||
     name.endsWith("$class") ||
-    name.contains("$sp")
+    name.contains("$sp") ||
+    name.contains("hive") ||
+    name.contains("Hive")
   }
 
   /**

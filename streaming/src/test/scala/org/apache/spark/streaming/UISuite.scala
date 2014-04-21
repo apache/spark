@@ -18,6 +18,7 @@
 package org.apache.spark.streaming
 
 import scala.io.Source
+import scala.language.postfixOps
 
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Eventually._
@@ -25,7 +26,8 @@ import org.scalatest.time.SpanSugar._
 
 class UISuite extends FunSuite {
 
-  test("streaming tab in spark UI") {
+  // Ignored: See SPARK-1530
+  ignore("streaming tab in spark UI") {
     val ssc = new StreamingContext("local", "test", Seconds(1))
     eventually(timeout(10 seconds), interval(50 milliseconds)) {
       val html = Source.fromURL(ssc.sparkContext.ui.appUIAddress).mkString

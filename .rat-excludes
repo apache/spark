@@ -11,6 +11,7 @@ RELEASE
 control
 docs
 fairscheduler.xml.template
+spark-defaults.conf.template
 log4j.properties
 log4j.properties.template
 metrics.properties.template
@@ -40,5 +41,5 @@ work
 golden
 test.out/*
 .*iml
-python/metastore/service.properties
-python/metastore/db.lck
+service.properties
+db.lck

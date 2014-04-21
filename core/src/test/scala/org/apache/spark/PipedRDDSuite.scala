@@ -19,8 +19,6 @@ package org.apache.spark
 
 import java.io.File
 
-import com.google.common.io.Files
-
 import org.scalatest.FunSuite
 
 import org.apache.spark.rdd.{HadoopRDD, PipedRDD, HadoopPartition}
@@ -28,6 +26,7 @@ import org.apache.hadoop.mapred.{JobConf, TextInputFormat, FileSplit}
 import org.apache.hadoop.fs.Path
 
 import scala.collection.Map
+import scala.language.postfixOps
 import scala.sys.process._
 import scala.util.Try
 

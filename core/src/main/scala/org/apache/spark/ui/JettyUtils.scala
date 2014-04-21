@@ -22,6 +22,7 @@ import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.annotation.tailrec
+import scala.language.implicitConversions
 import scala.util.{Failure, Success, Try}
 import scala.xml.Node
 

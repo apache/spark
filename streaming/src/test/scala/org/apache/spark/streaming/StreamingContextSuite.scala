@@ -29,6 +29,8 @@ import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
+import scala.language.postfixOps
+
 class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts with Logging {
 
   val master = "local[2]"
