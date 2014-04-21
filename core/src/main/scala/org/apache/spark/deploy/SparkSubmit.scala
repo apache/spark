@@ -107,7 +107,6 @@ object SparkSubmit {
     val sysProps = new HashMap[String, String]()
     var childMainClass = ""
 
-
     if (clusterManager == MESOS && deployOnCluster) {
       printErrorAndExit("Mesos does not support running the driver on the cluster")
     }
