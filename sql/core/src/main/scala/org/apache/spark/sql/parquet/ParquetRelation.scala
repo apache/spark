@@ -33,9 +33,11 @@ import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeNa
 import parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.ArrayType
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 
 // Implicits
 import scala.collection.JavaConversions._
@@ -142,6 +144,16 @@ private[sql] object ParquetRelation {
     ParquetRelation.enableLogForwarding()
     ParquetTypesConverter.writeMetaData(attributes, path, conf)
     new ParquetRelation(path.toString)
+  }
+
+  def checkPredicatePushdownPossible(filters: Seq[Expression]): Boolean = {
+    def checkFeasible(left: Expression, right: Expression) =
+      left.isInstanceOf[Literal] || right.isInstanceOf[Literal]
+    filters.forall {
+      case Equals(left, right) => checkFeasible(left, right)
+      case LessThan(left, right) => checkFeasible(left, right)
+      case _ => false
+    }
   }
 
   private def checkPath(pathStr: String, allowExisting: Boolean, conf: Configuration): Path = {

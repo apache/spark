@@ -27,15 +27,17 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat, FileOutputCommitter}
 
-import parquet.hadoop.{ParquetInputFormat, ParquetOutputFormat}
+import parquet.hadoop.{ParquetRecordReader, BadConfigurationException, ParquetInputFormat, ParquetOutputFormat}
 import parquet.hadoop.util.ContextUtil
 import parquet.io.InvalidRecordException
 import parquet.schema.MessageType
 
 import org.apache.spark.{SerializableWritable, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Row}
+import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, Attribute, Expression, Row}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
+import parquet.filter.UnboundRecordFilter
+import parquet.hadoop.api.ReadSupport
 
 /**
  * Parquet table scan operator. Imports the file that backs the given
@@ -46,7 +48,7 @@ case class ParquetTableScan(
     // https://issues.apache.org/jira/browse/SPARK-1367
     output: Seq[Attribute],
     relation: ParquetRelation,
-    columnPruningPred: Option[Expression])(
+    columnPruningPred: Option[Seq[Expression]])(
     @transient val sc: SparkContext)
   extends LeafNode {
 
@@ -62,17 +64,21 @@ case class ParquetTableScan(
     for (path <- fileList if !path.getName.startsWith("_")) {
       NewFileInputFormat.addInputPath(job, path)
     }
+
+    // Store Parquet schema in `Configuration`
     conf.set(
         RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA,
         ParquetTypesConverter.convertFromAttributes(output).toString)
-    // TODO: think about adding record filters
-    /* Comments regarding record filters: it would be nice to push down as much filtering
-      to Parquet as possible. However, currently it seems we cannot pass enough information
-      to materialize an (arbitrary) Catalyst [[Predicate]] inside Parquet's
-      ``FilteredRecordReader`` (via Configuration, for example). Simple
-      filter-rows-by-column-values however should be supported.
-    */
-    sc.newAPIHadoopRDD(conf, classOf[ParquetInputFormat[Row]], classOf[Void], classOf[Row])
+
+    // Store record filtering predicate in `Configuration`
+    // Note: the input format ignores all predicates that cannot be expressed
+    // as simple column predicate filters in Parquet. Here we just record
+    // the whole pruning predicate.
+    if (columnPruningPred.isDefined) {
+      ParquetFilters.serializeFilterExpressions(columnPruningPred.get, conf)
+    }
+
+    sc.newAPIHadoopRDD(conf, classOf[org.apache.spark.sql.parquet.FilteringParquetRowInputFormat], classOf[Void], classOf[Row])
     .map(_._2)
   }
 
@@ -259,6 +265,21 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
     val committer: FileOutputCommitter =
       getOutputCommitter(context).asInstanceOf[FileOutputCommitter]
     new Path(committer.getWorkPath, filename)
+  }
+}
+
+// We extend ParquetInputFormat in order to have more control over which
+// RecordFilter we want to use
+private[parquet] class FilteringParquetRowInputFormat extends parquet.hadoop.ParquetInputFormat[Row] {
+  override def createRecordReader(inputSplit: InputSplit, taskAttemptContext: TaskAttemptContext): RecordReader[Void, Row] = {
+    val readSupport: ReadSupport[Row] = new RowReadSupport()
+
+    val filterExpressions = ParquetFilters.deserializeFilterExpressions(ContextUtil.getConfiguration(taskAttemptContext))
+    if (filterExpressions.isDefined) {
+      new ParquetRecordReader[Row](readSupport, ParquetFilters.createFilter(filterExpressions.get))
+    } else {
+      new ParquetRecordReader[Row](readSupport)
+    }
   }
 }
 

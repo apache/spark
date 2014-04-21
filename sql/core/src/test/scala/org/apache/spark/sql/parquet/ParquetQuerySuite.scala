@@ -196,7 +196,6 @@ class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
     assert(true)
   }
 
-
   test("insert (appending) to same table via Scala API") {
     sql("INSERT INTO testsource SELECT * FROM testsource").collect()
     val double_rdd = sql("SELECT * FROM testsource").collect()
@@ -238,6 +237,11 @@ class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
     assert(rdd_saved(0) === Seq.fill(5)(null))
     Utils.deleteRecursively(file)
     assert(true)
+  }
+
+  test("SELECT WHERE") {
+    val result = sql("SELECT * FROM testsource WHERE myint = 5").collect()
+    assert(result != null)
   }
 }
 

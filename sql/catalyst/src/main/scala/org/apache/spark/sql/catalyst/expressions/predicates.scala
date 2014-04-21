@@ -174,6 +174,12 @@ case class GreaterThanOrEqual(left: Expression, right: Expression) extends Binar
   override def eval(input: Row): Any = c2(input, left, right, _.gteq(_, _))
 }
 
+// A simple filter condition on a single column
+/*case class ColumnFilterPredicate(val comparison: BinaryComparison) extends BinaryComparison {
+  override def eval(input: Row): Any = comparison.eval(input)
+
+} */
+
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
     extends Expression {
 

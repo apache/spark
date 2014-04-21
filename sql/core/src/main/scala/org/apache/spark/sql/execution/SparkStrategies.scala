@@ -141,11 +141,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.InsertIntoTable(table: ParquetRelation, partition, child, overwrite) =>
         InsertIntoParquetTable(table, planLater(child), overwrite)(sparkContext) :: Nil
       case PhysicalOperation(projectList, filters, relation: ParquetRelation) =>
-        // TODO: Should be pushing down filters as well.
-        pruneFilterProject(
-          projectList,
-          filters,
-          ParquetTableScan(_, relation, None)(sparkContext)) :: Nil
+          pruneFilterProject(
+            projectList,
+            filters,
+            ParquetTableScan(_, relation, Some(filters))(sparkContext)) :: Nil
       case _ => Nil
     }
   }

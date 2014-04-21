@@ -43,7 +43,7 @@ private[sql] object ParquetTestData {
   // field names for test assertion error messages
   val testSchemaFieldNames = Seq(
     "myboolean:Boolean",
-    "mtint:Int",
+    "myint:Int",
     "mystring:String",
     "mylong:Long",
     "myfloat:Float",
@@ -85,11 +85,11 @@ private[sql] object ParquetTestData {
       } else {
         data.update(0, false)
       }
-      if (i % 5 == 0) {
-        data.update(1, 5)
-      } else {
+      //if (i % 5 == 0) {
+      //  data.update(1, 5)
+      //} else {
         data.update(1, null) // optional
-      }
+      //}
       data.update(2, "abc")
       data.update(3, i.toLong << 33)
       data.update(4, 2.5F)
