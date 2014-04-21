@@ -178,8 +178,8 @@ case class HiveTableScan(
         // partition key attribute references.
         i = 0
         len = castedValues.length
+        // castedValues represents columns in the row.
         while (i < len) {
-        //castedValues represents columns in the row */
           castedValues(i) match {
             case n: String if n.toLowerCase == "null" => row.setNullAt(i)
             case n: Boolean => row.setBoolean(i,n)
