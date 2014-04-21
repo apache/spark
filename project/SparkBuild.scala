@@ -396,7 +396,8 @@ object SparkBuild extends Build {
         "mllib.regression", "mllib.stat", "mllib.tree", "mllib.tree.configuration",
         "mllib.tree.impurity", "mllib.tree.model", "mllib.util"
       ),
-      "-group", "Spark SQL", packageList("sql.api.java", "sql.hive.api.java")
+      "-group", "Spark SQL", packageList("sql.api.java", "sql.hive.api.java"),
+      "-noqualifier", "java.lang"
     )
   )
 
