@@ -374,7 +374,7 @@ object SparkBuild extends Build {
       "-group", "Core Java API", packageList("api.java", "api.java.function"),
       "-group", "Spark Streaming", packageList(
         "streaming.api.java", "streaming.flume", "streaming.kafka",
-        "steaming.mqtt", "streaming.twitter", "streaming.zeromq"
+        "streaming.mqtt", "streaming.twitter", "streaming.zeromq"
       ),
       "-group", "MLlib", packageList(
         "mllib.classification", "mllib.clustering", "mllib.evaluation.binary", "mllib.linalg",
