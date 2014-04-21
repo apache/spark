@@ -148,6 +148,7 @@ class SparkContext(config: SparkConf) extends Logging {
     this(master, appName, sparkHome, jars, Map(), Map())
 
   private[spark] val conf = config.clone()
+  conf.validateSettings()
 
   /**
    * Return a copy of this SparkContext's configuration. The configuration ''cannot'' be
@@ -159,7 +160,7 @@ class SparkContext(config: SparkConf) extends Logging {
     throw new SparkException("A master URL must be set in your configuration")
   }
   if (!conf.contains("spark.app.name")) {
-    throw new SparkException("An application must be set in your configuration")
+    throw new SparkException("An application name must be set in your configuration")
   }
 
   if (conf.getBoolean("spark.logConf", false)) {
@@ -170,11 +171,11 @@ class SparkContext(config: SparkConf) extends Logging {
   conf.setIfMissing("spark.driver.host", Utils.localHostName())
   conf.setIfMissing("spark.driver.port", "0")
 
-  val jars: Seq[String] = if (conf.contains("spark.jars")) {
-    conf.get("spark.jars").split(",").filter(_.size != 0)
-  } else {
-    null
-  }
+  val jars: Seq[String] =
+    conf.getOption("spark.jars").map(_.split(",")).map(_.filter(_.size != 0)).toSeq.flatten
+
+  val files: Seq[String] =
+    conf.getOption("spark.files").map(_.split(",")).map(_.filter(_.size != 0)).toSeq.flatten
 
   val master = conf.get("spark.master")
   val appName = conf.get("spark.app.name")
@@ -235,6 +236,10 @@ class SparkContext(config: SparkConf) extends Logging {
     jars.foreach(addJar)
   }
 
+  if (files != null) {
+    files.foreach(addFile)
+  }
+
   private def warnSparkMem(value: String): String = {
     logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
       "deprecated, please use spark.executor.memory instead.")
@@ -247,22 +252,20 @@ class SparkContext(config: SparkConf) extends Logging {
     .map(Utils.memoryStringToMb)
     .getOrElse(512)
 
-  // Environment variables to pass to our executors
-  private[spark] val executorEnvs = HashMap[String, String]()
-  for (key <- Seq("SPARK_CLASSPATH", "SPARK_LIBRARY_PATH", "SPARK_JAVA_OPTS");
-      value <- Option(System.getenv(key))) {
-    executorEnvs(key) = value
-  }
+  // Environment variables to pass to our executors.
+  // NOTE: This should only be used for test related settings.
+  private[spark] val testExecutorEnvs = HashMap[String, String]()
+
   // Convert java options to env vars as a work around
   // since we can't set env vars directly in sbt.
-  for { (envKey, propKey) <- Seq(("SPARK_HOME", "spark.home"), ("SPARK_TESTING", "spark.testing"))
+  for { (envKey, propKey) <- Seq(("SPARK_TESTING", "spark.testing"))
     value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
-    executorEnvs(envKey) = value
+    testExecutorEnvs(envKey) = value
   }
   // The Mesos scheduler backend relies on this environment variable to set executor memory.
   // TODO: Set this only in the Mesos scheduler.
-  executorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
-  executorEnvs ++= conf.getExecutorEnv
+  testExecutorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
+  testExecutorEnvs ++= conf.getExecutorEnv
 
   // Set SPARK_USER for user who is running SparkContext.
   val sparkUser = Option {
@@ -270,7 +273,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }.getOrElse {
     SparkContext.SPARK_UNKNOWN_USER
   }
-  executorEnvs("SPARK_USER") = sparkUser
+  testExecutorEnvs("SPARK_USER") = sparkUser
 
   // Create and start the scheduler
   private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
