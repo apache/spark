@@ -82,7 +82,7 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
     if (propertiesFile == null) {
       sys.env.get("SPARK_HOME").foreach { sparkHome =>
         val sep = File.separator
-        val defaultPath = s"${sparkHome}${sep}conf${sep}spark-defaults.properties"
+        val defaultPath = s"${sparkHome}${sep}conf${sep}spark-defaults.conf"
         val file = new File(defaultPath)
         if (file.exists()) {
           propertiesFile = file.getAbsolutePath
@@ -283,7 +283,7 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
         |  --files FILES               Comma separated list of files to be placed in the working dir
         |                              of each executor.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
-        |                              specified, this will look for conf/spark-defaults.properties.
+        |                              specified, this will look for conf/spark-defaults.conf.
         |
         |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: 512M).
         |  --driver-java-options       Extra Java options to pass to the driver

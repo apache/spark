@@ -659,7 +659,7 @@ Apart from these, the following properties are also available, and may be useful
     A string of extra JVM options to pass to executors. For instance, GC settings or other
     logging. Note that it is illegal to set Spark properties or heap size settings with this 
     option. Spark properties should be set using a SparkConf object or the 
-    spark-defaults.properties file used with the spark-submit script. Heap size settings can be set
+    spark-defaults.conf file used with the spark-submit script. Heap size settings can be set
     with spark.executor.memory.
   </td>
 </tr>

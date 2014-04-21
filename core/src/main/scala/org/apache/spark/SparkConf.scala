@@ -244,7 +244,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
           |This has undefined behavior when running on a cluster and is deprecated in Spark 1.0+.
           |
           |Please instead use:
-          | - ./spark-submit with conf/spark-defaults.properties to set defaults for an application
+          | - ./spark-submit with conf/spark-defaults.conf to set defaults for an application
           | - ./spark-submit with --driver-java-options to set -X options for a driver
           | - spark.executor.extraJavaOptions to set -X options for executors
           | - SPARK_DAEMON_OPTS to set java options for standalone daemons (i.e. master, worker)

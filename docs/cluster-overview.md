@@ -103,7 +103,7 @@ HADOOP_CONF_DIR=XX /bin/spark-submit my-app.jar \
 
 The `spark-submit` script can load default `SparkConf` values from a properties file and pass them
 onto your application. By default it will read configuration options from
-`conf/spark-defaults.properties`. Any values specified in the file will be passed on to the
+`conf/spark-defaults.conf`. Any values specified in the file will be passed on to the
 application when run. They can obviate the need for certain flags to `spark-submit`: for
 instance, if `spark.master` property is set, you can safely omit the
 `--master` flag from `spark-submit`. In general, configuration values explicitly set on a
