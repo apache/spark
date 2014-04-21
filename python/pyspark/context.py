@@ -306,20 +306,19 @@ class SparkContext(object):
             2. Serialization is attempted via Pyrolite pickling
             3. If this fails, the fallback is to call 'toString' on each key and value
             4. C{PickleSerializer} is used to deserialize pickled objects on the Python side
-
-        >>> sc.sequenceFile("test_support/data/sfint/").collect()
+        >>> sc.sequenceFile(tempdir + "/sftestdata/sfint/").collect()
         [(1, u'aa'), (2, u'bb'), (2, u'aa'), (3, u'cc'), (2, u'bb'), (1, u'aa')]
-        >>> sc.sequenceFile("test_support/data/sfdouble/").collect()
+        >>> sc.sequenceFile(tempdir + "/sftestdata/sfdouble/").collect()
         [(1.0, u'aa'), (2.0, u'bb'), (2.0, u'aa'), (3.0, u'cc'), (2.0, u'bb'), (1.0, u'aa')]
-        >>> sc.sequenceFile("test_support/data/sftext/").collect()
+        >>> sc.sequenceFile(tempdir + "/sftestdata/sftext/").collect()
         [(u'1', u'aa'), (u'2', u'bb'), (u'2', u'aa'), (u'3', u'cc'), (u'2', u'bb'), (u'1', u'aa')]
-        >>> sc.sequenceFile("test_support/data/sfbool/").collect()
+        >>> sc.sequenceFile(tempdir + "/sftestdata/sfbool/").collect()
         [(1, True), (2, True), (2, False), (3, True), (2, False), (1, False)]
-        >>> sc.sequenceFile("test_support/data/sfnull/").collect()
+        >>> sc.sequenceFile(tempdir + "/sftestdata/sfnull/").collect()
         [(1, None), (2, None), (2, None), (3, None), (2, None), (1, None)]
-        >>> sc.sequenceFile("test_support/data/sfmap/").collect()
+        >>> sc.sequenceFile(tempdir + "/sftestdata/sfmap/").collect()
         [(1, {2.0: u'aa'}), (2, {3.0: u'bb'}), (2, {1.0: u'cc'}), (3, {2.0: u'dd'}), (2, {1.0: u'aa'}), (1, {3.0: u'bb'})]
-        >>> sc.sequenceFile("test_support/data/sfclass").first()
+        >>> sc.sequenceFile(tempdir + "/sftestdata/sfclass").first()
         (u'1', {u'int': 123, u'double': 54.0, u'__class__': u'org.apache.spark.api.python.TestWritable', u'str': u'test1'})
         """
         minSplits = minSplits or min(self.defaultParallelism, 2)
@@ -555,6 +554,7 @@ def _test():
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
     globs['tempdir'] = tempfile.mkdtemp()
+    globs['sc']._jvm.WriteInputFormatTestDataGenerator.generateData(globs['tempdir'], globs['sc']._jsc)
     atexit.register(lambda: shutil.rmtree(globs['tempdir']))
     (failure_count, test_count) = doctest.testmod(globs=globs)
     globs['sc'].stop()
