@@ -65,8 +65,6 @@ In addition, if you wish to run Spark on [YARN](running-on-yarn.html), set
 
 Note that on Windows, you need to set the environment variables on separate lines, e.g., `set SPARK_HADOOP_VERSION=1.2.1`.
 
-For this version of Spark (0.9.1) Hadoop 2.2.x (or newer) users will have to build Spark and publish it locally. See [Launching Spark on YARN](running-on-yarn.html). This is needed because Hadoop 2.2 has non backwards compatible API changes.
-
 # Where to Go from Here
 
 **Programming guides:**
