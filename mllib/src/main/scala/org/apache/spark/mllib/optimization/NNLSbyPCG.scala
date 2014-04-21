@@ -99,11 +99,12 @@ private[mllib] object NNLSbyPCG {
     val dir = ws.dir
     val lastDir = ws.lastDir
     val res = ws.res
+    val iterMax = Math.max(400, 20 * n)
     var lastNorm = 0.0
     var iterno = 0
     var lastWall = 0 // Last iteration when we hit a bound constraint.
     var i = 0
-    while (iterno < 40000) {
+    while (iterno < iterMax) {
       // find the residual
       SimpleBlas.gemv(1.0, ata, x, 0.0, res)
       SimpleBlas.axpy(-1.0, atb, res)
