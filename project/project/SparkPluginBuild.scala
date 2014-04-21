@@ -26,7 +26,7 @@ import sbt.Keys._
 object SparkPluginDef extends Build {
   lazy val root = Project("plugins", file(".")) dependsOn(sparkStyle)
   lazy val sparkStyle = Project("spark-style", file("spark-style"), settings = styleSettings)
-  val sparkVersion = "1.0.0-SNAPSHOT"
+  val sparkVersion = "1.0.0"
   // There is actually no need to publish this artifact.
   def styleSettings = Defaults.defaultSettings ++ Seq (
     name                 :=  "spark-style",
