@@ -79,6 +79,11 @@ class SparkContext(object):
 
 
         >>> from pyspark.context import SparkContext
+        >>> s1 = SparkContext('local') # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+            ...
+        Exception:...
+
         >>> sc = SparkContext('local', 'test')
 
         >>> sc2 = SparkContext('local', 'test2') # doctest: +IGNORE_EXCEPTION_DETAIL
@@ -116,8 +121,12 @@ class SparkContext(object):
 
         # Check that we have at least the required parameters
         if not self._conf.contains("spark.master"):
+            with SparkContext._lock:
+                SparkContext._active_spark_context = None
             raise Exception("A master URL must be set in your configuration")
         if not self._conf.contains("spark.app.name"):
+            with SparkContext._lock:
+                SparkContext._active_spark_context = None
             raise Exception("An application name must be set in your configuration")
 
         # Read back our properties from the conf in case we loaded some of them from
