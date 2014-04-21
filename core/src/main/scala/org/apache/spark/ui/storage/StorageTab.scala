@@ -30,7 +30,7 @@ private[ui] class StorageTab(parent: SparkUI) extends WebUITab(parent, "storage"
   val listener = new StorageListener(parent.storageStatusListener)
 
   attachPage(new StoragePage(this))
-  attachPage(new RddPage(this))
+  attachPage(new RDDPage(this))
   parent.registerListener(listener)
 }
 
