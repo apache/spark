@@ -128,14 +128,6 @@ class ALSSuite extends FunSuite with LocalSparkContext {
     assert(u11 != u2)
   }
 
-  test("custom partitioner") {
-    testALS(50, 50, 2, 15, 0.7, 0.3, false, false, false, 3, null)
-    testALS(50, 50, 2, 15, 0.7, 0.3, false, false, false, 3, new Partitioner {
-      def numPartitions(): Int = 3
-      def getPartition(x: Any): Int = x.asInstanceOf[Int] % 2
-    })
-  }
-
   test("negative ids") {
     val data = ALSSuite.generateRatings(50, 50, 2, 0.7, false, false)
     val ratings = sc.parallelize(data._1.map { case Rating(u, p, r) =>
@@ -168,20 +160,18 @@ class ALSSuite extends FunSuite with LocalSparkContext {
    * @param bulkPredict    flag to test bulk prediciton
    * @param negativeWeights whether the generated data can contain negative values
    * @param numBlocks      number of blocks to partition users and products into
-   * @param partitioner    partitioner
    */
   def testALS(users: Int, products: Int, features: Int, iterations: Int,
     samplingRate: Double, matchThreshold: Double, implicitPrefs: Boolean = false,
-    bulkPredict: Boolean = false, negativeWeights: Boolean = false, numBlocks: Int = -1,
-    partitioner: Partitioner = null)
+    bulkPredict: Boolean = false, negativeWeights: Boolean = false, numBlocks: Int = -1)
   {
     val (sampledRatings, trueRatings, truePrefs) = ALSSuite.generateRatings(users, products,
       features, samplingRate, implicitPrefs, negativeWeights)
     val model = implicitPrefs match {
       case false => ALS.train(sc.parallelize(sampledRatings), features, iterations, 0.01,
-          numBlocks, 0L, partitioner)
+          numBlocks, 0L)
       case true => ALS.trainImplicit(sc.parallelize(sampledRatings), features, iterations, 0.01,
-          numBlocks, 1.0, 0L, partitioner)
+          numBlocks, 1.0, 0L)
     }
 
     val predictedU = new DoubleMatrix(users, features)
