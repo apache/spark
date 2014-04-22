@@ -15,26 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.receivers
+package org.apache.spark.streaming.receiver
 
-import akka.actor.{ Actor, PoisonPill, Props, SupervisorStrategy }
-import akka.actor.{ actorRef2Scala, ActorRef }
-import akka.actor.{ PossiblyHarmful, OneForOneStrategy }
-import akka.actor.SupervisorStrategy._
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
 
-import org.apache.spark.storage.{StorageLevel, StreamBlockId}
-import org.apache.spark.streaming.dstream.NetworkReceiver
-
-import java.util.concurrent.atomic.AtomicInteger
-
-import scala.collection.mutable.ArrayBuffer
+import akka.actor._
+import akka.actor.SupervisorStrategy.{Escalate, Restart}
+import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.storage.StorageLevel
+import java.nio.ByteBuffer
 
 /** A helper with set of defaults for supervisor strategy */
-object ReceiverSupervisorStrategy {
+object ActorSupervisorStrategy {
 
   val defaultStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange =
     15 millis) {
@@ -50,9 +46,9 @@ object ReceiverSupervisorStrategy {
  * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
  *
  * @example {{{
- *  class MyActor extends Actor with Receiver{
+ *  class MyActor extends Actor with ActorHelper{
  *      def receive {
- *          case anything: String => pushBlock(anything)
+ *          case anything: String => store(anything)
  *      }
  *  }
  *
@@ -65,29 +61,40 @@ object ReceiverSupervisorStrategy {
  *       to ensure the type safety, i.e parametrized type of push block and InputDStream
  *       should be same.
  */
-trait Receiver {
+trait ActorHelper {
 
   self: Actor => // to ensure that this can be added to Actor classes only
 
-  /**
-   * Push an iterator received data into Spark Streaming for processing
-   */
-  def pushBlock[T: ClassTag](iter: Iterator[T]) {
-    context.parent ! Data(iter)
+  /** Store an iterator of received data as a data block into Spark's memory. */
+  def store[T](iter: Iterator[T]) {
+    println("Storing iterator")
+    context.parent ! IteratorData(iter)
   }
 
   /**
-   * Push a single item of received data into Spark Streaming for processing
+   * Store the bytes of received data as a data block into Spark's memory. Note
+   * that the data in the ByteBuffer must be serialized using the same serializer
+   * that Spark is configured to use.
    */
-  def pushBlock[T: ClassTag](data: T) {
-    context.parent ! Data(data)
+  def store(bytes: ByteBuffer) {
+    context.parent ! ByteBufferData(bytes)
+  }
+
+  /**
+   * Store a single item of received data to Spark's memory.
+   * These single items will be aggregated together into data blocks before
+   * being pushed into Spark's memory.
+   */
+  def store[T](item: T) {
+    println("Storing item")
+    context.parent ! SingleItemData(item)
   }
 }
 
 /**
  * Statistics for querying the supervisor about state of workers. Used in
  * conjunction with `StreamingContext.actorStream` and
- * [[org.apache.spark.streaming.receivers.Receiver]].
+ * [[org.apache.spark.streaming.receiver.ActorHelper]].
  */
 case class Statistics(numberOfMsgs: Int,
   numberOfWorkers: Int,
@@ -95,7 +102,10 @@ case class Statistics(numberOfMsgs: Int,
   otherInfo: String)
 
 /** Case class to receive data sent by child actors */
-private[streaming] case class Data[T: ClassTag](data: T)
+private[streaming] sealed trait ActorReceiverData
+private[streaming] case class SingleItemData[T](item: T) extends ActorReceiverData
+private[streaming] case class IteratorData[T](iterator: Iterator[T]) extends ActorReceiverData
+private[streaming] case class ByteBufferData(bytes: ByteBuffer) extends ActorReceiverData
 
 /**
  * Provides Actors as receivers for receiving stream.
@@ -117,16 +127,13 @@ private[streaming] case class Data[T: ClassTag](data: T)
  * }}}
  */
 private[streaming] class ActorReceiver[T: ClassTag](
-  props: Props,
-  name: String,
-  storageLevel: StorageLevel,
-  receiverSupervisorStrategy: SupervisorStrategy)
-  extends NetworkReceiver[T] {
+    props: Props,
+    name: String,
+    storageLevel: StorageLevel,
+    receiverSupervisorStrategy: SupervisorStrategy
+  ) extends Receiver[T](storageLevel) with Logging {
 
-  protected lazy val blocksGenerator: BlockGenerator =
-    new BlockGenerator(storageLevel)
-
-  protected lazy val supervisor = env.actorSystem.actorOf(Props(new Supervisor),
+  protected lazy val supervisor = SparkEnv.get.actorSystem.actorOf(Props(new Supervisor),
     "Supervisor" + streamId)
 
   class Supervisor extends Actor {
@@ -140,11 +147,17 @@ private[streaming] class ActorReceiver[T: ClassTag](
 
     def receive = {
 
-      case Data(iter: Iterator[_]) => pushBlock(iter.asInstanceOf[Iterator[T]])
+      case IteratorData(iterator) =>
+        println("received iterator")
+        store(iterator.asInstanceOf[Iterator[T]])
 
-      case Data(msg) =>
-        blocksGenerator += msg.asInstanceOf[T]
+      case SingleItemData(msg) =>
+        println("received single")
+        store(msg.asInstanceOf[T])
         n.incrementAndGet
+
+      case ByteBufferData(bytes) =>
+        store(bytes)
 
       case props: Props =>
         val worker = context.actorOf(props)
@@ -165,20 +178,14 @@ private[streaming] class ActorReceiver[T: ClassTag](
     }
   }
 
-  protected def pushBlock(iter: Iterator[T]) {
-    val buffer = new ArrayBuffer[T]
-    buffer ++= iter
-    pushBlock(StreamBlockId(streamId, System.nanoTime()), buffer, null, storageLevel)
-  }
-
-  protected def onStart() = {
-    blocksGenerator.start()
+  def onStart() = {
     supervisor
     logInfo("Supervision tree for receivers initialized at:" + supervisor.path)
 
   }
 
-  protected def onStop() = {
+  def onStop() = {
     supervisor ! PoisonPill
   }
 }
+

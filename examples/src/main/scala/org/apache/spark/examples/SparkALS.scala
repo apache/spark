@@ -113,7 +113,7 @@ object SparkALS {
     printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
 
     val sc = new SparkContext(host, "SparkALS",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
 
     val R = generateR()
 
