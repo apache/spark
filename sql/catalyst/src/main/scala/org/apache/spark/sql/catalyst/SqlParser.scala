@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
+import scala.language.implicitConversions
 import scala.util.parsing.combinator.lexical.StdLexical
 import scala.util.parsing.combinator.syntactical.StandardTokenParsers
 import scala.util.parsing.input.CharArrayReader.EofCh
@@ -106,6 +107,8 @@ class SqlParser extends StandardTokenParsers {
   protected val IF = Keyword("IF")
   protected val IN = Keyword("IN")
   protected val INNER = Keyword("INNER")
+  protected val INSERT = Keyword("INSERT")
+  protected val INTO = Keyword("INTO")
   protected val IS = Keyword("IS")
   protected val JOIN = Keyword("JOIN")
   protected val LEFT = Keyword("LEFT")
@@ -114,6 +117,7 @@ class SqlParser extends StandardTokenParsers {
   protected val NULL = Keyword("NULL")
   protected val ON = Keyword("ON")
   protected val OR = Keyword("OR")
+  protected val OVERWRITE = Keyword("OVERWRITE")
   protected val LIKE = Keyword("LIKE")
   protected val RLIKE = Keyword("RLIKE")
   protected val REGEXP = Keyword("REGEXP")
@@ -162,7 +166,7 @@ class SqlParser extends StandardTokenParsers {
     select * (
       UNION ~ ALL ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) } |
       UNION ~ opt(DISTINCT) ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Distinct(Union(q1, q2)) }
-    )
+    ) | insert
 
   protected lazy val select: Parser[LogicalPlan] =
     SELECT ~> opt(DISTINCT) ~ projections ~
@@ -185,6 +189,13 @@ class SqlParser extends StandardTokenParsers {
         withLimit
   }
 
+  protected lazy val insert: Parser[LogicalPlan] =
+    INSERT ~> opt(OVERWRITE) ~ inTo ~ select <~ opt(";") ^^ {
+      case o ~ r ~ s =>
+        val overwrite: Boolean = o.getOrElse("") == "OVERWRITE"
+        InsertIntoTable(r, Map[String, Option[String]](), s, overwrite)
+    }
+
   protected lazy val projections: Parser[Seq[Expression]] = repsep(projection, ",")
 
   protected lazy val projection: Parser[Expression] =
@@ -194,6 +205,8 @@ class SqlParser extends StandardTokenParsers {
     }
 
   protected lazy val from: Parser[LogicalPlan] = FROM ~> relations
+
+  protected lazy val inTo: Parser[LogicalPlan] = INTO ~> relation
 
   // Based very loosely on the MySQL Grammar.
   // http://dev.mysql.com/doc/refman/5.0/en/join.html
@@ -207,7 +220,7 @@ class SqlParser extends StandardTokenParsers {
 
   protected lazy val relationFactor: Parser[LogicalPlan] =
     ident ~ (opt(AS) ~> opt(ident)) ^^ {
-      case ident ~ alias => UnresolvedRelation(alias, ident)
+      case tableName ~ alias => UnresolvedRelation(None, tableName, alias)
     } |
     "(" ~> query ~ ")" ~ opt(AS) ~ ident ^^ { case s ~ _ ~ _ ~ a => Subquery(a, s) }
 

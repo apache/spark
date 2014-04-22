@@ -17,9 +17,10 @@
 
 package org.apache.spark.examples
 
+import java.util.Random
+
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
-import java.util.Random
 
 object SimpleSkewedGroupByTest {
   def main(args: Array[String]) {
@@ -27,7 +28,7 @@ object SimpleSkewedGroupByTest {
       System.err.println("Usage: SimpleSkewedGroupByTest <master> " +
         "[numMappers] [numKVPairs] [valSize] [numReducers] [ratio]")
       System.exit(1)
-    }  
+    }
 
     var numMappers = if (args.length > 1) args(1).toInt else 2
     var numKVPairs = if (args.length > 2) args(2).toInt else 1000
@@ -36,7 +37,7 @@ object SimpleSkewedGroupByTest {
     var ratio = if (args.length > 5) args(5).toInt else 5.0
 
     val sc = new SparkContext(args(0), "GroupBy Test",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
 
     val pairs1 = sc.parallelize(0 until numMappers, numMappers).flatMap { p =>
       val ranGen = new Random
@@ -58,14 +59,13 @@ object SimpleSkewedGroupByTest {
     }.cache
     // Enforce that everything has been calculated and in cache
     pairs1.count
-    
+
     println("RESULT: " + pairs1.groupByKey(numReducers).count)
     // Print how many keys each reducer got (for debugging)
     // println("RESULT: " + pairs1.groupByKey(numReducers)
     //                           .map{case (k,v) => (k, v.size)}
     //                           .collectAsMap)
 
-    System.exit(0)
+    sc.stop()
   }
 }
-

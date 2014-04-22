@@ -25,7 +25,7 @@ import org.apache.spark.network.{ConnectionManager, Message, ConnectionManagerId
 import scala.concurrent.Await
 import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
-
+import scala.language.postfixOps
 
 /**
   * Test the ConnectionManager with various security settings.

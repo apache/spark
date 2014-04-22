@@ -49,18 +49,21 @@ class QueryTest extends FunSuite {
             |$e
           """.stripMargin)
     }
+
     if(prepareAnswer(convertedAnswer) != prepareAnswer(sparkAnswer)) {
       fail(s"""
         |Results do not match for query:
         |${rdd.logicalPlan}
         |== Analyzed Plan ==
         |${rdd.queryExecution.analyzed}
-        |== RDD ==
-        |$rdd
+        |== Physical Plan ==
+        |${rdd.queryExecution.executedPlan}
         |== Results ==
         |${sideBySide(
-            prepareAnswer(convertedAnswer).map(_.toString),
-            prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
+            s"== Correct Answer - ${convertedAnswer.size} ==" +:
+              prepareAnswer(convertedAnswer).map(_.toString),
+            s"== Spark Answer - ${sparkAnswer.size} ==" +:
+              prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
       """.stripMargin)
     }
   }

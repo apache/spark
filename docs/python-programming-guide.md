@@ -45,7 +45,7 @@ errors = logData.filter(is_error)
 
 PySpark will automatically ship these functions to executors, along with any objects that they reference.
 Instances of classes will be serialized and shipped to executors by PySpark, but classes themselves cannot be automatically distributed to executors.
-The [Standalone Use](#standalone-use) section describes how to ship code dependencies to executors.
+The [Standalone Programs](#standalone-programs) section describes how to ship code dependencies to executors.
 
 In addition, PySpark fully supports interactive use---simply run `./bin/pyspark` to launch an interactive shell.
 
@@ -82,15 +82,16 @@ The Python shell can be used explore data interactively and is a simple way to l
 >>> help(pyspark) # Show all pyspark functions
 {% endhighlight %}
 
-By default, the `bin/pyspark` shell creates SparkContext that runs applications locally on a single core.
-To connect to a non-local cluster, or use multiple cores, set the `MASTER` environment variable.
+By default, the `bin/pyspark` shell creates SparkContext that runs applications locally on all of
+your machine's logical cores.
+To connect to a non-local cluster, or to specify a number of cores, set the `MASTER` environment variable.
 For example, to use the `bin/pyspark` shell with a [standalone Spark cluster](spark-standalone.html):
 
 {% highlight bash %}
 $ MASTER=spark://IP:PORT ./bin/pyspark
 {% endhighlight %}
 
-Or, to use four cores on the local machine:
+Or, to use exactly four cores on the local machine:
 
 {% highlight bash %}
 $ MASTER=local[4] ./bin/pyspark
@@ -99,8 +100,8 @@ $ MASTER=local[4] ./bin/pyspark
 
 ## IPython
 
-It is also possible to launch PySpark in [IPython](http://ipython.org), the 
-enhanced Python interpreter. PySpark works with IPython 1.0.0 and later. To 
+It is also possible to launch PySpark in [IPython](http://ipython.org), the
+enhanced Python interpreter. PySpark works with IPython 1.0.0 and later. To
 use IPython, set the `IPYTHON` variable to `1` when running `bin/pyspark`:
 
 {% highlight bash %}
@@ -133,7 +134,7 @@ Files listed here will be added to the `PYTHONPATH` and shipped to remote worker
 Code dependencies can be added to an existing SparkContext using its `addPyFile()` method.
 
 You can set [configuration properties](configuration.html#spark-properties) by passing a
-[SparkConf](api/pyspark/pyspark.conf.SparkConf-class.html) object to SparkContext:
+[SparkConf](api/python/pyspark.conf.SparkConf-class.html) object to SparkContext:
 
 {% highlight python %}
 from pyspark import SparkConf, SparkContext
@@ -146,13 +147,13 @@ sc = SparkContext(conf = conf)
 
 # API Docs
 
-[API documentation](api/pyspark/index.html) for PySpark is available as Epydoc.
+[API documentation](api/python/index.html) for PySpark is available as Epydoc.
 Many of the methods also contain [doctests](http://docs.python.org/2/library/doctest.html) that provide additional usage examples.
 
 # Libraries
 
 [MLlib](mllib-guide.html) is also available in PySpark. To use it, you'll need
-[NumPy](http://www.numpy.org) version 1.7 or newer, and Python 2.7. The [MLlib guide](mllib-guide.html) contains
+[NumPy](http://www.numpy.org) version 1.4 or newer. The [MLlib guide](mllib-guide.html) contains
 some example applications.
 
 # Where to Go from Here

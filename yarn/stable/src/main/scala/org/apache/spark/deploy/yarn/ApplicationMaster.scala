@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.IOException
-import java.net.Socket
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
@@ -36,13 +35,16 @@ import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
-import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
+import org.apache.hadoop.yarn.webapp.util.WebAppUtils
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
 
+/**
+ * An application master that runs the user's driver program and allocates executors.
+ */
 class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
                         sparkConf: SparkConf) extends Logging {
 
@@ -138,7 +140,8 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
       System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
 
     val params = "PROXY_HOST=" + parts(0) + "," + "PROXY_URI_BASE=" + uriBase
-    System.setProperty("spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.params", params)
+    System.setProperty(
+      "spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.params", params)
   }
 
   /** Get the Yarn approved local directories. */
@@ -221,7 +224,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         assert(sparkContext != null || numTries >= maxNumTries)
 
         if (sparkContext != null) {
-          uiAddress = sparkContext.ui.appUIAddress
+          uiAddress = sparkContext.ui.appUIHostPort
           this.yarnAllocator = YarnAllocationHandler.newAllocator(
             yarnConf,
             amClient,
@@ -347,8 +350,8 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
       logInfo("finishApplicationMaster with " + status)
       if (registered) {
-        // Set tracking URL to empty since we don't have a history server.
-        amClient.unregisterApplicationMaster(status, "" /* appMessage */ , "" /* appTrackingUrl */)
+        val trackingUrl = sparkConf.get("spark.yarn.historyServer.address", "")
+        amClient.unregisterApplicationMaster(status, diagnostics, trackingUrl)
       }
     }
   }

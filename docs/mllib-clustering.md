@@ -33,7 +33,7 @@ a given dataset, the algorithm returns the best clustering result).
 
 Available algorithms for clustering: 
 
-* [KMeans](api/mllib/index.html#org.apache.spark.mllib.clustering.KMeans)
+* [KMeans](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans)
 
 
 
@@ -48,14 +48,15 @@ optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
 {% highlight scala %}
 import org.apache.spark.mllib.clustering.KMeans
+import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
-val data = sc.textFile("kmeans_data.txt")
-val parsedData = data.map( _.split(' ').map(_.toDouble))
+val data = sc.textFile("data/kmeans_data.txt")
+val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble)))
 
 // Cluster the data into two classes using KMeans
-val numIterations = 20
 val numClusters = 2
+val numIterations = 20
 val clusters = KMeans.train(parsedData, numClusters, numIterations)
 
 // Evaluate clustering by computing Within Set Sum of Squared Errors
@@ -85,12 +86,12 @@ from numpy import array
 from math import sqrt
 
 # Load and parse the data
-data = sc.textFile("kmeans_data.txt")
+data = sc.textFile("data/kmeans_data.txt")
 parsedData = data.map(lambda line: array([float(x) for x in line.split(' ')]))
 
 # Build the model (cluster the data)
 clusters = KMeans.train(parsedData, 2, maxIterations=10,
-        runs=30, initialization_mode="random")
+        runs=10, initialization_mode="random")
 
 # Evaluate clustering by computing Within Set Sum of Squared Errors
 def error(point):

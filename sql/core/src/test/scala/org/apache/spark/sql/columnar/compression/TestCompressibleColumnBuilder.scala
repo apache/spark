@@ -28,7 +28,7 @@ class TestCompressibleColumnBuilder[T <: NativeType](
   with NullableColumnBuilder
   with CompressibleColumnBuilder[T] {
 
-  override protected def isWorthCompressing(encoder: Encoder) = true
+  override protected def isWorthCompressing(encoder: Encoder[T]) = true
 }
 
 object TestCompressibleColumnBuilder {
@@ -37,7 +37,9 @@ object TestCompressibleColumnBuilder {
       columnType: NativeColumnType[T],
       scheme: CompressionScheme) = {
 
-    new TestCompressibleColumnBuilder(columnStats, columnType, Seq(scheme))
+    val builder = new TestCompressibleColumnBuilder(columnStats, columnType, Seq(scheme))
+    builder.initialize(0)
+    builder
   }
 }
 

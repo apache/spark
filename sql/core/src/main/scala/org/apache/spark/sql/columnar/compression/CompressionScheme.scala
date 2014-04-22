@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.columnar.compression
 
-import java.nio.ByteBuffer
+import java.nio.{ByteOrder, ByteBuffer}
 
 import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar.{ColumnType, NativeColumnType}
 
-private[sql] trait Encoder {
-  def gatherCompressibilityStats[T <: NativeType](
-      value: T#JvmType,
-      columnType: ColumnType[T, T#JvmType]) {}
+private[sql] trait Encoder[T <: NativeType] {
+  def gatherCompressibilityStats(value: T#JvmType, columnType: NativeColumnType[T]) {}
 
   def compressedSize: Int
 
@@ -35,10 +33,7 @@ private[sql] trait Encoder {
     if (uncompressedSize > 0) compressedSize.toDouble / uncompressedSize else 1.0
   }
 
-  def compress[T <: NativeType](
-      from: ByteBuffer,
-      to: ByteBuffer,
-      columnType: ColumnType[T, T#JvmType]): ByteBuffer
+  def compress(from: ByteBuffer, to: ByteBuffer, columnType: NativeColumnType[T]): ByteBuffer
 }
 
 private[sql] trait Decoder[T <: NativeType] extends Iterator[T#JvmType]
@@ -48,7 +43,7 @@ private[sql] trait CompressionScheme {
 
   def supports(columnType: ColumnType[_, _]): Boolean
 
-  def encoder: Encoder
+  def encoder[T <: NativeType]: Encoder[T]
 
   def decoder[T <: NativeType](buffer: ByteBuffer, columnType: NativeColumnType[T]): Decoder[T]
 }
@@ -58,15 +53,18 @@ private[sql] trait WithCompressionSchemes {
 }
 
 private[sql] trait AllCompressionSchemes extends WithCompressionSchemes {
-  override val schemes: Seq[CompressionScheme] = {
-    Seq(PassThrough, RunLengthEncoding, DictionaryEncoding)
-  }
+  override val schemes: Seq[CompressionScheme] = CompressionScheme.all
 }
 
 private[sql] object CompressionScheme {
-  def apply(typeId: Int): CompressionScheme = typeId match {
-    case PassThrough.typeId => PassThrough
-    case _ => throw new UnsupportedOperationException()
+  val all: Seq[CompressionScheme] =
+    Seq(PassThrough, RunLengthEncoding, DictionaryEncoding, BooleanBitSet, IntDelta, LongDelta)
+
+  private val typeIdToScheme = all.map(scheme => scheme.typeId -> scheme).toMap
+
+  def apply(typeId: Int): CompressionScheme = {
+    typeIdToScheme.getOrElse(typeId, throw new UnsupportedOperationException(
+      s"Unrecognized compression scheme type ID: $typeId"))
   }
 
   def copyColumnHeader(from: ByteBuffer, to: ByteBuffer) {
@@ -86,7 +84,7 @@ private[sql] object CompressionScheme {
   }
 
   def columnHeaderSize(columnBuffer: ByteBuffer): Int = {
-    val header = columnBuffer.duplicate()
+    val header = columnBuffer.duplicate().order(ByteOrder.nativeOrder)
     val nullCount = header.getInt(4)
     // Column type ID + null count + null positions
     4 + 4 + 4 * nullCount

@@ -40,8 +40,9 @@ Supervised Learning involves executing a learning *Algorithm* on a set of *label
 examples. The algorithm returns a trained *Model* (such as for example a linear function) that
 can predict the label for new data examples for which the label is unknown.
 
+## Discriminative Training using Linear Methods
 
-## Mathematical Formulation
+### Mathematical Formulation
 Many standard *machine learning* methods can be formulated as a convex optimization problem, i.e.
 the task of finding a minimizer of a convex function `$f$` that depends on a variable vector
 `$\wv$` (called `weights` in the code), which has `$d$` entries. 
@@ -71,7 +72,7 @@ The fixed regularization parameter `$\lambda\ge0$` (`regParam` in the code) defi
 between the two goals of small loss and small model complexity.
 
 
-## Binary Classification
+### Binary Classification
 
 **Input:** Datapoints `$\x_i\in\R^{d}$`, labels `$y_i\in\{+1,-1\}$`, for `$1\le i\le n$`.
 
@@ -83,7 +84,7 @@ In other words, the input distributed dataset
 ([RDD](scala-programming-guide.html#resilient-distributed-datasets-rdds)) must be the set of
 vectors `$\x_i\in\R^d$`.
 
-### Support Vector Machine
+#### Support Vector Machine
 The linear [Support Vector Machine (SVM)](http://en.wikipedia.org/wiki/Support_vector_machine)
 has become a standard choice for classification tasks.
 Here the loss function in formulation `$\eqref{eq:regPrimal}$` is given by the hinge-loss 
@@ -95,7 +96,7 @@ By default, SVMs are trained with an L2 regularization, which gives rise to the 
 interpretation if these classifiers. We also support alternative L1 regularization. In this case,
 the primal optimization problem becomes an [LP](http://en.wikipedia.org/wiki/Linear_programming).
 
-### Logistic Regression
+#### Logistic Regression
 Despite its name, [Logistic Regression](http://en.wikipedia.org/wiki/Logistic_regression) is a
 binary classification method, again when the labels are given by binary values
 `$y_i\in\{+1,-1\}$`. The logistic loss function in formulation `$\eqref{eq:regPrimal}$` is
@@ -105,7 +106,7 @@ L(\wv;\x_i,y_i) :=  \log(1+\exp( -y_i \wv^T \x_i)) \ .
 \]`
 
 
-## Linear Regression (Least Squares, Lasso and Ridge Regression)
+### Linear Regression (Least Squares, Lasso and Ridge Regression)
 
 **Input:** Data matrix `$A\in\R^{n\times d}$`, right hand side vector `$\y\in\R^n$`.
 
@@ -121,17 +122,17 @@ linear combination of our observed data `$A\in\R^{n\times d}$`, which is given a
 
 It comes in 3 flavors:
 
-### Least Squares
+#### Least Squares
 Plain old [least squares](http://en.wikipedia.org/wiki/Least_squares) linear regression is the
 problem of minimizing 
   `\[ f_{\text{LS}}(\wv) := \frac1n \|A\wv-\y\|_2^2 \ . \]`
 
-### Lasso
+#### Lasso
 The popular [Lasso](http://en.wikipedia.org/wiki/Lasso_(statistics)#Lasso_method) (alternatively
 also known as  `$L_1$`-regularized least squares regression) is given by
   `\[ f_{\text{Lasso}}(\wv) := \frac1n \|A\wv-\y\|_2^2  + \lambda \|\wv\|_1 \ . \]`
 
-### Ridge Regression
+#### Ridge Regression
 [Ridge regression](http://en.wikipedia.org/wiki/Ridge_regression) uses the same loss function but
 with a L2 regularizer term:
   `\[ f_{\text{Ridge}}(\wv) := \frac1n \|A\wv-\y\|_2^2  + \frac{\lambda}{2}\|\wv\|^2 \ . \]`
@@ -150,7 +151,7 @@ In our generic problem formulation `$\eqref{eq:regPrimal}$`, this means the loss
 the data matrix `$A$`.
 
 
-## Using Different Regularizers
+### Using Different Regularizers
 
 As we have mentioned above, the purpose of *regularizer* in `$\eqref{eq:regPrimal}$` is to
 encourage simple models, by punishing the complexity of the model `$\wv$`, in order to e.g. avoid
@@ -178,7 +179,7 @@ the 3 mentioned here can be conveniently optimized with gradient descent type me
 SGD) which is implemented in `MLlib` currently, and explained in the next section.
 
 
-# Optimization Methods Working on the Primal Formulation
+### Optimization Methods Working on the Primal Formulation
 
 **Stochastic subGradient Descent (SGD).**
 For optimization objectives `$f$` written as a sum, *stochastic subgradient descent (SGD)* can be
@@ -239,11 +240,72 @@ Here `$\mathop{sign}(\wv)$` is the vector consisting of the signs (`$\pm1$`) of 
 of `$\wv$`.
 Also, note that `$A_{i:} \in \R^d$` is a row-vector, but the gradient is a column vector.
 
+## Decision Tree Classification and Regression
+
+Decision trees and their ensembles are popular methods for the machine learning tasks of classification and regression. Decision trees are widely used since they are easy to interpret, handle categorical variables, extend to the multi-class classification setting, do not require feature scaling and are able to capture non-linearities and feature interactions. Tree ensemble algorithms such as decision forest and boosting are among the top performers for classification and regression tasks.
+
+### Basic Algorithm
+
+The decision tree is a greedy algorithm that performs a recursive binary partitioning of the feature space by choosing a single element from the *best split set* where each element of the set maximimizes the information gain at a tree node. In other words, the split chosen at each tree node is chosen from the set `$\underset{s}{\operatorname{argmax}} IG(D,s)$` where `$IG(D,s)$` is the information gain when a split `$s$` is applied to a dataset `$D$`.
+
+#### Node Impurity and Information Gain
+
+The *node impurity* is a measure of the homogeneity of the labels at the node. The current implementation provides two impurity measures for classification (Gini index and entropy) and one impurity measure for regression (variance).
+
+<table class="table">
+  <thead>
+    <tr><th>Impurity</th><th>Task</th><th>Formula</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Gini index</td><td>Classification</td><td>$\sum_{i=1}^{M} f_i(1-f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $M$ is the number of unique labels.</td>
+    </tr>
+    <tr>
+      <td>Entropy</td><td>Classification</td><td>$\sum_{i=1}^{M} -f_ilog(f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $M$ is the number of unique labels.</td>
+    </tr>
+    <tr>
+      <td>Variance</td><td>Classification</td><td>$\frac{1}{n} \sum_{i=1}^{N} (x_i - \mu)^2$</td><td>$y_i$ is label for an instance, $N$ is the number of instances and $\mu$ is the mean given by $\frac{1}{N} \sum_{i=1}^n x_i$.</td>
+    </tr>
+  </tbody>
+</table>
+
+The *information gain* is the difference in the parent node impurity and the weighted sum of the two child node impurities. Assuming that a split $s$ partitions the dataset `$D$` of size `$N$`  into two datasets `$D_{left}$` and `$D_{right}$` of sizes `$N_{left}$` and `$N_{right}$`, respectively:
+
+`$IG(D,s) = Impurity(D) - \frac{N_{left}}{N} Impurity(D_{left}) - \frac{N_{right}}{N} Impurity(D_{right})$`
+
+#### Split Candidates
+
+**Continuous Features**
+
+For small datasets in single machine implementations, the split candidates for each continuous feature are typically the unique values for the feature. Some implementations sort the feature values and then use the ordered unique values as split candidates for faster tree calculations.
+
+Finding ordered unique feature values is computationally intensive for large distributed datasets. One can get an approximate set of split candidates by performing a quantile calculation over a sampled fraction of the data. The ordered splits create "bins" and the maximum number of such bins can be specified using the `maxBins` parameters. 
+
+Note that the number of bins cannot be greater than the number of instances `$N$` (a rare scenario since the default `maxBins` value is 100). The tree algorithm automatically reduces the number of bins if the condition is not satisfied.
+
+**Categorical Features**
+
+For `$M$` categorical features, one could come up with `$2^M-1$` split candidates. However, for binary classification, the number of split candidates can be reduced to `$M-1$` by ordering the categorical feature values by the proportion of labels falling in one of the two classes (see Section 9.2.4 in [Elements of Statistical Machine Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for details). For example, for a binary classification problem with one categorical feature with three categories A, B and C with corresponding proportion of label 1 as 0.2, 0.6 and 0.4, the categorical features are orded as A followed by C followed B or A, B, C. The two split candidates are A \| C, B and A , B \| C where \| denotes the split.
+
+#### Stopping Rule
+
+The recursive tree construction is stopped at a node when one of the two conditions is met:
+
+1. The node depth is equal to the `maxDepth` training paramemter
+2. No split candidate leads to an information gain at the node.
+
+### Practical Limitations
+
+The tree implementation stores an Array[Double] of size *O(#features \* #splits \* 2^maxDepth)* in memory for aggregating histograms over partitions. The current implementation might not scale to very deep trees since the memory requirement grows exponentially with tree depth. 
+
+Please drop us a line if you encounter any issues. We are planning to solve this problem in the near future and real-world examples will be great.
 
 
 ## Implementation in MLlib
 
-For both classification and regression, `MLlib` implements a simple distributed version of
+#### Linear Methods
+
+For both classification and regression algorithms with convex loss functions, `MLlib` implements a simple distributed version of
 stochastic subgradient descent (SGD), building on the underlying gradient descent primitive (as
 described in the
 <a href="mllib-optimization.html">optimization section</a>).
@@ -254,30 +316,36 @@ For each of them, we support all 3 possible regularizations (none, L1 or L2).
 
 Available algorithms for binary classification:
 
-* [SVMWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.SVMWithSGD)
-* [LogisticRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD)
+* [SVMWithSGD](api/scala/index.html#org.apache.spark.mllib.classification.SVMWithSGD)
+* [LogisticRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD)
 
 Available algorithms for linear regression: 
 
-* [LinearRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.LinearRegressionWithSGD)
-* [RidgeRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
-* [LassoWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.LassoWithSGD)
+* [LinearRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.LinearRegressionWithSGD)
+* [RidgeRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
+* [LassoWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.LassoWithSGD)
 
 Behind the scenes, all above methods use the SGD implementation from the
 gradient descent primitive in MLlib, see the 
 <a href="mllib-optimization.html">optimization</a> part:
 
-* [GradientDescent](api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent)
+* [GradientDescent](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent)
 
+#### Tree-based Methods
 
+The decision tree algorithm supports binary classification and regression:
 
+* [DecisionTee](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree)
 
 
 # Usage in Scala
 
 Following code snippets can be executed in `spark-shell`.
 
-## Binary Classification
+## Linear Methods
+
+
+#### Binary Classification
 
 The following code snippet illustrates how to load a sample dataset, execute a
 training algorithm on this training data using a static method in the algorithm
@@ -288,16 +356,17 @@ error.
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.classification.SVMWithSGD
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data file
 val data = sc.textFile("mllib/data/sample_svm_data.txt")
 val parsedData = data.map { line =>
-  val parts = line.split(' ')
-  LabeledPoint(parts(0).toDouble, parts.tail.map(x => x.toDouble).toArray)
+  val parts = line.split(' ').map(_.toDouble)
+  LabeledPoint(parts(0), Vectors.dense(parts.tail))
 }
 
 // Run training algorithm to build the model
-val numIterations = 20
+val numIterations = 100
 val model = SVMWithSGD.train(parsedData, numIterations)
 
 // Evaluate model on training examples and compute training error
@@ -328,27 +397,99 @@ svmAlg.optimizer.setNumIterations(200)
 val modelL1 = svmAlg.run(parsedData)
 {% endhighlight %}
 
-## Linear Regression
+#### Linear Regression
 
 The following example demonstrate how to load training data, parse it as an RDD of LabeledPoint.
 The example then uses LinearRegressionWithSGD to build a simple linear model to predict label 
 values. We compute the Mean Squared Error at the end to evaluate
-[goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit)
+[goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
 
 {% highlight scala %}
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
 val data = sc.textFile("mllib/data/ridge-data/lpsa.data")
 val parsedData = data.map { line =>
   val parts = line.split(',')
-  LabeledPoint(parts(0).toDouble, parts(1).split(' ').map(x => x.toDouble).toArray)
+  LabeledPoint(parts(0).toDouble, Vectors.dense(parts(1).split(' ').map(_.toDouble)))
 }
 
 // Building the model
-val numIterations = 20
+val numIterations = 100
 val model = LinearRegressionWithSGD.train(parsedData, numIterations)
+
+// Evaluate model on training examples and compute training error
+val valuesAndPreds = parsedData.map { point =>
+  val prediction = model.predict(point.features)
+  (point.label, prediction)
+}
+val MSE = valuesAndPreds.map{case(v, p) => math.pow((v - p), 2)}.reduce(_ + _) / valuesAndPreds.count
+println("training Mean Squared Error = " + MSE)
+{% endhighlight %}
+
+
+Similarly you can use RidgeRegressionWithSGD and LassoWithSGD and compare training
+[Mean Squared Errors](http://en.wikipedia.org/wiki/Mean_squared_error).
+
+## Decision Tree
+
+#### Classification
+
+The example below demonstrates how to load a CSV file, parse it as an RDD of LabeledPoint and then perform classification using a decision tree using Gini index as an impurity measure and a maximum tree depth of 5. The training error is calculated to measure the algorithm accuracy.
+
+{% highlight scala %}
+import org.apache.spark.SparkContext
+import org.apache.spark.mllib.tree.DecisionTree
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.tree.configuration.Algo._
+import org.apache.spark.mllib.tree.impurity.Gini
+
+// Load and parse the data file
+val data = sc.textFile("mllib/data/sample_tree_data.csv")
+val parsedData = data.map { line =>
+  val parts = line.split(',').map(_.toDouble)
+  LabeledPoint(parts(0), Vectors.dense(parts.tail))
+}
+
+// Run training algorithm to build the model
+val maxDepth = 5
+val model = DecisionTree.train(parsedData, Classification, Gini, maxDepth)
+
+// Evaluate model on training examples and compute training error
+val labelAndPreds = parsedData.map { point =>
+  val prediction = model.predict(point.features)
+  (point.label, prediction)
+}
+val trainErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / parsedData.count
+println("Training Error = " + trainErr)
+{% endhighlight %}
+
+#### Regression
+
+The example below demonstrates how to load a CSV file, parse it as an RDD of LabeledPoint and then perform regression using a decision tree using variance as an impurity measure and a maximum tree depth of 5. The Mean Squared Error is computed at the end to evaluate
+[goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
+
+{% highlight scala %}
+import org.apache.spark.SparkContext
+import org.apache.spark.mllib.tree.DecisionTree
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.tree.configuration.Algo._
+import org.apache.spark.mllib.tree.impurity.Variance
+
+// Load and parse the data file
+val data = sc.textFile("mllib/data/sample_tree_data.csv")
+val parsedData = data.map { line =>
+  val parts = line.split(',').map(_.toDouble)
+  LabeledPoint(parts(0), Vectors.dense(parts.tail))
+}
+
+// Run training algorithm to build the model
+val maxDepth = 5
+val model = DecisionTree.train(parsedData, Regression, Variance, maxDepth)
 
 // Evaluate model on training examples and compute training error
 val valuesAndPreds = parsedData.map { point =>
@@ -358,10 +499,6 @@ val valuesAndPreds = parsedData.map { point =>
 val MSE = valuesAndPreds.map{ case(v, p) => math.pow((v - p), 2)}.reduce(_ + _)/valuesAndPreds.count
 println("training Mean Squared Error = " + MSE)
 {% endhighlight %}
-
-
-Similarly you can use RidgeRegressionWithSGD and LassoWithSGD and compare training
-[Mean Squared Errors](http://en.wikipedia.org/wiki/Mean_squared_error).
 
 
 # Usage in Java
@@ -375,48 +512,57 @@ calling `.rdd()` on your `JavaRDD` object.
 
 Following examples can be tested in the PySpark shell.
 
-## Binary Classification
+## Linear Methods
+
+### Binary Classification
 The following example shows how to load a sample dataset, build Logistic Regression model,
 and make predictions with the resulting model to compute the training error.
 
 {% highlight python %}
 from pyspark.mllib.classification import LogisticRegressionWithSGD
+from pyspark.mllib.regression import LabeledPoint
 from numpy import array
 
 # Load and parse the data
+def parsePoint(line):
+    values = [float(x) for x in line.split(' ')]
+    return LabeledPoint(values[0], values[1:])
+
 data = sc.textFile("mllib/data/sample_svm_data.txt")
-parsedData = data.map(lambda line: array([float(x) for x in line.split(' ')]))
-model = LogisticRegressionWithSGD.train(parsedData)
+parsedData = data.map(parsePoint)
 
 # Build the model
-labelsAndPreds = parsedData.map(lambda point: (int(point.item(0)),
-        model.predict(point.take(range(1, point.size)))))
+model = LogisticRegressionWithSGD.train(parsedData)
 
 # Evaluating the model on training data
+labelsAndPreds = parsedData.map(lambda p: (p.label, model.predict(p.features)))
 trainErr = labelsAndPreds.filter(lambda (v, p): v != p).count() / float(parsedData.count())
 print("Training Error = " + str(trainErr))
 {% endhighlight %}
 
-## Linear Regression
+### Linear Regression
 The following example demonstrate how to load training data, parse it as an RDD of LabeledPoint.
 The example then uses LinearRegressionWithSGD to build a simple linear model to predict label 
 values. We compute the Mean Squared Error at the end to evaluate
-[goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit)
+[goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
 
 {% highlight python %}
-from pyspark.mllib.regression import LinearRegressionWithSGD
+from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD
 from numpy import array
 
 # Load and parse the data
+def parsePoint(line):
+    values = [float(x) for x in line.replace(',', ' ').split(' ')]
+    return LabeledPoint(values[0], values[1:])
+
 data = sc.textFile("mllib/data/ridge-data/lpsa.data")
-parsedData = data.map(lambda line: array([float(x) for x in line.replace(',', ' ').split(' ')]))
+parsedData = data.map(parsePoint)
 
 # Build the model
 model = LinearRegressionWithSGD.train(parsedData)
 
 # Evaluate the model on training data
-valuesAndPreds = parsedData.map(lambda point: (point.item(0),
-        model.predict(point.take(range(1, point.size)))))
-MSE = valuesAndPreds.map(lambda (v, p): (v - p)**2).reduce(lambda x, y: x + y)/valuesAndPreds.count()
+valuesAndPreds = parsedData.map(lambda p: (p.label, model.predict(p.features)))
+MSE = valuesAndPreds.map(lambda (v, p): (v - p)**2).reduce(lambda x, y: x + y) / valuesAndPreds.count()
 print("Mean Squared Error = " + str(MSE))
 {% endhighlight %}

@@ -45,14 +45,20 @@ case class BoundReference(ordinal: Int, baseReference: Attribute)
 
   override def toString = s"$baseReference:$ordinal"
 
-  override def apply(input: Row): Any = input(ordinal)
+  override def eval(input: Row): Any = input(ordinal)
 }
+
+/**
+ * Used to denote operators that do their own binding of attributes internally.
+ */
+trait NoBind { self: trees.TreeNode[_] => }
 
 class BindReferences[TreeNode <: QueryPlan[TreeNode]] extends Rule[TreeNode] {
   import BindReferences._
 
   def apply(plan: TreeNode): TreeNode = {
     plan.transform {
+      case n: NoBind => n.asInstanceOf[TreeNode]
       case leafNode if leafNode.children.isEmpty => leafNode
       case unaryNode if unaryNode.children.size == 1 => unaryNode.transformExpressions { case e =>
         bindReference(e, unaryNode.children.head.output)

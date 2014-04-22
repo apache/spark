@@ -39,6 +39,9 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
+/**
+ * An application master that runs the users driver program and allocates executors.
+ */
 class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
                         sparkConf: SparkConf) extends Logging {
 
@@ -234,7 +237,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         assert(sparkContext != null || count >= numTries)
 
         if (null != sparkContext) {
-          uiAddress = sparkContext.ui.appUIAddress
+          uiAddress = sparkContext.ui.appUIHostPort
           this.yarnAllocator = YarnAllocationHandler.newAllocator(
             yarnConf,
             resourceManager,
@@ -366,8 +369,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         finishReq.setAppAttemptId(appAttemptId)
         finishReq.setFinishApplicationStatus(status)
         finishReq.setDiagnostics(diagnostics)
-        // Set tracking url to empty since we don't have a history server.
-        finishReq.setTrackingUrl("")
+        finishReq.setTrackingUrl(sparkConf.get("spark.yarn.historyServer.address", ""))
         resourceManager.finishApplicationMaster(finishReq)
       }
     }

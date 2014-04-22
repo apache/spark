@@ -17,8 +17,14 @@
 
 package org.apache.spark.executor
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.storage.{BlockId, BlockStatus}
 
+/**
+ * :: DeveloperApi ::
+ * Metrics tracked during the execution of a task.
+ */
+@DeveloperApi
 class TaskMetrics extends Serializable {
   /**
    * Host's name the task runs on
@@ -77,11 +83,16 @@ class TaskMetrics extends Serializable {
   var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
 }
 
-object TaskMetrics {
-  private[spark] def empty(): TaskMetrics = new TaskMetrics
+private[spark] object TaskMetrics {
+  def empty(): TaskMetrics = new TaskMetrics
 }
 
 
+/**
+ * :: DeveloperApi ::
+ * Metrics pertaining to shuffle data read in a given task.
+ */
+@DeveloperApi
 class ShuffleReadMetrics extends Serializable {
   /**
    * Absolute time when this task finished reading shuffle data
@@ -116,6 +127,11 @@ class ShuffleReadMetrics extends Serializable {
   var remoteBytesRead: Long = _
 }
 
+/**
+ * :: DeveloperApi ::
+ * Metrics pertaining to shuffle data written in a given task.
+ */
+@DeveloperApi
 class ShuffleWriteMetrics extends Serializable {
   /**
    * Number of bytes written for the shuffle by this task

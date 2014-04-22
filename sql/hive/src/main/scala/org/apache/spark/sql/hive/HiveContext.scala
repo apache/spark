@@ -23,17 +23,21 @@ import scala.language.implicitConversions
 import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
 import java.util.{ArrayList => JArrayList}
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LowerCaseSchema}
 import org.apache.spark.sql.catalyst.plans.logical.{NativeCommand, ExplainCommand}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution._
 
@@ -67,9 +71,34 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
-  override def parseSql(sql: String): LogicalPlan = HiveQl.parseSql(sql)
-  override def executePlan(plan: LogicalPlan): this.QueryExecution =
+  override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
+
+  /**
+   * Executes a query expressed in HiveQL using Spark, returning the result as a SchemaRDD.
+   */
+  def hiveql(hqlQuery: String): SchemaRDD = {
+    val result = new SchemaRDD(this, HiveQl.parseSql(hqlQuery))
+    // We force query optimization to happen right away instead of letting it happen lazily like
+    // when using the query DSL.  This is so DDL commands behave as expected.  This is only
+    // generates the RDD lineage for DML queries, but does not perform any execution.
+    result.queryExecution.toRdd
+    result
+  }
+
+  /** An alias for `hiveql`. */
+  def hql(hqlQuery: String): SchemaRDD = hiveql(hqlQuery)
+
+  /**
+   * Creates a table using the schema of the given class.
+   *
+   * @param tableName The name of the table to create.
+   * @param allowExisting When false, an exception will be thrown if the table already exists.
+   * @tparam A A case class that is used to describe the schema of the table to be created.
+   */
+  def createTable[A <: Product : TypeTag](tableName: String, allowExisting: Boolean = true) {
+    catalog.createTable("default", tableName, ScalaReflection.attributesFor[A], allowExisting)
+  }
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   @transient
@@ -108,7 +137,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient
-  override lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog {
+  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog {
     override def lookupRelation(
       databaseName: Option[String],
       tableName: String,
@@ -120,7 +149,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   /* An analyzer that uses the Hive metastore. */
   @transient
-  override lazy val analyzer = new Analyzer(catalog, HiveFunctionRegistry, caseSensitive = false)
+  override protected[sql] lazy val analyzer =
+    new Analyzer(catalog, HiveFunctionRegistry, caseSensitive = false)
 
   /**
    * Runs the specified SQL query using Hive.
@@ -202,14 +232,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   @transient
-  override val planner = hivePlanner
+  override protected[sql] val planner = hivePlanner
 
   @transient
   protected lazy val emptyResult =
     sparkContext.parallelize(Seq(new GenericRow(Array[Any]()): Row), 1)
 
   /** Extends QueryExecution with hive specific features. */
-  abstract class QueryExecution extends super.QueryExecution {
+  protected[sql] abstract class QueryExecution extends super.QueryExecution {
     // TODO: Create mixin for the analyzer instead of overriding things here.
     override lazy val optimizedPlan =
       optimizer(catalog.PreInsertionCasts(catalog.CreateTables(analyzed)))
@@ -282,5 +312,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         val asString = result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t")).toSeq
         asString
     }
+
+    override def simpleString: String =
+      logical match {
+        case _: NativeCommand => "<Executed by Hive>"
+        case _ => executedPlan.toString
+      }
   }
 }

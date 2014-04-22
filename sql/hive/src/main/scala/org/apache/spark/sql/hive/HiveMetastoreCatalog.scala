@@ -33,6 +33,8 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.execution.SparkLogicalPlan
+import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -62,7 +64,11 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
       alias)(table.getTTable, partitions.map(part => part.getTPartition))
   }
 
-  def createTable(databaseName: String, tableName: String, schema: Seq[Attribute]) {
+  def createTable(
+      databaseName: String,
+      tableName: String,
+      schema: Seq[Attribute],
+      allowExisting: Boolean = false): Unit = {
     val table = new Table(databaseName, tableName)
     val hiveSchema =
       schema.map(attr => new FieldSchema(attr.name, toMetastoreType(attr.dataType), ""))
@@ -82,7 +88,12 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
     serDeInfo.setSerializationLib("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
     serDeInfo.setParameters(Map[String, String]())
     sd.setSerdeInfo(serDeInfo)
-    client.createTable(table)
+
+    try client.createTable(table) catch {
+      case e: org.apache.hadoop.hive.ql.metadata.HiveException
+        if e.getCause.isInstanceOf[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] &&
+           allowExisting => // Do nothing.
+    }
   }
 
   /**
@@ -115,23 +126,31 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
       case p: LogicalPlan if !p.childrenResolved => p
 
       case p @ InsertIntoTable(table: MetastoreRelation, _, child, _) =>
-        val childOutputDataTypes = child.output.map(_.dataType)
-        // Only check attributes, not partitionKeys since they are always strings.
-        // TODO: Fully support inserting into partitioned tables.
-        val tableOutputDataTypes = table.attributes.map(_.dataType)
+        castChildOutput(p, table, child)
 
-        if (childOutputDataTypes == tableOutputDataTypes) {
-          p
-        } else {
-          // Only do the casting when child output data types differ from table output data types.
-          val castedChildOutput = child.output.zip(table.output).map {
-            case (input, output) if input.dataType != output.dataType =>
-              Alias(Cast(input, output.dataType), input.name)()
-            case (input, _) => input
-          }
+      case p @ logical.InsertIntoTable(SparkLogicalPlan(InMemoryColumnarTableScan(
+        _, HiveTableScan(_, table, _))), _, child, _) =>
+        castChildOutput(p, table, child)
+    }
 
-          p.copy(child = logical.Project(castedChildOutput, child))
+    def castChildOutput(p: InsertIntoTable, table: MetastoreRelation, child: LogicalPlan) = {
+      val childOutputDataTypes = child.output.map(_.dataType)
+      // Only check attributes, not partitionKeys since they are always strings.
+      // TODO: Fully support inserting into partitioned tables.
+      val tableOutputDataTypes = table.attributes.map(_.dataType)
+
+      if (childOutputDataTypes == tableOutputDataTypes) {
+        p
+      } else {
+        // Only do the casting when child output data types differ from table output data types.
+        val castedChildOutput = child.output.zip(table.output).map {
+          case (input, output) if input.dataType != output.dataType =>
+            Alias(Cast(input, output.dataType), input.name)()
+          case (input, _) => input
         }
+
+        p.copy(child = logical.Project(castedChildOutput, child))
+      }
     }
   }
 
@@ -148,6 +167,8 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
    */
   override def unregisterTable(
       databaseName: Option[String], tableName: String): Unit = ???
+
+  override def unregisterAllTables() = {}
 }
 
 object HiveMetastoreTypes extends RegexParsers {

@@ -99,7 +99,12 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
 
-  val inRepoTests = new File("src/test/resources/")
+  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql/hive")) {
+    new File("src/test/resources/")
+  } else {
+    new File("sql/hive/src/test/resources")
+  }
+
   def getHiveFile(path: String): File = {
     val stripped = path.replaceAll("""\.\.\/""", "")
     hiveDevHome
@@ -110,10 +115,10 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
 
   val describedTable = "DESCRIBE (\\w+)".r
 
-  class SqlQueryExecution(sql: String) extends this.QueryExecution {
-    lazy val logical = HiveQl.parseSql(sql)
-    def hiveExec() = runSqlHive(sql)
-    override def toString = sql + "\n" + super.toString
+  protected[hive] class HiveQLQueryExecution(hql: String) extends this.QueryExecution {
+    lazy val logical = HiveQl.parseSql(hql)
+    def hiveExec() = runSqlHive(hql)
+    override def toString = hql + "\n" + super.toString
   }
 
   /**
@@ -140,8 +145,8 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
 
   case class TestTable(name: String, commands: (()=>Unit)*)
 
-  implicit class SqlCmd(sql: String) {
-    def cmd = () => new SqlQueryExecution(sql).stringResult(): Unit
+  protected[hive] implicit class SqlCmd(sql: String) {
+    def cmd = () => new HiveQLQueryExecution(sql).stringResult(): Unit
   }
 
   /**
@@ -160,12 +165,6 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
     TestTable("src1",
       "CREATE TABLE src1 (key INT, value STRING)".cmd,
       s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv3.txt")}' INTO TABLE src1".cmd),
-    TestTable("dest1",
-      "CREATE TABLE IF NOT EXISTS dest1 (key INT, value STRING)".cmd),
-    TestTable("dest2",
-      "CREATE TABLE IF NOT EXISTS dest2 (key INT, value STRING)".cmd),
-    TestTable("dest3",
-      "CREATE TABLE IF NOT EXISTS dest3 (key INT, value STRING)".cmd),
     TestTable("srcpart", () => {
       runSqlHive(
         "CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)")
@@ -257,6 +256,7 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
 
   private val loadedTables = new collection.mutable.HashSet[String]
 
+  var cacheTables: Boolean = false
   def loadTestTable(name: String) {
     if (!(loadedTables contains name)) {
       // Marks the table as loaded first to prevent infite mutually recursive table loading.
@@ -265,6 +265,10 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
       val createCmds =
         testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
       createCmds.foreach(_())
+
+      if (cacheTables) {
+        cacheTable(name)
+      }
     }
   }
 
@@ -312,6 +316,8 @@ class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
         logger.debug(s"Dropping Database: $db")
         catalog.client.dropDatabase(db, true, false, true)
       }
+
+      catalog.unregisterAllTables()
 
       FunctionRegistry.getFunctionNames.filterNot(originalUdfs.contains(_)).foreach { udfName =>
         FunctionRegistry.unregisterTemporaryUDF(udfName)

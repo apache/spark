@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import java.util.{Properties, UUID}
+import java.util.Properties
 
 import scala.collection.Map
 
@@ -52,6 +52,8 @@ class JsonProtocolSuite extends FunSuite {
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(
       BlockManagerId("Scarce", "to be counted...", 100, 200))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
+    val applicationStart = SparkListenerApplicationStart("The winner of all", 42L, "Garfield")
+    val applicationEnd = SparkListenerApplicationEnd(42L)
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -64,6 +66,8 @@ class JsonProtocolSuite extends FunSuite {
     testEvent(blockManagerAdded, blockManagerAddedJsonString)
     testEvent(blockManagerRemoved, blockManagerRemovedJsonString)
     testEvent(unpersistRdd, unpersistRDDJsonString)
+    testEvent(applicationStart, applicationStartJsonString)
+    testEvent(applicationEnd, applicationEndJsonString)
   }
 
   test("Dependent Classes") {
@@ -89,7 +93,7 @@ class JsonProtocolSuite extends FunSuite {
     // JobResult
     val exception = new Exception("Out of Memory! Please restock film.")
     exception.setStackTrace(stackTrace)
-    val jobFailed = JobFailed(exception, 2)
+    val jobFailed = JobFailed(exception)
     testJobResult(JobSucceeded)
     testJobResult(jobFailed)
 
@@ -108,8 +112,7 @@ class JsonProtocolSuite extends FunSuite {
     // BlockId
     testBlockId(RDDBlockId(1, 2))
     testBlockId(ShuffleBlockId(1, 2, 3))
-    testBlockId(BroadcastBlockId(1L))
-    testBlockId(BroadcastHelperBlockId(BroadcastBlockId(2L), "Spark"))
+    testBlockId(BroadcastBlockId(1L, "insert_words_of_wisdom_here"))
     testBlockId(TaskResultBlockId(1L))
     testBlockId(StreamBlockId(1, 2L))
   }
@@ -209,7 +212,13 @@ class JsonProtocolSuite extends FunSuite {
       case (e1: SparkListenerBlockManagerRemoved, e2: SparkListenerBlockManagerRemoved) =>
         assertEquals(e1.blockManagerId, e2.blockManagerId)
       case (e1: SparkListenerUnpersistRDD, e2: SparkListenerUnpersistRDD) =>
-        assert(e1.rddId === e2.rddId)
+        assert(e1.rddId == e2.rddId)
+      case (e1: SparkListenerApplicationStart, e2: SparkListenerApplicationStart) =>
+        assert(e1.appName == e2.appName)
+        assert(e1.time == e2.time)
+        assert(e1.sparkUser == e2.sparkUser)
+      case (e1: SparkListenerApplicationEnd, e2: SparkListenerApplicationEnd) =>
+        assert(e1.time == e2.time)
       case (SparkListenerShutdown, SparkListenerShutdown) =>
       case _ => fail("Events don't match in types!")
     }
@@ -295,7 +304,6 @@ class JsonProtocolSuite extends FunSuite {
     (result1, result2) match {
       case (JobSucceeded, JobSucceeded) =>
       case (r1: JobFailed, r2: JobFailed) =>
-        assert(r1.failedStageId === r2.failedStageId)
         assertEquals(r1.exception, r2.exception)
       case _ => fail("Job results don't match in types!")
     }
@@ -456,7 +464,7 @@ class JsonProtocolSuite extends FunSuite {
     t.shuffleWriteMetrics = Some(sw)
     // Make at most 6 blocks
     t.updatedBlocks = Some((1 to (e % 5 + 1)).map { i =>
-      (RDDBlockId(e % i, f % i), BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i))
+      (RDDBlockId(e % i, f % i), BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i, c%i))
     }.toSeq)
     t
   }
@@ -470,19 +478,19 @@ class JsonProtocolSuite extends FunSuite {
     """
       {"Event":"SparkListenerStageSubmitted","Stage Info":{"Stage ID":100,"Stage Name":
       "greetings","Number of Tasks":200,"RDD Info":{"RDD ID":100,"Name":"mayor","Storage
-      Level":{"Use Disk":true,"Use Memory":true,"Deserialized":true,"Replication":1},
-      "Number of Partitions":200,"Number of Cached Partitions":300,"Memory Size":400,
-      "Disk Size":500},"Emitted Task Size Warning":false},"Properties":{"France":"Paris",
-      "Germany":"Berlin","Russia":"Moscow","Ukraine":"Kiev"}}
+      Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":true,
+      "Replication":1},"Number of Partitions":200,"Number of Cached Partitions":300,
+      "Memory Size":400,"Disk Size":500,"Tachyon Size":0},"Emitted Task Size Warning":false},
+      "Properties":{"France":"Paris","Germany":"Berlin","Russia":"Moscow","Ukraine":"Kiev"}}
     """
 
   private val stageCompletedJsonString =
     """
       {"Event":"SparkListenerStageCompleted","Stage Info":{"Stage ID":101,"Stage Name":
       "greetings","Number of Tasks":201,"RDD Info":{"RDD ID":101,"Name":"mayor","Storage
-      Level":{"Use Disk":true,"Use Memory":true,"Deserialized":true,"Replication":1},
-      "Number of Partitions":201,"Number of Cached Partitions":301,"Memory Size":401,
-      "Disk Size":501},"Emitted Task Size Warning":false}}
+      Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,"Deserialized":true,
+      "Replication":1},"Number of Partitions":201,"Number of Cached Partitions":301,
+      "Memory Size":401,"Disk Size":501,"Tachyon Size":0},"Emitted Task Size Warning":false}}
     """
 
   private val taskStartJsonString =
@@ -515,8 +523,8 @@ class JsonProtocolSuite extends FunSuite {
       700,"Fetch Wait Time":900,"Remote Bytes Read":1000},"Shuffle Write Metrics":
       {"Shuffle Bytes Written":1200,"Shuffle Write Time":1500},"Updated Blocks":
       [{"Block ID":{"Type":"RDDBlockId","RDD ID":0,"Split Index":0},"Status":
-      {"Storage Level":{"Use Disk":true,"Use Memory":true,"Deserialized":false,
-      "Replication":2},"Memory Size":0,"Disk Size":0}}]}}
+      {"Storage Level":{"Use Disk":true,"Use Memory":true,"Use Tachyon":false,
+      "Deserialized":false,"Replication":2},"Memory Size":0,"Disk Size":0,"Tachyon Size":0}}]}}
     """
 
   private val jobStartJsonString =
@@ -555,4 +563,14 @@ class JsonProtocolSuite extends FunSuite {
       {"Event":"SparkListenerUnpersistRDD","RDD ID":12345}
     """
 
- }
+  private val applicationStartJsonString =
+    """
+      {"Event":"SparkListenerApplicationStart","App Name":"The winner of all","Timestamp":42,
+      "User":"Garfield"}
+    """
+
+  private val applicationEndJsonString =
+    """
+      {"Event":"SparkListenerApplicationEnd","Timestamp":42}
+    """
+}

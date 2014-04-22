@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.FunSuite
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.execution.SparkLogicalPlan
 import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
+import org.apache.spark.sql.execution.SparkLogicalPlan
+import org.apache.spark.sql.test.TestSQLContext
 
 class CachedTableSuite extends QueryTest {
   TestData // Load test tables.
@@ -57,5 +56,18 @@ class CachedTableSuite extends QueryTest {
     intercept[IllegalArgumentException] {
       TestSQLContext.uncacheTable("testData")
     }
+  }
+
+  test("SELECT Star Cached Table") {
+    TestSQLContext.sql("SELECT * FROM testData").registerAsTable("selectStar")
+    TestSQLContext.cacheTable("selectStar")
+    TestSQLContext.sql("SELECT * FROM selectStar")
+    TestSQLContext.uncacheTable("selectStar")
+  }
+
+  test("Self-join cached") {
+    TestSQLContext.cacheTable("testData")
+    TestSQLContext.sql("SELECT * FROM testData a JOIN testData b ON a.key = b.key")
+    TestSQLContext.uncacheTable("testData")
   }
 }
