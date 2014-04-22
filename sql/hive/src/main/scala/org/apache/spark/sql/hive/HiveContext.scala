@@ -239,7 +239,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     sparkContext.parallelize(Seq(new GenericRow(Array[Any]()): Row), 1)
 
   /** Extends QueryExecution with hive specific features. */
-  @DeveloperApi
   protected[sql] abstract class QueryExecution extends super.QueryExecution {
     // TODO: Create mixin for the analyzer instead of overriding things here.
     override lazy val optimizedPlan =

@@ -391,9 +391,9 @@ object KMeans {
    * Returns the squared Euclidean distance between two vectors computed by
    * [[org.apache.spark.mllib.util.MLUtils#fastSquaredDistance]].
    */
-  private[clustering]
-  def fastSquaredDistance(v1: BreezeVectorWithNorm, v2: BreezeVectorWithNorm)
-  : Double = {
+  private[clustering] def fastSquaredDistance(
+      v1: BreezeVectorWithNorm,
+      v2: BreezeVectorWithNorm): Double = {
     MLUtils.fastSquaredDistance(v1.vector, v1.norm, v2.vector, v2.norm)
   }
 
