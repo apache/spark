@@ -224,7 +224,7 @@ object SparkBuild extends Build {
       <parent>
         <groupId>org.apache</groupId>
         <artifactId>apache</artifactId>
-        <version>13</version>
+        <version>14</version>
       </parent>
       <url>http://spark.apache.org/</url>
       <licenses>
@@ -250,7 +250,7 @@ object SparkBuild extends Build {
       </developers>
       <issueManagement>
         <system>JIRA</system>
-        <url>https://spark-project.atlassian.net/browse/SPARK</url>
+        <url>https://issues.apache.org/jira/browse/SPARK</url>
       </issueManagement>
     ),
 
