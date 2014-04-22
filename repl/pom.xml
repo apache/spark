@@ -31,11 +31,11 @@
   <name>Spark Project REPL</name>
   <url>http://spark.apache.org/</url>
 
-  <!-- SPARK-1121: SPARK-1121: Adds an explicit dependency on Avro to work around
+  <!-- SPARK-1121: Adds an explicit dependency on Avro to work around
        a Hadoop 0.23.X issue -->
   <profiles>
     <profile>
-      <id>yarn-alpha</id>
+      <id>hadoop-0.23</id>
       <dependencies>
         <dependency>
           <groupId>org.apache.avro</groupId>
