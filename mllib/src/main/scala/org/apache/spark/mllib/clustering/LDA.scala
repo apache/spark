@@ -20,13 +20,13 @@ package org.apache.spark.mllib.clustering
 import java.util.Random
 
 import breeze.linalg.{DenseVector => BDV}
-
-import org.apache.spark.rdd.RDD
-import org.apache.spark.{AccumulableParam, SparkContext, Logging}
+import org.apache.spark.{AccumulableParam, Logging, SparkContext}
 import org.apache.spark.mllib.expectation.GibbsSampling
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.model.Document
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.rdd.RDD
+
+case class Document(docId: Int, content: Iterable[Int])
 
 case class LDAParams (
     docCounts: Vector,
@@ -46,11 +46,13 @@ case class LDAParams (
   def merge(other: LDAParams) = {
     docCounts.toBreeze += other.docCounts.toBreeze
     topicCounts.toBreeze += other.topicCounts.toBreeze
+
     var i = 0
     while (i < docTopicCounts.length) {
       docTopicCounts(i).toBreeze += other.docTopicCounts(i).toBreeze
       i += 1
     }
+
     i = 0
     while (i < topicTermCounts.length) {
       topicTermCounts(i).toBreeze += other.topicTermCounts(i).toBreeze
@@ -119,8 +121,7 @@ class LDA private (
       numIteration,
       1,
       docTopicSmoothing,
-      topicTermSmoothing
-    )
+      topicTermSmoothing)
     (trainer, trainer.runGibbsSampling(LDAParams(numDocs, numTopics, numTerms)))
   }
 }

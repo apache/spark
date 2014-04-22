@@ -28,9 +28,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PartitionwiseSampledRDD
 import org.apache.spark.SparkContext
 import org.apache.spark.util.random.BernoulliSampler
-import org.apache.spark.mllib.model.Document
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.clustering.Document
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.

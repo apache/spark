@@ -23,8 +23,7 @@ import breeze.linalg.{DenseVector => BDV, sum}
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.clustering.LDAParams
-import org.apache.spark.mllib.model.Document
+import org.apache.spark.mllib.clustering.{Document, LDAParams}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
@@ -32,7 +31,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
  * @param data Dataset, such as corpus.
  * @param numOuterIterations Number of outer iteration.
  * @param numInnerIterations Number of inner iteration, used in each partition.
- * @param docTopicSmoothing Document-topic smoohing.
+ * @param docTopicSmoothing Document-topic smoothing.
  * @param topicTermSmoothing Topic-term smoothing.
  */
 class GibbsSampling(
@@ -42,29 +41,29 @@ class GibbsSampling(
     docTopicSmoothing: Double,
     topicTermSmoothing: Double)
   extends Logging with Serializable {
+
   import GibbsSampling._
 
   /**
    * Main function of running a Gibbs sampling method. It contains two phases of total Gibbs
    * sampling: first is initialization, second is real sampling.
    */
-   def runGibbsSampling(
-       initParams: LDAParams,
-       data: RDD[Document] = data,
-       numOuterIterations: Int = numOuterIterations,
-       numInnerIterations: Int = numInnerIterations,
-       docTopicSmoothing: Double = docTopicSmoothing,
-       topicTermSmoothing: Double = topicTermSmoothing): LDAParams = {
+  def runGibbsSampling(
+      initParams: LDAParams,
+      data: RDD[Document] = data,
+      numOuterIterations: Int = numOuterIterations,
+      numInnerIterations: Int = numInnerIterations,
+      docTopicSmoothing: Double = docTopicSmoothing,
+      topicTermSmoothing: Double = topicTermSmoothing): LDAParams = {
 
     val numTerms = initParams.topicTermCounts.head.size
     val numDocs = initParams.docCounts.size
     val numTopics = initParams.topicCounts.size
 
-    // construct topic assignment RDD
+    // Construct topic assignment RDD
     logInfo("Start initialization")
 
     val cpInterval = System.getProperty("spark.gibbsSampling.checkPointInterval", "10").toInt
-
     val sc = data.context
     val (initialParams, initialChosenTopics) = sampleTermAssignment(initParams, data)
 
@@ -94,6 +93,7 @@ class GibbsSampling(
           chosenTopics.checkpoint()
         }
 
+        // Trigger a job to collect accumulable LDA parameters.
         chosenTopics.count()
         lastChosenTopics.unpersist()
 
@@ -123,11 +123,13 @@ class GibbsSampling(
       topicTermCount(i) :/= topicCount(i)
       i += 1
     }
+
     i = 0
     while (i < docCount.length) {
       docTopicCount(i) :/= docCount(i)
       i += 1
     }
+
     (topicTermCount.map(vec => Vectors.fromBreeze(vec)),
       docTopicCount.map(vec => Vectors.fromBreeze(vec)))
   }
@@ -141,6 +143,7 @@ object GibbsSampling extends Logging {
   private def sampleTermAssignment(
       params: LDAParams,
       data: RDD[Document]): (LDAParams, RDD[Iterable[Int]]) = {
+
     val sc = data.context
     val initialParams = sc.accumulable(params)
     val rand = new Random(42)
@@ -148,20 +151,20 @@ object GibbsSampling extends Logging {
       val docTopics = params.docTopicCounts(docId)
       if (docTopics.toBreeze.norm(2) == 0) {
         content.map { term =>
-          // val topic = uniformDistSampler(new Random(docId ^ term), numTopics)
-            val topic = uniformDistSampler(rand, params.topicCounts.size)
-            initialParams +=(docId, term, topic, 1)
-            topic
+          val topic = uniformDistSampler(rand, params.topicCounts.size)
+          initialParams += (docId, term, topic, 1)
+          topic
         }
       } else {
         content.map { term =>
-            val topicTerms = Vectors.dense(params.topicTermCounts.map(vec => vec(term))).toBreeze
-            val dist = docTopics.toBreeze :* topicTerms
-            multinomialDistSampler(rand, dist.asInstanceOf[BDV[Double]])
+          val topicTerms = Vectors.dense(params.topicTermCounts.map(_(term))).toBreeze
+          val dist = docTopics.toBreeze :* topicTerms
+          multinomialDistSampler(rand, dist.asInstanceOf[BDV[Double]])
         }
       }
     }.cache()
 
+    // Trigger a job to collect accumulable LDA parameters.
     initialChosenTopics.count()
 
     (initialParams.value, initialChosenTopics)
