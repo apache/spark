@@ -30,69 +30,189 @@ esac
 # Enter posix mode for bash
 set -o posix
 
-CORE_PATTERN="^[0-9]+$"
-MEM_PATTERN="^[0-9]+[m|g|M|G]$"
-
+## Global script variables
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
-if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
-	echo "Usage: spark-shell [OPTIONS]"
-	echo "OPTIONS:"
-	echo "-c --cores num, the maximum number of cores to be used by the spark shell"
-	echo "-em --execmem num[m|g], the memory used by each executor of spark shell"
-	echo "-dm --drivermem num[m|g], the memory used by the spark shell and driver"
-	echo "-h --help, print this help information" 
-	exit
-fi
+SPARK_REPL_OPTS="${SPARK_REPL_OPTS:-""}"
+DEFAULT_MASTER="local[*]"
+MASTER=${MASTER:-""}
 
-for o in "$@"; do
-  if [ "$1" = "-c" -o "$1" = "--cores" ]; then
-    shift
+info_log=0
+
+#CLI Color Templates
+txtund=$(tput sgr 0 1)          # Underline
+txtbld=$(tput bold)             # Bold
+bldred=${txtbld}$(tput setaf 1) # red
+bldyel=${txtbld}$(tput setaf 3) # yellow
+bldblu=${txtbld}$(tput setaf 4) # blue
+bldwht=${txtbld}$(tput setaf 7) # white
+txtrst=$(tput sgr0)             # Reset
+info=${bldwht}*${txtrst}        # Feedback
+pass=${bldblu}*${txtrst}
+warn=${bldred}*${txtrst}
+ques=${bldblu}?${txtrst}
+
+# Helper function to describe the script usage
+function usage() {
+    cat << EOF
+${txtbld}Usage${txtrst}: spark-shell [OPTIONS]
+
+${txtbld}OPTIONS${txtrst}:
+    -h  --help              : Print this help information.
+    -c  --cores             : The maximum number of cores to be used by the Spark Shell.
+    -em --executor-memory   : The memory used by each executor of the Spark Shell, the number 
+                              is followed by m for megabytes or g for gigabytes, e.g. "1g".
+    -dm --driver-memory     : The memory used by the Spark Shell, the number is followed 
+                              by m for megabytes or g for gigabytes, e.g. "1g".
+    -m  --master            : A full string that describes the Spark Master, defaults to "local[*]"
+                              e.g. "spark://localhost:7077".
+    --log-conf              : Enables logging of the supplied SparkConf as INFO at start of the
+                              Spark Context.
+
+e.g.
+    spark-shell -m spark://localhost:7077 -c 4 -dm 512m -em 2g
+
+EOF
+}
+
+function out_error(){
+    echo -e "${txtund}${bldred}ERROR${txtrst}: $1"
+    usage
+    exit 1
+}
+
+function log_info(){
+    [ $info_log -eq 1 ] && echo -e "${bldyel}INFO${txtrst}: $1"
+}
+
+function log_warn(){
+    echo -e "${txtund}${bldyel}WARN${txtrst}: $1"
+}
+
+# PATTERNS used to validate more than one optional arg.
+ARG_FLAG_PATTERN="^-"
+MEM_PATTERN="^[0-9]+[m|g|M|G]$"
+NUM_PATTERN="^[0-9]+$"
+PORT_PATTERN="^[0-9]+$"
+
+# Setters for optional args.
+function set_cores(){
+    CORE_PATTERN="^[0-9]+$"
     if [[ "$1" =~ $CORE_PATTERN ]]; then
-      SPARK_REPL_OPTS="$SPARK_REPL_OPTS -Dspark.cores.max=$1"
-      shift
+        SPARK_REPL_OPTS="$SPARK_REPL_OPTS -Dspark.cores.max=$1"
     else
-      echo "ERROR: wrong format for -c/--cores"
-      exit 1
+        out_error "wrong format for $2"
     fi
-  fi
-  if [ "$1" = "-em" -o "$1" = "--execmem" ]; then
-    shift
+}
+
+function set_em(){
     if [[ $1 =~ $MEM_PATTERN ]]; then
       SPARK_REPL_OPTS="$SPARK_REPL_OPTS -Dspark.executor.memory=$1"
-      shift
     else
-      echo "ERROR: wrong format for --execmem/-em"
-      exit 1
+      out_error "wrong format for $2"
     fi
-  fi
-  if [ "$1" = "-dm" -o "$1" = "--drivermem" ]; then
-    shift
+}
+
+function set_dm(){
     if [[ $1 =~ $MEM_PATTERN ]]; then
       export SPARK_DRIVER_MEMORY=$1
-      shift
     else
-      echo "ERROR: wrong format for --drivermem/-dm"
-      exit 1
+      out_error "wrong format for $2"
     fi
-  fi
-done
+}
 
-# Set MASTER from spark-env if possible
-DEFAULT_SPARK_MASTER_PORT=7077
-if [ -z "$MASTER" ]; then
-  if [ -e "$FWDIR/conf/spark-env.sh" ]; then
-    . "$FWDIR/conf/spark-env.sh"
-  fi
-  if [ "x" != "x$SPARK_MASTER_IP" ]; then
-    if [ "y" != "y$SPARK_MASTER_PORT" ]; then
-      SPARK_MASTER_PORT="${SPARK_MASTER_PORT}"
+function set_spark_log_conf(){
+    SPARK_REPL_OPTS="$SPARK_REPL_OPTS -Dspark.logConf=$1"
+}
+
+function set_spark_master(){
+    if ! [[ "$1" =~ $ARG_FLAG_PATTERN ]]; then
+        export MASTER="$1"
     else
-      SPARK_MASTER_PORT=$DEFAULT_SPARK_MASTER_PORT
+        out_error "wrong format for $2"
     fi
-    export MASTER="spark://${SPARK_MASTER_IP}:${SPARK_MASTER_PORT}"
-  fi
-fi
+}
+
+function resolve_spark_master(){
+    # Set MASTER from spark-env if possible
+    DEFAULT_SPARK_MASTER_PORT=7077
+    if [ -z "$MASTER" ]; then
+        . $FWDIR/bin/load-spark-env.sh
+        if [ -n "$SPARK_MASTER_IP" ]; then
+            SPARK_MASTER_PORT="${SPARK_MASTER_PORT:-"$DEFAULT_SPARK_MASTER_PORT"}"
+            export MASTER="spark://${SPARK_MASTER_IP}:${SPARK_MASTER_PORT}"
+        fi
+    fi
+
+    if [ -z "$MASTER" ]; then
+        export MASTER="$DEFAULT_MASTER"
+    fi
+
+}
+
+function main(){
+    log_info "Base Directory set to $FWDIR"
+    
+    resolve_spark_master
+    log_info "Spark Master is $MASTER"
+
+    log_info "Spark REPL options  $SPARK_REPL_OPTS"
+    if $cygwin; then
+        # Workaround for issue involving JLine and Cygwin
+        # (see http://sourceforge.net/p/jline/bugs/40/).
+        # If you're using the Mintty terminal emulator in Cygwin, may need to set the
+        # "Backspace sends ^H" setting in "Keys" section of the Mintty options
+        # (see https://github.com/sbt/sbt/issues/562).
+        stty -icanon min 1 -echo > /dev/null 2>&1
+        export SPARK_REPL_OPTS="$SPARK_REPL_OPTS -Djline.terminal=unix"
+        $FWDIR/bin/spark-class org.apache.spark.repl.Main "$@"
+        stty icanon echo > /dev/null 2>&1
+    else
+        export SPARK_REPL_OPTS
+        $FWDIR/bin/spark-class org.apache.spark.repl.Main "$@"
+    fi
+}
+
+for option in "$@"
+do
+     case $option in
+         -h  | --help )
+             usage
+             exit 1
+             ;;
+         -c  | --cores)
+             shift
+             _1=$1
+             shift
+             set_cores $_1 "-c/--cores"
+             ;;
+         -em | --executor-memory)
+             shift
+             _1=$1
+             shift
+             set_em $_1 "-em/--executor-memory"
+             ;;
+         -dm | --driver-memory)
+             shift
+             _1=$1
+             shift
+             set_dm $_1 "-dm/--driver-memory"
+             ;;
+         -m | --master)
+             shift
+             _1=$1
+             shift
+             set_spark_master $_1 "-m/--master"
+             ;;
+         --log-conf)
+             shift
+             set_spark_log_conf "true"
+             info_log=1
+             ;;
+         ?)
+             ;;
+     esac
+done
 
 # Copy restore-TTY-on-exit functions from Scala script so spark-shell exits properly even in
 # binary distribution of Spark where Scala is not installed
@@ -122,22 +242,10 @@ if [[ ! $? ]]; then
   saved_stty=""
 fi
 
-if $cygwin; then
-  # Workaround for issue involving JLine and Cygwin
-  # (see http://sourceforge.net/p/jline/bugs/40/).
-  # If you're using the Mintty terminal emulator in Cygwin, may need to set the
-  # "Backspace sends ^H" setting in "Keys" section of the Mintty options
-  # (see https://github.com/sbt/sbt/issues/562).
-  stty -icanon min 1 -echo > /dev/null 2>&1
-  export SPARK_REPL_OPTS="$SPARK_REPL_OPTS -Djline.terminal=unix"
-  $FWDIR/bin/spark-class org.apache.spark.repl.Main "$@"
-  stty icanon echo > /dev/null 2>&1
-else
-  export SPARK_REPL_OPTS
-  $FWDIR/bin/spark-class org.apache.spark.repl.Main "$@"
-fi
+main
 
 # record the exit status lest it be overwritten:
 # then reenable echo and propagate the code.
 exit_status=$?
 onExit
+

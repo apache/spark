@@ -17,6 +17,7 @@
 
 package org.apache.spark.graphx.impl
 
+import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.Partitioner
@@ -45,7 +46,7 @@ class VertexBroadcastMsg[@specialized(Int, Long, Double, Boolean) T](
  * @param data value to send
  */
 private[graphx]
-class MessageToPartition[@specialized(Int, Long, Double, Char, Boolean/*, AnyRef*/) T](
+class MessageToPartition[@specialized(Int, Long, Double, Char, Boolean/* , AnyRef */) T](
     @transient var partition: PartitionID,
     var data: T)
   extends Product2[PartitionID, T] with Serializable {
@@ -65,11 +66,11 @@ class VertexBroadcastMsgRDDFunctions[T: ClassTag](self: RDD[VertexBroadcastMsg[T
 
     // Set a custom serializer if the data is of int or double type.
     if (classTag[T] == ClassTag.Int) {
-      rdd.setSerializer(classOf[IntVertexBroadcastMsgSerializer].getName)
+      rdd.setSerializer(new IntVertexBroadcastMsgSerializer)
     } else if (classTag[T] == ClassTag.Long) {
-      rdd.setSerializer(classOf[LongVertexBroadcastMsgSerializer].getName)
+      rdd.setSerializer(new LongVertexBroadcastMsgSerializer)
     } else if (classTag[T] == ClassTag.Double) {
-      rdd.setSerializer(classOf[DoubleVertexBroadcastMsgSerializer].getName)
+      rdd.setSerializer(new DoubleVertexBroadcastMsgSerializer)
     }
     rdd
   }
@@ -104,11 +105,11 @@ object MsgRDDFunctions {
 
     // Set a custom serializer if the data is of int or double type.
     if (classTag[T] == ClassTag.Int) {
-      rdd.setSerializer(classOf[IntAggMsgSerializer].getName)
+      rdd.setSerializer(new IntAggMsgSerializer)
     } else if (classTag[T] == ClassTag.Long) {
-      rdd.setSerializer(classOf[LongAggMsgSerializer].getName)
+      rdd.setSerializer(new LongAggMsgSerializer)
     } else if (classTag[T] == ClassTag.Double) {
-      rdd.setSerializer(classOf[DoubleAggMsgSerializer].getName)
+      rdd.setSerializer(new DoubleAggMsgSerializer)
     }
     rdd
   }

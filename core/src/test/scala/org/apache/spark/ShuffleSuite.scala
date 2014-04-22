@@ -27,6 +27,9 @@ import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.MutablePair
 
 class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
+
+  val conf = new SparkConf(loadDefaults = false)
+
   test("groupByKey without compression") {
     try {
       System.setProperty("spark.shuffle.compress", "false")
@@ -54,7 +57,7 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     // If the Kryo serializer is not used correctly, the shuffle would fail because the
     // default Java serializer cannot handle the non serializable class.
     val c = new ShuffledRDD[Int, NonJavaSerializableClass, (Int, NonJavaSerializableClass)](
-      b, new HashPartitioner(NUM_BLOCKS)).setSerializer(classOf[KryoSerializer].getName)
+      b, new HashPartitioner(NUM_BLOCKS)).setSerializer(new KryoSerializer(conf))
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[Int, Int]].shuffleId
 
     assert(c.count === 10)
@@ -76,7 +79,7 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     // If the Kryo serializer is not used correctly, the shuffle would fail because the
     // default Java serializer cannot handle the non serializable class.
     val c = new ShuffledRDD[Int, NonJavaSerializableClass, (Int, NonJavaSerializableClass)](
-      b, new HashPartitioner(3)).setSerializer(classOf[KryoSerializer].getName)
+      b, new HashPartitioner(3)).setSerializer(new KryoSerializer(conf))
     assert(c.count === 10)
   }
 
@@ -92,7 +95,7 @@ class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
     // NOTE: The default Java serializer doesn't create zero-sized blocks.
     //       So, use Kryo
     val c = new ShuffledRDD[Int, Int, (Int, Int)](b, new HashPartitioner(10))
-      .setSerializer(classOf[KryoSerializer].getName)
+      .setSerializer(new KryoSerializer(conf))
 
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[Int, Int]].shuffleId
     assert(c.count === 4)

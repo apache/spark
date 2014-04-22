@@ -80,6 +80,11 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
       <version>0.8.1</version>
@@ -159,6 +164,16 @@
       </dependencies>
     </profile>
     <profile>
+      <id>hive</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-hive_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
       <id>spark-ganglia-lgpl</id>
       <dependencies>
         <dependency>
@@ -203,7 +218,7 @@
           <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>buildnumber-maven-plugin</artifactId>
-            <version>1.1</version>
+            <version>1.2</version>
             <executions>
               <execution>
                 <phase>validate</phase>

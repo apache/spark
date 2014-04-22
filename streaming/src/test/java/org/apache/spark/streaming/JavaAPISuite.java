@@ -17,12 +17,14 @@
 
 package org.apache.spark.streaming;
 
+import org.apache.spark.streaming.api.java.*;
 import scala.Tuple2;
 
 import org.junit.Assert;
 import org.junit.Test;
 import java.io.*;
 import java.util.*;
+import java.lang.Iterable;
 
 import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
@@ -35,15 +37,23 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.storage.StorageLevel;
-import org.apache.spark.streaming.api.java.JavaDStream;
-import org.apache.spark.streaming.api.java.JavaDStreamLike;
-import org.apache.spark.streaming.api.java.JavaPairDStream;
-import org.apache.spark.streaming.api.java.JavaStreamingContext;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
 // see http://stackoverflow.com/questions/758570/.
 public class JavaAPISuite extends LocalJavaStreamingContext implements Serializable {
+
+  public void equalIterator(Iterator<?> a, Iterator<?> b) {
+    while (a.hasNext() && b.hasNext()) {
+      Assert.assertEquals(a.next(), b.next());
+    }
+    Assert.assertEquals(a.hasNext(), b.hasNext());
+  }
+
+  public void equalIterable(Iterable<?> a, Iterable<?> b) {
+      equalIterator(a.iterator(), b.iterator());
+  }
+
 
   @SuppressWarnings("unchecked")
   @Test
@@ -1016,11 +1026,24 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaDStream<Tuple2<String, String>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
-    JavaPairDStream<String, List<String>> grouped = pairStream.groupByKey();
+    JavaPairDStream<String, Iterable<String>> grouped = pairStream.groupByKey();
     JavaTestUtils.attachTestOutputStream(grouped);
-    List<List<Tuple2<String, List<String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<String, Iterable<String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assert.assertEquals(expected.size(), result.size());
+    Iterator<List<Tuple2<String, Iterable<String>>>> resultItr = result.iterator();
+    Iterator<List<Tuple2<String, List<String>>>> expectedItr = expected.iterator();
+    while (resultItr.hasNext() && expectedItr.hasNext()) {
+      Iterator<Tuple2<String, Iterable<String>>> resultElements = resultItr.next().iterator();
+      Iterator<Tuple2<String, List<String>>> expectedElements = expectedItr.next().iterator();
+      while (resultElements.hasNext() && expectedElements.hasNext()) {
+        Tuple2<String, Iterable<String>> resultElement = resultElements.next();
+        Tuple2<String, List<String>> expectedElement = expectedElements.next();
+        Assert.assertEquals(expectedElement._1(), resultElement._1());
+        equalIterable(expectedElement._2(), resultElement._2());
+      }
+      Assert.assertEquals(resultElements.hasNext(), expectedElements.hasNext());
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -1128,7 +1151,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
-    JavaPairDStream<String, List<Integer>> groupWindowed =
+    JavaPairDStream<String, Iterable<Integer>> groupWindowed =
         pairStream.groupByKeyAndWindow(new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(groupWindowed);
     List<List<Tuple2<String, List<Integer>>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
@@ -1471,11 +1494,25 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         ssc, stringStringKVStream2, 1);
     JavaPairDStream<String, String> pairStream2 = JavaPairDStream.fromJavaDStream(stream2);
 
-    JavaPairDStream<String, Tuple2<List<String>, List<String>>> grouped = pairStream1.cogroup(pairStream2);
+    JavaPairDStream<String, Tuple2<Iterable<String>, Iterable<String>>> grouped = pairStream1.cogroup(pairStream2);
     JavaTestUtils.attachTestOutputStream(grouped);
-    List<List<Tuple2<String, Tuple2<List<String>, List<String>>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<String, Tuple2<Iterable<String>, Iterable<String>>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assert.assertEquals(expected.size(), result.size());
+    Iterator<List<Tuple2<String, Tuple2<Iterable<String>, Iterable<String>>>>> resultItr = result.iterator();
+    Iterator<List<Tuple2<String, Tuple2<List<String>, List<String>>>>> expectedItr = expected.iterator();
+    while (resultItr.hasNext() && expectedItr.hasNext()) {
+      Iterator<Tuple2<String, Tuple2<Iterable<String>, Iterable<String>>>> resultElements = resultItr.next().iterator();
+      Iterator<Tuple2<String, Tuple2<List<String>, List<String>>>> expectedElements = expectedItr.next().iterator();
+      while (resultElements.hasNext() && expectedElements.hasNext()) {
+        Tuple2<String, Tuple2<Iterable<String>, Iterable<String>>> resultElement = resultElements.next();
+        Tuple2<String, Tuple2<List<String>, List<String>>> expectedElement = expectedElements.next();
+        Assert.assertEquals(expectedElement._1(), resultElement._1());
+        equalIterable(expectedElement._2()._1(), resultElement._2()._1());
+        equalIterable(expectedElement._2()._2(), resultElement._2()._2());
+      }
+      Assert.assertEquals(resultElements.hasNext(), expectedElements.hasNext());
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -1628,12 +1665,12 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   // InputStream functionality is deferred to the existing Scala tests.
   @Test
   public void testSocketTextStream() {
-    JavaDStream<String> test = ssc.socketTextStream("localhost", 12345);
+      JavaReceiverInputDStream<String> test = ssc.socketTextStream("localhost", 12345);
   }
 
   @Test
   public void testSocketString() {
-  
+
     class Converter implements Function<InputStream, Iterable<String>> {
       public Iterable<String> call(InputStream in) throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(in));
@@ -1661,6 +1698,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   @Test
   public void testRawSocketStream() {
-    JavaDStream<String> test = ssc.rawSocketStream("localhost", 12345);
+    JavaReceiverInputDStream<String> test = ssc.rawSocketStream("localhost", 12345);
   }
 }

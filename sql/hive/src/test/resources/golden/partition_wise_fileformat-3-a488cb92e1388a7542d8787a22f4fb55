@@ -1,0 +1,15 @@
+tableName:partition_test_partitioned
+owner:marmbrus
+location:file:/private/var/folders/36/cjkbrr953xg2p_krwrmn8h_r0000gn/T/sharkWarehouse6423793619827660847/partition_test_partitioned/dt=100
+inputformat:org.apache.hadoop.mapred.TextInputFormat
+outputformat:org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+columns:struct columns { string key, string value}
+partitioned:true
+partitionColumns:struct partition_columns { string dt}
+totalNumberFiles:1
+totalFileSize:236
+maxFileSize:236
+minFileSize:236
+lastAccessTime:0
+lastUpdateTime:1390900706000
+

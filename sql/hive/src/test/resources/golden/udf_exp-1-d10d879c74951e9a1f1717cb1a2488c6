@@ -1,0 +1,4 @@
+exp(x) - Returns e to the power of x
+Example:
+   > SELECT exp(0) FROM src LIMIT 1;
+  1

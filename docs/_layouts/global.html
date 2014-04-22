@@ -66,6 +66,7 @@
                                 <li><a href="python-programming-guide.html">Spark in Python</a></li>
                                 <li class="divider"></li>
                                 <li><a href="streaming-programming-guide.html">Spark Streaming</a></li>
+                                <li><a href="sql-programming-guide.html">Spark SQL</a></li>
                                 <li><a href="mllib-guide.html">MLlib (Machine Learning)</a></li>
                                 <li><a href="bagel-programming-guide.html">Bagel (Pregel on Spark)</a></li>
                                 <li><a href="graphx-programming-guide.html">GraphX (Graph Processing)</a></li>
@@ -75,24 +76,9 @@
                         <li class="dropdown">
                             <a href="#" class="dropdown-toggle" data-toggle="dropdown">API Docs<b class="caret"></b></a>
                             <ul class="dropdown-menu">
-                                <li><a href="api/core/index.html#org.apache.spark.package">Spark Core for Java/Scala</a></li>
-                                <li><a href="api/pyspark/index.html">Spark Core for Python</a></li>
-                                <li class="divider"></li>
-                                <li><a href="api/streaming/index.html#org.apache.spark.streaming.package">Spark Streaming</a></li>
-                                <li><a href="api/mllib/index.html#org.apache.spark.mllib.package">MLlib (Machine Learning)</a></li>
-                                <li><a href="api/bagel/index.html#org.apache.spark.bagel.package">Bagel (Pregel on Spark)</a></li>
-                                <li><a href="api/graphx/index.html#org.apache.spark.graphx.package">GraphX (Graph Processing)</a></li>
-                                <li class="divider"></li>
-                                <li class="dropdown-submenu">
-                                    <a tabindex="-1" href="#">External Data Sources</a>
-                                    <ul class="dropdown-menu">
-                                        <li><a href="api/external/kafka/index.html#org.apache.spark.streaming.kafka.KafkaUtils$">Kafka</a></li>
-                                        <li><a href="api/external/flume/index.html#org.apache.spark.streaming.flume.FlumeUtils$">Flume</a></li>
-                                        <li><a href="api/external/twitter/index.html#org.apache.spark.streaming.twitter.TwitterUtils$">Twitter</a></li>
-                                        <li><a href="api/external/zeromq/index.html#org.apache.spark.streaming.zeromq.ZeroMQUtils$">ZeroMQ</a></li>
-                                        <li><a href="api/external/mqtt/index.html#org.apache.spark.streaming.mqtt.MQTTUtils$">MQTT</a></li>
-                                    </ul>
-                                </li>
+                                <li><a href="api/scala/index.html#org.apache.spark.package">Scaladoc</a></li>
+                                <li><a href="api/java/index.html">Javadoc</a></li>
+                                <li><a href="api/python/index.html">Python API</a></li>
                             </ul>
                         </li>
 
@@ -131,33 +117,6 @@
           <h1 class="title">{{ page.title }}</h1>
 
           {{ content }}
-            <!-- Main hero unit for a primary marketing message or call to action -->
-            <!--<div class="hero-unit">
-                <h1>Hello, world!</h1>
-                <p>This is a template for a simple marketing or informational website. It includes a large callout called the hero unit and three supporting pieces of content. Use it as a starting point to create something more unique.</p>
-                <p><a class="btn btn-primary btn-large">Learn more &raquo;</a></p>
-            </div>-->
-
-            <!-- Example row of columns -->
-            <!--<div class="row">
-                <div class="span4">
-                    <h2>Heading</h2>
-                    <p>Donec id elit non mi porta gravida at eget metus. Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus. Etiam porta sem malesuada magna mollis euismod. Donec sed odio dui. </p>
-                    <p><a class="btn" href="#">View details &raquo;</a></p>
-                </div>
-                <div class="span4">
-                    <h2>Heading</h2>
-                    <p>Donec id elit non mi porta gravida at eget metus. Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus. Etiam porta sem malesuada magna mollis euismod. Donec sed odio dui. </p>
-                    <p><a class="btn" href="#">View details &raquo;</a></p>
-               </div>
-                <div class="span4">
-                    <h2>Heading</h2>
-                    <p>Donec sed odio dui. Cras justo odio, dapibus ac facilisis in, egestas eget quam. Vestibulum id ligula porta felis euismod semper. Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus.</p>
-                    <p><a class="btn" href="#">View details &raquo;</a></p>
-                </div>
-            </div>
-
-            <hr>-->
 
         </div> <!-- /container -->
 
@@ -165,42 +124,23 @@
         <script src="js/vendor/bootstrap.min.js"></script>
         <script src="js/main.js"></script>
 
-        <!-- A script to fix internal hash links because we have an overlapping top bar.
-             Based on https://github.com/twitter/bootstrap/issues/193#issuecomment-2281510 -->
+        <!-- MathJax Section -->
+        <script type="text/x-mathjax-config">
+              MathJax.Hub.Config({
+                TeX: { equationNumbers: { autoNumber: "AMS" } }
+              });
+            </script>
+        <script type="text/javascript"
+         src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
         <script>
-          $(function() {
-            function maybeScrollToHash() {
-              if (window.location.hash && $(window.location.hash).length) {
-                var newTop = $(window.location.hash).offset().top - $('#topbar').height() - 5;
-                $(window).scrollTop(newTop);
-              }
+          MathJax.Hub.Config({
+            tex2jax: {
+              inlineMath: [ ["$", "$"], ["\\\\(","\\\\)"] ],
+              displayMath: [ ["$$","$$"], ["\\[", "\\]"] ], 
+              processEscapes: true,
+              skipTags: ['script', 'noscript', 'style', 'textarea', 'pre']
             }
-            $(window).bind('hashchange', function() {
-              maybeScrollToHash();
-            });
-            // Scroll now too in case we had opened the page on a hash, but wait 1 ms because some browsers
-            // will try to do *their* initial scroll after running the onReady handler.
-            setTimeout(function() { maybeScrollToHash(); }, 1)
-          })
+          });
         </script>
-
     </body>
-    <!-- MathJax Section -->
-    <script type="text/x-mathjax-config">
-	  MathJax.Hub.Config({
-	    TeX: { equationNumbers: { autoNumber: "AMS" } }
-	  });
-	</script>
-    <script type="text/javascript"
-     src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-    <script>
-      MathJax.Hub.Config({
-        tex2jax: {
-          inlineMath: [ ["$", "$"], ["\\\\(","\\\\)"] ],
-          displayMath: [ ["$$","$$"], ["\\[", "\\]"] ], 
-          processEscapes: true,
-          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre']
-        }
-      });
-    </script>
 </html>

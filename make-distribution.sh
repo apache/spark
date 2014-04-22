@@ -58,6 +58,7 @@ echo "Version is ${VERSION}"
 # Initialize defaults
 SPARK_HADOOP_VERSION=1.0.4
 SPARK_YARN=false
+SPARK_TACHYON=false
 MAKE_TGZ=false
 
 # Parse arguments
@@ -69,6 +70,9 @@ while (( "$#" )); do
       ;;
     --with-yarn)
       SPARK_YARN=true
+      ;;
+    --with-tachyon)
+      SPARK_TACHYON=true
       ;;
     --tgz)
       MAKE_TGZ=true
@@ -88,6 +92,12 @@ if [ "$SPARK_YARN" == "true" ]; then
   echo "YARN enabled"
 else
   echo "YARN disabled"
+fi
+
+if [ "$SPARK_TACHYON" == "true" ]; then
+  echo "Tachyon Enabled"
+else
+  echo "Tachyon Disabled"
 fi
 
 # Build fat JAR
@@ -112,6 +122,34 @@ cp -r "$FWDIR/bin" "$DISTDIR"
 cp -r "$FWDIR/python" "$DISTDIR"
 cp -r "$FWDIR/sbin" "$DISTDIR"
 
+
+# Download and copy in tachyon, if requested
+if [ "$SPARK_TACHYON" == "true" ]; then
+  TACHYON_VERSION="0.4.1"
+  TACHYON_URL="https://github.com/amplab/tachyon/releases/download/v${TACHYON_VERSION}/tachyon-${TACHYON_VERSION}-bin.tar.gz"
+
+  TMPD=`mktemp -d 2>/dev/null || mktemp -d -t 'disttmp'`
+
+  pushd $TMPD > /dev/null
+  echo "Fetchting tachyon tgz"
+  wget "$TACHYON_URL"
+
+  tar xf "tachyon-${TACHYON_VERSION}-bin.tar.gz"
+  cp "tachyon-${TACHYON_VERSION}/target/tachyon-${TACHYON_VERSION}-jar-with-dependencies.jar" "$DISTDIR/jars"
+  mkdir -p "$DISTDIR/tachyon/src/main/java/tachyon/web"
+  cp -r "tachyon-${TACHYON_VERSION}"/{bin,conf,libexec} "$DISTDIR/tachyon"
+  cp -r "tachyon-${TACHYON_VERSION}"/src/main/java/tachyon/web/resources "$DISTDIR/tachyon/src/main/java/tachyon/web"
+
+  if [[ `uname -a` == Darwin* ]]; then
+    # need to run sed differently on osx
+    nl=$'\n'; sed -i "" -e "s|export TACHYON_JAR=\$TACHYON_HOME/target/\(.*\)|# This is set for spark's make-distribution\\$nl  export TACHYON_JAR=\$TACHYON_HOME/../jars/\1|" "$DISTDIR/tachyon/libexec/tachyon-config.sh"
+  else
+    sed -i "s|export TACHYON_JAR=\$TACHYON_HOME/target/\(.*\)|# This is set for spark's make-distribution\n  export TACHYON_JAR=\$TACHYON_HOME/../jars/\1|" "$DISTDIR/tachyon/libexec/tachyon-config.sh"
+  fi
+
+  popd > /dev/null
+  rm -rf $TMPD
+fi
 
 if [ "$MAKE_TGZ" == "true" ]; then
   TARDIR="$FWDIR/spark-$VERSION"

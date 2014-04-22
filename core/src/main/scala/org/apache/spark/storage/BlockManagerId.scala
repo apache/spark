@@ -50,7 +50,6 @@ private[spark] class BlockManagerId private (
     // DEBUG code
     Utils.checkHost(host)
     assert (port > 0)
-
     host + ":" + port
   }
 
@@ -93,7 +92,7 @@ private[spark] class BlockManagerId private (
 private[spark] object BlockManagerId {
 
   /**
-   * Returns a [[org.apache.spark.storage.BlockManagerId]] for the given configuraiton.
+   * Returns a [[org.apache.spark.storage.BlockManagerId]] for the given configuration.
    *
    * @param execId ID of the executor.
    * @param host Host name of the block manager.

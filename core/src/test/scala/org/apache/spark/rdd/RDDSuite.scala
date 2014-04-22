@@ -33,6 +33,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   test("basic operations") {
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     assert(nums.collect().toList === List(1, 2, 3, 4))
+    assert(nums.toLocalIterator.toList === List(1, 2, 3, 4))
     val dups = sc.makeRDD(Array(1, 1, 2, 2, 3, 3, 4, 4), 2)
     assert(dups.distinct().count() === 4)
     assert(dups.distinct.count === 4)  // Can distinct and count be called without parentheses?
@@ -47,6 +48,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(nums.glom().map(_.toList).collect().toList === List(List(1, 2), List(3, 4)))
     assert(nums.collect({ case i if i >= 3 => i.toString }).collect().toList === List("3", "4"))
     assert(nums.keyBy(_.toString).collect().toList === List(("1", 1), ("2", 2), ("3", 3), ("4", 4)))
+    assert(nums.max() === 4)
+    assert(nums.min() === 1)
     val partitionSums = nums.mapPartitions(iter => Iterator(iter.reduceLeft(_ + _)))
     assert(partitionSums.collect().toList === List(3, 7))
 
@@ -271,37 +274,42 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   test("coalesced RDDs with locality, large scale (10K partitions)") {
     // large scale experiment
     import collection.mutable
-    val rnd = scala.util.Random
     val partitions = 10000
     val numMachines = 50
     val machines = mutable.ListBuffer[String]()
-    (1 to numMachines).foreach(machines += "m"+_)
+    (1 to numMachines).foreach(machines += "m" + _)
+    val rnd = scala.util.Random
+    for (seed <- 1 to 5) {
+      rnd.setSeed(seed)
 
-    val blocks = (1 to partitions).map(i =>
-    { (i, Array.fill(3)(machines(rnd.nextInt(machines.size))).toList) } )
+      val blocks = (1 to partitions).map { i =>
+        (i, Array.fill(3)(machines(rnd.nextInt(machines.size))).toList)
+      }
 
-    val data2 = sc.makeRDD(blocks)
-    val coalesced2 = data2.coalesce(numMachines*2)
+      val data2 = sc.makeRDD(blocks)
+      val coalesced2 = data2.coalesce(numMachines * 2)
 
-    // test that you get over 90% locality in each group
-    val minLocality = coalesced2.partitions
-      .map(part => part.asInstanceOf[CoalescedRDDPartition].localFraction)
-      .foldLeft(1.0)((perc, loc) => math.min(perc,loc))
-    assert(minLocality >= 0.90, "Expected 90% locality but got " + (minLocality*100.0).toInt + "%")
+      // test that you get over 90% locality in each group
+      val minLocality = coalesced2.partitions
+        .map(part => part.asInstanceOf[CoalescedRDDPartition].localFraction)
+        .foldLeft(1.0)((perc, loc) => math.min(perc, loc))
+      assert(minLocality >= 0.90, "Expected 90% locality but got " +
+        (minLocality * 100.0).toInt + "%")
 
-    // test that the groups are load balanced with 100 +/- 20 elements in each
-    val maxImbalance = coalesced2.partitions
-      .map(part => part.asInstanceOf[CoalescedRDDPartition].parents.size)
-      .foldLeft(0)((dev, curr) => math.max(math.abs(100-curr),dev))
-    assert(maxImbalance <= 20, "Expected 100 +/- 20 per partition, but got " + maxImbalance)
+      // test that the groups are load balanced with 100 +/- 20 elements in each
+      val maxImbalance = coalesced2.partitions
+        .map(part => part.asInstanceOf[CoalescedRDDPartition].parents.size)
+        .foldLeft(0)((dev, curr) => math.max(math.abs(100 - curr), dev))
+      assert(maxImbalance <= 20, "Expected 100 +/- 20 per partition, but got " + maxImbalance)
 
-    val data3 = sc.makeRDD(blocks).map(i => i*2) // derived RDD to test *current* pref locs
-    val coalesced3 = data3.coalesce(numMachines*2)
-    val minLocality2 = coalesced3.partitions
-      .map(part => part.asInstanceOf[CoalescedRDDPartition].localFraction)
-      .foldLeft(1.0)((perc, loc) => math.min(perc,loc))
-    assert(minLocality2 >= 0.90, "Expected 90% locality for derived RDD but got " +
-      (minLocality2*100.0).toInt + "%")
+      val data3 = sc.makeRDD(blocks).map(i => i * 2) // derived RDD to test *current* pref locs
+      val coalesced3 = data3.coalesce(numMachines * 2)
+      val minLocality2 = coalesced3.partitions
+        .map(part => part.asInstanceOf[CoalescedRDDPartition].localFraction)
+        .foldLeft(1.0)((perc, loc) => math.min(perc, loc))
+      assert(minLocality2 >= 0.90, "Expected 90% locality for derived RDD but got " +
+        (minLocality2 * 100.0).toInt + "%")
+    }
   }
 
   test("zipped RDDs") {
@@ -457,6 +465,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
   test("takeSample") {
     val data = sc.parallelize(1 to 100, 2)
+
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=false, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
@@ -486,6 +495,12 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       // Chance of getting all distinct elements is still quite low, so test we got < 100
       assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
     }
+  }
+
+  test("takeSample from an empty rdd") {
+    val emptySet = sc.parallelize(Seq.empty[Int], 2)
+    val sample = emptySet.takeSample(false, 20, 1)
+    assert(sample.length === 0)
   }
 
   test("randomSplit") {

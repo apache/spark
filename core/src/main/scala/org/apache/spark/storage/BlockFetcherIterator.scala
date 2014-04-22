@@ -240,7 +240,7 @@ object BlockFetcherIterator {
     override def numRemoteBlocks: Int = numRemote
     override def fetchWaitTime: Long = _fetchWaitTime
     override def remoteBytesRead: Long = _remoteBytesRead
- 
+
 
     // Implementing the Iterator methods with an iterator that reads fetched blocks off the queue
     // as they arrive.
@@ -284,7 +284,7 @@ object BlockFetcherIterator {
               }
             } catch {
               case x: InterruptedException => logInfo("Copier Interrupted")
-              //case _ => throw new SparkException("Exception Throw in Shuffle Copier")
+              // case _ => throw new SparkException("Exception Throw in Shuffle Copier")
             }
           }
         }

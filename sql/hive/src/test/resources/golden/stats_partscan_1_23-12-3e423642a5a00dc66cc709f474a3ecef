@@ -1,0 +1,15 @@
+ABSTRACT SYNTAX TREE:
+  (TOK_ANALYZE (TOK_TAB (TOK_TABNAME analyze_srcpart_partial_scan) (TOK_PARTSPEC (TOK_PARTVAL ds '2008-04-08') (TOK_PARTVAL hr 11))) partialscan)
+
+STAGE DEPENDENCIES:
+  Stage-2 is a root stage
+  Stage-1 depends on stages: Stage-2
+
+STAGE PLANS:
+  Stage: Stage-2
+    Partial Scan Statistics
+
+  Stage: Stage-1
+    Stats-Aggr Operator
+
+

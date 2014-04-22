@@ -29,7 +29,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * Spark executor used with Mesos, YARN, and the standalone scheduler.
@@ -64,9 +64,10 @@ private[spark] class Executor(
   // to what Yarn on this system said was available. This will be used later when SparkEnv
   // created.
   if (java.lang.Boolean.valueOf(
-      System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE"))))
-  {
+      System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))) {
     conf.set("spark.local.dir", getYarnLocalDirs())
+  } else if (sys.env.contains("SPARK_LOCAL_DIRS")) {
+    conf.set("spark.local.dir", sys.env("SPARK_LOCAL_DIRS"))
   }
 
   if (!isLocal) {
@@ -112,17 +113,14 @@ private[spark] class Executor(
     }
   }
 
-  // Create our ClassLoader and set it on this thread
+  // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
   private val urlClassLoader = createClassLoader()
   private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
-  Thread.currentThread.setContextClassLoader(replClassLoader)
 
   // Akka's message frame size. If task result is bigger than this, we use the block manager
   // to send the result back.
-  private val akkaFrameSize = {
-    env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size")
-  }
+  private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
 
   // Start worker thread pool
   val threadPool = Utils.newDaemonCachedThreadPool("Executor task launch worker")
@@ -226,10 +224,10 @@ private[spark] class Executor(
 
         for (m <- task.metrics) {
           m.hostname = Utils.localHostName()
-          m.executorDeserializeTime = (taskStart - startTime).toInt
-          m.executorRunTime = (taskFinish - taskStart).toInt
+          m.executorDeserializeTime = taskStart - startTime
+          m.executorRunTime = taskFinish - taskStart
           m.jvmGCTime = gcTime - startGCTime
-          m.resultSerializationTime = (afterSerialization - beforeSerialization).toInt
+          m.resultSerializationTime = afterSerialization - beforeSerialization
         }
 
         val accumUpdates = Accumulators.values
@@ -265,7 +263,7 @@ private[spark] class Executor(
         }
 
         case t: Throwable => {
-          val serviceTime = (System.currentTimeMillis() - taskStart).toInt
+          val serviceTime = System.currentTimeMillis() - taskStart
           val metrics = attemptedTask.flatMap(t => t.metrics)
           for (m <- metrics) {
             m.executorRunTime = serviceTime
@@ -278,7 +276,6 @@ private[spark] class Executor(
           // have left some weird state around depending on when the exception was thrown, but on
           // the other hand, maybe we could detect that when future tasks fail and exit then.
           logError("Exception in task ID " + taskId, t)
-          //System.exit(1)
         }
       } finally {
         // TODO: Unregister shuffle memory only for ResultTask
@@ -295,15 +292,19 @@ private[spark] class Executor(
    * Create a ClassLoader for use in tasks, adding any JARs specified by the user or any classes
    * created by the interpreter to the search path
    */
-  private def createClassLoader(): ExecutorURLClassLoader = {
-    val loader = this.getClass.getClassLoader
+  private def createClassLoader(): MutableURLClassLoader = {
+    val currentLoader = Utils.getContextOrSparkClassLoader
 
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.
     val urls = currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }.toArray
-    new ExecutorURLClassLoader(urls, loader)
+    val userClassPathFirst = conf.getBoolean("spark.files.userClassPathFirst", false)
+    userClassPathFirst match {
+      case true => new ChildExecutorURLClassLoader(urls, currentLoader)
+      case false => new ExecutorURLClassLoader(urls, currentLoader)
+    }
   }
 
   /**
@@ -314,11 +315,14 @@ private[spark] class Executor(
     val classUri = conf.get("spark.repl.class.uri", null)
     if (classUri != null) {
       logInfo("Using REPL class URI: " + classUri)
+      val userClassPathFirst: java.lang.Boolean =
+        conf.getBoolean("spark.files.userClassPathFirst", false)
       try {
         val klass = Class.forName("org.apache.spark.repl.ExecutorClassLoader")
           .asInstanceOf[Class[_ <: ClassLoader]]
-        val constructor = klass.getConstructor(classOf[String], classOf[ClassLoader])
-        constructor.newInstance(classUri, parent)
+        val constructor = klass.getConstructor(classOf[String], classOf[ClassLoader],
+          classOf[Boolean])
+        constructor.newInstance(classUri, parent, userClassPathFirst)
       } catch {
         case _: ClassNotFoundException =>
           logError("Could not find org.apache.spark.repl.ExecutorClassLoader on classpath!")

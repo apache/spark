@@ -157,7 +157,7 @@ class ClientDistributedCacheManager() extends Logging {
   def isPublic(conf: Configuration, uri: URI, statCache: Map[URI, FileStatus]): Boolean = {
     val fs = FileSystem.get(uri, conf)
     val current = new Path(uri.getPath())
-    //the leaf level file should be readable by others
+    // the leaf level file should be readable by others
     if (!checkPermissionOfOther(fs, current, FsAction.READ, statCache)) {
       return false
     }
@@ -177,7 +177,7 @@ class ClientDistributedCacheManager() extends Logging {
       statCache: Map[URI, FileStatus]): Boolean =  {
     var current = path
     while (current != null) {
-      //the subdirs in the path should have execute permissions for others
+      // the subdirs in the path should have execute permissions for others
       if (!checkPermissionOfOther(fs, current, FsAction.EXECUTE, statCache)) {
         return false
       }

@@ -25,6 +25,7 @@ import scala.concurrent.duration._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
+import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark._
@@ -42,7 +43,7 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
  *
  * THREADING: SchedulerBackends and task-submitting clients can call this class from multiple
  * threads, so it needs locks in public API methods to maintain its state. In addition, some
- * SchedulerBackends sycnchronize on themselves when they want to send events here, and then
+ * SchedulerBackends synchronize on themselves when they want to send events here, and then
  * acquire a lock on us, so we need to make sure that we don't try to lock the backend while
  * we are holding a lock on ourselves.
  */
@@ -61,6 +62,9 @@ private[spark] class TaskSchedulerImpl(
 
   // Threshold above which we warn user initial TaskSet may be starved
   val STARVATION_TIMEOUT = conf.getLong("spark.starvation.timeout", 15000)
+
+  // CPUs to request per task
+  val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
@@ -95,8 +99,13 @@ private[spark] class TaskSchedulerImpl(
   var schedulableBuilder: SchedulableBuilder = null
   var rootPool: Pool = null
   // default scheduler is FIFO
-  val schedulingMode: SchedulingMode = SchedulingMode.withName(
-    conf.get("spark.scheduler.mode", "FIFO"))
+  private val schedulingModeConf = conf.get("spark.scheduler.mode", "FIFO")
+  val schedulingMode: SchedulingMode = try {
+    SchedulingMode.withName(schedulingModeConf.toUpperCase)
+  } catch {
+    case e: java.util.NoSuchElementException =>
+      throw new SparkException(s"Urecognized spark.scheduler.mode: $schedulingModeConf")
+  }
 
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
@@ -204,7 +213,7 @@ private[spark] class TaskSchedulerImpl(
       executorIdToHost(o.executorId) = o.host
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
-        executorGained(o.executorId, o.host)
+        executorAdded(o.executorId, o.host)
       }
     }
 
@@ -228,15 +237,18 @@ private[spark] class TaskSchedulerImpl(
         for (i <- 0 until shuffledOffers.size) {
           val execId = shuffledOffers(i).executorId
           val host = shuffledOffers(i).host
-          for (task <- taskSet.resourceOffer(execId, host, availableCpus(i), maxLocality)) {
-            tasks(i) += task
-            val tid = task.taskId
-            taskIdToTaskSetId(tid) = taskSet.taskSet.id
-            taskIdToExecutorId(tid) = execId
-            activeExecutorIds += execId
-            executorsByHost(host) += execId
-            availableCpus(i) -= 1
-            launchedTask = true
+          if (availableCpus(i) >= CPUS_PER_TASK) {
+            for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
+              tasks(i) += task
+              val tid = task.taskId
+              taskIdToTaskSetId(tid) = taskSet.taskSet.id
+              taskIdToExecutorId(tid) = execId
+              activeExecutorIds += execId
+              executorsByHost(host) += execId
+              availableCpus(i) -= CPUS_PER_TASK
+              assert (availableCpus(i) >= 0)
+              launchedTask = true
+            }
           }
         }
       } while (launchedTask)
@@ -399,8 +411,8 @@ private[spark] class TaskSchedulerImpl(
     rootPool.executorLost(executorId, host)
   }
 
-  def executorGained(execId: String, host: String) {
-    dagScheduler.executorGained(execId, host)
+  def executorAdded(execId: String, host: String) {
+    dagScheduler.executorAdded(execId, host)
   }
 
   def getExecutorsAliveOnHost(host: String): Option[Set[String]] = synchronized {

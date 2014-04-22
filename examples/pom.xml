@@ -45,21 +45,6 @@
     </profile>
   </profiles>
 
-  <repositories>
-    <repository>
-      <id>apache-repo</id>
-      <name>Apache Repository</name>
-      <url>https://repository.apache.org/content/repositories/releases</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-  </repositories>
-
-
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -82,6 +67,12 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-bagel_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-hive_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
@@ -119,7 +110,7 @@
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase</artifactId>
-      <version>0.94.6</version>
+      <version>${hbase.version}</version>
       <exclusions>
         <exclusion>
           <groupId>asm</groupId>

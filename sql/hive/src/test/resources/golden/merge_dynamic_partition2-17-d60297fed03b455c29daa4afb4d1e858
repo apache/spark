@@ -1,0 +1,14 @@
+tableName:merge_dynamic_part
+owner:marmbrus
+location:file:/private/var/folders/36/cjkbrr953xg2p_krwrmn8h_r0000gn/T/sharkWarehouse5646492510204438812/merge_dynamic_part
+inputformat:org.apache.hadoop.mapred.TextInputFormat
+outputformat:org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+columns:struct columns { i32 key, string value}
+partitioned:true
+partitionColumns:struct partition_columns { string ds, string hr}
+totalNumberFiles:3
+totalFileSize:17415
+maxFileSize:5901
+minFileSize:5702
+lastAccessTime:0
+lastUpdateTime:1389740265000

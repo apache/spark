@@ -18,9 +18,11 @@
 package org.apache.spark.examples
 
 import scala.math.sqrt
-import cern.jet.math._
+
 import cern.colt.matrix._
 import cern.colt.matrix.linalg._
+import cern.jet.math._
+
 import org.apache.spark._
 
 /**
@@ -54,7 +56,6 @@ object SparkALS {
     for (i <- 0 until M; j <- 0 until U) {
       r.set(i, j, blas.ddot(ms(i), us(j)))
     }
-    //println("R: " + r)
     blas.daxpy(-1, targetR, r)
     val sumSqs = r.aggregate(Functions.plus, Functions.square)
     sqrt(sumSqs / (M * U))
@@ -112,8 +113,8 @@ object SparkALS {
     printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
 
     val sc = new SparkContext(host, "SparkALS",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
-    
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
+
     val R = generateR()
 
     // Initialize m and u randomly
@@ -138,6 +139,6 @@ object SparkALS {
       println()
     }
 
-    System.exit(0)
+    sc.stop()
   }
 }

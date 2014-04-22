@@ -29,7 +29,7 @@
   <artifactId>spark-graphx_2.10</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project GraphX</name>
-  <url>http://spark-project.org/</url>
+  <url>http://spark.apache.org/</url>
 
   <profiles>
     <profile>
@@ -54,7 +54,7 @@
     <dependency>
       <groupId>org.jblas</groupId>
       <artifactId>jblas</artifactId>
-      <version>1.2.3</version>
+      <version>${jblas.version}</version>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>

@@ -49,7 +49,7 @@ private[spark] object AkkaUtils extends Logging {
 
     val akkaTimeout = conf.getInt("spark.akka.timeout", 100)
 
-    val akkaFrameSize = conf.getInt("spark.akka.frameSize", 10)
+    val akkaFrameSize = maxFrameSizeBytes(conf)
     val akkaLogLifecycleEvents = conf.getBoolean("spark.akka.logLifecycleEvents", false)
     val lifecycleEvents = if (akkaLogLifecycleEvents) "on" else "off"
     if (!akkaLogLifecycleEvents) {
@@ -92,7 +92,7 @@ private[spark] object AkkaUtils extends Logging {
       |akka.remote.netty.tcp.port = $port
       |akka.remote.netty.tcp.tcp-nodelay = on
       |akka.remote.netty.tcp.connection-timeout = $akkaTimeout s
-      |akka.remote.netty.tcp.maximum-frame-size = ${akkaFrameSize}MiB
+      |akka.remote.netty.tcp.maximum-frame-size = ${akkaFrameSize}B
       |akka.remote.netty.tcp.execution-pool-size = $akkaThreads
       |akka.actor.default-dispatcher.throughput = $akkaBatchSize
       |akka.log-config-on-start = $logAkkaConfig
@@ -119,6 +119,11 @@ private[spark] object AkkaUtils extends Logging {
 
   /** Returns the default Spark timeout to use for Akka remote actor lookup. */
   def lookupTimeout(conf: SparkConf): FiniteDuration = {
-    Duration.create(conf.get("spark.akka.lookupTimeout", "30").toLong, "seconds")
+    Duration.create(conf.getLong("spark.akka.lookupTimeout", 30), "seconds")
+  }
+
+  /** Returns the configured max frame size for Akka messages in bytes. */
+  def maxFrameSizeBytes(conf: SparkConf): Int = {
+    conf.getInt("spark.akka.frameSize", 10) * 1024 * 1024
   }
 }

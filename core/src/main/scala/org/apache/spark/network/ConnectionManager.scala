@@ -17,7 +17,6 @@
 
 package org.apache.spark.network
 
-import java.net._
 import java.nio._
 import java.nio.channels._
 import java.nio.channels.spi._
@@ -34,6 +33,7 @@ import scala.collection.mutable.SynchronizedQueue
 
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import org.apache.spark._
 import org.apache.spark.util.{SystemClock, Utils}
@@ -80,7 +80,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
 
   private val serverChannel = ServerSocketChannel.open()
   // used to track the SendingConnections waiting to do SASL negotiation
-  private val connectionsAwaitingSasl = new HashMap[ConnectionId, SendingConnection] 
+  private val connectionsAwaitingSasl = new HashMap[ConnectionId, SendingConnection]
     with SynchronizedMap[ConnectionId, SendingConnection]
   private val connectionsByKey =
     new HashMap[SelectionKey, Connection] with SynchronizedMap[SelectionKey, Connection]
@@ -142,7 +142,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
         } finally {
           writeRunnableStarted.synchronized {
             writeRunnableStarted -= key
-            val needReregister = register || conn.resetForceReregister() 
+            val needReregister = register || conn.resetForceReregister()
             if (needReregister && conn.changeInterestForWrite()) {
               conn.registerInterest()
             }
@@ -505,12 +505,12 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
       }
     }
     handleMessageExecutor.execute(runnable)
-    /*handleMessage(connection, message)*/
+    /* handleMessage(connection, message) */
   }
 
   private def handleClientAuthentication(
       waitingConn: SendingConnection,
-      securityMsg: SecurityMessage, 
+      securityMsg: SecurityMessage,
       connectionId : ConnectionId) {
     if (waitingConn.isSaslComplete()) {
       logDebug("Client sasl completed for id: "  + waitingConn.connectionId)
@@ -531,7 +531,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
           }
           return
         }
-        var securityMsgResp = SecurityMessage.fromResponse(replyToken, 
+        var securityMsgResp = SecurityMessage.fromResponse(replyToken,
           securityMsg.getConnectionId.toString())
         var message = securityMsgResp.toBufferMessage
         if (message == null) throw new Exception("Error creating security message")
@@ -547,7 +547,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
   }
 
   private def handleServerAuthentication(
-      connection: Connection, 
+      connection: Connection,
       securityMsg: SecurityMessage,
       connectionId: ConnectionId) {
     if (!connection.isSaslComplete()) {
@@ -562,7 +562,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
         }
         replyToken = connection.sparkSaslServer.response(securityMsg.getToken)
         if (connection.isSaslComplete()) {
-          logDebug("Server sasl completed: " + connection.connectionId) 
+          logDebug("Server sasl completed: " + connection.connectionId)
         } else {
           logDebug("Server sasl not completed: " + connection.connectionId)
         }
@@ -572,7 +572,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
           var message = securityMsgResp.toBufferMessage
           if (message == null) throw new Exception("Error creating security Message")
           sendSecurityMessage(connection.getRemoteConnectionManagerId(), message)
-        } 
+        }
       } catch {
         case e: Exception => {
           logError("Error in server auth negotiation: " + e)
@@ -582,7 +582,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
         }
       }
     } else {
-      logDebug("connection already established for this connection id: " + connection.connectionId) 
+      logDebug("connection already established for this connection id: " + connection.connectionId)
     }
   }
 
@@ -610,8 +610,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
       return true
     } else {
       if (!conn.isSaslComplete()) {
-        // We could handle this better and tell the client we need to do authentication 
-        // negotiation, but for now just ignore them. 
+        // We could handle this better and tell the client we need to do authentication
+        // negotiation, but for now just ignore them.
         logError("message sent that is not security negotiation message on connection " +
                  "not authenticated yet, ignoring it!!")
         return true
@@ -710,11 +710,11 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
         }
       }
     } else {
-      logDebug("Sasl already established ") 
+      logDebug("Sasl already established ")
     }
   }
 
-  // allow us to add messages to the inbox for doing sasl negotiating 
+  // allow us to add messages to the inbox for doing sasl negotiating
   private def sendSecurityMessage(connManagerId: ConnectionManagerId, message: Message) {
     def startNewConnection(): SendingConnection = {
       val inetSocketAddress = new InetSocketAddress(connManagerId.host, connManagerId.port)
@@ -733,7 +733,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
     logTrace("Sending Security [" + message + "] to [" + connManagerId + "]")
     val connection = connectionsById.getOrElseUpdate(connManagerId, startNewConnection())
 
-    //send security message until going connection has been authenticated
+    // send security message until going connection has been authenticated
     connection.send(message)
 
     wakeupSelector()
@@ -773,7 +773,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
             if (((clock.getTime() - startTime) >= (authTimeout * 1000))
               && (!connection.isSaslComplete())) {
               // took to long to authenticate the connection, something probably went wrong
-              throw new Exception("Took to long for authentication to " + connectionManagerId + 
+              throw new Exception("Took to long for authentication to " + connectionManagerId +
                 ", waited " + authTimeout + "seconds, failing.")
             }
           }
@@ -795,7 +795,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
               }
             }
             case None => {
-              logError("no messageStatus for failed message id: " + message.id) 
+              logError("no messageStatus for failed message id: " + message.id)
             }
           }
         }
@@ -859,14 +859,14 @@ private[spark] object ConnectionManager {
       None
     })
 
-    /*testSequentialSending(manager)*/
-    /*System.gc()*/
+    /* testSequentialSending(manager) */
+    /* System.gc() */
 
-    /*testParallelSending(manager)*/
-    /*System.gc()*/
+    /* testParallelSending(manager) */
+    /* System.gc() */
 
-    /*testParallelDecreasingSending(manager)*/
-    /*System.gc()*/
+    /* testParallelDecreasingSending(manager) */
+    /* System.gc() */
 
     testContinuousSending(manager)
     System.gc()
@@ -948,7 +948,7 @@ private[spark] object ConnectionManager {
     val ms = finishTime - startTime
     val tput = mb * 1000.0 / ms
     println("--------------------------")
-    /*println("Started at " + startTime + ", finished at " + finishTime) */
+    /* println("Started at " + startTime + ", finished at " + finishTime) */
     println("Sent " + mb + " MB in " + ms + " ms (" + tput + " MB/s)")
     println("--------------------------")
     println()

@@ -21,9 +21,10 @@ import java.io.File
 
 import org.eclipse.jetty.util.security.{Constraint, Password}
 import org.eclipse.jetty.security.authentication.DigestAuthenticator
-import org.eclipse.jetty.security.{ConstraintMapping, ConstraintSecurityHandler, HashLoginService}
+import org.eclipse.jetty.security.{ConstraintMapping, ConstraintSecurityHandler, HashLoginService, SecurityHandler}
 
-import org.eclipse.jetty.server.{Server, ServerConnector}
+import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.server.bio.SocketConnector
 import org.eclipse.jetty.server.handler.{DefaultHandler, HandlerList, ResourceHandler}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 
@@ -42,7 +43,7 @@ private[spark] class ServerStateException(message: String) extends Exception(mes
  */
 private[spark] class HttpServer(resourceBase: File, securityManager: SecurityManager)
     extends Logging {
-  private var server: Server = _
+  private var server: Server = null
   private var port: Int = -1
 
   def start() {
@@ -50,16 +51,16 @@ private[spark] class HttpServer(resourceBase: File, securityManager: SecurityMan
       throw new ServerStateException("Server is already started")
     } else {
       logInfo("Starting HTTP Server")
-      val threadPool = new QueuedThreadPool
-      threadPool.setDaemon(true)
-
-      server = new Server(threadPool)
-      val connector = new ServerConnector(server)
-      connector.setIdleTimeout(60 * 1000)
+      server = new Server()
+      val connector = new SocketConnector
+      connector.setMaxIdleTime(60*1000)
       connector.setSoLingerTime(-1)
       connector.setPort(0)
       server.addConnector(connector)
 
+      val threadPool = new QueuedThreadPool
+      threadPool.setDaemon(true)
+      server.setThreadPool(threadPool)
       val resHandler = new ResourceHandler
       resHandler.setResourceBase(resourceBase.getAbsolutePath)
 
@@ -78,23 +79,23 @@ private[spark] class HttpServer(resourceBase: File, securityManager: SecurityMan
       }
 
       server.start()
-      port = connector.getLocalPort
+      port = server.getConnectors()(0).getLocalPort()
     }
   }
 
-  /** 
+  /**
    * Setup Jetty to the HashLoginService using a single user with our
    * shared secret. Configure it to use DIGEST-MD5 authentication so that the password
    * isn't passed in plaintext.
    */
   private def setupSecurityHandler(securityMgr: SecurityManager): ConstraintSecurityHandler = {
     val constraint = new Constraint()
-    // use DIGEST-MD5 as the authentication mechanism 
+    // use DIGEST-MD5 as the authentication mechanism
     constraint.setName(Constraint.__DIGEST_AUTH)
     constraint.setRoles(Array("user"))
     constraint.setAuthenticate(true)
     constraint.setDataConstraint(Constraint.DC_NONE)
- 
+
     val cm = new ConstraintMapping()
     cm.setConstraint(constraint)
     cm.setPathSpec("/*")

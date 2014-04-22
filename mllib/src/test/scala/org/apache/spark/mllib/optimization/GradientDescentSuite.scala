@@ -20,13 +20,12 @@ package org.apache.spark.mllib.optimization
 import scala.util.Random
 import scala.collection.JavaConversions._
 
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
 
-import org.apache.spark.SparkContext
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.linalg.Vectors
 
 object GradientDescentSuite {
 
@@ -58,8 +57,7 @@ object GradientDescentSuite {
       if (yVal > 0) 1 else 0
     }
 
-    val testData = (0 until nPoints).map(i => LabeledPoint(y(i), Array(x1(i))))
-    testData
+    (0 until nPoints).map(i => LabeledPoint(y(i), Vectors.dense(x1(i))))
   }
 }
 
@@ -83,11 +81,11 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMa
     // Add a extra variable consisting of all 1.0's for the intercept.
     val testData = GradientDescentSuite.generateGDInput(A, B, nPoints, 42)
     val data = testData.map { case LabeledPoint(label, features) =>
-      label -> Array(1.0, features: _*)
+      label -> Vectors.dense(1.0, features.toArray: _*)
     }
 
     val dataRDD = sc.parallelize(data, 2).cache()
-    val initialWeightsWithIntercept = Array(1.0, initialWeights: _*)
+    val initialWeightsWithIntercept = Vectors.dense(1.0, initialWeights: _*)
 
     val (_, loss) = GradientDescent.runMiniBatchSGD(
       dataRDD,
@@ -113,13 +111,13 @@ class GradientDescentSuite extends FunSuite with LocalSparkContext with ShouldMa
     // Add a extra variable consisting of all 1.0's for the intercept.
     val testData = GradientDescentSuite.generateGDInput(2.0, -1.5, 10000, 42)
     val data = testData.map { case LabeledPoint(label, features) =>
-      label -> Array(1.0, features: _*)
+      label -> Vectors.dense(1.0, features.toArray: _*)
     }
 
     val dataRDD = sc.parallelize(data, 2).cache()
 
     // Prepare non-zero weights
-    val initialWeightsWithIntercept = Array(1.0, 0.5)
+    val initialWeightsWithIntercept = Vectors.dense(1.0, 0.5)
 
     val regParam0 = 0
     val (newWeights0, loss0) = GradientDescent.runMiniBatchSGD(

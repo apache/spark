@@ -17,13 +17,18 @@
 
 package org.apache.spark.storage
 
+import scala.collection.Map
+import scala.collection.mutable
+
 import org.apache.spark.SparkContext
-import org.apache.spark.storage.BlockManagerMasterActor.BlockStatus
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
 private[spark]
-case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long,
-  blocks: Map[BlockId, BlockStatus]) {
+class StorageStatus(
+    val blockManagerId: BlockManagerId,
+    val maxMem: Long,
+    val blocks: mutable.Map[BlockId, BlockStatus] = mutable.Map.empty) {
 
   def memUsed() = blocks.values.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
 
@@ -37,20 +42,29 @@ case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long,
 
   def memRemaining : Long = maxMem - memUsed()
 
-  def rddBlocks = blocks.flatMap {
-    case (rdd: RDDBlockId, status) => Some(rdd, status)
-    case _ => None
-  }
+  def rddBlocks = blocks.collect { case (rdd: RDDBlockId, status) => (rdd, status) }
 }
 
-case class RDDInfo(id: Int, name: String, storageLevel: StorageLevel,
-  numCachedPartitions: Int, numPartitions: Int, memSize: Long, diskSize: Long)
+@DeveloperApi
+private[spark]
+class RDDInfo(
+    val id: Int,
+    val name: String,
+    val numPartitions: Int,
+    val storageLevel: StorageLevel)
   extends Ordered[RDDInfo] {
+
+  var numCachedPartitions = 0
+  var memSize = 0L
+  var diskSize = 0L
+  var tachyonSize = 0L
+
   override def toString = {
     import Utils.bytesToString
-    ("RDD \"%s\" (%d) Storage: %s; CachedPartitions: %d; TotalPartitions: %d; MemorySize: %s; " +
-       "DiskSize: %s").format(name, id, storageLevel.toString, numCachedPartitions,
-         numPartitions, bytesToString(memSize), bytesToString(diskSize))
+    ("RDD \"%s\" (%d) Storage: %s; CachedPartitions: %d; TotalPartitions: %d; MemorySize: %s;" +
+      "TachyonSize: %s; DiskSize: %s").format(
+        name, id, storageLevel.toString, numCachedPartitions, numPartitions,
+        bytesToString(memSize), bytesToString(tachyonSize), bytesToString(diskSize))
   }
 
   override def compare(that: RDDInfo) = {
@@ -62,55 +76,79 @@ case class RDDInfo(id: Int, name: String, storageLevel: StorageLevel,
 private[spark]
 object StorageUtils {
 
-  /* Returns RDD-level information, compiled from a list of StorageStatus objects */
-  def rddInfoFromStorageStatus(storageStatusList: Seq[StorageStatus],
-    sc: SparkContext) : Array[RDDInfo] = {
-    rddInfoFromBlockStatusList(
-      storageStatusList.flatMap(_.rddBlocks).toMap[RDDBlockId, BlockStatus], sc)
+  /**
+   * Returns basic information of all RDDs persisted in the given SparkContext. This does not
+   * include storage information.
+   */
+  def rddInfoFromSparkContext(sc: SparkContext): Array[RDDInfo] = {
+    sc.persistentRdds.values.map { rdd =>
+      val rddName = Option(rdd.name).getOrElse(rdd.id.toString)
+      val rddNumPartitions = rdd.partitions.size
+      val rddStorageLevel = rdd.getStorageLevel
+      val rddInfo = new RDDInfo(rdd.id, rddName, rddNumPartitions, rddStorageLevel)
+      rddInfo
+    }.toArray
   }
 
-  /* Returns a map of blocks to their locations, compiled from a list of StorageStatus objects */
-  def blockLocationsFromStorageStatus(storageStatusList: Seq[StorageStatus]) = {
-    val blockLocationPairs = storageStatusList
-      .flatMap(s => s.blocks.map(b => (b._1, s.blockManagerId.hostPort)))
-    blockLocationPairs.groupBy(_._1).map{case (k, v) => (k, v.unzip._2)}.toMap
+  /** Returns storage information of all RDDs persisted in the given SparkContext. */
+  def rddInfoFromStorageStatus(
+      storageStatuses: Seq[StorageStatus],
+      sc: SparkContext): Array[RDDInfo] = {
+    rddInfoFromStorageStatus(storageStatuses, rddInfoFromSparkContext(sc))
   }
 
-  /* Given a list of BlockStatus objets, returns information for each RDD */
-  def rddInfoFromBlockStatusList(infos: Map[RDDBlockId, BlockStatus],
-    sc: SparkContext) : Array[RDDInfo] = {
+  /** Returns storage information of all RDDs in the given list. */
+  def rddInfoFromStorageStatus(
+      storageStatuses: Seq[StorageStatus],
+      rddInfos: Seq[RDDInfo]): Array[RDDInfo] = {
 
-    // Group by rddId, ignore the partition name
-    val groupedRddBlocks = infos.groupBy { case(k, v) => k.rddId }.mapValues(_.values.toArray)
+    // Mapping from RDD ID -> an array of associated BlockStatuses
+    val blockStatusMap = storageStatuses.flatMap(_.rddBlocks).toMap
+      .groupBy { case (k, _) => k.rddId }
+      .mapValues(_.values.toArray)
 
-    // For each RDD, generate an RDDInfo object
-    val rddInfos = groupedRddBlocks.map { case (rddId, rddBlocks) =>
-      // Add up memory and disk sizes
-      val memSize = rddBlocks.map(_.memSize).reduce(_ + _)
-      val diskSize = rddBlocks.map(_.diskSize).reduce(_ + _)
+    // Mapping from RDD ID -> the associated RDDInfo (with potentially outdated storage information)
+    val rddInfoMap = rddInfos.map { info => (info.id, info) }.toMap
 
-      // Get the friendly name and storage level for the RDD, if available
-      sc.persistentRdds.get(rddId).map { r =>
-        val rddName = Option(r.name).getOrElse(rddId.toString)
-        val rddStorageLevel = r.getStorageLevel
-        RDDInfo(rddId, rddName, rddStorageLevel, rddBlocks.length, r.partitions.size,
-          memSize, diskSize)
+    val rddStorageInfos = blockStatusMap.flatMap { case (rddId, blocks) =>
+      // Add up memory, disk and Tachyon sizes
+      val persistedBlocks =
+        blocks.filter { status => status.memSize + status.diskSize + status.tachyonSize > 0 }
+      val memSize = persistedBlocks.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
+      val diskSize = persistedBlocks.map(_.diskSize).reduceOption(_ + _).getOrElse(0L)
+      val tachyonSize = persistedBlocks.map(_.tachyonSize).reduceOption(_ + _).getOrElse(0L)
+      rddInfoMap.get(rddId).map { rddInfo =>
+        rddInfo.numCachedPartitions = persistedBlocks.length
+        rddInfo.memSize = memSize
+        rddInfo.diskSize = diskSize
+        rddInfo.tachyonSize = tachyonSize
+        rddInfo
       }
-    }.flatten.toArray
+    }.toArray
 
-    scala.util.Sorting.quickSort(rddInfos)
-
-    rddInfos
+    scala.util.Sorting.quickSort(rddStorageInfos)
+    rddStorageInfos
   }
 
-  /* Filters storage status by a given RDD id. */
-  def filterStorageStatusByRDD(storageStatusList: Array[StorageStatus], rddId: Int)
-    : Array[StorageStatus] = {
-
-    storageStatusList.map { status =>
-      val newBlocks = status.rddBlocks.filterKeys(_.rddId == rddId).toMap[BlockId, BlockStatus]
-      //val newRemainingMem = status.maxMem - newBlocks.values.map(_.memSize).reduce(_ + _)
-      StorageStatus(status.blockManagerId, status.maxMem, newBlocks)
+  /** Returns a mapping from BlockId to the locations of the associated block. */
+  def blockLocationsFromStorageStatus(
+      storageStatuses: Seq[StorageStatus]): Map[BlockId, Seq[String]] = {
+    val blockLocationPairs = storageStatuses.flatMap { storageStatus =>
+      storageStatus.blocks.map { case (bid, _) => (bid, storageStatus.blockManagerId.hostPort) }
     }
+    blockLocationPairs.toMap
+      .groupBy { case (blockId, _) => blockId }
+      .mapValues(_.values.toSeq)
+  }
+
+  /** Filters the given list of StorageStatus by the given RDD ID. */
+  def filterStorageStatusByRDD(
+      storageStatuses: Seq[StorageStatus],
+      rddId: Int): Array[StorageStatus] = {
+    storageStatuses.map { status =>
+      val filteredBlocks = status.rddBlocks.filterKeys(_.rddId == rddId).toSeq
+      val filteredBlockMap = mutable.Map[BlockId, BlockStatus](filteredBlocks: _*)
+      new StorageStatus(status.blockManagerId, status.maxMem, filteredBlockMap)
+    }.toArray
   }
 }

@@ -1,0 +1,16 @@
+ABSTRACT SYNTAX TREE:
+  (TOK_SHOWINDEXES show_idx_t1)
+
+STAGE DEPENDENCIES:
+  Stage-0 is a root stage
+  Stage-1 is a root stage
+
+STAGE PLANS:
+  Stage: Stage-0
+      Show Index Operator:
+        Show Indexes
+
+  Stage: Stage-1
+    Fetch Operator
+      limit: -1
+

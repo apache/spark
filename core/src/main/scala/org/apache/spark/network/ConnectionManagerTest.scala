@@ -37,20 +37,20 @@ private[spark] object ConnectionManagerTest extends Logging{
         "[size of msg in MB (integer)] [count] [await time in seconds)] ")
       System.exit(1)
     }
-    
+
     if (args(0).startsWith("local")) {
       println("This runs only on a mesos cluster")
     }
-    
+
     val sc = new SparkContext(args(0), "ConnectionManagerTest")
     val slavesFile = Source.fromFile(args(1))
     val slaves = slavesFile.mkString.split("\n")
     slavesFile.close()
 
-    /*println("Slaves")*/
-    /*slaves.foreach(println)*/
+    /* println("Slaves") */
+    /* slaves.foreach(println) */
     val tasknum = if (args.length > 2) args(2).toInt else slaves.length
-    val size = ( if (args.length > 3) (args(3).toInt) else 10 ) * 1024 * 1024 
+    val size = ( if (args.length > 3) (args(3).toInt) else 10 ) * 1024 * 1024
     val count = if (args.length > 4) args(4).toInt else 3
     val awaitTime = (if (args.length > 5) args(5).toInt else 600 ).second
     println("Running " + count + " rounds of test: " + "parallel tasks = " + tasknum + ", " +
@@ -64,16 +64,16 @@ private[spark] object ConnectionManagerTest extends Logging{
     (0 until count).foreach(i => {
       val resultStrs = sc.parallelize(0 until tasknum, tasknum).map(i => {
         val connManager = SparkEnv.get.connectionManager
-        val thisConnManagerId = connManager.id 
-        connManager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => { 
+        val thisConnManagerId = connManager.id
+        connManager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
           logInfo("Received [" + msg + "] from [" + id + "]")
           None
         })
 
         val buffer = ByteBuffer.allocate(size).put(Array.tabulate[Byte](size)(x => x.toByte))
         buffer.flip
-        
-        val startTime = System.currentTimeMillis  
+
+        val startTime = System.currentTimeMillis
         val futures = slaveConnManagerIds.filter(_ != thisConnManagerId).map{ slaveConnManagerId =>
           {
             val bufferMessage = Message.createBufferMessage(buffer.duplicate)
@@ -84,7 +84,7 @@ private[spark] object ConnectionManagerTest extends Logging{
         val results = futures.map(f => Await.result(f, awaitTime))
         val finishTime = System.currentTimeMillis
         Thread.sleep(5000)
-        
+
         val mb = size * results.size / 1024.0 / 1024.0
         val ms = finishTime - startTime
         val resultStr = thisConnManagerId + " Sent " + mb + " MB in " + ms + " ms at " + (mb / ms *
@@ -92,11 +92,11 @@ private[spark] object ConnectionManagerTest extends Logging{
         logInfo(resultStr)
         resultStr
       }).collect()
-      
-      println("---------------------") 
-      println("Run " + i) 
+
+      println("---------------------")
+      println("Run " + i)
       resultStrs.foreach(println)
-      println("---------------------") 
+      println("---------------------")
     })
   }
 }

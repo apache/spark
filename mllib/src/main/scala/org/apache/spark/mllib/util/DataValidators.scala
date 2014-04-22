@@ -17,23 +17,24 @@
 
 package org.apache.spark.mllib.util
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
 
 /**
+ * :: DeveloperApi ::
  * A collection of methods used to validate data before applying ML algorithms.
  */
+@DeveloperApi
 object DataValidators extends Logging {
 
   /**
    * Function to check if labels used for classification are either zero or one.
    *
-   * @param data - input data set that needs to be checked
-   *
    * @return True if labels are all zero or one, false otherwise.
    */
-   val classificationLabels: RDD[LabeledPoint] => Boolean = { data =>
+   val binaryLabelValidator: RDD[LabeledPoint] => Boolean = { data =>
     val numInvalid = data.filter(x => x.label != 1.0 && x.label != 0.0).count()
     if (numInvalid != 0) {
       logError("Classification labels should be 0 or 1. Found " + numInvalid + " invalid labels")

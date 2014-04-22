@@ -1,0 +1,1 @@
+like(str, pattern) - Checks if str matches pattern

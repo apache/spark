@@ -1,0 +1,7 @@
+conv(num, from_base, to_base) - convert num from from_base to to_base
+If to_base is negative, treat num as a signed integer,otherwise, treat it as an unsigned integer.
+Example:
+  > SELECT conv('100', 2, 10) FROM src LIMIT 1;
+  '4'
+  > SELECT conv(-10, 16, -10) FROM src LIMIT 1;
+  '16'

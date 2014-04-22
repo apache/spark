@@ -42,15 +42,18 @@ System Properties:
 * `spark.yarn.preserve.staging.files`, set to true to preserve the staged files(spark jar, app jar, distributed cache files) at the end of the job rather then delete them.
 * `spark.yarn.scheduler.heartbeat.interval-ms`, the interval in ms in which the Spark application master heartbeats into the YARN ResourceManager. Default is 5 seconds. 
 * `spark.yarn.max.executor.failures`, the maximum number of executor failures before failing the application. Default is the number of executors requested times 2 with minimum of 3.
+* `spark.yarn.historyServer.address`, the address of the Spark history server (i.e. host.com:18080). The address should not contain a scheme (http://). Defaults to not being set since the history server is an optional service. This address is given to the Yarn ResourceManager when the Spark application finishes to link the application from the ResourceManager UI to the Spark history server UI. 
 
 # Launching Spark on YARN
 
 Ensure that HADOOP_CONF_DIR or YARN_CONF_DIR points to the directory which contains the (client side) configuration files for the Hadoop cluster.
 These configs are used to connect to the cluster, write to the dfs, and connect to the YARN ResourceManager.
 
-There are two scheduler modes that can be used to launch Spark applications on YARN. In yarn-cluster mode, the Spark driver runs inside an application master process which is managed by YARN on the cluster, and the client can go away after initiating the application. In yarn-client mode, the driver runs in the client process, and the application master is only used for requesting resources from YARN.
+There are two deploy modes that can be used to launch Spark applications on YARN. In yarn-cluster mode, the Spark driver runs inside an application master process which is managed by YARN on the cluster, and the client can go away after initiating the application. In yarn-client mode, the driver runs in the client process, and the application master is only used for requesting resources from YARN.
 
 Unlike in Spark standalone and Mesos mode, in which the master's address is specified in the "master" parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration.  Thus, the master parameter is simply "yarn-client" or "yarn-cluster".
+
+The spark-submit script described in the [cluster mode overview](cluster-overview.html) provides the most straightforward way to submit a compiled Spark application to YARN in either deploy mode. For info on the lower-level invocations it uses, read ahead. For running spark-shell against YARN, skip down to the yarn-client section. 
 
 ## Launching a Spark application with yarn-cluster mode.
 
@@ -59,7 +62,7 @@ The command to launch the Spark application on the cluster is as follows:
     SPARK_JAR=<SPARK_ASSEMBLY_JAR_FILE> ./bin/spark-class org.apache.spark.deploy.yarn.Client \
       --jar <YOUR_APP_JAR_FILE> \
       --class <APP_MAIN_CLASS> \
-      --args <APP_MAIN_ARGUMENTS> \
+      --arg <APP_MAIN_ARGUMENT> \
       --num-executors <NUMBER_OF_EXECUTOR_PROCESSES> \
       --driver-memory <MEMORY_FOR_ApplicationMaster> \
       --executor-memory <MEMORY_PER_EXECUTOR> \
@@ -70,7 +73,7 @@ The command to launch the Spark application on the cluster is as follows:
       --files <files_for_distributed_cache> \
       --archives <archives_for_distributed_cache>
 
-For example:
+To pass multiple arguments the "arg" option can be specified multiple times. For example:
 
     # Build the Spark assembly JAR and the Spark examples JAR
     $ SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
@@ -83,7 +86,8 @@ For example:
         ./bin/spark-class org.apache.spark.deploy.yarn.Client \
           --jar examples/target/scala-{{site.SCALA_BINARY_VERSION}}/spark-examples-assembly-{{site.SPARK_VERSION}}.jar \
           --class org.apache.spark.examples.SparkPi \
-          --args yarn-cluster \
+          --arg yarn-cluster \
+          --arg 5 \
           --num-executors 3 \
           --driver-memory 4g \
           --executor-memory 2g \
@@ -121,7 +125,7 @@ or
     MASTER=yarn-client ./bin/spark-shell
 
 
-## Viewing logs
+# Viewing logs
 
 In YARN terminology, executors and application masters run inside "containers". YARN has two modes for handling container logs after an application has completed. If log aggregation is turned on (with the yarn.log-aggregation-enable config), container logs are copied to HDFS and deleted on the local machine. These logs can be viewed from anywhere on the cluster with the "yarn logs" command.
 

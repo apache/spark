@@ -19,15 +19,15 @@ package org.apache.spark.mllib.clustering
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.jblas.DoubleMatrix
+import breeze.linalg.{DenseVector => BDV, Vector => BV, norm => breezeNorm}
 
-import org.apache.spark.SparkContext
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.RDD
-import org.apache.spark.Logging
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
-
 
 /**
  * K-means clustering with support for multiple parallel runs and a k-means++ like initialization
@@ -38,16 +38,17 @@ import org.apache.spark.util.random.XORShiftRandom
  * to it should be cached by the user.
  */
 class KMeans private (
-    var k: Int,
-    var maxIterations: Int,
-    var runs: Int,
-    var initializationMode: String,
-    var initializationSteps: Int,
-    var epsilon: Double)
-  extends Serializable with Logging
-{
-  private type ClusterCenters = Array[Array[Double]]
+    private var k: Int,
+    private var maxIterations: Int,
+    private var runs: Int,
+    private var initializationMode: String,
+    private var initializationSteps: Int,
+    private var epsilon: Double) extends Serializable with Logging {
 
+  /**
+   * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
+   * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4}.
+   */
   def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4)
 
   /** Set the number of clusters to create (k). Default: 2. */
@@ -76,6 +77,7 @@ class KMeans private (
   }
 
   /**
+   * :: Experimental ::
    * Set the number of runs of the algorithm to execute in parallel. We initialize the algorithm
    * this many times with random starting conditions (configured by the initialization mode), then
    * return the best clustering found over any run. Default: 1.
@@ -113,10 +115,26 @@ class KMeans private (
    * Train a K-means model on the given set of points; `data` should be cached for high
    * performance, because this is an iterative algorithm.
    */
-  def run(data: RDD[Array[Double]]): KMeansModel = {
-    // TODO: check whether data is persistent; this needs RDD.storageLevel to be publicly readable
+  def run(data: RDD[Vector]): KMeansModel = {
+    // Compute squared norms and cache them.
+    val norms = data.map(v => breezeNorm(v.toBreeze, 2.0))
+    norms.persist()
+    val breezeData = data.map(_.toBreeze).zip(norms).map { case (v, norm) =>
+      new BreezeVectorWithNorm(v, norm)
+    }
+    val model = runBreeze(breezeData)
+    norms.unpersist()
+    model
+  }
+
+  /**
+   * Implementation of K-Means using breeze.
+   */
+  private def runBreeze(data: RDD[BreezeVectorWithNorm]): KMeansModel = {
 
     val sc = data.sparkContext
+
+    val initStartTime = System.nanoTime()
 
     val centers = if (initializationMode == KMeans.RANDOM) {
       initRandom(data)
@@ -124,17 +142,23 @@ class KMeans private (
       initKMeansParallel(data)
     }
 
+    val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
+    logInfo(s"Initialization with $initializationMode took " + "%.3f".format(initTimeInSeconds) +
+      " seconds.")
+
     val active = Array.fill(runs)(true)
     val costs = Array.fill(runs)(0.0)
 
     var activeRuns = new ArrayBuffer[Int] ++ (0 until runs)
     var iteration = 0
 
+    val iterationStartTime = System.nanoTime()
+
     // Execute iterations of Lloyd's algorithm until all runs have converged
     while (iteration < maxIterations && !activeRuns.isEmpty) {
-      type WeightedPoint = (DoubleMatrix, Long)
+      type WeightedPoint = (BV[Double], Long)
       def mergeContribs(p1: WeightedPoint, p2: WeightedPoint): WeightedPoint = {
-        (p1._1.addi(p2._1), p1._2 + p2._2)
+        (p1._1 += p2._1, p1._2 + p2._2)
       }
 
       val activeCenters = activeRuns.map(r => centers(r)).toArray
@@ -144,16 +168,18 @@ class KMeans private (
       val totalContribs = data.mapPartitions { points =>
         val runs = activeCenters.length
         val k = activeCenters(0).length
-        val dims = activeCenters(0)(0).length
+        val dims = activeCenters(0)(0).vector.length
 
-        val sums = Array.fill(runs, k)(new DoubleMatrix(dims))
+        val sums = Array.fill(runs, k)(BDV.zeros[Double](dims).asInstanceOf[BV[Double]])
         val counts = Array.fill(runs, k)(0L)
 
-        for (point <- points; (centers, runIndex) <- activeCenters.zipWithIndex) {
-          val (bestCenter, cost) = KMeans.findClosest(centers, point)
-          costAccums(runIndex) += cost
-          sums(runIndex)(bestCenter).addi(new DoubleMatrix(point))
-          counts(runIndex)(bestCenter) += 1
+        points.foreach { point =>
+          (0 until runs).foreach { i =>
+            val (bestCenter, cost) = KMeans.findClosest(activeCenters(i), point)
+            costAccums(i) += cost
+            sums(i)(bestCenter) += point.vector
+            counts(i)(bestCenter) += 1
+          }
         }
 
         val contribs = for (i <- 0 until runs; j <- 0 until k) yield {
@@ -165,15 +191,18 @@ class KMeans private (
       // Update the cluster centers and costs for each active run
       for ((run, i) <- activeRuns.zipWithIndex) {
         var changed = false
-        for (j <- 0 until k) {
+        var j = 0
+        while (j < k) {
           val (sum, count) = totalContribs((i, j))
           if (count != 0) {
-            val newCenter = sum.divi(count).data
-            if (MLUtils.squaredDistance(newCenter, centers(run)(j)) > epsilon * epsilon) {
+            sum /= count.toDouble
+            val newCenter = new BreezeVectorWithNorm(sum)
+            if (KMeans.fastSquaredDistance(newCenter, centers(run)(j)) > epsilon * epsilon) {
               changed = true
             }
             centers(run)(j) = newCenter
           }
+          j += 1
         }
         if (!changed) {
           active(run) = false
@@ -186,17 +215,32 @@ class KMeans private (
       iteration += 1
     }
 
-    val bestRun = costs.zipWithIndex.min._2
-    new KMeansModel(centers(bestRun))
+    val iterationTimeInSeconds = (System.nanoTime() - iterationStartTime) / 1e9
+    logInfo(s"Iterations took " + "%.3f".format(iterationTimeInSeconds) + " seconds.")
+
+    if (iteration == maxIterations) {
+      logInfo(s"KMeans reached the max number of iterations: $maxIterations.")
+    } else {
+      logInfo(s"KMeans converged in $iteration iterations.")
+    }
+
+    val (minCost, bestRun) = costs.zipWithIndex.min
+
+    logInfo(s"The cost for the best run is $minCost.")
+
+    new KMeansModel(centers(bestRun).map(c => Vectors.fromBreeze(c.vector)))
   }
 
   /**
    * Initialize `runs` sets of cluster centers at random.
    */
-  private def initRandom(data: RDD[Array[Double]]): Array[ClusterCenters] = {
+  private def initRandom(data: RDD[BreezeVectorWithNorm])
+  : Array[Array[BreezeVectorWithNorm]] = {
     // Sample all the cluster centers in one pass to avoid repeated scans
     val sample = data.takeSample(true, runs * k, new XORShiftRandom().nextInt()).toSeq
-    Array.tabulate(runs)(r => sample.slice(r * k, (r + 1) * k).toArray)
+    Array.tabulate(runs)(r => sample.slice(r * k, (r + 1) * k).map { v =>
+      new BreezeVectorWithNorm(v.vector.toDenseVector, v.norm)
+    }.toArray)
   }
 
   /**
@@ -208,38 +252,43 @@ class KMeans private (
    *
    * The original paper can be found at http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf.
    */
-  private def initKMeansParallel(data: RDD[Array[Double]]): Array[ClusterCenters] = {
+  private def initKMeansParallel(data: RDD[BreezeVectorWithNorm])
+  : Array[Array[BreezeVectorWithNorm]] = {
     // Initialize each run's center to a random point
     val seed = new XORShiftRandom().nextInt()
     val sample = data.takeSample(true, runs, seed).toSeq
-    val centers = Array.tabulate(runs)(r => ArrayBuffer(sample(r)))
+    val centers = Array.tabulate(runs)(r => ArrayBuffer(sample(r).toDense))
 
     // On each step, sample 2 * k points on average for each run with probability proportional
     // to their squared distance from that run's current centers
-    for (step <- 0 until initializationSteps) {
-      val centerArrays = centers.map(_.toArray)
+    var step = 0
+    while (step < initializationSteps) {
       val sumCosts = data.flatMap { point =>
-        for (r <- 0 until runs) yield (r, KMeans.pointCost(centerArrays(r), point))
+        (0 until runs).map { r =>
+          (r, KMeans.pointCost(centers(r), point))
+        }
       }.reduceByKey(_ + _).collectAsMap()
       val chosen = data.mapPartitionsWithIndex { (index, points) =>
         val rand = new XORShiftRandom(seed ^ (step << 16) ^ index)
-        for {
-          p <- points
-          r <- 0 until runs
-          if rand.nextDouble() < KMeans.pointCost(centerArrays(r), p) * 2 * k / sumCosts(r)
-        } yield (r, p)
+        points.flatMap { p =>
+          (0 until runs).filter { r =>
+            rand.nextDouble() < 2.0 * KMeans.pointCost(centers(r), p) * k / sumCosts(r)
+          }.map((_, p))
+        }
       }.collect()
-      for ((r, p) <- chosen) {
-        centers(r) += p
+      chosen.foreach { case (r, p) =>
+        centers(r) += p.toDense
       }
+      step += 1
     }
 
     // Finally, we might have a set of more than k candidate centers for each run; weigh each
     // candidate by the number of points in the dataset mapping to it and run a local k-means++
     // on the weighted centers to pick just k of them
-    val centerArrays = centers.map(_.toArray)
     val weightMap = data.flatMap { p =>
-      for (r <- 0 until runs) yield ((r, KMeans.findClosest(centerArrays(r), p)._1), 1.0)
+      (0 until runs).map { r =>
+        ((r, KMeans.findClosest(centers(r), p)._1), 1.0)
+      }
     }.reduceByKey(_ + _).collectAsMap()
     val finalCenters = (0 until runs).map { r =>
       val myCenters = centers(r).toArray
@@ -256,65 +305,99 @@ class KMeans private (
  * Top-level methods for calling K-means clustering.
  */
 object KMeans {
+
   // Initialization mode names
   val RANDOM = "random"
   val K_MEANS_PARALLEL = "k-means||"
 
+  /**
+   * Trains a k-means model using the given set of parameters.
+   *
+   * @param data training points stored as `RDD[Array[Double]]`
+   * @param k number of clusters
+   * @param maxIterations max number of iterations
+   * @param runs number of parallel runs, defaults to 1. The best model is returned.
+   * @param initializationMode initialization model, either "random" or "k-means||" (default).
+   */
   def train(
-      data: RDD[Array[Double]],
+      data: RDD[Vector],
       k: Int,
       maxIterations: Int,
       runs: Int,
-      initializationMode: String)
-    : KMeansModel =
-  {
+      initializationMode: String): KMeansModel = {
     new KMeans().setK(k)
-                .setMaxIterations(maxIterations)
-                .setRuns(runs)
-                .setInitializationMode(initializationMode)
-                .run(data)
+      .setMaxIterations(maxIterations)
+      .setRuns(runs)
+      .setInitializationMode(initializationMode)
+      .run(data)
   }
 
-  def train(data: RDD[Array[Double]], k: Int, maxIterations: Int, runs: Int): KMeansModel = {
-    train(data, k, maxIterations, runs, K_MEANS_PARALLEL)
-  }
-
-  def train(data: RDD[Array[Double]], k: Int, maxIterations: Int): KMeansModel = {
+  /**
+   * Trains a k-means model using specified parameters and the default values for unspecified.
+   */
+  def train(
+      data: RDD[Vector],
+      k: Int,
+      maxIterations: Int): KMeansModel = {
     train(data, k, maxIterations, 1, K_MEANS_PARALLEL)
   }
 
   /**
-   * Return the index of the closest point in `centers` to `point`, as well as its distance.
+   * Trains a k-means model using specified parameters and the default values for unspecified.
    */
-  private[mllib] def findClosest(centers: Array[Array[Double]], point: Array[Double])
-    : (Int, Double) =
-  {
+  def train(
+      data: RDD[Vector],
+      k: Int,
+      maxIterations: Int,
+      runs: Int): KMeansModel = {
+    train(data, k, maxIterations, runs, K_MEANS_PARALLEL)
+  }
+
+  /**
+   * Returns the index of the closest center to the given point, as well as the squared distance.
+   */
+  private[mllib] def findClosest(
+      centers: TraversableOnce[BreezeVectorWithNorm],
+      point: BreezeVectorWithNorm): (Int, Double) = {
     var bestDistance = Double.PositiveInfinity
     var bestIndex = 0
-    for (i <- 0 until centers.length) {
-      val distance = MLUtils.squaredDistance(point, centers(i))
-      if (distance < bestDistance) {
-        bestDistance = distance
-        bestIndex = i
+    var i = 0
+    centers.foreach { center =>
+      // Since `\|a - b\| \geq |\|a\| - \|b\||`, we can use this lower bound to avoid unnecessary
+      // distance computation.
+      var lowerBoundOfSqDist = center.norm - point.norm
+      lowerBoundOfSqDist = lowerBoundOfSqDist * lowerBoundOfSqDist
+      if (lowerBoundOfSqDist < bestDistance) {
+        val distance: Double = fastSquaredDistance(center, point)
+        if (distance < bestDistance) {
+          bestDistance = distance
+          bestIndex = i
+        }
       }
+      i += 1
     }
     (bestIndex, bestDistance)
   }
 
   /**
-   * Return the K-means cost of a given point against the given cluster centers.
+   * Returns the K-means cost of a given point against the given cluster centers.
    */
-  private[mllib] def pointCost(centers: Array[Array[Double]], point: Array[Double]): Double = {
-    var bestDistance = Double.PositiveInfinity
-    for (i <- 0 until centers.length) {
-      val distance = MLUtils.squaredDistance(point, centers(i))
-      if (distance < bestDistance) {
-        bestDistance = distance
-      }
-    }
-    bestDistance
+  private[mllib] def pointCost(
+      centers: TraversableOnce[BreezeVectorWithNorm],
+      point: BreezeVectorWithNorm): Double =
+    findClosest(centers, point)._2
+
+  /**
+   * Returns the squared Euclidean distance between two vectors computed by
+   * [[org.apache.spark.mllib.util.MLUtils#fastSquaredDistance]].
+   */
+  private[clustering] def fastSquaredDistance(
+      v1: BreezeVectorWithNorm,
+      v2: BreezeVectorWithNorm): Double = {
+    MLUtils.fastSquaredDistance(v1.vector, v1.norm, v2.vector, v2.norm)
   }
 
+  @Experimental
   def main(args: Array[String]) {
     if (args.length < 4) {
       println("Usage: KMeans <master> <input_file> <k> <max_iterations> [<runs>]")
@@ -323,14 +406,34 @@ object KMeans {
     val (master, inputFile, k, iters) = (args(0), args(1), args(2).toInt, args(3).toInt)
     val runs = if (args.length >= 5) args(4).toInt else 1
     val sc = new SparkContext(master, "KMeans")
-    val data = sc.textFile(inputFile).map(line => line.split(' ').map(_.toDouble)).cache()
+    val data = sc.textFile(inputFile)
+      .map(line => Vectors.dense(line.split(' ').map(_.toDouble)))
+      .cache()
     val model = KMeans.train(data, k, iters, runs)
     val cost = model.computeCost(data)
     println("Cluster centers:")
     for (c <- model.clusterCenters) {
-      println("  " + c.mkString(" "))
+      println("  " + c)
     }
     println("Cost: " + cost)
     System.exit(0)
   }
+}
+
+/**
+ * A breeze vector with its norm for fast distance computation.
+ *
+ * @see [[org.apache.spark.mllib.clustering.KMeans#fastSquaredDistance]]
+ */
+private[clustering]
+class BreezeVectorWithNorm(val vector: BV[Double], val norm: Double) extends Serializable {
+
+  def this(vector: BV[Double]) = this(vector, breezeNorm(vector, 2.0))
+
+  def this(array: Array[Double]) = this(new BDV[Double](array))
+
+  def this(v: Vector) = this(v.toBreeze)
+
+  /** Converts the vector to a dense vector. */
+  def toDense = new BreezeVectorWithNorm(vector.toDenseVector, norm)
 }

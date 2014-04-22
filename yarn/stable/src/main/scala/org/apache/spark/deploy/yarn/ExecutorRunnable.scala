@@ -78,7 +78,8 @@ class ExecutorRunnable(
     credentials.writeTokenStorageToStream(dob)
     ctx.setTokens(ByteBuffer.wrap(dob.getData()))
 
-    val commands = prepareCommand(masterAddress, slaveId, hostname, executorMemory, executorCores)
+    val commands = prepareCommand(masterAddress, slaveId, hostname, executorMemory, executorCores,
+      localResources)
 
     logInfo("Setting up executor with commands: " + commands)
     ctx.setCommands(commands)

@@ -35,7 +35,7 @@ RELEASE_URL = "http://people.apache.org/~pwendell/spark-1.0.0-rc1/"
 RELEASE_KEY = "9E4FE3AF"
 RELEASE_REPOSITORY = "https://repository.apache.org/content/repositories/orgapachespark-1006/"
 RELEASE_VERSION = "1.0.0"
-SCALA_VERSION = "2.10.3"
+SCALA_VERSION = "2.10.4"
 SCALA_BINARY_VERSION = "2.10"
 ##
 
@@ -114,6 +114,7 @@ os.chdir("blank_sbt_build")
 os.environ["SPARK_VERSION"] = RELEASE_VERSION
 os.environ["SCALA_VERSION"] = SCALA_VERSION
 os.environ["SPARK_RELEASE_REPOSITORY"] = RELEASE_REPOSITORY
+os.environ["SPARK_AUDIT_MASTER"] = "local"
 for module in modules:
   os.environ["SPARK_MODULE"] = module
   ret = run_cmd("sbt clean update", exit_on_failure=False)

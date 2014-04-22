@@ -21,6 +21,7 @@ import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.apache.spark._
@@ -32,7 +33,7 @@ import org.apache.spark._
  * @param parentsIndices list of indices in the parent that have been coalesced into this partition
  * @param preferredLocation the preferred location for this partition
  */
-case class CoalescedRDDPartition(
+private[spark] case class CoalescedRDDPartition(
                                   index: Int,
                                   @transient rdd: RDD[_],
                                   parentsIndices: Array[Int],
@@ -70,7 +71,7 @@ case class CoalescedRDDPartition(
  * @param maxPartitions number of desired partitions in the coalesced RDD
  * @param balanceSlack used to trade-off balance and locality. 1.0 is all locality, 0 is all balance
  */
-class CoalescedRDD[T: ClassTag](
+private[spark] class CoalescedRDD[T: ClassTag](
                                       @transient var prev: RDD[T],
                                       maxPartitions: Int,
                                       balanceSlack: Double = 0.10)

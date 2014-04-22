@@ -28,14 +28,30 @@ FAILED=0
 
 rm -f unit-tests.log
 
+# Remove the metastore and warehouse directory created by the HiveContext tests in SparkSQL
+rm -rf metastore warehouse
+
 function run_test() {
-    SPARK_TESTING=0 $FWDIR/bin/pyspark $1 2>&1 | tee -a unit-tests.log
+    SPARK_TESTING=0 $FWDIR/bin/pyspark $1 2>&1 | tee -a > unit-tests.log
     FAILED=$((PIPESTATUS[0]||$FAILED))
+
+    # Fail and exit on the first test failure.
+    if [[ $FAILED != 0 ]]; then
+        cat unit-tests.log | grep -v "^[0-9][0-9]*" # filter all lines starting with a number.
+        echo -en "\033[31m"  # Red
+        echo "Had test failures; see logs."
+        echo -en "\033[0m"  # No color
+        exit -1
+    fi
+
 }
 
 run_test "pyspark/rdd.py"
 run_test "pyspark/context.py"
 run_test "pyspark/conf.py"
+if [ -n "$_RUN_SQL_TESTS" ]; then
+  run_test "pyspark/sql.py"
+fi
 run_test "-m doctest pyspark/broadcast.py"
 run_test "-m doctest pyspark/accumulators.py"
 run_test "-m doctest pyspark/serializers.py"
@@ -43,15 +59,12 @@ run_test "pyspark/tests.py"
 run_test "pyspark/mllib/_common.py"
 run_test "pyspark/mllib/classification.py"
 run_test "pyspark/mllib/clustering.py"
+run_test "pyspark/mllib/linalg.py"
 run_test "pyspark/mllib/recommendation.py"
 run_test "pyspark/mllib/regression.py"
+run_test "pyspark/mllib/tests.py"
 
-if [[ $FAILED != 0 ]]; then
-    echo -en "\033[31m"  # Red
-    echo "Had test failures; see logs."
-    echo -en "\033[0m"  # No color
-    exit -1
-else
+if [[ $FAILED == 0 ]]; then
     echo -en "\033[32m"  # Green
     echo "Tests passed."
     echo -en "\033[0m"  # No color

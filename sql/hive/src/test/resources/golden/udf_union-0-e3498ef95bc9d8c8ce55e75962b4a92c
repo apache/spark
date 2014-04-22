@@ -1,0 +1,1 @@
+create_union(tag, obj1, obj2, obj3, ...) - Creates a union with the object for given tag
