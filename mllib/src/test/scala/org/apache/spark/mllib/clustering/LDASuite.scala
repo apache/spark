@@ -27,7 +27,6 @@ import org.scalatest.FunSuite
 import org.apache.spark.mllib.expectation.GibbsSampling
 import org.apache.spark.mllib.expectation.GibbsSampling._
 import org.apache.spark.SparkContext
-import Document
 
 class LDASuite extends FunSuite with BeforeAndAfterAll {
   import LDASuite._
@@ -85,7 +84,7 @@ object LDASuite {
   val incrementalLearning = 10
 
   /**
-   * Generate a random LDA org.apache.spark.mllib.model, i.e. the topic-term matrix.
+   * Generate a random LDA model, i.e. the topic-term matrix.
    */
   def generateRandomLDAModel(numTopics: Int, numTerms: Int): Array[BDV[Double]] = {
     val model = new Array[BDV[Double]](numTopics)
@@ -110,7 +109,7 @@ object LDASuite {
   }
 
   /**
-   * Sample one document given the topic-term matrix
+   * Sample one document given the topic-term matrix.
    */
   def ldaSampler(
       model: Array[BDV[Double]],
@@ -128,7 +127,7 @@ object LDASuite {
   }
 
   /**
-   * Sample corpus (many documents) from a given topic-term matrix
+   * Sample corpus (many documents) from a given topic-term matrix.
    */
   def sampleCorpus(
       model: Array[BDV[Double]],

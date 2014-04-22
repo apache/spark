@@ -20,6 +20,7 @@ package org.apache.spark.mllib.clustering
 import java.util.Random
 
 import breeze.linalg.{DenseVector => BDV}
+
 import org.apache.spark.{AccumulableParam, Logging, SparkContext}
 import org.apache.spark.mllib.expectation.GibbsSampling
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
