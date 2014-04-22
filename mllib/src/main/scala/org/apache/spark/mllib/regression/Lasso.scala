@@ -101,7 +101,6 @@ class LassoWithADMM private (
     var penalty: Double)
   extends GeneralizedLinearAlgorithm[LassoModel] with Serializable {
 
-
   @transient val optimizer = new ADMMLasso().setNumPartitions(numPartitions)
     .setNumIterations(numIterations)
     .setL1RegParam(l1RegParam)
@@ -247,13 +246,13 @@ object LassoWithADMM {
    *        the number of features in the data.
    */
   def train(
-             input: RDD[LabeledPoint],
-             numPartitions: Int,
-             numIterations: Int,
-             l1RegParam: Double,
-             l2RegParam: Double,
-             penalty: Double,
-             initialWeights: Vector): LassoModel = {
+      input: RDD[LabeledPoint],
+      numPartitions: Int,
+      numIterations: Int,
+      l1RegParam: Double,
+      l2RegParam: Double,
+      penalty: Double,
+      initialWeights: Vector): LassoModel = {
     new LassoWithADMM(numPartitions, numIterations, l1RegParam, l2RegParam, penalty)
       .run(input, initialWeights)
   }
@@ -271,17 +270,17 @@ object LassoWithADMM {
    * @param penalty ADMM penalty of the constraint
    */
   def train(
-             input: RDD[LabeledPoint],
-             numPartitions: Int,
-             numIterations: Int,
-             l1RegParam: Double,
-             l2RegParam: Double,
-             penalty: Double): LassoModel = {
+      input: RDD[LabeledPoint],
+      numPartitions: Int,
+      numIterations: Int,
+      l1RegParam: Double,
+      l2RegParam: Double,
+      penalty: Double): LassoModel = {
     new LassoWithADMM(numPartitions, numIterations, l1RegParam, l2RegParam, penalty).run(input)
   }
 
   def main(args: Array[String]) {
-    if (args.length != 5) {
+    if (args.length != 7) {
       println("Usage: Lasso <master> <input_dir> <numPartitions> <niters> <l1-regularizaztion> " +
         "<l2-regularizaztion> <penalty>")
       System.exit(1)

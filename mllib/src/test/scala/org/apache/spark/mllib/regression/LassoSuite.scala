@@ -47,8 +47,6 @@ class LassoSuite extends FunSuite with LocalSparkContext {
 
     val testRDD = sc.parallelize(testData, 2).cache()
 
-
-
     val ls = new LassoWithSGD()
     ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(40)
 

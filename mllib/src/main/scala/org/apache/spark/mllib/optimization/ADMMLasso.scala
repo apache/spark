@@ -165,8 +165,8 @@ object ADMMLasso extends Logging {
     while (iter <= numIterations && !minorChange) {
       val zBroadcast = z
       def localUpdate(
-           it: Iterator[((BDV[Double], BDM[Double], BDM[Double]), (BDV[Double], BDV[Double]))]):
-           Iterator[((BDV[Double], BDM[Double], BDM[Double]), (BDV[Double], BDV[Double]))] = {
+           it: Iterator[((BDV[Double], BDM[Double], BDM[Double]), (BDV[Double], BDV[Double]))]
+           ):Iterator[((BDV[Double], BDM[Double], BDM[Double]), (BDV[Double], BDV[Double]))] = {
         if (it.hasNext) {
           val localData = it.next()
           val (x, u) = localData._2
@@ -178,7 +178,7 @@ object ADMMLasso extends Logging {
 
           val updatedX = if (row >= col) {
             chol.t \ (chol \ q)
-          }else {
+          } else {
             (q :/ penalty) - ((design.t *(chol.t\(chol\(design * q)))) :/ (penalty * penalty))
           }
           Iterator((localData._1, (updatedX, updatedU)))
