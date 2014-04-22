@@ -98,16 +98,18 @@ case class And(left: Expression, right: Expression) extends BinaryPredicate {
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)
-    if(l == null) {
-       null
-    } else if(l == false) {
-      false
+    if(l == false) {
+       false
     } else {
       val r = right.eval(input)
-      if(r == null) {
-        null
+      if(r == false) {
+        false
       } else {
-        r
+        if(l != null && r != null) {
+          true
+        } else {
+          null
+        }
       }
     }
   }
@@ -118,16 +120,18 @@ case class Or(left: Expression, right: Expression) extends BinaryPredicate {
 
   override def eval(input: Row): Any = {
     val l = left.eval(input)
-    if(l == null) {
-      null
-    } else if(l == true) {
+    if(l == true) {
       true
     } else {
       val r = right.eval(input)
-      if(r == null) {
-        null
+      if(r == true) {
+        true
       } else {
-        r
+        if(l != null && r != null) {
+          false
+        } else {
+          null
+        }
       }
     }
   }
