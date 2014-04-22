@@ -33,7 +33,7 @@ a given dataset, the algorithm returns the best clustering result).
 
 Available algorithms for clustering: 
 
-* [KMeans](api/mllib/index.html#org.apache.spark.mllib.clustering.KMeans)
+* [KMeans](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans)
 
 
 

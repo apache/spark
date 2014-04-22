@@ -42,7 +42,7 @@ for an item.
 
 Available algorithms for collaborative filtering: 
 
-* [ALS](api/mllib/index.html#org.apache.spark.mllib.recommendation.ALS)
+* [ALS](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS)
 
 
 # Usage in Scala
