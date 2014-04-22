@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.recommendation
 
-import scala.collection.mutable.{ArrayBuffer, BitSet}
+import scala.collection.mutable.{ArrayBuffer, BitSet, HashSet}
 import scala.math.{abs, sqrt}
 import scala.util.Random
 import scala.util.Sorting
@@ -706,6 +706,56 @@ object ALS {
   def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int)
     : MatrixFactorizationModel = {
     trainImplicit(ratings, rank, iterations, 0.01, -1, 1.0)
+  }
+
+  /**
+   * Given an RDD of ratings, a rank, and two partitioners, compute rough estimates of the
+   * computation time and communication cost of one iteration of ALS.
+   *
+   * @param ratings             RDD of Rating objects
+   * @param rank                number of features to use
+   * @param userPartitioner     partitioner for partitioning users
+   * @param productPartitioner  partitioner for partitioning products
+   */
+  def evaluatePartitioner(ratings: RDD[Rating], rank: Int, userPartitioner: Partitioner,
+      productPartitioner: Partitioner): (Double, Double) = {
+    val utalk = ratings.mapPartitions(x => {
+        val ht = new HashSet[(Int, Int)]()
+        while (x.hasNext) {
+          val rat = x.next()
+          val u = userPartitioner.getPartition(rat.user)
+          val p = rat.product
+          ht += ((u, p))
+        }
+        ht.iterator
+      }
+    ).groupByKey().map(x => (x._1, x._2.toList.distinct.length)).collect
+
+    val ptalk = ratings.mapPartitions(x => {
+        val ht = new HashSet[(Int, Int)]()
+        while (x.hasNext) {
+          val rat = x.next()
+          val u = rat.user
+          val p = productPartitioner.getPartition(rat.product)
+          ht += ((p, u))
+        }
+        ht.iterator
+      }
+    ).groupByKey().map(x => (x._1, x._2.toList.distinct.length)).collect
+
+    val numUsers = ratings.map(x => x.user).distinct.count
+    val numProducts = ratings.map(x => x.product).distinct.count
+
+    // We send out each user vector to each product partition that needs it and vice versa.
+    val ucomm = utalk.map(x => x._2).reduce(_ + _)
+    val pcomm = ptalk.map(x => x._2).reduce(_ + _)
+    val communication = 8.0 * rank * (ucomm + pcomm)
+
+    // We do two rank*rank outer products per rating and one Cholesky factorisation per user and
+    // per product.
+    val computation = (2.0 * rank * rank * ratings.count
+        + rank * rank * rank * (numUsers + numProducts) / 6.0)
+    (computation, communication)
   }
 
   private class ALSRegistrator extends KryoRegistrator {
