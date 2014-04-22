@@ -105,7 +105,7 @@ data = sc.parallelize([
 ])
 
 # Train a naive Bayes model.
-model = NaiveBayes.train(training, 1.0)
+model = NaiveBayes.train(data, 1.0)
 
 # Make prediction.
 prediction = model.predict([0.0, 0.0])
