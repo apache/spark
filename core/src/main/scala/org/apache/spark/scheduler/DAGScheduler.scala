@@ -1055,6 +1055,9 @@ class DAGScheduler(
     val error = new SparkException(failureReason)
     job.listener.jobFailed(error)
 
+    val shouldInterruptThread =
+      job.properties.getProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false").toBoolean
+
     // Cancel all independent, running stages.
     val stages = jobIdToStageIds(job.jobId)
     if (stages.isEmpty) {
@@ -1073,7 +1076,7 @@ class DAGScheduler(
           // This is the only job that uses this stage, so fail the stage if it is running.
           val stage = stageIdToStage(stageId)
           if (runningStages.contains(stage)) {
-            taskScheduler.cancelTasks(stageId)
+            taskScheduler.cancelTasks(stageId, shouldInterruptThread)
             val stageInfo = stageToInfos(stage)
             stageInfo.stageFailed(failureReason)
             listenerBus.post(SparkListenerStageCompleted(stageToInfos(stage)))

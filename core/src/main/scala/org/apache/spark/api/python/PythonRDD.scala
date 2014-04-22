@@ -162,7 +162,6 @@ private[spark] class PythonRDD[T: ClassTag](
                 val update = new Array[Byte](updateLen)
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
-
               }
               Array.empty[Byte]
           }
