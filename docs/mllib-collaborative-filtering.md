@@ -85,7 +85,8 @@ If the rating matrix is derived from other source of information (i.e., it is in
 other signals), you can use the trainImplicit method to get better results.
 
 {% highlight scala %}
-val model = ALS.trainImplicit(ratings, rank, numIterations, 0.01)
+val alpha = 0.01
+val model = ALS.trainImplicit(ratings, rank, numIterations, alpha)
 {% endhighlight %}
 </div>
 
@@ -127,7 +128,7 @@ signals), you can use the trainImplicit method to get better results.
 
 {% highlight python %}
 # Build the recommendation model using Alternating Least Squares based on implicit ratings
-model = ALS.trainImplicit(ratings, rank, numIterations)
+model = ALS.trainImplicit(ratings, rank, numIterations, alpha = 0.01)
 {% endhighlight %}
 </div>
 
