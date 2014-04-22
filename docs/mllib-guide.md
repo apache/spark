@@ -56,10 +56,12 @@ class ([Java/Scala](api/mllib/index.html#org.apache.spark.mllib.regression.Label
 [Python](api/pyspark/pyspark.mllib.regression.LabeledPoint-class.html)) for labeled data.
 
 # Dependencies
-MLlib uses the [jblas](https://github.com/mikiobraun/jblas) linear algebra library, which itself
-depends on native Fortran routines. You may need to install the
-[gfortran runtime library](https://github.com/mikiobraun/jblas/wiki/Missing-Libraries)
-if it is not already present on your nodes. MLlib will throw a linking error if it cannot
-detect these libraries automatically.
+MLlib uses the [Breeze](https://github.com/scalanlp/breeze) linear algebra library, which depends on
+[netlib-java](https://github.com/fommil/netlib-java) as a wrapper for low-level BLAS, LAPACK and ARPACK
+that performs as fast as the C / Fortran interfaces. Although netlib-java provides JVM implementation of
+linear algebra, [F2J](http://icl.cs.utk.edu/f2j/) to ensure full portability, the performance is not optimized.
+Users can install [commercial or open source BLAS/LAPACK implementation](http://en.wikipedia.org/wiki/Basic_Linear_Algebra_Subprograms#Implementations)
+or enable the netlib-java self-contained native builds using the reference Fortran implementation from
+[netlib.org](http://www.netlib.org/) by installing libgfortran3 in Linux. See the netlib-java documentation for detail.
 
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
