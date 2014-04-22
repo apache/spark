@@ -145,6 +145,79 @@ conf = (SparkConf()
 sc = SparkContext(conf = conf)
 {% endhighlight %}
 
+# SequenceFile and Hadoop InputFormats
+
+In addition to reading text files, PySpark supports reading Hadoop SequenceFile and arbitrary InputFormats.
+
+## Writable Support
+
+PySpark SequenceFile support loads an RDD within Java, and pickles the resulting Java objects using
+[Pyrolite](https://github.com/irmen/Pyrolite/). The following Writables are automatically converted:
+
+
+<table class="table">
+<tr><th>Writable Type</th><th>Scala Type</th><th>Python Type</th></tr>
+<tr><td>Text</td><td>String</td><td>unicode str</td></tr>
+<tr><td>IntWritable</td><td>Int</td><td>int</td></tr>
+<tr><td>FloatWritable</td><td>Float</td><td>float</td></tr>
+<tr><td>DoubleWritable</td><td>Double</td><td>float</td></tr>
+<tr><td>BooleanWritable</td><td>Boolean</td><td>bool</td></tr>
+<tr><td>BytesWritable</td><td>Array[Byte]</td><td>bytearray</td></tr>
+<tr><td>NullWritable</td><td>null</td><td>None</td></tr>
+<tr><td>ArrayWritable</td><td>Array[T]</td><td>list of primitives, or tuple of objects</td></tr>
+<tr><td>MapWritable</td><td>java.util.Map[K, V]</td><td>dict</td></tr>
+<tr><td>Custom Class</td><td>Custom Class conforming to Java Bean conventions</td>
+    <td>dict of public properties (via JavaBean getters and setters) + __class__ for the class type</td></tr>
+</table>
+
+## Loading SequenceFiles
+
+Similarly to text files, SequenceFiles can be loaded by specifying the path. The key and value
+classes can be specified, but for standard Writables it should work without requiring this.
+
+{% highlight python %}
+>>> rdd = sc.sequenceFile("path/to/sequencefile/of/doubles")
+>>> rdd.collect()         # this example has DoubleWritable keys and Text values
+[(1.0, u'aa'),
+ (2.0, u'bb'),
+ (2.0, u'aa'),
+ (3.0, u'cc'),
+ (2.0, u'bb'),
+ (1.0, u'aa')]
+>>> help(sc.sequenceFile) # Show sequencefile documentation
+{% endhighlight %}
+
+## Loading Arbitrary Hadoop InputFormats
+
+PySpark can also read any Hadoop InputFormat, for both 'new' and 'old' Hadoop APIs. If required,
+a Hadoop configuration can be passed in as a Python dict. Here is an example using the
+Elasticsearch ESInputFormat:
+
+{% highlight python %}
+$ SPARK_CLASSPATH=/path/to/elasticsearch-hadoop.jar ./bin/pyspark
+>>> conf = {"es.resource" : "index/type"}   # assume Elasticsearch is running on localhost defaults
+>>> rdd = sc.newAPIHadoopRDD("org.elasticsearch.hadoop.mr.EsInputFormat",\
+    "org.apache.hadoop.io.NullWritable", "org.elasticsearch.hadoop.mr.LinkedMapWritable", conf=conf)
+>>> rdd.first()         # the result is a MapWritable that is converted to a Python dict
+(u'Elasticsearch ID',
+ {u'field1': True,
+  u'field2': u'Some Text',
+  u'field3': 12345})
+>>> help(sc.newAPIHadoopRDD) # Show help for new API Hadoop RDD
+{% endhighlight %}
+
+Note that, if the InputFormat simply depends on a Hadoop configuration and/or input path, and
+the key and value classes can easily be converted according to the above table,
+then this approach should work well for such cases.
+
+If you have custom serialized binary data (like pulling data from Cassandra / HBase) or custom
+classes that don't conform to the JavaBean requirements, then you will probably have to first
+transform that data on the Scala/Java side to something which can be handled by Pyrolite's pickler.
+
+Future support for 'wrapper' functions for keys/values that allows this to be written in Java/Scala,
+and called from Python, as well as support for writing data out as SequenceFile format
+and other OutputFormats, is forthcoming.
+
 # API Docs
 
 [API documentation](api/pyspark/index.html) for PySpark is available as Epydoc.
