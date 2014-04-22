@@ -17,25 +17,22 @@
 
 package org.apache.spark.sql.parquet
 
-import java.io.File
-
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.mapreduce.Job
 
 import parquet.hadoop.ParquetFileWriter
-import parquet.schema.MessageTypeParser
 import parquet.hadoop.util.ContextUtil
+import parquet.schema.MessageTypeParser
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.getTempFilePath
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Row}
+import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.TestData
+import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.util.Utils
-import org.apache.spark.sql.catalyst.types.{StringType, IntegerType, DataType}
-import org.apache.spark.sql.{parquet, SchemaRDD}
 
 // Implicits
 import org.apache.spark.sql.test.TestSQLContext._
@@ -64,12 +61,16 @@ class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
 
   override def beforeAll() {
     ParquetTestData.writeFile()
+    ParquetTestData.writeFilterFile()
     testRDD = parquetFile(ParquetTestData.testDir.toString)
     testRDD.registerAsTable("testsource")
+    parquetFile(ParquetTestData.testFilterDir.toString)
+      .registerAsTable("testfiltersource")
   }
 
   override def afterAll() {
     Utils.deleteRecursively(ParquetTestData.testDir)
+    Utils.deleteRecursively(ParquetTestData.testFilterDir)
     // here we should also unregister the table??
   }
 
@@ -255,6 +256,20 @@ class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
 >>>>>>> Extending ParquetFilters
     assert(result != null)
   }*/
+  }
+
+  test("test filter by predicate pushdown") {
+    for(myval <- Seq("myint", "mylong", "mydouble", "myfloat")) {
+      println(s"testing field $myval")
+      val result1 = sql(s"SELECT * FROM testfiltersource WHERE $myval < 150 AND $myval >= 100").collect()
+      assert(result1.size === 50)
+      val result2 = sql(s"SELECT * FROM testfiltersource WHERE $myval > 150 AND $myval <= 200").collect()
+      assert(result2.size === 50)
+    }
+    val booleanResult = sql(s"SELECT * FROM testfiltersource WHERE myboolean = true AND myint < 40").collect()
+    assert(booleanResult.size === 10)
+    val stringResult = sql("SELECT * FROM testfiltersource WHERE mystring = \"100\"").collect()
+    assert(stringResult.size === 1)
   }
 }
 

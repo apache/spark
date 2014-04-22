@@ -32,7 +32,7 @@ import parquet.hadoop.util.ContextUtil
 import parquet.io.InvalidRecordException
 import parquet.schema.MessageType
 
-import org.apache.spark.{SerializableWritable, SparkContext, TaskContext}
+import org.apache.spark.{Logging, SerializableWritable, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, Attribute, Expression, Row}
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan, UnaryNode}
@@ -78,8 +78,13 @@ case class ParquetTableScan(
       ParquetFilters.serializeFilterExpressions(columnPruningPred.get, conf)
     }
 
-    sc.newAPIHadoopRDD(conf, classOf[org.apache.spark.sql.parquet.FilteringParquetRowInputFormat], classOf[Void], classOf[Row])
-    .map(_._2)
+    sc.newAPIHadoopRDD(
+      conf,
+      classOf[org.apache.spark.sql.parquet.FilteringParquetRowInputFormat],
+      classOf[Void],
+      classOf[Row])
+      .map(_._2)
+      .filter(_ != null) // Parquet's record filters may produce null values
   }
 
   override def otherCopyArgs = sc :: Nil
@@ -270,12 +275,17 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
 
 // We extend ParquetInputFormat in order to have more control over which
 // RecordFilter we want to use
-private[parquet] class FilteringParquetRowInputFormat extends parquet.hadoop.ParquetInputFormat[Row] {
-  override def createRecordReader(inputSplit: InputSplit, taskAttemptContext: TaskAttemptContext): RecordReader[Void, Row] = {
+private[parquet] class FilteringParquetRowInputFormat
+  extends parquet.hadoop.ParquetInputFormat[Row] with Logging {
+  override def createRecordReader(
+      inputSplit: InputSplit,
+      taskAttemptContext: TaskAttemptContext): RecordReader[Void, Row] = {
     val readSupport: ReadSupport[Row] = new RowReadSupport()
 
-    val filterExpressions = ParquetFilters.deserializeFilterExpressions(ContextUtil.getConfiguration(taskAttemptContext))
+    val filterExpressions =
+      ParquetFilters.deserializeFilterExpressions(ContextUtil.getConfiguration(taskAttemptContext))
     if (filterExpressions.isDefined) {
+      logInfo(s"Pushing down predicates for RecordFilter: ${filterExpressions.mkString(", ")}")
       new ParquetRecordReader[Row](readSupport, ParquetFilters.createFilter(filterExpressions.get))
     } else {
       new ParquetRecordReader[Row](readSupport)
