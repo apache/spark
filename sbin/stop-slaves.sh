@@ -30,9 +30,9 @@ if [ -e "$sbin"/../tachyon/bin/tachyon ]; then
 fi
 
 if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
-  "$sbin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker 1
+  "$sbin"/spark-daemons.sh --config $SPARK_CONF_DIR stop org.apache.spark.deploy.worker.Worker 1
 else
   for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
-    "$sbin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
+    "$sbin"/spark-daemons.sh --config $SPARK_CONF_DIR stop org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
   done
 fi

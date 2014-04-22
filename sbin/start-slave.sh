@@ -23,4 +23,27 @@
 sbin=`dirname "$0"`
 sbin=`cd "$sbin"; pwd`
 
-"$sbin"/spark-daemon.sh start org.apache.spark.deploy.worker.Worker "$@"
+# Check if --config is passed as an argument. It is an optional parameter.
+# Exit if the argument is not a directory.
+
+if [ "$1" == "--config" ]
+then
+  shift
+  conf_dir=$1
+  if [ ! -d "$conf_dir" ]
+  then
+    echo "ERROR : $conf_dir is not a directory"
+    echo $usage
+    exit 1
+  else
+    export SPARK_CONF_DIR=$conf_dir
+  fi
+  shift
+fi
+
+if [ "${SPARK_CONF_DIR}X" != "X" ]
+then
+    "$sbin"/spark-daemon.sh --config $SPARK_CONF_DIR start org.apache.spark.deploy.worker.Worker "$@"
+else
+    "$sbin"/spark-daemon.sh start org.apache.spark.deploy.worker.Worker "$@"
+fi
