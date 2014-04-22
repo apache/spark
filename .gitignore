@@ -18,7 +18,6 @@ conf/java-opts
 conf/spark-env.sh
 conf/streaming-env.sh
 conf/log4j.properties
-conf/slaves
 docs/_site
 docs/api
 target/
@@ -49,4 +48,3 @@ unit-tests.log
 /lib/
 rat-results.txt
 scalastyle.txt
-deploy.sh
