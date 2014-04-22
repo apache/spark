@@ -7,19 +7,39 @@ Apache Spark is a fast and general-purpose cluster computing system.
 It provides high-level APIs in [Scala](scala-programming-guide.html), [Java](java-programming-guide.html), and [Python](python-programming-guide.html) that make parallel jobs easy to write, and an optimized engine that supports general computation graphs.
 It also supports a rich set of higher-level tools including [Shark](http://shark.cs.berkeley.edu) (Hive on Spark), [MLlib](mllib-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
 
-# Downloading
+# Download
 
 Get Spark by visiting the [downloads page](http://spark.apache.org/downloads.html) of the Apache Spark site. This documentation is for Spark version {{site.SPARK_VERSION}}.
 
-Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). All you need to run it is to have `java` to installed on your system `PATH`, or the `JAVA_HOME` environment variable pointing to a Java installation.
+Spark runs on both Windows and UNIX-like systems (e.g., Linux, Mac OS). All you need to run it is to have Java installed on your system `PATH` or point the `JAVA_HOME` environment variable to a Java installation.
 
-# Building
+For its Scala API, Spark {{site.SPARK_VERSION}} depends on Scala {{site.SCALA_BINARY_VERSION}}. If you write applications in
+Scala, you will need to use a compatible Scala version (e.g., {{site.SCALA_BINARY_VERSION}}.X) -- newer major versions may no
+t work. You can get the appropriate version of Scala from [scala-lang.org](http://www.scala-lang.org/download/).
 
-Spark uses [Simple Build Tool](http://www.scala-sbt.org), which is bundled with it. To compile the code, go into the top-level Spark directory and run
+# Build
+
+Spark uses the Hadoop-client library to talk to HDFS and other Hadoop-supported
+storage systems. Because the HDFS protocol has changed in different versions of
+Hadoop, you must build Spark against the same version that your cluster uses.
+
+Spark is bundled with the [Simple Build Tool](http://www.scala-sbt.org) (SBT). 
+
+To compile the code so Spark links to Hadoop 1.0.4 (default), from the top-level Spark directory run:
 
     sbt/sbt assembly
 
-For its Scala API, Spark {{site.SPARK_VERSION}} depends on Scala {{site.SCALA_BINARY_VERSION}}. If you write applications in Scala, you will need to use a compatible Scala version (e.g. {{site.SCALA_BINARY_VERSION}}.X) -- newer major versions may not work. You can get the right version of Scala from [scala-lang.org](http://www.scala-lang.org/download/).
+By default, Spark links to Hadoop 1.0.4. You can change this by setting the
+`SPARK_HADOOP_VERSION` variable when compiling:
+
+    SPARK_HADOOP_VERSION=2.2.0 sbt/sbt assembly
+
+    In addition, if you wish to run Spark on [YARN](running-on-yarn.html), set
+    `SPARK_YARN` to `true`:
+
+        SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
+
+	Note that on Windows, you need to set the environment variables on separate lines, e.g., `set SPARK_HADOOP_VERSION=1.2.1`.
 
 # Running the Examples and Shell
 
@@ -49,23 +69,6 @@ options for deployment:
 * [Standalone Deploy Mode](spark-standalone.html): simplest way to deploy Spark on a private cluster
 * [Apache Mesos](running-on-mesos.html)
 * [Hadoop YARN](running-on-yarn.html)
-
-# A Note About Hadoop Versions
-
-Spark uses the Hadoop-client library to talk to HDFS and other Hadoop-supported
-storage systems. Because the HDFS protocol has changed in different versions of
-Hadoop, you must build Spark against the same version that your cluster uses.
-By default, Spark links to Hadoop 1.0.4. You can change this by setting the
-`SPARK_HADOOP_VERSION` variable when compiling:
-
-    SPARK_HADOOP_VERSION=2.2.0 sbt/sbt assembly
-
-In addition, if you wish to run Spark on [YARN](running-on-yarn.html), set
-`SPARK_YARN` to `true`:
-
-    SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
-
-Note that on Windows, you need to set the environment variables on separate lines, e.g., `set SPARK_HADOOP_VERSION=1.2.1`.
 
 # Where to Go from Here
 
