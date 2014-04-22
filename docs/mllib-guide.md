@@ -12,8 +12,8 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * summary statistics
 * Classification and regression
   * [linear support vector machine (SVM)](mllib-linear-methods.html#linear-support-vector-machine-svm)
-  * [logistic regression](http://localhost:4000/mllib-linear-methods.html#logistic-regression)
-  * [linear least squares, Lasso, and ridge regression](http://localhost:4000/mllib-linear-methods.html#linear-least-squares-lasso-and-ridge-regression)
+  * [logistic regression](mllib-linear-methods.html#logistic-regression)
+  * [linear least squares, Lasso, and ridge regression](mllib-linear-methods.html#linear-least-squares-lasso-and-ridge-regression)
   * [decision tree](mllib-decision-tree.html)
   * [naive Bayes](mllib-naive-bayes.html)
 * [Collaborative filtering](mllib-collaborative-filtering.html)
