@@ -147,7 +147,7 @@ All transformations in Spark are <i>lazy</i>, in that they do not compute their 
 
 By default, each transformed RDD is recomputed each time you run an action on it. However, you may also *persist* an RDD in memory using the `persist` (or `cache`) method, in which case Spark will keep the elements around on the cluster for much faster access the next time you query it. There is also support for persisting datasets on disk, or replicated across the cluster. The next section in this document describes these options.
 
-The following tables list the transformations and actions currently supported (see also the [RDD API doc](api/core/index.html#org.apache.spark.rdd.RDD) for details):
+The following tables list the transformations and actions currently supported (see also the [RDD API doc](api/scala/index.html#org.apache.spark.rdd.RDD) for details):
 
 ### Transformations
 
@@ -216,7 +216,7 @@ The following tables list the transformations and actions currently supported (s
 </tr>
 </table>
 
-A complete list of transformations is available in the [RDD API doc](api/core/index.html#org.apache.spark.rdd.RDD).
+A complete list of transformations is available in the [RDD API doc](api/scala/index.html#org.apache.spark.rdd.RDD).
 
 ### Actions
 
@@ -264,7 +264,7 @@ A complete list of transformations is available in the [RDD API doc](api/core/in
 </tr>
 </table>
 
-A complete list of actions is available in the [RDD API doc](api/core/index.html#org.apache.spark.rdd.RDD).
+A complete list of actions is available in the [RDD API doc](api/scala/index.html#org.apache.spark.rdd.RDD).
 
 ## RDD Persistence
 
@@ -283,7 +283,7 @@ In addition, each RDD can be stored using a different *storage level*, allowing 
 persist the dataset on disk, or persist it in memory but as serialized Java objects (to save space),
 or replicate it across nodes, or store the data in off-heap memory in [Tachyon](http://tachyon-project.org/).
 These levels are chosen by passing a
-[`org.apache.spark.storage.StorageLevel`](api/core/index.html#org.apache.spark.storage.StorageLevel)
+[`org.apache.spark.storage.StorageLevel`](api/scala/index.html#org.apache.spark.storage.StorageLevel)
 object to `persist()`. The `cache()` method is a shorthand for using the default storage level,
 which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The complete set of
 available storage levels is:
@@ -355,7 +355,7 @@ waiting to recompute a lost partition.
 
 If you want to define your own storage level (say, with replication factor of 3 instead of 2), then
 use the function factor method `apply()` of the
-[`StorageLevel`](api/core/index.html#org.apache.spark.storage.StorageLevel$) singleton object.
+[`StorageLevel`](api/scala/index.html#org.apache.spark.storage.StorageLevel$) singleton object.
 
 Spark has a block manager inside the Executors that let you chose memory, disk, or off-heap. The
 latter is for storing RDDs off-heap outside the Executor JVM on top of the memory management system

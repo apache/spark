@@ -23,3 +23,4 @@ addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.1.6")
 
 addSbtPlugin("com.alpinenow" % "junit_xml_listener" % "0.5.0")
 
+addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.3.0")

@@ -95,12 +95,12 @@ As an alternative to just use the subgradient `$R'(\wv)$` of the regularizer in 
 direction, an improved update for some cases can be obtained by using the proximal operator
 instead.
 For the L1-regularizer, the proximal operator is given by soft thresholding, as implemented in
-[L1Updater](api/mllib/index.html#org.apache.spark.mllib.optimization.L1Updater).
+[L1Updater](api/scala/index.html#org.apache.spark.mllib.optimization.L1Updater).
 
 
 ## Update Schemes for Distributed SGD
 The SGD implementation in
-[GradientDescent](api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent) uses
+[GradientDescent](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent) uses
 a simple (distributed) sampling of the data examples.
 We recall that the loss part of the optimization problem `$\eqref{eq:regPrimal}$` is
 `$\frac1n \sum_{i=1}^n L(\wv;\x_i,y_i)$`, and therefore `$\frac1n \sum_{i=1}^n L'_{\wv,i}$` would
@@ -138,7 +138,7 @@ are developed, see the
 section for example.
 
 The SGD method
-[GradientDescent.runMiniBatchSGD](api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent)
+[GradientDescent.runMiniBatchSGD](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent)
 has the following parameters:
 
 * `gradient` is a class that computes the stochastic gradient of the function
@@ -161,6 +161,6 @@ each iteration, to compute the gradient direction.
 
 Available algorithms for gradient descent:
 
-* [GradientDescent.runMiniBatchSGD](api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent)
+* [GradientDescent.runMiniBatchSGD](api/scala/index.html#org.apache.spark.mllib.optimization.GradientDescent)
 
 

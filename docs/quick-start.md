@@ -138,7 +138,9 @@ Spark README. Note that you'll need to replace YOUR_SPARK_HOME with the location
 installed. Unlike the earlier examples with the Spark shell, which initializes its own SparkContext,
 we initialize a SparkContext as part of the program.
 
-We pass the SparkContext constructor a SparkConf object which contains information about our
+We pass the SparkContext constructor a 
+[SparkConf](api/scala/index.html#org.apache.spark.SparkConf)
+object which contains information about our
 application. We also call sc.addJar to make sure that when our application is launched in cluster
 mode, the jar file containing it will be shipped automatically to worker nodes.
 
