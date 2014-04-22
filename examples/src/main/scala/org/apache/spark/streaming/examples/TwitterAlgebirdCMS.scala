@@ -89,10 +89,10 @@ object TwitterAlgebirdCMS {
       if (rdd.count() != 0) {
         val partial = rdd.first()
         val partialTopK = partial.heavyHitters.map(id =>
-          (id, partial.frequency(id).estimate)).toSeq.sortBy(-_._2).take(TOPK)
+          (id, partial.frequency(id).estimate)).toSeq.sortBy(_._2).reverse.take(TOPK)
         globalCMS ++= partial
         val globalTopK = globalCMS.heavyHitters.map(id =>
-          (id, globalCMS.frequency(id).estimate)).toSeq.sortBy(-_._2).take(TOPK)
+          (id, globalCMS.frequency(id).estimate)).toSeq.sortBy(_._2).reverse.take(TOPK)
         println("Approx heavy hitters at %2.2f%% threshold this batch: %s".format(PERC,
           partialTopK.mkString("[", ",", "]")))
         println("Approx heavy hitters at %2.2f%% threshold overall: %s".format(PERC,
@@ -107,7 +107,7 @@ object TwitterAlgebirdCMS {
           {case (id, count) => (count, id)})
           .sortByKey(ascending = false).take(TOPK)
         globalExact = mm.plus(globalExact.toMap, partialMap)
-        val globalTopK = globalExact.toSeq.sortBy(-_._2).take(TOPK)
+        val globalTopK = globalExact.toSeq.sortBy(_._2).reverse.take(TOPK)
         println("Exact heavy hitters this batch: %s".format(partialTopK.mkString("[", ",", "]")))
         println("Exact heavy hitters overall: %s".format(globalTopK.mkString("[", ",", "]")))
       }

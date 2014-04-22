@@ -52,16 +52,16 @@ private[spark] class IndexPage(parent: MasterWebUI) {
 
     val appHeaders = Seq("ID", "Name", "Cores", "Memory per Node", "Submitted Time", "User",
       "State", "Duration")
-    val activeApps = state.activeApps.sortBy(-_.startTime)
+    val activeApps = state.activeApps.sortBy(_.startTime).reverse
     val activeAppsTable = UIUtils.listingTable(appHeaders, appRow, activeApps)
-    val completedApps = state.completedApps.sortBy(-_.endTime)
+    val completedApps = state.completedApps.sortBy(_.endTime).reverse
     val completedAppsTable = UIUtils.listingTable(appHeaders, appRow, completedApps)
 
     val driverHeaders = Seq("ID", "Submitted Time", "Worker", "State", "Cores", "Memory",
       "Main Class")
-    val activeDrivers = state.activeDrivers.sortBy(-_.startTime)
+    val activeDrivers = state.activeDrivers.sortBy(_.startTime).reverse
     val activeDriversTable = UIUtils.listingTable(driverHeaders, driverRow, activeDrivers)
-    val completedDrivers = state.completedDrivers.sortBy(-_.startTime)
+    val completedDrivers = state.completedDrivers.sortBy(_.startTime).reverse
     val completedDriversTable = UIUtils.listingTable(driverHeaders, driverRow, completedDrivers)
 
     // For now we only show driver information if the user has submitted drivers to the cluster.

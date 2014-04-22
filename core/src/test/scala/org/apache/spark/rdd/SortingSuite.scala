@@ -109,7 +109,7 @@ class SortingSuite extends FunSuite with SharedSparkContext with ShouldMatchers 
   test("partition balancing for descending sort") {
     val pairArr = (1 to 1000).map(x => (x, x)).toArray
     val sorted = sc.parallelize(pairArr, 4).sortByKey(false)
-    assert(sorted.collect() === pairArr.sortBy(-_._1))
+    assert(sorted.collect() === pairArr.sortBy(_._1).reverse)
     val partitions = sorted.collectPartitions()
     logInfo("partition lengths: " + partitions.map(_.length).mkString(", "))
     val lengthArr = partitions.map(_.length)

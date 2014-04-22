@@ -91,7 +91,10 @@ class NaiveBayes private (var lambda: Double) extends Serializable with Logging 
         (c1._1 + c2._1, c1._2 += c2._2)
     ).collect()
     val numLabels = aggregated.length
-    val numDocuments = aggregated.foldLeft(0L){case (curCount, (_, (n, _))) => curCount + n}
+    var numDocuments = 0L
+    aggregated.foreach { case (_, (n, _)) =>
+      numDocuments += n
+    }
     val numFeatures = aggregated.head match { case (_, (_, v)) => v.size }
     val labels = new Array[Double](numLabels)
     val pi = new Array[Double](numLabels)

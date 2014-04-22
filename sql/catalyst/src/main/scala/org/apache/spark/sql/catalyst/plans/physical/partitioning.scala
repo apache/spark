@@ -190,7 +190,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
     case OrderedDistribution(requiredOrdering) =>
-      val minSize = requiredOrdering.size.min(ordering.size)
+      val minSize = math.min(requiredOrdering.size, ordering.size)
       requiredOrdering.take(minSize) == ordering.take(minSize)
     case ClusteredDistribution(requiredClustering) =>
       clusteringSet.subsetOf(requiredClustering.toSet)
