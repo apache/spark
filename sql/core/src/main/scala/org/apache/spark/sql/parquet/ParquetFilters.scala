@@ -17,42 +17,125 @@
 
 package org.apache.spark.sql.parquet
 
-import parquet.filter._
-import parquet.column.ColumnReader
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.Equals
-import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.hadoop.conf.Configuration
-import org.apache.spark.sql.catalyst.types.{IntegerType, BooleanType, NativeType}
-import scala.reflect.runtime.universe.{typeTag, TypeTag}
-import scala.reflect.ClassTag
-import com.google.common.io.BaseEncoding
-import parquet.filter
-import parquet.filter.ColumnPredicates.BooleanPredicateFunction
 
-// Implicits
-import collection.JavaConversions._
+import parquet.filter._
+import parquet.filter.ColumnPredicates._
+import parquet.column.ColumnReader
+
+import com.google.common.io.BaseEncoding
+
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.SparkSqlSerializer
 
 object ParquetFilters {
   val PARQUET_FILTER_DATA = "org.apache.spark.sql.parquet.row.filter"
 
   def createFilter(filterExpressions: Seq[Expression]): UnboundRecordFilter = {
     def createEqualityFilter(name: String, literal: Literal) = literal.dataType match {
-      case BooleanType => new ComparisonFilter(name, literal.value.asInstanceOf[Boolean])
-      case IntegerType => new ComparisonFilter(name, _ == literal.value.asInstanceOf[Int])
+      case BooleanType =>
+        ComparisonFilter.createBooleanFilter(name, literal.value.asInstanceOf[Boolean])
+      case IntegerType =>
+        ComparisonFilter.createIntFilter(name, (x: Int) => x == literal.value.asInstanceOf[Int])
+      case LongType =>
+        ComparisonFilter.createLongFilter(name, (x: Long) => x == literal.value.asInstanceOf[Long])
+      case DoubleType =>
+        ComparisonFilter.createDoubleFilter(
+          name,
+          (x: Double) => x == literal.value.asInstanceOf[Double])
+      case FloatType =>
+        ComparisonFilter.createFloatFilter(
+          name,
+          (x: Float) => x == literal.value.asInstanceOf[Float])
+      case StringType =>
+        ComparisonFilter.createStringFilter(name, literal.value.asInstanceOf[String])
     }
-
-    val filters: Seq[UnboundRecordFilter] = filterExpressions.map {
-      case Equals(left: Literal, right: NamedExpression) => {
-        val name: String = right.name
-        createEqualityFilter(name, left)
-      }
-      case Equals(left: NamedExpression, right: Literal) => {
-        val name: String = left.name
-        createEqualityFilter(name, right)
-      }
+    def createLessThanFilter(name: String, literal: Literal) = literal.dataType match {
+      case IntegerType =>
+        ComparisonFilter.createIntFilter(name, (x: Int) => x < literal.value.asInstanceOf[Int])
+      case LongType =>
+        ComparisonFilter.createLongFilter(name, (x: Long) => x < literal.value.asInstanceOf[Long])
+      case DoubleType =>
+        ComparisonFilter.createDoubleFilter(
+          name,
+          (x: Double) => x < literal.value.asInstanceOf[Double])
+      case FloatType =>
+        ComparisonFilter.createFloatFilter(
+          name,
+          (x: Float) => x < literal.value.asInstanceOf[Float])
     }
-
+    def createLessThanOrEqualFilter(name: String, literal: Literal) = literal.dataType match {
+      case IntegerType =>
+        ComparisonFilter.createIntFilter(name, (x: Int) => x <= literal.value.asInstanceOf[Int])
+      case LongType =>
+        ComparisonFilter.createLongFilter(name, (x: Long) => x <= literal.value.asInstanceOf[Long])
+      case DoubleType =>
+        ComparisonFilter.createDoubleFilter(
+          name,
+          (x: Double) => x <= literal.value.asInstanceOf[Double])
+      case FloatType =>
+        ComparisonFilter.createFloatFilter(
+          name,
+          (x: Float) => x <= literal.value.asInstanceOf[Float])
+    }
+    // TODO: combine these two types somehow?
+    def createGreaterThanFilter(name: String, literal: Literal) = literal.dataType match {
+      case IntegerType =>
+        ComparisonFilter.createIntFilter(name, (x: Int) => x > literal.value.asInstanceOf[Int])
+      case LongType =>
+        ComparisonFilter.createLongFilter(name, (x: Long) => x > literal.value.asInstanceOf[Long])
+      case DoubleType =>
+        ComparisonFilter.createDoubleFilter(
+          name,
+          (x: Double) => x > literal.value.asInstanceOf[Double])
+      case FloatType =>
+        ComparisonFilter.createFloatFilter(
+          name,
+          (x: Float) => x > literal.value.asInstanceOf[Float])
+    }
+    def createGreaterThanOrEqualFilter(name: String, literal: Literal) = literal.dataType match {
+      case IntegerType =>
+        ComparisonFilter.createIntFilter(name, (x: Int) => x >= literal.value.asInstanceOf[Int])
+      case LongType =>
+        ComparisonFilter.createLongFilter(name, (x: Long) => x >= literal.value.asInstanceOf[Long])
+      case DoubleType =>
+        ComparisonFilter.createDoubleFilter(
+          name,
+          (x: Double) => x >= literal.value.asInstanceOf[Double])
+      case FloatType =>
+        ComparisonFilter.createFloatFilter(
+          name,
+          (x: Float) => x >= literal.value.asInstanceOf[Float])
+    }
+    // TODO: can we actually rely on the predicate being normalized as in expression < literal?
+    // That would simplify this pattern matching
+    // TODO: we currently only filter on non-nullable (Parquet REQUIRED) attributes until
+    // https://github.com/Parquet/parquet-mr/issues/371
+    // has been resolved
+    val filters: Seq[UnboundRecordFilter] = filterExpressions.collect {
+      case Equals(left: Literal, right: NamedExpression) if !right.nullable =>
+        createEqualityFilter(right.name, left)
+      case Equals(left: NamedExpression, right: Literal) if !left.nullable =>
+        createEqualityFilter(left.name, right)
+      case LessThan(left: Literal, right: NamedExpression) if !right.nullable =>
+        createLessThanFilter(right.name, left)
+      case LessThan(left: NamedExpression, right: Literal) if !left.nullable =>
+        createLessThanFilter(left.name, right)
+      case LessThanOrEqual(left: Literal, right: NamedExpression) if !right.nullable =>
+        createLessThanOrEqualFilter(right.name, left)
+      case LessThanOrEqual(left: NamedExpression, right: Literal) if !left.nullable =>
+        createLessThanOrEqualFilter(left.name, right)
+      case GreaterThan(left: Literal, right: NamedExpression) if !right.nullable =>
+        createGreaterThanFilter(right.name, left)
+      case GreaterThan(left: NamedExpression, right: Literal) if !left.nullable =>
+        createGreaterThanFilter(left.name, right)
+      case GreaterThanOrEqual(left: Literal, right: NamedExpression) if !right.nullable =>
+        createGreaterThanOrEqualFilter(right.name, left)
+      case GreaterThanOrEqual(left: NamedExpression, right: Literal) if !left.nullable =>
+        createGreaterThanOrEqualFilter(left.name, right)
+    }
+    // TODO: How about disjunctions? (Or-ed)
     if (filters.length > 0) filters.reduce(AndRecordFilter.and) else null
   }
 
@@ -83,47 +166,72 @@ class ComparisonFilter(
     private val columnName: String,
     private var filter: UnboundRecordFilter)
   extends UnboundRecordFilter {
-  def this(columnName: String, value: Boolean) =
-    this(
-      columnName,
-      ColumnRecordFilter.column(
-        columnName,
-        ColumnPredicates.applyFunctionToBoolean(
-          new ColumnPredicates.BooleanPredicateFunction {
-            def functionToApply(input: Boolean): Boolean = input == value
-        })))
-  def this(columnName: String, func: Int => Boolean) =
-    this(
-      columnName,
-      ColumnRecordFilter.column(
-        columnName,
-        ColumnPredicates.applyFunctionToInteger(
-          new ColumnPredicates.IntegerPredicateFunction {
-            def functionToApply(input: Int) = if (input != null) func(input) else false
-          })))
   override def bind(readers: java.lang.Iterable[ColumnReader]): RecordFilter = {
     filter.bind(readers)
   }
 }
 
-/*class EqualityFilter(
-    private val columnName: String,
-    private var filter: UnboundRecordFilter)
-  extends UnboundRecordFilter {
-  def this(columnName: String, value: Boolean) =
-    this(columnName, ColumnRecordFilter.column(columnName, ColumnPredicates.equalTo(value)))
-  def this(columnName: String, value: Int) =
-    this(columnName, ColumnRecordFilter.column(columnName, ColumnPredicates.equalTo(value)))
-  def this(columnName: String, value: Long) =
-    this(columnName, ColumnRecordFilter.column(columnName, ColumnPredicates.equalTo(value)))
-  def this(columnName: String, value: Double) =
-    this(columnName, ColumnRecordFilter.column(columnName, ColumnPredicates.equalTo(value)))
-  def this(columnName: String, value: Float) =
-    this(columnName, ColumnRecordFilter.column(columnName, ColumnPredicates.equalTo(value)))
-  def this(columnName: String, value: String) =
-    this(columnName, ColumnRecordFilter.column(columnName, ColumnPredicates.equalTo(value)))
-  override def bind(readers: java.lang.Iterable[ColumnReader]): RecordFilter = {
-    filter.bind(readers)
-  }
-}*/
+object ComparisonFilter {
+  def createBooleanFilter(columnName: String, value: Boolean): UnboundRecordFilter =
+    new ComparisonFilter(
+      columnName,
+      ColumnRecordFilter.column(
+        columnName,
+        ColumnPredicates.applyFunctionToBoolean(
+          new BooleanPredicateFunction {
+            def functionToApply(input: Boolean): Boolean = input == value
+          }
+        )))
+  def createStringFilter(columnName: String, value: String): UnboundRecordFilter =
+    new ComparisonFilter(
+      columnName,
+      ColumnRecordFilter.column(
+        columnName,
+        ColumnPredicates.applyFunctionToString (
+          new ColumnPredicates.PredicateFunction[String]  {
+            def functionToApply(input: String): Boolean = input == value
+          }
+        )))
+  def createIntFilter(columnName: String, func: Int => Boolean): UnboundRecordFilter =
+    new ComparisonFilter(
+      columnName,
+      ColumnRecordFilter.column(
+        columnName,
+        ColumnPredicates.applyFunctionToInteger(
+          new IntegerPredicateFunction {
+            def functionToApply(input: Int) = func(input)
+          }
+        )))
+  def createLongFilter(columnName: String, func: Long => Boolean): UnboundRecordFilter =
+    new ComparisonFilter(
+      columnName,
+      ColumnRecordFilter.column(
+        columnName,
+        ColumnPredicates.applyFunctionToLong(
+          new LongPredicateFunction {
+            def functionToApply(input: Long) = func(input)
+          }
+        )))
+  def createDoubleFilter(columnName: String, func: Double => Boolean): UnboundRecordFilter =
+    new ComparisonFilter(
+      columnName,
+      ColumnRecordFilter.column(
+        columnName,
+        ColumnPredicates.applyFunctionToDouble(
+          new DoublePredicateFunction {
+            def functionToApply(input: Double) = func(input)
+          }
+        )))
+  def createFloatFilter(columnName: String, func: Float => Boolean): UnboundRecordFilter =
+    new ComparisonFilter(
+      columnName,
+      ColumnRecordFilter.column(
+        columnName,
+        ColumnPredicates.applyFunctionToFloat(
+          new FloatPredicateFunction {
+            def functionToApply(input: Float) = func(input)
+          }
+        )))
+}
+
 

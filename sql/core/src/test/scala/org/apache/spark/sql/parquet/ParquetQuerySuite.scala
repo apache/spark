@@ -241,7 +241,20 @@ class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
 
   test("SELECT WHERE") {
     val result = sql("SELECT * FROM testsource WHERE myint = 5").collect()
+  /*test("SELECT WHERE") {
+    //val result = parquetFile("/home/andre/input.adam").registerAsTable("adamtable")
+    //sql("SELECT * FROM adamtable WHERE mapq = 0").collect()
+    //assert(result != null)
+    //val result = sql("SELECT * FROM testsource WHERE myint = 5").collect()
+    // TODO: ADD larger case SchemaRDD with filtering on REQUIRED field!
+    implicit def anyToRow(value: Any): Row = value.asInstanceOf[Row]
+    TestSQLContext
+      .parquetFile(ParquetTestData.testNestedDir1.toString)
+      .toSchemaRDD.registerAsTable("xtmptable")
+    val result = sql("SELECT * FROM xtmptable WHERE owner = \"Julien Le Dem\"").collect()
+>>>>>>> Extending ParquetFilters
     assert(result != null)
+  }*/
   }
 }
 

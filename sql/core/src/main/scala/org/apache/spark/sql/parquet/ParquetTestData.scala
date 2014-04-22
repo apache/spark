@@ -27,6 +27,29 @@ import parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.util.Utils
+import parquet.hadoop.metadata.CompressionCodecName
+import parquet.hadoop.api.WriteSupport
+import parquet.example.data.{GroupWriter, Group}
+import parquet.io.api.RecordConsumer
+import parquet.hadoop.api.WriteSupport.WriteContext
+import parquet.example.data.simple.SimpleGroup
+
+// Write support class for nested groups:
+// ParquetWriter initializes GroupWriteSupport with an empty configuration
+// (it is after all not intended to be used in this way?)
+// and members are private so we need to make our own
+private class TestGroupWriteSupport(schema: MessageType) extends WriteSupport[Group] {
+  var groupWriter: GroupWriter = null
+  override def prepareForWrite(recordConsumer: RecordConsumer): Unit = {
+    groupWriter = new GroupWriter(recordConsumer, schema)
+  }
+  override def init(configuration: Configuration): WriteContext = {
+    new WriteContext(schema, new java.util.HashMap[String, String]())
+  }
+  override def write(record: Group) {
+    groupWriter.write(record)
+  }
+}
 
 private[sql] object ParquetTestData {
 
@@ -75,26 +98,42 @@ private[sql] object ParquetTestData {
     val configuration: Configuration = ContextUtil.getConfiguration(job)
     val schema: MessageType = MessageTypeParser.parseMessageType(testSchema)
 
-    val writeSupport = new RowWriteSupport()
-    writeSupport.setSchema(schema, configuration)
-    val writer = new ParquetWriter(path, writeSupport)
+    //val writeSupport = new MutableRowWriteSupport()
+    //writeSupport.setSchema(schema, configuration)
+    //val writer = new ParquetWriter(path, writeSupport)
+    val writeSupport = new TestGroupWriteSupport(schema)
+    //val writer = //new ParquetWriter[Group](path, writeSupport)
+    val writer = new ParquetWriter[Group](path, writeSupport)
+
     for(i <- 0 until 15) {
-      val data = new Array[Any](6)
+      val record = new SimpleGroup(schema)
+      //val data = new Array[Any](6)
       if (i % 3 == 0) {
-        data.update(0, true)
+        //data.update(0, true)
+        record.add(0, true)
       } else {
-        data.update(0, false)
+        //data.update(0, false)
+        record.add(0, false)
       }
-      //if (i % 5 == 0) {
+      if (i % 5 == 0) {
+        record.add(1, 5)
       //  data.update(1, 5)
-      //} else {
-        data.update(1, null) // optional
+      } else {
+        if (i % 5 == 1) record.add(1, 4)
+      }
+       //else {
+      //  data.update(1, null) // optional
       //}
-      data.update(2, "abc")
-      data.update(3, i.toLong << 33)
-      data.update(4, 2.5F)
-      data.update(5, 4.5D)
-      writer.write(new GenericRow(data.toArray))
+      //data.update(2, "abc")
+      record.add(2, "abc")
+      //data.update(3, i.toLong << 33)
+      record.add(3, i.toLong << 33)
+      //data.update(4, 2.5F)
+      record.add(4, 2.5F)
+      //data.update(5, 4.5D)
+      record.add(5, 4.5D)
+      //writer.write(new GenericRow(data.toArray))
+      writer.write(record)
     }
     writer.close()
   }
