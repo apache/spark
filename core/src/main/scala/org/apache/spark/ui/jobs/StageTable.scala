@@ -37,7 +37,6 @@ private[ui] class StageTableBase(
   protected def isFairScheduler = parent.isFairScheduler
 
   protected def columns: Seq[Node] = {
-    // create dummy element to wrap the columns
     <th>Stage Id</th> ++
     {if (isFairScheduler) {<th>Pool Name</th>} else Seq.empty} ++
     <th>Description</th>
