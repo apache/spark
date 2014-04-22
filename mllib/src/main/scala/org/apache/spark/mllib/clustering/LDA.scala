@@ -67,17 +67,17 @@ case class LDAParams (
   def dropOneDistSampler(
       docTopicSmoothing: Double,
       topicTermSmoothing: Double,
-      termIdx: Int,
-      docIdx: Int,
+      termId: Int,
+      docId: Int,
       rand: Random): Int = {
     val (numTopics, numTerms) = (topicCounts.size, topicTermCounts.head.size)
     val topicThisTerm = BDV.zeros[Double](numTopics)
     var i = 0
     while (i < numTopics) {
       topicThisTerm(i) =
-        ((topicTermCounts(i)(termIdx) + topicTermSmoothing)
+        ((topicTermCounts(i)(termId) + topicTermSmoothing)
           / (topicCounts(i) + (numTerms * topicTermSmoothing))
-        ) + (docTopicCounts(docIdx)(i) + docTopicSmoothing)
+        ) + (docTopicCounts(docId)(i) + docTopicSmoothing)
       i += 1
     }
     GibbsSampling.multinomialDistSampler(rand, topicThisTerm)
@@ -162,8 +162,6 @@ object LDA extends Logging {
 
     val (phi, theta) = LDA.train(data, k, 0.01, 0.01, iters, numDocs, numTerms)
     val pp = GibbsSampling.perplexity(data, phi, theta)
-    // println(s"final org.apache.spark.mllib.model Phi is $phi")
-    // println(s"final org.apache.spark.mllib.model Theta is $theta")
     println(s"final mode perplexity is $pp")
   }
 }

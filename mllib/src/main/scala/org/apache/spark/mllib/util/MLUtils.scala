@@ -284,9 +284,9 @@ object MLUtils {
     val broadcastDocMap = sc.broadcast(docMap)
 
     val data = almostData.map { case (fileName, tokens) =>
-      val fileIdx = broadcastDocMap.value.index(fileName)
+      val fileId = broadcastDocMap.value.index(fileName)
       val translatedContent = tokens.map(broadcastWordMap.value.index)
-      Document(fileIdx, translatedContent)
+      Document(fileId, translatedContent)
     }.cache()
 
     (data, termMap, docMap)
