@@ -31,6 +31,7 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
+import org.apache.spark.util.Utils.memoryStringToMb
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
@@ -79,7 +80,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     // Calculate level for single group construction
 
     // Max memory usage for aggregates
-    val maxMemoryUsage = scala.math.pow(2, 27).toInt //128MB
+    val maxMemoryUsage = strategy.maxMemory * 1024 * 1024
     logDebug("max memory usage for aggregates = " + maxMemoryUsage)
     val numElementsPerNode = {
       strategy.algo match {
@@ -1158,9 +1159,12 @@ object DecisionTree extends Serializable with Logging {
 
     val maxDepth = options.getOrElse('maxDepth, "1").toString.toInt
     val maxBins = options.getOrElse('maxBins, "100").toString.toInt
+    val maxMemUsage = memoryStringToMb(options.getOrElse('maxMemory, "128m").toString)
 
-    val strategy = new Strategy(algo, impurity, maxDepth, maxBins)
+    val strategy = new Strategy(algo, impurity, maxDepth, maxBins, maxMemory=maxMemUsage)
     val model = DecisionTree.train(trainData, strategy)
+
+
 
     // Load test data.
     val testData = loadLabeledData(sc, options.get('testDataDir).get.toString)
