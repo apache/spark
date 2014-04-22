@@ -62,7 +62,7 @@ object WriteInputFormatTestDataGenerator extends App {
   import SparkContext._
 
   def generateData(path: String, jsc: JavaSparkContext) {
-    val sc = jsc.sc //new SparkContext("local[2]", "test")
+    val sc = jsc.sc
 
     val basePath = s"$path/sftestdata/"
     val textPath = s"$basePath/sftext/"
