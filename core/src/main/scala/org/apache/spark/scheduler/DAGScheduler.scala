@@ -854,7 +854,7 @@ class DAGScheduler(
     }
   }
 
-  private def handleStageCancellation(stageId: Int) {
+  private[scheduler] def handleStageCancellation(stageId: Int) {
     if (stageIdToJobIds.contains(stageId)) {
       val jobsThatUseStage: Array[Int] = stageIdToJobIds(stageId).toArray
       jobsThatUseStage.foreach(jobId => {
@@ -1076,6 +1076,9 @@ private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGSchedule
             properties))
         dagScheduler.submitStage(finalStage)
       }
+
+    case StageCancelled(stageId) =>
+      dagScheduler.handleStageCancellation(stageId)
 
     case JobCancelled(jobId) =>
       dagScheduler.handleJobCancellation(jobId)
