@@ -375,9 +375,11 @@ object ClientBase {
     val classpathEntries = Option(conf.getStrings(
       YarnConfiguration.YARN_APPLICATION_CLASSPATH)).getOrElse(
         getDefaultYarnApplicationClasspath())
-    for (c <- classpathEntries) {
-      YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, c.trim,
-        File.pathSeparator)
+    if (classpathEntries != null) {
+      for (c <- classpathEntries) {
+        YarnSparkHadoopUtil.addToEnvironment(env, Environment.CLASSPATH.name, c.trim,
+          File.pathSeparator)
+      }
     }
 
     val mrClasspathEntries = Option(conf.getStrings(
