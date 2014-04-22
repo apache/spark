@@ -19,12 +19,9 @@ package org.apache.spark.sql.catalyst.types
 
 import java.sql.Timestamp
 
-import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.{typeTag, TypeTag, runtimeMirror}
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.sql.catalyst.expressions.Expression
-
-import org.apache.spark.util.Utils
 
 abstract class DataType {
   /** Matches any expression that evaluates to this DataType */
@@ -40,11 +37,6 @@ abstract class NativeType extends DataType {
   type JvmType
   @transient val tag: TypeTag[JvmType]
   val ordering: Ordering[JvmType]
-
-  @transient val classTag = {
-  val mirror = runtimeMirror(Utils.getSparkClassLoader)
-    ClassTag[JvmType](mirror.runtimeClass(tag.tpe))
-  }
 }
 
 case object StringType extends NativeType {

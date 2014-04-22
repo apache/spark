@@ -141,6 +141,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.InsertIntoTable(table: ParquetRelation, partition, child, overwrite) =>
         InsertIntoParquetTable(table, planLater(child), overwrite)(sparkContext) :: Nil
       case PhysicalOperation(projectList, filters, relation: ParquetRelation) =>
+        // Note: we do not actually remove the filters that were pushed down to Parquet from
+        // the plan, in case that some of the predicates cannot be evaluated there because
+        // they contain complex operations, such as CASTs.
+        // TODO: rethink whether conjuntions that are handed down to Parquet should be removed
+        // from the list of higher-level filters.
           pruneFilterProject(
             projectList,
             filters,
