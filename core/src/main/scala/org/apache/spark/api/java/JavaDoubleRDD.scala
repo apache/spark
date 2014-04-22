@@ -133,7 +133,13 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, Ja
   /**
    * Return a sampled subset of this RDD.
    */
-  def sample(withReplacement: Boolean, fraction: JDouble, seed: Int): JavaDoubleRDD =
+  def sample(withReplacement: Boolean, fraction: JDouble): JavaDoubleRDD =
+    sample(withReplacement, fraction, System.nanoTime)
+    
+  /**
+   * Return a sampled subset of this RDD.
+   */
+  def sample(withReplacement: Boolean, fraction: JDouble, seed: Long): JavaDoubleRDD =
     fromRDD(srdd.sample(withReplacement, fraction, seed))
 
   /**
