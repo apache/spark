@@ -20,13 +20,15 @@ package org.apache.spark.mllib.util
 import scala.reflect.ClassTag
 
 import breeze.linalg.{Vector => BV, SparseVector => BSV, squaredDistance => breezeSquaredDistance}
+import breeze.util.Index
+import chalk.text.tokenize.JavaWordTokenizer
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PartitionwiseSampledRDD
-import org.apache.spark.SparkContext._
+import org.apache.spark.SparkContext
 import org.apache.spark.util.random.BernoulliSampler
+import org.apache.spark.mllib.model.Document
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
 
@@ -232,5 +234,61 @@ object MLUtils {
       sqDist = breezeSquaredDistance(v1, v2)
     }
     sqDist
+  }
+
+/**
+   * Load corpus from a given path. Terms and documents will be translated into integers, with a
+   * term-integer map and a document-integer map.
+   *
+   * @param dir The path of corpus.
+   * @param dirStopWords The path of stop words.
+   * @return (RDD[Document], Term-integer map, doc-integer map)
+   */
+  def loadCorpus(
+      sc: SparkContext,
+      dir: String,
+      minSplits: Int,
+      dirStopWords: String = ""):
+  (RDD[Document], Index[String], Index[String]) = {
+
+    // Containers and indexers for terms and documents
+    val termMap = Index[String]()
+    val docMap = Index[String]()
+
+    val stopWords =
+      if (dirStopWords == "") {
+        Set.empty[String]
+      }
+      else {
+        sc.textFile(dirStopWords, minSplits).
+          map(x => x.replaceAll( """(?m)\s+$""", "")).distinct().collect().toSet
+      }
+    val broadcastStopWord = sc.broadcast(stopWords)
+
+    // Tokenize and filter terms
+    val almostData = sc.wholeTextFiles(dir, minSplits).map { case (fileName, content) =>
+      val tokens = JavaWordTokenizer(content)
+        .filter(_(0).isLetter)
+        .filter(!broadcastStopWord.value.contains(_))
+      (fileName, tokens)
+    }
+
+    almostData.map(_._1).collect().map(x => docMap.index(x))
+
+    almostData.flatMap(_._2).collect().map(x => termMap.index(x))
+
+    println(termMap.size)
+    println(docMap.size)
+
+    val broadcastWordMap = sc.broadcast(termMap)
+    val broadcastDocMap = sc.broadcast(docMap)
+
+    val data = almostData.map { case (fileName, tokens) =>
+      val fileIdx = broadcastDocMap.value.index(fileName)
+      val translatedContent = tokens.map(broadcastWordMap.value.index)
+      Document(fileIdx, translatedContent)
+    }.cache()
+
+    (data, termMap, docMap)
   }
 }
