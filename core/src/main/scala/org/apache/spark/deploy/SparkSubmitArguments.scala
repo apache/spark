@@ -116,13 +116,15 @@ private[spark] class SparkSubmitArguments(args: Array[String]) {
     if (args.length == 0) printUsageAndExit(-1)
     if (primaryResource == null) SparkSubmit.printErrorAndExit("Must specify a primary resource")
     if (mainClass == null) SparkSubmit.printErrorAndExit("Must specify a main class with --class")
+    val testing = sys.env.contains("SPARK_TESTING")
     if (master.startsWith("yarn")) {
-      val hasHadoopEnv = sys.env.contains("HADOOP_CONF_DIR") ||
-        sys.env.contains("YARN_CONF_DIR") ||
-        sys.env.contains("SPARK_TESTING")
+      val hasHadoopEnv = testing ||
+        sys.env.contains("HADOOP_CONF_DIR") ||
+        sys.env.contains("YARN_CONF_DIR")
+
       if (!hasHadoopEnv) {
-        throw new Exception(s"When running with master '$master'" +
-          s" either HADOOP_CONF_DIR or YARN_CONF_DIR must be set in the environment.")
+        throw new Exception(s"When running with master '$master' " +
+          "either HADOOP_CONF_DIR or YARN_CONF_DIR must be set in the environment.")
       }
     }
   }
