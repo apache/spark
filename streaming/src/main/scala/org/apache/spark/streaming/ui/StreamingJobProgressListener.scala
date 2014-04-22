@@ -62,8 +62,8 @@ private[ui] class StreamingJobProgressListener(ssc: StreamingContext) extends St
     totalCompletedBatches += 1L
   }
 
-  def numNetworkReceivers = synchronized {
-    ssc.graph.getNetworkInputStreams().size
+  def numReceivers = synchronized {
+    ssc.graph.getReceiverInputStreams().size
   }
 
   def numTotalCompletedBatches: Long = synchronized {
@@ -101,7 +101,7 @@ private[ui] class StreamingJobProgressListener(ssc: StreamingContext) extends St
   def receivedRecordsDistributions: Map[Int, Option[Distribution]] = synchronized {
     val latestBatchInfos = retainedBatches.reverse.take(batchInfoLimit)
     val latestBlockInfos = latestBatchInfos.map(_.receivedBlockInfo)
-    (0 until numNetworkReceivers).map { receiverId =>
+    (0 until numReceivers).map { receiverId =>
       val blockInfoOfParticularReceiver = latestBlockInfos.map { batchInfo =>
         batchInfo.get(receiverId).getOrElse(Array.empty)
       }
@@ -117,11 +117,11 @@ private[ui] class StreamingJobProgressListener(ssc: StreamingContext) extends St
   def lastReceivedBatchRecords: Map[Int, Long] = {
     val lastReceivedBlockInfoOption = lastReceivedBatch.map(_.receivedBlockInfo)
     lastReceivedBlockInfoOption.map { lastReceivedBlockInfo =>
-      (0 until numNetworkReceivers).map { receiverId =>
+      (0 until numReceivers).map { receiverId =>
         (receiverId, lastReceivedBlockInfo(receiverId).map(_.numRecords).sum)
       }.toMap
     }.getOrElse {
-      (0 until numNetworkReceivers).map(receiverId => (receiverId, 0L)).toMap
+      (0 until numReceivers).map(receiverId => (receiverId, 0L)).toMap
     }
   }
 
