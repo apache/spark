@@ -188,7 +188,9 @@ After loading, the feature indices are converted to zero-based.
 examples stored in LIBSVM format.
 
 {% highlight scala %}
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.rdd.RDD
 
 val training: RDD[LabeledPoint] = MLUtils.loadLibSVMData(sc, "mllib/data/sample_libsvm_data.txt")
 {% endhighlight %}
@@ -199,7 +201,9 @@ val training: RDD[LabeledPoint] = MLUtils.loadLibSVMData(sc, "mllib/data/sample_
 examples stored in LIBSVM format.
 
 {% highlight java %}
+import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.rdd.RDDimport;
 
 RDD[LabeledPoint] training = MLUtils.loadLibSVMData(sc, "mllib/data/sample_libsvm_data.txt")
 {% endhighlight %}
