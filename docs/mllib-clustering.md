@@ -90,7 +90,7 @@ parsedData = data.map(lambda line: array([float(x) for x in line.split(' ')]))
 
 # Build the model (cluster the data)
 clusters = KMeans.train(parsedData, 2, maxIterations=10,
-        runs=10, initialization_mode="random")
+        runs=10, initializationMode="random")
 
 # Evaluate clustering by computing Within Set Sum of Squared Errors
 def error(point):
