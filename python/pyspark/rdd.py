@@ -270,11 +270,14 @@ class RDD(object):
         def func(s, iterator): return chain.from_iterable(imap(f, iterator))
         return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
-    def partitions(self):
+    def getNumPartitions(self):
         """
-        Get the array of partitions of this RDD, taking into account whether the RDD is checkpointed or not.
+        Get the number of partitions of this RDD.
+        
+        >>> sc.parallelize([1, 2, 3, 4, 5, 6], 4).getNumPartitions()
+        4
         """
-        return self._jrdd.splits()
+        return self._jrdd.splits().size()
 
     def mapPartitions(self, f, preservesPartitioning=False):
         """
