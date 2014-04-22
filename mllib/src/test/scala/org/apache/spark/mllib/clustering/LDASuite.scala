@@ -28,7 +28,6 @@ import org.apache.spark.mllib.expectation.GibbsSampling
 import org.apache.spark.mllib.expectation.GibbsSampling._
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.model.Document
-import org.apache.spark.mllib.clustering.LDAParams
 
 class LDASuite extends FunSuite with BeforeAndAfterAll {
   import LDASuite._

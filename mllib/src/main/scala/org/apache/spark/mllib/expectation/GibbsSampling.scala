@@ -22,11 +22,10 @@ import java.util.Random
 import breeze.linalg.{DenseVector => BDV, sum}
 
 import org.apache.spark.Logging
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
-
 import org.apache.spark.mllib.clustering.LDAParams
 import org.apache.spark.mllib.model.Document
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
  * Gibbs sampling from a given dataset and org.apache.spark.mllib.model.
