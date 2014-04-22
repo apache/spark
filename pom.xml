@@ -127,6 +127,7 @@
     <jetty.version>8.1.14.v20131031</jetty.version>
     <chill.version>0.3.1</chill.version>
     <codahale.metrics.version>3.0.0</codahale.metrics.version>
+    <avro.version>1.7.4</avro.version>
 
     <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
@@ -506,7 +507,7 @@
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro</artifactId>
-        <version>1.7.4</version>
+        <version>${avro.version}</version>
         <exclusions>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
@@ -521,7 +522,7 @@
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro-ipc</artifactId>
-        <version>1.7.4</version>
+        <version>${avro.version}</version>
         <exclusions>
           <exclusion>
             <groupId>org.mortbay.jetty</groupId>
@@ -544,7 +545,7 @@
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro-mapred</artifactId>
-        <version>1.7.4</version>
+        <version>${avro.version}</version>
         <exclusions>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
@@ -833,13 +834,7 @@
   <profiles>
     <!-- SPARK-1121: Adds an explicit dependency on Avro to work around a Hadoop 0.23.X issue -->
     <profile>
-      <id>hadoop0.23.1</id>
-      <activation>
-        <property>
-          <name>hadoop.version</name>
-          <value>0.23.1</value>
-        </property>
-      </activation>
+      <id>hadoop-0.23</id>
       <dependencies>
         <dependency>
           <groupId>org.apache.avro</groupId>
@@ -847,141 +842,7 @@
         </dependency>
       </dependencies>
     </profile>
-    <profile>
-      <id>hadoop0.23.2</id>
-      <activation>
-        <property>
-          <name>hadoop.version</name>
-          <value>0.23.2</value>
-        </property>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>hadoop0.23.3</id>
-      <activation>
-        <property>
-          <name>hadoop.version</name>
-          <value>0.23.3</value>
-        </property>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>hadoop0.23.4</id>
-      <activation>
-        <property>
-          <name>hadoop.version</name>
-          <value>0.23.4</value>
-        </property>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>hadoop0.23.5</id>
-      <activation>
-        <property>
-          <name>hadoop.version</name>
-          <value>0.23.5</value>
-        </property>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>hadoop0.23.6</id>
-      <activation>
-        <property>
-          <name>hadoop.version</name>
-          <value>0.23.6</value>
-        </property>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>hadoop0.23.7</id>
-      <activation>
-        <property>
-          <name>hadoop.version</name>
-          <value>0.23.7</value>
-        </property>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>hadoop0.23.8</id>
-      <activation>
-        <property>
-          <name>hadoop.version</name>
-          <value>0.23.8</value>
-        </property>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>hadoop0.23.9</id>
-      <activation>
-        <property>
-          <name>hadoop.version</name>
-          <value>0.23.9</value>
-        </property>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>hadoop0.23.10</id>
-      <activation>
-        <property>
-          <name>hadoop.version</name>
-          <value>0.23.10</value>
-        </property>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.avro</groupId>
-          <artifactId>avro</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
+
     <profile>
       <id>yarn-alpha</id>
       <properties>
