@@ -44,6 +44,28 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) {
       new SlidingRDD[T](self, windowSize)
     }
   }
+
+
+  /**
+   * Computes the all-reduced RDD of the parent RDD, which has the same number of partitions and
+   * locality information as its parent RDD. Each partition contains only one record, the same as
+   * calling `RDD#reduce` on its parent RDD.
+   *
+   * @param f reducer
+   * @return all-reduced RDD
+   */
+  def allReduce(f: (T, T) => T): RDD[T] = {
+    var butterfly = self.mapPartitions( (iter) =>
+      Iterator(iter.reduce(f)),
+      preservesPartitioning = true
+    ).cache()
+    var offset = self.partitions.size / 2
+    while (offset > 0) {
+      butterfly = new ButterflyReducedRDD[T](butterfly, offset, f).cache()
+      offset /= 2
+    }
+    butterfly
+  }
 }
 
 private[mllib]

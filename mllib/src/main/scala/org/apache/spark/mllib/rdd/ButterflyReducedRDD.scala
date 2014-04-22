@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rdd
+package org.apache.spark.mllib.rdd
 
 import scala.reflect.ClassTag
 
 import org.apache.spark.{TaskContext, Partition}
+import org.apache.spark.rdd.RDD
 
 private case class ButterflyReducedRDDPartition(
     override val index: Int,
