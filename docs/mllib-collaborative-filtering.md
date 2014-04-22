@@ -18,14 +18,14 @@ In particular, we implement the [alternating least squares
 algorithm to learn these latent factors. The implementation in MLlib has the
 following parameters:
 
-* *numBlocks* is the number of blacks used to parallelize computation (set to -1 to auto-configure).
+* *numBlocks* is the number of blocks used to parallelize computation (set to -1 to auto-configure).
 * *rank* is the number of latent factors in our model.
 * *iterations* is the number of iterations to run.
 * *lambda* specifies the regularization parameter in ALS.
 * *implicitPrefs* specifies whether to use the *explicit feedback* ALS variant or one adapted for
-  *implicit feedback* data
+  *implicit feedback* data.
 * *alpha* is a parameter applicable to the implicit feedback variant of ALS that governs the
-  *baseline* confidence in preference observations
+  *baseline* confidence in preference observations.
 
 ### Explicit vs. implicit feedback
 

@@ -27,15 +27,16 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * stochastic gradient descent
   * limited-memory BFGS (L-BFGS)
 
-MLlib is currently a beta component under active development.
-The APIs may be changed in the future releases, and we will provide migration guide between releases.
+MLlib is currently a *beta* component under active development.
+The APIs may change in the future releases, and we will provide migration guide between releases.
 
 ## Dependencies
 
 MLlib uses linear algebra packages [Breeze](http://www.scalanlp.org/), which depends on
 [netlib-java](https://github.com/fommil/netlib-java), and
-[jblas](https://github.com/mikiobraun/jblas).  `jblas` depend on native Fortran routines. You need
-to install the
+[jblas](https://github.com/mikiobraun/jblas). 
+`netlib-java` and `jblas` depend on native Fortran routines.
+You need to install the
 [gfortran runtime library](https://github.com/mikiobraun/jblas/wiki/Missing-Libraries) if it is not
 already present on your nodes. MLlib will throw a linking error if it cannot detect these libraries
 automatically.  Due to license issues, we do not include `netlib-java`'s native libraries in MLlib's
