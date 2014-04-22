@@ -17,9 +17,13 @@
 
 package org.apache.spark.mllib.tree.configuration
 
+import org.apache.spark.annotation.Experimental
+
 /**
+ * :: Experimental ::
  * Enum for selecting the quantile calculation strategy
  */
+@Experimental
 object QuantileStrategy extends Enumeration {
   type QuantileStrategy = Value
   val Sort, MinMax, ApproxHist = Value

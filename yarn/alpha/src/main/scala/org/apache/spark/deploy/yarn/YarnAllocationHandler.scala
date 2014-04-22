@@ -54,6 +54,10 @@ object AllocationType extends Enumeration {
 // Note that right now, we assume all node asks as uniform in terms of capabilities and priority
 // Refer to http://developer.yahoo.com/blogs/hadoop/posts/2011/03/mapreduce-nextgen-scheduler/ for
 // more info on how we are requesting for containers.
+
+/**
+ * Acquires resources for executors from a ResourceManager and launches executors in new containers.
+ */
 private[yarn] class YarnAllocationHandler(
     val conf: Configuration,
     val resourceManager: AMRMProtocol, 
@@ -225,8 +229,8 @@ private[yarn] class YarnAllocationHandler(
         val executorHostname = container.getNodeId.getHost
         val containerId = container.getId
 
-        assert(
-          container.getResource.getMemory >= (executorMemory + YarnAllocationHandler.MEMORY_OVERHEAD))
+        assert( container.getResource.getMemory >=
+          (executorMemory + YarnAllocationHandler.MEMORY_OVERHEAD))
 
         if (numExecutorsRunningNow > maxExecutors) {
           logInfo("""Ignoring container %s at host %s, since we already have the required number of
@@ -393,9 +397,10 @@ private[yarn] class YarnAllocationHandler(
 
       // default.
     if (numExecutors <= 0 || preferredHostToCount.isEmpty) {
-      logDebug("numExecutors: " + numExecutors + ", host preferences: " + preferredHostToCount.isEmpty)
-      resourceRequests = List(
-        createResourceRequest(AllocationType.ANY, null, numExecutors, YarnAllocationHandler.PRIORITY))
+      logDebug("numExecutors: " + numExecutors + ", host preferences: " +
+        preferredHostToCount.isEmpty)
+      resourceRequests = List(createResourceRequest(
+        AllocationType.ANY, null, numExecutors, YarnAllocationHandler.PRIORITY))
     }
     else {
       // request for all hosts in preferred nodes and for numExecutors - 

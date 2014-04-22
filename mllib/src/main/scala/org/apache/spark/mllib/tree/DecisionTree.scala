@@ -19,6 +19,7 @@ package org.apache.spark.mllib.tree
 
 import scala.util.control.Breaks._
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -33,13 +34,15 @@ import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
+ * :: Experimental ::
  * A class that implements a decision tree algorithm for classification and regression. It
  * supports both continuous and categorical features.
  * @param strategy The configuration parameters for the tree algorithm which specify the type
  *                 of algorithm (classification, regression, etc.), feature type (continuous,
  *                 categorical), depth of the tree, quantile calculation strategy, etc.
  */
-class DecisionTree private(val strategy: Strategy) extends Serializable with Logging {
+@Experimental
+class DecisionTree (private val strategy: Strategy) extends Serializable with Logging {
 
   /**
    * Method to train a decision tree model over an RDD
@@ -1024,7 +1027,7 @@ object DecisionTree extends Serializable with Logging {
     }
   }
 
-  val usage = """
+  private val usage = """
     Usage: DecisionTreeRunner <master>[slices] --algo <Classification,
     Regression> --trainDataDir path --testDataDir path --maxDepth num [--impurity <Gini,Entropy,
     Variance>] [--maxBins num]
@@ -1113,7 +1116,7 @@ object DecisionTree extends Serializable with Logging {
    * @return An RDD of LabeledPoint. Each labeled point has two elements: the first element is
    *         the label, and the second element represents the feature values (an array of Double).
    */
-  def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
+  private def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
     sc.textFile(dir).map { line =>
       val parts = line.trim().split(",")
       val label = parts(0).toDouble

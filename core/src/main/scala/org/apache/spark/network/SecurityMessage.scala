@@ -26,33 +26,33 @@ import org.apache.spark._
 import org.apache.spark.network._
 
 /**
- * SecurityMessage is class that contains the connectionId and sasl token 
+ * SecurityMessage is class that contains the connectionId and sasl token
  * used in SASL negotiation. SecurityMessage has routines for converting
  * it to and from a BufferMessage so that it can be sent by the ConnectionManager
  * and easily consumed by users when received.
  * The api was modeled after BlockMessage.
  *
- * The connectionId is the connectionId of the client side. Since 
+ * The connectionId is the connectionId of the client side. Since
  * message passing is asynchronous and its possible for the server side (receiving)
- * to get multiple different types of messages on the same connection the connectionId 
- * is used to know which connnection the security message is intended for. 
- * 
+ * to get multiple different types of messages on the same connection the connectionId
+ * is used to know which connnection the security message is intended for.
+ *
  * For instance, lets say we are node_0. We need to send data to node_1. The node_0 side
  * is acting as a client and connecting to node_1. SASL negotiation has to occur
- * between node_0 and node_1 before node_1 trusts node_0 so node_0 sends a security message. 
- * node_1 receives the message from node_0 but before it can process it and send a response, 
- * some thread on node_1 decides it needs to send data to node_0 so it connects to node_0 
- * and sends a security message of its own to authenticate as a client. Now node_0 gets 
- * the message and it needs to decide if this message is in response to it being a client 
- * (from the first send) or if its just node_1 trying to connect to it to send data.  This 
+ * between node_0 and node_1 before node_1 trusts node_0 so node_0 sends a security message.
+ * node_1 receives the message from node_0 but before it can process it and send a response,
+ * some thread on node_1 decides it needs to send data to node_0 so it connects to node_0
+ * and sends a security message of its own to authenticate as a client. Now node_0 gets
+ * the message and it needs to decide if this message is in response to it being a client
+ * (from the first send) or if its just node_1 trying to connect to it to send data.  This
  * is where the connectionId field is used. node_0 can lookup the connectionId to see if
  * it is in response to it being a client or if its in response to someone sending other data.
- * 
+ *
  * The format of a SecurityMessage as its sent is:
  *   - Length of the ConnectionId
- *   - ConnectionId 
+ *   - ConnectionId
  *   - Length of the token
- *   - Token 
+ *   - Token
  */
 private[spark] class SecurityMessage() extends Logging {
 
@@ -61,13 +61,13 @@ private[spark] class SecurityMessage() extends Logging {
 
   def set(byteArr: Array[Byte], newconnectionId: String) {
     if (byteArr == null) {
-      token = new Array[Byte](0) 
+      token = new Array[Byte](0)
     } else {
       token = byteArr
     }
     connectionId = newconnectionId
   }
- 
+
   /**
    * Read the given buffer and set the members of this class.
    */
@@ -91,17 +91,17 @@ private[spark] class SecurityMessage() extends Logging {
     buffer.clear()
     set(buffer)
   }
-  
+
   def getConnectionId: String = {
     return connectionId
   }
-  
+
   def getToken: Array[Byte] = {
     return token
   }
-  
+
   /**
-   * Create a BufferMessage that can be sent by the ConnectionManager containing 
+   * Create a BufferMessage that can be sent by the ConnectionManager containing
    * the security information from this class.
    * @return BufferMessage
    */
@@ -110,12 +110,12 @@ private[spark] class SecurityMessage() extends Logging {
     val buffers = new ArrayBuffer[ByteBuffer]()
 
     // 4 bytes for the length of the connectionId
-    // connectionId is of type char so multiple the length by 2 to get number of bytes 
+    // connectionId is of type char so multiple the length by 2 to get number of bytes
     // 4 bytes for the length of token
     // token is a byte buffer so just take the length
     var buffer = ByteBuffer.allocate(4 + connectionId.length() * 2 + 4 + token.length)
     buffer.putInt(connectionId.length())
-    connectionId.foreach((x: Char) => buffer.putChar(x)) 
+    connectionId.foreach((x: Char) => buffer.putChar(x))
     buffer.putInt(token.length)
 
     if (token.length > 0) {
@@ -123,7 +123,7 @@ private[spark] class SecurityMessage() extends Logging {
     }
     buffer.flip()
     buffers += buffer
-    
+
     var message = Message.createBufferMessage(buffers)
     logDebug("message total size is : " + message.size)
     message.isSecurityNeg = true
@@ -136,7 +136,7 @@ private[spark] class SecurityMessage() extends Logging {
 }
 
 private[spark] object SecurityMessage {
- 
+
   /**
    * Convert the given BufferMessage to a SecurityMessage by parsing the contents
    * of the BufferMessage and populating the SecurityMessage fields.

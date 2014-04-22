@@ -20,7 +20,6 @@ package org.apache.spark.examples
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkContext
 
-
 /**
  * Computes the PageRank of URLs from an input file. Input file should
  * be in format of:
@@ -57,7 +56,6 @@ object SparkPageRank {
     val output = ranks.collect()
     output.foreach(tup => println(tup._1 + " has rank: " + tup._2 + "."))
 
-    System.exit(0)
+    ctx.stop()
   }
 }
-

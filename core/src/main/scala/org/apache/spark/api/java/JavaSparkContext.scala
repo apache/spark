@@ -22,6 +22,7 @@ import java.util.{Map => JMap}
 
 import scala.collection.JavaConversions
 import scala.collection.JavaConversions._
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import com.google.common.base.Optional
@@ -89,7 +90,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    */
   def this(master: String, appName: String, sparkHome: String, jars: Array[String],
       environment: JMap[String, String]) =
-    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment))
+    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment, Map()))
 
   private[spark] val env = sc.env
 
@@ -108,8 +109,16 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
   def defaultParallelism: java.lang.Integer = sc.defaultParallelism
 
-  /** Default min number of partitions for Hadoop RDDs when not given by user */
+  /**
+   * Default min number of partitions for Hadoop RDDs when not given by user.
+   * @deprecated As of Spark 1.0.0, defaultMinSplits is deprecated, use
+   *            {@link #defaultMinPartitions()} instead
+   */
+  @deprecated("use defaultMinPartitions", "1.0.0")
   def defaultMinSplits: java.lang.Integer = sc.defaultMinSplits
+
+  /** Default min number of partitions for Hadoop RDDs when not given by user */
+  def defaultMinPartitions: java.lang.Integer = sc.defaultMinPartitions
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {
@@ -152,7 +161,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
    */
-  def textFile(path: String, minSplits: Int): JavaRDD[String] = sc.textFile(path, minSplits)
+  def textFile(path: String, minPartitions: Int): JavaRDD[String] =
+    sc.textFile(path, minPartitions)
 
   /**
    * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
@@ -177,7 +187,19 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    *   (a-hdfs-path/part-nnnnn, its content)
    * }}}
    *
-   * @note Small files are preferred, as each file will be loaded fully in memory.
+   * @note Small files are preferred, large file is also allowable, but may cause bad performance.
+   *
+   * @param minPartitions A suggestion value of the minimal splitting number for input data.
+   */
+  def wholeTextFiles(path: String, minPartitions: Int): JavaPairRDD[String, String] =
+    new JavaPairRDD(sc.wholeTextFiles(path, minPartitions))
+
+  /**
+   * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI. Each file is read as a single record and returned in a
+   * key-value pair, where the key is the path of each file, the value is the content of each file.
+   *
+   * @see `wholeTextFiles(path: String, minPartitions: Int)`.
    */
   def wholeTextFiles(path: String): JavaPairRDD[String, String] =
     new JavaPairRDD(sc.wholeTextFiles(path))
@@ -192,11 +214,11 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   def sequenceFile[K, V](path: String,
     keyClass: Class[K],
     valueClass: Class[V],
-    minSplits: Int
+    minPartitions: Int
     ): JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
     implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
-    new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass, minSplits))
+    new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass, minPartitions))
   }
 
   /** Get an RDD for a Hadoop SequenceFile.
@@ -220,9 +242,9 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * slow if you use the default serializer (Java serialization), though the nice thing about it is
    * that there's very little effort required to save arbitrary objects.
    */
-  def objectFile[T](path: String, minSplits: Int): JavaRDD[T] = {
+  def objectFile[T](path: String, minPartitions: Int): JavaRDD[T] = {
     implicit val ctag: ClassTag[T] = fakeClassTag
-    sc.objectFile(path, minSplits)(ctag)
+    sc.objectFile(path, minPartitions)(ctag)
   }
 
   /**
@@ -252,11 +274,11 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     inputFormatClass: Class[F],
     keyClass: Class[K],
     valueClass: Class[V],
-    minSplits: Int
+    minPartitions: Int
     ): JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
     implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
-    new JavaPairRDD(sc.hadoopRDD(conf, inputFormatClass, keyClass, valueClass, minSplits))
+    new JavaPairRDD(sc.hadoopRDD(conf, inputFormatClass, keyClass, valueClass, minPartitions))
   }
 
   /**
@@ -291,11 +313,11 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     inputFormatClass: Class[F],
     keyClass: Class[K],
     valueClass: Class[V],
-    minSplits: Int
+    minPartitions: Int
     ): JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
     implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
-    new JavaPairRDD(sc.hadoopFile(path, inputFormatClass, keyClass, valueClass, minSplits))
+    new JavaPairRDD(sc.hadoopFile(path, inputFormatClass, keyClass, valueClass, minPartitions))
   }
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat

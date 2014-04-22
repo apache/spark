@@ -17,19 +17,24 @@
 
 package org.apache.spark
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 
 /**
+ * :: DeveloperApi ::
  * Base class for dependencies.
  */
+@DeveloperApi
 abstract class Dependency[T](val rdd: RDD[T]) extends Serializable
 
 
 /**
+ * :: DeveloperApi ::
  * Base class for dependencies where each partition of the parent RDD is used by at most one
  * partition of the child RDD.  Narrow dependencies allow for pipelined execution.
  */
+@DeveloperApi
 abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency(rdd) {
   /**
    * Get the parent partitions for a child partition.
@@ -41,6 +46,7 @@ abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency(rdd) {
 
 
 /**
+ * :: DeveloperApi ::
  * Represents a dependency on the output of a shuffle stage.
  * @param rdd the parent RDD
  * @param partitioner partitioner used to partition the shuffle output
@@ -48,6 +54,7 @@ abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency(rdd) {
  *                   the default serializer, as specified by `spark.serializer` config option, will
  *                   be used.
  */
+@DeveloperApi
 class ShuffleDependency[K, V](
     @transient rdd: RDD[_ <: Product2[K, V]],
     val partitioner: Partitioner,
@@ -61,20 +68,24 @@ class ShuffleDependency[K, V](
 
 
 /**
+ * :: DeveloperApi ::
  * Represents a one-to-one dependency between partitions of the parent and child RDDs.
  */
+@DeveloperApi
 class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
   override def getParents(partitionId: Int) = List(partitionId)
 }
 
 
 /**
+ * :: DeveloperApi ::
  * Represents a one-to-one dependency between ranges of partitions in the parent and child RDDs.
  * @param rdd the parent RDD
  * @param inStart the start of the range in the parent RDD
  * @param outStart the start of the range in the child RDD
  * @param length the length of the range
  */
+@DeveloperApi
 class RangeDependency[T](rdd: RDD[T], inStart: Int, outStart: Int, length: Int)
   extends NarrowDependency[T](rdd) {
 

@@ -20,7 +20,7 @@ a schema that describes the data types of each column in the row.  A SchemaRDD i
 in a traditional relational database.  A SchemaRDD can be created from an existing RDD, parquet
 file, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
 
-**All of the examples on this page use sample data included in the Spark distribution and can be run in the spark-shell.**
+**All of the examples on this page use sample data included in the Spark distribution and can be run in the `spark-shell`.**
 
 </div>
 
@@ -33,6 +33,19 @@ a schema that describes the data types of each column in the row.  A JavaSchemaR
 in a traditional relational database.  A JavaSchemaRDD can be created from an existing RDD, parquet
 file, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
 </div>
+
+<div data-lang="python"  markdown="1">
+
+Spark SQL allows relational queries expressed in SQL or HiveQL to be executed using
+Spark.  At the core of this component is a new type of RDD,
+[SchemaRDD](api/pyspark/pyspark.sql.SchemaRDD-class.html).  SchemaRDDs are composed
+[Row](api/pyspark/pyspark.sql.Row-class.html) objects along with
+a schema that describes the data types of each column in the row.  A SchemaRDD is similar to a table
+in a traditional relational database.  A SchemaRDD can be created from an existing RDD, parquet
+file, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
+
+**All of the examples on this page use sample data included in the Spark distribution and can be run in the `pyspark` shell.**
+</div>
 </div>
 
 ***************************************************************************************************
@@ -44,7 +57,7 @@ file, or by running HiveQL against data stored in [Apache Hive](http://hive.apac
 
 The entry point into all relational functionality in Spark is the
 [SQLContext](api/sql/core/index.html#org.apache.spark.sql.SQLContext) class, or one of its
-decendents.  To create a basic SQLContext, all you need is a SparkContext.
+descendants.  To create a basic SQLContext, all you need is a SparkContext.
 
 {% highlight scala %}
 val sc: SparkContext // An existing SparkContext.
@@ -56,15 +69,28 @@ import sqlContext._
 
 </div>
 
-<div data-lang="java"  markdown="1">
+<div data-lang="java" markdown="1">
 
 The entry point into all relational functionality in Spark is the
 [JavaSQLContext](api/sql/core/index.html#org.apache.spark.sql.api.java.JavaSQLContext) class, or one
-of its decendents.  To create a basic JavaSQLContext, all you need is a JavaSparkContext.
+of its descendants.  To create a basic JavaSQLContext, all you need is a JavaSparkContext.
 
 {% highlight java %}
 JavaSparkContext ctx = ...; // An existing JavaSparkContext.
 JavaSQLContext sqlCtx = new org.apache.spark.sql.api.java.JavaSQLContext(ctx);
+{% endhighlight %}
+
+</div>
+
+<div data-lang="python"  markdown="1">
+
+The entry point into all relational functionality in Spark is the
+[SQLContext](api/pyspark/pyspark.sql.SQLContext-class.html) class, or one
+of its decedents.  To create a basic SQLContext, all you need is a SparkContext.
+
+{% highlight python %}
+from pyspark.sql import SQLContext
+sqlCtx = SQLContext(sc)
 {% endhighlight %}
 
 </div>
@@ -81,7 +107,7 @@ One type of table that is supported by Spark SQL is an RDD of Scala case classes
 defines the schema of the table.  The names of the arguments to the case class are read using
 reflection and become the names of the columns. Case classes can also be nested or contain complex
 types such as Sequences or Arrays. This RDD can be implicitly converted to a SchemaRDD and then be
-registered as a table.  Tables can used in subsequent SQL statements.
+registered as a table.  Tables can be used in subsequent SQL statements.
 
 {% highlight scala %}
 val sqlContext = new org.apache.spark.sql.SQLContext(sc)
@@ -176,6 +202,34 @@ List<String> teenagerNames = teenagers.map(new Function<Row, String>() {
 
 </div>
 
+<div data-lang="python"  markdown="1">
+
+One type of table that is supported by Spark SQL is an RDD of dictionaries.  The keys of the
+dictionary define the columns names of the table, and the types are inferred by looking at the first
+row. Any RDD of dictionaries can converted to a SchemaRDD and then registered as a table.  Tables
+can be used in subsequent SQL statements.
+
+{% highlight python %}
+# Load a text file and convert each line to a dictionary.
+lines = sc.textFile("examples/src/main/resources/people.txt")
+parts = lines.map(lambda l: l.split(","))
+people = parts.map(lambda p: {"name": p[0], "age": int(p[1])})
+
+# Infer the schema, and register the SchemaRDD as a table.
+# In future versions of PySpark we would like to add support for registering RDDs with other
+# datatypes as tables
+peopleTable = sqlCtx.inferSchema(people)
+peopleTable.registerAsTable("people")
+
+# SQL can be run over SchemaRDDs that have been registered as a table.
+teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
+
+# The results of SQL queries are RDDs and support all the normal RDD operations.
+teenNames = teenagers.map(lambda p: "Name: " + p.name)
+{% endhighlight %}
+
+</div>
+
 </div>
 
 **Note that Spark SQL currently uses a very basic SQL parser.**
@@ -230,6 +284,27 @@ JavaSchemaRDD parquetFile = sqlCtx.parquetFile("people.parquet");
 parquetFile.registerAsTable("parquetFile");
 JavaSchemaRDD teenagers = sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
 
+
+{% endhighlight %}
+
+</div>
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+
+peopleTable # The SchemaRDD from the previous example.
+
+# SchemaRDDs can be saved as parquet files, maintaining the schema information.
+peopleTable.saveAsParquetFile("people.parquet")
+
+# Read in the parquet file created above.  Parquet files are self-describing so the schema is preserved.
+# The result of loading a parquet file is also a SchemaRDD.
+parquetFile = sqlCtx.parquetFile("people.parquet")
+
+# Parquet files can also be registered as tables and then used in SQL statements.
+parquetFile.registerAsTable("parquetFile");
+teenagers = sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 
 {% endhighlight %}
 
@@ -317,5 +392,25 @@ Row[] results = hiveCtx.hql("FROM src SELECT key, value").collect();
 {% endhighlight %}
 
 </div>
+
+<div data-lang="python"  markdown="1">
+
+When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
+adds support for finding tables in in the MetaStore and writing queries using HiveQL. In addition to
+the `sql` method a `HiveContext` also provides an `hql` methods, which allows queries to be
+expressed in HiveQL.
+
+{% highlight python %}
+
+from pyspark.sql import HiveContext
+hiveCtx = HiveContext(sc)
+
+hiveCtx.hql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+hiveCtx.hql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+
+# Queries can be expressed in HiveQL.
+results = hiveCtx.hql("FROM src SELECT key, value").collect()
+
+{% endhighlight %}
 
 </div>

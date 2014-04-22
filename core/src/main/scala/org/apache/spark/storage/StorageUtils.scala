@@ -21,6 +21,7 @@ import scala.collection.Map
 import scala.collection.mutable
 
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
 private[spark]
@@ -41,23 +42,22 @@ class StorageStatus(
 
   def memRemaining : Long = maxMem - memUsed()
 
-  def rddBlocks = blocks.flatMap {
-    case (rdd: RDDBlockId, status) => Some(rdd, status)
-    case _ => None
-  }
+  def rddBlocks = blocks.collect { case (rdd: RDDBlockId, status) => (rdd, status) }
 }
 
+@DeveloperApi
 private[spark]
 class RDDInfo(
-  val id: Int,
-  val name: String,
-  val numPartitions: Int,
-  val storageLevel: StorageLevel) extends Ordered[RDDInfo] {
+    val id: Int,
+    val name: String,
+    val numPartitions: Int,
+    val storageLevel: StorageLevel)
+  extends Ordered[RDDInfo] {
 
   var numCachedPartitions = 0
   var memSize = 0L
   var diskSize = 0L
-  var tachyonSize= 0L
+  var tachyonSize = 0L
 
   override def toString = {
     import Utils.bytesToString

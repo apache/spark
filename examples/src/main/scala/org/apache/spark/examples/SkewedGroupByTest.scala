@@ -17,9 +17,10 @@
 
 package org.apache.spark.examples
 
+import java.util.Random
+
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
-import java.util.Random
 
 object SkewedGroupByTest {
   def main(args: Array[String]) {
@@ -27,7 +28,7 @@ object SkewedGroupByTest {
       System.err.println(
         "Usage: GroupByTest <master> [numMappers] [numKVPairs] [KeySize] [numReducers]")
       System.exit(1)
-    }  
+    }
 
     var numMappers = if (args.length > 1) args(1).toInt else 2
     var numKVPairs = if (args.length > 2) args(2).toInt else 1000
@@ -53,10 +54,9 @@ object SkewedGroupByTest {
     }.cache()
     // Enforce that everything has been calculated and in cache
     pairs1.count()
-    
+
     println(pairs1.groupByKey(numReducers).count())
 
-    System.exit(0)
+    sc.stop()
   }
 }
-

@@ -17,8 +17,8 @@
 
 package org.apache.spark.examples
 
-import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext
 
 object MultiBroadcastTest {
   def main(args: Array[String]) {
@@ -51,6 +51,6 @@ object MultiBroadcastTest {
     // Collect the small RDD so we can print the observed sizes locally.
     observedSizes.collect().foreach(i => println(i))
 
-    System.exit(0)
+    sc.stop()
   }
 }
