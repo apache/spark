@@ -39,21 +39,32 @@ You can start a the history server by executing:
 
 The base logging directory must be supplied, and should contain sub-directories that each
 represents an application's event logs. This creates a web interface at
-`http://<server-url>:18080` by default. The history server depends on the following variables:
+`http://<server-url>:18080` by default. The history server can be configured as follows:
 
 <table class="table">
   <tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr>
   <tr>
     <td><code>SPARK_DAEMON_MEMORY</code></td>
-    <td>Memory to allocate to the history server. (default: 512m).</td>
+    <td>Memory to allocate to the history server (default: 512m).</td>
   </tr>
   <tr>
     <td><code>SPARK_DAEMON_JAVA_OPTS</code></td>
     <td>JVM options for the history server (default: none).</td>
   </tr>
+  <tr>
+    <td><code>SPARK_PUBLIC_DNS</code></td>
+    <td>
+      The public address for the history server. If this is not set, links to application history
+      may use the internal address of the server, resulting in broken links (default: none).
+    </td>
+  </tr>
+  <tr>
+    <td><code>SPARK_HISTORY_OPTS</code></td>
+    <td>
+      <code>spark.history.*</code> configuration options for the history server (default: none).
+    </td>
+  </tr>
 </table>
-
-Further, the history server can be configured as follows:
 
 <table class="table">
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
