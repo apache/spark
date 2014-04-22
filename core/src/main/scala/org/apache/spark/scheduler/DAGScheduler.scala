@@ -1014,18 +1014,17 @@ private[scheduler] class DAGSchedulerActorSupervisor(dagScheduler: DAGScheduler)
 
   override val supervisorStrategy =
     OneForOneStrategy() {
-      case x: Exception => {
+      case x: Exception =>
         logError("eventProcesserActor failed due to the error %s; shutting down SparkContext"
           .format(x.getMessage))
         dagScheduler.doCancelAllJobs()
         dagScheduler.sc.stop()
         Stop
-      }
     }
 
   def receive = {
     case p: Props => sender ! context.actorOf(p)
-    case _ => logWarning("recevied unknown message in DAGSchedulerActorSupervisor")
+    case _ => logWarning("received unknown message in DAGSchedulerActorSupervisor")
   }
 
   dagScheduler.eventProcessActor = context.actorOf(
