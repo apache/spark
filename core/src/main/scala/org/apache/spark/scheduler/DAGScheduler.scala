@@ -1140,7 +1140,7 @@ private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGSchedule
   }
 
   override def postStop() {
-    // Cancel any active jobs
+    // Cancel any active jobs in postStop hook
     for (job <- dagScheduler.activeJobs) {
       val error = new SparkException("Job cancelled because SparkContext was shut down")
       job.listener.jobFailed(error)
