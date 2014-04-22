@@ -89,7 +89,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
       }
     }
     logDebug("numElementsPerNode = " + numElementsPerNode)
-    val arraySizePerNode = 8 * numElementsPerNode //approx. memory usage for bin aggregate array
+    val arraySizePerNode = 8 * numElementsPerNode // approx. memory usage for bin aggregate array
     val maxNumberOfNodesPerGroup = scala.math.max(maxMemoryUsage / arraySizePerNode, 1)
     logDebug("maxNumberOfNodesPerGroup = " + maxNumberOfNodesPerGroup)
     // nodes at a level is 2^(level-1). level is zero indexed.
