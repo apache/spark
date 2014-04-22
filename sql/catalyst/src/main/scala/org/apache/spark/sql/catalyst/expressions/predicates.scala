@@ -174,7 +174,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     extends Expression {
 
   def children = predicate :: trueValue :: falseValue :: Nil
-  override def nullable = predicate.nullable || (trueValue.nullable && falseValue.nullable)
+  override def nullable = trueValue.nullable || falseValue.nullable
   def references = children.flatMap(_.references).toSet
   override lazy val resolved = childrenResolved && trueValue.dataType == falseValue.dataType
   def dataType = {
@@ -189,10 +189,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   type EvaluatedType = Any
 
   override def eval(input: Row): Any = {
-    val condition = predicate.eval(input)
-    if (null == condition) {
-      null
-    } else if(condition == true) {
+    if (true == predicate.eval(input)) {
       trueValue.eval(input)
     } else {
       falseValue.eval(input)
