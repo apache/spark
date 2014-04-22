@@ -38,6 +38,7 @@ private[streaming]
 class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
   private val ssc = jobScheduler.ssc
+  private val conf = ssc.conf
   private val graph = ssc.graph
 
   val clock = {
@@ -93,26 +94,31 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     if (processReceivedData) {
       logInfo("Stopping JobGenerator gracefully")
       val timeWhenStopStarted = System.currentTimeMillis()
-      val stopTimeout = 10 * ssc.graph.batchDuration.milliseconds
+      val stopTimeout = conf.getLong(
+        "spark.streaming.gracefulStopTimeout",
+        10 * ssc.graph.batchDuration.milliseconds
+      )
       val pollTime = 100
 
       // To prevent graceful stop to get stuck permanently
       def hasTimedOut = {
         val timedOut = System.currentTimeMillis() - timeWhenStopStarted > stopTimeout
-        if (timedOut) logWarning("Timed out while stopping the job generator")
+        if (timedOut) {
+          logWarning("Timed out while stopping the job generator (timeout = " + stopTimeout + ")")
+        }
         timedOut
       }
 
       // Wait until all the received blocks in the network input tracker has
       // been consumed by network input DStreams, and jobs have been generated with them
       logInfo("Waiting for all received blocks to be consumed for job generation")
-      while(!hasTimedOut && jobScheduler.networkInputTracker.hasMoreReceivedBlockIds) {
+      while(!hasTimedOut && jobScheduler.receiverTracker.hasMoreReceivedBlockIds) {
         Thread.sleep(pollTime)
       }
       logInfo("Waited for all received blocks to be consumed for job generation")
 
       // Stop generating jobs
-      val stopTime = timer.stop(false)
+      val stopTime = timer.stop(interruptTimer = false)
       graph.stop()
       logInfo("Stopped generation timer")
 
@@ -214,7 +220,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     SparkEnv.set(ssc.env)
     Try(graph.generateJobs(time)) match {
       case Success(jobs) =>
-        val receivedBlockInfo = graph.getNetworkInputStreams.map { stream =>
+        val receivedBlockInfo = graph.getReceiverInputStreams.map { stream =>
           val streamId = stream.id
           val receivedBlockInfo = stream.getReceivedBlockInfo(time)
           (streamId, receivedBlockInfo)

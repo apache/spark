@@ -23,6 +23,8 @@ import AssemblyKeys._
 import scala.util.Properties
 import org.scalastyle.sbt.ScalastylePlugin.{Settings => ScalaStyleSettings}
 import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
+import sbtunidoc.Plugin._
+import UnidocKeys._
 
 import scala.collection.JavaConversions._
 
@@ -31,6 +33,7 @@ import scala.collection.JavaConversions._
 
 object SparkBuild extends Build {
   val SPARK_VERSION = "1.0.0-SNAPSHOT"
+  val SPARK_VERSION_SHORT = SPARK_VERSION.replaceAll("-SNAPSHOT", "")
 
   // Hadoop version to build against. For example, "1.0.4" for Apache releases, or
   // "2.0.0-mr1-cdh4.2.0" for Cloudera Hadoop. Note that these variables can be set
@@ -184,12 +187,17 @@ object SparkBuild extends Build {
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
     // Remove certain packages from Scaladoc
-    scalacOptions in (Compile,doc) := Seq("-groups", "-skip-packages", Seq(
-      "akka",
-      "org.apache.spark.network",
-      "org.apache.spark.deploy",
-      "org.apache.spark.util.collection"
-      ).mkString(":")),
+    scalacOptions in (Compile, doc) := Seq(
+      "-groups",
+      "-skip-packages", Seq(
+        "akka",
+        "org.apache.spark.api.python",
+        "org.apache.spark.network",
+        "org.apache.spark.deploy",
+        "org.apache.spark.util.collection"
+      ).mkString(":"),
+      "-doc-title", "Spark " + SPARK_VERSION_SHORT + " ScalaDoc"
+    ),
 
     // Only allow one test at a time, even across projects, since they run in the same JVM
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
@@ -283,7 +291,7 @@ object SparkBuild extends Build {
     publishMavenStyle in MavenCompile := true,
     publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
     publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
-  ) ++ net.virtualvoid.sbt.graph.Plugin.graphSettings ++ ScalaStyleSettings
+  ) ++ net.virtualvoid.sbt.graph.Plugin.graphSettings ++ ScalaStyleSettings ++ genjavadocSettings
 
   val akkaVersion = "2.2.3-shaded-protobuf"
   val chillVersion = "0.3.1"
@@ -349,15 +357,57 @@ object SparkBuild extends Build {
     libraryDependencies ++= maybeAvro
   )
 
-  def rootSettings = sharedSettings ++ Seq(
-    publish := {}
+  // Create a colon-separate package list adding "org.apache.spark" in front of all of them,
+  // for easier specification of JavaDoc package groups
+  def packageList(names: String*): String = {
+    names.map(s => "org.apache.spark." + s).mkString(":")
+  }
+
+  def rootSettings = sharedSettings ++ scalaJavaUnidocSettings ++ Seq(
+    publish := {},
+
+    unidocProjectFilter in (ScalaUnidoc, unidoc) :=
+      inAnyProject -- inProjects(repl, examples, tools, yarn, yarnAlpha),
+    unidocProjectFilter in (JavaUnidoc, unidoc) :=
+      inAnyProject -- inProjects(repl, examples, bagel, graphx, catalyst, tools, yarn, yarnAlpha),
+
+    // Skip class names containing $ and some internal packages in Javadocs
+    unidocAllSources in (JavaUnidoc, unidoc) := {
+      (unidocAllSources in (JavaUnidoc, unidoc)).value
+        .map(_.filterNot(_.getName.contains("$")))
+        .map(_.filterNot(_.getCanonicalPath.contains("akka")))
+        .map(_.filterNot(_.getCanonicalPath.contains("deploy")))
+        .map(_.filterNot(_.getCanonicalPath.contains("network")))
+        .map(_.filterNot(_.getCanonicalPath.contains("executor")))
+        .map(_.filterNot(_.getCanonicalPath.contains("python")))
+        .map(_.filterNot(_.getCanonicalPath.contains("collection")))
+    },
+
+    // Javadoc options: create a window title, and group key packages on index page
+    javacOptions in doc := Seq(
+      "-windowtitle", "Spark " + SPARK_VERSION_SHORT + " JavaDoc",
+      "-public",
+      "-group", "Core Java API", packageList("api.java", "api.java.function"),
+      "-group", "Spark Streaming", packageList(
+        "streaming.api.java", "streaming.flume", "streaming.kafka",
+        "streaming.mqtt", "streaming.twitter", "streaming.zeromq"
+      ),
+      "-group", "MLlib", packageList(
+        "mllib.classification", "mllib.clustering", "mllib.evaluation.binary", "mllib.linalg",
+        "mllib.linalg.distributed", "mllib.optimization", "mllib.rdd", "mllib.recommendation",
+        "mllib.regression", "mllib.stat", "mllib.tree", "mllib.tree.configuration",
+        "mllib.tree.impurity", "mllib.tree.model", "mllib.util"
+      ),
+      "-group", "Spark SQL", packageList("sql.api.java", "sql.hive.api.java"),
+      "-noqualifier", "java.lang"
+    )
   )
 
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
-   libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v ),
-   libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "jline"          % v ),
-   libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-reflect"  % v )
+    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v),
+    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "jline"          % v),
+    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-reflect"  % v)
   )
 
   def examplesSettings = sharedSettings ++ Seq(

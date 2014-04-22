@@ -25,36 +25,43 @@ To write a Spark application, you need to add a dependency on Spark. If you use 
     artifactId = spark-core_{{site.SCALA_BINARY_VERSION}}
     version = {{site.SPARK_VERSION}}
 
-In addition, if you wish to access an HDFS cluster, you need to add a dependency on `hadoop-client` for your version of HDFS:
+In addition, if you wish to access an HDFS cluster, you need to add a dependency on
+`hadoop-client` for your version of HDFS. Some common HDFS version tags are listed on the
+[third party distributions](hadoop-third-party-distributions.html) page.
 
     groupId = org.apache.hadoop
     artifactId = hadoop-client
     version = <your-hdfs-version>
-
-For other build systems, you can run `sbt/sbt assembly` to pack Spark and its dependencies into one JAR (`assembly/target/scala-{{site.SCALA_BINARY_VERSION}}/spark-assembly-{{site.SPARK_VERSION}}-hadoop*.jar`), then add this to your CLASSPATH. Set the HDFS version as described [here](index.html#a-note-about-hadoop-versions).
 
 Finally, you need to import some Spark classes and implicit conversions into your program. Add the following lines:
 
 {% highlight scala %}
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
+import org.apache.spark.SparkConf
 {% endhighlight %}
 
 # Initializing Spark
 
-The first thing a Spark program must do is to create a `SparkContext` object, which tells Spark how to access a cluster.
-This is done through the following constructor:
+The first thing a Spark program must do is to create a `SparkContext` object, which tells Spark
+how to access a cluster. To create a `SparkContext` you first need to build a `SparkConf` object
+that contains information about your application.
 
 {% highlight scala %}
-new SparkContext(master, appName, [sparkHome], [jars])
+val conf = new SparkConf().setAppName(<app name>).setMaster(<master>)
+new SparkContext(conf)
 {% endhighlight %}
 
-or through `new SparkContext(conf)`, which takes a [SparkConf](api/core/index.html#org.apache.spark.SparkConf)
-object for more advanced configuration.
+The `<master>` parameter is a string specifying a [Spark, Mesos or YARN cluster URL](#master-urls)
+to connect to, or a special "local" string to run in local mode, as described below. `<app name>` is
+a name for your application, which will be shown in the cluster web UI. It's also possible to set
+these variables [using a configuration file](cluster-overview.html#loading-configurations-from-a-file)
+which avoids hard-coding the master name in your application.
 
-The `master` parameter is a string specifying a [Spark or Mesos cluster URL](#master-urls) to connect to, or a special "local" string to run in local mode, as described below. `appName` is a name for your application, which will be shown in the cluster web UI. Finally, the last two parameters are needed to deploy your code to a cluster if running in distributed mode, as described later.
-
-In the Spark shell, a special interpreter-aware SparkContext is already created for you, in the variable called `sc`. Making your own SparkContext will not work. You can set which master the context connects to using the `MASTER` environment variable, and you can add JARs to the classpath with the `ADD_JARS` variable. For example, to run `bin/spark-shell` on exactly four cores, use
+In the Spark shell, a special interpreter-aware SparkContext is already created for you, in the
+variable called `sc`. Making your own SparkContext will not work. You can set which master the
+context connects to using the `MASTER` environment variable, and you can add JARs to the classpath
+with the `ADD_JARS` variable. For example, to run `bin/spark-shell` on exactly four cores, use
 
 {% highlight bash %}
 $ MASTER=local[4] ./bin/spark-shell
@@ -83,20 +90,15 @@ The master URL passed to Spark can be in one of the following formats:
         The host parameter is the hostname of the Mesos master. The port must be whichever one the master is configured to use,
         which is 5050 by default.
 </td></tr>
+<tr><td> yarn-client </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
+client mode. The cluster location will be inferred based on the local Hadoop configuration.
+</td></tr>
+<tr><td> yarn-cluster </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
+cluster mode. The cluster location will be inferred based on the local Hadoop configuration.
+</td></tr>
 </table>
 
 If no master URL is specified, the spark shell defaults to "local[*]".
-
-For running on YARN, Spark launches an instance of the standalone deploy cluster within YARN; see [running on YARN](running-on-yarn.html) for details.
-
-### Deploying Code on a Cluster
-
-If you want to run your application on a cluster, you will need to specify the two optional parameters to `SparkContext` to let it find your code:
-
-* `sparkHome`: The path at which Spark is installed on your worker machines (it should be the same on all of them).
-* `jars`: A list of JAR files on the local machine containing your application's code and any dependencies, which Spark will deploy to all the worker nodes. You'll need to package your application into a set of JARs using your build system. For example, if you're using SBT, the [sbt-assembly](https://github.com/sbt/sbt-assembly) plugin is a good way to make a single JAR with your code and dependencies.
-
-If you run `bin/spark-shell` on a cluster, you can add JARs to it by specifying the `ADD_JARS` environment variable before you launch it.  This variable should contain a comma-separated list of JARs. For example, `ADD_JARS=a.jar,b.jar ./bin/spark-shell` will launch a shell with `a.jar` and `b.jar` on its classpath. In addition, any new classes you define in the shell will automatically be distributed.
 
 # Resilient Distributed Datasets (RDDs)
 
@@ -145,7 +147,7 @@ All transformations in Spark are <i>lazy</i>, in that they do not compute their 
 
 By default, each transformed RDD is recomputed each time you run an action on it. However, you may also *persist* an RDD in memory using the `persist` (or `cache`) method, in which case Spark will keep the elements around on the cluster for much faster access the next time you query it. There is also support for persisting datasets on disk, or replicated across the cluster. The next section in this document describes these options.
 
-The following tables list the transformations and actions currently supported (see also the [RDD API doc](api/core/index.html#org.apache.spark.rdd.RDD) for details):
+The following tables list the transformations and actions currently supported (see also the [RDD API doc](api/scala/index.html#org.apache.spark.rdd.RDD) for details):
 
 ### Transformations
 
@@ -214,7 +216,7 @@ The following tables list the transformations and actions currently supported (s
 </tr>
 </table>
 
-A complete list of transformations is available in the [RDD API doc](api/core/index.html#org.apache.spark.rdd.RDD).
+A complete list of transformations is available in the [RDD API doc](api/scala/index.html#org.apache.spark.rdd.RDD).
 
 ### Actions
 
@@ -262,7 +264,7 @@ A complete list of transformations is available in the [RDD API doc](api/core/in
 </tr>
 </table>
 
-A complete list of actions is available in the [RDD API doc](api/core/index.html#org.apache.spark.rdd.RDD).
+A complete list of actions is available in the [RDD API doc](api/scala/index.html#org.apache.spark.rdd.RDD).
 
 ## RDD Persistence
 
@@ -281,7 +283,7 @@ In addition, each RDD can be stored using a different *storage level*, allowing 
 persist the dataset on disk, or persist it in memory but as serialized Java objects (to save space),
 or replicate it across nodes, or store the data in off-heap memory in [Tachyon](http://tachyon-project.org/).
 These levels are chosen by passing a
-[`org.apache.spark.storage.StorageLevel`](api/core/index.html#org.apache.spark.storage.StorageLevel)
+[`org.apache.spark.storage.StorageLevel`](api/scala/index.html#org.apache.spark.storage.StorageLevel)
 object to `persist()`. The `cache()` method is a shorthand for using the default storage level,
 which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The complete set of
 available storage levels is:
@@ -353,7 +355,7 @@ waiting to recompute a lost partition.
 
 If you want to define your own storage level (say, with replication factor of 3 instead of 2), then
 use the function factor method `apply()` of the
-[`StorageLevel`](api/core/index.html#org.apache.spark.storage.StorageLevel$) singleton object.
+[`StorageLevel`](api/scala/index.html#org.apache.spark.storage.StorageLevel$) singleton object.
 
 Spark has a block manager inside the Executors that let you chose memory, disk, or off-heap. The
 latter is for storing RDDs off-heap outside the Executor JVM on top of the memory management system
