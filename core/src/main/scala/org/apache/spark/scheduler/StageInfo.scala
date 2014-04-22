@@ -51,7 +51,7 @@ private[spark] object StageInfo {
    */
   def fromStage(stage: Stage): StageInfo = {
     val ancestorRddInfos = stage.rdd.getNarrowAncestors().map(RDDInfo.fromRdd)
-    val rddInfos = ancestorRddInfos ++ Seq(RDDInfo.fromRdd(stage.rdd))
+    val rddInfos = Seq(RDDInfo.fromRdd(stage.rdd)) ++ ancestorRddInfos
     new StageInfo(stage.id, stage.name, stage.numTasks, rddInfos)
   }
 }

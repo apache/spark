@@ -17,12 +17,10 @@
 
 package org.apache.spark.rdd
 
-import scala.collection.mutable.HashMap
-import scala.collection.parallel.mutable
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.reflect.ClassTag
 
 import org.scalatest.FunSuite
-import org.scalatest.concurrent.Timeouts._
-import org.scalatest.time.{Millis, Span}
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
@@ -153,7 +151,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
         if (shouldFail) {
           throw new Exception("injected failure")
         } else {
-          return Array(1, 2, 3, 4).iterator
+          Array(1, 2, 3, 4).iterator
         }
       }
     }.cache()
@@ -567,5 +565,139 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val ranked = data.zipWithUniqueId()
     val ids = ranked.map(_._1).distinct().collect()
     assert(ids.length === n)
+  }
+
+  test("getNarrowAncestors") {
+    val rdd1 = sc.parallelize(1 to 100, 4)
+    val rdd2 = rdd1.filter(_ % 2 == 0).map(_ + 1)
+    val rdd3 = rdd2.map(_ - 1).filter(_ < 50).map(i => (i, i))
+    val rdd4 = rdd3.reduceByKey(_ + _)
+    val rdd5 = rdd4.mapValues(_ + 1).mapValues(_ + 2).mapValues(_ + 3)
+    val ancestors1 = rdd1.getNarrowAncestors()
+    val ancestors2 = rdd2.getNarrowAncestors()
+    val ancestors3 = rdd3.getNarrowAncestors()
+    val ancestors4 = rdd4.getNarrowAncestors()
+    val ancestors5 = rdd5.getNarrowAncestors()
+
+    // Simple dependency tree with a single branch
+    assert(ancestors1.size === 0)
+    assert(ancestors2.size === 2)
+    assert(ancestors2.count(_.isInstanceOf[ParallelCollectionRDD[_]]) === 1)
+    assert(ancestors2.count(_.isInstanceOf[FilteredRDD[_]]) === 1)
+    assert(ancestors3.size === 5)
+    assert(ancestors3.count(_.isInstanceOf[ParallelCollectionRDD[_]]) === 1)
+    assert(ancestors3.count(_.isInstanceOf[FilteredRDD[_]]) === 2)
+    assert(ancestors3.count(_.isInstanceOf[MappedRDD[_, _]]) === 2)
+
+    // Any ancestors before the shuffle are not considered
+    assert(ancestors4.size === 1)
+    assert(ancestors4.count(_.isInstanceOf[ShuffledRDD[_, _, _]]) === 1)
+    assert(ancestors5.size === 4)
+    assert(ancestors5.count(_.isInstanceOf[ShuffledRDD[_, _, _]]) === 1)
+    assert(ancestors5.count(_.isInstanceOf[MapPartitionsRDD[_, _]]) === 1)
+    assert(ancestors5.count(_.isInstanceOf[MappedValuesRDD[_, _, _]]) === 2)
+  }
+
+  test("getNarrowAncestors with multiple parents") {
+    val rdd1 = sc.parallelize(1 to 100, 5)
+    val rdd2 = sc.parallelize(1 to 200, 10).map(_ + 1)
+    val rdd3 = sc.parallelize(1 to 300, 15).filter(_ > 50)
+    val rdd4 = rdd1.map(i => (i, i))
+    val rdd5 = rdd2.map(i => (i, i))
+    val rdd6 = sc.union(rdd1, rdd2)
+    val rdd7 = sc.union(rdd1, rdd2, rdd3)
+    val rdd8 = sc.union(rdd6, rdd7)
+    val rdd9 = rdd4.join(rdd5)
+    val ancestors6 = rdd6.getNarrowAncestors()
+    val ancestors7 = rdd7.getNarrowAncestors()
+    val ancestors8 = rdd8.getNarrowAncestors()
+    val ancestors9 = rdd9.getNarrowAncestors()
+
+    // Simple dependency tree with multiple branches
+    assert(ancestors6.size === 3)
+    assert(ancestors6.count(_.isInstanceOf[ParallelCollectionRDD[_]]) === 2)
+    assert(ancestors6.count(_.isInstanceOf[MappedRDD[_, _]]) === 1)
+    assert(ancestors7.size === 5)
+    assert(ancestors7.count(_.isInstanceOf[ParallelCollectionRDD[_]]) === 3)
+    assert(ancestors7.count(_.isInstanceOf[MappedRDD[_, _]]) === 1)
+    assert(ancestors7.count(_.isInstanceOf[FilteredRDD[_]]) === 1)
+
+    // Dependency tree with duplicate nodes (e.g. rdd1 should not be reported twice)
+    assert(ancestors8.size === 7)
+    assert(ancestors8.count(_.isInstanceOf[MappedRDD[_, _]]) === 1)
+    assert(ancestors8.count(_.isInstanceOf[FilteredRDD[_]]) === 1)
+    assert(ancestors8.count(_.isInstanceOf[UnionRDD[_]]) === 2)
+    assert(ancestors8.count(_.isInstanceOf[ParallelCollectionRDD[_]]) === 3)
+    assert(ancestors8.count(_ == rdd1) === 1)
+    assert(ancestors8.count(_ == rdd2) === 1)
+    assert(ancestors8.count(_ == rdd3) === 1)
+
+    // Any ancestors before the shuffle are not considered
+    assert(ancestors9.size === 2)
+    assert(ancestors9.count(_.isInstanceOf[CoGroupedRDD[_]]) === 1)
+    assert(ancestors9.count(_.isInstanceOf[MappedValuesRDD[_, _, _]]) === 1)
+  }
+
+  test("getNarrowAncestors with cycles") {
+    val rdd1 = new CyclicalDependencyRDD[Int]
+    val rdd2 = new CyclicalDependencyRDD[Int]
+    val rdd3 = new CyclicalDependencyRDD[Int]
+    val rdd4 = rdd3.map(_ + 1).filter(_ > 10).map(_ + 2).filter(_ % 5 > 1)
+    val rdd5 = rdd4.map(_ + 2).filter(_ > 20)
+    val rdd6 = sc.union(rdd1, rdd2, rdd3).map(_ + 4).union(rdd5).union(rdd4)
+
+    // Simple cyclical dependency
+    rdd1.addDependency(new OneToOneDependency[Int](rdd2))
+    rdd2.addDependency(new OneToOneDependency[Int](rdd1))
+    val ancestors1 = rdd1.getNarrowAncestors()
+    val ancestors2 = rdd2.getNarrowAncestors()
+    assert(ancestors1.size === 1)
+    assert(ancestors1.count(_ == rdd2) === 1)
+    assert(ancestors1.count(_ == rdd1) === 0)
+    assert(ancestors2.size === 1)
+    assert(ancestors2.count(_ == rdd1) === 1)
+    assert(ancestors2.count(_ == rdd2) === 0)
+
+    // Cycle involving a longer chain
+    rdd3.addDependency(new OneToOneDependency[Int](rdd4))
+    val ancestors3 = rdd3.getNarrowAncestors()
+    val ancestors4 = rdd4.getNarrowAncestors()
+    assert(ancestors3.size === 4)
+    assert(ancestors3.count(_.isInstanceOf[MappedRDD[_, _]]) === 2)
+    assert(ancestors3.count(_.isInstanceOf[FilteredRDD[_]]) === 2)
+    assert(ancestors3.count(_ == rdd3) === 0)
+    assert(ancestors4.size === 4)
+    assert(ancestors4.count(_.isInstanceOf[MappedRDD[_, _]]) === 2)
+    assert(ancestors4.count(_.isInstanceOf[FilteredRDD[_]]) === 1)
+    assert(ancestors4.count(_.isInstanceOf[CyclicalDependencyRDD[_]]) === 1)
+    assert(ancestors4.count(_ == rdd3) === 1)
+    assert(ancestors4.count(_ == rdd4) === 0)
+
+    // Cycles that do not involve the root
+    val ancestors5 = rdd5.getNarrowAncestors()
+    assert(ancestors5.size === 6)
+    assert(ancestors5.count(_.isInstanceOf[MappedRDD[_, _]]) === 3)
+    assert(ancestors5.count(_.isInstanceOf[FilteredRDD[_]]) === 2)
+    assert(ancestors5.count(_.isInstanceOf[CyclicalDependencyRDD[_]]) === 1)
+    assert(ancestors4.count(_ == rdd3) === 1)
+
+    // Complex cyclical dependency graph (combination of all of the above)
+    val ancestors6 = rdd6.getNarrowAncestors()
+    assert(ancestors6.size === 12)
+    assert(ancestors6.count(_.isInstanceOf[UnionRDD[_]]) === 2)
+    assert(ancestors6.count(_.isInstanceOf[MappedRDD[_, _]]) === 4)
+    assert(ancestors6.count(_.isInstanceOf[FilteredRDD[_]]) === 3)
+    assert(ancestors6.count(_.isInstanceOf[CyclicalDependencyRDD[_]]) === 3)
+  }
+
+  /** A contrived RDD that allows the manual addition of dependencies after creation. */
+  private class CyclicalDependencyRDD[T: ClassTag] extends RDD[T](sc, Nil) {
+    private val mutableDependencies: ArrayBuffer[Dependency[_]] = ArrayBuffer.empty
+    override def compute(p: Partition, c: TaskContext): Iterator[T] = Iterator.empty
+    override def getPartitions: Array[Partition] = Array.empty
+    override def getDependencies: Seq[Dependency[_]] = mutableDependencies
+    def addDependency(dep: Dependency[_]) {
+      mutableDependencies += dep
+    }
   }
 }
