@@ -35,7 +35,7 @@ object BroadcastTest {
     System.setProperty("spark.broadcast.blockSize", blockSize)
 
     val sc = new SparkContext(args(0), "Broadcast Test",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
 
     val slices = if (args.length > 1) args(1).toInt else 2
     val num = if (args.length > 2) args(2).toInt else 1000000

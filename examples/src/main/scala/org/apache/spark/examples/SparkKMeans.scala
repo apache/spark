@@ -57,7 +57,7 @@ object SparkKMeans {
         System.exit(1)
     }
     val sc = new SparkContext(args(0), "SparkLocalKMeans",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
     val lines = sc.textFile(args(1))
     val data = lines.map(parseVector _).cache()
     val K = args(2).toInt

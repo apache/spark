@@ -50,7 +50,7 @@ object RawNetworkGrep {
 
     // Create the context
     val ssc = new StreamingContext(master, "RawNetworkGrep", Milliseconds(batchMillis),
-      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
 
     // Warm up the JVMs on master and slave for JIT compilation to kick in
     RawTextHelper.warmUp(ssc.sparkContext)

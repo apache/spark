@@ -47,7 +47,7 @@ object SparkTC {
       System.exit(1)
     }
     val spark = new SparkContext(args(0), "SparkTC",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
     val slices = if (args.length > 1) args(1).toInt else 2
     var tc = spark.parallelize(generateGraph, slices).cache()
 

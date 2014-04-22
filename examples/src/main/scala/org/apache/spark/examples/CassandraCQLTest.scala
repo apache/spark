@@ -75,7 +75,7 @@ object CassandraCQLTest {
     val sc = new SparkContext(args(0),
                "CQLTestApp",
                System.getenv("SPARK_HOME"),
-               SparkContext.jarOfClass(this.getClass))
+               SparkContext.jarOfClass(this.getClass).toSeq)
     val cHost: String = args(1)
     val cPort: String = args(2)
     val KeySpace = "retail"

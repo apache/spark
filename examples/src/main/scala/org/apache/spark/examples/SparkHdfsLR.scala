@@ -56,7 +56,7 @@ object SparkHdfsLR {
     val inputPath = args(1)
     val conf = SparkHadoopUtil.get.newConfiguration()
     val sc = new SparkContext(args(0), "SparkHdfsLR",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass), Map(),
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq, Map(),
       InputFormatInfo.computePreferredLocations(
         Seq(new InputFormatInfo(conf, classOf[org.apache.hadoop.mapred.TextInputFormat], inputPath))
       ))

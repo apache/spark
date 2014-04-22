@@ -54,7 +54,7 @@ object StatefulNetworkWordCount {
 
     // Create the context with a 1 second batch size
     val ssc = new StreamingContext(args(0), "NetworkWordCumulativeCountUpdateStateByKey",
-      Seconds(1), System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass))
+      Seconds(1), System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
     ssc.checkpoint(".")
 
     // Create a NetworkInputDStream on target ip:port and count the

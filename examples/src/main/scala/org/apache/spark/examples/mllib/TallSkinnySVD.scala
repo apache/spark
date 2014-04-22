@@ -44,7 +44,7 @@ object TallSkinnySVD {
       .setMaster(args(0))
       .setAppName("TallSkinnySVD")
       .setSparkHome(System.getenv("SPARK_HOME"))
-      .setJars(SparkContext.jarOfClass(this.getClass))
+      .setJars(SparkContext.jarOfClass(this.getClass).toSeq)
     val sc = new SparkContext(conf)
 
     // Load and parse the data file.

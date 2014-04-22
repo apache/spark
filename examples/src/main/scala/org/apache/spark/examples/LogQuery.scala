@@ -46,7 +46,7 @@ object LogQuery {
     }
 
     val sc = new SparkContext(args(0), "Log Query",
-      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass).toSeq)
 
     val dataSet =
       if (args.length == 2) sc.textFile(args(1))
