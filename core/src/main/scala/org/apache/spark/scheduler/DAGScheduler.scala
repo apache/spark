@@ -57,7 +57,7 @@ class DAGScheduler(
     private[scheduler] val listenerBus: LiveListenerBus,
     mapOutputTracker: MapOutputTrackerMaster,
     blockManagerMaster: BlockManagerMaster,
-    private[scheduler] val env: SparkEnv)
+    env: SparkEnv)
   extends Logging {
 
   import DAGScheduler._
