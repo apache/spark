@@ -15,18 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.dstream
+package org.apache.spark.streaming.api.java
 
-import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.dstream.InputDStream
 import scala.reflect.ClassTag
-import org.apache.spark.streaming.receiver.Receiver
 
-private[streaming]
-class PluggableInputDStream[T: ClassTag](
-  @transient ssc_ : StreamingContext,
-  receiver: Receiver[T]) extends ReceiverInputDStream[T](ssc_) {
+/**
+ * A Java-friendly interface to [[org.apache.spark.streaming.dstream.InputDStream]] of
+ * key-value pairs.
+ */
+class JavaPairInputDStream[K, V](val inputDStream: InputDStream[(K, V)])(
+    implicit val kClassTag: ClassTag[K], implicit val vClassTag: ClassTag[V]
+  ) extends JavaPairDStream[K, V](inputDStream) {
+}
 
-  def getReceiver(): Receiver[T] = {
-    receiver
+object JavaPairInputDStream {
+  /**
+   * Convert a scala [[org.apache.spark.streaming.dstream.InputDStream]] of pairs to a
+   * Java-friendly [[org.apache.spark.streaming.api.java.JavaPairInputDStream]].
+   */
+  implicit def fromInputDStream[K: ClassTag, V: ClassTag](
+       inputDStream: InputDStream[(K, V)]): JavaPairInputDStream[K, V] = {
+    new JavaPairInputDStream[K, V](inputDStream)
   }
 }
