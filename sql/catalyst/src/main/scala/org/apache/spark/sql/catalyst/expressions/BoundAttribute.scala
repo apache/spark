@@ -45,7 +45,7 @@ case class BoundReference(ordinal: Int, baseReference: Attribute)
 
   override def toString = s"$baseReference:$ordinal"
 
-  override def eval(input: Row): Any = if (input != null) input(ordinal) else null
+  override def eval(input: Row): Any = input(ordinal)
 }
 
 /**

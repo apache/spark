@@ -146,16 +146,6 @@ private[sql] object ParquetRelation {
     new ParquetRelation(path.toString)
   }
 
-  def checkPredicatePushdownPossible(filters: Seq[Expression]): Boolean = {
-    def checkFeasible(left: Expression, right: Expression) =
-      left.isInstanceOf[Literal] || right.isInstanceOf[Literal]
-    filters.forall {
-      case Equals(left, right) => checkFeasible(left, right)
-      case LessThan(left, right) => checkFeasible(left, right)
-      case _ => false
-    }
-  }
-
   private def checkPath(pathStr: String, allowExisting: Boolean, conf: Configuration): Path = {
     if (pathStr == null) {
       throw new IllegalArgumentException("Unable to create ParquetRelation: path is null")

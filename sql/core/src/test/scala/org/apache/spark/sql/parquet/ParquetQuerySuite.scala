@@ -266,6 +266,14 @@ class ParquetQuerySuite extends QueryTest with FunSuite with BeforeAndAfterAll {
       val result2 = sql(s"SELECT * FROM testfiltersource WHERE $myval > 150 AND $myval <= 200").collect()
       assert(result2.size === 50)
     }
+    for(myval <- Seq("myint", "mylong")) {
+      val result3 = sql(s"SELECT * FROM testfiltersource WHERE $myval > 190 OR $myval < 10").collect()
+      assert(result3.size === 20)
+    }
+    for(myval <- Seq("mydouble", "myfloat")) {
+      val result3 = sql(s"SELECT * FROM testfiltersource WHERE $myval > 190.5 OR $myval < 10").collect()
+      assert(result3.size === 20)
+    }
     val booleanResult = sql(s"SELECT * FROM testfiltersource WHERE myboolean = true AND myint < 40").collect()
     assert(booleanResult.size === 10)
     val stringResult = sql("SELECT * FROM testfiltersource WHERE mystring = \"100\"").collect()

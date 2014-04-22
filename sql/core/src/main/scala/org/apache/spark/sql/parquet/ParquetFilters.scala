@@ -114,6 +114,18 @@ object ParquetFilters {
     // https://github.com/Parquet/parquet-mr/issues/371
     // has been resolved
     val filters: Seq[UnboundRecordFilter] = filterExpressions.collect {
+      case Or(left: Expression, right: Expression)
+          if createFilter(Seq(left)) != null && createFilter(Seq(right)) != null => {
+        // Note: if either side of this Or-predicate is empty then this means
+        // it contains a more complex comparison than between attribute and literal
+        // (e.g., it contained a CAST). The only safe thing to do is then to disregard
+        // this disjunction, which could be contained in a conjunction. If it stands
+        // alone then it is also safe to drop it, since a Null return value of this
+        // function is interpreted as having no filters at all.
+        val leftFilter = createFilter(Seq(left))
+        val rightFilter = createFilter(Seq(right))
+        OrRecordFilter.or(leftFilter, rightFilter)
+      }
       case Equals(left: Literal, right: NamedExpression) if !right.nullable =>
         createEqualityFilter(right.name, left)
       case Equals(left: NamedExpression, right: Literal) if !left.nullable =>
@@ -135,7 +147,6 @@ object ParquetFilters {
       case GreaterThanOrEqual(left: NamedExpression, right: Literal) if !left.nullable =>
         createGreaterThanOrEqualFilter(left.name, right)
     }
-    // TODO: How about disjunctions? (Or-ed)
     if (filters.length > 0) filters.reduce(AndRecordFilter.and) else null
   }
 
