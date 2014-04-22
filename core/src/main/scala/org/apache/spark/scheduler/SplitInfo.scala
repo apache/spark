@@ -24,8 +24,12 @@ import org.apache.spark.annotation.DeveloperApi
 // information about a specific split instance : handles both split instances.
 // So that we do not need to worry about the differences.
 @DeveloperApi
-class SplitInfo(val inputFormatClazz: Class[_], val hostLocation: String, val path: String,
-                val length: Long, val underlyingSplit: Any) {
+class SplitInfo(
+    val inputFormatClazz: Class[_],
+    val hostLocation: String,
+    val path: String,
+    val length: Long,
+    val underlyingSplit: Any) {
   override def toString(): String = {
     "SplitInfo " + super.toString + " .. inputFormatClazz " + inputFormatClazz +
       ", hostLocation : " + hostLocation + ", path : " + path +

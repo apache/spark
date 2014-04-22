@@ -94,26 +94,20 @@ abstract class RDD[T: ClassTag](
   def compute(split: Partition, context: TaskContext): Iterator[T]
 
   /**
-   * :: DeveloperApi ::
    * Implemented by subclasses to return the set of partitions in this RDD. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
    */
-  @DeveloperApi
   protected def getPartitions: Array[Partition]
 
   /**
-   * :: DeveloperApi ::
    * Implemented by subclasses to return how this RDD depends on parent RDDs. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
    */
-  @DeveloperApi
   protected def getDependencies: Seq[Dependency[_]] = deps
 
   /**
-   * :: DeveloperApi ::
    * Optionally overridden by subclasses to specify placement preferences.
    */
-  @DeveloperApi
   protected def getPreferredLocations(split: Partition): Seq[String] = Nil
 
   /** Optionally overridden by subclasses to specify how they are partitioned. */
