@@ -26,6 +26,12 @@ import org.apache.spark.util.BoundedPriorityQueue
 
 /**
  * Registers GraphX classes with Kryo for improved performance.
+ *
+ * If possible disable Reference tracking in Kryo (not safe in the Spark-Shell).
+ * Reference tracking can be disabled by following the instructions here:
+ *
+ *   http://spark.apache.org/docs/latest/configuration.html
+ *
  */
 class GraphKryoRegistrator extends KryoRegistrator {
 
@@ -41,8 +47,5 @@ class GraphKryoRegistrator extends KryoRegistrator {
     kryo.register(classOf[PartitionStrategy])
     kryo.register(classOf[BoundedPriorityQueue[Object]])
     kryo.register(classOf[EdgeDirection])
-
-    // This avoids a large number of hash table lookups.
-    kryo.setReferences(false)
   }
 }
