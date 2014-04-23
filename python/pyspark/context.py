@@ -318,9 +318,9 @@ class SparkContext(object):
         [(1, None), (1, None), (2, None), (2, None), (2, None), (3, None)]
         >>> sorted(sc.sequenceFile(tempdir + "/sftestdata/sfmap/").collect())
         [(1, {2.0: u'aa'}), (1, {3.0: u'bb'}), (2, {1.0: u'aa'}), (2, {1.0: u'cc'}), (2, {3.0: u'bb'}), (3, {2.0: u'dd'})]
-        >>> r = sc.sequenceFile(tempdir + "/sftestdata/sfclass").first()
-        >>> [r[0], sorted([(k, v) for k, v in r[1].iteritems()])]
-        [u'1', [(u'__class__', u'org.apache.spark.api.python.TestWritable'), (u'double', 54.0), (u'int', 123), (u'str', u'test1')]]
+        >>> r = sorted(sc.sequenceFile(tempdir + "/sftestdata/sfclass").collect())[0]
+        >>> r == (u'1', {u'__class__': u'org.apache.spark.api.python.TestWritable', u'double': 54.0, u'int': 123, u'str': u'test1'})
+        True
         """
         minSplits = minSplits or min(self.defaultParallelism, 2)
         jrdd = self._jvm.PythonRDD.sequenceFile(self._jsc, name, key_class, value_class, key_wrapper, value_wrapper,
