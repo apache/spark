@@ -190,11 +190,7 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging with Lifecycle {
   }
 
   /** This thread class runs all the receivers on the cluster.  */
-<<<<<<< HEAD:streaming/src/main/scala/org/apache/spark/streaming/scheduler/NetworkInputTracker.scala
-  class ReceiverExecutor extends Lifecycle {
-=======
-  class ReceiverLauncher {
->>>>>>> 39f85e0322cfecefbc30e7d5a30356cfab1e9640:streaming/src/main/scala/org/apache/spark/streaming/scheduler/ReceiverTracker.scala
+  class ReceiverLauncher extends Lifecycle {
     @transient val env = ssc.env
     @transient val thread  = new Thread() {
       override def run() {
