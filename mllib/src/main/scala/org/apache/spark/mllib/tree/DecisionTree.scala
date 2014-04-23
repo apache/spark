@@ -144,8 +144,8 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
       parentImpurities: Array[Double],
       filters: Array[List[Filter]]): Unit = {
     // 0 corresponds to the left child node and 1 corresponds to the right child node.
-    // TODO: Convert to while loop
-    for (i <- 0 to 1) {
+    var i = 0
+    while (i <= 1) {
      // Calculate the index of the node from the node level and the index at the current level.
       val nodeIndex = scala.math.pow(2, level + 1).toInt - 1 + 2 * index + i
       if (level < maxDepth - 1) {
@@ -164,6 +164,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
           logDebug("Filter = " + filter)
         }
       }
+      i += 1
     }
   }
 }
