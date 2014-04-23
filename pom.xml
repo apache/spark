@@ -385,15 +385,6 @@
         <groupId>net.liftweb</groupId>
         <artifactId>lift-json_${scala.binary.version}</artifactId>
         <version>2.5.1</version>
-        <!-- see also exclusion for json4s; this is necessary since it depends on
-             scala-library and scalap 2.10.0, but we use 2.10.4, and only override
-             scala-library -->
-        <exclusions>
-          <exclusion>
-            <groupId>org.scala-lang</groupId>
-            <artifactId>scalap</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.codahale.metrics</groupId>
@@ -438,6 +429,16 @@
       <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-library</artifactId>
+        <version>${scala.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang</groupId>
+        <artifactId>scala-actors</artifactId>
+        <version>${scala.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang</groupId>
+        <artifactId>scalap</artifactId>
         <version>${scala.version}</version>
       </dependency>
       <dependency>
