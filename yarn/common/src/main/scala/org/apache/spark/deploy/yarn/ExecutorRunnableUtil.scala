@@ -55,6 +55,9 @@ trait ExecutorRunnableUtil extends Logging {
     sys.props.get("spark.executor.extraJavaOptions").foreach { opts =>
       JAVA_OPTS += opts
     }
+    if (env.isDefinedAt("SPARK_JAVA_OPTS")) {
+      JAVA_OPTS += env("SPARK_JAVA_OPTS") + " "
+    }
 
     JAVA_OPTS += " -Djava.io.tmpdir=" +
       new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR) + " "
