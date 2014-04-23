@@ -201,7 +201,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.ui.killEnabled</td>
-  <td>true</td>
+  <td>false</td>
   <td>
     Allows stages and corresponding jobs to be killed from the web ui.
   </td>
