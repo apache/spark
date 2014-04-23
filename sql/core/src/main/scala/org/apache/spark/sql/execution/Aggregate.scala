@@ -19,12 +19,14 @@ package org.apache.spark.sql.execution
 
 import java.util.HashMap
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 
 /**
+ * :: DeveloperApi ::
  * Groups input data by `groupingExpressions` and computes the `aggregateExpressions` for each
  * group.
  *
@@ -34,6 +36,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
  * @param aggregateExpressions expressions that are computed for each group.
  * @param child the input data source.
  */
+@DeveloperApi
 case class Aggregate(
     partial: Boolean,
     groupingExpressions: Seq[Expression],

@@ -21,7 +21,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.hive.TestHive
+import org.apache.spark.sql.hive.test.TestHive
 
 // Implicits
 import scala.collection.JavaConversions._

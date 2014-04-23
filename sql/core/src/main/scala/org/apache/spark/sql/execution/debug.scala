@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-object DebugQuery {
+private[sql] object DebugQuery {
   def apply(plan: SparkPlan): SparkPlan = {
     val visited = new collection.mutable.HashSet[Long]()
     plan transform {
@@ -28,7 +28,7 @@ object DebugQuery {
   }
 }
 
-case class DebugNode(child: SparkPlan) extends UnaryNode {
+private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode {
   def references = Set.empty
   def output = child.output
   def execute() = {

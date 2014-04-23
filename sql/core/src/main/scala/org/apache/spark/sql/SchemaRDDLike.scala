@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 /**
  * Contains functions that are shared between all SchemaRDD types (i.e., Scala, Java)
  */
-trait SchemaRDDLike {
+private[sql] trait SchemaRDDLike {
   @transient val sqlContext: SQLContext
   @transient protected[spark] val logicalPlan: LogicalPlan
 

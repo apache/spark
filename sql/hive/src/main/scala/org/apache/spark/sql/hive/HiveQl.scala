@@ -36,20 +36,20 @@ import scala.collection.JavaConversions._
  * back for Hive to execute natively.  Will be replaced with a native command that contains the
  * cmd string.
  */
-case object NativePlaceholder extends Command
+private[hive] case object NativePlaceholder extends Command
 
-case class DfsCommand(cmd: String) extends Command
+private[hive] case class DfsCommand(cmd: String) extends Command
 
-case class ShellCommand(cmd: String) extends Command
+private[hive] case class ShellCommand(cmd: String) extends Command
 
-case class SourceCommand(filePath: String) extends Command
+private[hive] case class SourceCommand(filePath: String) extends Command
 
-case class AddJar(jarPath: String) extends Command
+private[hive] case class AddJar(jarPath: String) extends Command
 
-case class AddFile(filePath: String) extends Command
+private[hive] case class AddFile(filePath: String) extends Command
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
-object HiveQl {
+private[hive] object HiveQl {
   protected val nativeCommands = Seq(
     "TOK_DESCFUNCTION",
     "TOK_DESCTABLE",

@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.types._
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
-object HiveFunctionRegistry
+private[hive] object HiveFunctionRegistry
   extends analysis.FunctionRegistry with HiveFunctionFactory with HiveInspectors {
 
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
@@ -99,7 +99,7 @@ object HiveFunctionRegistry
   }
 }
 
-trait HiveFunctionFactory {
+private[hive] trait HiveFunctionFactory {
   def getFunctionInfo(name: String) = FunctionRegistry.getFunctionInfo(name)
   def getFunctionClass(name: String) = getFunctionInfo(name).getFunctionClass
   def createFunction[UDFType](name: String) =
@@ -130,7 +130,7 @@ trait HiveFunctionFactory {
   }
 }
 
-abstract class HiveUdf extends Expression with Logging with HiveFunctionFactory {
+private[hive] abstract class HiveUdf extends Expression with Logging with HiveFunctionFactory {
   self: Product =>
 
   type UDFType
@@ -148,7 +148,7 @@ abstract class HiveUdf extends Expression with Logging with HiveFunctionFactory 
   override def toString = s"$nodeName#${functionInfo.getDisplayName}(${children.mkString(",")})"
 }
 
-case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUdf {
+private[hive] case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUdf {
   import org.apache.spark.sql.hive.HiveFunctionRegistry._
   type UDFType = UDF
 
@@ -201,7 +201,7 @@ case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUd
   }
 }
 
-case class HiveGenericUdf(name: String, children: Seq[Expression])
+private[hive] case class HiveGenericUdf(name: String, children: Seq[Expression])
   extends HiveUdf with HiveInspectors {
 
   import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
@@ -228,7 +228,7 @@ case class HiveGenericUdf(name: String, children: Seq[Expression])
   }
 }
 
-trait HiveInspectors {
+private[hive] trait HiveInspectors {
 
   def unwrapData(data: Any, oi: ObjectInspector): Any = oi match {
     case pi: PrimitiveObjectInspector => pi.getPrimitiveJavaObject(data)
@@ -329,7 +329,7 @@ trait HiveInspectors {
   }
 }
 
-case class HiveGenericUdaf(
+private[hive] case class HiveGenericUdaf(
     name: String,
     children: Seq[Expression]) extends AggregateExpression
   with HiveInspectors
@@ -371,7 +371,7 @@ case class HiveGenericUdaf(
  * Operators that require maintaining state in between input rows should instead be implemented as
  * user defined aggregations, which have clean semantics even in a partitioned execution.
  */
-case class HiveGenericUdtf(
+private[hive] case class HiveGenericUdtf(
     name: String,
     aliasNames: Seq[String],
     children: Seq[Expression])
@@ -438,7 +438,7 @@ case class HiveGenericUdtf(
   override def toString = s"$nodeName#$name(${children.mkString(",")})"
 }
 
-case class HiveUdafFunction(
+private[hive] case class HiveUdafFunction(
     functionName: String,
     exprs: Seq[Expression],
     base: AggregateExpression)

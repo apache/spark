@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Logging, Row}
 import org.apache.spark.sql.catalyst.trees
@@ -26,6 +27,10 @@ import org.apache.spark.sql.catalyst.plans.{QueryPlan, logical}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
   self: Product =>
 
@@ -51,6 +56,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
 }
 
 /**
+ * :: DeveloperApi ::
  * Allows already planned SparkQueries to be linked into logical query plans.
  *
  * Note that in general it is not valid to use this class to link multiple copies of the same
@@ -59,6 +65,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
  * replace the output attributes with new copies of themselves without breaking any attribute
  * linking.
  */
+@DeveloperApi
 case class SparkLogicalPlan(alreadyPlanned: SparkPlan)
   extends logical.LogicalPlan with MultiInstanceRelation {
 
@@ -77,15 +84,15 @@ case class SparkLogicalPlan(alreadyPlanned: SparkPlan)
   }
 }
 
-trait LeafNode extends SparkPlan with trees.LeafNode[SparkPlan] {
+private[sql] trait LeafNode extends SparkPlan with trees.LeafNode[SparkPlan] {
   self: Product =>
 }
 
-trait UnaryNode extends SparkPlan with trees.UnaryNode[SparkPlan] {
+private[sql] trait UnaryNode extends SparkPlan with trees.UnaryNode[SparkPlan] {
   self: Product =>
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
-trait BinaryNode extends SparkPlan with trees.BinaryNode[SparkPlan] {
+private[sql] trait BinaryNode extends SparkPlan with trees.BinaryNode[SparkPlan] {
   self: Product =>
 }

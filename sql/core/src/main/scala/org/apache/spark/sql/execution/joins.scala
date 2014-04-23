@@ -21,14 +21,24 @@ import scala.collection.mutable.{ArrayBuffer, BitSet}
 
 import org.apache.spark.SparkContext
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Partitioning}
 
+@DeveloperApi
 sealed abstract class BuildSide
+
+@DeveloperApi
 case object BuildLeft extends BuildSide
+
+@DeveloperApi
 case object BuildRight extends BuildSide
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class HashJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
@@ -130,6 +140,10 @@ case class HashJoin(
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   def output = left.output ++ right.output
 
@@ -138,6 +152,10 @@ case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNod
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class BroadcastNestedLoopJoin(
     streamed: SparkPlan, broadcast: SparkPlan, joinType: JoinType, condition: Option[Expression])
     (@transient sc: SparkContext)

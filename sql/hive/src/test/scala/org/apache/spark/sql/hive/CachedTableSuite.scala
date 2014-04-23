@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.execution.SparkLogicalPlan
 import org.apache.spark.sql.columnar.InMemoryColumnarTableScan
 import org.apache.spark.sql.hive.execution.HiveComparisonTest
+import org.apache.spark.sql.hive.test.TestHive
 
 class CachedTableSuite extends HiveComparisonTest {
   TestHive.loadTestTable("src")

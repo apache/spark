@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.hive.execution
 
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
@@ -30,23 +30,26 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveVarcharOb
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{BooleanType, DataType}
 import org.apache.spark.sql.execution._
-import org.apache.spark.{SparkHiveHadoopWriter, TaskContext, SparkException}
+import org.apache.spark.sql.hive._
+import org.apache.spark.{TaskContext, SparkException}
 
 /* Implicits */
 import scala.collection.JavaConversions._
 
 /**
+ * :: DeveloperApi ::
  * The Hive table scan operator.  Column and partition pruning are both handled.
  *
- * @constructor
  * @param attributes Attributes to be fetched from the Hive table.
  * @param relation The Hive table be be scanned.
  * @param partitionPruningPred An optional partition pruning predicate for partitioned table.
  */
+@DeveloperApi
 case class HiveTableScan(
     attributes: Seq[Attribute],
     relation: MetastoreRelation,
@@ -160,6 +163,10 @@ case class HiveTableScan(
   def output = attributes
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 case class InsertIntoHiveTable(
     table: MetastoreRelation,
     partition: Map[String, Option[String]],

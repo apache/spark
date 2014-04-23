@@ -27,7 +27,7 @@ import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.MutablePair
 import org.apache.spark.util.Utils
 
-class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
+private[sql] class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
   override def newKryo(): Kryo = {
     val kryo = new Kryo()
     kryo.setRegistrationRequired(false)
@@ -50,7 +50,7 @@ class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
   }
 }
 
-object SparkSqlSerializer {
+private[sql] object SparkSqlSerializer {
   // TODO (lian) Using KryoSerializer here is workaround, needs further investigation
   // Using SparkSqlSerializer here makes BasicQuerySuite to fail because of Kryo serialization
   // related error.
@@ -68,7 +68,7 @@ object SparkSqlSerializer {
   }
 }
 
-class BigDecimalSerializer extends Serializer[BigDecimal] {
+private[sql] class BigDecimalSerializer extends Serializer[BigDecimal] {
   def write(kryo: Kryo, output: Output, bd: math.BigDecimal) {
     // TODO: There are probably more efficient representations than strings...
     output.writeString(bd.toString())
@@ -83,7 +83,7 @@ class BigDecimalSerializer extends Serializer[BigDecimal] {
  * Maps do not have a no arg constructor and so cannot be serialized by default. So, we serialize
  * them as `Array[(k,v)]`.
  */
-class MapSerializer extends Serializer[Map[_,_]] {
+private[sql] class MapSerializer extends Serializer[Map[_,_]] {
   def write(kryo: Kryo, output: Output, map: Map[_,_]) {
     kryo.writeObject(output, map.flatMap(e => Seq(e._1, e._2)).toArray)
   }

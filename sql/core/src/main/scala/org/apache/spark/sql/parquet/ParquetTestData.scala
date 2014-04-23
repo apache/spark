@@ -28,7 +28,7 @@ import parquet.schema.{MessageType, MessageTypeParser}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.util.Utils
 
-object ParquetTestData {
+private[sql] object ParquetTestData {
 
   val testSchema =
     """message myrecord {
