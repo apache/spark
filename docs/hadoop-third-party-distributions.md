@@ -110,10 +110,5 @@ The location of these configuration files varies across CDH and HDP versions, bu
 a common location is inside of `/etc/hadoop/conf`. Some tools, such as Cloudera Manager, create
 configurations on-the-fly, but offer a mechanisms to download copies of them.
 
-There are a few ways to make these files visible to Spark:
-
-* You can copy these files into `$SPARK_HOME/conf` and they will be included in Spark's
-classpath automatically.
-* If you are running Spark on the same nodes as Hadoop _and_ your distribution includes both
-`hdfs-site.xml` and `core-site.xml` in the same directory, you can set `HADOOP_CONF_DIR` 
-in `$SPARK_HOME/spark-env.sh` to that directory.
+To make these files visible to Spark, set `HADOOP_CONF_DIR` in `$SPARK_HOME/spark-env.sh` 
+to a location containing the configuration files.
