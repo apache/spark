@@ -33,7 +33,7 @@
 
   <properties>
     <spark.jar.dir>scala-${scala.binary.version}</spark.jar.dir>
-    <spark.jar.basename>${project.artifactId}-${project.version}-hadoop${hadoop.version}.jar</spark.jar.basename>
+    <spark.jar.basename>spark-assembly-${project.version}-hadoop${hadoop.version}.jar</spark.jar.basename>
     <spark.jar>${project.build.directory}/${spark.jar.dir}/${spark.jar.basename}</spark.jar>
     <deb.pkg.name>spark</deb.pkg.name>
     <deb.install.path>/usr/share/spark</deb.install.path>
