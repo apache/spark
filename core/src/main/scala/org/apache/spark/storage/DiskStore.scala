@@ -33,6 +33,8 @@ import org.apache.spark.util.Utils
 private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManager)
   extends BlockStore(blockManager) with Logging {
 
+  val minMemoryMapBytes = blockManager.conf.getLong("spark.storage.memoryMapThreshold", 2 * 4096L)
+
   override def getSize(blockId: BlockId): Long = {
     diskManager.getBlockLocation(blockId).length
   }
@@ -87,7 +89,7 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
 
     val buffer =
       // For small files, directly read rather than memory map
-      if (segment.length < 2 * 4096) {
+      if (segment.length < minMemoryMapBytes) {
         val buf = ByteBuffer.allocate(segment.length.toInt)
         try {
           channel.read(buf, segment.offset)
