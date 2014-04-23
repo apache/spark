@@ -28,6 +28,7 @@
 #      --tgz: Additionally creates spark-$VERSION-bin.tar.gz
 #      --hadoop VERSION: Builds against specified version of Hadoop.
 #      --with-yarn: Enables support for Hadoop YARN.
+#      --with-hive: Enables support for Hive.
 #
 # Recommended deploy/testing procedure (standalone mode):
 # 1) Rsync / deploy the dist/ dir to one host
@@ -59,6 +60,7 @@ echo "Version is ${VERSION}"
 SPARK_HADOOP_VERSION=1.0.4
 SPARK_YARN=false
 SPARK_TACHYON=false
+SPARK_HIVE=false
 MAKE_TGZ=false
 
 # Parse arguments
@@ -73,6 +75,9 @@ while (( "$#" )); do
       ;;
     --with-tachyon)
       SPARK_TACHYON=true
+      ;;
+    --with-hive)
+      SPARK_HIVE=true
       ;;
     --tgz)
       MAKE_TGZ=true
@@ -100,9 +105,16 @@ else
   echo "Tachyon Disabled"
 fi
 
+if [ "$SPARK_HIVE" == "true" ]; then
+  echo "Hive Enabled"
+else
+  echo "Hive Disabled"
+fi
+
 # Build fat JAR
 export SPARK_HADOOP_VERSION
 export SPARK_YARN
+export SPARK_HIVE
 cd $FWDIR
 
 "sbt/sbt" "assembly/assembly"
