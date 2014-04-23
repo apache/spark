@@ -90,6 +90,11 @@ private[spark] class PythonRDD[T: ClassTag](
           dataOut.flush()
           worker.shutdownOutput()
         } catch {
+
+          case e: java.io.FileNotFoundException =>
+            readerException = e
+            Try(worker.shutdownOutput()) // kill Python worker process
+
           case e: IOException =>
             // This can happen for legitimate reasons if the Python code stops returning data
             // before we are done passing elements through, e.g., for take(). Just log a message to
