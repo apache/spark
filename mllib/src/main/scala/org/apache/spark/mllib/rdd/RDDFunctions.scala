@@ -45,26 +45,52 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) {
     }
   }
 
+  /**
+   * Returns an RDD with the specified slice of partitions.
+   */
+  def slicePartitions(slice: Seq[Int]): RDD[T] = {
+    new PartitionSlicingRDD(self, slice)
+  }
 
   /**
    * Computes the all-reduced RDD of the parent RDD, which has the same number of partitions and
-   * locality information as its parent RDD. Each partition contains only one record, the same as
-   * calling `RDD#reduce` on its parent RDD.
+   * locality information as its parent RDD. Each partition contains only one record, which is the
+   * same as calling `RDD#reduce` on its parent RDD.
    *
    * @param f reducer
    * @return all-reduced RDD
    */
   def allReduce(f: (T, T) => T): RDD[T] = {
+    val numPartitions = self.partitions.size
+    require(numPartitions > 0, "Parent RDD does not have any partitions.")
+    val nextPowerOfTwo = {
+      var i = 0
+      while ((numPartitions >> i) > 0) {
+        i += 1
+      }
+      1 << i
+    }
     var butterfly = self.mapPartitions( (iter) =>
       Iterator(iter.reduce(f)),
       preservesPartitioning = true
     ).cache()
-    var offset = self.partitions.size / 2
-    while (offset > 0) {
-      butterfly = new ButterflyReducedRDD[T](butterfly, offset, f).cache()
-      offset /= 2
+
+    if (nextPowerOfTwo > numPartitions) {
+      val padding = self.context.parallelize(Seq.empty[T], nextPowerOfTwo - numPartitions)
+      butterfly = butterfly.union(padding)
     }
-    butterfly
+
+    var offset = nextPowerOfTwo >> 1
+    while (offset > 0) {
+      butterfly = new ButterflyReducedRDD[T](butterfly, f, offset).cache()
+      offset >>= 1
+    }
+
+    if (nextPowerOfTwo > numPartitions) {
+      new PartitionSlicingRDD(butterfly, 0 until numPartitions)
+    } else {
+      butterfly
+    }
   }
 }
 

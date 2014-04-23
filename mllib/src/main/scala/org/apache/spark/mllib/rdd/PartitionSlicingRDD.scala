@@ -19,42 +19,25 @@ package org.apache.spark.mllib.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{TaskContext, Partition}
 import org.apache.spark.rdd.RDD
-
-/** A partition in a butterfly-reduced RDD. */
-private case class ButterflyReducedRDDPartition(
-    override val index: Int,
-    source: Partition,
-    target: Partition) extends Partition
+import org.apache.spark.{TaskContext, Partition}
 
 /**
- * Butterfly-reduced RDD.
+ * Represents an RDD obtained from partition slicing of its parent RDD.
  */
-private[mllib] class ButterflyReducedRDD[T: ClassTag](
+private[mllib] class PartitionSlicingRDD[T: ClassTag](
     @transient rdd: RDD[T],
-    reducer: (T, T) => T,
-    @transient offset: Int) extends RDD[T](rdd) {
-
-  /** Computes the target partition. */
-  private def targetPartition(i: Int): Partition = {
-    val j = (i + offset) % rdd.partitions.size
-    rdd.partitions(j)
-  }
+    @transient slice: Seq[Int]) extends RDD[T](rdd) {
 
   override def getPartitions: Array[Partition] = {
-    rdd.partitions.zipWithIndex.map { case (part, i) =>
-      ButterflyReducedRDDPartition(i, part, targetPartition(i))
-    }
+    slice.map(i => rdd.partitions(i)).toArray
   }
 
   override def compute(s: Partition, context: TaskContext): Iterator[T] = {
-    val pair = s.asInstanceOf[ButterflyReducedRDDPartition]
-    Iterator((firstParent[T].iterator(pair.source, context) ++
-      firstParent[T].iterator(pair.target, context)).reduce(reducer))
+    firstParent[T].iterator(s, context)
   }
 
   override def getPreferredLocations(s: Partition): Seq[String] = {
-    rdd.preferredLocations(s.asInstanceOf[ButterflyReducedRDDPartition].source)
+    rdd.preferredLocations(s)
   }
 }
