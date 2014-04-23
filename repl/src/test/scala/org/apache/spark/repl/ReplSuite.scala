@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.common.io.Files
 import org.scalatest.FunSuite
 import org.apache.spark.SparkContext
-import org.apache.commons.lang.StringEscapeUtils
+import org.apache.commons.lang3.StringEscapeUtils
 
 
 class ReplSuite extends FunSuite {
