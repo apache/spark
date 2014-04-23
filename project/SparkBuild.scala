@@ -411,7 +411,9 @@ object SparkBuild extends Build {
   )
 
   def examplesSettings = sharedSettings ++ Seq(
-    name := "spark-examples",
+    name := "spark-examples",  
+    jarName in assembly <<= version map { 
+      v => "spark-examples-" + v + "-hadoop" + hadoopVersion + ".jar" },
     libraryDependencies ++= Seq(
       "com.twitter"          %% "algebird-core"   % "0.1.11",
       "org.apache.hbase" % "hbase" % HBASE_VERSION excludeAll(excludeNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging),
