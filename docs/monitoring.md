@@ -95,8 +95,9 @@ represents an application's event logs. This creates a web interface at
     <td>spark.history.use.kerberos</td>
     <td>false</td>
     <td>
-      Indicates whether the history server should use kerberos to login. If this is true
-      it looks uses the configs <code>spark.history.kerberos.principal</code> and
+      Indicates whether the history server should use kerberos to login. This is useful
+      if the history server is accessing HDFS files on a secure Hadoop cluster. If this is 
+      true it looks uses the configs <code>spark.history.kerberos.principal</code> and
       <code>spark.history.kerberos.keytab</code>. 
     </td>
   </tr>
