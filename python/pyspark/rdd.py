@@ -932,6 +932,7 @@ class RDD(object):
 
         def add_shuffle_key(split, iterator):
 
+            connection = 
             client = statsd()
             buckets = defaultdict(list)
             record_count = 0
@@ -993,7 +994,7 @@ class RDD(object):
             combiners = {}
             client = statsd()
             for x in iterator:
-                client.increment('spark.combine_by_key_metric.combine_locally_count')
+                client.increment('spark.combine_by_key_metric.combine_locally_count', sample_rate=0.001)
                 (k, v) = x
                 if k not in combiners:
                     combiners[k] = createCombiner(v)
