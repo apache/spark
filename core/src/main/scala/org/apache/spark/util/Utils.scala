@@ -30,6 +30,7 @@ import scala.io.Source
 import scala.reflect.ClassTag
 
 import com.google.common.io.Files
+import org.apache.commons.lang.SystemUtils
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.json4s._
@@ -45,7 +46,10 @@ import org.apache.spark.serializer.{DeserializationStream, SerializationStream, 
  */
 private[spark] object Utils extends Logging {
 
-  val osName = System.getProperty("os.name")
+  def sparkBin(sparkHome: String, which: String): File = {
+    val suffix = if (SystemUtils.IS_OS_WINDOWS) ".cmd" else ""
+    new File(sparkHome + File.separator + "bin", which + suffix)
+  }
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -603,7 +607,7 @@ private[spark] object Utils extends Logging {
    */
   def isSymlink(file: File): Boolean = {
     if (file == null) throw new NullPointerException("File must not be null")
-    if (osName.startsWith("Windows")) return false
+    if (SystemUtils.IS_OS_WINDOWS) return false
     val fileInCanonicalDir = if (file.getParent() == null) {
       file
     } else {
@@ -1007,9 +1011,17 @@ private[spark] object Utils extends Logging {
     if (dst.isAbsolute()) {
       throw new IOException("Destination must be relative")
     }
-    val linkCmd = if (osName.startsWith("Windows")) "copy" else "ln -sf"
+    var cmdSuffix = ""
+    val linkCmd = if (SystemUtils.IS_OS_WINDOWS) {
+      // refer to http://technet.microsoft.com/en-us/library/cc771254.aspx
+      cmdSuffix = " /s /e /k /h /y /i"
+      "cmd /c xcopy "
+    } else {
+      cmdSuffix = ""
+      "ln -sf "
+    }
     import scala.sys.process._
-    (linkCmd + " " + src.getAbsolutePath() + " " + dst.getPath()) lines_! ProcessLogger(line =>
+    (linkCmd + src.getAbsolutePath() + " " + dst.getPath() + cmdSuffix) lines_! ProcessLogger(line =>
        (logInfo(line)))
   }
 
