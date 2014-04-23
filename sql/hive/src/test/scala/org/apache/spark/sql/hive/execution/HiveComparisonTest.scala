@@ -26,6 +26,8 @@ import org.apache.spark.sql.execution.Sort
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 import org.apache.spark.sql.hive.test.TestHive
 
+/* SPURIOUS CHANGE */
+
 /**
  * Allows the creations of tests that execute the same query against both hive
  * and catalyst, comparing the results.
