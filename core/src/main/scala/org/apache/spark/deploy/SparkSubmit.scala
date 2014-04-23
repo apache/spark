@@ -196,7 +196,7 @@ object SparkSubmit {
         childArgs ++= appArgs.childArgs
       } else if (clusterManager == YARN) {
         for (arg <- appArgs.childArgs) {
-          childArgs += ("--args", arg)
+          childArgs += ("--arg", arg)
         }
       }
     }
