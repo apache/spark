@@ -69,12 +69,12 @@ private[spark] class CoarseGrainedExecutorBackend(
         executor.launchTask(this, taskDesc.taskId, taskDesc.serializedTask)
       }
 
-    case KillTask(taskId, _) =>
+    case KillTask(taskId, _, interruptThread) =>
       if (executor == null) {
         logError("Received KillTask command but executor was null")
         System.exit(1)
       } else {
-        executor.killTask(taskId)
+        executor.killTask(taskId, interruptThread)
       }
 
     case x: DisassociatedEvent =>
