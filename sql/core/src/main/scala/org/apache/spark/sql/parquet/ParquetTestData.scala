@@ -130,14 +130,15 @@ private[sql] object ParquetTestData {
     writer.close()
   }
 
-  def writeFilterFile() = {
+  def writeFilterFile(records: Int = 200) = {
+    // for microbenchmark use: records = 300000000
     testFilterDir.delete
     val path: Path = new Path(new Path(testFilterDir.toURI), new Path("part-r-0.parquet"))
     val schema: MessageType = MessageTypeParser.parseMessageType(testFilterSchema)
     val writeSupport = new TestGroupWriteSupport(schema)
     val writer = new ParquetWriter[Group](path, writeSupport)
 
-    for(i <- 0 to 200) {
+    for(i <- 0 to records) {
       val record = new SimpleGroup(schema)
       if (i % 4 == 0) {
         record.add(0, true)

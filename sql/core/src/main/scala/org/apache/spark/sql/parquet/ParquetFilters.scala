@@ -31,6 +31,10 @@ import org.apache.spark.sql.execution.SparkSqlSerializer
 
 object ParquetFilters {
   val PARQUET_FILTER_DATA = "org.apache.spark.sql.parquet.row.filter"
+  // set this to false if pushdown should be disabled
+  // Note: prefix is "spark.hadoop." so that it will be copied from SparkConf
+  // to Hadoop configuration
+  val PARQUET_FILTER_PUSHDOWN_ENABLED = "org.apache.spark.sql.parquet.filter.pushdown"
 
   def createFilter(filterExpressions: Seq[Expression]): UnboundRecordFilter = {
     def createEqualityFilter(name: String, literal: Literal) = literal.dataType match {

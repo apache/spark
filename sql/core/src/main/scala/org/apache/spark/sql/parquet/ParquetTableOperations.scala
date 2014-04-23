@@ -71,10 +71,13 @@ case class ParquetTableScan(
         ParquetTypesConverter.convertFromAttributes(output).toString)
 
     // Store record filtering predicate in `Configuration`
-    // Note: the input format ignores all predicates that cannot be expressed
+    // Note 1: the input format ignores all predicates that cannot be expressed
     // as simple column predicate filters in Parquet. Here we just record
     // the whole pruning predicate.
-    if (columnPruningPred.isDefined) {
+    // Note 2: you can disable filter predicate pushdown by setting
+    // "org.apache.spark.sql.parquet.filter.pushdown" to false inside SparkConf.
+    if (columnPruningPred.isDefined &&
+      sc.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
       ParquetFilters.serializeFilterExpressions(columnPruningPred.get, conf)
     }
 
