@@ -18,12 +18,15 @@
 package org.apache.spark.graphx.lib
 
 import org.apache.spark.graphx._
-import com.twitter.algebird.{ Min, Monoid }
 
 object ShortestPaths {
-  type SPMap = Map[VertexId, Min[Int]] // map of landmarks -> minimum distance to landmark
-  def SPMap(x: (VertexId, Min[Int])*) = Map(x: _*)
-  def increment(spmap: SPMap): SPMap = spmap.map { case (v, Min(d)) => v -> Min(d + 1) }
+  type SPMap = Map[VertexId, Int] // map of landmarks -> minimum distance to landmark
+  def SPMap(x: (VertexId, Int)*) = Map(x: _*)
+  def increment(spmap: SPMap): SPMap = spmap.map { case (v, d) => v -> (d + 1) }
+  def plus(spmap1: SPMap, spmap2: SPMap): SPMap =
+    (spmap1.keySet ++ spmap2.keySet).map{
+      k => k -> scala.math.min(spmap1.getOrElse(k, Int.MaxValue), spmap2.getOrElse(k, Int.MaxValue))
+    }.toMap
 
   /**
    * Compute the shortest paths to each landmark for each vertex and
@@ -41,11 +44,11 @@ object ShortestPaths {
    * shortest paths to each landmark
    */
   def run[VD, ED](graph: Graph[VD, ED], landmarks: Seq[VertexId])
-    (implicit m1: Manifest[VD], m2: Manifest[ED], spMapMonoid: Monoid[SPMap]): Graph[SPMap, SPMap] = {
+    (implicit m1: Manifest[VD], m2: Manifest[ED]): Graph[SPMap, SPMap] = {
 
     val spGraph = graph
       .mapVertices{ (vid, attr) =>
-        if (landmarks.contains(vid)) SPMap(vid -> Min(0))
+        if (landmarks.contains(vid)) SPMap(vid -> 0)
         else SPMap()
       }
       .mapTriplets{ edge => edge.srcAttr }
@@ -53,17 +56,17 @@ object ShortestPaths {
     val initialMessage = SPMap()
 
     def vertexProgram(id: VertexId, attr: SPMap, msg: SPMap): SPMap = {
-      spMapMonoid.plus(attr, msg)
+      plus(attr, msg)
     }
 
     def sendMessage(edge: EdgeTriplet[SPMap, SPMap]): Iterator[(VertexId, SPMap)] = {
       val newAttr = increment(edge.srcAttr)
-      if (edge.dstAttr != spMapMonoid.plus(newAttr, edge.dstAttr)) Iterator((edge.dstId, newAttr))
+      if (edge.dstAttr != plus(newAttr, edge.dstAttr)) Iterator((edge.dstId, newAttr))
       else Iterator.empty
     }
 
     def messageCombiner(s1: SPMap, s2: SPMap): SPMap = {
-      spMapMonoid.plus(s1, s2)
+      plus(s1, s2)
     }
 
     Pregel(spGraph, initialMessage)(

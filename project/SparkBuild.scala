@@ -322,8 +322,7 @@ object SparkBuild extends Build {
   def graphxSettings = sharedSettings ++ Seq(
     name := "spark-graphx",
     libraryDependencies ++= Seq(
-      "org.jblas" % "jblas" % "1.2.3",
-      "com.twitter" %% "algebird-core" % "0.3.0"
+      "org.jblas" % "jblas" % "1.2.3"
     )
   )
 
