@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import java.util.Random
 
 import scala.collection.Map
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{classTag, ClassTag}
 
@@ -227,6 +228,30 @@ abstract class RDD[T: ClassTag](
     } else {
       computeOrReadCheckpoint(split, context)
     }
+  }
+
+  /**
+   * Return the ancestors of the given RDD that are related to it only through a sequence of
+   * narrow dependencies. This traverses the given RDD's dependency tree using DFS, but maintains
+   * no ordering on the RDDs returned.
+   */
+  private[spark] def getNarrowAncestors: Seq[RDD[_]] = {
+    val ancestors = new mutable.HashSet[RDD[_]]
+
+    def visit(rdd: RDD[_]) {
+      val narrowDependencies = rdd.dependencies.filter(_.isInstanceOf[NarrowDependency[_]])
+      val narrowParents = narrowDependencies.map(_.rdd)
+      val narrowParentsNotVisited = narrowParents.filterNot(ancestors.contains)
+      narrowParentsNotVisited.foreach { parent =>
+        ancestors.add(parent)
+        visit(parent)
+      }
+    }
+
+    visit(this)
+
+    // In case there is a cycle, do not include the root itself
+    ancestors.filterNot(_ == this).toSeq
   }
 
   /**
