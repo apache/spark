@@ -2,7 +2,7 @@ require 'bundler/setup'
 require 'capistrano_recipes/deploy/packserv'
 
 set :application, "spark"
-role :app, *((1..47).map {|i| "dn%02d.chi.shopify.com" % i } - ["dn41.chi.shopify.com", "dn05.chi.shopify.com"])
+role :app, *((4..47).map {|i| "dn%02d.chi.shopify.com" % i } - ["dn41.chi.shopify.com", "dn05.chi.shopify.com"])
 role :master, "dn05.chi.shopify.com"
 role :code, "hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com"
 
