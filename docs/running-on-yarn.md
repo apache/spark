@@ -67,6 +67,7 @@ The command to launch the Spark application on the cluster is as follows:
       --executor-memory <MEMORY_PER_EXECUTOR> \
       --executor-cores <CORES_PER_EXECUTOR> \
       --name <application_name> \
+      --spark-java-opts <JAVA_OPTS> \
       --queue <queue_name> \
       --addJars <any_local_files_used_in_SparkContext.addJar> \
       --files <files_for_distributed_cache> \

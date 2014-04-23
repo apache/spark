@@ -344,6 +344,10 @@ trait ClientBase extends Logging {
       JAVA_OPTS += " " + env("SPARK_JAVA_OPTS")
     }
 
+    if(args.javaOpts != null){
+      JAVA_OPTS += " " + args.javaOpts + " "
+    }
+
     // Command for the ApplicationMaster
     var javaCommand = "java"
     val javaHome = System.getenv("JAVA_HOME")

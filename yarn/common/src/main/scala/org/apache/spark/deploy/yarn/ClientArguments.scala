@@ -38,6 +38,7 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
   var numExecutors = 2
   var amQueue = sparkConf.get("QUEUE", "default")
   var amMemory: Int = 512 // MB
+  var javaOpts: String = null
   var amClass: String = "org.apache.spark.deploy.yarn.ApplicationMaster"
   var appName: String = "Spark"
   // TODO
@@ -105,6 +106,10 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
           executorCores = value
           args = tail
 
+        case ("--spark-java-opts") :: value :: tail =>
+          javaOpts = value
+          args = tail
+
         case ("--queue") :: value :: tail =>
           amQueue = value
           args = tail
@@ -147,19 +152,20 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
     System.err.println(
       "Usage: org.apache.spark.deploy.yarn.Client [options] \n" +
       "Options:\n" +
-      "  --jar JAR_PATH             Path to your application's JAR file (required in yarn-cluster mode)\n" +
-      "  --class CLASS_NAME         Name of your application's main class (required)\n" +
-      "  --arg ARGS                 Argument to be passed to your application's main class.\n" +
-      "                             Multiple invocations are possible, each will be passed in order.\n" +
-      "  --num-executors NUM        Number of executors to start (Default: 2)\n" +
-      "  --executor-cores NUM       Number of cores for the executors (Default: 1).\n" +
-      "  --driver-memory MEM        Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)\n" +
-      "  --executor-memory MEM      Memory per executor (e.g. 1000M, 2G) (Default: 1G)\n" +
-      "  --name NAME                The name of your application (Default: Spark)\n" +
-      "  --queue QUEUE              The hadoop queue to use for allocation requests (Default: 'default')\n" +
-      "  --addJars jars             Comma separated list of local jars that want SparkContext.addJar to work with.\n" +
-      "  --files files              Comma separated list of files to be distributed with the job.\n" +
-      "  --archives archives        Comma separated list of archives to be distributed with the job."
+      "  --jar JAR_PATH             	Path to your application's JAR file (required in yarn-cluster mode)\n" +
+      "  --class CLASS_NAME         	Name of your application's main class (required)\n" +
+      "  --arg ARGS                 	Argument to be passed to your application's main class.\n" +
+      "                             	Multiple invocations are possible, each will be passed in order.\n" +
+      "  --num-executors NUM        	Number of executors to start (Default: 2)\n" +
+      "  --executor-cores NUM       	Number of cores for the executors (Default: 1).\n" +
+      "  --driver-memory MEM        	Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)\n" +
+      "  --executor-memory MEM      	Memory per executor (e.g. 1000M, 2G) (Default: 1G)\n" +
+      "  --spark-java-opts JAVA_OPTS	JAVA_OPTS to be passed to application's JVMs\n" +
+      "  --name NAME                	The name of your application (Default: Spark)\n" +
+      "  --queue QUEUE              	The hadoop queue to use for allocation requests (Default: 'default')\n" +
+      "  --addJars jars             	Comma separated list of local jars that want SparkContext.addJar to work with.\n" +
+      "  --files files              	Comma separated list of files to be distributed with the job.\n" +
+      "  --archives archives        	Comma separated list of archives to be distributed with the job."
       )
     System.exit(exitCode)
   }
