@@ -46,6 +46,8 @@ import org.apache.spark.serializer.{DeserializationStream, SerializationStream, 
 private[spark] object Utils extends Logging {
 
   val osName = System.getProperty("os.name")
+  
+  val random = new Random()
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {

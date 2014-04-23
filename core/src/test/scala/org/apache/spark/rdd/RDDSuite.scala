@@ -467,11 +467,11 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val data = sc.parallelize(1 to 100, 2)
     
     for (num <- List(5,20,100)) {
-    	  val sample = data.takeSample(withReplacement=false, num=num)
+      val sample = data.takeSample(withReplacement=false, num=num)
       assert(sample.size === num)        // Got exactly num elements
       assert(sample.toSet.size === num)  // Elements are distinct
       assert(sample.forall(x => 1 <= x && x <= 100), "elements not in [1, 100]")
-    	}
+    }
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=false, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements

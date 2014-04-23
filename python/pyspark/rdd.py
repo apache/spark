@@ -30,7 +30,7 @@ from tempfile import NamedTemporaryFile
 from threading import Thread
 import warnings
 import heapq
-import random
+from random import Random
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, pack_long
@@ -382,11 +382,11 @@ class RDD(object):
         # If the first sample didn't turn out large enough, keep trying to take samples;
         # this shouldn't happen often because we use a big multiplier for their initial size.
         # See: scala/spark/RDD.scala
-        random.seed(seed)
+        rand = Random(seed)
         while len(samples) < total:
-            samples = self.sample(withReplacement, fraction, random.randint(0,sys.maxint)).collect()
+            samples = self.sample(withReplacement, fraction, rand.randint(0,sys.maxint)).collect()
 
-        sampler = RDDSampler(withReplacement, fraction, random.randint(0,sys.maxint))
+        sampler = RDDSampler(withReplacement, fraction, rand.randint(0,sys.maxint))
         sampler.shuffle(samples)
         return samples[0:total]
 
