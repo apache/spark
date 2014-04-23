@@ -97,7 +97,7 @@ object MQTTWordCount {
     val Seq(master, brokerUrl, topic) = args.toSeq
 
     val ssc = new StreamingContext(master, "MqttWordCount", Seconds(2), System.getenv("SPARK_HOME"),
-    StreamingContext.jarOfClass(this.getClass))
+    StreamingContext.jarOfClass(this.getClass).toSeq)
     val lines = MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_ONLY_SER_2)
 
     val words = lines.flatMap(x => x.toString.split(" "))
