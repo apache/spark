@@ -573,11 +573,11 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val rdd3 = rdd2.map(_ - 1).filter(_ < 50).map(i => (i, i))
     val rdd4 = rdd3.reduceByKey(_ + _)
     val rdd5 = rdd4.mapValues(_ + 1).mapValues(_ + 2).mapValues(_ + 3)
-    val ancestors1 = rdd1.getNarrowAncestors()
-    val ancestors2 = rdd2.getNarrowAncestors()
-    val ancestors3 = rdd3.getNarrowAncestors()
-    val ancestors4 = rdd4.getNarrowAncestors()
-    val ancestors5 = rdd5.getNarrowAncestors()
+    val ancestors1 = rdd1.getNarrowAncestors
+    val ancestors2 = rdd2.getNarrowAncestors
+    val ancestors3 = rdd3.getNarrowAncestors
+    val ancestors4 = rdd4.getNarrowAncestors
+    val ancestors5 = rdd5.getNarrowAncestors
 
     // Simple dependency tree with a single branch
     assert(ancestors1.size === 0)
@@ -608,10 +608,10 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val rdd7 = sc.union(rdd1, rdd2, rdd3)
     val rdd8 = sc.union(rdd6, rdd7)
     val rdd9 = rdd4.join(rdd5)
-    val ancestors6 = rdd6.getNarrowAncestors()
-    val ancestors7 = rdd7.getNarrowAncestors()
-    val ancestors8 = rdd8.getNarrowAncestors()
-    val ancestors9 = rdd9.getNarrowAncestors()
+    val ancestors6 = rdd6.getNarrowAncestors
+    val ancestors7 = rdd7.getNarrowAncestors
+    val ancestors8 = rdd8.getNarrowAncestors
+    val ancestors9 = rdd9.getNarrowAncestors
 
     // Simple dependency tree with multiple branches
     assert(ancestors6.size === 3)
@@ -649,8 +649,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     // Simple cyclical dependency
     rdd1.addDependency(new OneToOneDependency[Int](rdd2))
     rdd2.addDependency(new OneToOneDependency[Int](rdd1))
-    val ancestors1 = rdd1.getNarrowAncestors()
-    val ancestors2 = rdd2.getNarrowAncestors()
+    val ancestors1 = rdd1.getNarrowAncestors
+    val ancestors2 = rdd2.getNarrowAncestors
     assert(ancestors1.size === 1)
     assert(ancestors1.count(_ == rdd2) === 1)
     assert(ancestors1.count(_ == rdd1) === 0)
@@ -660,8 +660,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
     // Cycle involving a longer chain
     rdd3.addDependency(new OneToOneDependency[Int](rdd4))
-    val ancestors3 = rdd3.getNarrowAncestors()
-    val ancestors4 = rdd4.getNarrowAncestors()
+    val ancestors3 = rdd3.getNarrowAncestors
+    val ancestors4 = rdd4.getNarrowAncestors
     assert(ancestors3.size === 4)
     assert(ancestors3.count(_.isInstanceOf[MappedRDD[_, _]]) === 2)
     assert(ancestors3.count(_.isInstanceOf[FilteredRDD[_]]) === 2)
@@ -674,7 +674,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(ancestors4.count(_ == rdd4) === 0)
 
     // Cycles that do not involve the root
-    val ancestors5 = rdd5.getNarrowAncestors()
+    val ancestors5 = rdd5.getNarrowAncestors
     assert(ancestors5.size === 6)
     assert(ancestors5.count(_.isInstanceOf[MappedRDD[_, _]]) === 3)
     assert(ancestors5.count(_.isInstanceOf[FilteredRDD[_]]) === 2)
@@ -682,7 +682,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(ancestors4.count(_ == rdd3) === 1)
 
     // Complex cyclical dependency graph (combination of all of the above)
-    val ancestors6 = rdd6.getNarrowAncestors()
+    val ancestors6 = rdd6.getNarrowAncestors
     assert(ancestors6.size === 12)
     assert(ancestors6.count(_.isInstanceOf[UnionRDD[_]]) === 2)
     assert(ancestors6.count(_.isInstanceOf[MappedRDD[_, _]]) === 4)

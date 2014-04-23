@@ -241,17 +241,21 @@ abstract class RDD[T: ClassTag](
    * narrow dependencies. This traverses the given RDD's dependency tree using DFS, but maintains
    * no ordering on the RDDs returned.
    */
-  private[spark] def getNarrowAncestors(
-      ancestors: mutable.Set[RDD[_]] = mutable.Set.empty): mutable.Set[RDD[_]] = {
-    val narrowDependencies = dependencies.filter(_.isInstanceOf[NarrowDependency[_]])
-    val narrowParents = narrowDependencies.map(_.rdd)
-    val narrowParentsNotVisited = narrowParents.filterNot(ancestors.contains)
-    narrowParentsNotVisited.foreach { parent =>
-      ancestors.add(parent)
-      parent.getNarrowAncestors(ancestors)
+  private[spark] def getNarrowAncestors: Seq[RDD[_]] = {
+    val ancestors = new mutable.HashSet[RDD[_]]
+
+    def visit(rdd: RDD[_]) {
+      val narrowDependencies = rdd.dependencies.filter(_.isInstanceOf[NarrowDependency[_]])
+      val narrowParents = narrowDependencies.map(_.rdd)
+      val narrowParentsNotVisited = narrowParents.filterNot(ancestors.contains)
+      narrowParentsNotVisited.foreach { parent =>
+        ancestors.add(parent)
+        visit(parent)
+      }
     }
-    // In case there is a cycle, do not include the root itself
-    ancestors.filterNot(_ == this)
+
+    visit(this)
+    ancestors.filterNot(_ == this).toSeq
   }
 
   /**

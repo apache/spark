@@ -50,7 +50,7 @@ private[spark] object StageInfo {
    * sequence of narrow dependencies should also be associated with this Stage.
    */
   def fromStage(stage: Stage): StageInfo = {
-    val ancestorRddInfos = stage.rdd.getNarrowAncestors().map(RDDInfo.fromRdd)
+    val ancestorRddInfos = stage.rdd.getNarrowAncestors.map(RDDInfo.fromRdd)
     val rddInfos = Seq(RDDInfo.fromRdd(stage.rdd)) ++ ancestorRddInfos
     new StageInfo(stage.id, stage.name, stage.numTasks, rddInfos)
   }
