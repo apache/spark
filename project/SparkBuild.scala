@@ -367,7 +367,7 @@ object SparkBuild extends Build {
     publish := {},
 
     unidocProjectFilter in (ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(repl, examples, tools, yarn, yarnAlpha),
+      inAnyProject -- inProjects(repl, examples, tools, catalyst, yarn, yarnAlpha),
     unidocProjectFilter in (JavaUnidoc, unidoc) :=
       inAnyProject -- inProjects(repl, examples, bagel, graphx, catalyst, tools, yarn, yarnAlpha),
 
@@ -457,7 +457,7 @@ object SparkBuild extends Build {
   def catalystSettings = sharedSettings ++ Seq(
     name := "catalyst",
     // The mechanics of rewriting expression ids to compare trees in some test cases makes
-    // assumptions about the the expression ids being contiguious.  Running tests in parallel breaks
+    // assumptions about the the expression ids being contiguous.  Running tests in parallel breaks
     // this non-deterministically.  TODO: FIX THIS.
     parallelExecution in Test := false,
     libraryDependencies ++= Seq(

@@ -22,11 +22,10 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Row}
 import org.apache.spark.sql.catalyst.types.{DataType, StringType, IntegerType}
 import org.apache.spark.sql.{parquet, SchemaRDD}
-import org.apache.spark.sql.hive.TestHive
 import org.apache.spark.util.Utils
 
 // Implicits
-import org.apache.spark.sql.hive.TestHive._
+import org.apache.spark.sql.hive.test.TestHive._
 
 class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
 

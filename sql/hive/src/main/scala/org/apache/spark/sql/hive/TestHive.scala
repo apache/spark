@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.hive.test
 
 import java.io.File
 import java.util.{Set => JavaSet}
@@ -34,6 +34,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, NativeCommand}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.hive._
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
