@@ -84,7 +84,7 @@ class TaskMetrics extends Serializable {
 }
 
 private[spark] object TaskMetrics {
-  def empty(): TaskMetrics = new TaskMetrics
+  def empty: TaskMetrics = new TaskMetrics
 }
 
 

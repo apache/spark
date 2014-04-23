@@ -25,7 +25,7 @@ import org.apache.spark.storage.RDDInfo
  * Stores information about a stage to pass from the scheduler to SparkListeners.
  */
 @DeveloperApi
-class StageInfo(val stageId: Int, val name: String, val numTasks: Int, val rddInfo: RDDInfo) {
+class StageInfo(val stageId: Int, val name: String, val numTasks: Int, val rddInfos: Seq[RDDInfo]) {
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
   /** Time when all tasks in the stage completed or when the stage was cancelled. */
@@ -41,12 +41,17 @@ class StageInfo(val stageId: Int, val name: String, val numTasks: Int, val rddIn
   }
 }
 
-private[spark]
-object StageInfo {
+private[spark] object StageInfo {
+  /**
+   * Construct a StageInfo from a Stage.
+   *
+   * Each Stage is associated with one or many RDDs, with the boundary of a Stage marked by
+   * shuffle dependencies. Therefore, all ancestor RDDs related to this Stage's RDD through a
+   * sequence of narrow dependencies should also be associated with this Stage.
+   */
   def fromStage(stage: Stage): StageInfo = {
-    val rdd = stage.rdd
-    val rddName = Option(rdd.name).getOrElse(rdd.id.toString)
-    val rddInfo = new RDDInfo(rdd.id, rddName, rdd.partitions.size, rdd.getStorageLevel)
-    new StageInfo(stage.id, stage.name, stage.numTasks, rddInfo)
+    val ancestorRddInfos = stage.rdd.getNarrowAncestors.map(RDDInfo.fromRdd)
+    val rddInfos = Seq(RDDInfo.fromRdd(stage.rdd)) ++ ancestorRddInfos
+    new StageInfo(stage.id, stage.name, stage.numTasks, rddInfos)
   }
 }
