@@ -433,7 +433,7 @@ class DAGScheduler(
   {
     val waiter = submitJob(rdd, func, partitions, callSite, allowLocal, resultHandler, properties)
     waiter.awaitResult() match {
-      case JobSucceeded =>
+      case JobSucceeded => {}
       case JobFailed(exception: Exception) =>
         logInfo("Failed to run " + callSite)
         throw exception
