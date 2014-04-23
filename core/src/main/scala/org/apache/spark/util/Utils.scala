@@ -1021,8 +1021,8 @@ private[spark] object Utils extends Logging {
       "ln -sf "
     }
     import scala.sys.process._
-    (linkCmd + src.getAbsolutePath() + " " + dst.getPath() + cmdSuffix) lines_! ProcessLogger(line =>
-       (logInfo(line)))
+    (linkCmd + src.getAbsolutePath() + " " + dst.getPath() + cmdSuffix) lines_! 
+      ProcessLogger(line => (logInfo(line)))
   }
 
 
