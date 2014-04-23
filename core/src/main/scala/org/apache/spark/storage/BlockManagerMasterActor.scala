@@ -203,7 +203,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       val locations = blockLocations.get(blockId)
       locations -= blockManagerId
       if (locations.size == 0) {
-        blockLocations.remove(locations)
+        blockLocations.remove(blockId)
       }
     }
     listenerBus.post(SparkListenerBlockManagerRemoved(blockManagerId))
