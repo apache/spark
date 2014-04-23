@@ -34,19 +34,19 @@ public class JavaSparkSQL {
     private String name;
     private int age;
 
-    String getName() {
+    public String getName() {
       return name;
     }
 
-    void setName(String name) {
+    public void setName(String name) {
       this.name = name;
     }
 
-    int getAge() {
+    public int getAge() {
       return age;
     }
 
-    void setAge(int age) {
+    public void setAge(int age) {
       this.age = age;
     }
   }
