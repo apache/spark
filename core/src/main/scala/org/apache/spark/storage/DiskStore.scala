@@ -88,24 +88,19 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
     val channel = new RandomAccessFile(segment.file, "r").getChannel()
 
     val buffer =
-      // For small files, directly read rather than memory map
-      if (segment.length < minMemoryMapBytes) {
-        val buf = ByteBuffer.allocate(segment.length.toInt)
-        try {
+      try {
+        // For small files, directly read rather than memory map
+        if (segment.length < minMemoryMapBytes) {
+          val buf = ByteBuffer.allocate(segment.length.toInt)
           channel.read(buf, segment.offset)
+          buf.rewind()
+          Some(buf)
+        } else {
+          Some(channel.map(MapMode.READ_ONLY, segment.offset, segment.length))
         }
-        finally {
-          channel.close()
-        }
-        Some(buf)
-      } else {
-        val buf = try {
-          channel.map(MapMode.READ_ONLY, segment.offset, segment.length)
-        } finally {
-          channel.close()
-        }
-        Some(buf)
-    }
+      } finally {
+        channel.close()
+      }
     buffer
   }
 
