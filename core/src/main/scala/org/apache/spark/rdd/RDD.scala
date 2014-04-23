@@ -255,6 +255,8 @@ abstract class RDD[T: ClassTag](
     }
 
     visit(this)
+
+    // In case there is a cycle, do not include the root itself
     ancestors.filterNot(_ == this).toSeq
   }
 
