@@ -248,14 +248,14 @@ class SparkContext(object):
         jrdd = readRDDFromFile(self._jsc, tempFile.name, numSlices)
         return RDD(jrdd, self, serializer)
 
-    def textFile(self, name, minSplits=None):
+    def textFile(self, name, minPartitions=None):
         """
         Read a text file from HDFS, a local file system (available on all
         nodes), or any Hadoop-supported file system URI, and return it as an
         RDD of Strings.
         """
-        minSplits = minSplits or min(self.defaultParallelism, 2)
-        return RDD(self._jsc.textFile(name, minSplits), self,
+        minPartitions = minPartitions or min(self.defaultParallelism, 2)
+        return RDD(self._jsc.textFile(name, minPartitions), self,
                    UTF8Deserializer())
 
     def wholeTextFiles(self, path):

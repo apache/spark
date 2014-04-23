@@ -64,9 +64,10 @@ private[spark] class Executor(
   // to what Yarn on this system said was available. This will be used later when SparkEnv
   // created.
   if (java.lang.Boolean.valueOf(
-      System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE"))))
-  {
+      System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))) {
     conf.set("spark.local.dir", getYarnLocalDirs())
+  } else if (sys.env.contains("SPARK_LOCAL_DIRS")) {
+    conf.set("spark.local.dir", sys.env("SPARK_LOCAL_DIRS"))
   }
 
   if (!isLocal) {
@@ -292,7 +293,7 @@ private[spark] class Executor(
    * created by the interpreter to the search path
    */
   private def createClassLoader(): MutableURLClassLoader = {
-    val loader = this.getClass.getClassLoader
+    val currentLoader = Utils.getContextOrSparkClassLoader
 
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.
@@ -301,8 +302,8 @@ private[spark] class Executor(
     }.toArray
     val userClassPathFirst = conf.getBoolean("spark.files.userClassPathFirst", false)
     userClassPathFirst match {
-      case true => new ChildExecutorURLClassLoader(urls, loader)
-      case false => new ExecutorURLClassLoader(urls, loader)
+      case true => new ChildExecutorURLClassLoader(urls, currentLoader)
+      case false => new ExecutorURLClassLoader(urls, currentLoader)
     }
   }
 

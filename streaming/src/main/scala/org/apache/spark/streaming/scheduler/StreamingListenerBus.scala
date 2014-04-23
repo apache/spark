@@ -40,6 +40,10 @@ private[spark] class StreamingListenerBus(val conf: SparkConf) extends Logging w
         event match {
           case receiverStarted: StreamingListenerReceiverStarted =>
             listeners.foreach(_.onReceiverStarted(receiverStarted))
+          case receiverError: StreamingListenerReceiverError =>
+            listeners.foreach(_.onReceiverError(receiverError))
+          case receiverStopped: StreamingListenerReceiverStopped =>
+            listeners.foreach(_.onReceiverStopped(receiverStopped))
           case batchSubmitted: StreamingListenerBatchSubmitted =>
             listeners.foreach(_.onBatchSubmitted(batchSubmitted))
           case batchStarted: StreamingListenerBatchStarted =>

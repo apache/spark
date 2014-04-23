@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.hive.TestHiveContext
+import org.apache.spark.sql.hive.test.TestHiveContext
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 class ConcurrentHiveSuite extends FunSuite with BeforeAndAfterAll {

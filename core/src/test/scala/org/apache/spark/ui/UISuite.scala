@@ -21,6 +21,7 @@ import java.net.ServerSocket
 import javax.servlet.http.HttpServletRequest
 
 import scala.io.Source
+import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
 import org.eclipse.jetty.server.Server
@@ -35,7 +36,7 @@ import scala.xml.Node
 
 class UISuite extends FunSuite {
 
-  test("basic ui visibility") {
+  ignore("basic ui visibility") {
     withSpark(new SparkContext("local", "test")) { sc =>
       // test if the ui is visible, and all the expected tabs are visible
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
@@ -49,7 +50,7 @@ class UISuite extends FunSuite {
     }
   }
 
-  test("visibility at localhost:4040") {
+  ignore("visibility at localhost:4040") {
     withSpark(new SparkContext("local", "test")) { sc =>
       // test if visible from http://localhost:4040
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
@@ -59,7 +60,7 @@ class UISuite extends FunSuite {
     }
   }
 
-  test("attaching a new tab") {
+  ignore("attaching a new tab") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val sparkUI = sc.ui
 

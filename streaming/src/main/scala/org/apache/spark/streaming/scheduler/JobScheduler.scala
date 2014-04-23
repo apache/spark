@@ -46,7 +46,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging with Lifecycle {
 
   // These two are created only when scheduler starts.
   // eventActor not being null means the scheduler has been started and not stopped
-  var networkInputTracker: NetworkInputTracker = null
+  var receiverTracker: ReceiverTracker = null
   private var eventActor: ActorRef = null
 
   def conf = ssc.conf
@@ -62,8 +62,8 @@ class JobScheduler(val ssc: StreamingContext) extends Logging with Lifecycle {
     }), "JobScheduler")
 
     listenerBus.start()
-    networkInputTracker = new NetworkInputTracker(ssc)
-    networkInputTracker.start()
+    receiverTracker = new ReceiverTracker(ssc)
+    receiverTracker.start()
     jobGenerator.start()
     logInfo("Started JobScheduler")
   }
@@ -79,7 +79,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging with Lifecycle {
     logDebug("Stopping JobScheduler")
 
     // First, stop receiving
-    networkInputTracker.stop()
+    receiverTracker.stop()
 
     // Second, stop generating jobs. If it has to process all received data,
     // then this will wait for all the processing through JobScheduler to be over.

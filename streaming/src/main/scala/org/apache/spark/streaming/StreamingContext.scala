@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.Map
 import scala.collection.mutable.Queue
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import akka.actor.{Props, SupervisorStrategy}
@@ -30,12 +31,11 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
-
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream._
-import org.apache.spark.streaming.receivers._
+import org.apache.spark.streaming.receiver.{ActorSupervisorStrategy, ActorReceiver, Receiver}
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.ui.StreamingTab
 import org.apache.spark.util.MetadataCleaner
@@ -116,11 +116,6 @@ class StreamingContext private[streaming] (
     }
   }
 
-  if (MetadataCleaner.getDelaySeconds(sc.conf) < 0) {
-    throw new SparkException("Spark Streaming cannot be used without setting spark.cleaner.ttl; "
-      + "set this property before creating a SparkContext (use SPARK_JAVA_OPTS for the shell)")
-  }
-
   def conf = sc.conf
 
   private[streaming] val env = SparkEnv.get
@@ -138,7 +133,7 @@ class StreamingContext private[streaming] (
     }
   }
 
-  private val nextNetworkInputStreamId = new AtomicInteger(0)
+  private val nextReceiverInputStreamId = new AtomicInteger(0)
 
   private[streaming] var checkpointDir: String = {
     if (isCheckpointPresent) {
@@ -198,15 +193,26 @@ class StreamingContext private[streaming] (
     if (isCheckpointPresent) cp_ else null
   }
 
-  private[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
+  private[streaming] def getNewReceiverStreamId() = nextReceiverInputStreamId.getAndIncrement()
 
   /**
-   * Create an input stream with any arbitrary user implemented network receiver.
+   * Create an input stream with any arbitrary user implemented receiver.
    * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
-   * @param receiver Custom implementation of NetworkReceiver
+   * @param receiver Custom implementation of Receiver
    */
+  @deprecated("Use receiverStream", "1.0.0")
   def networkStream[T: ClassTag](
-    receiver: NetworkReceiver[T]): DStream[T] = {
+    receiver: Receiver[T]): ReceiverInputDStream[T] = {
+    receiverStream(receiver)
+  }
+
+  /**
+   * Create an input stream with any arbitrary user implemented receiver.
+   * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
+   * @param receiver Custom implementation of Receiver
+   */
+  def receiverStream[T: ClassTag](
+    receiver: Receiver[T]): ReceiverInputDStream[T] = {
     new PluggableInputDStream[T](this, receiver)
   }
 
@@ -226,9 +232,9 @@ class StreamingContext private[streaming] (
       props: Props,
       name: String,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
-      supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy
-    ): DStream[T] = {
-    networkStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
+      supervisorStrategy: SupervisorStrategy = ActorSupervisorStrategy.defaultStrategy
+    ): ReceiverInputDStream[T] = {
+    receiverStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
   }
 
   /**
@@ -244,7 +250,7 @@ class StreamingContext private[streaming] (
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): DStream[String] = {
+    ): ReceiverInputDStream[String] = {
     socketStream[String](hostname, port, SocketReceiver.bytesToLines, storageLevel)
   }
 
@@ -263,7 +269,7 @@ class StreamingContext private[streaming] (
       port: Int,
       converter: (InputStream) => Iterator[T],
       storageLevel: StorageLevel
-    ): DStream[T] = {
+    ): ReceiverInputDStream[T] = {
     new SocketInputDStream[T](this, hostname, port, converter, storageLevel)
   }
 
@@ -282,7 +288,7 @@ class StreamingContext private[streaming] (
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): DStream[T] = {
+    ): ReceiverInputDStream[T] = {
     new RawInputDStream[T](this, hostname, port, storageLevel)
   }
 
@@ -300,7 +306,7 @@ class StreamingContext private[streaming] (
     K: ClassTag,
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
-  ] (directory: String): DStream[(K, V)] = {
+  ] (directory: String): InputDStream[(K, V)] = {
     new FileInputDStream[K, V, F](this, directory)
   }
 
@@ -320,7 +326,7 @@ class StreamingContext private[streaming] (
     K: ClassTag,
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
-  ] (directory: String, filter: Path => Boolean, newFilesOnly: Boolean): DStream[(K, V)] = {
+  ] (directory: String, filter: Path => Boolean, newFilesOnly: Boolean): InputDStream[(K, V)] = {
     new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly)
   }
 
@@ -346,7 +352,7 @@ class StreamingContext private[streaming] (
   def queueStream[T: ClassTag](
       queue: Queue[RDD[T]],
       oneAtATime: Boolean = true
-    ): DStream[T] = {
+    ): InputDStream[T] = {
     queueStream(queue, oneAtATime, sc.makeRDD(Seq[T](), 1))
   }
 
@@ -363,7 +369,7 @@ class StreamingContext private[streaming] (
       queue: Queue[RDD[T]],
       oneAtATime: Boolean,
       defaultRDD: RDD[T]
-    ): DStream[T] = {
+    ): InputDStream[T] = {
     new QueueInputDStream(this, queue, oneAtATime, defaultRDD)
   }
 
@@ -484,8 +490,6 @@ class StreamingContext private[streaming] (
 
 object StreamingContext extends Logging {
 
-  private[streaming] val DEFAULT_CLEANER_TTL = 3600
-
   implicit def toPairDStreamFunctions[K: ClassTag, V: ClassTag](stream: DStream[(K,V)]) = {
     new PairDStreamFunctions[K, V](stream)
   }
@@ -527,16 +531,10 @@ object StreamingContext extends Logging {
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
    * their JARs to StreamingContext.
    */
-  def jarOfClass(cls: Class[_]): Seq[String] = SparkContext.jarOfClass(cls)
+  def jarOfClass(cls: Class[_]): Option[String] = SparkContext.jarOfClass(cls)
 
   private[streaming] def createNewSparkContext(conf: SparkConf): SparkContext = {
-    // Set the default cleaner delay to an hour if not already set.
-    // This should be sufficient for even 1 second batch intervals.
-    if (MetadataCleaner.getDelaySeconds(conf) < 0) {
-      MetadataCleaner.setDelaySeconds(conf, DEFAULT_CLEANER_TTL)
-    }
-    val sc = new SparkContext(conf)
-    sc
+    new SparkContext(conf)
   }
 
   private[streaming] def createNewSparkContext(

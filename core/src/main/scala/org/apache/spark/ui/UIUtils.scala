@@ -121,7 +121,11 @@ private[spark] object UIUtils extends Logging {
         (records, "")
       }
     }
-    "%.1f%s".formatLocal(Locale.US, value, unit)
+    if (unit.isEmpty) {
+      "%d".formatLocal(Locale.US, value)
+    } else {
+      "%.1f%s".formatLocal(Locale.US, value, unit)
+    }
   }
 
   // Yarn has to go through a proxy so the base uri is provided and has to be on all links
@@ -158,7 +162,7 @@ private[spark] object UIUtils extends Logging {
       <body>
         <div class="navbar navbar-static-top">
           <div class="navbar-inner">
-            <a href={prependBaseUri(basePath, "/")} class="brand">
+            <a href="/" class="brand">
               <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
             </a>
             <ul class="nav">{header}</ul>

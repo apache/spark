@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster
 
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
 import org.apache.spark.{SparkException, Logging, SparkContext}
-import org.apache.spark.deploy.yarn.{Client, ClientArguments}
+import org.apache.spark.deploy.yarn.{Client, ClientArguments, ExecutorLauncher}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 import scala.collection.mutable.ArrayBuffer
@@ -54,7 +54,7 @@ private[spark] class YarnClientSchedulerBackend(
       "--class", "notused",
       "--jar", null,
       "--args", hostport,
-      "--am-class", "org.apache.spark.deploy.yarn.ExecutorLauncher"
+      "--am-class", classOf[ExecutorLauncher].getName
     )
 
     // process any optional arguments, given either as environment variables

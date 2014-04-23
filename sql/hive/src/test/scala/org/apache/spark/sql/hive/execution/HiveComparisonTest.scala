@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{ExplainCommand, NativeComman
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.Sort
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
-import org.apache.spark.sql.hive.TestHive
+import org.apache.spark.sql.hive.test.TestHive
 
 /**
  * Allows the creations of tests that execute the same query against both hive
@@ -218,10 +218,7 @@ abstract class HiveComparisonTest
         val quotes = "\"\"\""
         queryList.zipWithIndex.map {
           case (query, i) =>
-            s"""
-              |val q$i = $quotes$query$quotes.q
-              |q$i.stringResult()
-            """.stripMargin
+            s"""val q$i = hql($quotes$query$quotes); q$i.collect()"""
         }.mkString("\n== Console version of this test ==\n", "\n", "\n")
       }
 
@@ -287,7 +284,6 @@ abstract class HiveComparisonTest
                         |Error: ${e.getMessage}
                         |${stackTraceToString(e)}
                         |$queryString
-                        |$consoleTestCase
                       """.stripMargin
                     stringToFile(
                       new File(hiveFailedDirectory, testCaseName),
@@ -304,7 +300,7 @@ abstract class HiveComparisonTest
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
           val query = new TestHive.HiveQLQueryExecution(queryString)
           try { (query, prepareAnswer(query, query.stringResult())) } catch {
-            case e: Exception =>
+            case e: Throwable =>
               val errorMessage =
                 s"""
                   |Failed to execute query using catalyst:
@@ -313,8 +309,6 @@ abstract class HiveComparisonTest
                   |$query
                   |== HIVE - ${hive.size} row(s) ==
                   |${hive.mkString("\n")}
-                  |
-                  |$consoleTestCase
                 """.stripMargin
               stringToFile(new File(failedDirectory, testCaseName), errorMessage + consoleTestCase)
               fail(errorMessage)
