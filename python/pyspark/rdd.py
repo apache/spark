@@ -932,7 +932,6 @@ class RDD(object):
 
         def add_shuffle_key(split, iterator):
 
-            connection = 
             client = statsd()
             buckets = defaultdict(list)
             record_count = 0
