@@ -38,7 +38,8 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
     var hasDstId: Boolean = false) {
 
   /**
-   * Return a new `ReplicatedVertexView` with the specified `EdgeRDD`, which must have the same shipping level.
+   * Return a new `ReplicatedVertexView` with the specified `EdgeRDD`, which must have the same
+   * shipping level.
    */
   def withEdges[VD2: ClassTag, ED2: ClassTag](
       edges_ : EdgeRDD[ED2, VD2]): ReplicatedVertexView[VD2, ED2] = {

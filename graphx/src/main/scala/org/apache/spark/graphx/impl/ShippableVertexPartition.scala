@@ -39,8 +39,8 @@ object ShippableVertexPartition {
     apply(iter, RoutingTablePartition.empty, null.asInstanceOf[VD])
 
   /**
-   * Construct a `ShippableVertexPartition` from the given vertices with the specified routing table,
-   * filling in missing vertices mentioned in the routing table using `defaultVal`.
+   * Construct a `ShippableVertexPartition` from the given vertices with the specified routing
+   * table, filling in missing vertices mentioned in the routing table using `defaultVal`.
    */
   def apply[VD: ClassTag](
       iter: Iterator[(VertexId, VD)], routingTable: RoutingTablePartition, defaultVal: VD)

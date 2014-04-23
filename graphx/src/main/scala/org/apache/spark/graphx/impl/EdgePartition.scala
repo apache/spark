@@ -40,7 +40,8 @@ import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
  * @param activeSet an optional active vertex set for filtering computation on the edges
  */
 private[graphx]
-class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassTag, VD: ClassTag](
+class EdgePartition[
+    @specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassTag, VD: ClassTag](
     val srcIds: Array[VertexId],
     val dstIds: Array[VertexId],
     val data: Array[ED],

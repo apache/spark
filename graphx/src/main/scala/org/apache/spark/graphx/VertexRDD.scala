@@ -396,7 +396,8 @@ object VertexRDD {
    * @param numPartitions the desired number of partitions for the resulting `VertexRDD`
    * @param defaultVal the vertex attribute to use when creating missing vertices
    */
-  def fromEdges[VD: ClassTag](edges: EdgeRDD[_, _], numPartitions: Int, defaultVal: VD): VertexRDD[VD] = {
+  def fromEdges[VD: ClassTag](
+      edges: EdgeRDD[_, _], numPartitions: Int, defaultVal: VD): VertexRDD[VD] = {
     val routingTables = createRoutingTables(edges, new HashPartitioner(numPartitions))
     val vertexPartitions = routingTables.mapPartitions({ routingTableIter =>
       val routingTable =
