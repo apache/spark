@@ -7,17 +7,19 @@ Apache Spark is a fast and general-purpose cluster computing system.
 It provides high-level APIs in [Scala](scala-programming-guide.html), [Java](java-programming-guide.html), and [Python](python-programming-guide.html) that make parallel jobs easy to write, and an optimized engine that supports general computation graphs.
 It also supports a rich set of higher-level tools including [Shark](http://shark.cs.berkeley.edu) (Hive on Spark), [MLlib](mllib-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
 
-# Download
+# Downloading
 
 Get Spark by visiting the [downloads page](http://spark.apache.org/downloads.html) of the Apache Spark site. This documentation is for Spark version {{site.SPARK_VERSION}}.
 
-Spark runs on both Windows and UNIX-like systems (e.g., Linux, Mac OS). All you need to run it is to have Java installed on your system `PATH` or point the `JAVA_HOME` environment variable to a Java installation.
+Spark runs on both Windows and Unix-like systems (e.g., Linux, Mac OS). All you need to run it is to have Java installed on your system `PATH` or point the `JAVA_HOME` environment variable to a Java installation.
+
+Note: The Spark Programming Guide is written through a Scala lens, so Java and Python developers may wish to download and install Scala so they can work hands-on with the Scala examples in the Spark Programming Guide. 
 
 For its Scala API, Spark {{site.SPARK_VERSION}} depends on Scala {{site.SCALA_BINARY_VERSION}}. If you write applications in
-Scala, you will need to use a compatible Scala version (e.g., {{site.SCALA_BINARY_VERSION}}.X) -- newer major versions may no
+Scala, you will need to use a compatible Scala version (*e.g.*, {{site.SCALA_BINARY_VERSION}}.X) -- newer major versions may no
 t work. You can get the appropriate version of Scala from [scala-lang.org](http://www.scala-lang.org/download/).
 
-# Build
+# Building
 
 Spark uses the Hadoop-client library to talk to HDFS and other Hadoop-supported
 storage systems. Because the HDFS protocol has changed in different versions of
@@ -27,55 +29,97 @@ Spark is bundled with the [Simple Build Tool](http://www.scala-sbt.org) (SBT).
 
 To compile the code so Spark links to Hadoop 1.0.4 (default), from the top-level Spark directory run:
 
-    sbt/sbt assembly
+    $ sbt/sbt assembly
 
-By default, Spark links to Hadoop 1.0.4. You can change this by setting the
-`SPARK_HADOOP_VERSION` variable when compiling:
+You can change the Hadoop version that Spark links to by setting the 
+`SPARK_HADOOP_VERSION` environment variable when compiling. For example:
 
-    SPARK_HADOOP_VERSION=2.2.0 sbt/sbt assembly
+    $ SPARK_HADOOP_VERSION=2.2.0 sbt/sbt assembly
 
-    In addition, if you wish to run Spark on [YARN](running-on-yarn.html), set
-    `SPARK_YARN` to `true`:
+If you wish to run Spark on [YARN](running-on-yarn.html), set 
+`SPARK_YARN` to `true`. For example:
 
-        SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
+    $ SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
 
-	Note that on Windows, you need to set the environment variables on separate lines, e.g., `set SPARK_HADOOP_VERSION=1.2.1`.
+Note: If you're using the Windows Command Prompt run each command separately:
 
-# Running the Examples and Shell
+    > set SPARK_HADOOP_VERSION=2.0.5-alpha
+    > set SPARK_YARN=true
+    > sbt/sbt assembly
 
-Spark comes with several sample programs.  Scala and Java examples are in the `examples` directory, and Python examples are in `python/examples`.
-To run one of the Java or Scala sample programs, use `./bin/run-example <class> <params>` in the top-level Spark directory
-(the `bin/run-example` script sets up the appropriate paths and launches that program).
-For example, try `./bin/run-example org.apache.spark.examples.SparkPi local`.
-To run a Python sample program, use `./bin/pyspark <sample-program> <params>`.  For example, try `./bin/pyspark ./python/examples/pi.py local`.
+# Running Spark Examples 
 
-Each example prints usage help when run with no parameters.
+Spark comes with a number of sample programs.  Scala and Java examples are in the `examples` directory, and Python examples are in the `python/examples` directory.
+
+To run one of the Java or Scala sample programs, in the top-level Spark directory: 
+
+    $ ./bin/run-example <class> <params> 
+
+The `bin/run-example` script sets up the appropriate paths and launches the specified program. 
+For example, try this Scala program:
+
+    $ ./bin/run-example org.apache.spark.examples.SparkPi local
+
+Or run this Java program:
+
+    $ ./bin/run-example org.apache.spark.examples.JavaSparkPi local
+
+To run a Python sample program, in the top-level Spark directory:
+
+    $ ./bin/pyspark <sample-program> <params> 
+    
+For example, try:
+
+    $ ./bin/pyspark ./python/examples/pi.py local
+
+Each example prints usage help when run without parameters:
+    
+    $ ./bin/run-example org.apache.spark.examples.JavaWordCount
+    Usage: JavaWordCount <master> <file>
+
+    $ ./bin/run-example org.apache.spark.examples.JavaWordCount local README.md
+        
+The README.md file is located in the top-level Spark directory.
 
 Note that all of the sample programs take a `<master>` parameter specifying the cluster URL
 to connect to. This can be a [URL for a distributed cluster](scala-programming-guide.html#master-urls),
-or `local` to run locally with one thread, or `local[N]` to run locally with N threads. You should start by using
+`local` to run locally with one thread, or `local[N]` to run locally with N threads. We recommend starting by using
 `local` for testing.
 
-Finally, you can run Spark interactively through modified versions of the Scala shell (`./bin/spark-shell`) or
-Python interpreter (`./bin/pyspark`). These are a great way to learn the framework.
+# Using the Spark Shells
+
+You can run Spark interactively through modified versions of the Scala shell or
+the Python interpreter. These are great ways to learn the Spark framework.
+
+To run Spark's Scala shell:
+
+    $ ./bin/spark-shell
+    ...
+    >
+
+To run Spark's Python interpreter:
+
+    $ ./bin/pyspark
+    ...
+    >>>
 
 # Launching on a Cluster
 
 The Spark [cluster mode overview](cluster-overview.html) explains the key concepts in running on a cluster.
-Spark can run both by itself, or over several existing cluster managers. It currently provides several
+Spark can run by itself or over several existing cluster managers. There are currently several
 options for deployment:
 
 * [Amazon EC2](ec2-scripts.html): our EC2 scripts let you launch a cluster in about 5 minutes
-* [Standalone Deploy Mode](spark-standalone.html): simplest way to deploy Spark on a private cluster
+* [Standalone Deploy Mode](spark-standalone.html): the simplest way to deploy Spark on a private cluster
 * [Apache Mesos](running-on-mesos.html)
 * [Hadoop YARN](running-on-yarn.html)
 
 # Where to Go from Here
 
-**Programming guides:**
+**Programming Guides:**
 
 * [Quick Start](quick-start.html): a quick introduction to the Spark API; start here!
-* [Spark Programming Guide](scala-programming-guide.html): an overview of Spark concepts, and details on the Scala API
+* [Spark Programming Guide](scala-programming-guide.html): an overview of Spark concepts though the lens of the Scala API
   * [Java Programming Guide](java-programming-guide.html): using Spark from Java
   * [Python Programming Guide](python-programming-guide.html): using Spark from Python
 * [Spark Streaming](streaming-programming-guide.html): Spark's API for processing data streams
