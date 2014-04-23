@@ -137,7 +137,6 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   val conf = new SparkConf()
     .setMaster(master)
     .setAppName(framework)
-    .set("spark.cleaner.ttl", StreamingContext.DEFAULT_CLEANER_TTL.toString)
 
   // Default before function for any streaming test suite. Override this
   // if you want to add your stuff to "before" (i.e., don't call before { } )

@@ -26,7 +26,7 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
-private[ui] class RddPage(parent: StorageTab) extends WebUIPage("rdd") {
+private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
   private val appName = parent.appName
   private val basePath = parent.basePath
   private val listener = parent.listener

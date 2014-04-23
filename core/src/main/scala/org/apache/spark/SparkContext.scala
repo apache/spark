@@ -1110,6 +1110,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * :: Experimental ::
    * Submit a job for execution and return a FutureJob holding the result.
    */
   @Experimental
@@ -1345,19 +1346,19 @@ object SparkContext extends Logging {
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
    * their JARs to SparkContext.
    */
-  def jarOfClass(cls: Class[_]): Seq[String] = {
+  def jarOfClass(cls: Class[_]): Option[String] = {
     val uri = cls.getResource("/" + cls.getName.replace('.', '/') + ".class")
     if (uri != null) {
       val uriStr = uri.toString
       if (uriStr.startsWith("jar:file:")) {
         // URI will be of the form "jar:file:/path/foo.jar!/package/cls.class",
         // so pull out the /path/foo.jar
-        List(uriStr.substring("jar:file:".length, uriStr.indexOf('!')))
+        Some(uriStr.substring("jar:file:".length, uriStr.indexOf('!')))
       } else {
-        Nil
+        None
       }
     } else {
-      Nil
+      None
     }
   }
 
@@ -1366,7 +1367,7 @@ object SparkContext extends Logging {
    * to pass their JARs to SparkContext. In most cases you can call jarOfObject(this) in
    * your driver program.
    */
-  def jarOfObject(obj: AnyRef): Seq[String] = jarOfClass(obj.getClass)
+  def jarOfObject(obj: AnyRef): Option[String] = jarOfClass(obj.getClass)
 
   /**
    * Creates a modified version of a SparkConf with the parameters that can be passed separately

@@ -98,6 +98,11 @@ class HistoryServer(
   def initialize() {
     attachPage(new HistoryPage(this))
     attachHandler(createStaticHandler(STATIC_RESOURCE_DIR, "/static"))
+  }
+
+  /** Bind to the HTTP server behind this web interface. */
+  override def bind() {
+    super.bind()
     logCheckingThread.start()
   }
 

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.sql.hive
 
 import java.io.IOException
 import java.text.NumberFormat
@@ -28,12 +28,13 @@ import org.apache.hadoop.hive.ql.plan.FileSinkDesc
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.io.Writable
 
+import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
+
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.
  * It is based on [[SparkHadoopWriter]].
  */
-protected[spark]
-class SparkHiveHadoopWriter(
+private[hive] class SparkHiveHadoopWriter(
     @transient jobConf: JobConf,
     fileSinkConf: FileSinkDesc)
   extends Logging
@@ -179,7 +180,7 @@ class SparkHiveHadoopWriter(
   }
 }
 
-object SparkHiveHadoopWriter {
+private[hive] object SparkHiveHadoopWriter {
   def createPathFromString(path: String, conf: JobConf): Path = {
     if (path == null) {
       throw new IllegalArgumentException("Output path is null")

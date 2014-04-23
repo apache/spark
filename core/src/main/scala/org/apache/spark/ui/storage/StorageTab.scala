@@ -30,7 +30,7 @@ private[ui] class StorageTab(parent: SparkUI) extends WebUITab(parent, "storage"
   val listener = new StorageListener(parent.storageStatusListener)
 
   attachPage(new StoragePage(this))
-  attachPage(new RddPage(this))
+  attachPage(new RDDPage(this))
   parent.registerListener(listener)
 }
 
@@ -66,8 +66,8 @@ private[ui] class StorageListener(storageStatusListener: StorageStatusListener)
   }
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = synchronized {
-    val rddInfo = stageSubmitted.stageInfo.rddInfo
-    _rddInfoMap.getOrElseUpdate(rddInfo.id, rddInfo)
+    val rddInfos = stageSubmitted.stageInfo.rddInfos
+    rddInfos.foreach { info => _rddInfoMap.getOrElseUpdate(info.id, info) }
   }
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {

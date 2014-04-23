@@ -9,7 +9,7 @@ This guide shows the programming model and features by walking through a simple 
 
 ### Writing a Simple Receiver
 
-This starts with implementing [NetworkReceiver](api/streaming/index.html#org.apache.spark.streaming.dstream.NetworkReceiver).
+This starts with implementing [NetworkReceiver](api/scala/index.html#org.apache.spark.streaming.dstream.NetworkReceiver).
 
 The following is a simple socket text-stream receiver.
 
@@ -125,4 +125,4 @@ _A more comprehensive example is provided in the spark streaming examples_
 ## References
 
 1.[Akka Actor documentation](http://doc.akka.io/docs/akka/2.0.5/scala/actors.html)
-2.[NetworkReceiver](api/streaming/index.html#org.apache.spark.streaming.dstream.NetworkReceiver)
+2.[NetworkReceiver](api/scala/index.html#org.apache.spark.streaming.dstream.NetworkReceiver)
