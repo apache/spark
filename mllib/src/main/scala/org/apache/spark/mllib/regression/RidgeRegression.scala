@@ -76,12 +76,6 @@ class RidgeRegressionWithSGD private (
    */
   def this() = this(1.0, 100, 1.0, 1.0)
 
-  override def setIntercept(addIntercept: Boolean): this.type = {
-    // TODO: Support adding intercept.
-    if (addIntercept) throw new UnsupportedOperationException("Adding intercept is not supported.")
-    this
-  }
-
   override protected def createModel(weights: Vector, intercept: Double) = {
     new RidgeRegressionModel(weights, intercept)
   }
