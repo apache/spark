@@ -709,6 +709,7 @@ object ALS {
   }
 
   /**
+   * :: DeveloperApi ::
    * Given an RDD of ratings, a rank, and two partitioners, compute rough estimates of the
    * computation time and communication cost of one iteration of ALS.
    *
@@ -716,7 +717,8 @@ object ALS {
    * @param rank                number of features to use
    * @param userPartitioner     partitioner for partitioning users
    * @param productPartitioner  partitioner for partitioning products
-   */
+   * /
+  @DeveloperApi
   def evaluatePartitioner(ratings: RDD[Rating], rank: Int, userPartitioner: Partitioner,
       productPartitioner: Partitioner): (Double, Double) = {
     val utalk = ratings.mapPartitions(x => {
@@ -755,6 +757,7 @@ object ALS {
     // per product.
     val computation = (2.0 * rank * rank * ratings.count
         + rank * rank * rank * (numUsers + numProducts) / 6.0)
+
     (computation, communication)
   }
 
