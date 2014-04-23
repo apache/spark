@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.File
-
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.hive.test.TestHive
 
 /* Implicits */
-import org.apache.spark.sql.hive.TestHive._
+import org.apache.spark.sql.hive.test.TestHive._
 
 case class TestData(key: Int, value: String)
 
