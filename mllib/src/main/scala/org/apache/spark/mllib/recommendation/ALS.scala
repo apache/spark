@@ -26,7 +26,7 @@ import scala.util.hashing.byteswap32
 import com.esotericsoftware.kryo.Kryo
 import org.jblas.{DoubleMatrix, SimpleBlas, Solve}
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.{Logging, HashPartitioner, Partitioner, SparkContext, SparkConf}
 import org.apache.spark.storage.StorageLevel
@@ -717,7 +717,7 @@ object ALS {
    * @param rank                number of features to use
    * @param userPartitioner     partitioner for partitioning users
    * @param productPartitioner  partitioner for partitioning products
-   * /
+   */
   @DeveloperApi
   def evaluatePartitioner(ratings: RDD[Rating], rank: Int, userPartitioner: Partitioner,
       productPartitioner: Partitioner): (Double, Double) = {
