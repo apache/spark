@@ -192,28 +192,19 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void zipWithUniqueId() {
-    List<Integer> correct = Arrays.asList(1, 2, 3, 4);
-    JavaPairRDD<Integer, Long> zip = sc.parallelize(correct).zipWithUniqueId();
-    JavaRDD<Long> indexes = zip.map(new Function<Tuple2<Integer, Long>, Long>() {
-      @Override
-      public Long call(Tuple2<Integer, Long> t) throws Exception {
-        return t._2();
-      }
-    });
+    List<Integer> dataArray = Arrays.asList(1, 2, 3, 4);
+    JavaPairRDD<Integer, Long> zip = sc.parallelize(dataArray).zipWithUniqueId();
+    JavaRDD<Long> indexes = zip.values();
     Assert.assertTrue(new HashSet<Long>(indexes.collect()).size() == 4);
   }
 
   @Test
   public void zipWithIndex() {
-    List<Integer> correct = Arrays.asList(1, 2, 3, 4);
-    JavaPairRDD<Integer, Long> zip = sc.parallelize(correct).zipWithIndex();
-    JavaRDD<Long> indexes = zip.map(new Function<Tuple2<Integer, Long>, Long>() {
-      @Override
-      public Long call(Tuple2<Integer, Long> t) throws Exception {
-        return t._2();
-      }
-    });
-    Assert.assertTrue(new HashSet<Long>(indexes.collect()).size() == 4);
+    List<Integer> dataArray = Arrays.asList(1, 2, 3, 4);
+    JavaPairRDD<Integer, Long> zip = sc.parallelize(dataArray).zipWithIndex();
+    JavaRDD<Long> indexes = zip.values();
+    HashSet<Long> correctIndexes = new HashSet<Long>(Arrays.asList(0l, 1l, 2l, 3l));
+    Assert.assertTrue(new HashSet<Long>(indexes.collect()) == correctIndexes);
   }
 
   @SuppressWarnings("unchecked")
