@@ -24,6 +24,21 @@ import org.apache.spark.streaming.dstream.DStream
 
 object FlumeUtils {
   /**
+   * Create a input stream from a Flume source by starting an Avro RPC server on each worker.
+   * @param ssc      StreamingContext object
+   * @param port     Port of the slave machines to which the flume data will be sent
+   * @param storageLevel  Storage level to use for storing the received objects
+   */
+  def createStream (
+      ssc: StreamingContext,
+      port: Int,
+      storageLevel: StorageLevel
+    ): DStream[SparkFlumeEvent] = {
+    val inputStream = new FlumeInputDStream[SparkFlumeEvent](ssc, None, port, storageLevel)
+    inputStream
+  }
+
+  /**
    * Create a input stream from a Flume source.
    * @param ssc      StreamingContext object
    * @param hostname Hostname of the slave machine to which the flume data will be sent
@@ -31,12 +46,16 @@ object FlumeUtils {
    * @param storageLevel  Storage level to use for storing the received objects
    */
   def createStream (
-      ssc: StreamingContext,
-      hostname: String,
-      port: Int,
-      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): DStream[SparkFlumeEvent] = {
-    val inputStream = new FlumeInputDStream[SparkFlumeEvent](ssc, hostname, port, storageLevel)
+                     ssc: StreamingContext,
+                     hostname: String,
+                     port: Int,
+                     storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
+                     ): DStream[SparkFlumeEvent] = {
+    val inputStream = new FlumeInputDStream[SparkFlumeEvent](
+      ssc,
+      Some(hostname),
+      port,
+      storageLevel)
     inputStream
   }
 

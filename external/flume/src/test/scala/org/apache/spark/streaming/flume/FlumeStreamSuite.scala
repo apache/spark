@@ -31,15 +31,14 @@ import org.apache.flume.source.avro.{AvroFlumeEvent, AvroSourceProtocol}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{TestOutputStream, StreamingContext, TestSuiteBase}
 import org.apache.spark.streaming.util.ManualClock
+import org.apache.spark.streaming.dstream.DStream
 
 class FlumeStreamSuite extends TestSuiteBase {
 
-  val testPort = 9999
 
-  test("flume input stream") {
+  def testStream(flumeStream: DStream[SparkFlumeEvent], port: Int) {
     // Set up the streaming context and input streams
-    val ssc = new StreamingContext(conf, batchDuration)
-    val flumeStream = FlumeUtils.createStream(ssc, "localhost", testPort, StorageLevel.MEMORY_AND_DISK)
+    val ssc = flumeStream.ssc
     val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
       with SynchronizedBuffer[Seq[SparkFlumeEvent]]
     val outputStream = new TestOutputStream(flumeStream, outputBuffer)
@@ -49,7 +48,7 @@ class FlumeStreamSuite extends TestSuiteBase {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq(1, 2, 3, 4, 5)
     Thread.sleep(1000)
-    val transceiver = new NettyTransceiver(new InetSocketAddress("localhost", testPort))
+    val transceiver = new NettyTransceiver(new InetSocketAddress("localhost", port))
     val client = SpecificRequestor.getClient(
       classOf[AvroSourceProtocol], transceiver)
 
@@ -71,16 +70,33 @@ class FlumeStreamSuite extends TestSuiteBase {
     val timeTaken = System.currentTimeMillis() - startTime
     assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
     logInfo("Stopping context")
+    transceiver.close()
     ssc.stop()
 
     val decoder = Charset.forName("UTF-8").newDecoder()
 
+    println(outputBuffer)
     assert(outputBuffer.size === input.length)
     for (i <- 0 until outputBuffer.size) {
+      println(outputBuffer(i))
       assert(outputBuffer(i).size === 1)
       val str = decoder.decode(outputBuffer(i).head.event.getBody)
       assert(str.toString === input(i).toString)
       assert(outputBuffer(i).head.event.getHeaders.get("test") === "header")
     }
+  }
+
+  test("flume input stream") {
+    val ssc = new StreamingContext(conf, batchDuration)
+    val port = 9901
+    val flumeStream = FlumeUtils.createStream(ssc, "localhost", port, StorageLevel.MEMORY_AND_DISK)
+    testStream(flumeStream, port)
+  }
+
+  test("flume multi-worker input stream") {
+    val ssc = new StreamingContext(conf, batchDuration)
+    val port = 9902
+    val multiWorkerFlumeListeningStream = FlumeUtils.createStream(ssc, port, StorageLevel.MEMORY_AND_DISK)
+    testStream(multiWorkerFlumeListeningStream, port)
   }
 }

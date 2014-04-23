@@ -38,7 +38,7 @@ import org.apache.spark.streaming.dstream._
 private[streaming]
 class FlumeInputDStream[T: ClassTag](
   @transient ssc_ : StreamingContext,
-  host: String,
+  host: Option[String],
   port: Int,
   storageLevel: StorageLevel
 ) extends NetworkInputDStream[SparkFlumeEvent](ssc_) {
@@ -130,7 +130,7 @@ class FlumeEventServer(receiver : FlumeReceiver) extends AvroSourceProtocol {
   * Flume Avro interface. */
 private[streaming]
 class FlumeReceiver(
-    host: String,
+    host: Option[String],
     port: Int,
     storageLevel: StorageLevel
   ) extends NetworkReceiver[SparkFlumeEvent] {
@@ -140,7 +140,7 @@ class FlumeReceiver(
   protected override def onStart() {
     val responder = new SpecificResponder(
       classOf[AvroSourceProtocol], new FlumeEventServer(this))
-    val server = new NettyServer(responder, new InetSocketAddress(host, port))
+    val server = new NettyServer(responder, new InetSocketAddress(host.getOrElse("0.0.0.0"), port))
     blockGenerator.start()
     server.start()
     logInfo("Flume receiver started")
@@ -151,5 +151,5 @@ class FlumeReceiver(
     logInfo("Flume receiver stopped")
   }
 
-  override def getLocationPreference = Some(host)
+  override def getLocationPreference = host
 }
