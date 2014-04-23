@@ -339,6 +339,10 @@ trait ClientBase extends Logging {
     }
     JAVA_OPTS += ClientBase.getLog4jConfiguration(localResources)
 
+    if(args.javaOpts != null){
+      JAVA_OPTS += " " + args.javaOpts + " "
+    }
+
     // Command for the ApplicationMaster
     val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
       JAVA_OPTS ++
