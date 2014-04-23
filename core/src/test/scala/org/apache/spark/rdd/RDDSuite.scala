@@ -638,6 +638,12 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(ancestors9.count(_.isInstanceOf[MappedValuesRDD[_, _, _]]) === 1)
   }
 
+  /**
+   * This tests for the pathological condition in which the RDD dependency graph is cyclical.
+   *
+   * Since RDD is part of the public API, applications may actually implement RDDs that allow
+   * such graphs to be constructed. In such cases, getNarrowAncestor should not simply hang.
+   */
   test("getNarrowAncestors with cycles") {
     val rdd1 = new CyclicalDependencyRDD[Int]
     val rdd2 = new CyclicalDependencyRDD[Int]
