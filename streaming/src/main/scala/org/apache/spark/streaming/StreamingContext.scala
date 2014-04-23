@@ -116,11 +116,6 @@ class StreamingContext private[streaming] (
     }
   }
 
-  if (MetadataCleaner.getDelaySeconds(sc.conf) < 0) {
-    throw new SparkException("Spark Streaming cannot be used without setting spark.cleaner.ttl; "
-      + "set this property before creating a SparkContext (use SPARK_JAVA_OPTS for the shell)")
-  }
-
   private[streaming] val conf = sc.conf
 
   private[streaming] val env = SparkEnv.get
@@ -500,8 +495,6 @@ class StreamingContext private[streaming] (
 
 object StreamingContext extends Logging {
 
-  private[streaming] val DEFAULT_CLEANER_TTL = 3600
-
   implicit def toPairDStreamFunctions[K: ClassTag, V: ClassTag](stream: DStream[(K,V)]) = {
     new PairDStreamFunctions[K, V](stream)
   }
@@ -546,13 +539,7 @@ object StreamingContext extends Logging {
   def jarOfClass(cls: Class[_]): Option[String] = SparkContext.jarOfClass(cls)
 
   private[streaming] def createNewSparkContext(conf: SparkConf): SparkContext = {
-    // Set the default cleaner delay to an hour if not already set.
-    // This should be sufficient for even 1 second batch intervals.
-    if (MetadataCleaner.getDelaySeconds(conf) < 0) {
-      MetadataCleaner.setDelaySeconds(conf, DEFAULT_CLEANER_TTL)
-    }
-    val sc = new SparkContext(conf)
-    sc
+    new SparkContext(conf)
   }
 
   private[streaming] def createNewSparkContext(
